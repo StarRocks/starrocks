@@ -34,6 +34,8 @@
 
 package com.starrocks.server;
 
+import brave.Tracing;
+import brave.http.HttpTracing;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -46,6 +48,7 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.JWTTokenProvider;
 import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -584,6 +587,8 @@ public class GlobalStateMgr {
     private final SPMAutoCapturer spmAutoCapturer;
 
     private JwkMgr jwkMgr;
+    private JWTTokenProvider tokenProvider;
+    private HttpTracing httpTracing;
 
     private final TabletReshardJobMgr tabletReshardJobMgr;
 
@@ -944,6 +949,8 @@ public class GlobalStateMgr {
         this.tabletCollector = new TabletCollector();
 
         this.jwkMgr = new JwkMgr();
+        this.httpTracing = HttpTracing.create(Tracing.newBuilder().build());
+        initTokenProvider();
 
         this.tabletReshardJobMgr = new TabletReshardJobMgr();
     }
@@ -3838,6 +3845,73 @@ public class GlobalStateMgr {
 
     public void setJwkMgr(JwkMgr jwkMgr) {
         this.jwkMgr = jwkMgr;
+    }
+
+    /**
+     * Initializes the bot JWT token provider used to authenticate background tasks
+     * (MV async refresh, Iceberg stats/metadata collection) when no user session is
+     * available. No-op when {@code use_bot_for_background_tasks} is disabled.
+     */
+    public void initTokenProvider() {
+        if (!Config.use_bot_for_background_tasks) {
+            LOG.info("Bot token for background tasks is disabled (use_bot_for_background_tasks=false)");
+            return;
+        }
+        LOG.info("Initializing JWT token provider for background tasks. " +
+                "url={}, clientId={}, clientSecret={}, jwksUrl={}, scope={}, audience={}, issuer={}, " +
+                "principalField={}, connectionTimeout={}, readTimeout={}",
+                Config.background_task_client_token_issuer_url,
+                maskPrefix(Config.background_task_client_id),
+                maskPrefix(Config.background_task_client_password),
+                Config.background_task_client_token_jwks_url,
+                Config.background_task_client_scope,
+                Config.background_task_client_audience,
+                Config.background_task_client_issuer,
+                Config.background_task_client_principal_field,
+                Config.background_task_http_client_connection_timeout_s,
+                Config.background_task_http_client_read_timeout_s);
+
+        JWTTokenProvider.Builder builder = JWTTokenProvider.newBuilder();
+        builder.url(Config.background_task_client_token_issuer_url);
+        builder.clientID(Config.background_task_client_id);
+        builder.clientSecret(Config.background_task_client_password);
+        builder.jwksUrl(Config.background_task_client_token_jwks_url);
+        builder.connectionParams(Config.background_task_http_client_connection_timeout_s,
+                Config.background_task_http_client_read_timeout_s);
+        if (httpTracing != null) {
+            builder.httpTracing(httpTracing);
+        }
+        if (StringUtils.isNotEmpty(Config.background_task_client_scope)) {
+            builder.scope(Config.background_task_client_scope);
+        }
+        if (StringUtils.isNotEmpty(Config.background_task_client_audience)) {
+            builder.audience(Config.background_task_client_audience);
+        }
+        if (StringUtils.isNotEmpty(Config.background_task_client_issuer)) {
+            builder.issuer(Config.background_task_client_issuer);
+        }
+        if (StringUtils.isNotEmpty(Config.background_task_client_principal_field)) {
+            builder.principalField(Config.background_task_client_principal_field);
+        }
+
+        try {
+            this.tokenProvider = builder.build();
+            LOG.info("Initialized JWT token provider for background tasks successfully");
+        } catch (IllegalArgumentException e) {
+            LOG.error("Failed to initialize JWT token provider: {}. " +
+                    "Bot tokens will not be available for background tasks.", e.getMessage());
+        }
+    }
+
+    private static String maskPrefix(String s) {
+        if (s == null) {
+            return "null";
+        }
+        return s.substring(0, Math.min(4, s.length())) + "****";
+    }
+
+    public JWTTokenProvider getTokenProvider() {
+        return tokenProvider;
     }
 
     public void setRoutineLoadMgr(RoutineLoadMgr routineLoadMgr) {

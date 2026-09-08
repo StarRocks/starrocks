@@ -35,7 +35,7 @@ import java.util.Base64;
 import java.util.Date;
 
 public class MockTokenUtils {
-    String getOpenIdConnect(String fileName) throws IOException {
+    public String getOpenIdConnect(String fileName) throws IOException {
         String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
         File file = new File(path + "/" + fileName);
         BufferedReader reader = new BufferedReader(new FileReader(file));
@@ -49,19 +49,32 @@ public class MockTokenUtils {
         return sb.toString();
     }
 
-    String generateTestOIDCToken(long validity) throws Exception {
+    public String generateTestOIDCToken(long validity) throws Exception {
+        return generateTestOIDCToken(validity,
+                "http://localhost:38080/realms/master",
+                "12345",
+                "8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663");
+    }
+
+    public String generateTestOIDCToken(long validity, String issuer, String audience, String subject) throws Exception {
         MockJwkMgr mockJwkMgr = new MockJwkMgr();
         RSASSASigner signer = new RSASSASigner(mockJwkMgr.loadPrivateKey("jwks-private-key.pem"));
         JWKSet jwkSet = mockJwkMgr.getJwkSet("signer-jwks.json");
 
-        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .issuer("http://localhost:38080/realms/master")
-                .subject("8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663")
-                .audience("12345")
+        JWTClaimsSet.Builder claimsSetBuilder = new JWTClaimsSet.Builder()
+                .subject(subject)
                 .issueTime(new Date())
                 .expirationTime(new Date(new Date().getTime() + validity))
-                .claim("preferred_username", "harbor")
-                .build();
+                .claim("preferred_username", "harbor");
+
+        if (issuer != null) {
+            claimsSetBuilder.issuer(issuer);
+        }
+        if (audience != null) {
+            claimsSetBuilder.audience(audience);
+        }
+
+        JWTClaimsSet claimsSet = claimsSetBuilder.build();
 
         JWSHeader.Builder headerBuilder = new JWSHeader.Builder(JWSAlgorithm.RS256)
                 .keyID(jwkSet.getKeys().get(0).getKeyID());
@@ -73,7 +86,11 @@ public class MockTokenUtils {
         return signedJWT.serialize();
     }
 
-    static class MockJwkMgr extends JwkMgr {
+    public String generateTestOIDCToken(long validity, String issuer, String audience) throws Exception {
+        return generateTestOIDCToken(validity, issuer, audience, "8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663");
+    }
+
+    public static class MockJwkMgr extends JwkMgr {
         @Override
         public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
             String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
