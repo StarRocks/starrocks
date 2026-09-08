@@ -761,6 +761,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
                                               tablet_id(), metadata().id(), i));
             continue;
         }
+        if (seg_ptr->num_rows() == 0) {
+            continue;
+        }
         // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
         // shared stats object; otherwise all segments share `stats`.
         if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {

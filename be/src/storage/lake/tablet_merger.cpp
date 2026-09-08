@@ -2887,9 +2887,14 @@ PersistentIndexSstablePB normalized_preflight_sstable_form(const PersistentIndex
     normalized.clear_version();
     normalized.clear_filename();
     normalized.clear_filesize();
+    normalized.clear_max_rss_rowid();
     normalized.clear_encryption_meta();
     normalized.clear_shared();
+    normalized.clear_shared_rssid();
+    normalized.clear_shared_version();
+    normalized.clear_delvec();
     normalized.clear_fileset_id();
+    normalized.clear_rssid_offset();
     normalized.clear_generation_version();
     return normalized;
 }

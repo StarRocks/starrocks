@@ -849,7 +849,6 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
                 return Status::Corruption("tablet split effective rowset range lies outside source tablet");
             }
         }
-        std::unordered_set<uint32_t> indices;
         uint32_t previous = 0;
         bool first = true;
         for (const auto& segment : rowset.segment_metas()) {
@@ -858,7 +857,7 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
                 fallback = Status::NotSupported("tablet split segment index is absent");
             } else {
                 const uint32_t index = segment.segment_idx();
-                if (!indices.insert(index).second || (!first && index <= previous)) {
+                if (!first && index <= previous) {
                     return Status::Corruption("tablet split segment indices are not strictly increasing");
                 }
                 if (uint64_t{rowset.id()} + index > UINT32_MAX) {
@@ -1518,8 +1517,16 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
         if (std::none_of(emit.begin(), emit.end(), [](bool value) { return value; })) {
             return Status::Corruption("tablet split rowset has no emitted child");
         }
-        if (separate_sort || rowset.segment_metas_size() == 0) {
+        const bool zero_row_replay =
+                anchor.num_rows == 0 && anchor.num_dels == 0 && anchor.data_size > 0 && rowset.del_files_size() > 0 &&
+                rowset.segment_metas_size() > 0 &&
+                std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(), [](const auto& segment) {
+                    return segment.has_num_rows() && segment.num_rows() == 0 &&
+                           segment.sort_key_min().values_size() == 0 && segment.sort_key_max().values_size() == 0;
+                });
+        if (separate_sort || rowset.segment_metas_size() == 0 || zero_row_replay) {
             for (size_t c = 0; c < child_count; ++c) row_weights[c] = byte_weights[c] = emit[c] ? 1 : 0;
+            if (zero_row_replay) std::fill(row_weights.begin(), row_weights.end(), 0);
         } else {
             // Only this rowset's segment/sample weights are live. Include sinks outside
             // its effective range, so clipping never donates out-of-range samples to a child.

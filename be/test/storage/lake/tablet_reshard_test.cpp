@@ -893,6 +893,45 @@ protected:
         return {std::move(source_a), std::move(source_b)};
     }
 
+    std::vector<std::shared_ptr<TabletMetadataPB>> make_readable_preflight_sst_sources(const std::string& stem) {
+        auto sources = make_preflight_sst_sources(stem);
+        const std::string segment_name = stem + ".dat";
+        const uint64_t segment_size =
+                write_two_column_segment(sources[0]->id(), segment_name, 100, [](int key) { return key * 10; });
+        std::vector<std::pair<std::string, std::string>> entries;
+        entries.reserve(100);
+        for (uint32_t key = 0; key < 100; ++key) {
+            entries.emplace_back(encode_int_primary_key(key), serialize_index_values({{1, 1, key}}));
+        }
+        const auto sst_file = write_raw_pk_sstable(_tablet_manager->sst_location(sources[0]->id(), stem + ".sst"),
+                                                   std::move(entries), /*encrypted=*/false);
+        for (auto& source : sources) {
+            source->clear_schema();
+            set_two_column_pk_schema(source.get(), /*schema_id=*/4001);
+            source->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+            auto* rowset = source->mutable_rowsets(0);
+            rowset->set_num_rows(50);
+            rowset->set_data_size(segment_size / 2);
+            rowset->set_num_dels(0);
+            auto* segment = rowset->mutable_segment_metas(0);
+            segment->set_size(segment_size);
+            segment->set_num_rows(100);
+            segment->set_segment_idx(0);
+            segment->set_shared(true);
+            *segment->mutable_sort_key_min() = generate_sort_key(0);
+            *segment->mutable_sort_key_max() = generate_sort_key(99);
+            auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
+            sst->set_version(1);
+            sst->set_filesize(sst_file.filesize);
+            sst->set_max_rss_rowid((uint64_t{1} << 32) | 99);
+            *sst->mutable_range() = sst_file.range;
+            sst->mutable_fileset_id()->set_hi(1);
+            sst->mutable_fileset_id()->set_lo(1);
+        }
+        sources[1]->mutable_rowsets(0)->set_data_size(segment_size - segment_size / 2);
+        return sources;
+    }
+
     void add_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
                     const std::string& file_name, const std::string& content) {
         FileMetaPB file_meta;
@@ -8795,6 +8834,108 @@ TEST_F(LakeTabletReshardTest, test_batch_virtual_self_del_offset_survives_split_
     expect_lifecycle_oracle(cold, {{10, 300}}, {});
 }
 
+// CORE-003: a normal serial PK DELETE writes a zero-row physical segment whose footer has positive
+// size and whose sort-key bounds are empty. Split must conserve its physical bytes and replay order;
+// cold PK-index rebuild must skip the empty segment while still applying its del file.
+TEST_F(LakeTabletReshardTest, test_delete_only_zero_row_segment_survives_split_merge_cold_load) {
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+
+    ASSIGN_OR_ABORT(auto seeded,
+                    create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/10, /*value=*/100,
+                                            /*include_delete=*/false));
+    ASSIGN_OR_ABORT(auto deleted, publish_followup_delete(tablet_id, seeded->version(), /*delete_key=*/10));
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore_pk_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+    const RowsetMetadataPB* delete_rowset = nullptr;
+    for (const auto& rowset : deleted->rowsets()) {
+        if (rowset.del_files_size() > 0) delete_rowset = &rowset;
+    }
+    ASSERT_NE(nullptr, delete_rowset);
+    EXPECT_EQ(0, delete_rowset->num_rows());
+    EXPECT_GT(delete_rowset->data_size(), 0);
+    ASSERT_EQ(1, delete_rowset->segment_metas_size());
+    EXPECT_EQ(0, delete_rowset->segment_metas(0).num_rows());
+    EXPECT_EQ(0, delete_rowset->segment_metas(0).sort_key_min().values_size());
+    EXPECT_EQ(0, delete_rowset->segment_metas(0).sort_key_max().values_size());
+    ASSERT_EQ(1, delete_rowset->del_files_size());
+    EXPECT_GT(delete_rowset->del_files(0).num_rows(), 0);
+    const RowsetMetadataPB original_delete(*delete_rowset);
+    auto find_delete_rowset = [&](const TabletMetadataPtr& metadata) -> const RowsetMetadataPB* {
+        for (const auto& rowset : metadata->rowsets()) {
+            if (rowset.uid().SerializeAsString() == original_delete.uid().SerializeAsString()) return &rowset;
+        }
+        return nullptr;
+    };
+    auto expect_canonical_delete = [&](const TabletMetadataPtr& metadata) {
+        const auto* rowset = find_delete_rowset(metadata);
+        ASSERT_NE(nullptr, rowset);
+        EXPECT_EQ(0, rowset->num_rows());
+        EXPECT_EQ(0, rowset->num_dels());
+        EXPECT_EQ(original_delete.data_size(), rowset->data_size());
+        ASSERT_EQ(1, rowset->segment_metas_size());
+        SegmentMetadataPB expected_segment(original_delete.segment_metas(0));
+        SegmentMetadataPB actual_segment(rowset->segment_metas(0));
+        expected_segment.clear_shared();
+        actual_segment.clear_shared();
+        EXPECT_EQ(expected_segment.SerializeAsString(), actual_segment.SerializeAsString());
+        ASSERT_EQ(1, rowset->del_files_size());
+        DelfileWithRowsetId expected_del(original_delete.del_files(0));
+        DelfileWithRowsetId actual_del(rowset->del_files(0));
+        expected_del.clear_shared();
+        actual_del.clear_shared();
+        EXPECT_EQ(expected_del.SerializeAsString(), actual_del.SerializeAsString());
+    };
+
+    int flushes = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    auto children = split_fixed_point_source(deleted, /*child_count=*/2);
+    int64_t projected_bytes = 0;
+    for (const auto& child : children) {
+        const auto* rowset = find_delete_rowset(child);
+        ASSERT_NE(nullptr, rowset);
+        ASSERT_EQ(1, rowset->segment_metas_size());
+        ASSERT_EQ(1, rowset->del_files_size());
+        EXPECT_EQ(0, rowset->num_rows());
+        EXPECT_EQ(0, rowset->num_dels());
+        EXPECT_GT(rowset->data_size(), 0);
+        projected_bytes += rowset->data_size();
+    }
+    EXPECT_EQ(original_delete.data_size(), projected_bytes);
+    EXPECT_EQ(1, flushes);
+
+    const int64_t merged_tablet = next_id();
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    ASSERT_OK(publish_resharding_merge(children, merged_tablet, deleted->version() + 1, deleted->version() + 2,
+                                       next_id(), published));
+    auto merged = published.at(merged_tablet);
+    expect_canonical_delete(merged);
+    expect_lifecycle_oracle(merged, {}, {10});
+    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, deleted->version() + 2));
+    expect_canonical_delete(cold);
+    expect_lifecycle_oracle(cold, {}, {10});
+
+    auto second_cycle = run_no_write_split_merge_cycle(cold, /*child_count=*/3);
+    expect_canonical_delete(second_cycle);
+    expect_lifecycle_oracle(second_cycle, {}, {10});
+    _update_manager->unload_and_remove_primary_index(second_cycle->id());
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto second_cold,
+                    _tablet_manager->get_tablet_metadata(second_cycle->id(), second_cycle->version()));
+    expect_canonical_delete(second_cold);
+    expect_lifecycle_oracle(second_cold, {}, {10});
+    EXPECT_EQ(2, flushes);
+}
+
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for_splitting) {
     auto base_metadata = std::make_shared<TabletMetadataPB>();
     base_metadata->set_id(next_id());
@@ -12562,38 +12703,49 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_modern_sst_i
     }
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_sst_same_file_form_or_range_conflict_before_io) {
-    struct DeclarationConflict {
+TEST_F(LakeTabletReshardTest, test_tablet_merging_same_physical_sst_allows_logical_attachment_differences) {
+    struct LogicalAttachment {
         const char* name;
         std::function<void(PersistentIndexSstablePB*)> apply;
     };
-    const std::vector<DeclarationConflict> conflicts = {
-            {"max rss rowid", [](PersistentIndexSstablePB* sst) { sst->set_max_rss_rowid(uint64_t{2} << 32); }},
+    const std::vector<LogicalAttachment> attachments = {
+            {"deprecated version", [](PersistentIndexSstablePB* sst) { sst->set_version(2); }},
+            {"max rss rowid", [](PersistentIndexSstablePB* sst) { sst->set_max_rss_rowid((uint64_t{2} << 32) | 99); }},
+            {"shared", [](PersistentIndexSstablePB* sst) { sst->set_shared(false); }},
             {"shared rssid", [](PersistentIndexSstablePB* sst) { sst->set_shared_rssid(2); }},
             {"shared version", [](PersistentIndexSstablePB* sst) { sst->set_shared_version(2); }},
-            {"shared version presence", [](PersistentIndexSstablePB* sst) { sst->clear_shared_version(); }},
-            {"rssid offset", [](PersistentIndexSstablePB* sst) { sst->set_rssid_offset(1); }},
             {"embedded delvec",
              [](PersistentIndexSstablePB* sst) {
                  sst->mutable_delvec()->set_version(1);
                  sst->mutable_delvec()->set_size(1);
              }},
-            {"range start",
-             [&](PersistentIndexSstablePB* sst) { sst->mutable_range()->set_start_key(encode_int_primary_key(11)); }},
-            {"range end",
-             [&](PersistentIndexSstablePB* sst) { sst->mutable_range()->set_end_key(encode_int_primary_key(89)); }},
-            {"range presence", [](PersistentIndexSstablePB* sst) { sst->clear_range(); }},
+            {"fileset",
+             [](PersistentIndexSstablePB* sst) {
+                 sst->mutable_fileset_id()->set_hi(2);
+                 sst->mutable_fileset_id()->set_lo(2);
+             }},
+            {"rssid offset", [](PersistentIndexSstablePB* sst) { sst->set_rssid_offset(1); }},
+            {"generation version", [](PersistentIndexSstablePB* sst) { sst->set_generation_version(2); }},
     };
 
-    for (const auto& conflict : conflicts) {
-        SCOPED_TRACE(conflict.name);
-        auto sources = make_preflight_sst_sources(fmt::format("sst_form_conflict_{}", next_id()));
-        conflict.apply(sources[1]->mutable_sstable_meta()->mutable_sstables(0));
-        std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
-        MergePhaseCounts counts;
-        auto status = expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
-        EXPECT_TRUE(status.message().contains("SST")) << status;
-        EXPECT_TRUE(status.message().contains("conflict")) << status;
+    std::vector<std::pair<int32_t, int32_t>> expected_rows;
+    for (int key = 0; key < 100; ++key) expected_rows.emplace_back(key, key * 10);
+    for (const auto& attachment : attachments) {
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("{}; reverse={}", attachment.name, reverse_sources));
+            auto sources = make_readable_preflight_sst_sources(fmt::format("sst_attachment_{}", next_id()));
+            attachment.apply(sources[1]->mutable_sstable_meta()->mutable_sstables(0));
+            std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
+            if (reverse_sources) std::swap(immutable_sources[0], immutable_sources[1]);
+            const int64_t target = next_id();
+            prepare_tablet_dirs(target);
+            std::unordered_map<int64_t, TabletMetadataPtr> published;
+            ASSERT_OK(publish_resharding_merge(immutable_sources, target, /*base_version=*/1, /*new_version=*/2,
+                                               next_id(), published));
+            auto merged = published.at(target);
+            _update_manager->unload_and_remove_primary_index(target);
+            expect_lifecycle_oracle(merged, expected_rows, {});
+        }
     }
 }
 
@@ -12620,6 +12772,18 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_late_sst_fil
              }},
             {"encryption presence",
              [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->clear_encryption_meta(); }},
+            {"range presence",
+             [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->clear_range(); }},
+            {"range value",
+             [&](auto& sources) {
+                 sources[1]->mutable_sstable_meta()->mutable_sstables(0)->mutable_range()->set_start_key(
+                         encode_int_primary_key(11));
+             }},
+            {"unknown field",
+             [](auto& sources) {
+                 auto* sst = sources[1]->mutable_sstable_meta()->mutable_sstables(0);
+                 sst->GetReflection()->MutableUnknownFields(sst)->AddVarint(1000, 1);
+             }},
             {"empty filename",
              [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->set_filename(""); }},
             {"negative size",
@@ -12632,20 +12796,24 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_late_sst_fil
     };
 
     for (const auto& conflict : conflicts) {
-        SCOPED_TRACE(conflict.name);
-        auto sources = make_preflight_sst_sources(fmt::format("sst_preflight_{}", next_id()));
-        for (auto& source : sources) {
-            auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
-            sst->set_filename("repeated_physical.sst");
-            sst->set_encryption_meta(encryption_a.encryption_meta);
-        }
-        conflict.apply(sources);
-        std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("{}; reverse={}", conflict.name, reverse_sources));
+            auto sources = make_preflight_sst_sources(fmt::format("sst_preflight_{}", next_id()));
+            for (auto& source : sources) {
+                auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
+                sst->set_filename("repeated_physical.sst");
+                sst->set_encryption_meta(encryption_a.encryption_meta);
+            }
+            conflict.apply(sources);
+            std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
+            if (reverse_sources) std::swap(immutable_sources[0], immutable_sources[1]);
 
-        MergePhaseCounts counts;
-        auto status = expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
-        if (std::string_view(conflict.name) != "invalid range arity") {
-            EXPECT_TRUE(status.message().contains("SST")) << status;
+            MergePhaseCounts counts;
+            auto status =
+                    expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
+            if (std::string_view(conflict.name) != "invalid range arity") {
+                EXPECT_TRUE(status.message().contains("SST")) << status;
+            }
         }
     }
 }
