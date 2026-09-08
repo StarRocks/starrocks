@@ -27,6 +27,7 @@
 #include "column/datum_tuple.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs_memory.h"
@@ -2000,9 +2001,14 @@ static std::string make_json(int64_t x, const std::string& tag) {
     return R"({"x": )" + std::to_string(x) + R"(, "y": ")" + tag + R"("})";
 }
 
-static TabletSharedPtr create_json_tablet(std::vector<TabletSharedPtr>* tablets, int64_t tablet_id,
-                                          int32_t schema_hash) {
+// |flat_json_config| mirrors the table-level flat_json properties the FE puts on TCreateTabletReq;
+// nullptr models a table that sets none, whose tablet meta then carries no flat_json_config at all.
+static TabletSharedPtr create_json_tablet(std::vector<TabletSharedPtr>* tablets, int64_t tablet_id, int32_t schema_hash,
+                                          const TFlatJsonConfig* flat_json_config = nullptr) {
     TCreateTabletReq request;
+    if (flat_json_config != nullptr) {
+        request.__set_flat_json_config(*flat_json_config);
+    }
     request.tablet_id = tablet_id;
     request.__set_version(1);
     request.__set_version_hash(0);
@@ -2049,6 +2055,9 @@ static RowsetWriterContext json_writer_context(const TabletSharedPtr& tablet) {
     writer_context.version.first = 0;
     writer_context.version.second = 0;
     writer_context.segments_overlap = NONOVERLAPPING;
+    // What DeltaWriter::_init does for a real load, so the rowsets these helpers build have the same
+    // JSON physical form the load path would have produced.
+    writer_context.flat_json_config = tablet->flat_json_config();
     return writer_context;
 }
 
@@ -2083,13 +2092,14 @@ static RowsetSharedPtr create_json_rowset(const TabletSharedPtr& tablet, const s
 static RowsetSharedPtr create_json_partial_rowset(const TabletSharedPtr& tablet, const std::vector<int64_t>& keys,
                                                   const std::function<int64_t(int64_t)>& x_of,
                                                   const std::shared_ptr<TabletSchema>& partial_schema,
-                                                  const std::vector<int32_t>& column_indexes, const std::string& tag) {
+                                                  const std::vector<int32_t>& column_indexes, const std::string& tag,
+                                                  PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE) {
     RowsetWriterContext writer_context = json_writer_context(tablet);
     writer_context.tablet_schema = partial_schema;
     writer_context.referenced_column_ids = column_indexes;
     writer_context.full_tablet_schema = tablet->tablet_schema();
     writer_context.is_partial_update = true;
-    writer_context.partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE;
+    writer_context.partial_update_mode = mode;
     std::unique_ptr<RowsetWriter> writer;
     CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
 
@@ -2332,6 +2342,145 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
     ASSERT_FALSE(words.empty()) << "no dictionary collected, the check below would be vacuous";
     EXPECT_TRUE(words.count("new") > 0) << "dictionary is missing the value the scan now returns";
     EXPECT_TRUE(words.count("old") == 0) << "dictionary still carries the pre-update value";
+}
+
+// A table's flat JSON properties must survive a column-mode partial update.
+//
+// The apply builds its SegmentWriterOptions by hand -- one for the .cols delta column group holding
+// the updated columns, one for the full-row segment holding newly inserted rows -- so neither goes
+// through RowsetWriterContext, where every other writer picks the config up. With flat_json_config
+// left unset there, SegmentWriter falls back to config::enable_json_flat and a table created with
+// "flat_json.enable" = "false" has its JSON column silently flattened by a partial update.
+// ------------------------------------------------------------------------------------------------
+
+static TFlatJsonConfig make_flat_json_config(bool enable) {
+    TFlatJsonConfig flat_json_config;
+    flat_json_config.__set_flat_json_enable(enable);
+    flat_json_config.__set_flat_json_null_factor(config::json_flat_null_factor);
+    flat_json_config.__set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+    flat_json_config.__set_flat_json_column_max(config::json_flat_column_max);
+    return flat_json_config;
+}
+
+// Every place a column-mode partial update can leave the `j` column, as <where, was written flat>:
+// the base segments, the .cols delta column groups carrying updated rows, and the full-row segments
+// appended for newly inserted rows.
+static std::vector<std::pair<std::string, bool>> collect_json_column_forms(const TabletSharedPtr& tablet,
+                                                                           int64_t version) {
+    std::vector<std::pair<std::string, bool>> forms;
+    auto dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(tablet->data_dir()->get_meta());
+    auto rowset_map = tablet->updates()->get_rowset_map();
+    CHECK(rowset_map != nullptr);
+    const ColumnUID j_uid = tablet->tablet_schema()->column(1).unique_id();
+    for (const auto& [rowset_id, rs] : *rowset_map) {
+        if (rs == nullptr) {
+            continue;
+        }
+        CHECK_OK(rs->load());
+        for (size_t seg = 0; seg < rs->segments().size(); seg++) {
+            const auto& segment = rs->segments()[seg];
+            const ColumnReader* reader = segment->column_with_uid(static_cast<size_t>(j_uid));
+            if (reader != nullptr) {
+                forms.emplace_back("segment " + segment->file_name(), reader->is_flat_json());
+            }
+            // For a primary-key tablet the delta column group is keyed by the rowset-map key (the
+            // rssid base) plus the segment index -- the same arithmetic SegmentMetaCollecter does.
+            DeltaColumnGroupList dcgs;
+            TabletSegmentId tsid;
+            tsid.tablet_id = tablet->tablet_id();
+            tsid.segment_id = rowset_id + seg;
+            CHECK_OK(dcg_loader->load(tsid, version, &dcgs));
+            for (const auto& dcg : dcgs) {
+                std::pair<int32_t, int32_t> idx = dcg->get_column_idx(j_uid);
+                if (idx.first < 0) {
+                    continue;
+                }
+                ASSIGN_OR_ABORT(auto dcg_segment, segment->new_dcg_segment(*dcg, idx.first, tablet->tablet_schema()));
+                const ColumnReader* dcg_reader = dcg_segment->column_with_uid(static_cast<size_t>(j_uid));
+                CHECK(dcg_reader != nullptr) << dcg_segment->file_name();
+                forms.emplace_back("cols " + dcg_segment->file_name(), dcg_reader->is_flat_json());
+            }
+        }
+    }
+    return forms;
+}
+
+// Counts the two kinds of place the apply writes, so a test can prove it actually exercised both.
+static std::pair<size_t, size_t> count_forms(const std::vector<std::pair<std::string, bool>>& forms) {
+    size_t segments = 0;
+    size_t cols = 0;
+    for (const auto& form : forms) {
+        (form.first.rfind("cols ", 0) == 0 ? cols : segments)++;
+    }
+    return {segments, cols};
+}
+
+// Drives one column-mode partial update in COLUMN_UPSERT_MODE over `keys`, half of which already
+// exist (-> .cols delta column group) and half of which do not (-> full-row segment), and returns
+// the physical form of the `j` column everywhere it ended up.
+static std::vector<std::pair<std::string, bool>> run_upsert_and_collect_forms(const TabletSharedPtr& tablet,
+                                                                              int64_t* version, int n) {
+    auto x_of = [](int64_t pk) { return pk; };
+    std::vector<int64_t> base_keys(n);
+    for (int i = 0; i < n; i++) {
+        base_keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets{create_json_rowset(tablet, base_keys, x_of, "old")};
+    commit_rowsets(tablet, rowsets, *version);
+
+    // Half already present, half new.
+    std::vector<int64_t> upsert_keys(2 * n);
+    for (int i = 0; i < 2 * n; i++) {
+        upsert_keys[i] = i;
+    }
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset = create_json_partial_rowset(
+            tablet, upsert_keys, x_of, partial_schema, column_indexes, "new", PartialUpdateMode::COLUMN_UPSERT_MODE);
+    auto st = tablet->rowset_commit(++(*version), partial_rowset, 10000);
+    CHECK(st.ok()) << st.to_string();
+    return collect_json_column_forms(tablet, *version);
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_keeps_table_flat_json_config) {
+    // The defect only shows when the be.conf global says "flatten": the table's "do not" is then the
+    // only thing that can stop it.
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    const int N = 100;
+
+    // Control: a table that sets no flat_json property at all. Its tablet meta carries no
+    // flat_json_config, tablet->flat_json_config() is nullptr, and every writer keeps following the
+    // global -- this must not change.
+    {
+        auto tablet = create_json_tablet(&_tablets, rand(), rand());
+        ASSERT_TRUE(tablet->flat_json_config() == nullptr);
+        int64_t version = 1;
+        auto forms = run_upsert_and_collect_forms(tablet, &version, N);
+        auto [num_segments, num_cols] = count_forms(forms);
+        ASSERT_TRUE(num_segments > 0);
+        ASSERT_TRUE(num_cols > 0) << "the update did not produce a delta column group";
+        for (const auto& [where, is_flat] : forms) {
+            EXPECT_TRUE(is_flat) << where << " should still follow config::enable_json_flat";
+        }
+    }
+
+    // A table with "flat_json.enable" = "false".
+    {
+        TFlatJsonConfig disabled = make_flat_json_config(false);
+        auto tablet = create_json_tablet(&_tablets, rand(), rand(), &disabled);
+        ASSERT_TRUE(tablet->flat_json_config() != nullptr);
+        ASSERT_FALSE(tablet->flat_json_config()->is_flat_json_enabled());
+        int64_t version = 1;
+        auto forms = run_upsert_and_collect_forms(tablet, &version, N);
+        auto [num_segments, num_cols] = count_forms(forms);
+        // Guard against a vacuous pass: without both kinds of output the loop below proves nothing
+        // about the two SegmentWriters the apply builds.
+        ASSERT_TRUE(num_segments > 0);
+        ASSERT_TRUE(num_cols > 0) << "the update did not produce a delta column group";
+        for (const auto& [where, is_flat] : forms) {
+            EXPECT_FALSE(is_flat) << where << " ignored the table's flat_json.enable=false";
+        }
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,

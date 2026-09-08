@@ -1,0 +1,288 @@
+-- name: test_partial_update_flat_json_config
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_default (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_default VALUES
+  (1, parse_json('{"a": 1, "b": "p"}'), 1),
+  (2, parse_json('{"a": 2, "b": "p"}'), 2),
+  (3, parse_json('{"a": 3, "b": "p"}'), 3),
+  (4, parse_json('{"a": 4, "b": "p"}'), 4),
+  (5, parse_json('{"a": 5, "b": "p"}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+-- result:
+-- !result
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_default[_META_]) x order by form;
+-- result:
+nulls(TINYINT), a(BIGINT), b(VARCHAR)
+-- !result
+CREATE TABLE t_off (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "flat_json.enable" = "false");
+-- result:
+-- !result
+INSERT INTO t_off VALUES
+  (1, parse_json('{"a": 1, "b": "p"}'), 1),
+  (2, parse_json('{"a": 2, "b": "p"}'), 2),
+  (3, parse_json('{"a": 3, "b": "p"}'), 3),
+  (4, parse_json('{"a": 4, "b": "p"}'), 4),
+  (5, parse_json('{"a": 5, "b": "p"}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+-- result:
+-- !result
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_off[_META_]) x order by form;
+-- result:
+(not flat)
+-- !result
+set partial_update_mode = 'column';
+-- result:
+-- !result
+INSERT INTO t_off (pk, j) VALUES
+  (1, parse_json('{"a": 101, "b": "q"}')),
+  (2, parse_json('{"a": 102, "b": "q"}')),
+  (3, parse_json('{"a": 103, "b": "q"}')),
+  (4, parse_json('{"a": 104, "b": "q"}')),
+  (5, parse_json('{"a": 105, "b": "q"}')),
+  (11, parse_json('{"a": 111, "b": "q"}')),
+  (12, parse_json('{"a": 112, "b": "q"}')),
+  (13, parse_json('{"a": 113, "b": "q"}')),
+  (14, parse_json('{"a": 114, "b": "q"}')),
+  (15, parse_json('{"a": 115, "b": "q"}'));
+-- result:
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_off[_META_]) x order by form;
+-- result:
+(not flat)
+-- !result
+set partial_update_mode = 'column';
+-- result:
+-- !result
+INSERT INTO t_default (pk, j) VALUES
+  (1, parse_json('{"a": 101, "b": "q"}')),
+  (2, parse_json('{"a": 102, "b": "q"}')),
+  (3, parse_json('{"a": 103, "b": "q"}')),
+  (4, parse_json('{"a": 104, "b": "q"}')),
+  (5, parse_json('{"a": 105, "b": "q"}')),
+  (11, parse_json('{"a": 111, "b": "q"}')),
+  (12, parse_json('{"a": 112, "b": "q"}')),
+  (13, parse_json('{"a": 113, "b": "q"}')),
+  (14, parse_json('{"a": 114, "b": "q"}')),
+  (15, parse_json('{"a": 115, "b": "q"}'));
+-- result:
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_default[_META_]) x order by form;
+-- result:
+nulls(TINYINT), a(BIGINT), b(VARCHAR)
+-- !result
+CREATE TABLE t_off_row (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "flat_json.enable" = "false");
+-- result:
+-- !result
+INSERT INTO t_off_row VALUES
+  (1, parse_json('{"a": 1, "b": "p"}'), 1),
+  (2, parse_json('{"a": 2, "b": "p"}'), 2),
+  (3, parse_json('{"a": 3, "b": "p"}'), 3),
+  (4, parse_json('{"a": 4, "b": "p"}'), 4),
+  (5, parse_json('{"a": 5, "b": "p"}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+-- result:
+-- !result
+set partial_update_mode = 'row';
+-- result:
+-- !result
+INSERT INTO t_off_row (pk, j) VALUES
+  (1, parse_json('{"a": 101, "b": "q"}')),
+  (2, parse_json('{"a": 102, "b": "q"}')),
+  (3, parse_json('{"a": 103, "b": "q"}')),
+  (4, parse_json('{"a": 104, "b": "q"}')),
+  (5, parse_json('{"a": 105, "b": "q"}'));
+-- result:
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_off_row[_META_]) x order by form;
+-- result:
+(not flat)
+-- !result
+CREATE TABLE t_sparse (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "flat_json.enable" = "true", "flat_json.sparsity.factor" = "0.9");
+-- result:
+-- !result
+INSERT INTO t_sparse VALUES
+  (1, parse_json('{"a": 1, "b": "p", "c": 1}'), 1),
+  (2, parse_json('{"a": 2, "b": "p", "c": 2}'), 2),
+  (3, parse_json('{"a": 3, "b": "p", "c": 3}'), 3),
+  (4, parse_json('{"a": 4, "b": "p", "c": 4}'), 4),
+  (5, parse_json('{"a": 5, "b": "p", "c": 5}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+-- result:
+-- !result
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_sparse[_META_]) x order by form;
+-- result:
+nulls(TINYINT), a(BIGINT), b(VARCHAR), remain(JSON)
+-- !result
+set partial_update_mode = 'column';
+-- result:
+-- !result
+INSERT INTO t_sparse (pk, j) VALUES
+  (11, parse_json('{"a": 111, "b": "q", "c": 111}')),
+  (12, parse_json('{"a": 112, "b": "q", "c": 112}')),
+  (13, parse_json('{"a": 113, "b": "q", "c": 113}')),
+  (14, parse_json('{"a": 114, "b": "q", "c": 114}')),
+  (15, parse_json('{"a": 115, "b": "q"}')),
+  (16, parse_json('{"a": 116, "b": "q"}')),
+  (17, parse_json('{"a": 117, "b": "q"}')),
+  (18, parse_json('{"a": 118, "b": "q"}')),
+  (19, parse_json('{"a": 119, "b": "q"}')),
+  (20, parse_json('{"a": 120, "b": "q"}'));
+-- result:
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_sparse[_META_]) x order by form;
+-- result:
+nulls(TINYINT), a(BIGINT), b(VARCHAR), remain(JSON)
+-- !result
+select pk, cast(j as varchar), v from t_off order by pk;
+-- result:
+1	{"a": 101, "b": "q"}	1
+2	{"a": 102, "b": "q"}	2
+3	{"a": 103, "b": "q"}	3
+4	{"a": 104, "b": "q"}	4
+5	{"a": 105, "b": "q"}	5
+6	{"a": 6, "b": "p"}	6
+7	{"a": 7, "b": "p"}	7
+8	{"a": 8, "b": "p"}	8
+9	{"a": 9, "b": "p"}	9
+10	{"a": 10, "b": "p"}	10
+11	{"a": 111, "b": "q"}	None
+12	{"a": 112, "b": "q"}	None
+13	{"a": 113, "b": "q"}	None
+14	{"a": 114, "b": "q"}	None
+15	{"a": 115, "b": "q"}	None
+-- !result
+select pk, cast(j as varchar), v from t_default order by pk;
+-- result:
+1	{"a": 101, "b": "q"}	1
+2	{"a": 102, "b": "q"}	2
+3	{"a": 103, "b": "q"}	3
+4	{"a": 104, "b": "q"}	4
+5	{"a": 105, "b": "q"}	5
+6	{"a": 6, "b": "p"}	6
+7	{"a": 7, "b": "p"}	7
+8	{"a": 8, "b": "p"}	8
+9	{"a": 9, "b": "p"}	9
+10	{"a": 10, "b": "p"}	10
+11	{"a": 111, "b": "q"}	None
+12	{"a": 112, "b": "q"}	None
+13	{"a": 113, "b": "q"}	None
+14	{"a": 114, "b": "q"}	None
+15	{"a": 115, "b": "q"}	None
+-- !result
+select pk, cast(j as varchar), v from t_off_row order by pk;
+-- result:
+1	{"a": 101, "b": "q"}	1
+2	{"a": 102, "b": "q"}	2
+3	{"a": 103, "b": "q"}	3
+4	{"a": 104, "b": "q"}	4
+5	{"a": 105, "b": "q"}	5
+6	{"a": 6, "b": "p"}	6
+7	{"a": 7, "b": "p"}	7
+8	{"a": 8, "b": "p"}	8
+9	{"a": 9, "b": "p"}	9
+10	{"a": 10, "b": "p"}	10
+-- !result
+select pk, cast(j as varchar), v from t_sparse order by pk;
+-- result:
+1	{"a": 1, "b": "p", "c": 1}	1
+2	{"a": 2, "b": "p", "c": 2}	2
+3	{"a": 3, "b": "p", "c": 3}	3
+4	{"a": 4, "b": "p", "c": 4}	4
+5	{"a": 5, "b": "p", "c": 5}	5
+6	{"a": 6, "b": "p"}	6
+7	{"a": 7, "b": "p"}	7
+8	{"a": 8, "b": "p"}	8
+9	{"a": 9, "b": "p"}	9
+10	{"a": 10, "b": "p"}	10
+11	{"a": 111, "b": "q", "c": 111}	None
+12	{"a": 112, "b": "q", "c": 112}	None
+13	{"a": 113, "b": "q", "c": 113}	None
+14	{"a": 114, "b": "q", "c": 114}	None
+15	{"a": 115, "b": "q"}	None
+16	{"a": 116, "b": "q"}	None
+17	{"a": 117, "b": "q"}	None
+18	{"a": 118, "b": "q"}	None
+19	{"a": 119, "b": "q"}	None
+20	{"a": 120, "b": "q"}	None
+-- !result
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_off;
+-- result:
+15	120	1120	55
+-- !result
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_default;
+-- result:
+15	120	1120	55
+-- !result
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_off_row;
+-- result:
+10	55	555	55
+-- !result
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_sparse;
+-- result:
+20	210	1210	55
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

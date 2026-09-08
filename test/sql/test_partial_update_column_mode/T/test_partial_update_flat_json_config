@@ -1,0 +1,178 @@
+-- name: test_partial_update_flat_json_config
+-- A column-mode partial update must keep writing JSON with the table's own flat_json properties.
+--
+-- The apply builds its SegmentWriterOptions by hand -- one for the .cols delta column group holding
+-- the updated columns, one for the full-row segment holding rows the upsert inserted -- so neither
+-- goes through RowsetWriterContext, where every other writer picks the table config up. With
+-- flat_json_config left unset there, SegmentWriter falls back to be.conf's enable_json_flat (on by
+-- default) and a table created with "flat_json.enable" = "false" gets flattened anyway.
+--
+-- flat_json_meta() reports the physical form of segments; the .cols overlay is not visible through
+-- it (SegmentMetaCollecter::_collect_flat_json reads the base segment's own reader), so this file
+-- covers the full-row-segment half. The .cols half is covered by the BE unit test
+-- RowsetColumnPartialUpdateTest.partial_update_keeps_table_flat_json_config.
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+-- Control, and the guard against a false negative: a table that sets no flat_json property must
+-- still follow the be.conf global and come back flattened. If this one reports [] the environment is
+-- not flattening anything and every assertion below would pass for the wrong reason.
+CREATE TABLE t_default (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_default VALUES
+  (1, parse_json('{"a": 1, "b": "p"}'), 1),
+  (2, parse_json('{"a": 2, "b": "p"}'), 2),
+  (3, parse_json('{"a": 3, "b": "p"}'), 3),
+  (4, parse_json('{"a": 4, "b": "p"}'), 4),
+  (5, parse_json('{"a": 5, "b": "p"}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_default[_META_]) x order by form;
+
+-- The table under test.
+CREATE TABLE t_off (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "flat_json.enable" = "false");
+INSERT INTO t_off VALUES
+  (1, parse_json('{"a": 1, "b": "p"}'), 1),
+  (2, parse_json('{"a": 2, "b": "p"}'), 2),
+  (3, parse_json('{"a": 3, "b": "p"}'), 3),
+  (4, parse_json('{"a": 4, "b": "p"}'), 4),
+  (5, parse_json('{"a": 5, "b": "p"}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+-- The load path already carries the table config, so this is "(not flat)" on both sides of the fix.
+-- Each probe is DISTINCT over the per-segment forms rather than the raw one-row-per-segment output:
+-- a primary key tablet can compact its segments together at any moment, which would otherwise make
+-- the recorded row count depend on timing.
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_off[_META_]) x order by form;
+
+-- Column-mode partial update. pk 1..5 already exist and land in a .cols delta column group; pk
+-- 11..15 are new and land in a full-row segment written by RowsetColumnUpdateState::_insert_new_rows
+-- -- that is the one flat_json_meta can see.
+set partial_update_mode = 'column';
+INSERT INTO t_off (pk, j) VALUES
+  (1, parse_json('{"a": 101, "b": "q"}')),
+  (2, parse_json('{"a": 102, "b": "q"}')),
+  (3, parse_json('{"a": 103, "b": "q"}')),
+  (4, parse_json('{"a": 104, "b": "q"}')),
+  (5, parse_json('{"a": 105, "b": "q"}')),
+  (11, parse_json('{"a": 111, "b": "q"}')),
+  (12, parse_json('{"a": 112, "b": "q"}')),
+  (13, parse_json('{"a": 113, "b": "q"}')),
+  (14, parse_json('{"a": 114, "b": "q"}')),
+  (15, parse_json('{"a": 115, "b": "q"}'));
+set partial_update_mode = 'auto';
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_off[_META_]) x order by form;
+
+-- Control: the same update on the table that sets no property must stay flattened.
+set partial_update_mode = 'column';
+INSERT INTO t_default (pk, j) VALUES
+  (1, parse_json('{"a": 101, "b": "q"}')),
+  (2, parse_json('{"a": 102, "b": "q"}')),
+  (3, parse_json('{"a": 103, "b": "q"}')),
+  (4, parse_json('{"a": 104, "b": "q"}')),
+  (5, parse_json('{"a": 105, "b": "q"}')),
+  (11, parse_json('{"a": 111, "b": "q"}')),
+  (12, parse_json('{"a": 112, "b": "q"}')),
+  (13, parse_json('{"a": 113, "b": "q"}')),
+  (14, parse_json('{"a": 114, "b": "q"}')),
+  (15, parse_json('{"a": 115, "b": "q"}'));
+set partial_update_mode = 'auto';
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_default[_META_]) x order by form;
+
+-- Control: row-mode partial update, which #62168 already routed through the table config.
+CREATE TABLE t_off_row (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "flat_json.enable" = "false");
+INSERT INTO t_off_row VALUES
+  (1, parse_json('{"a": 1, "b": "p"}'), 1),
+  (2, parse_json('{"a": 2, "b": "p"}'), 2),
+  (3, parse_json('{"a": 3, "b": "p"}'), 3),
+  (4, parse_json('{"a": 4, "b": "p"}'), 4),
+  (5, parse_json('{"a": 5, "b": "p"}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+set partial_update_mode = 'row';
+INSERT INTO t_off_row (pk, j) VALUES
+  (1, parse_json('{"a": 101, "b": "q"}')),
+  (2, parse_json('{"a": 102, "b": "q"}')),
+  (3, parse_json('{"a": 103, "b": "q"}')),
+  (4, parse_json('{"a": 104, "b": "q"}')),
+  (5, parse_json('{"a": 105, "b": "q"}'));
+set partial_update_mode = 'auto';
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_off_row[_META_]) x order by form;
+
+-- A table-level threshold, not just the on/off switch: "b" is present in every row but "c" only in
+-- half of them, so a sparsity factor of 0.9 must keep "c" out of its own sub-column even though the
+-- be.conf global (0.3) would extract it. The column-mode update has to honour that too.
+CREATE TABLE t_sparse (
+    pk BIGINT NOT NULL,
+    j JSON,
+    v BIGINT
+) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "flat_json.enable" = "true", "flat_json.sparsity.factor" = "0.9");
+INSERT INTO t_sparse VALUES
+  (1, parse_json('{"a": 1, "b": "p", "c": 1}'), 1),
+  (2, parse_json('{"a": 2, "b": "p", "c": 2}'), 2),
+  (3, parse_json('{"a": 3, "b": "p", "c": 3}'), 3),
+  (4, parse_json('{"a": 4, "b": "p", "c": 4}'), 4),
+  (5, parse_json('{"a": 5, "b": "p", "c": 5}'), 5),
+  (6, parse_json('{"a": 6, "b": "p"}'), 6),
+  (7, parse_json('{"a": 7, "b": "p"}'), 7),
+  (8, parse_json('{"a": 8, "b": "p"}'), 8),
+  (9, parse_json('{"a": 9, "b": "p"}'), 9),
+  (10, parse_json('{"a": 10, "b": "p"}'), 10);
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_sparse[_META_]) x order by form;
+set partial_update_mode = 'column';
+INSERT INTO t_sparse (pk, j) VALUES
+  (11, parse_json('{"a": 111, "b": "q", "c": 111}')),
+  (12, parse_json('{"a": 112, "b": "q", "c": 112}')),
+  (13, parse_json('{"a": 113, "b": "q", "c": 113}')),
+  (14, parse_json('{"a": 114, "b": "q", "c": 114}')),
+  (15, parse_json('{"a": 115, "b": "q"}')),
+  (16, parse_json('{"a": 116, "b": "q"}')),
+  (17, parse_json('{"a": 117, "b": "q"}')),
+  (18, parse_json('{"a": 118, "b": "q"}')),
+  (19, parse_json('{"a": 119, "b": "q"}')),
+  (20, parse_json('{"a": 120, "b": "q"}'));
+set partial_update_mode = 'auto';
+select distinct coalesce(m[1], '(not flat)') as form
+  from (select flat_json_meta(j) as m from t_sparse[_META_]) x order by form;
+
+-- This is a physical-form change only: every value must be untouched by it.
+select pk, cast(j as varchar), v from t_off order by pk;
+select pk, cast(j as varchar), v from t_default order by pk;
+select pk, cast(j as varchar), v from t_off_row order by pk;
+select pk, cast(j as varchar), v from t_sparse order by pk;
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_off;
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_default;
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_off_row;
+select count(*), sum(pk), sum(get_json_int(j, '$.a')), sum(v) from t_sparse;
+
+DROP DATABASE db_${uuid0};

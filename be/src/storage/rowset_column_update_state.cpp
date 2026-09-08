@@ -426,7 +426,8 @@ static Status read_from_source_segment_and_update(
 
 // this function build delta writer for delta column group's file.(end with `.col`)
 StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta_column_group_writer(
-        Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver, int idx) {
+        Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema,
+        const std::shared_ptr<FlatJsonConfig>& flat_json_config, uint32_t rssid, int64_t ver, int idx) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
     ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(rssid));
     // always 0 file suffix here, because alter table will execute after this version has been applied only.
@@ -436,6 +437,10 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    // The .cols file holds the updated columns, written through fresh column writers, so a JSON
+    // column among them has its physical form re-derived here. Carry the table's own config in, or
+    // that derivation silently uses the be.conf globals.
+    writer_options.flat_json_config = flat_json_config;
     // Deliberately no segment_file_mark: a mark would make standalone (CLucene) inverted
     // indexes collide with the base segment's (same rowset id + segment id), so the
     // SegmentWriter skips them for .cols files. Footer-inlined (builtin) inverted indexes
@@ -538,13 +543,17 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
 
 // this function build segment writer for segment files
 StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_segment_writer(
-        Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, int segment_id) {
+        Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, const std::shared_ptr<FlatJsonConfig>& flat_json_config,
+        int segment_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
     const std::string path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
     (void)fs->delete_file(path); // delete .dat if already exist
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    // Writes whole rows (writer.init below takes every column), so any JSON column's physical form
+    // is re-derived here and needs the table's own config rather than the be.conf globals.
+    writer_options.flat_json_config = flat_json_config;
     // These are full-row segments appended to the rowset, so give the writer a real file
     // mark: standalone (CLucene) inverted indexes land at the path readers derive from
     // (rowset path, rowset id, segment id). Mirrors RowsetUpdateState's segment rewrite.
@@ -681,7 +690,8 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             // 1. generate segment file
             auto chunk_ptr = ChunkFactory::new_chunk(schema, _partial_update_states[upt_id].insert_rowids.size());
             ChunkUniquePtr partial_chunk_ptr = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
-            ASSIGN_OR_RETURN(auto writer, _prepare_segment_writer(rowset, tablet_schema, segid));
+            ASSIGN_OR_RETURN(auto writer,
+                             _prepare_segment_writer(rowset, tablet_schema, tablet->flat_json_config(), segid));
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, partial_chunk_ptr));
             for (uint32_t column_id : read_update_column_ids.second) {
                 chunk_ptr->get_column_raw_ptr_by_id(column_id)->append_selective(
@@ -792,7 +802,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
 
     auto build_writer_fn = [&](uint32_t rssid, const std::shared_ptr<TabletSchema>& partial_tschema, int idx) {
         // we can generate delta column group by new version
-        return _prepare_delta_column_group_writer(rowset, partial_tschema, rssid,
+        return _prepare_delta_column_group_writer(rowset, partial_tschema, tablet->flat_json_config(), rssid,
                                                   latest_applied_version.major_number() + 1, idx);
     };
     // 2. getter all rss_rowid_to_update_rowid, and prepare .col writer by the way

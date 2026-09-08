@@ -31,6 +31,7 @@ class FileSystem;
 class Segment;
 class RandomAccessFile;
 class ColumnIterator;
+class FlatJsonConfig;
 
 struct StreamChunkContainer {
     Chunk* chunk_ptr = nullptr;
@@ -219,8 +220,15 @@ private:
     Status _check_and_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t start_idx, uint32_t end_idx,
                                        EditVersion latest_applied_version, const PrimaryIndex& index);
 
+    // |flat_json_config| is the table-level flat JSON config of the tablet this state applies to,
+    // or nullptr for a table that carries none (its tablet meta then has no flat_json_config field
+    // at all, and SegmentWriter keeps the be.conf global behavior). It is deliberately NOT defaulted:
+    // a writer that leaves it unset silently re-derives the JSON physical form from the be.conf
+    // globals instead of the table's own flat_json properties -- the exact defect this parameter
+    // exists to prevent -- so every caller is made to name where its config comes from.
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
-            Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver, int idx);
+            Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema,
+            const std::shared_ptr<FlatJsonConfig>& flat_json_config, uint32_t rssid, int64_t ver, int idx);
 
     // to build `_partial_update_states`
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t start_idx, uint32_t end_idx,
@@ -238,9 +246,10 @@ private:
     // build the map from rssid to <RowsetId, segment id>
     Status _init_rowset_seg_id(Tablet* tablet);
 
-    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset,
-                                                                     const TabletSchemaCSPtr& tablet_schema,
-                                                                     int segment_id);
+    // See _prepare_delta_column_group_writer for |flat_json_config|.
+    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(
+            Rowset* rowset, const TabletSchemaCSPtr& tablet_schema,
+            const std::shared_ptr<FlatJsonConfig>& flat_json_config, int segment_id);
 
     Status _fill_default_columns(const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& column_ids,
                                  const int64_t row_cnt, vector<ColumnPtr>* columns);
