@@ -3070,8 +3070,8 @@ protected:
         lake::tablet_reshard_helper::set_rowset_uid(rowset);
         for (int i = 0; i < 2; ++i) {
             const auto name = fmt::format("fixed_{}_{}.dat", metadata->id(), i);
-            const auto size =
-                    write_two_column_segment(metadata->id(), name, 50, [](int key) { return key * 10; }, i * 50);
+            const auto size = write_two_column_segment(
+                    metadata->id(), name, 50, [](int key) { return key * 10; }, i * 50);
             auto* segment = rowset->add_segment_metas();
             segment->set_filename(name);
             segment->set_size(size);
@@ -8955,8 +8955,10 @@ TEST_F(LakeTabletReshardTest, test_batch_virtual_self_del_offset_survives_split_
 
     const std::string first_name = fmt::format("virtual_first_{}.dat", tablet_id);
     const std::string second_name = fmt::format("virtual_second_{}.dat", tablet_id);
-    const uint64_t first_size = write_two_column_segment(tablet_id, first_name, 1, [](int) { return 100; }, 10);
-    const uint64_t second_size = write_two_column_segment(tablet_id, second_name, 1, [](int) { return 300; }, 10);
+    const uint64_t first_size = write_two_column_segment(
+            tablet_id, first_name, 1, [](int) { return 100; }, 10);
+    const uint64_t second_size = write_two_column_segment(
+            tablet_id, second_name, 1, [](int) { return 300; }, 10);
 
     lake::Tablet tablet(_tablet_manager.get(), tablet_id);
     lake::MetaFileBuilder builder(tablet, source);
