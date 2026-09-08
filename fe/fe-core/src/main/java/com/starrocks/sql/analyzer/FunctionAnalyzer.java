@@ -272,7 +272,29 @@ public class FunctionAnalyzer {
                     functionCallExpr.getPos());
         }
 
+<<<<<<< HEAD
         if (fnName.getFunction().equals(FunctionSet.COUNT)) {
+=======
+        // DISTINCT aggregation over a PERCENTILE value has no meaning and no rewrite: unlike
+        // count(distinct bitmap) / count(distinct hll) -- which the optimizer rewrites to
+        // bitmap_union_count / hll cardinality -- a PERCENTILE cannot be de-duplicated, so the
+        // call reaches the BE as a raw distinct aggregate. There it is dispatched to the
+        // string/binary distinct path and down_casts the PercentileColumn to a BinaryColumn it is
+        // not, which aborts a debug build (casts.h down_cast on BinaryColumnBase) and dereferences
+        // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
+        if (fnParams.isDistinct()) {
+            for (Expr child : functionCallExpr.getChildren()) {
+                if (child.getType().isPercentile()) {
+                    throw new SemanticException(
+                            "DISTINCT aggregation is not supported for PERCENTILE type: " +
+                                    ExprToSql.toSql(functionCallExpr),
+                            functionCallExpr.getPos());
+                }
+            }
+        }
+
+        if (fnName.equals(FunctionSet.COUNT)) {
+>>>>>>> 5208e87 ([BugFix] Reject DISTINCT aggregation over a PERCENTILE value (#78795))
             // for multiple exprs count must be qualified with distinct
             if (functionCallExpr.getChildren().size() > 1 && !fnParams.isDistinct()) {
                 throw new SemanticException(
