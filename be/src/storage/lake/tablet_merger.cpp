@@ -671,10 +671,9 @@ Status validate_del_coordinate(const RowsetMetadataPB& containing_rowset, const 
     if (containing_rowset.segment_metas_size() == 0) {
         return offset == 0 ? Status::OK() : Status::Corruption("segmentless self-origin del offset is not zero");
     }
-    for (int i = 0; i < containing_rowset.segment_metas_size(); ++i) {
-        if (get_segment_idx(containing_rowset, i) == offset) return Status::OK();
-    }
-    return Status::Corruption("self-origin del offset does not name a current segment");
+    return offset <= get_max_segment_idx(containing_rowset)
+                   ? Status::OK()
+                   : Status::Corruption("self-origin del offset exceeds rowset replay span");
 }
 
 bool same_range(const TabletRange& a, const TabletRange& b) {

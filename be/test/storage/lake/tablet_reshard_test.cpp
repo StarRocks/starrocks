@@ -5484,7 +5484,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_self_del_offset_falls_back_a
     auto* del = m->mutable_rowsets(0)->add_del_files();
     del->set_name("self.del");
     del->set_origin_rowset_id(2);
-    del->set_op_offset(1);
+    del->set_op_offset(8);
     expect_split_fallback_after_flush(m);
 }
 
@@ -8562,6 +8562,237 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_multi_stmt_batch_keeps_sc
     EXPECT_EQ(child1_rowset.uid().SerializeAsString(), child0_rowset.uid().SerializeAsString());
     EXPECT_EQ(1, child0_rowset.uid().hi());
     EXPECT_EQ(7777, child0_rowset.uid().lo());
+}
+
+// CORE-001: split cross-publish deliberately retains every shared physical segment and apportions
+// rowset stats. A child can therefore have positive approximate stats even when the shared segment
+// is wholly outside its range. A later SPLIT must take the typed identical fallback after its flush,
+// rather than treating current-producer metadata as corruption.
+TEST_F(LakeTabletReshardTest, test_cross_published_off_range_stats_split_falls_back_identical) {
+    constexpr int64_t kBaseVersion = 1;
+    constexpr int64_t kCrossVersion = 2;
+    constexpr int64_t kSplitVersion = 3;
+    const int64_t old_tablet = next_id();
+    const int64_t right_child = next_id();
+    const int64_t fallback_child = next_id();
+    const int64_t unused_child = next_id();
+    for (int64_t id : {old_tablet, right_child, fallback_child, unused_child}) prepare_tablet_dirs(id);
+
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        *range->mutable_lower_bound() = generate_sort_key(lower);
+        range->set_lower_bound_included(true);
+        *range->mutable_upper_bound() = generate_sort_key(upper);
+        range->set_upper_bound_included(false);
+    };
+
+    auto right = std::make_shared<TabletMetadataPB>();
+    right->set_id(right_child);
+    right->set_version(kBaseVersion);
+    right->set_next_rowset_id(1);
+    set_two_column_pk_schema(right.get(), /*schema_id=*/4001);
+    right->mutable_schema()->set_keys_type(DUP_KEYS);
+    set_range(right->mutable_range(), 50, 100);
+    ASSERT_OK(put_tablet_metadata(right));
+
+    const std::string segment_name = fmt::format("cross_off_range_{}.dat", old_tablet);
+    const uint64_t segment_size =
+            write_two_column_segment(old_tablet, segment_name, 50, [](int key) { return key * 10; });
+    const int64_t cross_txn = next_id();
+    TxnLogPB cross_log;
+    cross_log.set_tablet_id(old_tablet);
+    cross_log.set_txn_id(cross_txn);
+    auto* cross_rowset = cross_log.mutable_op_write()->mutable_rowset();
+    cross_rowset->set_num_rows(50);
+    cross_rowset->set_data_size(segment_size);
+    lake::tablet_reshard_helper::set_rowset_uid(cross_rowset);
+    auto* segment = cross_rowset->add_segment_metas();
+    segment->set_filename(segment_name);
+    segment->set_size(segment_size);
+    segment->set_num_rows(50);
+    segment->set_segment_idx(0);
+    *segment->mutable_sort_key_min() = generate_sort_key(0);
+    *segment->mutable_sort_key_max() = generate_sort_key(49);
+    ASSERT_OK(_tablet_manager->put_txn_log(cross_log));
+
+    lake::PublishTabletInfo cross_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet, right_child,
+                                       /*split_count=*/2, /*split_index=*/1);
+    TxnInfoPB cross_txn_info;
+    cross_txn_info.set_txn_id(cross_txn);
+    cross_txn_info.set_txn_type(TXN_NORMAL);
+    cross_txn_info.set_commit_time(1);
+    ASSIGN_OR_ABORT(auto cross_published,
+                    lake::publish_version(_tablet_manager.get(), cross_info, kBaseVersion, kCrossVersion,
+                                          std::span<const TxnInfoPB>(&cross_txn_info, 1), false));
+    ASSERT_EQ(1, cross_published->rowsets_size());
+    const auto& published_rowset = cross_published->rowsets(0);
+    EXPECT_EQ(25, published_rowset.num_rows());
+    EXPECT_EQ(cross_published->range().SerializeAsString(), published_rowset.range().SerializeAsString());
+    ASSERT_EQ(1, published_rowset.segment_metas_size());
+    EXPECT_TRUE(published_rowset.segment_metas(0).shared());
+    ASSIGN_OR_ABORT(auto before_rows, read_two_column_rows(cross_published));
+    EXPECT_TRUE(before_rows.empty());
+
+    ReshardingTabletInfoPB request;
+    auto* split = request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(right_child);
+    split->add_new_tablet_ids(fallback_child);
+    split->add_new_tablet_ids(unused_child);
+    set_range(split->add_new_tablet_ranges(), 50, 75);
+    set_range(split->add_new_tablet_ranges(), 75, 100);
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+
+    int flushes = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, kCrossVersion, kSplitVersion, split_txn,
+                                              false, published, ranges));
+    EXPECT_EQ(1, flushes);
+    ASSERT_TRUE(published.contains(right_child));
+    ASSERT_TRUE(published.contains(fallback_child));
+    EXPECT_FALSE(published.contains(unused_child));
+    EXPECT_EQ(cross_published->range().SerializeAsString(), published.at(fallback_child)->range().SerializeAsString());
+    EXPECT_EQ(cross_published->rowsets(0).SerializeAsString(),
+              published.at(fallback_child)->rowsets(0).SerializeAsString());
+    ASSIGN_OR_ABORT(auto after_rows, read_two_column_rows(published.at(fallback_child)));
+    EXPECT_EQ(before_rows, after_rows);
+}
+
+// CORE-002: MetaFileBuilder reserves a virtual operation slot for a pure DELETE statement in a
+// multi-statement batch. INSERT / DELETE / INSERT therefore produces physical segment indices
+// {0,2} with self-origin delete offset 1. Reshard must preserve that replay ordering even though
+// offset 1 does not name a physical segment.
+TEST_F(LakeTabletReshardTest, test_batch_virtual_self_del_offset_survives_split_merge_cold_load) {
+    constexpr int64_t kWriteVersion = 2;
+    constexpr int64_t kSplitVersion = 3;
+    constexpr int64_t kMergeVersion = 4;
+    const int64_t tablet_id = next_id();
+    const int64_t left_child = next_id();
+    const int64_t right_child = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t id : {tablet_id, left_child, right_child, merged_tablet}) prepare_tablet_dirs(id);
+
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        *range->mutable_lower_bound() = generate_sort_key(lower);
+        range->set_lower_bound_included(true);
+        *range->mutable_upper_bound() = generate_sort_key(upper);
+        range->set_upper_bound_included(false);
+    };
+
+    auto source = std::make_shared<TabletMetadataPB>();
+    source->set_id(tablet_id);
+    source->set_version(kWriteVersion);
+    source->set_next_rowset_id(1);
+    set_two_column_pk_schema(source.get(), /*schema_id=*/4001);
+    source->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    source->set_enable_persistent_index(true);
+    source->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    set_range(source->mutable_range(), 0, 100);
+
+    const std::string first_name = fmt::format("virtual_first_{}.dat", tablet_id);
+    const std::string second_name = fmt::format("virtual_second_{}.dat", tablet_id);
+    const uint64_t first_size = write_two_column_segment(tablet_id, first_name, 1, [](int) { return 100; }, 10);
+    const uint64_t second_size = write_two_column_segment(tablet_id, second_name, 1, [](int) { return 300; }, 10);
+
+    lake::Tablet tablet(_tablet_manager.get(), tablet_id);
+    lake::MetaFileBuilder builder(tablet, source);
+    auto make_upsert = [&](const std::string& name, uint64_t size) {
+        RowsetMetadataPB rowset;
+        rowset.set_num_rows(1);
+        rowset.set_data_size(size);
+        rowset.set_num_dels(0);
+        lake::tablet_reshard_helper::set_rowset_uid(&rowset);
+        auto* segment = rowset.add_segment_metas();
+        segment->set_filename(name);
+        segment->set_size(size);
+        segment->set_num_rows(1);
+        segment->set_segment_idx(0);
+        *segment->mutable_sort_key_min() = generate_sort_key(10);
+        *segment->mutable_sort_key_max() = generate_sort_key(10);
+        return rowset;
+    };
+    builder.add_rowset(make_upsert(first_name, first_size), {}, {}, {}, {}, {});
+
+    const std::string del_name = fmt::format("virtual_middle_{}.del", tablet_id);
+    write_binary_del_file(tablet_id, del_name, {encode_int_primary_key(10)});
+    RowsetMetadataPB pure_delete;
+    pure_delete.set_num_rows(0);
+    pure_delete.set_data_size(0);
+    pure_delete.set_num_dels(1);
+    FileMetaPB del_file;
+    del_file.set_name(del_name);
+    builder.add_rowset(pure_delete, {}, {}, std::vector<FileMetaPB>{del_file},
+                       /*del_op_offsets=*/{-1}, /*del_num_rows=*/{1});
+    builder.add_rowset(make_upsert(second_name, second_size), {}, {}, {}, {}, {});
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, source->rowsets_size());
+
+    const auto& built_batch = source->rowsets(0);
+    DelVector first_segment_delvec;
+    const uint32_t deleted_row = 0;
+    first_segment_delvec.init(kWriteVersion, &deleted_row, 1);
+    add_delvec(source.get(), tablet_id, kWriteVersion, built_batch.id(),
+               fmt::format("virtual_middle_{}.delvec", tablet_id), first_segment_delvec.save());
+    ASSERT_OK(put_tablet_metadata(source));
+    TabletMetadataPtr written = source;
+    ASSERT_EQ(1, written->rowsets_size());
+    const auto& batch = written->rowsets(0);
+    ASSERT_EQ(2, batch.segment_metas_size());
+    EXPECT_EQ(0, batch.segment_metas(0).segment_idx());
+    EXPECT_EQ(2, batch.segment_metas(1).segment_idx());
+    ASSERT_EQ(1, batch.del_files_size());
+    EXPECT_EQ(batch.id(), batch.del_files(0).origin_rowset_id());
+    EXPECT_EQ(1, batch.del_files(0).op_offset());
+    expect_lifecycle_oracle(written, {{10, 300}}, {});
+
+    ReshardingTabletInfoPB split_request;
+    auto* split = split_request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(tablet_id);
+    split->add_new_tablet_ids(left_child);
+    split->add_new_tablet_ids(right_child);
+    set_range(split->add_new_tablet_ranges(), 0, 50);
+    set_range(split->add_new_tablet_ranges(), 50, 100);
+    TxnInfoPB split_info;
+    split_info.set_txn_id(next_id());
+    split_info.set_commit_time(1);
+    split_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> split_published;
+    std::unordered_map<int64_t, TabletRangePB> split_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), split_request, kWriteVersion, kSplitVersion,
+                                              split_info, false, split_published, split_ranges));
+    ASSERT_TRUE(split_published.contains(left_child));
+    ASSERT_TRUE(split_published.contains(right_child));
+    for (int64_t child : {left_child, right_child}) {
+        ASSERT_EQ(1, split_published.at(child)->rowsets_size());
+        const auto& child_rowset = split_published.at(child)->rowsets(0);
+        ASSERT_EQ(2, child_rowset.segment_metas_size());
+        EXPECT_EQ(0, child_rowset.segment_metas(0).segment_idx());
+        EXPECT_EQ(2, child_rowset.segment_metas(1).segment_idx());
+        ASSERT_EQ(1, child_rowset.del_files_size());
+        EXPECT_EQ(1, child_rowset.del_files(0).op_offset());
+    }
+
+    std::unordered_map<int64_t, TabletMetadataPtr> merge_published;
+    ASSERT_OK(publish_resharding_merge({split_published.at(left_child), split_published.at(right_child)}, merged_tablet,
+                                       kSplitVersion, kMergeVersion, next_id(), merge_published));
+    auto merged = merge_published.at(merged_tablet);
+    ASSERT_EQ(1, merged->rowsets_size());
+    ASSERT_EQ(1, merged->rowsets(0).del_files_size());
+    EXPECT_EQ(1, merged->rowsets(0).del_files(0).op_offset());
+    expect_lifecycle_oracle(merged, {{10, 300}}, {});
+    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, kMergeVersion));
+    expect_lifecycle_oracle(cold, {{10, 300}}, {});
 }
 
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for_splitting) {
@@ -14642,13 +14873,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_duplicate_segment_inde
     expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_self_del_offset_outside_current_segments) {
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_self_del_offset_outside_replay_span) {
     auto source = make_allocator_source(next_id(), 20);
     auto* rowset = add_allocator_rowset(source.get(), 10, 1, "canonical_self.dat", 7);
     auto* del = rowset->add_del_files();
     del->set_name("canonical_self.del");
     del->set_origin_rowset_id(10);
-    del->set_op_offset(2);
+    del->set_op_offset(8);
     MergePhaseCounts counts;
     expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
 }

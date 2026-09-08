@@ -876,8 +876,8 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
                 return Status::Corruption("tablet split delete replay span overflows uint32");
             }
             if (del.origin_rowset_id() == rowset.id() &&
-                (rowset.segment_metas_size() == 0 ? offset != 0 : !indices.contains(offset))) {
-                fallback = Status::NotSupported("tablet split self-origin delete offset is not a current segment");
+                (rowset.segment_metas_size() == 0 ? offset != 0 : offset > previous)) {
+                fallback = Status::NotSupported("tablet split self-origin delete offset exceeds rowset replay span");
             }
         }
     }
@@ -1489,6 +1489,8 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
     ASSIGN_OR_RETURN(const auto schema, materialize_sort_key_schema(source.schema()));
     const bool separate_sort = schema->keys_type() == PRIMARY_KEYS && schema->has_separate_sort_key();
     ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(*schema));
+    TabletRange source_range;
+    RETURN_IF_ERROR(source_range.from_proto(source.range()));
     for (int r = 0; r < source.rowsets_size(); ++r) {
         const auto& rowset = source.rowsets(r);
         RETURN_IF_ERROR(budget->consume(child_count, "projector intersections"));
@@ -1603,8 +1605,22 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
             }
         }
         const auto positive = [](int64_t weight) { return weight > 0; };
-        if ((anchor.num_rows > 0 && std::none_of(row_weights.begin(), row_weights.end(), positive)) ||
-            (anchor.data_size > 0 && std::none_of(byte_weights.begin(), byte_weights.end(), positive))) {
+        const bool zero_row_weight =
+                anchor.num_rows > 0 && std::none_of(row_weights.begin(), row_weights.end(), positive);
+        const bool zero_byte_weight =
+                anchor.data_size > 0 && std::none_of(byte_weights.begin(), byte_weights.end(), positive);
+        if (zero_row_weight || zero_byte_weight) {
+            const bool same_source_range =
+                    effective.lower_bound() == source_range.lower_bound() &&
+                    effective.upper_bound() == source_range.upper_bound() &&
+                    (effective.is_minimum() ||
+                     effective.lower_bound_included() == source_range.lower_bound_included()) &&
+                    (effective.is_maximum() || effective.upper_bound_included() == source_range.upper_bound_included());
+            const bool all_shared = std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                                                [](const auto& segment) { return segment.shared(); });
+            if (rowset.has_range() && rowset.segment_metas_size() > 0 && same_source_range && all_shared) {
+                return Status::NotSupported("tablet split cross-published rowset has no active physical weight");
+            }
             return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
         }
         tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
