@@ -65,6 +65,20 @@ abstract class AzureStorageCloudCredential implements CloudCredential {
         properties.putAll(generatedConfigurationMap);
     }
 
+    protected static String getHadoopEndpoint(String endpoint) {
+        String endpointWithoutScheme = endpoint;
+        if (endpoint.regionMatches(true, 0, "https://", 0, "https://".length())) {
+            endpointWithoutScheme = endpoint.substring("https://".length());
+        } else if (endpoint.regionMatches(true, 0, "http://", 0, "http://".length())) {
+            endpointWithoutScheme = endpoint.substring("http://".length());
+        }
+
+        // Hadoop Azure filesystems use the account portion of the filesystem URI's raw authority for credential lookup.
+        // Exclude a trailing slash or path, but retain an explicit port because it is part of that authority.
+        int pathSeparator = endpointWithoutScheme.indexOf('/');
+        return pathSeparator >= 0 ? endpointWithoutScheme.substring(0, pathSeparator) : endpointWithoutScheme;
+    }
+
     abstract void tryGenerateConfigurationMap();
 }
 
@@ -143,20 +157,6 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, tenantId);
             }
         }
-    }
-
-    private static String getHadoopEndpoint(String endpoint) {
-        String endpointWithoutScheme = endpoint;
-        if (endpoint.regionMatches(true, 0, "https://", 0, "https://".length())) {
-            endpointWithoutScheme = endpoint.substring("https://".length());
-        } else if (endpoint.regionMatches(true, 0, "http://", 0, "http://".length())) {
-            endpointWithoutScheme = endpoint.substring("http://".length());
-        }
-
-        // Hadoop WASB uses the account portion of the filesystem URI's raw authority for credential lookup.
-        // Exclude a trailing slash or path, but retain an explicit port because it is part of that authority.
-        int pathSeparator = endpointWithoutScheme.indexOf('/');
-        return pathSeparator >= 0 ? endpointWithoutScheme.substring(0, pathSeparator) : endpointWithoutScheme;
     }
 
     @Override
@@ -298,11 +298,12 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                         String.format("fs.azure.account.key.%s.dfs.core.windows.net", storageAccount),
                         sharedKey);
             } else if (!endpoint.isEmpty()) {
+                String hadoopEndpoint = getHadoopEndpoint(endpoint);
                 generatedConfigurationMap.put(
-                        String.format("fs.azure.account.auth.type.%s", endpoint),
+                        String.format("fs.azure.account.auth.type.%s", hadoopEndpoint),
                         "SharedKey");
                 generatedConfigurationMap.put(
-                        String.format("fs.azure.account.key.%s", endpoint),
+                        String.format("fs.azure.account.key.%s", hadoopEndpoint),
                         sharedKey);
             }
         } else if (!sasToken.isEmpty()) {
@@ -314,11 +315,12 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                         String.format("fs.azure.sas.fixed.token.%s.dfs.core.windows.net", storageAccount),
                         sasToken);
             } else if (!endpoint.isEmpty()) {
+                String hadoopEndpoint = getHadoopEndpoint(endpoint);
                 generatedConfigurationMap.put(
-                        String.format("fs.azure.account.auth.type.%s", endpoint),
+                        String.format("fs.azure.account.auth.type.%s", hadoopEndpoint),
                         "SAS");
                 generatedConfigurationMap.put(
-                        String.format("fs.azure.sas.fixed.token.%s", endpoint),
+                        String.format("fs.azure.sas.fixed.token.%s", hadoopEndpoint),
                         sasToken);
             }
         } else if (!oauth2ClientId.isEmpty() && !oauth2ClientSecret.isEmpty() &&

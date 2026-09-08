@@ -370,6 +370,41 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+    public void testAzureADLS2EndpointSchemeIsExcludedFromHadoopCredentialKeys() {
+        Map<String, String> sharedKeyProperties = new HashMap<>();
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT,
+                "https://account.dfs.core.windows.net");
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, "shared-key");
+
+        CloudConfiguration sharedKeyConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sharedKeyProperties);
+        Configuration sharedKeyHadoopConfiguration = new Configuration();
+        sharedKeyConfiguration.applyToConfiguration(sharedKeyHadoopConfiguration);
+        Assertions.assertEquals("SharedKey", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.auth.type.account.dfs.core.windows.net"));
+        Assertions.assertEquals("shared-key", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.dfs.core.windows.net"));
+        Assertions.assertNull(sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.https://account.dfs.core.windows.net"));
+
+        Map<String, String> sasProperties = new HashMap<>();
+        sasProperties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT,
+                "http://account.dfs.core.windows.net");
+        sasProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, "sas-token");
+
+        CloudConfiguration sasConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sasProperties);
+        Configuration sasHadoopConfiguration = new Configuration();
+        sasConfiguration.applyToConfiguration(sasHadoopConfiguration);
+        Assertions.assertEquals("SAS", sasHadoopConfiguration.get(
+                "fs.azure.account.auth.type.account.dfs.core.windows.net"));
+        Assertions.assertEquals("sas-token", sasHadoopConfiguration.get(
+                "fs.azure.sas.fixed.token.account.dfs.core.windows.net"));
+        Assertions.assertNull(sasHadoopConfiguration.get(
+                "fs.azure.sas.fixed.token.http://account.dfs.core.windows.net"));
+    }
+
+    @Test
     public void testAzureADLS2ManagedIdentity() {
         Map<String, String> map = new HashMap<>() {
             {
