@@ -1,0 +1,127 @@
+-- name: test_meta_scan_json_subfield_default_value
+-- `ADD COLUMN j JSON DEFAULT '{"f2":"hello"}'` on a table that already holds data leaves the old
+-- segments without a `j` column: they serve it from a DefaultValueColumnIterator. When the JSONV2
+-- rewrite turns `get_json_string(j,'$.f2')` into a synthetic extended subfield column, the scan path
+-- gives that column the default extracted out of the root JSON default, but the two [_META_] paths
+-- (OlapMetaScanner / LakeMetaReader) did not. Without a default the iterator reports only_nulls(),
+-- SegmentMetaCollecter::_collect_dict_for_column silently skips the segment, and the global
+-- dictionary the frontend caches ends up holding only the values that are physically stored --
+-- 'aaa' -- and not the default 'hello' that the very same scan returns.
+--
+-- Every row carrying the default then encoded to a bogus code 0 (ColumnDecoder::
+-- _encode_string_to_global_id falls back to 0 for a value the dictionary does not know), which is
+-- below every real code, so:
+--   * ordering / grouping on the subfield came back in the wrong order, with no error at all;
+--   * anything that had to decode the subfield back to a string failed with
+--     "Dict Decode failed, Dict can't take cover all key :0".
+-- With the default inherited, the collecter reports GlobalDictError instead and the frontend simply
+-- does not build a dictionary for this column, so the subfield is read as a plain string and every
+-- answer below is right. The controls prove the dictionary is only withheld from this one shape.
+create database db_${uuid0};
+use db_${uuid0};
+
+-- t1: the affected shape. k=1..20 have no `j` in their segment and read back the default 'hello';
+-- k=21..30 physically store 'aaa'.
+create table t1 (k int, v int) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t1 values (1,10),(2,20),(3,30),(4,40),(5,50),(6,60),(7,70),(8,80),(9,90),(10,100);
+insert into t1 values (11,10),(12,20),(13,30),(14,40),(15,50),(16,60),(17,70),(18,80),(19,90),(20,100);
+alter table t1 add column j json default '{"f2":"hello"}';
+function: wait_alter_table_finish()
+insert into t1 values (21,10,parse_json('{"f2":"aaa"}')),(22,20,parse_json('{"f2":"aaa"}')),(23,30,parse_json('{"f2":"aaa"}')),(24,40,parse_json('{"f2":"aaa"}')),(25,50,parse_json('{"f2":"aaa"}')),(26,60,parse_json('{"f2":"aaa"}')),(27,70,parse_json('{"f2":"aaa"}')),(28,80,parse_json('{"f2":"aaa"}')),(29,90,parse_json('{"f2":"aaa"}')),(30,100,parse_json('{"f2":"aaa"}'));
+
+-- t2 control: the same 30 rows, but `j` is physically stored in every segment.
+create table t2 (k int, v int, j json) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t2 values (1,10,parse_json('{"f2":"hello"}')),(2,20,parse_json('{"f2":"hello"}')),(3,30,parse_json('{"f2":"hello"}')),(4,40,parse_json('{"f2":"hello"}')),(5,50,parse_json('{"f2":"hello"}')),(6,60,parse_json('{"f2":"hello"}')),(7,70,parse_json('{"f2":"hello"}')),(8,80,parse_json('{"f2":"hello"}')),(9,90,parse_json('{"f2":"hello"}')),(10,100,parse_json('{"f2":"hello"}'));
+insert into t2 values (11,10,parse_json('{"f2":"hello"}')),(12,20,parse_json('{"f2":"hello"}')),(13,30,parse_json('{"f2":"hello"}')),(14,40,parse_json('{"f2":"hello"}')),(15,50,parse_json('{"f2":"hello"}')),(16,60,parse_json('{"f2":"hello"}')),(17,70,parse_json('{"f2":"hello"}')),(18,80,parse_json('{"f2":"hello"}')),(19,90,parse_json('{"f2":"hello"}')),(20,100,parse_json('{"f2":"hello"}'));
+insert into t2 values (21,10,parse_json('{"f2":"aaa"}')),(22,20,parse_json('{"f2":"aaa"}')),(23,30,parse_json('{"f2":"aaa"}')),(24,40,parse_json('{"f2":"aaa"}')),(25,50,parse_json('{"f2":"aaa"}')),(26,60,parse_json('{"f2":"aaa"}')),(27,70,parse_json('{"f2":"aaa"}')),(28,80,parse_json('{"f2":"aaa"}')),(29,90,parse_json('{"f2":"aaa"}')),(30,100,parse_json('{"f2":"aaa"}'));
+
+-- t3 control: ADD COLUMN with NO default. The old rows really are NULL, so there is nothing to
+-- inherit and the dictionary (holding only 'aaa') is complete. This shape must keep its dictionary.
+create table t3 (k int, v int) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t3 values (1,10),(2,20),(3,30),(4,40),(5,50),(6,60),(7,70),(8,80),(9,90),(10,100);
+insert into t3 values (11,10),(12,20),(13,30),(14,40),(15,50),(16,60),(17,70),(18,80),(19,90),(20,100);
+alter table t3 add column j json;
+function: wait_alter_table_finish()
+insert into t3 values (21,10,parse_json('{"f2":"aaa"}')),(22,20,parse_json('{"f2":"aaa"}')),(23,30,parse_json('{"f2":"aaa"}')),(24,40,parse_json('{"f2":"aaa"}')),(25,50,parse_json('{"f2":"aaa"}')),(26,60,parse_json('{"f2":"aaa"}')),(27,70,parse_json('{"f2":"aaa"}')),(28,80,parse_json('{"f2":"aaa"}')),(29,90,parse_json('{"f2":"aaa"}')),(30,100,parse_json('{"f2":"aaa"}'));
+
+-- t5 control: a plain low-cardinality VARCHAR column, no JSON anywhere. The low-cardinality
+-- optimization as a whole must be untouched.
+create table t5 (k int, s varchar(64)) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t5 values (1,'hello'),(2,'hello'),(3,'hello'),(4,'hello'),(5,'hello'),(6,'hello'),(7,'hello'),(8,'hello'),(9,'hello'),(10,'hello');
+insert into t5 values (11,'hello'),(12,'hello'),(13,'hello'),(14,'hello'),(15,'hello'),(16,'hello'),(17,'hello'),(18,'hello'),(19,'hello'),(20,'hello');
+insert into t5 values (21,'aaa'),(22,'aaa'),(23,'aaa'),(24,'aaa'),(25,'aaa'),(26,'aaa'),(27,'aaa'),(28,'aaa'),(29,'aaa'),(30,'aaa');
+
+-- Guard: the subfield has to be really flattened, otherwise the extended-column path is never taken
+-- and everything below passes for the wrong reason. 1 means at least one segment carries f2.
+select max(case when array_join(fm, ',') like '%f2(VARCHAR)%' then 1 else 0 end) from (select flat_json_meta(j) fm from t1 [_META_]) x;
+select max(case when array_join(fm, ',') like '%f2(VARCHAR)%' then 1 else 0 end) from (select flat_json_meta(j) fm from t2 [_META_]) x;
+select max(case when array_join(fm, ',') like '%f2(VARCHAR)%' then 1 else 0 end) from (select flat_json_meta(j) fm from t3 [_META_]) x;
+
+-- The dictionary is collected asynchronously: the statement that touches the subfield only kicks the
+-- collection off. A fixed sleep is not a barrier -- on a loaded cluster the collection lands after it
+-- expires, every query below then runs without the broken dictionary and answers correctly even
+-- against the pre-fix binary, and the case passes for the wrong reason. So drive the collection and
+-- wait on states instead of on the clock.
+--
+-- The three controls must end up WITH a dictionary, and that is a state we can poll for directly:
+-- wait_global_dict_ready keeps re-planning until the plan carries a Decode and only gives up (and
+-- fails) after 60s, so it is the control assertion and the barrier at once.
+function: try_collect_dict_N_times("get_json_string(j, '$.f2')", 't1', 10)
+function: wait_global_dict_ready("get_json_string(j, '$.f2')", 't2')
+function: wait_global_dict_ready("get_json_string(j, '$.f2')", 't3')
+function: wait_global_dict_ready('s', 't5')
+
+-- t1 must end up WITHOUT one, and "no dictionary yet" looks exactly like "no dictionary ever" in a
+-- plan -- so assert the terminal state the frontend really records instead. With the default
+-- inherited the collecter answers GlobalDictError and CacheDictManager parks `j.f2` in
+-- NO_DICT_STRING_COLUMNS for good; that set is written only once a collection has finished and
+-- failed, so an in-flight collection cannot satisfy it. Before the fix the collection succeeded and
+-- handed back a dictionary that was missing the default value, `j.f2` is not parked and the plan
+-- does carry a Decode, and both of these fail.
+function: assert_never_collect_dicts('j.f2', 't1', 'db_${uuid0}')
+function: assert_no_global_dict("get_json_string(j, '$.f2')", 't1')
+
+-- Silent wrong answers: the dictionary code, not the string, drove the ordering.
+[ORDER]select k from t1 order by get_json_string(j, '$.f2'), k limit 5;
+[ORDER]select count(*) from t1 group by get_json_string(j, '$.f2') order by get_json_string(j, '$.f2');
+-- Hard failures: anything that decodes the subfield back to a string.
+[ORDER]select k, get_json_string(j, '$.f2') from t1 where k in (1,2,3,21) order by k;
+[ORDER]select get_json_string(j, '$.f2') s, count(*) c from t1 group by s order by s;
+select min(get_json_string(j, '$.f2')), max(get_json_string(j, '$.f2')) from t1;
+[ORDER]select concat(get_json_string(j, '$.f2'), '!') from t1 where k <= 2 order by k;
+-- Predicates and counts were right even with the broken dictionary, because the scan filters on the
+-- raw string and only encodes afterwards. They must stay right.
+select count(*) from t1 where get_json_string(j, '$.f2') = 'hello';
+select count(*) from t1 where get_json_string(j, '$.f2') = 'aaa';
+select count(*) from t1 where get_json_string(j, '$.f2') like 'h%';
+select count(*) from t1 where get_json_string(j, '$.f2') is not null;
+select count(distinct get_json_string(j, '$.f2')) from t1;
+select count(*) from t1 where get_json_string(j, '$.f2') != 'hello';
+select count(*) from t1 where get_json_string(j, '$.f2') in ('hello','aaa');
+select count(get_json_string(j, '$.f2')) from t1;
+
+-- t2: `j` stored everywhere, dictionary complete, always was and stays correct.
+[ORDER]select k from t2 order by get_json_string(j, '$.f2'), k limit 5;
+[ORDER]select k, get_json_string(j, '$.f2') from t2 where k in (1,2,3,21) order by k;
+[ORDER]select count(*) from t2 group by get_json_string(j, '$.f2') order by get_json_string(j, '$.f2');
+
+-- t3: ADD COLUMN without a default, the missing rows really are NULL (NULLs sort first).
+[ORDER]select k from t3 order by get_json_string(j, '$.f2'), k limit 5;
+[ORDER]select k, get_json_string(j, '$.f2') from t3 where k in (1,2,3,21) order by k;
+select count(*) from t3 where get_json_string(j, '$.f2') is not null;
+
+-- t5: the plain low-cardinality column is unaffected.
+[ORDER]select k from t5 order by s, k limit 5;
+[ORDER]select k, s from t5 where k in (1,2,3,21) order by k;
+[ORDER]select count(*) from t5 group by s order by s;
+
+-- With the JSONV2 dictionary rewrite off, t1 was correct before the fix too.
+set cbo_json_v2_dict_opt = false;
+[ORDER]select k from t1 order by get_json_string(j, '$.f2'), k limit 5;
+[ORDER]select k, get_json_string(j, '$.f2') from t1 where k in (1,2,3,21) order by k;
+
+drop database db_${uuid0};

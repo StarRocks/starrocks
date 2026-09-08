@@ -18,6 +18,7 @@
 
 #include "exec/olap_meta_scan_node.h"
 #include "runtime/runtime_state.h"
+#include "storage/extends_column_utils.h"
 #include "storage/metadata_util.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -103,8 +104,15 @@ Status OlapMetaScanner::_init_meta_reader_params() {
             column.set_type(path->value_type().type);
             column.set_length(path->value_type().len);
             column.set_is_nullable(true);
-            int32_t root_uid = tmp_schema->column(static_cast<size_t>(root_column_index)).unique_id();
-            column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+            const auto& root_column = tmp_schema->column(static_cast<size_t>(root_column_index));
+            column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_column.unique_id()));
+
+            // Same as the scan path (extend_schema_by_access_paths / LakeDataSource): inherit the
+            // root JSON column's default value. Segments written before the JSON column was added
+            // serve the subfield from a DefaultValueColumnIterator; without the default that
+            // iterator reports only_nulls() and dictionary collection skips those rows, so the
+            // global dictionary would miss the default value the scan actually returns.
+            inherit_default_value_from_json(&column, root_column, path.get());
 
             tmp_schema->append_column(column);
             VLOG(2) << "extend the tablet-schema: " << column.debug_string();

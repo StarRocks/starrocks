@@ -17,6 +17,17 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
+// Give the extended column built for `path` the default value its root JSON column carries, by
+// extracting the subfield `path` points at out of that JSON default.
+//
+// A synthetic subfield column owns no storage, so in a segment written before the JSON column was
+// added it is served by a DefaultValueColumnIterator. Without this the iterator has no default
+// value, reports itself as all-nulls, and every consumer that asks the segment about the subfield
+// (a scan, or a [_META_] dictionary collection) sees NULL where the table actually returns the
+// default. Every site that appends such a column must call this, or the sites disagree.
+void inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                     const ColumnAccessPath* path);
+
 StatusOr<TabletSchemaCSPtr> extend_schema_by_access_paths(const TabletSchemaCSPtr& tablet_schema, size_t next_unique_id,
                                                           const std::vector<ColumnAccessPathPtr>& access_paths);
 

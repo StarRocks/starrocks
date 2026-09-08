@@ -16,6 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <map>
+#include <string>
+#include <vector>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
@@ -248,6 +253,133 @@ TEST_F(LakeMetaReaderTest, test_init_seg_meta_collecters_ignore_lost_segment) {
     LakeMetaReaderParams params;
     // The sole segment is lost, so the collector loop must skip the null slot without crashing.
     ASSERT_OK(reader.TEST_init_seg_meta_collecters(tablet, params));
+}
+
+// Builds the access path the FE emits for get_json_string(j, '$.f2'): a ROOT node named after the
+// JSON column carrying `extended`, with one FIELD child per subfield.
+static ColumnAccessPathPtr make_extended_json_path(const std::string& root_column, const std::string& field,
+                                                   const TypeDescriptor& value_type) {
+    TColumnAccessPath tleaf;
+    tleaf.__set_type(TAccessPathType::FIELD);
+    tleaf.__set_from_predicate(false);
+    tleaf.__set_extended(false);
+    tleaf.__set_type_desc(value_type.to_thrift());
+
+    TColumnAccessPath troot;
+    troot.__set_type(TAccessPathType::ROOT);
+    troot.__set_from_predicate(false);
+    troot.__set_extended(true);
+    troot.__set_type_desc(value_type.to_thrift());
+    troot.__set_children({tleaf});
+
+    std::vector<std::string> resolved = {root_column, field};
+    size_t resolve_index = 0;
+    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> {
+        CHECK_LT(resolve_index, resolved.size());
+        return resolved[resolve_index++];
+    };
+    auto res = ColumnAccessPath::create(troot, resolver);
+    CHECK(res.ok()) << res.status();
+    return std::move(res).value();
+}
+
+// A tablet whose only value column is a JSON column, optionally carrying a default value.
+static std::shared_ptr<TabletMetadataPB> generate_json_tablet_metadata(const std::string& json_default) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(1);
+    auto schema = metadata->mutable_schema();
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+
+    auto c0 = schema->add_column();
+    c0->set_unique_id(next_id());
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    auto c1 = schema->add_column();
+    c1->set_unique_id(next_id());
+    c1->set_name("j");
+    c1->set_type("JSON");
+    c1->set_is_key(false);
+    c1->set_is_nullable(true);
+    c1->set_aggregation("NONE");
+    if (!json_default.empty()) {
+        c1->set_default_value(json_default);
+    }
+    return metadata;
+}
+
+// A [_META_] scan appends a synthetic column for every extended JSON subfield path, exactly like the
+// data scan does (extend_schema_by_access_paths / LakeDataSource::_extend_schema_by_access_paths).
+// The synthetic column owns no storage, so in a segment written before `ADD COLUMN j JSON DEFAULT
+// ...` it is served by a DefaultValueColumnIterator. Unless it inherits the root JSON column's
+// default, that iterator reports only_nulls() and SegmentMetaCollecter::_collect_dict_for_column
+// silently skips the segment, so the global dictionary the frontend caches is missing the default
+// value -- and every row holding it then decodes to a bogus code 0: wrong sort/group order, or a
+// "Dict Decode failed" error. Keep the meta path in step with the scan path.
+TEST_F(LakeMetaReaderTest, test_extended_json_subfield_inherits_root_default_value) {
+    auto metadata = generate_json_tablet_metadata(R"({"f2":"hello"})");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    std::vector<ColumnAccessPathPtr> paths;
+    paths.emplace_back(make_extended_json_path("j", "f2", TypeDescriptor::create_varchar_type(65533)));
+    ASSERT_EQ("j.f2", paths[0]->linear_path());
+    ASSERT_TRUE(paths[0]->is_extended());
+
+    std::map<int32_t, std::string> id_to_names;
+    LakeMetaReaderParams params;
+    params.tablet_manager = _tablet_mgr.get();
+    params.tablet_id = metadata->id();
+    params.version = Version(0, 1);
+    params.id_to_names = &id_to_names;
+    params.column_access_paths = &paths;
+    // Same seed as next_uniq_id(): above every real column id, so the synthetic id cannot collide.
+    params.next_uniq_id = std::numeric_limits<int32_t>::max() - 1000000;
+
+    LakeMetaReader reader;
+    ASSERT_OK(reader.init(params));
+
+    const auto& schema = reader.TEST_tablet_schema();
+    int32_t cid = schema->field_index("j.f2");
+    ASSERT_GE(cid, 0);
+    const auto& subfield = schema->column(static_cast<size_t>(cid));
+    ASSERT_TRUE(subfield.is_extended());
+    EXPECT_TRUE(subfield.has_default_value()) << "the subfield must inherit the root JSON column's default";
+    EXPECT_EQ("hello", subfield.default_value());
+}
+
+// Control: a JSON column with no default must not hand the subfield one, otherwise the meta scan
+// would invent a value the data scan never returns.
+TEST_F(LakeMetaReaderTest, test_extended_json_subfield_without_root_default_value) {
+    auto metadata = generate_json_tablet_metadata("");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    std::vector<ColumnAccessPathPtr> paths;
+    paths.emplace_back(make_extended_json_path("j", "f2", TypeDescriptor::create_varchar_type(65533)));
+
+    std::map<int32_t, std::string> id_to_names;
+    LakeMetaReaderParams params;
+    params.tablet_manager = _tablet_mgr.get();
+    params.tablet_id = metadata->id();
+    params.version = Version(0, 1);
+    params.id_to_names = &id_to_names;
+    params.column_access_paths = &paths;
+    params.next_uniq_id = std::numeric_limits<int32_t>::max() - 1000000;
+
+    LakeMetaReader reader;
+    ASSERT_OK(reader.init(params));
+
+    const auto& schema = reader.TEST_tablet_schema();
+    int32_t cid = schema->field_index("j.f2");
+    ASSERT_GE(cid, 0);
+    EXPECT_FALSE(schema->column(static_cast<size_t>(cid)).has_default_value());
 }
 
 } // namespace starrocks::lake

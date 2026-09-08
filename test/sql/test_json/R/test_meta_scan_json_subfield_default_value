@@ -1,0 +1,255 @@
+-- name: test_meta_scan_json_subfield_default_value
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (k int, v int) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1,10),(2,20),(3,30),(4,40),(5,50),(6,60),(7,70),(8,80),(9,90),(10,100);
+-- result:
+-- !result
+insert into t1 values (11,10),(12,20),(13,30),(14,40),(15,50),(16,60),(17,70),(18,80),(19,90),(20,100);
+-- result:
+-- !result
+alter table t1 add column j json default '{"f2":"hello"}';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t1 values (21,10,parse_json('{"f2":"aaa"}')),(22,20,parse_json('{"f2":"aaa"}')),(23,30,parse_json('{"f2":"aaa"}')),(24,40,parse_json('{"f2":"aaa"}')),(25,50,parse_json('{"f2":"aaa"}')),(26,60,parse_json('{"f2":"aaa"}')),(27,70,parse_json('{"f2":"aaa"}')),(28,80,parse_json('{"f2":"aaa"}')),(29,90,parse_json('{"f2":"aaa"}')),(30,100,parse_json('{"f2":"aaa"}'));
+-- result:
+-- !result
+create table t2 (k int, v int, j json) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t2 values (1,10,parse_json('{"f2":"hello"}')),(2,20,parse_json('{"f2":"hello"}')),(3,30,parse_json('{"f2":"hello"}')),(4,40,parse_json('{"f2":"hello"}')),(5,50,parse_json('{"f2":"hello"}')),(6,60,parse_json('{"f2":"hello"}')),(7,70,parse_json('{"f2":"hello"}')),(8,80,parse_json('{"f2":"hello"}')),(9,90,parse_json('{"f2":"hello"}')),(10,100,parse_json('{"f2":"hello"}'));
+-- result:
+-- !result
+insert into t2 values (11,10,parse_json('{"f2":"hello"}')),(12,20,parse_json('{"f2":"hello"}')),(13,30,parse_json('{"f2":"hello"}')),(14,40,parse_json('{"f2":"hello"}')),(15,50,parse_json('{"f2":"hello"}')),(16,60,parse_json('{"f2":"hello"}')),(17,70,parse_json('{"f2":"hello"}')),(18,80,parse_json('{"f2":"hello"}')),(19,90,parse_json('{"f2":"hello"}')),(20,100,parse_json('{"f2":"hello"}'));
+-- result:
+-- !result
+insert into t2 values (21,10,parse_json('{"f2":"aaa"}')),(22,20,parse_json('{"f2":"aaa"}')),(23,30,parse_json('{"f2":"aaa"}')),(24,40,parse_json('{"f2":"aaa"}')),(25,50,parse_json('{"f2":"aaa"}')),(26,60,parse_json('{"f2":"aaa"}')),(27,70,parse_json('{"f2":"aaa"}')),(28,80,parse_json('{"f2":"aaa"}')),(29,90,parse_json('{"f2":"aaa"}')),(30,100,parse_json('{"f2":"aaa"}'));
+-- result:
+-- !result
+create table t3 (k int, v int) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t3 values (1,10),(2,20),(3,30),(4,40),(5,50),(6,60),(7,70),(8,80),(9,90),(10,100);
+-- result:
+-- !result
+insert into t3 values (11,10),(12,20),(13,30),(14,40),(15,50),(16,60),(17,70),(18,80),(19,90),(20,100);
+-- result:
+-- !result
+alter table t3 add column j json;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t3 values (21,10,parse_json('{"f2":"aaa"}')),(22,20,parse_json('{"f2":"aaa"}')),(23,30,parse_json('{"f2":"aaa"}')),(24,40,parse_json('{"f2":"aaa"}')),(25,50,parse_json('{"f2":"aaa"}')),(26,60,parse_json('{"f2":"aaa"}')),(27,70,parse_json('{"f2":"aaa"}')),(28,80,parse_json('{"f2":"aaa"}')),(29,90,parse_json('{"f2":"aaa"}')),(30,100,parse_json('{"f2":"aaa"}'));
+-- result:
+-- !result
+create table t5 (k int, s varchar(64)) duplicate key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t5 values (1,'hello'),(2,'hello'),(3,'hello'),(4,'hello'),(5,'hello'),(6,'hello'),(7,'hello'),(8,'hello'),(9,'hello'),(10,'hello');
+-- result:
+-- !result
+insert into t5 values (11,'hello'),(12,'hello'),(13,'hello'),(14,'hello'),(15,'hello'),(16,'hello'),(17,'hello'),(18,'hello'),(19,'hello'),(20,'hello');
+-- result:
+-- !result
+insert into t5 values (21,'aaa'),(22,'aaa'),(23,'aaa'),(24,'aaa'),(25,'aaa'),(26,'aaa'),(27,'aaa'),(28,'aaa'),(29,'aaa'),(30,'aaa');
+-- result:
+-- !result
+select max(case when array_join(fm, ',') like '%f2(VARCHAR)%' then 1 else 0 end) from (select flat_json_meta(j) fm from t1 [_META_]) x;
+-- result:
+1
+-- !result
+select max(case when array_join(fm, ',') like '%f2(VARCHAR)%' then 1 else 0 end) from (select flat_json_meta(j) fm from t2 [_META_]) x;
+-- result:
+1
+-- !result
+select max(case when array_join(fm, ',') like '%f2(VARCHAR)%' then 1 else 0 end) from (select flat_json_meta(j) fm from t3 [_META_]) x;
+-- result:
+1
+-- !result
+function: try_collect_dict_N_times("get_json_string(j, '$.f2')", 't1', 10)
+-- result:
+None
+-- !result
+function: wait_global_dict_ready("get_json_string(j, '$.f2')", 't2')
+-- result:
+
+-- !result
+function: wait_global_dict_ready("get_json_string(j, '$.f2')", 't3')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('s', 't5')
+-- result:
+
+-- !result
+function: assert_never_collect_dicts('j.f2', 't1', 'db_${uuid0}')
+-- result:
+None
+-- !result
+function: assert_no_global_dict("get_json_string(j, '$.f2')", 't1')
+-- result:
+None
+-- !result
+[ORDER]select k from t1 order by get_json_string(j, '$.f2'), k limit 5;
+-- result:
+21
+22
+23
+24
+25
+-- !result
+[ORDER]select count(*) from t1 group by get_json_string(j, '$.f2') order by get_json_string(j, '$.f2');
+-- result:
+10
+20
+-- !result
+[ORDER]select k, get_json_string(j, '$.f2') from t1 where k in (1,2,3,21) order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+21	aaa
+-- !result
+[ORDER]select get_json_string(j, '$.f2') s, count(*) c from t1 group by s order by s;
+-- result:
+aaa	10
+hello	20
+-- !result
+select min(get_json_string(j, '$.f2')), max(get_json_string(j, '$.f2')) from t1;
+-- result:
+aaa	hello
+-- !result
+[ORDER]select concat(get_json_string(j, '$.f2'), '!') from t1 where k <= 2 order by k;
+-- result:
+hello!
+hello!
+-- !result
+select count(*) from t1 where get_json_string(j, '$.f2') = 'hello';
+-- result:
+20
+-- !result
+select count(*) from t1 where get_json_string(j, '$.f2') = 'aaa';
+-- result:
+10
+-- !result
+select count(*) from t1 where get_json_string(j, '$.f2') like 'h%';
+-- result:
+20
+-- !result
+select count(*) from t1 where get_json_string(j, '$.f2') is not null;
+-- result:
+30
+-- !result
+select count(distinct get_json_string(j, '$.f2')) from t1;
+-- result:
+2
+-- !result
+select count(*) from t1 where get_json_string(j, '$.f2') != 'hello';
+-- result:
+10
+-- !result
+select count(*) from t1 where get_json_string(j, '$.f2') in ('hello','aaa');
+-- result:
+30
+-- !result
+select count(get_json_string(j, '$.f2')) from t1;
+-- result:
+30
+-- !result
+[ORDER]select k from t2 order by get_json_string(j, '$.f2'), k limit 5;
+-- result:
+21
+22
+23
+24
+25
+-- !result
+[ORDER]select k, get_json_string(j, '$.f2') from t2 where k in (1,2,3,21) order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+21	aaa
+-- !result
+[ORDER]select count(*) from t2 group by get_json_string(j, '$.f2') order by get_json_string(j, '$.f2');
+-- result:
+10
+20
+-- !result
+[ORDER]select k from t3 order by get_json_string(j, '$.f2'), k limit 5;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+[ORDER]select k, get_json_string(j, '$.f2') from t3 where k in (1,2,3,21) order by k;
+-- result:
+1	None
+2	None
+3	None
+21	aaa
+-- !result
+select count(*) from t3 where get_json_string(j, '$.f2') is not null;
+-- result:
+10
+-- !result
+[ORDER]select k from t5 order by s, k limit 5;
+-- result:
+21
+22
+23
+24
+25
+-- !result
+[ORDER]select k, s from t5 where k in (1,2,3,21) order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+21	aaa
+-- !result
+[ORDER]select count(*) from t5 group by s order by s;
+-- result:
+10
+20
+-- !result
+set cbo_json_v2_dict_opt = false;
+-- result:
+-- !result
+[ORDER]select k from t1 order by get_json_string(j, '$.f2'), k limit 5;
+-- result:
+21
+22
+23
+24
+25
+-- !result
+[ORDER]select k, get_json_string(j, '$.f2') from t1 where k in (1,2,3,21) order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+21	aaa
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
