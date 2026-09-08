@@ -1,0 +1,49 @@
+-- name: test_parquet_flba_decimal_dict
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ./sql/test_external_file/data/flba_decimal_dict.parquet oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 792,264. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE flba_decimal_dict
+(
+    cat string,
+    amt decimal(38, 2)
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0}/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select count(*), max(amt), min(amt), sum(amt) from flba_decimal_dict where cat = 'c7' and amt > 0;
+-- result:
+20000	1999.98	0.08	20000600.00
+-- !result
+select count(*) from flba_decimal_dict where cat = 'c7' and abs(amt) >= 1e10;
+-- result:
+0
+-- !result
+select count(*), max(amt) from flba_decimal_dict where amt > 0;
+-- result:
+200000	2000.00
+-- !result
+select count(*), max(amt), min(amt), sum(amt) from flba_decimal_dict where cat = 'c7';
+-- result:
+20000	1999.98	0.08	20000600.00
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
