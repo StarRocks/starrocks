@@ -818,7 +818,9 @@ jobs:
         id: run_ut
         if: steps.branch.outcome == 'success'
         shell: bash
-        timeout-minutes: 90
+        # TEMPORARY: lowered from 90 so the HangSentinelTest validation run reaches the stack dump
+        # in ~35min instead of ~90min. Revert together with HangSentinelTest.
+        timeout-minutes: 35
         env:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
