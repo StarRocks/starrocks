@@ -16,9 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <limits>
 #include <random>
 
+#include "base/coding.h"
 #include "base/simd/byte_stream_split.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -1150,6 +1152,215 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPackedCorruptHeader) {
         ASSERT_TRUE(encoding->create_decoder(&decoder).ok());
         Status st = decoder->set_data(Slice(reinterpret_cast<const char*>(header.data()), header.size()));
         ASSERT_TRUE(st.is_corruption()) << st;
+    }
+}
+
+// ---- BOOLEAN + RLE -------------------------------------------------------------------------------
+// Wire format: 4-byte little-endian payload length, then the RLE / bit-packed hybrid stream with a
+// bit width of 1. parquet-mr writes every boolean column this way in PARQUET_2_0 mode.
+
+namespace {
+
+const EncodingInfo* rle_boolean_encoding() {
+    const EncodingInfo* encoding = nullptr;
+    (void)EncodingInfo::get(tparquet::Type::BOOLEAN, tparquet::Encoding::RLE, &encoding);
+    return encoding;
+}
+
+Slice rle_boolean_encode(const EncodingInfo* encoding, const std::vector<uint8_t>& values,
+                         std::unique_ptr<Encoder>* encoder) {
+    EXPECT_TRUE(encoding->create_encoder(encoder).ok());
+    EXPECT_TRUE((*encoder)->append(values.data(), values.size()).ok());
+    Slice encoded = (*encoder)->build();
+    // the prefix must describe exactly the payload that follows
+    EXPECT_GE(encoded.size, static_cast<size_t>(4));
+    EXPECT_EQ(decode_fixed32_le(reinterpret_cast<const uint8_t*>(encoded.data)),
+              static_cast<uint32_t>(encoded.size - 4));
+    return encoded;
+}
+
+} // namespace
+
+TEST_F(ParquetEncodingTest, RleBooleanRoundTrip) {
+    const EncodingInfo* encoding = rle_boolean_encoding();
+    ASSERT_TRUE(encoding != nullptr);
+
+    // Every stream here ends on a repeated run or on a full literal group, so it carries no literal
+    // padding and DecoderChecker's out-of-bounds assertions hold.
+    std::vector<std::vector<uint8_t>> cases;
+    cases.emplace_back(100, 1);
+    cases.emplace_back(100, 0);
+    {
+        std::vector<uint8_t> alternating(64);
+        for (size_t i = 0; i < alternating.size(); ++i) {
+            alternating[i] = i % 2;
+        }
+        cases.push_back(alternating);
+    }
+    {
+        // repeated run -> repeated run -> literal groups -> repeated run
+        std::vector<uint8_t> mixed;
+        mixed.insert(mixed.end(), 50, 1);
+        mixed.insert(mixed.end(), 50, 0);
+        for (size_t i = 0; i < 64; ++i) {
+            mixed.push_back(i % 3 == 0);
+        }
+        mixed.insert(mixed.end(), 100, 1);
+        cases.push_back(mixed);
+    }
+    {
+        // Random values interleave literal groups and repeated runs. A repeated run whose length is
+        // not a multiple of 8 shifts the literal-group alignment, so the stream could end on a partial
+        // (padded) group; a trailing repeated run keeps the final flush exact.
+        std::vector<uint8_t> random(4096);
+        auto gen = std::mt19937(7);
+        std::bernoulli_distribution dist(0.5);
+        for (auto& v : random) {
+            v = dist(gen);
+        }
+        random.insert(random.end(), 64, 1);
+        cases.push_back(random);
+    }
+
+    for (const auto& values : cases) {
+        std::unique_ptr<Encoder> encoder;
+        Slice encoded = rle_boolean_encode(encoding, values, &encoder);
+
+        std::unique_ptr<Decoder> decoder;
+        ASSERT_TRUE(encoding->create_decoder(&decoder).ok());
+        DecoderChecker<uint8_t, false>::check(values, encoded, decoder.get());
+
+        // build() is idempotent: the same bytes come back
+        Slice again = encoder->build();
+        ASSERT_EQ(encoded.size, again.size);
+        ASSERT_EQ(0, memcmp(encoded.data, again.data, encoded.size));
+    }
+}
+
+TEST_F(ParquetEncodingTest, RleBooleanUnalignedSizes) {
+    // The format pads the last literal group to 8 values, so sizes that are not a multiple of 8
+    // must still decode exactly through every read path.
+    const EncodingInfo* encoding = rle_boolean_encoding();
+    ASSERT_TRUE(encoding != nullptr);
+
+    for (size_t n : {1, 2, 7, 9, 31, 33, 127, 1001}) {
+        std::vector<uint8_t> values(n);
+        for (size_t i = 0; i < n; ++i) {
+            values[i] = (i * 7) % 3 == 0;
+        }
+        std::unique_ptr<Encoder> encoder;
+        Slice encoded = rle_boolean_encode(encoding, values, &encoder);
+
+        std::unique_ptr<Decoder> decoder;
+        ASSERT_TRUE(encoding->create_decoder(&decoder).ok());
+
+        // raw read
+        {
+            std::vector<uint8_t> check(n);
+            ASSERT_TRUE(decoder->set_data(encoded).ok());
+            ASSERT_TRUE(decoder->next_batch(n, check.data()).ok());
+            ASSERT_EQ(values, check) << "n=" << n;
+        }
+        // skip, then read the rest into a column
+        {
+            size_t to_skip = n / 3;
+            auto column = FixedLengthColumn<uint8_t>::create();
+            ASSERT_TRUE(decoder->set_data(encoded).ok());
+            ASSERT_TRUE(decoder->skip(to_skip).ok());
+            ASSERT_TRUE(decoder->next_batch(n - to_skip, ColumnContentType::VALUE, column.get()).ok());
+            const auto& data = column->immutable_data();
+            ASSERT_EQ(n - to_skip, data.size());
+            for (size_t i = 0; i < data.size(); ++i) {
+                ASSERT_EQ(values[to_skip + i], data[i]) << "n=" << n << " i=" << i;
+            }
+        }
+        // nullable column: nulls interleaved through the default next_batch_with_nulls path
+        {
+            auto column = NullableColumn::create(FixedLengthColumn<uint8_t>::create(), NullColumn::create());
+            std::vector<uint8_t> is_null(n);
+            NullInfos null_infos;
+            null_infos.reset_with_capacity(n);
+            for (size_t i = 0; i < n; ++i) {
+                is_null[i] = (i % 5 == 0);
+                null_infos.nulls_data()[i] = is_null[i];
+                null_infos.num_nulls += is_null[i];
+                null_infos.num_ranges += (i > 0 && is_null[i] != is_null[i - 1]);
+            }
+            ASSERT_TRUE(decoder->set_data(encoded).ok());
+            ASSERT_TRUE(decoder->next_batch_with_nulls(n, null_infos, ColumnContentType::VALUE, column.get(), nullptr)
+                                .ok());
+            ASSERT_EQ(n, column->size());
+            const auto& data =
+                    down_cast<const FixedLengthColumn<uint8_t>*>(column->data_column().get())->immutable_data();
+            size_t value_idx = 0;
+            for (size_t i = 0; i < n; ++i) {
+                if (is_null[i]) {
+                    ASSERT_TRUE(column->is_null(i)) << "n=" << n << " i=" << i;
+                } else {
+                    ASSERT_FALSE(column->is_null(i)) << "n=" << n << " i=" << i;
+                    // non-null values are consumed from the stream in order
+                    ASSERT_EQ(values[value_idx], data[i]) << "n=" << n << " i=" << i;
+                    ++value_idx;
+                }
+            }
+        }
+    }
+}
+
+TEST_F(ParquetEncodingTest, RleBooleanHandCraftedStream) {
+    // Independent of our encoder. Payload:
+    //   0x90 0x03 = ULEB128(400): lsb 0 -> repeated run of 400 >> 1 = 200 values; value byte 0x01
+    //   0x03      = ULEB128(3):   lsb 1 -> literal run of (3 >> 1) * 8 = 8 values
+    //   0xAA      = 0b10101010, LSB first -> 0,1,0,1,0,1,0,1
+    const std::vector<uint8_t> stream = {0x05, 0x00, 0x00, 0x00, 0x90, 0x03, 0x01, 0x03, 0xAA};
+    std::vector<uint8_t> expected(200, 1);
+    for (int i = 0; i < 8; ++i) {
+        expected.push_back(i % 2);
+    }
+
+    const EncodingInfo* encoding = rle_boolean_encoding();
+    ASSERT_TRUE(encoding != nullptr);
+    std::unique_ptr<Decoder> decoder;
+    ASSERT_TRUE(encoding->create_decoder(&decoder).ok());
+    DecoderChecker<uint8_t, false>::check(expected, Slice(stream.data(), stream.size()), decoder.get());
+}
+
+TEST_F(ParquetEncodingTest, RleBooleanCorruptInput) {
+    const EncodingInfo* encoding = rle_boolean_encoding();
+    ASSERT_TRUE(encoding != nullptr);
+    std::unique_ptr<Decoder> decoder;
+    ASSERT_TRUE(encoding->create_decoder(&decoder).ok());
+    std::vector<uint8_t> out(256);
+
+    // shorter than the length prefix
+    {
+        const std::vector<uint8_t> stream = {0x01, 0x00};
+        ASSERT_FALSE(decoder->set_data(Slice(stream.data(), stream.size())).ok());
+    }
+    // prefix claims more payload than the page holds
+    {
+        const std::vector<uint8_t> stream = {0x10, 0x00, 0x00, 0x00, 0x03, 0xAA};
+        ASSERT_FALSE(decoder->set_data(Slice(stream.data(), stream.size())).ok());
+    }
+    // well-formed prefix, but the repeated-run header is missing its value byte
+    {
+        const std::vector<uint8_t> stream = {0x02, 0x00, 0x00, 0x00, 0x90, 0x03};
+        ASSERT_TRUE(decoder->set_data(Slice(stream.data(), stream.size())).ok());
+        ASSERT_FALSE(decoder->next_batch(200, out.data()).ok());
+    }
+    // empty payload: nothing to read, nothing to skip
+    {
+        const std::vector<uint8_t> stream = {0x00, 0x00, 0x00, 0x00};
+        ASSERT_TRUE(decoder->set_data(Slice(stream.data(), stream.size())).ok());
+        ASSERT_FALSE(decoder->next_batch(1, out.data()).ok());
+        ASSERT_TRUE(decoder->set_data(Slice(stream.data(), stream.size())).ok());
+        ASSERT_FALSE(decoder->skip(1).ok());
+    }
+    // a literal run that promises more groups than the payload contains
+    {
+        const std::vector<uint8_t> stream = {0x02, 0x00, 0x00, 0x00, 0x07, 0xAA};
+        ASSERT_TRUE(decoder->set_data(Slice(stream.data(), stream.size())).ok());
+        ASSERT_FALSE(decoder->next_batch(24, out.data()).ok());
     }
 }
 
