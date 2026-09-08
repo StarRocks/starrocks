@@ -2755,6 +2755,53 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
+     * What makes a failed attempt's partition retryable is its transaction reaching a terminal state, so
+     * that must happen BEFORE the journal write that only records why we are retrying. If the order were
+     * reversed, a leader exiting between the two would replay a job whose transaction is still PREPARE,
+     * and classifyRewrite would report IN_FLIGHT on every later tick instead of re-running the partition.
+     */
+    @Test
+    public void testTheFailedTransactionIsAbortedBeforeTheDiagnosticIsJournaled() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        List<String> order = new ArrayList<>();
+        // classifyRewrite returns NEEDS_RUN without consulting the manager while the journaled id is
+        // still null, so getTransactionState here is reached only from the abort path under test.
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                order.add("abort");
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                if (alterJob.errMsg != null && !alterJob.errMsg.isEmpty()) {
+                    order.add("journal-diagnostic");
+                }
+            }
+        };
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            insertStmt.setTxnId(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId());
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(List.of("abort", "journal-diagnostic"), order,
+                "the failed transaction must be aborted before the retry diagnostic is journaled");
+    }
+
+    /**
      * The retry diagnostic must be cleared once the partition's rewrite is observed published - and that
      * must not depend on the transient failure map, which is empty after a leader failover replays the
      * job. Simulated here by clearing the map (as replay leaves it) before the partition reaches DONE.

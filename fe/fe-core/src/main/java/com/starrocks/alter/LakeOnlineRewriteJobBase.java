@@ -1168,9 +1168,16 @@ public abstract class LakeOnlineRewriteJobBase
                     if (actualTxnId != DmlStmt.INVALID_TXN_ID) {
                         // The attempt did begin a transaction; classifyRewrite must see it leave PREPARE
                         // before the next tick, or it reports IN_FLIGHT forever and the retry budget above
-                        // is never consulted again.
+                        // is never consulted again. Do this BEFORE journaling the diagnostic below: the
+                        // transaction reaching a terminal state is what makes the partition retryable,
+                        // so it must not sit behind a journal write that only records why we are retrying.
                         abortUncommittedRewriteTxn(plan.physicalPartitionId, actualTxnId, error);
                     }
+                    // Now that the partition is retryable, record why, for SHOW ALTER TABLE COLUMN's Msg
+                    // column: getInfo emits errMsg regardless of job state, and checkTableStable already
+                    // reports a waiting job this way. It also means that if the job is later cancelled for
+                    // an unrelated reason, the operator has already seen the cause.
+                    setRetryDiagnostic(retryDiagnosticPrefix(plan.physicalPartitionId) + error);
                     // Leave the partition in NEEDS_RUN and yield the tick: runRunningJob returns right
                     // after this call, so the next tick re-classifies this attempt's txn and re-runs just
                     // this partition, with every published partition still skipped as DONE.
@@ -1230,10 +1237,6 @@ public abstract class LakeOnlineRewriteJobBase
                     jobId, physicalPartitionId, budgetMs / 1000, elapsedMs / 1000, error);
             return false;
         }
-        // Surface the stall in SHOW ALTER TABLE COLUMN's Msg column: getInfo emits errMsg regardless of
-        // job state, and checkTableStable already reports a waiting job this way. It also means that if
-        // the job is later cancelled for an unrelated reason, the operator has already seen the cause.
-        setRetryDiagnostic(retryDiagnosticPrefix(physicalPartitionId) + error);
         LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}, retrying on a later tick "
                         + "({}s of the {}s budget used): {}",
                 jobId, physicalPartitionId, elapsedMs / 1000, budgetMs / 1000, error);
