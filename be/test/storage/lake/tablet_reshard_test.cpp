@@ -3070,8 +3070,8 @@ protected:
         lake::tablet_reshard_helper::set_rowset_uid(rowset);
         for (int i = 0; i < 2; ++i) {
             const auto name = fmt::format("fixed_{}_{}.dat", metadata->id(), i);
-            const auto size = write_two_column_segment(
-                    metadata->id(), name, 50, [](int key) { return key * 10; }, i * 50);
+            const auto size =
+                    write_two_column_segment(metadata->id(), name, 50, [](int key) { return key * 10; }, i * 50);
             auto* segment = rowset->add_segment_metas();
             segment->set_filename(name);
             segment->set_size(size);
@@ -8955,10 +8955,8 @@ TEST_F(LakeTabletReshardTest, test_batch_virtual_self_del_offset_survives_split_
 
     const std::string first_name = fmt::format("virtual_first_{}.dat", tablet_id);
     const std::string second_name = fmt::format("virtual_second_{}.dat", tablet_id);
-    const uint64_t first_size = write_two_column_segment(
-            tablet_id, first_name, 1, [](int) { return 100; }, 10);
-    const uint64_t second_size = write_two_column_segment(
-            tablet_id, second_name, 1, [](int) { return 300; }, 10);
+    const uint64_t first_size = write_two_column_segment(tablet_id, first_name, 1, [](int) { return 100; }, 10);
+    const uint64_t second_size = write_two_column_segment(tablet_id, second_name, 1, [](int) { return 300; }, 10);
 
     lake::Tablet tablet(_tablet_manager.get(), tablet_id);
     lake::MetaFileBuilder builder(tablet, source);
@@ -17672,8 +17670,7 @@ inline void set_pk_int_key_schema(TabletMetadataPB* metadata, int64_t schema_id)
 
 inline std::shared_ptr<TabletMetadataPB> make_pk_shared_child_with_real_segment(int64_t tablet_id, int64_t base_version,
                                                                                 uint32_t shared_id, int tablet_lower,
-                                                                                int tablet_upper,
-                                                                                uint64_t segment_size,
+                                                                                int tablet_upper, uint64_t segment_size,
                                                                                 int physical_num_rows) {
     auto meta = std::make_shared<TabletMetadataPB>();
     meta->set_id(tablet_id);
@@ -17760,8 +17757,9 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
                 metas[i] = make_pk_compacted_child(child_ids[i], base_version, /*compacted_id=*/11, lower, upper,      \
                                                    fmt::format("compacted_{}.dat", i));                                \
             } else {                                                                                                   \
-                metas[i] = make_pk_shared_child_with_real_segment(child_ids[i], base_version, /*shared_id=*/10, lower, \
-                                                                  upper, segment_size, /*physical_num_rows=*/kNumRows); \
+                metas[i] =                                                                                             \
+                        make_pk_shared_child_with_real_segment(child_ids[i], base_version, /*shared_id=*/10, lower,    \
+                                                               upper, segment_size, /*physical_num_rows=*/kNumRows);   \
             }                                                                                                          \
             EXPECT_OK(put_tablet_metadata(metas[i]));                                                                  \
         }                                                                                                              \

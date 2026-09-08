@@ -1282,8 +1282,7 @@ TEST_F(LakeRowsetTest, test_zero_row_segment_positional_iterator_contracts) {
     EXPECT_TRUE(plain_iters[0]->get_next(empty_result.get()).is_end_of_file());
     EXPECT_EQ(count_rows_from_iters({plain_iters[1]}), keys.size());
 
-    ASSIGN_OR_ABORT(auto delvec_iters,
-                    rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+    ASSIGN_OR_ABORT(auto delvec_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
     ASSERT_EQ(delvec_iters.size(), 2);
     EXPECT_EQ(delvec_iters[0], nullptr);
     ASSERT_NE(delvec_iters[1], nullptr);
