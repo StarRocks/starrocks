@@ -29,6 +29,7 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -75,6 +76,30 @@ public class LoadJobMVListenerTest extends MVTestBase {
 
         Assertions.assertEquals(0, callCount.get(),
                 "auto-trigger must not resubmit a refresh for an MV suspended by consecutive failures");
+    }
+
+    @Test
+    public void testSkipsAutoTriggerWhenMvSchemaNoLongerMatches() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE lt_base_t4 (\n" +
+                "   k1 int,\n" +
+                "   k2 date,\n" +
+                "   k3 string\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lt_mv4\n" +
+                "REFRESH ON_CHANGE\n" +
+                "AS select sum(k1), k2, k3 from lt_base_t4 group by k2, k3;");
+        MaterializedView mv = getMv("lt_mv4");
+        // Not the constant: going through the producer keeps the marker -> reason -> blocked-set chain covered.
+        mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
+                new RuntimeException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
+                        Collections.singleton("column count 6 vs 7"))), mv.getName()));
+
+        AtomicInteger callCount = mockRefreshCallCount();
+        LoadJobMVListener.INSTANCE.onTableDataChange(getDb(), getBaseTable("lt_base_t4"));
+
+        Assertions.assertEquals(0, callCount.get(),
+                "auto-trigger must not resubmit a refresh for an MV whose stored schema no longer matches");
     }
 
     @Test
