@@ -1,0 +1,60 @@
+-- name: test_virtual_column_bitmap_index
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_bitmap (
+    k int not null,
+    v varchar(20),
+    index idx_k (k) using bitmap
+)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_bitmap values (0, 'lo'), (999999999, 'hi');
+-- result:
+-- !result
+select count(*) from t_bitmap where k = 0;
+-- result:
+1
+-- !result
+select count(*) from t_bitmap where k = 999999999;
+-- result:
+1
+-- !result
+select count(*) from t_bitmap where k = 424242;
+-- result:
+0
+-- !result
+select count(*) from t_bitmap where _tablet_id_ > 0;
+-- result:
+2
+-- !result
+select count(*) from t_bitmap where _tablet_id_ = 0;
+-- result:
+0
+-- !result
+select k from t_bitmap where _tablet_id_ > 0 order by k;
+-- result:
+0
+999999999
+-- !result
+select count(*) from t_bitmap where _row_id_ >= 0;
+-- result:
+2
+-- !result
+select count(*) from t_bitmap where k = 0 and _tablet_id_ > 0;
+-- result:
+1
+-- !result
+select count(*) from t_bitmap where k = 0 or _tablet_id_ > 0;
+-- result:
+2
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

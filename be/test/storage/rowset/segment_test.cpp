@@ -47,6 +47,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/PlanNodes_constants.h"
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "runtime/mem_pool.h"
@@ -59,6 +60,7 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage/virtual_column_utils.h"
 #include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
@@ -621,6 +623,122 @@ TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {
             << "Expected InternalError, got: " << st.code() << ", message: " << st.message();
     EXPECT_EQ(st.message(), "Duplicate column id found in tablet schema")
             << "Error message should indicate duplicate column id in tablet schema.";
+}
+
+// A predicate on a virtual column (_tablet_id_, _row_id_, ...) must not be served the bitmap index
+// of an unrelated real column. cid_2_ucid in SegmentIterator::_apply_bitmap_index() deliberately
+// skips virtual columns, but the resulting miss used to be looked up with operator[], which inserts
+// and returns unique id 0 -- a REAL column's id, since the first column of a table gets uid 0. The
+// virtual-column predicate then received that column's bitmap index while read_file stayed nullptr
+// (a virtual column has no entry in _column_files), and the dictionary seek aborted the BE on
+// `Check failed: 'read_file' Must be non nullptr` in PageIO.
+TEST_F(SegmentReaderWriterTest, TestVirtualColumnPredicateGetsNoBitmapIndex) {
+    // Column unique id 0 owns a bitmap index: exactly the id an unmatched virtual column resolved to.
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(0, /*is_nullable=*/false, /*is_bf_column=*/false, /*has_bitmap_index=*/true),
+             create_int_value_pb(1)});
+
+    // The row count has to clear the bitmap selectivity gate: BitmapIndexSeeker skips a bitmap index
+    // unless selected * 1000 <= cardinality * config::bitmap_max_filter_ratio (default 1). With one
+    // distinct value per row, 2000 rows make a single-value lookup pass that gate, so the assertion
+    // below really proves the real column's index is used. (The crash this test guards against
+    // happens in seek_dictionary, i.e. before that gate, and needs no particular row count.)
+    constexpr int kNumRows = 2000;
+    constexpr int64_t kTabletId = 776655;
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    const auto file_name = kSegmentDir + "/virtual_column_bitmap_index";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+    ASSERT_OK(writer.init());
+
+    auto write_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, kNumRows);
+    for (int i = 0; i < kNumRows; ++i) {
+        auto cols = chunk->columns();
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i + 1)));
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema));
+    ASSERT_EQ(kNumRows, segment->num_rows());
+
+    ASSIGN_OR_ABORT(auto read_tablet_schema, extend_schema_by_virtual_columns(tablet_schema));
+    ColumnId tablet_id_cid = 0;
+    for (size_t i = 0; i < read_tablet_schema->num_columns(); ++i) {
+        if (read_tablet_schema->column(i).name() == PlanNodesConstants().TABLET_ID_COLUMN_NAME) {
+            tablet_id_cid = static_cast<ColumnId>(i);
+        }
+    }
+    ASSERT_GE(tablet_id_cid, 2u) << "_tablet_id_ must be appended after the two real columns";
+    auto read_schema = ChunkHelper::convert_schema(read_tablet_schema, {0, 1, tablet_id_cid});
+
+    auto scan = [&](ColumnPredicate* predicate, int64_t* bitmap_filtered) -> StatusOr<int64_t> {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_options;
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{predicate});
+        seg_options.fs = _fs;
+        seg_options.stats = &stats;
+        seg_options.tablet_id = kTabletId;
+        seg_options.tablet_schema = read_tablet_schema;
+        seg_options.pred_tree = PredicateTree::create(std::move(pred_root));
+        ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(read_schema, seg_options));
+        auto read_chunk = ChunkFactory::new_chunk(read_schema, kNumRows);
+        int64_t count = 0;
+        while (true) {
+            read_chunk->reset();
+            auto st = seg_iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(st);
+            count += read_chunk->num_rows();
+        }
+        *bitmap_filtered = stats.rows_bitmap_index_filtered;
+        return count;
+    };
+
+    // Guard the guard: the bitmap index really is written for the real column and really is used,
+    // otherwise a predicate on the virtual column could never have reached it.
+    {
+        auto predicate = new_column_eq_predicate(get_type_info(LogicalType::TYPE_INT), 0, "5");
+        auto pred_guard = std::unique_ptr<ColumnPredicate>{predicate};
+        int64_t bitmap_filtered = 0;
+        ASSIGN_OR_ABORT(auto rows, scan(predicate, &bitmap_filtered));
+        EXPECT_EQ(1, rows);
+        EXPECT_GT(bitmap_filtered, 0) << "the real column's bitmap index was not exercised";
+    }
+
+    // This is the case that used to abort the BE. The predicate must be evaluated against the
+    // virtual column's values instead of against a foreign bitmap index, and every row of the
+    // segment carries the tablet id.
+    {
+        const auto operand = std::to_string(kTabletId);
+        auto predicate = new_column_eq_predicate(get_type_info(LogicalType::TYPE_BIGINT), tablet_id_cid, operand);
+        auto pred_guard = std::unique_ptr<ColumnPredicate>{predicate};
+        int64_t bitmap_filtered = 0;
+        ASSIGN_OR_ABORT(auto rows, scan(predicate, &bitmap_filtered));
+        EXPECT_EQ(kNumRows, rows);
+        EXPECT_EQ(0, bitmap_filtered) << "a virtual column must not be pruned by any bitmap index";
+    }
+
+    // ... and a tablet id that does not belong to this segment keeps no row at all.
+    {
+        const auto operand = std::to_string(kTabletId + 1);
+        auto predicate = new_column_eq_predicate(get_type_info(LogicalType::TYPE_BIGINT), tablet_id_cid, operand);
+        auto pred_guard = std::unique_ptr<ColumnPredicate>{predicate};
+        int64_t bitmap_filtered = 0;
+        ASSIGN_OR_ABORT(auto rows, scan(predicate, &bitmap_filtered));
+        EXPECT_EQ(0, rows);
+        EXPECT_EQ(0, bitmap_filtered) << "a virtual column must not be pruned by any bitmap index";
+    }
 }
 
 } // namespace starrocks

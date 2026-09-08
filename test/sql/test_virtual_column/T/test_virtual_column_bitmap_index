@@ -1,0 +1,39 @@
+-- name: test_virtual_column_bitmap_index
+create database db_${uuid0};
+use db_${uuid0};
+
+-- The bitmap index sits on the first column, whose column unique id is 0. A predicate on a virtual
+-- column used to resolve to unique id 0 as well and was handed this index, which aborted the BE
+-- while seeking its dictionary. The k values span the whole id space on purpose: the segment-level
+-- zone map of k can then never prune a predicate on a virtual column away before the bitmap index
+-- path is reached, so every query below really exercises that path.
+create table t_bitmap (
+    k int not null,
+    v varchar(20),
+    index idx_k (k) using bitmap
+)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_bitmap values (0, 'lo'), (999999999, 'hi');
+
+-- The bitmap index still serves the real column it belongs to.
+select count(*) from t_bitmap where k = 0;
+select count(*) from t_bitmap where k = 999999999;
+select count(*) from t_bitmap where k = 424242;
+
+-- A predicate on a virtual column must be evaluated against the virtual column instead. No tablet
+-- id is ever 0 and every row carries the id of its own tablet, so both counts are independent of
+-- the ids this cluster happens to hand out.
+select count(*) from t_bitmap where _tablet_id_ > 0;
+select count(*) from t_bitmap where _tablet_id_ = 0;
+select k from t_bitmap where _tablet_id_ > 0 order by k;
+
+-- _row_id_ resolves through the same path.
+select count(*) from t_bitmap where _row_id_ >= 0;
+
+-- A virtual column next to a real column that does own a bitmap index, in one AND and one OR.
+select count(*) from t_bitmap where k = 0 and _tablet_id_ > 0;
+select count(*) from t_bitmap where k = 0 or _tablet_id_ > 0;
+
+drop database db_${uuid0};

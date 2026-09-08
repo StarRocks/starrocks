@@ -4756,12 +4756,25 @@ Status SegmentIterator::_apply_bitmap_index() {
 
         RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
                                                       this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            // A virtual column (_tablet_id_, _row_id_, ...) is skipped while cid_2_ucid is built
+            // above, so a miss here means the predicate sits on one. Such a column owns no bitmap
+            // index and has no entry in _column_files, while operator[] would insert and return
+            // unique id 0 -- a REAL column's id, since the first column of a table gets uid 0.
+            // That hands the first column's bitmap index to this predicate with read_file left
+            // nullptr, and the dictionary seek then aborts the BE on a CHECK in PageIO. Report
+            // "no index" instead so the predicate is evaluated against the column values. Mirrors
+            // the find()-based skip in _init_inverted_index_iterators.
+            const auto ucid_it = cid_2_ucid.find(cid);
+            if (ucid_it == cid_2_ucid.end()) {
+                BitmapIndexIterator* no_bitmap_index = nullptr;
+                return no_bitmap_index;
+            }
             // NOTE: deliberately the column's OWN unique id, not storage_column_uid(). An extended
             // column (JSON subfield) owns no bitmap index, so this misses every delta column group and
             // then finds no reader in the base segment either -- the column ends up unindexed, which is
             // what we want. Substituting the root column's id here would apply the JSON column's index
             // to a subfield predicate. Only the value-read path resolves through the root id.
-            const ColumnUID ucid = cid_2_ucid[cid];
+            const ColumnUID ucid = ucid_it->second;
             // the column's index in this segment file
             ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
             // Non-null => the column is served from a Delta Column Group (.cols)
