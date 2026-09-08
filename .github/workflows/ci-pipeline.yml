@@ -833,6 +833,36 @@ jobs:
         if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
+          # Fork pids come from ps. jcmd -l enumerates through hsperfdata under the caller's own
+          # /tmp and comes back empty here because this shell does not share the mount namespace of
+          # the forks, while attaching by pid still works through /proc/<pid>/root/tmp. A pgrep -f
+          # pattern is not usable either: it also matches this very script. Requiring argv[0] to be
+          # the java binary drops both this script and surefire's `/bin/sh -c` wrapper, and maven's
+          # own JVM carries no ForkedBooter. These notes stay outside the quoted script on purpose:
+          # an apostrophe inside it would close the single-quoted argument early.
+          echo "::group::>>> FE UT: stacks of surefire forks still alive"
+          eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c '
+            (
+              trap "" HUP
+              set -x
+              java_bin=$(ls -d /var/local/env/jdk*/bin 2>/dev/null | head -1)
+              [ -n "${java_bin}" ] && export PATH=${java_bin}:$PATH
+              ps -eo pid,ppid,etime,time,pcpu,command | grep "[/]bin/java" | cut -c1-240
+              for p in $(ps -eo pid,command | awk "\$2 ~ /bin\/java\$/ && /ForkedBooter/ {print \$1}"); do
+                echo "===== surefire fork pid ${p} ====="
+                ps -o pid,etime,time,pcpu,rss -p "${p}"
+                ls -la /proc/${p}/root/tmp/ | head -30
+                timeout 150 jhsdb jstack --locks --pid "${p}"; echo "jhsdb rc=$?"
+                timeout 90 jstack -l "${p}"; echo "jstack rc=$?"
+                timeout 90 jcmd "${p}" Thread.print -l; echo "jcmd rc=$?"
+                timeout 60 jcmd "${p}" GC.heap_info; echo "heap rc=$?"
+              done
+            ) > /tmp/feut_stacks.txt 2>&1 &
+            sleep 100
+            wc -c /tmp/feut_stacks.txt
+          ' || true
+          eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "cat /tmp/feut_stacks.txt" || true
+          echo "::endgroup::"
           echo "::group::>>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           echo "::endgroup::"
