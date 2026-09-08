@@ -441,7 +441,7 @@ public class StatisticExecutor {
 
     private static Pair<List<TStatisticData>, Status> executeStatisticDQLWithSample(
             String sql, RemoteFilesSampleStrategy strategy) throws TException {
-        ConnectContext context = StatisticUtils.buildConnectContext();
+        ConnectContext context = StatisticUtils.buildConnectContextWithAuth();
         // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to
         // prevent collection tasks from occupying a large number of be execution threads and scan threads.
         context.getSessionVariable().setPipelineDop(1);

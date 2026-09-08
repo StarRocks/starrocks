@@ -150,7 +150,7 @@ public class ConnectorAnalyzeTask {
 
     public AnalyzeStatus executeAnalyze(LocalDateTime lastAnalyzedTime) {
         // init connect context
-        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContextWithAuth();
         statsConnectCtx.setThreadLocalInfo();
         // init column names and types
         List<String> columnNames = Lists.newArrayList(columns);

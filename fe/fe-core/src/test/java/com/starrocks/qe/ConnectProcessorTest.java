@@ -2007,6 +2007,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         request.setQueryId(UUIDUtil.genTUniqueId());
         request.setSession_id(UUID.randomUUID().toString());
         request.setIsLastStmt(true);
+        request.setAuth_token("test-jwt-token");
 
         // mock context
         ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -2027,6 +2028,7 @@ public class ConnectProcessorTest extends DDLTestBase {
                 })) {
             TMasterOpResult result = processor.proxyExecute(request, null);
             Assertions.assertNotNull(result);
+            Assertions.assertEquals("test-jwt-token", ctx.getAuthToken());
         }
     }
 
