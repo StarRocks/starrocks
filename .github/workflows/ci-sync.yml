@@ -34,15 +34,11 @@ jobs:
           # Collapsing both into one flag is what silently starved mirrorship of every
           # cd-contributed change (the step showed `skipped` while the job stayed green).
           #
-          #   `sync`            -> legacy CelerData reverse-sync marker (`cd-sync`, retired,
-          #                        only ever co-occurred with it). On StarRocks a
-          #                        `sync`-labelled PR is cd-origin: every one of them comes
-          #                        from the old cd->sr executor (`<branch>-cd-sync-pr-*`
-          #                        heads), and mirrorship->sr has never run. So this is a CD
-          #                        provenance marker and gates the CD path ONLY -- gating MS
-          #                        on it would repeat the very bug this commit fixes.
-          #                        (`sync` on the mirrorship side means something else: it
-          #                        marks every PR the FORWARD sr->ms sync opens there.)
+          #   `sync`            -> legacy sync marker, kept as the catch-all: it gates BOTH
+          #                        paths. Substring match, so any other label containing
+          #                        "sync" (e.g. the retired `cd-sync`) trips it too. A
+          #                        `sync`-labelled change that mirrorship needs is
+          #                        backfilled by hand, not by this workflow.
           #   `cd-contributed`  -> came up from CelerData; skip the CD path only.
           #   `ms-contributed`  -> came up from mirrorship; skip the MS path only.
           #
@@ -53,11 +49,11 @@ jobs:
           skip_ms=false
           if [[ "${labels}" =~ sync ]]; then
             skip_cd=true
+            skip_ms=true
           fi
           # Whole-line match, like the mergify fallback below and
-          # contributed-backport-label.yml. The `sync` test above is a substring match, so it
-          # also trips on any other label containing "sync" (e.g. the retired `cd-sync`);
-          # such a PR skips the CD path.
+          # contributed-backport-label.yml. (The `sync` test above is a substring match; see
+          # the marker list.)
           echo "${labels}" | grep -qx 'cd-contributed' && skip_cd=true
           echo "${labels}" | grep -qx 'ms-contributed' && skip_ms=true
 
