@@ -852,6 +852,9 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
         bool first = true;
         for (const auto& segment : rowset.segment_metas()) {
             RETURN_IF_ERROR(budget->consume(segment.deprecated_sort_key_samples_size(), "source metadata samples"));
+            if (!segment.has_num_rows()) {
+                fallback = Status::NotSupported("tablet split segment row count is absent");
+            }
             if (!segment.has_segment_idx()) {
                 fallback = Status::NotSupported("tablet split segment index is absent");
             } else {
@@ -905,6 +908,7 @@ Status build_unique_boundary_segments(TabletManager* tablet_manager, const Table
             }
             ASSIGN_OR_RETURN(bool inserted, insert_physical_slice(sm, &slices));
             if (!inserted) continue;
+            if (sm.has_num_rows() && sm.num_rows() == 0) continue;
             SegmentSplitInfo segment;
             RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
@@ -1516,21 +1520,8 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
         if (std::none_of(emit.begin(), emit.end(), [](bool value) { return value; })) {
             return Status::Corruption("tablet split rowset has no emitted child");
         }
-        bool zero_row_replay = anchor.num_rows == 0 && anchor.num_dels == 0 && anchor.data_size > 0 &&
-                               rowset.del_files_size() > 0 && rowset.segment_metas_size() > 0;
-        if (zero_row_replay) {
-            for (const auto& segment : rowset.segment_metas()) {
-                RETURN_IF_ERROR(budget->consume(1, "projector zero-row replay classification"));
-                if (!segment.has_num_rows() || segment.num_rows() != 0 || segment.sort_key_min().values_size() != 0 ||
-                    segment.sort_key_max().values_size() != 0) {
-                    zero_row_replay = false;
-                    break;
-                }
-            }
-        }
-        if (separate_sort || rowset.segment_metas_size() == 0 || zero_row_replay) {
+        if (separate_sort || rowset.segment_metas_size() == 0) {
             for (size_t c = 0; c < child_count; ++c) row_weights[c] = byte_weights[c] = emit[c] ? 1 : 0;
-            if (zero_row_replay) std::fill(row_weights.begin(), row_weights.end(), 0);
         } else {
             // Only this rowset's segment/sample weights are live. Include sinks outside
             // its effective range, so clipping never donates out-of-range samples to a child.
@@ -1538,6 +1529,7 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
             for (const auto& sm : rowset.segment_metas()) {
                 RETURN_IF_ERROR(
                         budget->consume(1 + sm.deprecated_sort_key_samples_size(), "projector segment samples"));
+                if (sm.has_num_rows() && sm.num_rows() == 0) continue;
                 SegmentSplitInfo segment;
                 RETURN_IF_ERROR(segment.min_key.from_proto(sm.sort_key_min()));
                 RETURN_IF_ERROR(segment.max_key.from_proto(sm.sort_key_max()));
@@ -1549,73 +1541,81 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
                 for (auto& sample : segment.sort_key_samples) projection.project(&sample);
                 segments.push_back(std::move(segment));
             }
-            VariantTuple lo = segments.front().min_key, hi = segments.front().max_key;
-            for (const auto& segment : segments) {
-                if (segment.min_key.compare(lo) < 0) lo = segment.min_key;
-                if (segment.max_key.compare(hi) > 0) hi = segment.max_key;
-            }
-            RETURN_IF_ERROR(budget->consume(2, "projector envelope"));
-            std::vector<VariantTuple> cuts{lo, hi};
-            auto add_cut = [&](const VariantTuple& cut) -> Status {
-                if (cut.compare(lo) > 0 && cut.compare(hi) < 0) {
-                    RETURN_IF_ERROR(budget->consume(1, "projector cut"));
-                    cuts.push_back(cut);
+            if (segments.empty()) {
+                for (size_t c = 0; c < child_count; ++c) row_weights[c] = byte_weights[c] = emit[c] ? 1 : 0;
+            } else {
+                VariantTuple lo = segments.front().min_key, hi = segments.front().max_key;
+                for (const auto& segment : segments) {
+                    if (segment.min_key.compare(lo) < 0) lo = segment.min_key;
+                    if (segment.max_key.compare(hi) > 0) hi = segment.max_key;
                 }
-                return Status::OK();
-            };
-            if (!effective.is_minimum()) RETURN_IF_ERROR(add_cut(effective.lower_bound()));
-            if (!effective.is_maximum()) RETURN_IF_ERROR(add_cut(effective.upper_bound()));
-            for (const auto& range : parsed_ranges) {
-                if (!range.is_minimum()) RETURN_IF_ERROR(add_cut(range.lower_bound()));
-                if (!range.is_maximum()) RETURN_IF_ERROR(add_cut(range.upper_bound()));
-            }
-            std::sort(cuts.begin(), cuts.end());
-            cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
-            std::vector<RangeInfo> distribution;
-            std::vector<int> destinations;
-            const size_t interval_count = std::max<size_t>(1, cuts.size() - 1);
-            for (size_t i = 0; i < interval_count; ++i) {
-                auto& range = distribution.emplace_back();
-                range.min = cuts[i];
-                range.max = cuts[std::min(i + 1, cuts.size() - 1)];
-                int destination = -1;
+                RETURN_IF_ERROR(budget->consume(2, "projector envelope"));
+                std::vector<VariantTuple> cuts{lo, hi};
+                auto add_cut = [&](const VariantTuple& cut) -> Status {
+                    if (cut.compare(lo) > 0 && cut.compare(hi) < 0) {
+                        RETURN_IF_ERROR(budget->consume(1, "projector cut"));
+                        cuts.push_back(cut);
+                    }
+                    return Status::OK();
+                };
+                if (!effective.is_minimum()) RETURN_IF_ERROR(add_cut(effective.lower_bound()));
+                if (!effective.is_maximum()) RETURN_IF_ERROR(add_cut(effective.upper_bound()));
+                for (const auto& range : parsed_ranges) {
+                    if (!range.is_minimum()) RETURN_IF_ERROR(add_cut(range.lower_bound()));
+                    if (!range.is_maximum()) RETURN_IF_ERROR(add_cut(range.upper_bound()));
+                }
+                std::sort(cuts.begin(), cuts.end());
+                cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+                std::vector<RangeInfo> distribution;
+                std::vector<int> destinations;
+                const size_t interval_count = std::max<size_t>(1, cuts.size() - 1);
+                for (size_t i = 0; i < interval_count; ++i) {
+                    auto& range = distribution.emplace_back();
+                    range.min = cuts[i];
+                    range.max = cuts[std::min(i + 1, cuts.size() - 1)];
+                    int destination = -1;
+                    for (size_t c = 0; c < child_count; ++c) {
+                        RETURN_IF_ERROR(budget->consume(1, "projector interval intersection"));
+                        if (emit[c] && effective.contains(range.min) && parsed_ranges[c].contains(range.min)) {
+                            destination = c;
+                            break;
+                        }
+                    }
+                    destinations.push_back(destination);
+                }
+                // The physical maximum can itself belong to the next child (or to a
+                // sink at an excluded parent edge). Give that point its own last bucket
+                // only when its owner differs, preserving the ordinary interval weights.
+                int endpoint_destination = -1;
                 for (size_t c = 0; c < child_count; ++c) {
-                    RETURN_IF_ERROR(budget->consume(1, "projector interval intersection"));
-                    if (emit[c] && effective.contains(range.min) && parsed_ranges[c].contains(range.min)) {
-                        destination = c;
+                    RETURN_IF_ERROR(budget->consume(1, "projector endpoint intersection"));
+                    if (emit[c] && effective.contains(hi) && parsed_ranges[c].contains(hi)) {
+                        endpoint_destination = c;
                         break;
                     }
                 }
-                destinations.push_back(destination);
-            }
-            // The physical maximum can itself belong to the next child (or to a
-            // sink at an excluded parent edge). Give that point its own last bucket
-            // only when its owner differs, preserving the ordinary interval weights.
-            int endpoint_destination = -1;
-            for (size_t c = 0; c < child_count; ++c) {
-                RETURN_IF_ERROR(budget->consume(1, "projector endpoint intersection"));
-                if (emit[c] && effective.contains(hi) && parsed_ranges[c].contains(hi)) {
-                    endpoint_destination = c;
-                    break;
+                if (endpoint_destination != destinations.back()) {
+                    RETURN_IF_ERROR(budget->consume(1, "projector endpoint bucket"));
+                    auto& endpoint = distribution.emplace_back();
+                    endpoint.min = hi;
+                    endpoint.max = hi;
+                    destinations.push_back(endpoint_destination);
                 }
-            }
-            if (endpoint_destination != destinations.back()) {
-                RETURN_IF_ERROR(budget->consume(1, "projector endpoint bucket"));
-                auto& endpoint = distribution.emplace_back();
-                endpoint.min = hi;
-                endpoint.max = hi;
-                destinations.push_back(endpoint_destination);
-            }
-            for (const auto& segment : segments) {
-                RETURN_IF_ERROR(distribute_segment_to_ranges(segment, distribution, false, budget));
-            }
-            for (size_t i = 0; i < distribution.size(); ++i) {
-                if (destinations[i] < 0) continue;
-                row_weights[destinations[i]] += distribution[i].num_rows;
-                byte_weights[destinations[i]] += distribution[i].data_size;
+                for (const auto& segment : segments) {
+                    RETURN_IF_ERROR(distribute_segment_to_ranges(segment, distribution, false, budget));
+                }
+                for (size_t i = 0; i < distribution.size(); ++i) {
+                    if (destinations[i] < 0) continue;
+                    row_weights[destinations[i]] += distribution[i].num_rows;
+                    byte_weights[destinations[i]] += distribution[i].data_size;
+                }
             }
         }
         const auto positive = [](int64_t weight) { return weight > 0; };
+        if (anchor.data_size > 0 && std::none_of(byte_weights.begin(), byte_weights.end(), positive) &&
+            std::any_of(row_weights.begin(), row_weights.end(), positive)) {
+            byte_weights = row_weights;
+        }
         const bool zero_row_weight =
                 anchor.num_rows > 0 && std::none_of(row_weights.begin(), row_weights.end(), positive);
         const bool zero_byte_weight =
@@ -1805,6 +1805,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
 // is skipped. A rowset with no segments returns false (nothing to open).
 static bool rowset_has_sampleless_segment(const RowsetMetadataPB& rowset) {
     for (const auto& segment_meta : rowset.segment_metas()) {
+        if (segment_meta.has_num_rows() && segment_meta.num_rows() == 0) continue;
         if (segment_meta.deprecated_sort_key_samples_size() == 0) return true;
     }
     return false;
@@ -1906,6 +1907,7 @@ static Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, co
 
         for (int meta_pos = 0; meta_pos < rowset_meta.segment_metas_size(); ++meta_pos) {
             const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
+            if (segment_meta.has_num_rows() && segment_meta.num_rows() == 0) continue;
             SegmentSplitInfo segment;
             segment.source_id = rowset_meta.id();
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
@@ -2013,6 +2015,7 @@ bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_a
     // travel with it), so a bundled rowset prunes uniformly with any other — no separate
     // parallel-array shape check is needed.
     for (const auto& segment_meta : rowset.segment_metas()) {
+        if (!segment_meta.has_num_rows() || segment_meta.num_rows() == 0) return false;
         if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) return false;
         // (c) those bounds must be comparable with the new tablets' ranges, which are at the
         // CURRENT sort-key arity. A rowset written before a metadata-only trailing sort-key ADD

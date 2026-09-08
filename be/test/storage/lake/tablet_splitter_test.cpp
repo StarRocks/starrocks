@@ -1365,6 +1365,68 @@ TEST(TabletSplitterExternalBoundariesTest, ExternalRanges_SeparateSortPkUsesElig
     EXPECT_EQ(3, ranges[1].rowset_stats.at(1).num_dels);
 }
 
+TEST(TabletSplitterExternalBoundariesTest, zero_row_segment_is_not_geometry_and_all_stats_are_conserved) {
+    auto m = std::make_shared<TabletMetadataPB>(
+            *make_dup_keys_metadata_with_rowsets({{1, 0, 100, 101, 1201}}, make_bigint_range_pb(0, 101)));
+    auto* rowset = m->mutable_rowsets(0);
+    rowset->set_num_dels(7);
+    SegmentMetadataPB live(rowset->segment_metas(0));
+    live.set_segment_idx(1);
+    live.set_size(1001);
+    rowset->clear_segment_metas();
+    auto* empty = rowset->add_segment_metas();
+    empty->set_filename("empty");
+    empty->set_segment_idx(0);
+    empty->set_num_rows(0);
+    empty->set_size(200);
+    *rowset->add_segment_metas() = live;
+
+    auto external = make_ranges({make_bigint_range_pb(0, 50), make_bigint_range_pb(50, 101)});
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(compute_split_ranges_from_external_boundaries(nullptr, m, external, &ranges));
+    ASSERT_EQ(2, ranges.size());
+    ASSERT_TRUE(ranges[0].rowset_stats.contains(1));
+    ASSERT_TRUE(ranges[1].rowset_stats.contains(1));
+    const auto& left = ranges[0].rowset_stats.at(1);
+    const auto& right = ranges[1].rowset_stats.at(1);
+    EXPECT_EQ(51, left.num_rows);
+    EXPECT_EQ(50, right.num_rows);
+    EXPECT_EQ(601, left.data_size);
+    EXPECT_EQ(600, right.data_size);
+    EXPECT_EQ(4, left.num_dels);
+    EXPECT_EQ(3, right.num_dels);
+    EXPECT_EQ(101, left.num_rows + right.num_rows);
+    EXPECT_EQ(1201, left.data_size + right.data_size);
+    EXPECT_EQ(7, left.num_dels + right.num_dels);
+}
+
+TEST(TabletSplitterExternalBoundariesTest, all_zero_segments_use_emitted_child_weights_without_shape_requirements) {
+    auto m = std::make_shared<TabletMetadataPB>(*make_dup_keys_metadata_with_rowsets({}, make_bigint_range_pb(0, 100)));
+    auto* rowset = m->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(1);
+    rowset->set_num_dels(0);
+    for (int i = 0; i < 2; ++i) {
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename("empty" + std::to_string(i));
+        segment->set_segment_idx(i);
+        segment->set_num_rows(0);
+        segment->set_size(1);
+    }
+
+    auto external = make_ranges({make_bigint_range_pb(0, 50), make_bigint_range_pb(50, 100)});
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(compute_split_ranges_from_external_boundaries(nullptr, m, external, &ranges));
+    ASSERT_EQ(2, ranges.size());
+    ASSERT_TRUE(ranges[0].rowset_stats.contains(1));
+    ASSERT_TRUE(ranges[1].rowset_stats.contains(1));
+    EXPECT_EQ(0, ranges[0].rowset_stats.at(1).num_rows + ranges[1].rowset_stats.at(1).num_rows);
+    EXPECT_EQ(0, ranges[0].rowset_stats.at(1).num_dels + ranges[1].rowset_stats.at(1).num_dels);
+    EXPECT_EQ(1, ranges[0].rowset_stats.at(1).data_size);
+    EXPECT_EQ(0, ranges[1].rowset_stats.at(1).data_size);
+}
+
 TEST(TabletSplitterExternalBoundariesTest, parent_envelope_clips_effective_lo_hi) {
     // Parent [0, 100). Two rowsets fully within parent at [10, 40] and [60, 90].
     // external boundaries K=2 split at 50. Exercises the effective-envelope branches that read
@@ -1488,6 +1550,7 @@ namespace {
 static void add_bigint_seg(RowsetMetadataPB* rs, int64_t mn, int64_t mx, const std::string& name) {
     auto* m = rs->add_segment_metas();
     m->set_filename(name);
+    m->set_num_rows(1);
     *m->mutable_sort_key_min() = make_bigint_tuple_pb(mn);
     *m->mutable_sort_key_max() = make_bigint_tuple_pb(mx);
 }
@@ -1526,6 +1589,13 @@ TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
         rs.mutable_segment_metas(0)->set_shared(true);
         EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (d) ok
+    {
+        auto rs = make_pruneable();
+        rs.mutable_segment_metas(0)->clear_num_rows();
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
+        rs.mutable_segment_metas(0)->set_num_rows(0);
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
+    } // zero or missing count has no pruneable geometry
     {
         // (e) bounds narrower than the current sort key (a rowset written before a metadata-only
         // trailing sort-key ADD): not comparable with the new tablets' ranges, so not pruneable.
@@ -2411,6 +2481,31 @@ TEST(TabletSplitterTest, BuildSegmentsFromRowsets_NullTabletManagerSkipsLoader) 
     ASSERT_EQ(1u, segments.size());
     EXPECT_TRUE(segments[0].sort_key_samples.empty());
     EXPECT_EQ(0, segments[0].sort_key_sample_row_interval);
+}
+
+TEST(TabletSplitterTest, build_segments_from_rowsets_skips_explicit_zero_rows) {
+    auto metadata = std::make_shared<TabletMetadataPB>(*make_dup_keys_metadata_with_rowsets({{1, 10, 19, 10, 100}}));
+    auto* rowset = metadata->mutable_rowsets(0);
+    SegmentMetadataPB live(rowset->segment_metas(0));
+    live.set_segment_idx(1);
+    rowset->clear_segment_metas();
+    auto* empty = rowset->add_segment_metas();
+    empty->set_filename("empty");
+    empty->set_segment_idx(0);
+    empty->set_num_rows(0);
+    empty->set_size(37);
+    *rowset->add_segment_metas() = live;
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, metadata, &segments));
+    ASSERT_EQ(1, segments.size());
+    EXPECT_EQ(1, segments[0].source_id);
+    EXPECT_EQ(10, segments[0].num_rows);
+    EXPECT_EQ(100, segments[0].data_size);
+    ASSERT_EQ(1, segments[0].min_key.size());
+    ASSERT_EQ(1, segments[0].max_key.size());
+    EXPECT_EQ(10, segments[0].min_key[0].value().get_int64());
+    EXPECT_EQ(19, segments[0].max_key[0].value().get_int64());
 }
 
 // =============================================================================
