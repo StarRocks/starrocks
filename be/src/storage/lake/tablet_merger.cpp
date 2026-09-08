@@ -150,12 +150,6 @@ struct DelvecSourceRef {
     std::string file_name;
 };
 
-struct UnionPageInfo {
-    uint64_t offset;
-    uint64_t size;
-    uint32_t masked_crc32c;
-};
-
 struct TargetDelvecState {
     std::optional<DelvecSourceRef> single_source;
     std::unique_ptr<DelVector> merged;
@@ -1620,7 +1614,7 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
     // Track full paths of rebuilt .cols files so we can best-effort clean them
     // up if a later target's rebuild fails partway through. Downstream failures
     // (merge_delvecs/merge_sstables/publish) still rely on standard orphan-file
-    // vacuum, which matches the pattern used by merge_delvec_files.
+    // vacuum, which matches the compact page-writer orphan boundary.
     std::vector<std::string> rebuilt_file_paths;
     auto cleanup_on_failure = [&]() {
         for (const auto& path : rebuilt_file_paths) {
@@ -2016,6 +2010,8 @@ Status inject_synthesized_gaps_into_target_states(TabletManager* tablet_manager,
             DelVector dv_prev;
             const auto& ref = *state.single_source;
             LakeIOOptions io_opts;
+            TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_gap_promotion", nullptr);
+            TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_get_del_vec", nullptr);
             RETURN_IF_ERROR(get_del_vec(tablet_manager, *ref.ctx->metadata(), ref.page, false, io_opts, &dv_prev));
             auto merged_dv = std::make_unique<DelVector>();
             if (dv_prev.roaring()) {
@@ -2052,7 +2048,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     // Phase 1: Scan pages, build TargetDelvecState for each target rssid.
     // File name is resolved inline via each old tablet's version_to_file map.
     std::map<uint32_t, TargetDelvecState> target_states;
-    std::unordered_map<std::string, DelvecFileInfo> actual_page_source_files;
+    bool has_actual_page_source = false;
     const auto target_live_rssids = collect_live_rssids(*new_metadata);
 
     for (size_t context_index = 0; context_index < merge_contexts.size(); ++context_index) {
@@ -2084,18 +2080,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 return Status::InvalidArgument("Delvec file not found for page version");
             }
             const std::string& file_name = file_it->second.name();
-            auto [canonical_file_it, inserted] =
-                    actual_page_source_files.emplace(file_name, DelvecFileInfo{ctx.metadata()->id(), file_it->second});
-            if (!inserted) {
-                const auto& canonical_file = canonical_file_it->second.delvec_file;
-                const auto& incoming_file = file_it->second;
-                if (!delvec_file_metadata_matches(canonical_file, incoming_file)) {
-                    return Status::Corruption(
-                            fmt::format("Delvec actual page source metadata mismatch for file {} between tablets {} "
-                                        "and {}",
-                                        file_name, canonical_file_it->second.tablet_id, ctx.metadata()->id()));
-                }
-            }
+            has_actual_page_source = true;
             auto& state = target_states[target];
             auto source_key = std::make_pair(file_name, page.offset());
 
@@ -2107,8 +2092,8 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 // single_source state
                 auto seen_it = state.seen_sources.find(source_key);
                 if (seen_it != state.seen_sources.end()) {
-                    // Dedup hit: same file_name + offset. File metadata was
-                    // already validated through actual_page_source_files.
+                    // Dedup hit: same file_name + offset. File metadata was already validated by
+                    // preflight_merge_sources before any merge state was materialized.
                     if (seen_it->second != page.size()) {
                         return Status::Corruption("Delvec page size mismatch for same source");
                     }
@@ -2120,12 +2105,14 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 {
                     const auto& ref = *state.single_source;
                     LakeIOOptions io_opts;
+                    TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_get_del_vec", nullptr);
                     RETURN_IF_ERROR(
                             get_del_vec(tablet_manager, *ref.ctx->metadata(), ref.page, false, io_opts, &dv_prev));
                 }
                 DelVector dv_new;
                 {
                     LakeIOOptions io_opts;
+                    TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_get_del_vec", nullptr);
                     RETURN_IF_ERROR(get_del_vec(tablet_manager, *ctx.metadata(), page, false, io_opts, &dv_new));
                 }
                 // Union
@@ -2149,6 +2136,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 DelVector dv_new;
                 {
                     LakeIOOptions io_opts;
+                    TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_get_del_vec", nullptr);
                     RETURN_IF_ERROR(get_del_vec(tablet_manager, *ctx.metadata(), page, false, io_opts, &dv_new));
                 }
                 union_delvec(state.merged.get(), dv_new, new_version);
@@ -2170,71 +2158,41 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         return Status::OK();
     }
 
-    // Phase 2: Serialize union results into union_buffer.
-    std::string union_buffer;
-    std::map<uint32_t, UnionPageInfo> union_page_infos;
-
+    // Phase 2: build one ordered output entry for each final target RSSID.
+    // Raw and serialized pages deliberately interleave in this map order.
+    std::vector<uint32_t> target_rssids;
+    std::vector<DelvecOutputPage> output_pages;
+    target_rssids.reserve(target_states.size());
+    output_pages.reserve(target_states.size());
     for (auto& [target, state] : target_states) {
-        if (state.merged) {
-            std::string data = state.merged->save();
-            uint32_t masked_crc = crc32c::Mask(crc32c::Value(data.data(), data.size()));
-            union_page_infos[target] = {static_cast<uint64_t>(union_buffer.size()), static_cast<uint64_t>(data.size()),
-                                        masked_crc};
-            union_buffer.append(data);
+        target_rssids.push_back(target);
+        DelvecOutputPage output_page;
+        if (state.single_source.has_value()) {
+            const auto& ref = *state.single_source;
+            auto file_it = ref.ctx->metadata()->delvec_meta().version_to_file().find(ref.page.version());
+            if (file_it == ref.ctx->metadata()->delvec_meta().version_to_file().end()) {
+                return Status::InvalidArgument("Delvec file not found for final single-source page version");
+            }
+            if (file_it->second.name() != ref.file_name) {
+                return Status::Corruption("Delvec final single-source file name changed during merge");
+            }
+            output_page.raw_page = DelvecPageInfo{ref.ctx->metadata()->id(), file_it->second, ref.page};
+        } else if (state.merged) {
+            output_page.serialized_page = state.merged->save();
+        } else {
+            return Status::Corruption("Delvec target state has neither single_source nor merged");
         }
+        output_pages.emplace_back(std::move(output_page));
     }
 
-    // Phase 3: Resolve files only for final single-source consumers. A merged
-    // state has already been decoded into union_buffer and does not need its
-    // immutable source file copied into the output.
-    std::vector<DelvecFileInfo> unique_delvec_files;
-    std::unordered_set<std::string> selected_source_filenames;
-    for (const auto& [target, state] : target_states) {
-        (void)target;
-        if (!state.single_source.has_value()) {
-            continue;
-        }
-        const auto& ref = *state.single_source;
-        auto file_it = ref.ctx->metadata()->delvec_meta().version_to_file().find(ref.page.version());
-        if (file_it == ref.ctx->metadata()->delvec_meta().version_to_file().end()) {
-            return Status::InvalidArgument("Delvec file not found for final single-source page version");
-        }
-        const auto& file = file_it->second;
-        if (file.name() != ref.file_name) {
-            return Status::Corruption("Delvec final single-source file name changed during merge");
-        }
-        if (selected_source_filenames.emplace(file.name()).second) {
-            unique_delvec_files.push_back(DelvecFileInfo{ref.ctx->metadata()->id(), file});
-        }
-    }
-    TEST_SYNC_POINT_CALLBACK("merge_delvecs:selected_source_files", &unique_delvec_files);
-
-    if (unique_delvec_files.empty() && union_buffer.empty()) {
-        return Status::Corruption("Delvec targets produced neither source files nor serialized union pages");
-    }
-
-    // Phase 4: Write one file. With no final single-source consumer, the
-    // serialized union is the complete output; otherwise concatenate only the
-    // selected immutable files and append the union buffer.
     FileMetaPB new_delvec_file;
     std::vector<uint64_t> offsets;
-    uint64_t union_base_offset = 0;
-    int writer_invocations = 0;
-    if (unique_delvec_files.empty()) {
-        DCHECK(!union_buffer.empty()) << "buffer-only path with empty union_buffer";
-        ++writer_invocations;
-        TEST_SYNC_POINT_CALLBACK("merge_delvecs:writer_invocations", &writer_invocations);
-        RETURN_IF_ERROR(write_delvec_file_from_buffer(tablet_manager, new_metadata->id(), txn_id, Slice(union_buffer),
-                                                      &new_delvec_file));
-        union_base_offset = 0;
-        if (actual_page_source_files.empty()) {
-            g_tablet_merge_synthesized_only_delvec_total << 1;
-        }
-    } else {
-        ++writer_invocations;
-        TEST_SYNC_POINT_CALLBACK("merge_delvecs:writer_invocations", &writer_invocations);
-        RETURN_IF_ERROR(merge_delvec_files(tablet_manager, unique_delvec_files, new_metadata->id(), txn_id,
-                                           &new_delvec_file, &offsets, Slice(union_buffer), &union_base_offset));
+    [[maybe_unused]] int writer_invocations = 1;
+    TEST_SYNC_POINT_CALLBACK("merge_delvecs:writer_invocations", &writer_invocations);
+    RETURN_IF_ERROR(write_compacted_delvec_pages(tablet_manager, output_pages, new_metadata->id(), txn_id,
+                                                 &new_delvec_file, &offsets));
+    if (!has_actual_page_source) {
+        g_tablet_merge_synthesized_only_delvec_total << 1;
     }
 
     // The merged delvec file is written; new_metadata does not point at it until Phase 5 below.
@@ -2243,48 +2201,28 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     // injected here leaves the file for ordinary orphan-file vacuum.
     FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_write_delvec);
 
-    // Build base_offset_by_file_name. Empty for synthesized-only route since
-    // there are no source files to reference; merged-state targets always go
-    // through union_page_infos which is keyed by target rssid, not file name.
-    std::unordered_map<std::string, uint64_t> base_offset_by_file_name;
-    for (size_t i = 0; i < unique_delvec_files.size(); ++i) {
-        base_offset_by_file_name[unique_delvec_files[i].delvec_file.name()] = offsets[i];
-    }
-
-    TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_apply_offsets", &base_offset_by_file_name);
-
-    // Phase 5: Build metadata locally. Install it only after every page offset
+    // Phase 3: Build metadata locally. Install it only after every page offset
     // has been validated, so writer and mapping failures cannot partially
     // publish a destination delvec_meta.
     DelvecMetadataPB new_delvec_meta;
 
-    for (const auto& [target, state] : target_states) {
+    for (size_t i = 0; i < target_rssids.size(); ++i) {
+        const uint32_t target = target_rssids[i];
         DelvecPagePB new_page;
         new_page.set_version(new_version);
         new_page.set_crc32c_gen_version(new_version);
-
-        if (state.single_source.has_value()) {
-            const auto& ref = *state.single_source;
-            auto base_it = base_offset_by_file_name.find(ref.file_name);
-            if (base_it == base_offset_by_file_name.end()) {
-                return Status::InvalidArgument("Delvec file not merged for page version");
-            }
-            new_page.set_offset(base_it->second + ref.page.offset());
+        new_page.set_offset(offsets[i]);
+        if (output_pages[i].raw_page.has_value()) {
+            const auto& ref = *output_pages[i].raw_page;
             new_page.set_size(ref.page.size());
             // CRC decision: only reuse if old CRC is trustworthy
             if (ref.page.has_crc32c() && ref.page.crc32c_gen_version() == ref.page.version()) {
                 new_page.set_crc32c(ref.page.crc32c());
             }
-        } else if (state.merged) {
-            auto info_it = union_page_infos.find(target);
-            if (info_it == union_page_infos.end()) {
-                return Status::Corruption("Union page info not found for merged target");
-            }
-            new_page.set_offset(union_base_offset + info_it->second.offset);
-            new_page.set_size(info_it->second.size);
-            new_page.set_crc32c(info_it->second.masked_crc32c);
         } else {
-            return Status::Corruption("Delvec target state has neither single_source nor merged");
+            new_page.set_size(output_pages[i].serialized_page.size());
+            new_page.set_crc32c(crc32c::Mask(
+                    crc32c::Value(output_pages[i].serialized_page.data(), output_pages[i].serialized_page.size())));
         }
 
         (*new_delvec_meta.mutable_delvecs())[target] = std::move(new_page);
@@ -2851,6 +2789,10 @@ Status preflight_merge_sources(const std::vector<TabletMergeContext>& contexts,
                 const auto& declaration = file->second;
                 if (!declaration.has_name() || declaration.name().empty()) {
                     return Status::Corruption("tablet merge live delvec page has a missing or empty filename");
+                }
+                if (!declaration.encryption_meta().empty()) {
+                    return Status::NotSupported(fmt::format(
+                            "encrypted delvec input is unsupported; delvec must be plaintext: {}", declaration.name()));
                 }
                 if (declaration.has_size()) {
                     if (declaration.size() < 0) {
