@@ -48,6 +48,7 @@ import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -261,6 +262,24 @@ public class StatementPlanner {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
                             session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
                 }
+            }
+
+            // CTAS is not an INSERT at plan time: its target table does not exist until execution, so it
+            // cannot use the deferred-lock path above. Its SELECT still needs the same treatment as an
+            // INSERT-SELECT though -- files() schema inference does an object-store LIST plus a BE
+            // get_file_schema RPC, and running that inside the PlannerMetaLock critical section stalls
+            // every db-level DDL behind the database intention lock. Pre-resolve it here; resolveTableRef
+            // reuses the already-built TableFunctionTable once the lock is held.
+            // Unwrap SUBMIT TASK as well: it carries either an INSERT (handled above) or a CTAS.
+            CreateTableAsSelectStmt ctasStmt = null;
+            if (statement instanceof CreateTableAsSelectStmt ctas) {
+                ctasStmt = ctas;
+            } else if (statement instanceof SubmitTaskStmt submitTaskStmt) {
+                ctasStmt = submitTaskStmt.getCreateTableAsSelectStmt();
+            }
+            if (ctasStmt != null && locker != null && !locker.isEmpty()
+                    && !AnalyzerUtils.collectFileTableFunctionRelation(ctasStmt.getQueryStatement()).isEmpty()) {
+                new QueryAnalyzer(session).analyzeFilesOnly(ctasStmt.getQueryStatement());
             }
 
             if (deferredLock) {
