@@ -169,6 +169,22 @@ public class ThreadPoolManager {
                 new BlockedPolicy(poolName, 60), poolName, needRegisterMetric);
     }
 
+<<<<<<< HEAD
+=======
+    public static ThreadPoolExecutor newDaemonFixedThreadPoolWithAbortPolicy(
+            int numThread, int queueSize, String poolName, boolean needRegisterMetric) {
+        return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(queueSize),
+                new FastAbortPolicy(), poolName, needRegisterMetric);
+    }
+
+    public static ThreadPoolExecutor newDaemonFixedThreadPoolWithUnboundedQueue(int numThread, String poolName,
+                                                                                boolean needRegisterMetric) {
+        return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(), new LogDiscardPolicy(poolName), poolName, needRegisterMetric);
+    }
+
+>>>>>>> 3e6d798 ([BugFix] FailFast: Prevent thrift acceptor stalls on saturation (#78838))
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
                                                                               String poolName,
                                                                               boolean needRegisterMetric) {
@@ -219,6 +235,35 @@ public class ThreadPoolManager {
      */
     private static ThreadFactory namedThreadFactory(String poolName) {
         return new ThreadFactoryBuilder().setDaemon(true).setNameFormat(poolName + "-%d").build();
+    }
+
+    /**
+     * A handler for rejected task that fails the submission immediately and says nothing, used for a pool
+     * whose caller reports the rejection itself.
+     * <p>
+     * {@link ThreadPoolExecutor.AbortPolicy} composes its message from {@link ThreadPoolExecutor#toString()},
+     * which takes the pool's mainLock and walks every worker to tally completed tasks. On a saturated pool
+     * that is thousands of iterations under the same lock {@code addWorker} and {@code processWorkerExit}
+     * need, paid per rejected task, to build a string a caller that logs its own message never reads.
+     */
+    static class FastAbortPolicy implements RejectedExecutionHandler {
+
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            throw new StacklessRejectedExecutionException();
+        }
+
+        /**
+         * Skips the stack-trace capture, which dominates the cost of throwing and is the last thing
+         * left to pay for once the message is gone. Nothing prints this trace: the caller logs its
+         * own message and discards the exception.
+         */
+        private static class StacklessRejectedExecutionException extends RejectedExecutionException {
+            @Override
+            public synchronized Throwable fillInStackTrace() {
+                return this;
+            }
+        }
     }
 
     /**

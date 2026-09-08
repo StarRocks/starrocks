@@ -48,6 +48,18 @@ description: "Alphabetical t - z"
 - Unit: Count
 - Description: Number of currently opened thrift clients.
 
+## `thrift_server_acceptor_stall_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Milliseconds since the FE Thrift accept loop last returned a connection. A wedged acceptor makes this climb, but so does an FE with no Thrift traffic, so read it together with the connection arrival rate rather than alerting on it alone. `0` also covers the case where no acceptor is running at all, before the Thrift server starts and after it stops, so a threshold alert on this metric cannot tell a dead Thrift service from a healthy one.
+
+## `thrift_server_rejected_connections_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of connections the FE Thrift server closed immediately because its worker pool was saturated. Every rejection is counted, including those whose log warning was suppressed by rate limiting. A rising value means clients are being turned away; read it with the `thread_pool` metrics for `thrift-server-pool`, where the rate of increase indicates how far worker capacity is short.
+
 ## `thrift_used_clients`
 
 - Unit: Count
