@@ -421,10 +421,10 @@ class StatementPlannerTest extends PlanTestBase {
         // Without an internal table to lock there is no critical section to stay out of.
         assertFalse(locker.isEmpty(), "statement must lock at least one internal table: " + sql);
 
-        // close() drains the whole heldStack; unlock() would pop only one frame and leak a real
-        // read lock into the rest of the surefire fork if the statement ever locked twice.
-        try (PlannerMetaLocker ignored = locker) {
+        try {
             StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+        } finally {
+            locker.unlock();
         }
 
         assertTrue(lockCalls.get() >= 1, "meta lock should be taken at least once");
