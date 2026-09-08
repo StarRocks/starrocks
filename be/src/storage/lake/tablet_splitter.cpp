@@ -1634,9 +1634,17 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
             }
             return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
         }
+        auto delete_weights = row_weights;
+        if (anchor.num_dels > 0 && std::none_of(delete_weights.begin(), delete_weights.end(), positive)) {
+            // Row counts are estimates but deletes are exact. Integer geometry can assign every
+            // physical row to clipped sink ranges while this rowset is emitted only to later
+            // children. Restrict the deterministic fallback to those emitted children so none of
+            // the delete anchor is allocated to a child that will drop the rowset below.
+            for (size_t c = 0; c < child_count; ++c) delete_weights[c] = emit[c] ? 1 : 0;
+        }
         tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
         tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
-        tablet_reshard_helper::allocate_proportionally(anchor.num_dels, row_weights, &dels);
+        tablet_reshard_helper::allocate_proportionally(anchor.num_dels, delete_weights, &dels);
         for (size_t c = 0; c < child_count; ++c) {
             if (emit[c]) (*split_ranges)[c].rowset_stats[rowset.id()] = {rows[c], bytes[c], dels[c]};
         }
@@ -1875,14 +1883,6 @@ static Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, co
         std::vector<Rowset::LoadedSegment> loaded_segments; // keeps the Segments alive for this rowset's scope
         Schema rowset_schema;
         std::vector<uint32_t> sort_key_idxes;
-        std::unordered_set<int> zero_row_segment_positions;
-        for (int meta_pos = 0; meta_pos < rowset_meta.segment_metas_size(); ++meta_pos) {
-            const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
-            if (segment_meta.has_num_rows() && segment_meta.num_rows() == 0) {
-                zero_row_segment_positions.insert(meta_pos);
-            }
-        }
-
         // Two cheap protobuf-only gates, evaluated BEFORE constructing the Rowset or
         // touching the loader:
         //   * rowset_has_sampleless_segment -- skip the loader when every segment already
@@ -1894,6 +1894,13 @@ static Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, co
         //     unset, so only construct the Rowset when the schema resolves safely.
         if (tablet_manager != nullptr && rowset_has_sampleless_segment(rowset_meta) &&
             rowset_schema_resolves_to_valid_id(*tablet_metadata, rowset_meta.id())) {
+            std::unordered_set<int> zero_row_segment_positions;
+            for (int meta_pos = 0; meta_pos < rowset_meta.segment_metas_size(); ++meta_pos) {
+                const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
+                if (segment_meta.has_num_rows() && segment_meta.num_rows() == 0) {
+                    zero_row_segment_positions.insert(meta_pos);
+                }
+            }
             Rowset rowset(tablet_manager, tablet_metadata, rowset_index, /*compaction_segment_limit=*/0);
             SegmentReadOptions read_options;
             read_options.lake_io_opts.fill_data_cache = false;
