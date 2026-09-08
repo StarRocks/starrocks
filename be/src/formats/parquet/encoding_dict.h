@@ -580,7 +580,7 @@ private:
             // `_next_null_column` has already written this batch's NULL flags from the definition
             // levels; the rows the filter excludes are added on top, so that a row which
             // contributes no bytes is always marked NULL (see the class comment).
-            uint8_t* null_data = down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->get_data().data() + cur_size;
+            uint8_t* null_data = down_cast<NullableColumn*>(dst)->mutable_null_column()->get_data().data() + cur_size;
             size_t cnt = 0;
             size_t num_excluded = 0;
             for (int i = 0; i < count; ++i) {
@@ -657,14 +657,10 @@ private:
             }
             uint8_t* null_data = nullptr;
             if (dst->is_nullable()) {
-<<<<<<< HEAD
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
-=======
-                auto* null_column = down_cast<NullableColumn*>(dst)->null_column_raw_ptr();
+                auto* null_column = down_cast<NullableColumn*>(dst)->mutable_null_column();
                 size_t null_base = null_column->size();
                 null_column->append_default(count);
                 null_data = null_column->get_data().data() + null_base;
->>>>>>> 267fba9 ([BugFix] Mark filter-excluded FLBA dictionary rows NULL (#78685))
             }
             auto* data_column = ColumnHelper::get_data_column(dst);
             if (UNLIKELY(!data_column->is_binary())) {

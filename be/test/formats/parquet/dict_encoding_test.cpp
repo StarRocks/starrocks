@@ -6,17 +6,10 @@
 #include <string>
 #include <vector>
 
-<<<<<<< HEAD
-#include "column/column_helper.h"
-#include "column/type_traits.h"
-=======
-#include "base/string/slice.h"
-#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "column/runtime_type_traits.h"
->>>>>>> 267fba9 ([BugFix] Mark filter-excluded FLBA dictionary rows NULL (#78685))
+#include "column/type_traits.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/utils.h"
@@ -302,7 +295,6 @@ TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
     }
 }
 
-<<<<<<< HEAD
 // A dictionary-encoded data page: one bit-width byte, then RLE/bit-packed runs. A single
 // repeated run covers every value, so the page is a handful of bytes however many values it
 // claims -- which is what keeps a multi-million-value test cheap. (Building the same page with
@@ -390,7 +382,7 @@ TEST(DictEncodingReadTest, LargeBatchWithNulls) {
     large_batch_with_nulls_test<LogicalType::TYPE_INT, LogicalType::TYPE_INT>();
     large_batch_with_nulls_test<LogicalType::TYPE_INT, LogicalType::TYPE_VARCHAR>();
 }
-=======
+
 // A row that a pushed-down filter excludes is never written, so it contributes no bytes to the
 // BinaryColumn. It must therefore come back NULL, keeping the layout invariant that a non-NULL row
 // occupies exactly the value width and a NULL row occupies nothing. Leaving such a row NOT NULL
@@ -432,7 +424,7 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
         EXPECTED_UNQUOTE(dst->debug_item(4), "1");
 
         // The invariant itself: only the surviving rows occupy bytes.
-        auto* binary = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+        auto* binary = down_cast<BinaryColumn*>(nullable->mutable_data_column());
         EXPECT_EQ((count - excluded.size()) * kValueLen, binary->get_bytes().size());
         EXPECT_EQ(binary->get_bytes().size(), binary->get_offset().back());
     }
@@ -477,11 +469,10 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
             EXPECT_EQ(infos.nulls_data()[i] != 0 || is_excluded, nullable->is_null(i)) << "row " << i;
         }
 
-        auto* binary = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+        auto* binary = down_cast<BinaryColumn*>(nullable->mutable_data_column());
         const size_t surviving = count - infos.num_nulls - excluded.size();
         EXPECT_EQ(surviving * kValueLen, binary->get_bytes().size());
         EXPECT_EQ(binary->get_bytes().size(), binary->get_offset().back());
     }
 }
->>>>>>> 267fba9 ([BugFix] Mark filter-excluded FLBA dictionary rows NULL (#78685))
 } // namespace starrocks::parquet
