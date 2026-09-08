@@ -63,8 +63,14 @@ void HdfsFileSystemTest::create_file_and_destroy() {
     EXPECT_TRUE(fs->new_sequential_file(filepath).ok());
     EXPECT_TRUE(fs->new_random_access_file(filepath).ok());
 
-    // error injection during HDFSWritableFile::close, it is hard to simulate a sync failure with a POSIX filesystem.
-    // HDFS FileSystem sync operation will fail if the file is removed from remote name node.
+    // done the file, check if there is any memory leak
+    (*wfile).reset();
+
+    // error injection during HDFSWritableFile::close, it is hard to simulate a close failure with a POSIX filesystem.
+    // HDFS FileSystem close operation will fail if the file is removed from remote name node.
+    std::string filepath2 = "file://" + _root_path + "/create_file_and_destroy_close_failure_file";
+    auto wfile2 = fs->new_writable_file(filepath2);
+    ASSERT_TRUE(wfile2.ok());
     SyncPoint::GetInstance()->SetCallBack("HDFSWritableFile::close", [](void* arg) { *(int*)arg = -1; });
     SyncPoint::GetInstance()->EnableProcessing();
 
@@ -73,8 +79,11 @@ void HdfsFileSystemTest::create_file_and_destroy() {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    // done the file, check if there is any memory leak
-    (*wfile).reset();
+    auto close_st = (*wfile2)->close();
+    EXPECT_TRUE(close_st.is_io_error()) << close_st;
+    // the file is marked closed even if hdfsCloseFile() failed, so a second close() is a no-op
+    EXPECT_TRUE((*wfile2)->close().ok());
+    (*wfile2).reset();
 }
 
 TEST_F(HdfsFileSystemTest, get_namenode_from_path) {

@@ -365,17 +365,15 @@ Status HDFSWritableFile::close() {
     FileSystem::on_file_write_close(this);
     Status st = JavaEnv::GetInstance()->call_function_in_pthread([this]() {
         FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
-        int r = hdfsHSync(_fs, _file);
-        TEST_SYNC_POINT_CALLBACK("HDFSWritableFile::close", &r);
+        // No hdfsHSync() here. hdfsCloseFile() already flushes the remaining
+        // packets, waits for the acks of every DataNode in the pipeline and
+        // completes the file on the NameNode, which is what other HDFS writers
+        // rely on. hsync additionally forces an fsync on every DataNode and can
+        // block for a long time on busy disks. Use sync() explicitly if the
+        // data must be on disk before close().
         auto st = Status::OK();
-        if (r == -1) {
-            auto error_msg = fmt::format("Fail to sync file {}: {}", _path, get_hdfs_err_msg());
-            LOG(WARNING) << error_msg;
-            st.update(Status::IOError(error_msg));
-        }
-
-        FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
-        r = hdfsCloseFile(_fs, _file);
+        int r = hdfsCloseFile(_fs, _file);
+        TEST_SYNC_POINT_CALLBACK("HDFSWritableFile::close", &r);
         if (r == -1) {
             auto error_msg = fmt::format("Fail to close file {}: {}", _path, get_hdfs_err_msg());
             LOG(WARNING) << error_msg;
