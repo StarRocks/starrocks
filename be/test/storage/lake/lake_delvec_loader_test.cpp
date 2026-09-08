@@ -434,19 +434,16 @@ TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_releases_key_on_excep
     const int64_t version = 3;
 
     DelVectorPtr dv;
-    EXPECT_THROW((void)holder->get_or_load(tsid, version, &dv,
-                                           [](DelVectorPtr*) -> Status { throw std::bad_alloc(); }),
+    EXPECT_THROW((void)holder->get_or_load(tsid, version, &dv, [](DelVectorPtr*) -> Status { throw std::bad_alloc(); }),
                  std::bad_alloc);
 
     // The key was released, so this call loads instead of blocking on a mark nobody will clear.
     int loads = 0;
-    ASSERT_TRUE(holder->get_or_load(tsid, version, &dv,
-                                    [&](DelVectorPtr* out) {
-                                        loads++;
-                                        *out = std::make_shared<DelVector>();
-                                        return Status::OK();
-                                    })
-                        .ok());
+    ASSERT_TRUE(holder->get_or_load(tsid, version, &dv, [&](DelVectorPtr* out) {
+                          loads++;
+                          *out = std::make_shared<DelVector>();
+                          return Status::OK();
+                      }).ok());
     EXPECT_EQ(1, loads);
     EXPECT_TRUE(dv != nullptr);
 }
