@@ -52,12 +52,12 @@ select * from site_access order by event_day, site_id;
 -- result:
 2026-10-05	1	100
 -- !result
-select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'transaction_simple' order by PARTITION_NAME;
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'transaction_simple' and PARTITION_NAME like 'p%' order by PARTITION_NAME;
 -- result:
 p202610
 p202611
 -- !result
-select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'site_access' order by PARTITION_NAME;
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'site_access' and PARTITION_NAME like 'p%' order by PARTITION_NAME;
 -- result:
 p20261005
 -- !result

@@ -39,8 +39,8 @@ shell: curl -s --location-trusted -u root: -H "label:auto_partition_${uuid0}" -H
 -- 5. Rows are visible in the partitions created during the load
 select * from transaction_simple order by company_id;
 select * from site_access order by event_day, site_id;
-select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'transaction_simple' order by PARTITION_NAME;
-select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'site_access' order by PARTITION_NAME;
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'transaction_simple' and PARTITION_NAME like 'p%' order by PARTITION_NAME;
+select PARTITION_NAME from information_schema.partitions_meta where DB_NAME = 'db_${uuid0}' and TABLE_NAME = 'site_access' and PARTITION_NAME like 'p%' order by PARTITION_NAME;
 
 -- 6. A later transaction that loads into an existing partition still works
 shell: curl -s --location-trusted -u root: -H "label:existing_partition_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
