@@ -686,8 +686,7 @@ Status validate_canonical_rowset(const RowsetMetadataPB& rowset, const TabletMet
     if (!tablet_reshard_helper::has_valid_uid(rowset)) {
         return Status::Corruption("tablet merge source rowset has no valid uid");
     }
-    if (rowset.num_rows() < 0 || rowset.data_size() < 0 || rowset.num_dels() < 0 ||
-        rowset.num_dels() > rowset.num_rows()) {
+    if (rowset.num_rows() < 0 || rowset.data_size() < 0 || rowset.num_dels() < 0) {
         return Status::Corruption("tablet merge source rowset has invalid statistics");
     }
     if (rowset.has_delete_predicate() &&
@@ -878,12 +877,18 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(
             RETURN_IF_ERROR(union_canonical_range(&canonical, occurrence_range));
             if (decision.role == RowsetOccurrenceRole::CONTRIBUTOR) {
                 canonical.contributor_ranges.emplace_back(occurrence_range);
-                canonical.source_form_rowset.set_num_rows(canonical.source_form_rowset.num_rows() +
-                                                          occurrence.num_rows());
-                canonical.source_form_rowset.set_data_size(canonical.source_form_rowset.data_size() +
-                                                           occurrence.data_size());
-                canonical.source_form_rowset.set_num_dels(canonical.source_form_rowset.num_dels() +
-                                                          occurrence.num_dels());
+                int64_t num_rows = 0;
+                int64_t data_size = 0;
+                int64_t num_dels = 0;
+                if (__builtin_add_overflow(canonical.source_form_rowset.num_rows(), occurrence.num_rows(), &num_rows) ||
+                    __builtin_add_overflow(canonical.source_form_rowset.data_size(), occurrence.data_size(),
+                                           &data_size) ||
+                    __builtin_add_overflow(canonical.source_form_rowset.num_dels(), occurrence.num_dels(), &num_dels)) {
+                    return Status::Corruption("tablet merge contributor statistics overflow int64");
+                }
+                canonical.source_form_rowset.set_num_rows(num_rows);
+                canonical.source_form_rowset.set_data_size(data_size);
+                canonical.source_form_rowset.set_num_dels(num_dels);
             }
             RETURN_IF_ERROR(reconcile_segments(&canonical.source_form_rowset, &occurrence));
             RETURN_IF_ERROR(reconcile_duplicate_dels(&canonical, occurrence));

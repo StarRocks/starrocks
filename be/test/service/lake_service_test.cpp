@@ -189,6 +189,7 @@ protected:
         rowset->set_overlapped(false);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
+        rowset->set_num_dels(3);
         // Production rowset producers mint a uid; emulate that here so the
         // strict-uid invariant in tablet_merger holds when MERGE later runs.
         lake::tablet_reshard_helper::ensure_rowset_uid(rowset);

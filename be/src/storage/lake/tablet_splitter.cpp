@@ -788,8 +788,7 @@ StatusOr<RowsetAnchor> rowset_anchor(const RowsetMetadataPB& rowset) {
         if (!rowset.has_num_rows()) rows += segment.num_rows();
         if (!rowset.has_data_size()) bytes += segment.size();
     }
-    if (rows < 0 || bytes < 0 || rows > INT64_MAX || bytes > INT64_MAX || rowset.num_dels() < 0 ||
-        rowset.num_dels() > rows) {
+    if (rows < 0 || bytes < 0 || rows > INT64_MAX || bytes > INT64_MAX || rowset.num_dels() < 0) {
         return Status::Corruption("tablet split has invalid rowset statistics");
     }
     return RowsetAnchor{static_cast<int64_t>(rows), static_cast<int64_t>(bytes), rowset.num_dels()};
@@ -1638,7 +1637,6 @@ Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<Ta
         tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
         tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
         tablet_reshard_helper::allocate_proportionally(anchor.num_dels, row_weights, &dels);
-        tablet_reshard_helper::cap_and_redistribute_dels(rows, &dels);
         for (size_t c = 0; c < child_count; ++c) {
             if (emit[c]) (*split_ranges)[c].rowset_stats[rowset.id()] = {rows[c], bytes[c], dels[c]};
         }
