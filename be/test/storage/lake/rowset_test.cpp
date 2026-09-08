@@ -1229,6 +1229,72 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
 }
 
+TEST_F(LakeRowsetTest, test_zero_row_segment_positional_iterator_contracts) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    auto empty_c0 = Int32Column::create();
+    auto empty_c1 = Int32Column::create();
+    Chunk empty_chunk({std::move(empty_c0), std::move(empty_c1)}, _schema);
+    ASSERT_OK(writer->write(empty_chunk));
+    ASSERT_OK(writer->finish());
+
+    std::vector<int> keys{1, 2, 3};
+    std::vector<int> values{10, 20, 30};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c1->append_numbers(values.data(), values.size() * sizeof(int));
+    Chunk data_chunk({std::move(c0), std::move(c1)}, _schema);
+    ASSERT_OK(writer->write(data_chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(2, writer->segments().size());
+
+    auto* rowset_meta = _tablet_metadata->add_rowsets();
+    rowset_meta->set_overlapped(true);
+    rowset_meta->set_id(next_id());
+    rowset_meta->set_num_rows(keys.size());
+    for (size_t i = 0; i < writer->segments().size(); ++i) {
+        auto* segment_meta = rowset_meta->add_segment_metas();
+        segment_meta->set_filename(writer->segments()[i].path);
+        segment_meta->set_num_rows(i == 0 ? 0 : keys.size());
+        segment_meta->set_segment_idx(i);
+        segment_meta->set_shared(true);
+    }
+    set_tablet_range_int(_tablet_metadata.get(), 1, true, 4, false);
+    writer->close();
+    _tablet_metadata->set_version(_tablet_metadata->version() + 1);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    OlapReaderStatistics stats;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0, 1});
+
+    ASSIGN_OR_ABORT(auto plain_iters, rowset->get_each_segment_iterator(input_schema, false, &stats));
+    ASSERT_EQ(plain_iters.size(), 2);
+    ASSERT_NE(plain_iters[0], nullptr);
+    ASSERT_NE(plain_iters[1], nullptr);
+    ASSERT_OK(plain_iters[0]->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(plain_iters[0]->init_output_schema(std::unordered_set<uint32_t>()));
+    auto empty_result = ChunkFactory::new_chunk(plain_iters[0]->schema(), 1024);
+    EXPECT_TRUE(plain_iters[0]->get_next(empty_result.get()).is_end_of_file());
+    EXPECT_EQ(count_rows_from_iters({plain_iters[1]}), keys.size());
+
+    ASSIGN_OR_ABORT(auto delvec_iters,
+                    rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+    ASSERT_EQ(delvec_iters.size(), 2);
+    EXPECT_EQ(delvec_iters[0], nullptr);
+    ASSERT_NE(delvec_iters[1], nullptr);
+    EXPECT_EQ(count_rows_from_iters({delvec_iters[1]}), keys.size());
+
+    for (auto& iter : plain_iters) {
+        iter->close();
+    }
+    delvec_iters[1]->close();
+}
+
 // Test class for segment metadata filter and parallel load with skip_segment_idxs
 class LakeRowsetSegmentMetadataFilterTest : public TestBase {
 public:
