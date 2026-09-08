@@ -61,6 +61,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.ThriftServer;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
@@ -529,6 +530,8 @@ public final class MetricRepo {
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
+    public static GaugeMetric<Long> GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
 
     // BCDR Mertic
     public static LongCounterMetric COUNTER_EXTERNAL_SNAPSHOT_JOB_NUM;
@@ -560,6 +563,21 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
         GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
         GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
+
+        GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS = new GaugeMetric<>(
+                "thrift_server_acceptor_stall_ms", MetricUnit.MILLISECONDS,
+                "milliseconds since the thrift accept loop last made progress") {
+            @Override
+            public Long getValue() {
+                return ThriftServer.getAcceptorStallTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS);
+
+        COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_rejected_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed because its worker pool was saturated");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS);
 
         // 1. gauge
         // build info

@@ -17,6 +17,8 @@
 
 package com.starrocks.common;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -25,17 +27,19 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TServerEventHandler;
+import org.apache.thrift.transport.SocketAddressProvider;
 import org.apache.thrift.transport.TServerTransport;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 
+import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
-import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 
 /**
  * Almost all code is copied from org.apache.thrift.server.TThreadPoolServer v0.13.0
@@ -48,6 +52,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class SRTThreadPoolServer extends TServer {
     private static final Logger LOG = LogManager.getLogger(SRTThreadPoolServer.class);
+    private static final long REJECTION_LOG_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(10);
 
     public static class Args extends AbstractServerArgs<SRTThreadPoolServer.Args> {
         public int minWorkerThreads = 5;
@@ -55,9 +60,19 @@ public class SRTThreadPoolServer extends TServer {
         public ExecutorService executorService;
         public int stopTimeoutVal = 60;
         public TimeUnit stopTimeoutUnit = TimeUnit.SECONDS;
+        /**
+         * How long a submission was retried before the connection was dropped, and the slot length of
+         * the binary exponential backoff between those retries. The server no longer retries at all -
+         * a submission it cannot queue fails immediately - so none of the four has any effect. They are
+         * kept so that existing callers still compile.
+         */
+        @Deprecated
         public int requestTimeout = 20;
+        @Deprecated
         public TimeUnit requestTimeoutUnit = TimeUnit.SECONDS;
+        @Deprecated
         public int beBackoffSlotLength = 100;
+        @Deprecated
         public TimeUnit beBackoffSlotLengthUnit = TimeUnit.MILLISECONDS;
 
         public Args(TServerTransport transport) {
@@ -84,22 +99,39 @@ public class SRTThreadPoolServer extends TServer {
             return this;
         }
 
+        /**
+         * @deprecated the retry these configured no longer exists; setting it has no effect.
+         */
+        @Deprecated
         public SRTThreadPoolServer.Args requestTimeout(int n) {
             requestTimeout = n;
             return this;
         }
 
+        /**
+         * @deprecated the retry these configured no longer exists; setting it has no effect.
+         */
+        @Deprecated
         public SRTThreadPoolServer.Args requestTimeoutUnit(TimeUnit tu) {
             requestTimeoutUnit = tu;
             return this;
         }
-        //Binary exponential backoff slot length
+
+        /**
+         * @deprecated binary exponential backoff slot length; the backoff no longer exists, so
+         *     setting it has no effect.
+         */
+        @Deprecated
         public SRTThreadPoolServer.Args beBackoffSlotLength(int n) {
             beBackoffSlotLength = n;
             return this;
         }
 
-        //Binary exponential backoff slot time unit
+        /**
+         * @deprecated binary exponential backoff slot time unit; the backoff no longer exists, so
+         *     setting it has no effect.
+         */
+        @Deprecated
         public SRTThreadPoolServer.Args beBackoffSlotLengthUnit(TimeUnit tu) {
             beBackoffSlotLengthUnit = tu;
             return this;
@@ -118,22 +150,36 @@ public class SRTThreadPoolServer extends TServer {
 
     private final long stopTimeoutVal;
 
-    private final TimeUnit requestTimeoutUnit;
+    private final LongSupplier nanoTime;
 
-    private final long requestTimeout;
+    private volatile long acceptorHeartbeatNanos;
 
-    private final long beBackoffSlotInMillis;
+    // The rejection bookkeeping below is only ever touched from the single acceptor thread,
+    // so it needs no synchronization.
+    private long rejectedSinceLastReport;
 
-    private final Random random = new Random(System.currentTimeMillis());
+    private long rejectionWindowStartNanos;
+
+    private long lastRejectionNanos;
+
+    private long lastReportedSpanMs;
+
+    private boolean rejectionWindowOpen;
+
+    private SocketAddress lastRejectedPeer;
 
     public SRTThreadPoolServer(SRTThreadPoolServer.Args args) {
+        this(args, System::nanoTime);
+    }
+
+    @VisibleForTesting
+    SRTThreadPoolServer(SRTThreadPoolServer.Args args, LongSupplier nanoTime) {
         super(args);
 
         stopTimeoutUnit = args.stopTimeoutUnit;
         stopTimeoutVal = args.stopTimeoutVal;
-        requestTimeoutUnit = args.requestTimeoutUnit;
-        requestTimeout = args.requestTimeout;
-        beBackoffSlotInMillis = args.beBackoffSlotLengthUnit.toMillis(args.beBackoffSlotLength);
+        this.nanoTime = nanoTime;
+        acceptorHeartbeatNanos = nanoTime.getAsLong();
 
         executorService = args.executorService != null ?
                 args.executorService : createDefaultExecutorService(args);
@@ -181,48 +227,13 @@ public class SRTThreadPoolServer extends TServer {
     protected void execute() {
         while (!stopped_) {
             try {
+                // Deliberately not stamped before accept(): a failing accept() (EMFILE, a closed
+                // server socket) spins this loop, and stamping here would report a healthy acceptor
+                // through exactly the outage the heartbeat exists to expose.
                 TTransport client = serverTransport_.accept();
-                SRTThreadPoolServer.WorkerProcess wp = new SRTThreadPoolServer.WorkerProcess(client);
-
-                int retryCount = 0;
-                long remainTimeInMillis = requestTimeoutUnit.toMillis(requestTimeout);
-                while (true) {
-                    try {
-                        executorService.execute(wp);
-                        break;
-                    } catch (Throwable t) {
-                        if (t instanceof RejectedExecutionException) {
-                            retryCount++;
-                            try {
-                                if (remainTimeInMillis > 0) {
-                                    //do a truncated 20 binary exponential backoff sleep
-                                    long sleepTimeInMillis = ((long) (random.nextDouble() *
-                                            (1L << Math.min(retryCount, 20)))) * beBackoffSlotInMillis;
-                                    sleepTimeInMillis = Math.min(sleepTimeInMillis, remainTimeInMillis);
-                                    TimeUnit.MILLISECONDS.sleep(sleepTimeInMillis);
-                                    remainTimeInMillis = remainTimeInMillis - sleepTimeInMillis;
-                                } else {
-                                    client.close();
-                                    wp = null;
-                                    LOG.warn("Task has been rejected by ExecutorService " + retryCount
-                                            + " times till timedout, reason: " + t);
-                                    break;
-                                }
-                            } catch (InterruptedException e) {
-                                client.close();
-                                wp = null;
-                                LOG.warn("Interrupted while waiting to place client on executor queue.");
-                                Thread.currentThread().interrupt();
-                                break;
-                            }
-                        } else {
-                            client.close();
-                            wp = null;
-                            LOG.error("ExecutorService threw error: " + t, t);
-                            break;
-                        }
-                    }
-                }
+                markAcceptorProgress();
+                reportRejectedConnections(false);
+                submitClient(client);
             } catch (TTransportException ttx) {
                 if (!stopped_) {
                     LOG.warn("Transport error occurred during acceptance of message.", ttx);
@@ -231,6 +242,103 @@ public class SRTThreadPoolServer extends TServer {
                 LOG.warn("Error occurred during acceptance of message.", t);
             }
         }
+        // The acceptor is the only reporter, so flush what the open window still holds.
+        reportRejectedConnections(true);
+    }
+
+    private void submitClient(TTransport client) {
+        SRTThreadPoolServer.WorkerProcess worker = new SRTThreadPoolServer.WorkerProcess(client);
+        try {
+            executorService.execute(worker);
+        } catch (RejectedExecutionException e) {
+            recordRejectedConnection(client);
+            client.close();
+        } catch (Throwable t) {
+            client.close();
+            LOG.error("ExecutorService threw error: " + t, t);
+        }
+    }
+
+    /**
+     * The peer of a transport, or null when it cannot report one. TSocket implements
+     * {@link SocketAddressProvider}, and going through the interface keeps this working for any other
+     * transport that does - a TLS wrapper, say - instead of degrading to an unknown peer.
+     */
+    private SocketAddress getPeerAddress(TTransport client) {
+        if (client instanceof SocketAddressProvider) {
+            return ((SocketAddressProvider) client).getRemoteSocketAddress();
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    void markAcceptorProgress() {
+        acceptorHeartbeatNanos = nanoTime.getAsLong();
+    }
+
+    /**
+     * Milliseconds since the accept loop last returned a connection. This rises while the acceptor is
+     * wedged, but also on an FE that simply has no thrift traffic, so it only means "stalled" when read
+     * together with the connection arrival rate.
+     */
+    long getAcceptorStallTimeMs() {
+        long elapsedNanos = nanoTime.getAsLong() - acceptorHeartbeatNanos;
+        return elapsedNanos <= 0 ? 0 : TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
+    }
+
+    /**
+     * Counts one rejected connection, into the metric and into the window the accept loop reports
+     * from. Every rejection is counted, so the counter and the eventual warning agree on the
+     * magnitude even though at most one warning is emitted per window.
+     */
+    @VisibleForTesting
+    void recordRejectedConnection(TTransport client) {
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS.increase(1L);
+        }
+        long nowNanos = nanoTime.getAsLong();
+        if (!rejectionWindowOpen) {
+            rejectionWindowOpen = true;
+            rejectionWindowStartNanos = nowNanos;
+        }
+        lastRejectionNanos = nowNanos;
+        rejectedSinceLastReport++;
+        lastRejectedPeer = getPeerAddress(client);
+    }
+
+    /**
+     * Emits one warning covering every rejection counted in the open window, once that window has
+     * closed. The accept loop drives this, so the report waits on the next accepted connection, or on
+     * the loop exiting, rather than on another rejection. The span it reports runs from the first to
+     * the last rejection in the window, not to whenever the report happened to fire, so a burst that
+     * is flushed long after it ended still states its own duration.
+     *
+     * @param force report a still-open window, for the accept loop to flush on its way out
+     * @return how many rejections were reported, 0 if none were
+     */
+    @VisibleForTesting
+    long reportRejectedConnections(boolean force) {
+        if (!rejectionWindowOpen) {
+            return 0;
+        }
+        if (!force && nanoTime.getAsLong() - rejectionWindowStartNanos < REJECTION_LOG_INTERVAL_NANOS) {
+            return 0;
+        }
+        long reported = rejectedSinceLastReport;
+        lastReportedSpanMs = TimeUnit.NANOSECONDS.toMillis(lastRejectionNanos - rejectionWindowStartNanos);
+        LOG.warn("Rejected {} thrift connection(s) within {} ms because the server worker pool is "
+                        + "saturated, most recent peer {}",
+                reported, lastReportedSpanMs, lastRejectedPeer == null ? "unknown" : lastRejectedPeer);
+        rejectedSinceLastReport = 0;
+        rejectionWindowOpen = false;
+        lastRejectedPeer = null;
+        return reported;
+    }
+
+    /** The span of the burst covered by the last emitted warning. */
+    @VisibleForTesting
+    long getLastReportedSpanMs() {
+        return lastReportedSpanMs;
     }
 
     protected void waitForShutdown() {
