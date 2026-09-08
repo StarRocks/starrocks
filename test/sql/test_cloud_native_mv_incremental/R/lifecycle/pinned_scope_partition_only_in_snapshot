@@ -1,0 +1,106 @@
+-- name: test_ivm_pinned_scope_partition_only_in_snapshot
+create external catalog ice_${uuid0} properties (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog ice_${uuid0};
+-- result:
+-- !result
+create database ice_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE ice_${uuid0}.ice_db_${uuid0}.base_ps (dt date, k int, v bigint) PARTITION BY (dt);
+-- result:
+-- !result
+INSERT INTO ice_${uuid0}.ice_db_${uuid0}.base_ps
+SELECT date_add('2030-01-01', INTERVAL generate_series DAY), generate_series, 1
+FROM TABLE(generate_series(1, 14));
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database mvdb_${uuid0};
+-- result:
+-- !result
+use mvdb_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ps_${uuid0}
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL", "partition_refresh_number" = "1")
+AS SELECT dt, k, v FROM ice_${uuid0}.ice_db_${uuid0}.base_ps;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ps_${uuid0};
+function: wait_mv_refresh_count("mvdb_${uuid0}", "mv_ps_${uuid0}", 4)
+-- result:
+None
+-- !result
+DELETE FROM ice_${uuid0}.ice_db_${uuid0}.base_ps WHERE dt = '2030-01-03';
+-- result:
+-- !result
+function: wait_async_materialized_view_finish("mvdb_${uuid0}", "mv_ps_${uuid0}")
+-- result:
+None
+-- !result
+SELECT COUNT(*) AS base_rows_for_deleted_partition FROM ice_${uuid0}.ice_db_${uuid0}.base_ps WHERE dt = '2030-01-03';
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS mv_partitions_for_deleted_date FROM information_schema.partitions_meta
+WHERE DB_NAME = 'mvdb_${uuid0}' AND TABLE_NAME = 'mv_ps_${uuid0}' AND PARTITION_NAME = 'p20300103';
+-- result:
+1
+-- !result
+SELECT COUNT(*) AS mv_rows_for_deleted_partition FROM mv_ps_${uuid0} WHERE dt = '2030-01-03';
+-- result:
+1
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ps_${uuid0} WITH SYNC MODE;
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%non-append-only change on base table%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+  AND (EXTRA_MESSAGE LIKE '%mv_ps_${uuid0}%' OR DEFINITION LIKE '%mv_ps_${uuid0}%')
+  AND STATE = 'FAILED';
+-- result:
+FAILED	1
+-- !result
+SELECT COUNT(*) AS mv_partitions_for_deleted_date_after FROM information_schema.partitions_meta
+WHERE DB_NAME = 'mvdb_${uuid0}' AND TABLE_NAME = 'mv_ps_${uuid0}' AND PARTITION_NAME = 'p20300103';
+-- result:
+0
+-- !result
+SELECT IS_ACTIVE AS mv_active_after FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = 'mvdb_${uuid0}' AND TABLE_NAME = 'mv_ps_${uuid0}';
+-- result:
+false
+-- !result
+SELECT COUNT(*) AS mv_rows_after FROM mv_ps_${uuid0};
+-- result:
+13
+-- !result
+SELECT COUNT(*) AS base_rows_after FROM ice_${uuid0}.ice_db_${uuid0}.base_ps;
+-- result:
+13
+-- !result
+DROP MATERIALIZED VIEW mv_ps_${uuid0};
+-- result:
+-- !result
+DROP DATABASE mvdb_${uuid0};
+-- result:
+-- !result
+DROP TABLE ice_${uuid0}.ice_db_${uuid0}.base_ps FORCE;
+-- result:
+-- !result
+DROP DATABASE ice_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+DROP CATALOG ice_${uuid0};
+-- result:
+-- !result
