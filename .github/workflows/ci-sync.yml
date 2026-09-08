@@ -48,8 +48,11 @@ jobs:
             skip_cd=true
             skip_ms=true
           fi
-          [[ "${labels}" =~ cd-contributed ]] && skip_cd=true
-          [[ "${labels}" =~ ms-contributed ]] && skip_ms=true
+          # Exact whole-line match, like the mergify fallback below and
+          # contributed-backport-label.yml. The `sync` test above stays a substring match on
+          # purpose: it is the legacy catch-all and must keep catching `cd-sync` too.
+          echo "${labels}" | grep -qx 'cd-contributed' && skip_cd=true
+          echo "${labels}" | grep -qx 'ms-contributed' && skip_ms=true
 
           if [[ "$skip_cd" != "true" || "$skip_ms" != "true" ]]; then
             src=""
@@ -82,4 +85,18 @@ jobs:
           SKIP_MS: ${{ steps.commit_sha.outputs.skip_ms }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && timeout 60 git pull >/dev/null || echo "git pull timeout, using cached ci-tool"
+
+          # The CD anti-loop is no longer enforced by this step's `if` -- run-repo-sync.sh
+          # owns it via SKIP_CD. That script is fetched at run time and the `git pull` above
+          # deliberately tolerates failure, so a stale /var/lib/ci-tool checkout would run a
+          # pre-contract script that ignores SKIP_CD and pushes cd-contributed changes back
+          # to CelerData (ping-pong: the new CD PR carries no `sr-synced`, so TSP's reverse
+          # sync picks it up again). Assert the contract instead of trusting merge order.
+          # Failing loudly beats looping silently -- silence is what cost mirrorship three
+          # weeks of changes in the first place.
+          if ! grep -q 'SKIP_CD' ./scripts/run-repo-sync.sh; then
+            echo "::error::ci-tool run-repo-sync.sh predates the SKIP_CD/SKIP_MS contract (stale /var/lib/ci-tool on this runner, or StarRocks/ci-tool#5248 not merged yet). Refusing to run: the CD anti-loop would be unenforced."
+            exit 1
+          fi
+
           ./scripts/run-repo-sync.sh
