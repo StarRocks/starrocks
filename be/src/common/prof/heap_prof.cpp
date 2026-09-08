@@ -39,11 +39,21 @@ static int set_jemalloc_profiling(bool enable) {
     return je_mallctl("prof.active", nullptr, nullptr, &enable, sizeof(enable));
 }
 
-static int has_enable_heap_profile() {
-    int value = 0;
+static bool has_enable_heap_profile() {
+    // `prof.active` is a bool node, and je_mallctl() rejects a read whose length does not match
+    // the node's type: the ctl layer copies min(sizeof(bool), *oldlenp) bytes and returns EINVAL
+    // rather than filling the buffer. Reading it into an int with sizeof(int) therefore only
+    // happened to work because the int was zero initialized and the caller never looked at the
+    // return code -- checking the code without fixing the type would have made this always
+    // report false.
+    bool value = false;
     size_t size = sizeof(value);
+<<<<<<< HEAD:be/src/common/prof/heap_prof.cpp
     je_mallctl("prof.active", &value, &size, nullptr, 0);
     return value;
+=======
+    return je_mallctl("prof.active", &value, &size, nullptr, 0) == 0 && value;
+>>>>>>> 691f2aa ([BugFix] Read prof.active into a bool in has_enable_heap_profile (#78820)):be/src/runtime/prof/heap_prof.cpp
 }
 
 bool dump_snapshot(const std::string& filename) {
