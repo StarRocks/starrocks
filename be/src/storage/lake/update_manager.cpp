@@ -2425,7 +2425,13 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
 }
 
+DEFINE_FAIL_POINT(fail_execute_index_major_compaction);
+
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
+    // Test-only: inject an index major compaction failure so callers can exercise their
+    // error-propagation paths.
+    FAIL_POINT_TRIGGER_EXECUTE(fail_execute_index_major_compaction,
+                               { return Status::InternalError("injected index major compaction failure"); });
     if (config::enable_pk_index_parallel_compaction) {
         if (_parallel_compact_mgr == nullptr) {
             return Status::InternalError("parallel compact manager is not initialized");
