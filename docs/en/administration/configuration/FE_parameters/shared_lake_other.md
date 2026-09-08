@@ -648,7 +648,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: How long an online rewrite of a shared-data range-distribution table keeps retrying one partition's rewrite `INSERT` after it fails, before cancelling the whole job. An online rewrite — a range sort-key schema change, a range rollup, or a materialized view sort-key rewrite — rebuilds data one partition per alter-scheduler tick, so a compute node that restarts or crashes while one of those `INSERT` statements is in flight fails that partition. Within this window the job re-runs only the failed partition on a later tick and keeps every partition it has already rewritten; once the window is exhausted the job is cancelled and reports the last rewrite error. This window is measured from a partition's first failure and is checked only when a later attempt fails; time the partition instead spends waiting — because no compute node is available to run the rewrite, or because a committed rewrite is waiting to publish — is bounded by `alter_table_timeout_second` instead. Set this item to a value larger than the time a compute node takes to become available again. Keep it well below `alter_table_timeout_second`, because compaction on the table is deferred for as long as the online rewrite runs. Set this item to `0` to cancel the job on the first failure.
-- Introduced in: v4.1.5
+- Introduced in: v4.2.0
 
 ## Data Lake
 
