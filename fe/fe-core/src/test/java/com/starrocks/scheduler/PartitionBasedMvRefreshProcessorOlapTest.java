@@ -470,7 +470,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     public void testRewriteNonPartitionedMVForOlapTable() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withMaterializedView("create materialized view mv_single_for_olap " +
-                        "refresh async " +
+                        "refresh on_change " +
                         "as select * from tbl1");
         String mvName = "mv_single_for_olap";
         refreshMVRange(mvName, false);
@@ -1622,7 +1622,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         starRocksAssert.withMaterializedView("create materialized view test_drop_partition_mv1\n" +
                 "PARTITION BY k1\n" +
                 "distributed by hash(k2) buckets 3\n" +
-                "refresh async \n" +
+                "refresh on_change \n" +
                 "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
 
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");

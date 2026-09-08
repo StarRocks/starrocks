@@ -1042,6 +1042,21 @@ public class UtFrameUtils {
         return result;
     }
 
+    private static final Pattern REPLAY_BARE_ASYNC_REFRESH = Pattern.compile(
+            "(?im)^(REFRESH\\s+(?:(?:IMMEDIATE|DEFERRED)\\s+)?)ASYNC\\b(?!\\s*(?:START|EVERY))");
+
+    static String normalizeReplayRefreshKeyword(String mvDdl) {
+        // A dump captured before ON_CHANGE existed carries a bare REFRESH ASYNC that no longer
+        // parses. Rewriting every match would also hit the AS query, whose literals must replay
+        // as captured, so only the rendered clause is taken: the first line-initial REFRESH.
+        Matcher matcher = REPLAY_BARE_ASYNC_REFRESH.matcher(mvDdl);
+        if (!matcher.find()) {
+            return mvDdl;
+        }
+        return mvDdl.substring(0, matcher.start()) + matcher.group(1) + "ON_CHANGE"
+                + mvDdl.substring(matcher.end());
+    }
+
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -1172,7 +1187,8 @@ public class UtFrameUtils {
             // (shared-nothing) replay env cannot analyze (warehouse / storage_volume / datacache.*), so a
             // dump captured from a shared-data cluster still creates its MVs -- otherwise
             // PropertyAnalyzer.analyzeMVProperties rejects the whole property set.
-            starRocksAssert.withMaterializedView(stripReplayUnsupportedMvProperties(entry.getValue()));
+            starRocksAssert.withMaterializedView(
+                    normalizeReplayRefreshKeyword(stripReplayUnsupportedMvProperties(entry.getValue())));
         }
 
         // mock be core stat

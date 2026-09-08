@@ -1675,7 +1675,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         String sql1 = "create materialized view base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
-                "refresh async " +
+                "refresh on_change " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -1688,7 +1688,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         String sql2 = "create materialized view mv_from_base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
-                "refresh async " +
+                "refresh on_change " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2185,7 +2185,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
     public void testRandomColocate() {
         String sql = "create materialized view mv1 " +
                 "distributed by random " +
-                "refresh async " +
+                "refresh on_change " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n," +
                 "'colocate_with' = 'hehe' " +
@@ -2383,7 +2383,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
     @Test
     public void testCreateMvWithImplicitColumnReorder() throws Exception {
-        starRocksAssert.withMaterializedView("create materialized view mv_column_reorder refresh async as " +
+        starRocksAssert.withMaterializedView("create materialized view mv_column_reorder refresh on_change as " +
                 "select c_1_3, c_1_4, c_1_0, c_1_1, c_1_2 from t1");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_column_reorder");
         List<String> keys = mv.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
@@ -3198,7 +3198,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         AtomicInteger executeTaskCalls = installExecuteTaskCounter();
         starRocksAssert.withMaterializedView(
                 "create materialized view deferred_async " +
-                        "refresh deferred async distributed by hash(c_1_9) as" +
+                        "refresh deferred on_change distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1");
         starRocksAssert.withMaterializedView(
                 "create materialized view deferred_manual " +
@@ -3216,7 +3216,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         AtomicInteger executeTaskCalls = installExecuteTaskCounter();
         starRocksAssert.withMaterializedView(
                 "create materialized view async_immediate " +
-                        "refresh immediate async distributed by hash(c_1_9) as" +
+                        "refresh immediate on_change distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1");
         starRocksAssert.withMaterializedView(
                 "create materialized view manual_immediate " +
@@ -3234,7 +3234,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         AtomicInteger executeTaskCalls = installExecuteTaskCounter();
         starRocksAssert.withMaterializedView(
                 "create materialized view async_immediate_implicit " +
-                        "refresh async distributed by hash(c_1_9) as" +
+                        "refresh on_change distributed by hash(c_1_9) as" +
                         " select c_1_9, c_1_4 from t1");
         starRocksAssert.withMaterializedView(
                 "create materialized view manual_immediate_implicit " +
@@ -4639,7 +4639,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
     public void testEnableQueryRewrite() throws Exception {
         // default
         starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
-                "refresh async " +
+                "refresh on_change " +
                 "as select * from t1 limit 10");
         Assertions.assertEquals(
                 "CREATE MATERIALIZED VIEW `mv_invalid` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, " +
@@ -4658,7 +4658,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         // disable
         starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
-                "refresh async " +
+                "refresh on_change " +
                 "properties('enable_query_rewrite' = 'false') " +
                 "as select * from t1 limit 10");
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_invalid` " +
@@ -4678,7 +4678,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         // enable
         starRocksAssert.withMaterializedView("create materialized view mv_enable " +
-                "refresh async " +
+                "refresh on_change " +
                 "properties('enable_query_rewrite' = 'true') " +
                 "as select * from t1");
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
@@ -4723,7 +4723,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
     public void testEnableTransparentMVRewrite() throws Exception {
         // disable
         starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
-                "refresh async " +
+                "refresh on_change " +
                 "properties('transparent_mv_rewrite_mode' = 'false') " +
                 "as select * from t1 limit 10");
         String sql = starRocksAssert.showCreateTable("show create table mv_invalid");
@@ -4743,7 +4743,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         // enable
         starRocksAssert.withMaterializedView("create materialized view mv_enable " +
-                "refresh async " +
+                "refresh on_change " +
                 "properties('transparent_mv_rewrite_mode' = 'true') " +
                 "as select * from t1");
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +

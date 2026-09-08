@@ -294,36 +294,20 @@ public class ShowCreateMaterializedViewStmtTest {
     }
 
     @Test
-    public void testOnChangeAndBareAsyncBothRenderAsOnChange() throws Exception {
+    public void testOnChangeRendersAsOnChange() throws Exception {
         final String mvName = "test_mv_on_change";
         starRocksAssert.ddl("drop materialized view if exists " + mvName);
-        // Spelled ASYNC on purpose: this half is the pre-26.2 compatibility path.
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
-                " DISTRIBUTED BY HASH(`k1`) BUCKETS 3" +
-                " REFRESH ASYNC" +
-                " AS SELECT k1, k2 FROM test.tbl1");
-        MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
-        Assertions.assertTrue(mv.isLoadTriggeredRefresh());
-
-        List<String> ddl = Lists.newArrayList();
-        AstToStringBuilder.getDdlStmt(mv, ddl, null, null, false, true);
-        Assertions.assertTrue(ddl.get(0).contains("REFRESH ON_CHANGE"),
-                "SHOW CREATE should display ON_CHANGE, got: " + ddl.get(0));
-        Assertions.assertFalse(ddl.get(0).contains("REFRESH ASYNC"),
-                "SHOW CREATE should not display ASYNC, got: " + ddl.get(0));
-        starRocksAssert.dropMaterializedView(mvName);
-
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
                 " DISTRIBUTED BY HASH(`k1`) BUCKETS 3" +
                 " REFRESH ON_CHANGE" +
                 " AS SELECT k1, k2 FROM test.tbl1");
-        MaterializedView onChangeMv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
-        Assertions.assertEquals(MaterializedViewRefreshType.ASYNC, onChangeMv.getRefreshScheme().getType());
-        Assertions.assertNull(onChangeMv.getRefreshScheme().getAsyncRefreshContext().getTimeUnit());
-        Assertions.assertTrue(onChangeMv.isLoadTriggeredRefresh());
+        MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
+        Assertions.assertEquals(MaterializedViewRefreshType.ASYNC, mv.getRefreshScheme().getType());
+        Assertions.assertNull(mv.getRefreshScheme().getAsyncRefreshContext().getTimeUnit());
+        Assertions.assertTrue(mv.isLoadTriggeredRefresh());
 
-        ddl.clear();
-        AstToStringBuilder.getDdlStmt(onChangeMv, ddl, null, null, false, true);
+        List<String> ddl = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(mv, ddl, null, null, false, true);
         Assertions.assertTrue(ddl.get(0).contains("REFRESH ON_CHANGE"),
                 "SHOW CREATE should display ON_CHANGE, got: " + ddl.get(0));
         starRocksAssert.dropMaterializedView(mvName);

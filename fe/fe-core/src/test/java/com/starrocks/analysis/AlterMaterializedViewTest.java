@@ -131,10 +131,10 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     public void testAlterRefreshScheme() throws Exception {
         List<String> refreshSchemes = Lists.newArrayList(
                 "ASYNC START(\"2022-05-23 00:00:00\") EVERY(INTERVAL 1 HOUR)",
-                "ASYNC",
+                "ON_CHANGE",
                 "ASYNC START(\"2022-05-23 01:02:03\") EVERY(INTERVAL 1 DAY)",
                 "ASYNC EVERY(INTERVAL 1 DAY)",
-                "ASYNC",
+                "ON_CHANGE",
                 "MANUAL",
                 "ASYNC EVERY(INTERVAL 1 DAY)",
                 "MANUAL",
@@ -145,8 +145,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = starRocksAssert.getMv("test", mvName);
         String taskDefinition = mv.getTaskDefinition();
         for (String refresh : refreshSchemes) {
-            // Inputs stay spelled ASYNC on purpose: this asserts the legacy synonym still
-            // parses on the ALTER path.
+            // The timed entries stay spelled ASYNC: the legacy synonym must still parse here.
             String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
             starRocksAssert.ddl(sql);
 
@@ -398,11 +397,11 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         String createBaseTable = "create table treload_1 (c1 int) distributed by hash(c1) " +
                 "properties('replication_num'='1')";
         starRocksAssert.withTable(createBaseTable);
-        starRocksAssert.withMaterializedView("create materialized view mvreload_1 refresh async " +
+        starRocksAssert.withMaterializedView("create materialized view mvreload_1 refresh on_change " +
                 "as select * from treload_1");
-        starRocksAssert.withMaterializedView("create materialized view mvreload_2 refresh async " +
+        starRocksAssert.withMaterializedView("create materialized view mvreload_2 refresh on_change " +
                 "as select * from treload_1");
-        starRocksAssert.withMaterializedView("create materialized view mvreload_3 refresh async " +
+        starRocksAssert.withMaterializedView("create materialized view mvreload_3 refresh on_change " +
                 "as select a.c1, b.c1 as bc1 from mvreload_1 a join mvreload_2 b");
 
         // drop base table would inactive all related MV

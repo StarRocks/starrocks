@@ -71,12 +71,12 @@ public class SysObjectDependenciesTest {
                         + "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" + "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view test.mv_1\n"
                         + "PARTITION BY k1\n" + "distributed by hash(k2) buckets 3\n"
-                        + "refresh async\n"
+                        + "refresh on_change\n"
                         + "as select k1, k2, sum(v1) as total from test_mv_base_table group by k1, k2;")
                 .withMaterializedView("create materialized view test.mv_2\n"
                         + "PARTITION BY date_trunc('month', k1)\n"
                         + "distributed by hash(k2) buckets 3\n"
-                        + "refresh async\n"
+                        + "refresh on_change\n"
                         + "as select k1, k2, sum(v1) as total from test_mv_base_table group by k1, k2;");
 
 

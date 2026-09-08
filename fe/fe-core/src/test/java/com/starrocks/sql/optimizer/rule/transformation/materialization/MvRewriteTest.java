@@ -1888,7 +1888,7 @@ public class MvRewriteTest extends MVTestBase {
         CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
         // Planner exception
         String mvSql = "create materialized view mv_with_window" +
-                " refresh deferred async " +
+                " refresh deferred on_change " +
                 " as SELECT test_all_type.t1d, row_number() over (partition by t1c) from test_all_type";
         starRocksAssert.withMaterializedView(mvSql);
 
@@ -2104,7 +2104,7 @@ public class MvRewriteTest extends MVTestBase {
         String mvName = "mv_insert";
         createAndRefreshMv("create materialized view " + mvName +
                 " distributed by hash(v1) " +
-                "refresh async as " +
+                "refresh on_change as " +
                 "select * from t0");
         String sql = "insert into t0 select * from t0";
 
@@ -2144,7 +2144,7 @@ public class MvRewriteTest extends MVTestBase {
         for (int i = 0; i < dimensions.size(); i++) {
             String name = mvNameBuilder.apply(i);
             starRocksAssert.withRefreshedMaterializedView("create materialized view " + name +
-                    " refresh async as " +
+                    " refresh on_change as " +
                     " select sum(c1) from t_metrics group by " +
                     dimensions.get(i));
             MaterializedView mv = starRocksAssert.getMv("test", name);
@@ -2189,7 +2189,7 @@ public class MvRewriteTest extends MVTestBase {
             String dimension = columnNameGen.apply(i);
             String mvName = mvNameGen.apply(i);
             starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
-                    "refresh async " +
+                    "refresh on_change " +
                     "properties('query_rewrite_consistency'='nocheck') " +
                     "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension, true, true);
         }

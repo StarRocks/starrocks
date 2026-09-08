@@ -996,4 +996,38 @@ class ParserTest {
         SqlParser.parse("CREATE TABLE t(id bigint, d datetime) PARTITION BY days_add(d, 1)", new SessionVariable());
         SqlParser.parse("CREATE TABLE t(id bigint, d date) PARTITION BY years_add(d, 1)", new SessionVariable());
     }
+
+    @Test
+    void testBareRefreshAsyncIsRejected() {
+        List<String> rejected = Lists.newArrayList(
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH ASYNC AS SELECT k FROM t",
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH IMMEDIATE ASYNC AS SELECT k FROM t",
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH DEFERRED ASYNC AS SELECT k FROM t",
+                "ALTER MATERIALIZED VIEW mv REFRESH ASYNC",
+                "ALTER MATERIALIZED VIEW mv REFRESH DEFERRED ASYNC");
+
+        for (String sql : rejected) {
+            ParsingException exception = Assertions.assertThrows(ParsingException.class,
+                    () -> SqlParser.parse(sql, new SessionVariable()), sql);
+            Assertions.assertTrue(exception.getMessage().contains("ON_CHANGE"),
+                    sql + " => " + exception.getMessage());
+        }
+
+        // ASYNC survives as a legacy synonym of SCHEDULE, so the timed form must keep parsing.
+        List<String> accepted = Lists.newArrayList(
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH ASYNC EVERY(INTERVAL 1 HOUR)"
+                        + " AS SELECT k FROM t",
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH ASYNC"
+                        + " START('2026-01-01 00:00:00') EVERY(INTERVAL 1 HOUR) AS SELECT k FROM t",
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH ON_CHANGE AS SELECT k FROM t",
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH SCHEDULE EVERY(INTERVAL 1 HOUR)"
+                        + " AS SELECT k FROM t",
+                "CREATE MATERIALIZED VIEW mv DISTRIBUTED BY HASH(k) REFRESH MANUAL AS SELECT k FROM t",
+                "ALTER MATERIALIZED VIEW mv REFRESH ASYNC EVERY(INTERVAL 1 HOUR)",
+                "ALTER MATERIALIZED VIEW mv REFRESH ON_CHANGE");
+
+        for (String sql : accepted) {
+            SqlParser.parse(sql, new SessionVariable());
+        }
+    }
 }

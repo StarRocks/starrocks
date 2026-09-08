@@ -573,7 +573,7 @@ public class FrontendServiceImplTest {
                     .withView("create view v5 as select CONNECTION_ID()")
                     .withView("create view v6 as select CATALOG()")
 
-                    .withMaterializedView("create materialized view mv refresh async as select * from site_access_empty");
+                    .withMaterializedView("create materialized view mv refresh on_change as select * from site_access_empty");
     }
 
     @AfterAll

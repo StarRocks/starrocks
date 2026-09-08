@@ -4002,13 +4002,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testNestedAggregateBelowJoin2() throws Exception {
         String mv1 = "create materialized view mv1 \n" +
                 "distributed by random \n" +
-                "refresh async\n" +
+                "refresh on_change\n" +
                 "as select empid, deptno, locationid, \n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
                 " from emps group by empid, deptno, locationid ";
         String mv2 = "create materialized view mv2 \n" +
                 "distributed by random \n" +
-                "refresh async\n" +
+                "refresh on_change\n" +
                 "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
                 "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
                 "on t.locationid = locations.locationid) t2\n" +

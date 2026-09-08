@@ -289,12 +289,12 @@ public class MaterializedViewTest extends StarRocksTestBase {
                 .withMaterializedView("create materialized view mv_to_rename\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;")
                 .withMaterializedView("create materialized view mv_to_rename2\n" +
                         "PARTITION BY date_trunc('month', k1)\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
 
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
@@ -373,7 +373,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
                 .withMaterializedView("create materialized view mv_replay\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
         connectContext.executeSql("insert into test.tbl1 values('2022-02-01', 2, 3)");
         connectContext.executeSql("insert into test.tbl1 values('2022-02-16', 3, 5)");
@@ -407,7 +407,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "as select k2, sum(v1) as total from tbl_drop group by k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -438,7 +438,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         String alterSql = "alter table tbl_to_rename rename new_tbl_name;";
@@ -470,7 +470,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
                 .withMaterializedView("create materialized view mv_with_hint\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "as select /*+ SET_VAR(query_timeout = 500) */ k1, k2, sum(v1) " +
                         "as total from tbl1 group by k1, k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -1352,7 +1352,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
                         "as select k2, sum(v1) as total from base_table1 group by k2;")
                 .withMaterializedView("create materialized view test_mv1 \n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "as select * from base_view1;");
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()

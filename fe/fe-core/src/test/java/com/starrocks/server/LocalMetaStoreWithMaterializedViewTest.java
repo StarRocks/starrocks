@@ -62,7 +62,7 @@ public class LocalMetaStoreWithMaterializedViewTest extends MVTestBase  {
         starRocksAssert.withMaterializedView(
                 "CREATE MATERIALIZED VIEW test.mv1\n" +
                         "distributed by hash(k1) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh on_change\n" +
                         "properties(\n" +
                         "'replication_num' = '1'\n" +
                         ")\n" +

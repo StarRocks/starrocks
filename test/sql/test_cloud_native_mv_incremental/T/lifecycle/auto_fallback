@@ -305,7 +305,7 @@ INSERT INTO bl_base VALUES ('2026-04-01',1,10),('2026-04-02',2,20),('2026-04-03'
 CREATE MATERIALIZED VIEW mv_bl
 PARTITION BY dt
 DISTRIBUTED BY HASH(k) BUCKETS 1
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '1')
 AS SELECT dt, k, v FROM bl_base;
 [UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bl';

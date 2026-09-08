@@ -10019,6 +10019,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else if (context.IMMEDIATE() != null) {
             refreshMoment = RefreshSchemeClause.RefreshMoment.IMMEDIATE;
         }
+        if (context.ASYNC() != null && context.interval() == null) {
+            throw new ParsingException(
+                    "REFRESH ASYNC without EVERY is no longer supported. "
+                            + "Use REFRESH ON_CHANGE for base-table-change-triggered refresh.",
+                    pos);
+        }
         // SCHEDULE / ON_CHANGE are the preferred keywords; ASYNC is the legacy synonym for both.
         if (context.ASYNC() != null || context.SCHEDULE() != null || context.ON_CHANGE() != null) {
             boolean defineStartTime = false;

@@ -58,7 +58,7 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "group by id;");
         starRocksAssert.withMaterializedView("create materialized view mv1 " +
                 "distributed by hash(id) " +
-                "refresh async " +
+                "refresh on_change " +
                 "properties('replication_num'='1') " +
                 "as select * from mv_base_table_9527");
         testFragmentPlanContains("select inspect_mv_meta('mv1');", "MaterializedView");
@@ -83,7 +83,7 @@ public class ConstantExpressionTest extends PlanTestBase {
         testFragmentPlanContains("select inspect_related_mv('mv_base_table_9527')", "name\":\"mv1\"");
         starRocksAssert.withMaterializedView("create materialized view mv_from_view_1 " +
                 "distributed by hash(id) " +
-                "refresh async " +
+                "refresh on_change " +
                 "properties('replication_num'='1') " +
                 "as select * from mv_base_table_9527_view_1");
 

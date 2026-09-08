@@ -56,11 +56,11 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
                 "on v1.v1 = v2.v1");
 
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_agg_join_1 " +
-                " refresh async as " +
+                " refresh on_change as " +
                 " select * from join_view_1");
 
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv_agg_1 " +
-                " refresh async as " +
+                " refresh on_change as " +
                 " select * from t0_view_1");
 
         // use another table
@@ -79,12 +79,12 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
             // join MV
             String joinMV = "mv_candidate_join_" + i;
             starRocksAssert.withRefreshedMaterializedView("create materialized view " + joinMV +
-                    " refresh async as " +
+                    " refresh on_change as " +
                     " select * from join_view_2");
 
             String viewJoinMv = "mv_candidate_view_join_" + i;
             starRocksAssert.withRefreshedMaterializedView("create materialized view " + viewJoinMv +
-                    " refresh async as " +
+                    " refresh on_change as " +
                     " select v1.v1, total1, total2 " +
                     " from t2_view_1 v1 join t2_view_2 v2 " +
                     " on v1.v1 = v2.v1");

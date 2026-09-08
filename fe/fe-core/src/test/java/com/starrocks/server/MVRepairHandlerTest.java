@@ -50,7 +50,7 @@ public class MVRepairHandlerTest {
                 .withTable("CREATE TABLE test.t1(k1 int, k2 int, k3 int) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test.mv1 " +
-                        "distributed by hash(k1) buckets 3 refresh async as select k1 from test.t1");
+                        "distributed by hash(k1) buckets 3 refresh on_change as select k1 from test.t1");
 
         database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");

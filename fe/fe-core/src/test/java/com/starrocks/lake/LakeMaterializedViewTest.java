@@ -241,7 +241,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
                 "   'enable_async_write_back' = 'false',\n" +
                 "   'datacache.partition_duration' = '6 day'\n" +
                 ")\n" +
-                "refresh async\n" +
+                "refresh on_change\n" +
                 "as select k2, sum(k3) as total from base_table group by k2;");
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
@@ -381,7 +381,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
                     rangeTable.getDefaultDistributionInfo().getType());
 
             starRocksAssert.withMaterializedView("create materialized view rd_mv_default\n" +
-                    "refresh async\n" +
+                    "refresh on_change\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
             MaterializedView randomMv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(db.getFullName(), "rd_mv_default");
@@ -393,7 +393,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
             // Both configs on: the MV joins the table default and selects RANGE.
             Config.enable_mv_range_distribution = true;
             starRocksAssert.withMaterializedView("create materialized view rd_mv_range\n" +
-                    "refresh async\n" +
+                    "refresh on_change\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
             MaterializedView rangeMv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(db.getFullName(), "rd_mv_range");
@@ -404,7 +404,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
             // Kill switch: the MV config alone selects nothing once the table config is disabled.
             Config.enable_range_distribution = false;
             starRocksAssert.withMaterializedView("create materialized view rd_mv_killswitch\n" +
-                    "refresh async\n" +
+                    "refresh on_change\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
             MaterializedView killSwitchMv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(db.getFullName(), "rd_mv_killswitch");
@@ -427,7 +427,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
                 "DISTRIBUTED BY HASH(k4) BUCKETS 3");
         starRocksAssert.withMaterializedView("create materialized view mv2\n" +
                 "distributed by hash(k2) buckets 3\n" +
-                "refresh async\n" +
+                "refresh on_change\n" +
                 "as select k1, k2, sum(k3) as total from base_table, base_table2 where k1 = k4 group by k1, k2;");
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
@@ -486,7 +486,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
                     "duplicate key(k4) distributed by hash(k4) buckets 3;");
             starRocksAssert.withMaterializedView("create materialized view mv4\n" +
                     "distributed by hash(k1) buckets 3\n" +
-                    "refresh async\n" +
+                    "refresh on_change\n" +
                     "as select k1, k5, sum(k3) as total from base_table, base_table4 where k1 = k4 group by k1, k5;");
 
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
@@ -526,7 +526,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
                     "duplicate key(k4) distributed by hash(k4) buckets 3;");
             starRocksAssert.withMaterializedView("create materialized view mv5\n" +
                     "distributed by hash(k1) buckets 3\n" +
-                    "refresh async\n" +
+                    "refresh on_change\n" +
                     "as select k1, k5, sum(k3) as total from base_table, base_table5 where k1 = k4 group by k1, k5;");
 
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
@@ -666,7 +666,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
                 "PROPERTIES(\n" +
                 "   'colocate_with' = 'aaa'\n" +
                 ")\n" +
-                "refresh async\n" +
+                "refresh on_change\n" +
                 "as select k2, sum(k3) as total from base_table group by k2;");
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);

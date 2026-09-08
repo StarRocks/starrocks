@@ -180,7 +180,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         String sql = "create materialized view test_mv0 \n" +
                     "partition by k1 \n" +
                     "distributed by random \n" +
-                    "refresh async \n" +
+                    "refresh on_change \n" +
                     "properties(" +
                     "\"partition_refresh_number\" = \"1\"" +
                     ")" +
@@ -196,7 +196,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         String sql = "create materialized view test_mv0 \n" +
                     "partition by k1 \n" +
                     "distributed by random \n" +
-                    "refresh async \n" +
+                    "refresh on_change \n" +
                     "properties(" +
                     "\"partition_refresh_number\" = \"1\"" +
                     ")" +
@@ -212,7 +212,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         String sql = "create materialized view test_mv0 \n" +
                     "partition by k1 \n" +
                     "distributed by random \n" +
-                    "refresh async \n" +
+                    "refresh on_change \n" +
                     "as " +
                     " select * from t1 union all select * from t2;";
         starRocksAssert.withMaterializedView(sql,
@@ -255,7 +255,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         String sql = "create materialized view test_mv0 \n" +
                     "partition by k1 \n" +
                     "distributed by random \n" +
-                    "refresh async \n" +
+                    "refresh on_change \n" +
                     "properties(" +
                     "\"partition_refresh_number\" = \"1\"" +
                     ")" +
