@@ -34,7 +34,8 @@ jobs:
           # Collapsing both into one flag is what silently starved mirrorship of every
           # cd-contributed change (the step showed `skipped` while the job stayed green).
           #
-          #   `sync` / `cd-sync` -> legacy CelerData reverse-sync markers. On StarRocks a
+          #   `sync`            -> legacy CelerData reverse-sync marker (`cd-sync`, retired,
+          #                        only ever co-occurred with it). On StarRocks a
           #                        `sync`-labelled PR is cd-origin: every one of them comes
           #                        from the old cd->sr executor (`<branch>-cd-sync-pr-*`
           #                        heads), and mirrorship->sr has never run. So this is a CD
@@ -53,9 +54,10 @@ jobs:
           if [[ "${labels}" =~ sync ]]; then
             skip_cd=true
           fi
-          # Exact whole-line match, like the mergify fallback below and
-          # contributed-backport-label.yml. The `sync` test above stays a substring match on
-          # purpose: it must keep catching the `cd-sync` label as well.
+          # Whole-line match, like the mergify fallback below and
+          # contributed-backport-label.yml. The `sync` test above is a substring match, so it
+          # also trips on any other label containing "sync" (e.g. the retired `cd-sync`);
+          # such a PR skips the CD path.
           echo "${labels}" | grep -qx 'cd-contributed' && skip_cd=true
           echo "${labels}" | grep -qx 'ms-contributed' && skip_ms=true
 
@@ -99,8 +101,12 @@ jobs:
           # sync picks it up again). Assert the contract instead of trusting merge order.
           # Failing loudly beats looping silently -- silence is what cost mirrorship three
           # weeks of changes in the first place.
-          if ! grep -q 'SKIP_CD' ./scripts/run-repo-sync.sh; then
-            echo "::error::ci-tool run-repo-sync.sh predates the SKIP_CD/SKIP_MS contract (stale /var/lib/ci-tool on this runner, or StarRocks/ci-tool#5248 not merged yet). Refusing to run: the CD anti-loop would be unenforced."
+          if [[ ! -f ./scripts/run-repo-sync.sh ]]; then
+            echo "::error::ci-tool checkout failed on this runner (no ./scripts/run-repo-sync.sh); the cp/cd above is swallowed by the || echo."
+            exit 1
+          fi
+          if ! grep -q 'SKIP_CD' ./scripts/run-repo-sync.sh || ! grep -q 'SKIP_MS' ./scripts/run-repo-sync.sh; then
+            echo "::error::ci-tool run-repo-sync.sh predates the SKIP_CD/SKIP_MS contract (stale /var/lib/ci-tool on this runner, or StarRocks/ci-tool#5248 not merged yet). Refusing to run: the anti-loop would be unenforced."
             exit 1
           fi
 
