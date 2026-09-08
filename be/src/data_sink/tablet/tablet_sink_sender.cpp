@@ -139,9 +139,10 @@ Status TabletSinkSender::_assign_shard_write_targets(
         }
         DCHECK(!last_be_ids->empty());
         // Local when this node is one of the tablet's writers; otherwise round-robin over the list.
-        // The location carries every alive CN, so the fallback is unreachable in practice -- it is
-        // what keeps an unexpected list (a node that just left the warehouse) routing somewhere
-        // valid rather than nowhere.
+        // The fallback is a ROUTINE path, not a defensive one: FE bounds the list at
+        // lake_local_first_write_max_nodes, so on a warehouse wider than that bound every sink instance
+        // outside the list sends its rows instead of keeping them -- which is what this feature's
+        // predecessor did for every row. Roughly (1 - bound / alive_nodes) of the rows travel.
         const int64_t target =
                 keep_local ? _local_node_id : (*last_be_ids)[((*last_counter)++ / stride) % last_be_ids->size()];
         _row_target_node[selection] = target;
@@ -390,8 +391,11 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                                     bool write_txn_log) {
     Status status = std::move(close_status);
     if (_enable_shard_write && ts_profile != nullptr && ts_profile->runtime_profile != nullptr) {
-        // How this instance's rows were split. A non-zero remote count means this node was not one
-        // of the tablet's writers -- the location normally carries every alive CN, so it should be 0.
+        // How this instance's rows were split. A non-zero remote count is EXPECTED whenever the
+        // warehouse is wider than lake_local_first_write_max_nodes: this instance's node is then not in
+        // the tablet's list and its rows travel. Judge it against that bound, not against zero -- the
+        // share that travels is about (1 - bound / alive_nodes), and only a remote count above that
+        // points at something being wrong.
         COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteLocalRows", TUnit::UNIT),
                        _shard_write_local_rows);
         COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteRemoteRows", TUnit::UNIT),
