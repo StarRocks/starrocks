@@ -2465,7 +2465,10 @@ public class StmtExecutor {
     }
 
     protected void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
-        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        // Capture this.context now: executeAnalyze may run on the AnalyzeTaskThreadPool, where
+        // ConnectContext.get() is null, so the no-arg buildConnectContext() would otherwise drop
+        // the caller's auth token for JWT-secured external catalog lookups.
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext(context);
         if (table.isTemporaryTable()) {
             statsConnectCtx.setSessionId(context.getSessionId());
         }

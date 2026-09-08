@@ -140,7 +140,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            return delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
+                            // Caffeine's async reload runs on the cache's own executor, never on a
+                            // request thread — there is no user ConnectContext to fall back on here.
+                            return delegate.getTable(StatisticUtils.buildBotContext(), key.dbName, key.tableName);
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
                             return oldValue;
@@ -507,7 +509,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     continue;
                 }
 
-                refreshTable(identifier.dbName, identifier.tableName, new ConnectContext(), backgroundExecutor);
+                refreshTable(identifier.dbName, identifier.tableName, StatisticUtils.buildBotContext(), backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName,
                         identifier.tableName, e);

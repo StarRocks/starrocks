@@ -61,7 +61,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 return Optional.empty();
             }
             try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                ConnectContext connectContext = StatisticUtils.buildConnectContextWithAuth();
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableId, cacheKey.column);
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
@@ -108,7 +108,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     columns.add(key.column);
                 }
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContextWithAuth();
                 statsConnectCtx.setThreadLocalInfo();
 
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableId, columns);

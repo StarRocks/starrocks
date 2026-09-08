@@ -75,6 +75,16 @@ public abstract class MetadataCollectJob {
         this.context = buildConnectContext(sessionVariable);
     }
 
+    public void init(ConnectContext originContext) {
+        this.sql = buildCollectMetadataSQL();
+        this.context = buildConnectContext(originContext.getSessionVariable());
+        // Forward the originating session's REST auth token so the metadata-collection
+        // query (remote/distributed planning path) authenticates to the REST catalog.
+        // Without this, the collect job runs with a token-less context and REST calls
+        // such as tableExists are rejected. See planFileTasksRemotely().
+        this.context.setAuthToken(originContext.getAuthToken());
+    }
+
     protected String getCatalogName() {
         return catalogName;
     }

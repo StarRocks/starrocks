@@ -77,7 +77,8 @@ public class ConnectorTableTriggerAnalyzeMgr {
         }
     }
 
-    public void checkAndUpdateTableStats(Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnStats) {
+    public void checkAndUpdateTableStats(ConnectContext context,
+            Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnStats) {
         if (columnStats == null || columnStats.isEmpty()) {
             return;
         }
@@ -90,7 +91,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
             ConnectorTableColumnKey columnKey = entry.getKey();
             // first check table exist
             if (!tableExist) {
-                try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+                try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(context)) {
                     tableTriple = StatisticsUtils.getTableTripleByUUID(scope.getContext(), columnKey.tableUUID);
                     // check table could run analyze
                     if (!tableTriple.getRight().isAnalyzableExternalTable()) {

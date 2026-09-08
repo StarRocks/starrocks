@@ -54,7 +54,7 @@ public class ConnectorColumnStatsCacheLoader implements
                 return Optional.empty();
             }
             try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                ConnectContext connectContext = StatisticUtils.buildConnectContextWithAuth();
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableUUID, cacheKey.column);
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
@@ -98,7 +98,7 @@ public class ConnectorColumnStatsCacheLoader implements
                     columns.add(key.column);
                 }
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContextWithAuth();
                 statsConnectCtx.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableUUID, columns);
 

@@ -369,7 +369,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
-        Database db = getDb(new ConnectContext(), stmt.getDbName());
+        Database db = getDb(context, stmt.getDbName());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -394,7 +394,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
-        Database db = getDb(new ConnectContext(), stmt.getDbName());
+        Database db = getDb(context, stmt.getDbName());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -763,9 +763,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     public void dropTable(ConnectContext context, DropTableStmt stmt) {
         Table icebergTable;
         try {
-            icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+            icebergTable = getTable(context, stmt.getDbName(), stmt.getTableName());
         } catch (StarRocksConnectorException | NotFoundException e) {
-            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
+            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(context, stmt.getDbName(), stmt.getTableName())) {
                 throw e;
             }
             // Iceberg tolerates this on drop: HiveCatalog#dropTable still removes the catalog entry when the
@@ -809,9 +809,9 @@ public class IcebergMetadata implements ConnectorMetadata {
      * refers to ({@link PropertyAnalyzer#analyzeForeignKeyConstraint}). Confirm the missing file is this
      * table's own, or a healthy table would lose its catalog entry over a broken neighbour.
      */
-    private boolean isTableMetadataMissing(String dbName, String tableName) {
+    private boolean isTableMetadataMissing(ConnectContext context, String dbName, String tableName) {
         try {
-            icebergCatalog.getTable(new ConnectContext(), dbName, tableName);
+            icebergCatalog.getTable(context, dbName, tableName);
             return false;
         } catch (Exception e) {
             return isMetadataFileMissing(e);
@@ -1214,7 +1214,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
-        IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
+        // ConnectContext.get() is null in background/bot operations; getTable() must handle null safely
+        IcebergTable icebergTable = (IcebergTable) getTable(connectContext, dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
         if (snapshotId == -1) {
             Snapshot currentSnapshot = nativeTable.currentSnapshot();
@@ -2635,7 +2636,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // Commit task that performs the actual Iceberg transaction commit
         IcebergCommitQueueManager.CommitTask commitTask = () -> {
-            IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
+            ConnectContext commitCtx = context != null ? context : new ConnectContext();
+            IcebergTable table = (IcebergTable) getTable(commitCtx, dbName, tableName);
             org.apache.iceberg.Table nativeTbl = table.getNativeTable();
             Transaction transaction = nativeTbl.newTransaction();
 

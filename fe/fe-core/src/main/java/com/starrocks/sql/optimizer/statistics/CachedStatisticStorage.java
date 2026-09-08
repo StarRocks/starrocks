@@ -226,13 +226,19 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             SessionVariable sessionVariable = ConnectContext.get() == null ?
                     GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable() :
                     ConnectContext.get().getSessionVariable();
+            // Capture the caller's ConnectContext now: whenCompleteAsync runs on
+            // statsCacheRefresherExecutor, where ConnectContext.get() is null, so the
+            // caller's auth token would otherwise be lost for the JWT REST catalog lookup
+            // inside checkAndUpdateTableStats.
+            ConnectContext callerCtx = ConnectContext.get();
             result.whenCompleteAsync((res, e) -> {
                 if (e != null) {
                     LOG.warn("Get connector table column statistics filed, exception: ", e);
                     return;
                 }
                 if (sessionVariable.isEnableQueryTriggerAnalyze() && GlobalStateMgr.getCurrentState().isLeader()) {
-                    GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
+                    GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr()
+                            .checkAndUpdateTableStats(callerCtx, res);
                 }
             }, statsCacheRefresherExecutor);
             if (result.isDone()) {
