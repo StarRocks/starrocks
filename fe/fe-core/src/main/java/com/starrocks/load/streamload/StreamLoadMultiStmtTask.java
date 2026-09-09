@@ -883,11 +883,7 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                     // throws, nothing is added to taskMaps and executeLoadTask aborts the transaction.
                     TransactionStmtExecutor.activateTable(dbId, table.getId(), context);
                     task = newTask;
-<<<<<<< HEAD
-=======
                     taskMaps.put(table.getName(), task);
-                    boolean isFirstSubTask = taskMaps.size() == 1;
->>>>>>> 45942c3 ([BugFix] Create partitions for multi-table transaction stream load (#78790))
                     LOG.info("Add stream load task {}", task.getShowInfo());
                     task.tryBegin(0, 1, txnId);
                 }

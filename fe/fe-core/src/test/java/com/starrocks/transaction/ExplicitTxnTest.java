@@ -697,8 +697,6 @@ public class ExplicitTxnTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testCommitWithLostTransactionState() {
         // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
         // commitStmt should report an error instead of silently succeeding.
@@ -1580,7 +1578,6 @@ public class ExplicitTxnTest {
     }
 
     @Test
->>>>>>> 45942c3 ([BugFix] Create partitions for multi-table transaction stream load (#78790))
     public void testBeginWithLabelAlreadyUsedByAnotherSession() {
         // BEGIN WITH LABEL must be rejected when another session already holds an explicit transaction
         // with the same label
