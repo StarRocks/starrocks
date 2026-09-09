@@ -697,6 +697,890 @@ public class ExplicitTxnTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCommitWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // commitStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99999);
+
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testRollbackWithoutItemsReportsAbortFailure() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990001L;
+        TransactionState state = addExplicitState(mgr, txnId, "rollback-abort-fails", 60_000L);
+        // Registered with a database by a load that produced no item.
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
+                throw new StarRocksException("abort failed for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+        // The explicit state is cleared as for any rollback, but the failure is reported instead of ABORTED.
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("abort failed for test"));
+    }
+
+    @Test
+    public void testCommitWithoutItemsAbortsRegisteredTransaction() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        addExplicitState(mgr, txnId, "commit-without-items", 60_000L);
+        // The INSERT path registers the transaction before it executes; a failed INSERT leaves the
+        // transaction registered without an item.
+        mgr.registerExplicitTransactionState(txnId, db1.getId());
+        mgr.activateExplicitTransactionTable(txnId, db1.getId(), table1.getId());
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                mgr.getTransactionState(db1.getId(), txnId).getTransactionStatus());
+        int runningBefore = mgr.getDatabaseTransactionMgr(db1.getId()).getRunningTxnNums();
+
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertFalse(context.getState().isError(), context.getState().getErrorMessage());
+        Assertions.assertEquals("{'label':'commit-without-items', 'status':'VISIBLE', 'txnId':'" + txnId + "'}",
+                context.getState().getInfoMessage());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        // The registered transaction is aborted instead of lingering PREPARE until its timeout: it no
+        // longer counts as running, no longer blocks the table and its label can be used again.
+        Assertions.assertEquals(TransactionStatus.ABORTED,
+                mgr.getTransactionState(db1.getId(), txnId).getTransactionStatus());
+        Assertions.assertEquals(runningBefore - 1, mgr.getDatabaseTransactionMgr(db1.getId()).getRunningTxnNums());
+        Assertions.assertTrue(mgr.isPreviousTransactionsFinished(txnId + 1, db1.getId(), List.of(table1.getId())));
+        Assertions.assertEquals(TransactionStatus.ABORTED,
+                mgr.getLabelTransactionState(db1.getId(), "commit-without-items").getTransactionStatus());
+    }
+
+    @Test
+    public void testCommitWithoutItemsReportsAbortFailure() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990002L;
+        TransactionState state = addExplicitState(mgr, txnId, "commit-abort-fails", 60_000L);
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
+                throw new StarRocksException("abort failed for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("abort failed for test"));
+    }
+
+    @Test
+    public void testRollbackWithoutItemsClearsStateWhenAbortThrowsUnchecked() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990003L;
+        TransactionState state = addExplicitState(mgr, txnId, "rollback-abort-unchecked", 60_000L);
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                throw new IllegalStateException("unchecked abort failure for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO)));
+        // The session must not stay inside a dead transaction.
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+    }
+
+    @Test
+    public void testRollbackWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // rollbackStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99998);
+
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testBeginWithLostTransactionState() {
+        // When txnId is set but explicitTxnState was cleared (e.g., timeout cleanup),
+        // beginStmt should reset and create a new transaction instead of NPE.
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(900, 901);
+        context.setExecutionId(queryId);
+
+        // Simulate stale txnId without matching explicitTxnState
+        context.setTxnId(88888);
+
+        // BEGIN should recover by creating a new transaction
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "recovery_label"));
+        Assertions.assertFalse(context.getState().isError());
+        Assertions.assertNotEquals(88888, context.getTxnId());
+        Assertions.assertTrue(context.getState().getInfoMessage().contains("'label':'recovery_label'"));
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testCleanupClearsExplicitTxnState() {
+        // Test that ConnectContext.cleanup() properly clears explicitTxnStateMap entries
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(950, 951);
+        context.setExecutionId(queryId);
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "cleanup_test_label"));
+        long txnId = context.getTxnId();
+        Assertions.assertNotEquals(0, txnId);
+        Assertions.assertNotNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+
+        // Simulate connection disconnect
+        context.cleanup();
+
+        // Verify explicitTxnState was cleaned up
+        Assertions.assertNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+    }
+
+    @Test
+    public void testReshardPlanningReservations() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        Database db2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
+        Table table2 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db2.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        abortRunningTransactions(mgr, db2.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "reshard-planning-reservation", 60_000L);
+        try {
+            Assertions.assertTrue(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+            Assertions.assertTrue(mgr.isPreviousTransactionsFinished(
+                    txnId, db1.getId(), List.of(table1.getId())));
+
+            Assertions.assertSame(state, mgr.reserveExplicitTransactionLayout(
+                    txnId, db1.getId(), table1.getId()));
+            Assertions.assertEquals(0, state.getDbId());
+            Assertions.assertTrue(state.getTableIdList().isEmpty());
+            Assertions.assertFalse(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+            Assertions.assertTrue(mgr.isPreviousTransactionsFinished(
+                    txnId, db1.getId(), List.of(table1.getId())));
+
+            Assertions.assertSame(state, mgr.reserveExplicitTransactionLayout(
+                    txnId, db2.getId(), table2.getId()));
+            Assertions.assertSame(state, mgr.registerExplicitTransactionState(txnId, db2.getId()));
+            Assertions.assertTrue(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+            Assertions.assertFalse(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db2.getId(), List.of(table2.getId()), Set.of()));
+            Assertions.assertTrue(state.getTableIdList().isEmpty());
+            Assertions.assertSame(state, mgr.registerExplicitTransactionState(txnId, db2.getId()));
+
+            ErrorReportException exception = Assertions.assertThrows(ErrorReportException.class,
+                    () -> mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), table1.getId()));
+            Assertions.assertEquals(ErrorCode.ERR_TXN_FORBID_CROSS_DB, exception.getErrorCode());
+            Assertions.assertEquals(ErrorCode.ERR_TXN_FORBID_CROSS_DB.formatErrorMsg(), exception.getMessage());
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testRegistrationFailureRestoresUnboundStateAndReservation() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        abortRunningTransactions(mgr, db1.getId());
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "registration-failure", 60_000L);
+        try {
+            mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), table1.getId());
+            new MockUp<DatabaseTransactionMgr>() {
+                @Mock
+                public void upsertTransactionState(TransactionState transactionState) throws AnalysisException {
+                    throw new AnalysisException("injected upsert failure");
+                }
+            };
+
+            AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
+                    () -> mgr.registerExplicitTransactionState(txnId, db1.getId()));
+            Assertions.assertEquals("injected upsert failure", exception.getMessage());
+            Assertions.assertEquals(0, state.getDbId());
+            Assertions.assertNull(mgr.getDatabaseTransactionMgr(db1.getId()).getTransactionState(txnId));
+            Assertions.assertFalse(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testRegisteredTransactionReservesNewTableDuringPlanning() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        abortRunningTransactions(mgr, db1.getId());
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long secondTableId = table1.getId() + 1;
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "registered-new-table", 60_000L);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            state.addTableIdList(table1.getId());
+            mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), secondTableId);
+
+            Assertions.assertFalse(state.getTableIdList().contains(secondTableId));
+            Assertions.assertFalse(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(secondTableId), Set.of()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testDatabaseLoadDataRegistrationFailureRestoresUnboundState() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "database-load-registration-failure", 60_000L);
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(txnId);
+        context.setExecutionId(new TUniqueId(txnId, txnId));
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        try {
+            new MockUp<DatabaseTransactionMgr>() {
+                @Mock
+                public void upsertTransactionState(TransactionState transactionState) throws AnalysisException {
+                    throw new AnalysisException("injected upsert failure");
+                }
+            };
+
+            TransactionStmtExecutor.loadData(db1, table1, new ExecPlan(), mock(DmlStmt.class),
+                    new OriginStatement("insert"), context);
+            Assertions.assertTrue(context.getState().isError());
+            Assertions.assertTrue(context.getState().getErrorMessage().contains("injected upsert failure"));
+            Assertions.assertEquals(0, state.getDbId());
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testStreamLoadDataRegistrationFailureRestoresUnboundState() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "stream-load-registration-failure", 60_000L);
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(txnId);
+        context.setExecutionId(new TUniqueId(txnId, txnId));
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        try {
+            new MockUp<DatabaseTransactionMgr>() {
+                @Mock
+                public void upsertTransactionState(TransactionState transactionState) throws AnalysisException {
+                    throw new AnalysisException("injected upsert failure");
+                }
+            };
+
+            AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
+                    () -> TransactionStmtExecutor.loadData(db1.getId(), table1.getId(),
+                            new ExplicitTxnState.ExplicitTxnStateItem(), context));
+            Assertions.assertEquals("injected upsert failure", exception.getMessage());
+            Assertions.assertEquals(0, state.getDbId());
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testDatabaseLoadDataRejectsMissingExplicitState() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(txnId);
+        context.setExecutionId(new TUniqueId(txnId, txnId));
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+
+        Assertions.assertNull(mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), table1.getId()));
+        TransactionStmtExecutor.loadData(db1, table1, new ExecPlan(), mock(DmlStmt.class),
+                new OriginStatement("insert"), context);
+
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains(Long.toString(txnId)));
+    }
+
+    @Test
+    public void testStreamLoadDataRejectsMissingExplicitState() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(txnId);
+
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                () -> TransactionStmtExecutor.loadData(db1.getId(), table1.getId(),
+                        new ExplicitTxnState.ExplicitTxnStateItem(), context));
+        Assertions.assertTrue(exception.getMessage().contains(Long.toString(txnId)));
+    }
+
+    @Test
+    public void testDatabaseLoadDataRejectsStateRemovedBeforeActivation() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "database-load-removed-state", 60_000L);
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(txnId);
+        context.setExecutionId(new TUniqueId(txnId, txnId));
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        try {
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public ExplicitTxnState activateExplicitTransactionTable(
+                        Invocation invocation, long transactionId, long dbId, long tableId) throws StarRocksException {
+                    mgr.clearExplicitTxnState(transactionId);
+                    return invocation.proceed(transactionId, dbId, tableId);
+                }
+            };
+
+            TransactionStmtExecutor.loadData(db1, table1, new ExecPlan(), mock(DmlStmt.class),
+                    new OriginStatement("insert"), context);
+            Assertions.assertTrue(context.getState().isError());
+            Assertions.assertTrue(context.getState().getErrorMessage().contains(Long.toString(txnId)));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testStreamLoadDataRejectsStateRemovedBeforeActivation() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "stream-load-removed-state", 60_000L);
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(txnId);
+        try {
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public ExplicitTxnState activateExplicitTransactionTable(
+                        Invocation invocation, long transactionId, long dbId, long tableId) throws StarRocksException {
+                    mgr.clearExplicitTxnState(transactionId);
+                    return invocation.proceed(transactionId, dbId, tableId);
+                }
+            };
+
+            StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                    () -> TransactionStmtExecutor.loadData(db1.getId(), table1.getId(),
+                            new ExplicitTxnState.ExplicitTxnStateItem(), context));
+            Assertions.assertTrue(exception.getMessage().contains(Long.toString(txnId)));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testExplicitTableActivationRejectsStateClearedAfterRegistration() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "activation-after-clear", 60_000L);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            mgr.clearExplicitTxnState(txnId);
+
+            StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                    () -> mgr.activateExplicitTransactionTable(txnId, db1.getId(), table1.getId()));
+            Assertions.assertTrue(exception.getMessage().contains(Long.toString(txnId)));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testDatabaseTableActivationRejectsMissingTransaction() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+
+        TransactionNotFoundException exception = Assertions.assertThrows(TransactionNotFoundException.class,
+                () -> mgr.getDatabaseTransactionMgr(db1.getId()).activateTransactionTable(txnId, 1L));
+        Assertions.assertTrue(exception.getMessage().contains(Long.toString(txnId)));
+    }
+
+    @Test
+    public void testDatabaseTableActivationRejectsFinishedTransaction() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "activation-after-finish", 60_000L);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            mgr.abortTransaction(db1.getId(), txnId, "finish before activation");
+
+            Assertions.assertThrows(TransactionNotFoundException.class,
+                    () -> mgr.getDatabaseTransactionMgr(db1.getId())
+                            .activateTransactionTable(txnId, table1.getId()));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            mgr.clearExplicitTxnState(txnId);
+        }
+    }
+
+    @Test
+    public void testDatabaseTableActivationIsIdempotent() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "idempotent-table-activation", 60_000L);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            DatabaseTransactionMgr dbTxnMgr = mgr.getDatabaseTransactionMgr(db1.getId());
+
+            Assertions.assertSame(state, dbTxnMgr.activateTransactionTable(txnId, table1.getId()));
+            Assertions.assertSame(state, dbTxnMgr.activateTransactionTable(txnId, table1.getId()));
+            Assertions.assertEquals(1, state.getTableIdList().stream()
+                    .filter(tableId -> tableId.equals(table1.getId())).count());
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testExplicitTableActivationSerializesWatermarkAndRemoval() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "serialize-table-activation", 60_000L);
+        CountDownLatch activationEntered = new CountDownLatch(1);
+        CountDownLatch releaseActivation = new CountDownLatch(1);
+        CountDownLatch watermarkStarted = new CountDownLatch(1);
+        CountDownLatch removalStarted = new CountDownLatch(1);
+        AtomicBoolean blockActivation = new AtomicBoolean(true);
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            ExplicitTxnState explicit = mgr.getExplicitTxnState(txnId);
+            Assertions.assertNotNull(explicit);
+            new MockUp<TransactionState>() {
+                @Mock
+                public void addTableIdList(Invocation invocation, Long tableId) {
+                    TransactionState invokedState = invocation.getInvokedInstance();
+                    if (invokedState == state && tableId.equals(table1.getId())
+                            && blockActivation.compareAndSet(true, false)) {
+                        activationEntered.countDown();
+                        awaitLatch(releaseActivation, "activation was not released");
+                    }
+                    invocation.proceed(tableId);
+                }
+            };
+
+            Future<ExplicitTxnState> activation = executor.submit(
+                    () -> mgr.activateExplicitTransactionTable(txnId, db1.getId(), table1.getId()));
+            Assertions.assertTrue(activationEntered.await(10, TimeUnit.SECONDS));
+            Future<Boolean> watermark = executor.submit(() -> {
+                watermarkStarted.countDown();
+                return mgr.isPreviousTransactionsFinishedForReshard(
+                        txnId, db1.getId(), List.of(table1.getId()), Set.of());
+            });
+            Future<?> removal = executor.submit(() -> {
+                removalStarted.countDown();
+                mgr.clearExplicitTxnState(txnId);
+            });
+            Assertions.assertTrue(watermarkStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertTrue(removalStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(watermark.isDone());
+            Assertions.assertFalse(removal.isDone());
+
+            releaseActivation.countDown();
+            Assertions.assertSame(explicit, activation.get(10, TimeUnit.SECONDS));
+            removal.get(10, TimeUnit.SECONDS);
+            Assertions.assertFalse(watermark.get(10, TimeUnit.SECONDS));
+            Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+            Assertions.assertTrue(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            releaseActivation.countDown();
+            executor.shutdownNow();
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testDatabaseWatermarkSerializesTableActivation() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long secondTableId = table1.getId() + 1;
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "serialize-db-table-list", 60_000L);
+        CountDownLatch watermarkEntered = new CountDownLatch(1);
+        CountDownLatch releaseWatermark = new CountDownLatch(1);
+        CountDownLatch activationStarted = new CountDownLatch(1);
+        AtomicBoolean blockWatermark = new AtomicBoolean(true);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            DatabaseTransactionMgr dbTxnMgr = mgr.getDatabaseTransactionMgr(db1.getId());
+            dbTxnMgr.activateTransactionTable(txnId, table1.getId());
+            new MockUp<TransactionState>() {
+                @Mock
+                public List<Long> getTableIdList(Invocation invocation) {
+                    TransactionState invokedState = invocation.getInvokedInstance();
+                    if (invokedState == state && blockWatermark.compareAndSet(true, false)) {
+                        watermarkEntered.countDown();
+                        awaitLatch(releaseWatermark, "watermark was not released");
+                    }
+                    return invocation.proceed();
+                }
+            };
+
+            Future<Boolean> watermark = executor.submit(() -> dbTxnMgr.isPreviousTransactionsFinished(
+                    txnId, List.of(secondTableId), Set.of()));
+            Assertions.assertTrue(watermarkEntered.await(10, TimeUnit.SECONDS));
+            Future<TransactionState> activation = executor.submit(() -> {
+                activationStarted.countDown();
+                return dbTxnMgr.activateTransactionTable(txnId, secondTableId);
+            });
+            Assertions.assertTrue(activationStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(activation.isDone());
+
+            releaseWatermark.countDown();
+            Assertions.assertTrue(watermark.get(10, TimeUnit.SECONDS));
+            Assertions.assertSame(state, activation.get(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(dbTxnMgr.isPreviousTransactionsFinished(
+                    txnId, List.of(secondTableId), Set.of()));
+        } finally {
+            releaseWatermark.countDown();
+            executor.shutdownNow();
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testReshardWatermarkSerializesRegistration() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "serialize-registration", 60_000L);
+        CountDownLatch watermarkEntered = new CountDownLatch(1);
+        CountDownLatch releaseWatermark = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), table1.getId());
+            new MockUp<DatabaseTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, List<Long> tableIds,
+                        Set<Long> excludeTransactionIds) throws InterruptedException {
+                    watermarkEntered.countDown();
+                    Assertions.assertTrue(releaseWatermark.await(10, TimeUnit.SECONDS));
+                    return true;
+                }
+            };
+
+            Future<Boolean> watermark = executor.submit(() -> mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+            Assertions.assertTrue(watermarkEntered.await(10, TimeUnit.SECONDS));
+            Future<TransactionState> registration = executor.submit(
+                    () -> mgr.registerExplicitTransactionState(txnId, db1.getId()));
+            Assertions.assertFalse(registration.isDone());
+            releaseWatermark.countDown();
+            Assertions.assertFalse(watermark.get(10, TimeUnit.SECONDS));
+            Assertions.assertSame(state, registration.get(10, TimeUnit.SECONDS));
+        } finally {
+            releaseWatermark.countDown();
+            executor.shutdownNow();
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testReshardWatermarkSerializesExplicitRemoval() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "serialize-removal", 60_000L);
+        CountDownLatch watermarkEntered = new CountDownLatch(1);
+        CountDownLatch releaseWatermark = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), table1.getId());
+            new MockUp<DatabaseTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, List<Long> tableIds,
+                        Set<Long> excludeTransactionIds) throws InterruptedException {
+                    watermarkEntered.countDown();
+                    Assertions.assertTrue(releaseWatermark.await(10, TimeUnit.SECONDS));
+                    return true;
+                }
+            };
+
+            Future<Boolean> watermark = executor.submit(() -> mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+            Assertions.assertTrue(watermarkEntered.await(10, TimeUnit.SECONDS));
+            Future<?> removal = executor.submit(() -> mgr.clearExplicitTxnState(txnId));
+            Assertions.assertFalse(removal.isDone());
+            releaseWatermark.countDown();
+            Assertions.assertFalse(watermark.get(10, TimeUnit.SECONDS));
+            removal.get(10, TimeUnit.SECONDS);
+            Assertions.assertTrue(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+        } finally {
+            releaseWatermark.countDown();
+            executor.shutdownNow();
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testRegistrationSerializesReshardWatermark() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "registration-serializes-watermark", 60_000L);
+        CountDownLatch upsertEntered = new CountDownLatch(1);
+        CountDownLatch releaseUpsert = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), table1.getId());
+            new MockUp<DatabaseTransactionMgr>() {
+                @Mock
+                public void upsertTransactionState(Invocation invocation, TransactionState transactionState)
+                        throws Exception {
+                    upsertEntered.countDown();
+                    Assertions.assertTrue(releaseUpsert.await(10, TimeUnit.SECONDS));
+                    invocation.proceed(transactionState);
+                }
+            };
+
+            Future<TransactionState> registration = executor.submit(
+                    () -> mgr.registerExplicitTransactionState(txnId, db1.getId()));
+            Assertions.assertTrue(upsertEntered.await(10, TimeUnit.SECONDS));
+            Future<Boolean> watermark = executor.submit(() -> mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+            Assertions.assertFalse(watermark.isDone());
+            releaseUpsert.countDown();
+            Assertions.assertSame(state, registration.get(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(watermark.get(10, TimeUnit.SECONDS));
+        } finally {
+            releaseUpsert.countDown();
+            executor.shutdownNow();
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testClearReservedExplicitStateReleasesReshardWatermark() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        abortRunningTransactions(mgr, db1.getId());
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "clear-reserved-state", 60_000L);
+        try {
+            mgr.reserveExplicitTransactionLayout(txnId, db1.getId(), table1.getId());
+            Assertions.assertFalse(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+            mgr.clearExplicitTxnState(txnId);
+            Assertions.assertTrue(mgr.isPreviousTransactionsFinishedForReshard(
+                    txnId, db1.getId(), List.of(table1.getId()), Set.of()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupExplicitTxnState() throws Exception {
+        // Test that abortTimeoutTxns() cleans up timed-out explicit transaction states
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        abortRunningTransactions(globalTransactionMgr, db1.getId());
+
+        // Create a transaction state with a very short timeout (already expired)
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId();
+        TransactionState transactionState = new TransactionState(transactionId, "timeout_test_label", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
+                1L); // 1ms timeout
+        transactionState.setPrepareTime(System.currentTimeMillis() - 10000); // Started 10 seconds ago
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        try {
+            Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db1.getFullName(), "tbl1");
+            globalTransactionMgr.reserveExplicitTransactionLayout(transactionId, db1.getId(), table1.getId());
+
+            Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+            Assertions.assertFalse(globalTransactionMgr.isPreviousTransactionsFinishedForReshard(
+                    transactionId, db1.getId(), List.of(table1.getId()), Set.of()));
+
+            // Run timeout cleanup
+            globalTransactionMgr.abortTimeoutTxns();
+
+            // Verify the timed-out state was cleaned up
+            Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+            Assertions.assertTrue(globalTransactionMgr.isPreviousTransactionsFinishedForReshard(
+                    transactionId, db1.getId(), List.of(table1.getId()), Set.of()));
+        } finally {
+            cleanupExplicitState(globalTransactionMgr, transactionState);
+        }
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupOrphanedNullState() {
+        // Test that abortTimeoutTxns() also cleans up entries where transactionState is null
+        // (orphaned entries from lost state, e.g., after FE leader switch)
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        long orphanTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState orphanState = new ExplicitTxnState();
+        // transactionState is null by default - simulates orphaned entry
+        globalTransactionMgr.addTransactionState(orphanTxnId, orphanState);
+
+        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+
+        // Run timeout cleanup
+        globalTransactionMgr.abortTimeoutTxns();
+
+        // Verify the orphaned null-state entry was cleaned up
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+    }
+
+    @Test
+    public void testBeginWithStaleExplicitTxnStateClearsEntry() {
+        // Test that beginStmt clears the stale map entry when explicitTxnState exists
+        // but transactionState is null
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(960, 961);
+        context.setExecutionId(queryId);
+
+        // Add a stale entry with null transactionState
+        long staleTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState staleState = new ExplicitTxnState();
+        globalTransactionMgr.addTransactionState(staleTxnId, staleState);
+        context.setTxnId(staleTxnId);
+
+        // beginStmt should detect the lost state, clean up stale entry, and start fresh
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "stale_cleanup_label"));
+
+        // Stale entry should be removed from the map
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(staleTxnId));
+        // A new transaction should have been started
+        Assertions.assertNotEquals(0, context.getTxnId());
+        Assertions.assertNotEquals(staleTxnId, context.getTxnId());
+        Assertions.assertFalse(context.getState().isError());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+>>>>>>> 45942c3 ([BugFix] Create partitions for multi-table transaction stream load (#78790))
     public void testBeginWithLabelAlreadyUsedByAnotherSession() {
         // BEGIN WITH LABEL must be rejected when another session already holds an explicit transaction
         // with the same label
