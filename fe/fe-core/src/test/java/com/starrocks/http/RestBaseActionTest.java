@@ -283,12 +283,10 @@ public class RestBaseActionTest {
         Set<String> groups = Set.of("ldap_admins", "ldap_ops");
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
-                            eq("ldap_user"), eq("10.4.5.6"), any(byte[].class)))
+            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(any(ConnectContext.class),
+                            eq("ldap_user"), eq("10.4.5.6"), eq("secret")))
                     .thenAnswer(invocation -> {
                         ConnectContext authCtx = invocation.getArgument(0);
-                        byte[] passwordBytes = invocation.getArgument(3);
-                        Assertions.assertArrayEquals("secret".getBytes(StandardCharsets.UTF_8), passwordBytes);
                         authCtx.setCurrentUserIdentity(authenticatedUser);
                         authCtx.setCurrentRoleIds(roleIds);
                         authCtx.setGroups(groups);
@@ -326,8 +324,8 @@ public class RestBaseActionTest {
         BaseRequest request = mockExecutableRequest(basicAuth("bad_user", "bad_pwd"), new HttpConnectContext());
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
-                            eq("bad_user"), eq("10.4.5.6"), any(byte[].class)))
+            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(any(ConnectContext.class),
+                            eq("bad_user"), eq("10.4.5.6"), eq("bad_pwd")))
                     .thenThrow(new AuthenticationException("bad credentials"));
 
             Assertions.assertThrows(AccessDeniedException.class, () -> action.execute(request, new BaseResponse()));

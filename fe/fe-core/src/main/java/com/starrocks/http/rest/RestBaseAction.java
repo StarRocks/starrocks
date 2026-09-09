@@ -78,7 +78,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -197,8 +196,8 @@ public class RestBaseAction extends BaseAction {
             Set<Long> currentRoleIds;
             Set<String> currentGroups;
             try {
-                AuthenticationHandler.authenticate(authCtx, authInfo.fullUserName,
-                        authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
+                AuthenticationHandler.authenticateWithClearPassword(authCtx, authInfo.fullUserName,
+                        authInfo.remoteIp, authInfo.password);
                 currentUser = authCtx.getCurrentUserIdentity();
                 currentRoleIds = authCtx.getCurrentRoleIds();
                 currentGroups = authCtx.getGroups();

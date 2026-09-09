@@ -874,6 +874,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于 StarRocks 集群内部身份验证的令牌。如果未指定此参数，StarRocks 会在集群 Leader FE 首次启动时为集群生成一个随机令牌。
 - 引入版本: -
 
+### `authentication_failure_cache_capacity`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: `authentication_failure_cache_ttl_second` 最多记住多少条被拒绝的凭据。用于限制一个客户端（或一个不断更换用户名的攻击者）能占用的内存，超出后按最早写入的顺序淘汰。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
+- 引入版本: v4.2, v4.1.6
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - 默认值: 空字符串
@@ -908,6 +926,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 用于搜索用户身份验证信息的管理员密码。
 - 引入版本: -
+
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 socket 读超时。参见 `authentication_ldap_simple_conn_timeout_ms`。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 TCP 连接超时。不设置时会退回到操作系统的 TCP 超时，目录不可达时可能把处理请求的线程占住几分钟——security integration 现在也为 HTTP、Arrow Flight 和 BE→FE 的导入 RPC 做认证，占住的就是这些通道的工作线程。需要认证快速失败时可以调小。
+- 引入版本: v4.2, v4.1.6
 
 ### `authentication_ldap_simple_group_source`
 
