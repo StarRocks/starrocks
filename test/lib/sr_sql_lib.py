@@ -3240,17 +3240,24 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
 
-    def assert_any_backend_script_prints(self, script, pattern):
-        """Run a Wren script on one backend and check the printed result against a regex.
+    def get_any_backend_id(self) -> str:
+        """Return the id of one alive backend.
 
-        ADMIN EXECUTE needs a concrete backend id, and `ALL BACKENDS` only exists on newer
-        versions, so the id is looked up here rather than written into the case. One backend is
-        enough: the bindings under test are per-process and identical on every node.
+        ADMIN EXECUTE needs a concrete id, and `ALL BACKENDS` only exists on newer versions, so
+        cases look one up instead of naming a node. Which one does not matter for anything that
+        is per-process and identical on every node.
         """
         backend_ids = self.get_all_backend_ids()
         tools.assert_true(len(backend_ids) > 0, "no alive backend to run ADMIN EXECUTE on")
+        return backend_ids[0]
 
-        sql = "admin execute on %s '%s'" % (backend_ids[0], script)
+    def assert_backend_script_prints(self, backend_id, script, pattern):
+        """Run a Wren script on `backend_id` and match what it printed against a regex.
+
+        The regex lives here because a `function:` result is compared for equality, and the
+        printed text carries per-cluster numbers.
+        """
+        sql = "admin execute on %s '%s'" % (backend_id, script)
         res = self.execute_sql(sql, ori=True)
         tools.assert_true(res["status"], "%s failed: %s" % (sql, res.get("msg", "")))
 
