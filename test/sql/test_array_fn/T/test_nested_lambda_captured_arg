@@ -1,0 +1,28 @@
+-- name: test_nested_lambda_captured_arg
+-- A nested array_map whose INNER lambda holds a common sub expression that captures the ENCLOSING
+-- lambda's argument. The FE hoists the duplicated abs(x) into the inner lambda's own common sub
+-- expression list and rewrites its body to reference the hoisted slot, so x appears nowhere in that
+-- body any more. LambdaFunction::get_slot_ids reported the body alone when called before prepare(),
+-- which hid x from ArrayMapExpr::prepare and from extract_outer_common_exprs. The outer lambda was
+-- therefore judged independent of x, stopped putting x into the chunk it passes down, and evaluating
+-- the inner array_map could not find x.
+-- Keeping the two abs(x) separated by y matters: it leaves no x-only subexpression for the FE to
+-- hoist any further, which is what makes the hoist stay in the inner lambda.
+-- Do not add a constant-array form (array_map(x -> array_map(y -> ..., [1,2]), [1,2])): it folds
+-- into a PHYSICAL_VALUES plan where the FE still hoists the reference out of the scope that defines
+-- it, so it fails plan validation until #78645 lands.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE nlc (k INT, arr ARRAY<BIGINT>) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO nlc VALUES (1, [1, -2]), (2, []), (3, NULL);
+
+-- used to fail with "Expr evaluate meet error: slot_id N not found (known slots: [...])"
+SELECT k, array_map(x -> array_map(y -> abs(x) + y + abs(x), arr), arr) AS r FROM nlc ORDER BY k;
+-- control: an equivalent single-occurrence form leaves the hoist in the lambda that binds x, so it
+-- was already correct; both forms must agree
+SELECT k, array_map(x -> array_map(y -> abs(x) * 2 + y, arr), arr) AS r FROM nlc ORDER BY k;
+
+drop database db_${uuid0};
