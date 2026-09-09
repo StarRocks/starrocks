@@ -3240,6 +3240,29 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
 
+    def assert_admin_execute_prints(self, script, pattern):
+        """Run a Wren script on one backend and check the printed result against a regex.
+
+        ADMIN EXECUTE needs a concrete backend id, and `ALL BACKENDS` only exists on newer
+        versions, so the id is looked up here rather than written into the case. One backend is
+        enough: the bindings under test are per-process and identical on every node.
+        """
+        backend_ids = self.get_all_backend_ids()
+        tools.assert_true(len(backend_ids) > 0, "no alive backend to run ADMIN EXECUTE on")
+
+        sql = "admin execute on %s '%s'" % (backend_ids[0], script)
+        res = self.execute_sql(sql, ori=True)
+        tools.assert_true(res["status"], "%s failed: %s" % (sql, res.get("msg", "")))
+
+        printed = "\n".join("\t".join(str(cell) for cell in row) for row in res["result"])
+        tools.assert_regex(
+            printed,
+            pattern,
+            "ADMIN EXECUTE result does not match\n- [script]: %s\n- [exp]: %s\n- [act]: %s"
+            % (script, pattern, printed),
+        )
+        return "OK"
+
     def get_all_backend_ids(self) -> List[str]:
         """Return ids of all alive backends (fallback to all rows if Alive not found)."""
         res = self.execute_sql("show backends;", ori=True)

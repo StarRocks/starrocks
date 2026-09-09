@@ -1,15 +1,17 @@
 -- name: test_script_object_tostring @native
--- Wren resolves System.print(x) through the getter x.toString. The script bindings used to
--- register toString as a method only, so printing a bound object produced the placeholder
--- "instance of <Class>" and the text the binding exists to produce was unreachable.
+-- Wren resolves System.print(x) through the getter x.toString (wren.c, System.writeObject_).
+-- The script bindings used to register toString as a method only, so printing a bound object
+-- produced the placeholder "instance of <Class>" and the text was unreachable that way.
+--
+-- GlobalEnv and StorageEngine are used rather than RuntimeEnv, because GlobalEnv is the
+-- spelling that exists on every branch this is expected to reach.
 
--- Status: the error message must reach the result cell. Tablet 1 does not exist, so
--- do_compaction() returns InvalidArgument("Not Found tablet:1").
-admin execute on all backends 'System.print(StorageEngine.do_compaction(1, "base"))';
+-- Status: tablet 1 does not exist, so do_compaction() returns InvalidArgument.
+function: assert_admin_execute_prints('System.print(StorageEngine.do_compaction(1, "base"))', '.*Not Found tablet:1.*')
 
 -- MemTracker: debug_string() is a single line shaped "limit: N; reserve_limit: N; ...".
-admin execute on all backends 'System.print(RuntimeEnv.GetInstance().process_mem_tracker())';
+function: assert_admin_execute_prints('System.print(GlobalEnv.GetInstance().process_mem_tracker())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
 
--- The method spelling stays available, because before the getter existed it was the only way
--- to obtain the text and is what existing scripts use.
-admin execute on all backends 'System.print(RuntimeEnv.GetInstance().process_mem_tracker().toString())';
+-- The method spelling stays supported: before the getter existed it was the only way to reach
+-- the text, so it is what existing scripts use.
+function: assert_admin_execute_prints('System.print(GlobalEnv.GetInstance().process_mem_tracker().toString())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
