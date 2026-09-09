@@ -76,6 +76,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -115,6 +116,25 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr.TimeUnit;
+>>>>>>> 0c2c1ee ([BugFix] Keep year 0000 when batch-building date range partitions (#78746))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
@@ -1492,6 +1512,40 @@ public class AnalyzerUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Truncate a date/datetime string value to the partition boundary defined by granularity.
+     * Returns the formatted canonical string for the partition start time.
+     * This is the single source of truth for date-to-partition-boundary mapping,
+     * used by both partition clause creation and dedup key generation.
+     */
+    public static String truncateToPartitionBoundary(String dateValue, String granularity) throws AnalysisException {
+        TimeUnit timeUnit = toAutoPartitionTimeUnit(granularity,
+                "unsupported automatic partition granularity: " + granularity);
+        try {
+            if ("NULL".equalsIgnoreCase(dateValue)) {
+                dateValue = "0000-01-01";
+            }
+            DateTimeFormatter fmt = DateUtils.probeFormat(dateValue);
+            LocalDateTime dt = DateUtils.parseStringWithDefaultHSM(dateValue, fmt);
+            dt = PartitionTimeUtils.truncateToUnitStart(dt, timeUnit);
+            return dt.format(PartitionTimeUtils.getPartitionNameFormatter(timeUnit));
+        } catch (Exception e) {
+            throw new AnalysisException("failed to parse partition value: " + dateValue);
+        }
+    }
+
+    /** Resolves an automatic partition granularity into its time unit. */
+    private static TimeUnit toAutoPartitionTimeUnit(String granularity, String errorMessage) throws AnalysisException {
+        TimeUnit timeUnit = TimeUnit.fromName(granularity);
+        if (timeUnit == null || !PartitionTimeUtils.AUTO_PARTITION_TIME_UNITS.contains(timeUnit)) {
+            throw new AnalysisException(errorMessage);
+        }
+        return timeUnit;
+    }
+
+>>>>>>> 0c2c1ee ([BugFix] Keep year 0000 when batch-building date range partitions (#78746))
     public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
             throws AnalysisException {
         long interval = 1;
@@ -1699,6 +1753,7 @@ public class AnalyzerUtils {
                 }
                 beginDateTimeFormat = DateUtils.probeFormat(partitionItem);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
+<<<<<<< HEAD
                 // The start date here is passed by BE through function calculation,
                 // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
@@ -1730,6 +1785,12 @@ public class AnalyzerUtils {
                     default:
                         throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
+=======
+                TimeUnit timeUnit = toAutoPartitionTimeUnit(granularity,
+                        "unsupported automatic partition granularity:" + granularity);
+                beginTime = PartitionTimeUtils.truncateToUnitStart(beginTime, timeUnit);
+                endTime = PartitionTimeUtils.plus(beginTime, timeUnit, interval);
+>>>>>>> 0c2c1ee ([BugFix] Keep year 0000 when batch-building date range partitions (#78746))
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
@@ -1760,18 +1821,16 @@ public class AnalyzerUtils {
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
                                                            LocalDateTime endTime) throws AnalysisException {
         boolean isMaxValue;
-        DateTimeFormatter outputDateFormat;
         if (partitionType.isDate()) {
-            outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
             isMaxValue =
                     endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else if (partitionType.isDatetime()) {
-            outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
             isMaxValue = endTime.isAfter(
                     TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }
+        DateTimeFormatter outputDateFormat = PartitionTimeUtils.getPartitionBoundFormatter(partitionType);
         String lowerBound = beginTime.format(outputDateFormat);
 
         PartitionValue upperPartitionValue;
