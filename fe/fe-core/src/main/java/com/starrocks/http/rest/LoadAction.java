@@ -46,6 +46,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpServerHandler;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
@@ -55,6 +56,7 @@ import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -64,8 +66,10 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import org.apache.commons.collections.CollectionUtils;
@@ -99,6 +103,12 @@ public class LoadAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.PUT,
                 "/api/{" + DB_KEY + "}/{" + TABLE_KEY + "}/_stream_load",
                 new LoadAction(controller));
+    }
+
+    @Override
+    public boolean supportAsyncHandler() {
+        // Await lastHttpWrite off the Netty event loop. Same as ExecuteSqlAction.
+        return true;
     }
 
     @Override
@@ -185,9 +195,37 @@ public class LoadAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+        HttpConnectContext context = request.getConnectContext();
+        HttpConnectContext sqlKeepAlive = HttpServerHandler.getChannelSqlConnectContext(request.getContext());
+        boolean requestPending = false;
+        boolean keepAlivePending = false;
+        boolean admitted = false;
         try {
+            if (context != null) {
+                if (!context.tryIncPendingTask()) {
+                    rejectNewHttpRequest(request, response);
+                    return;
+                }
+                requestPending = true;
+            }
+            if (sqlKeepAlive != null && sqlKeepAlive != context) {
+                if (!sqlKeepAlive.tryIncPendingTask()) {
+                    rejectNewHttpRequest(request, response);
+                    return;
+                }
+                keepAlivePending = true;
+            }
+            if (!GracefulExitFlag.tryStartHttpRequest()) {
+                rejectNewHttpRequest(request, response);
+                return;
+            }
+            admitted = true;
             executeWithoutPasswordInternal(request, response);
-        } catch (DdlException e) {
+        } catch (AccessDeniedException e) {
+            // Write 401 here so lastHttpWrite is recorded before finishAdmittedHttpRequest.
+            response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
+            writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
+        } catch (Exception e) {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
             resp.msg = e.getClass() + ": " + e.getMessage();
@@ -198,9 +236,30 @@ public class LoadAction extends RestBaseAction {
             }
             LOG.warn("Failed to execute executeWithoutPasswordInternal: {}, The most inner stack: {}",
                     e.getMessage(), firstStackTrace);
-
             sendResult(request, response, resp);
+        } finally {
+            if (admitted) {
+                if (context != null) {
+                    context.finishAdmittedHttpRequest();
+                } else {
+                    GracefulExitFlag.finishHttpRequest();
+                }
+            }
+            if (keepAlivePending) {
+                sqlKeepAlive.decPendingTask();
+            }
+            if (requestPending) {
+                context.decPendingTask();
+            }
         }
+    }
+
+    private void rejectNewHttpRequest(BaseRequest request, BaseResponse response) {
+        response.setForceCloseConnection(true);
+        TransactionResult resp = new TransactionResult();
+        resp.status = ActionStatus.FAILED;
+        resp.msg = "FE is in graceful shutdown, no longer accepting new requests";
+        sendResult(request, response, HttpResponseStatus.SERVICE_UNAVAILABLE, resp);
     }
 
     // Basically a complete copy of the private interface HttpUtil.isExpectHeaderValid.
@@ -216,10 +275,16 @@ public class LoadAction extends RestBaseAction {
     public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException,
             AccessDeniedException {
 
-        // A 'Load' request must have "Expect: 100-continue" header for HTTP/1.1 and onward.
-        // Skip the "Expect" header check for HTTP/1.0 and earlier versions.
-        if (isExpectHeaderValid(request.getRequest()) && !HttpUtil.is100ContinueExpected(request.getRequest())) {
-            // TODO: should respond "HTTP 417 Expectation Failed"
+        // A 'Load' request may send "Expect: 100-continue" for HTTP/1.1 and onward. An L7 proxy
+        // (e.g. nginx) may strip this header, so a missing header is tolerated: the FE redirects
+        // to the BE without reading the body anyway. Only an explicitly present but wrong Expect
+        // value is rejected. HTTP/1.0 never requires the header (RFC 7231 5.1.1).
+        if (isExpectHeaderValid(request.getRequest())
+                && request.getRequest().headers().contains(HttpHeaderNames.EXPECT)
+                && !HttpUtil.is100ContinueExpected(request.getRequest())) {
+            // RFC 7231 5.1.1: a request with an unsupported Expect is rejected with 417; here we
+            // follow the existing behavior of failing the load with a DdlException and closing the
+            // connection (the body is not read since the FE redirects without consuming it).
             response.setForceCloseConnection(true);
             throw new DdlException("There is no 100-continue header");
         }

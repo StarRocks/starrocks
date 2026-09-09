@@ -887,6 +887,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの IP アドレス。
 - 導入時期：-
 
+### `graceful_exit_http_accept_window_ms`
+
+- デフォルト：60000
+- タイプ：Long
+- 単位：ms
+- 変更可能：Yes
+- 説明：`SIGUSR1` 後の HTTP 受け入れウィンドウ（ミリ秒）。3 つの HTTP 入口の新規リクエストのみを制御します：ExecuteSqlAction（HTTP SQL）、LoadAction（stream load）、TransactionLoadAction（transaction stream load）。HealthCheck は T0 で 500 を返し、HTTP LB が切り離せるようにします。JDBC はこのウィンドウを使いません：T0 で `stopAccept()` が MySQL ポートを閉じ、アイドル JDBC 接続は最初から閉じます。ウィンドウ中は上記 3 入口がリクエストを受け入れ、アイドル HTTP keep-alive は維持します。終了後は新規リクエストが 503 と Connection: close を返し、その後アイドル HTTP keep-alive を閉じます。HTTP LB のプローブ間隔・unhealthy 閾値・切り離し遅延と余裕を覆い、`max_graceful_exit_time_second` より小さくする必要があります。
+- 導入時期：-
+
 ### `http_async_threads_num`
 
 - デフォルト：4096
@@ -981,6 +990,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの HTTPS サーバーがリッスンするポート。
 - 導入時期：v4.0
 
+### `max_graceful_exit_time_second`
+
+- デフォルト：120
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：グレースフルエグジット全体のハードタイムアウトで、シグナル（SIGUSR1）から計測されます。`graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second` より大きい値にする必要があります。グレースフルエグジットスレッドのハードタイムアウト join(max) はシグナル送信時から計測され、FE は新規受け入れウィンドウの経過とウィンドウ後のドレイン完了前に終了できないため、max はウィンドウ全体と最小ドレインをカバーする必要があります。max < window + min の場合、スレッドはドレイン完了前に強制終了され、グレースフルエグジットが機能しません。ウィンドウと max は一緒に設定してください。
+- 導入時期：-
+
 ### `max_mysql_service_task_threads_num`
 
 - デフォルト：4096
@@ -1016,6 +1034,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：FE の `MemoryUsageTracker` デーモンが FE プロセスと登録された `MemoryTrackable` モジュールのメモリ使用量をポーリングして記録する間隔 (秒単位)。`memory_tracker_enable` が `true` に設定されている場合、トラッカーはこの周期で実行され、`MEMORY_USAGE` を更新し、集計された JVM および追跡対象モジュールの使用状況をログに記録します。
 - 導入時期：v3.2.4
+
+### `min_graceful_exit_time_second`
+
+- デフォルト：15
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：グレースフルエグジット（SIGUSR1）がマークされた後、FE が生き続ける最小時間で、シグナルから計測されます。探知失敗は最初に発生します。HealthAction は 500 を返し（HTTP プローブ、ロード経路）、`stopAccept()` は MySQL ポートを閉じます（TCP プローブ、クエリ経路）。FE はロードバランサーがプローブ間隔内でこれらの失敗を認識してルーティングを停止する前に終了してはなりません。この待機はロードバランサーの切り離しレイテンシー（約 15 秒）より短くならないようにする必要があります。実際には `graceful_exit_http_accept_window_ms` がこの値より大きいため、この最小値は通常、新規受け入れウィンドウが経過した時点で満たされています。`max_graceful_exit_time_second` より小さくする必要があります。
+- 導入時期：-
 
 ### `mysql_nio_backlog_num`
 

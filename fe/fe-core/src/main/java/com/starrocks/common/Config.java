@@ -4828,18 +4828,41 @@ public class Config extends ConfigBase {
     public static int max_spm_cache_baseline_size = 1000;
 
     /**
-     * The process must be stopped after the load balancing detection becomes Unhealthy,
-     * otherwise the new connection will still be forwarded to the machine where the FE node is located,
-     * causing the connection to fail.
+     * Minimum time the FE stays alive after graceful exit (SIGUSR1) is marked, measured from the signal.
+     * Probe failure fires at the very start: HealthAction returns 500 (HTTP probe, load) and stopAccept
+     * closes the MySQL port (TCP probe, query). The FE must not exit before the Load Balancer notices
+     * these failures within its probe interval and stops routing; this wait must be &gt; the Load Balancer
+     * detach latency (typically 7-11s). In practice graceful_exit_http_accept_window_ms is larger than
+     * this value, so this minimum is usually already satisfied when the accept-new window elapses.
+     * Must be &lt; max_graceful_exit_time_second.
      */
     @ConfField(mutable = true)
     public static long min_graceful_exit_time_second = 15;
 
     /**
-     * timeout for graceful exit
+     * Hard timeout for the whole graceful exit, measured from the signal (SIGUSR1). MUST be greater than
+     * graceful_exit_http_accept_window_ms + min_graceful_exit_time_second: the graceful-exit thread's hard
+     * timeout is join(max) measured from the signal, and the FE may not exit before the accept-new window
+     * elapses plus the post-window drain, so max must cover the whole window plus the minimum. If max &lt;
+     * window + min the thread is force-killed before the drain completes, defeating graceful shutdown.
+     * Set window and max together.
      */
     @ConfField(mutable = true)
-    public static long max_graceful_exit_time_second = 60;
+    public static long max_graceful_exit_time_second = 120;
+
+    /**
+     * HTTP accept window after SIGUSR1, in milliseconds. Controls new-request admission on the
+     * three HTTP entries: ExecuteSqlAction (HTTP SQL), LoadAction (stream load), and
+     * TransactionLoadAction (transaction stream load). HealthCheck returns 500 at T0 so the HTTP
+     * load balancer can detach. JDBC does not use this window: stopAccept() closes the MySQL port
+     * at T0 and idle JDBC connections close from the start. During this window the three HTTP
+     * entries still admit requests and idle HTTP keep-alives are kept. After it elapses, new
+     * requests on those entries get 503 + Connection: close, then idle HTTP keep-alives are closed.
+     * Must cover HTTP LB probe interval, unhealthy threshold, detach latency and margin. Must be
+     * smaller than the drain covered by max_graceful_exit_time_second.
+     */
+    @ConfField(mutable = true)
+    public static long graceful_exit_http_accept_window_ms = 60000;
 
     @ConfField(mutable = true)
     public static long default_statistics_output_row_count = 1L;

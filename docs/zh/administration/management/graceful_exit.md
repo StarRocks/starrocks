@@ -58,7 +58,7 @@ stop_fe.sh -g
 
 #### 超时控制
 
-如果查询运行时间过长，FE 在 **60 秒** 后强制退出（可通过 `--timeout` 选项配置）。
+如果查询运行时间过长，FE 在 **120 秒** 后强制退出（可通过 `--timeout` 选项配置）。
 
 ### BE/CN 优雅退出机制
 
@@ -101,14 +101,34 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 #### `stop_fe.sh -g --timeout`
 
 - 描述：FE 被强制终止前的最大等待时间。
-- 默认值：60（秒）
-- 如何应用：在脚本命令中指定，例如 `--timeout 120`。
+- 默认值：120（秒）
+- 如何应用：在脚本命令中指定。该值必须超过完整的优雅退出时长：接受新连接窗口（`graceful_exit_http_accept_window_ms`）加上窗口后的最短等待时间（`min_graceful_exit_time_second`）。例如默认设置（60000 毫秒 + 15 秒）下应使用 `--timeout 120`。如果设置过小，FE 会在排空完成前被强制终止。
 
 #### *最小 LB 检测时间*
 
 - 描述：LB 至少需要 15 秒来检测变更的健康状态。
 - 默认值：15（秒）
 - 如何应用：固定值
+
+#### `graceful_exit_http_accept_window_ms`
+
+- 描述：`SIGUSR1` 之后的 HTTP 准入窗口（毫秒）。仅控制三个 HTTP 入口的新请求：ExecuteSqlAction（HTTP SQL）、LoadAction（stream load）、TransactionLoadAction（transaction stream load）。HealthCheck 在 T0 返回 500，便于 HTTP 负载均衡器摘流。JDBC 不使用该窗口：T0 即 `stopAccept()` 关闭 MySQL 端口，空闲 JDBC 连接从一开始关闭。窗口内上述三个入口继续接受请求，空闲 HTTP keep-alive 保留；窗口结束后新请求返回 503 并 Connection: close，随后关闭空闲 HTTP keep-alive。窗口应覆盖 HTTP LB 探活周期、不健康阈值、摘流延迟和余量，且须小于 `max_graceful_exit_time_second` 覆盖的总排空时间。
+- 默认值：60000
+- 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
+
+#### `min_graceful_exit_time_second`
+
+- 描述：优雅退出（SIGUSR1）标记后 FE 保持存活的最短时间，从信号发出时开始计时。探活失败最早触发：HealthAction 返回 500（HTTP 探活，导入链路），`stopAccept()` 关闭 MySQL 端口（TCP 探活，查询链路）。FE 不能早于负载均衡器在其探测周期内感知到这些失败并停止路由之前退出；该等待不能短于负载均衡器的摘除延迟（约 15 秒）。实践中 `graceful_exit_http_accept_window_ms` 大于此值，因此接受新连接窗口结束时该最小值通常已经满足。必须小于 `max_graceful_exit_time_second`。
+- 默认值：15
+- 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
+- 时序关系：必须小于 `max_graceful_exit_time_second`。
+
+#### `max_graceful_exit_time_second`
+
+- 描述：整个优雅退出的硬超时，从信号（SIGUSR1）发出时开始计时。必须大于 `graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second`：优雅退出线程的硬超时 join(max) 从信号发出时开始计时，且 FE 不能早于接受新连接窗口结束加窗口后排空完成之前退出，因此 max 必须覆盖整个窗口加最短排空。如果 max < window + min，线程会在排空完成前被强制终止，破坏优雅退出。请一起设置窗口和 max。
+- 默认值：120
+- 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
+- 时序关系：必须大于 `graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second`。这些参数应一起设置。
 
 ### BE/CN 配置
 
@@ -187,12 +207,12 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 ### 执行 FE 优雅退出
 
 ```bash
-./bin/stop_fe.sh -g --timeout 60
+./bin/stop_fe.sh -g --timeout 120
 ```
 
 参数：
 
-- `--timeout`：在 FE 节点被强制终止前的最大等待时间。
+- `--timeout`：在 FE 节点被强制终止前的最大等待时间。该值必须超过完整的优雅退出时长（接受新连接窗口 `graceful_exit_http_accept_window_ms` 加上窗口后的最短等待时间 `min_graceful_exit_time_second`）；默认设置下至少使用 `--timeout 120`。如果设置过小，FE 会在排空完成前被强制终止。
 
 行为：
 

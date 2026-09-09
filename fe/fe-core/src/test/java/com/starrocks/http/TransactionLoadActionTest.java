@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.proc.ProcResult;
@@ -29,6 +30,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -79,11 +81,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
@@ -2218,6 +2224,55 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private Request newRequest(TransactionOperation operation) throws Exception {
         return newRequest(operation, (uriBuilder, reqBuilder) -> {
         });
+    }
+
+    @Test
+    public void testRejectsNewRequestAfterAcceptWindowElapsed() throws Exception {
+        GracefulExitFlag.markGracefulExit();
+        long acceptWindowNanos = TimeUnit.NANOSECONDS.convert(
+                Config.graceful_exit_http_accept_window_ms, TimeUnit.MILLISECONDS);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(System.nanoTime() - acceptWindowNanos - 1L);
+        try {
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, RandomStringUtils.randomAlphanumeric(32));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                assertEquals(503, response.code());
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("no longer accepting new requests"));
+                assertEquals("close", response.header("Connection"));
+            }
+
+            Request loadRequest = newRequest(TransactionOperation.TXN_LOAD, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, RandomStringUtils.randomAlphanumeric(32));
+            });
+            try (Response response = networkClient.newCall(loadRequest).execute()) {
+                assertEquals(503, response.code());
+            }
+
+            Request commitRequest = newRequest(TransactionOperation.TXN_COMMIT, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(LABEL_KEY, RandomStringUtils.randomAlphanumeric(32));
+            });
+            try (Response response = networkClient.newCall(commitRequest).execute()) {
+                assertTrue(response.code() != 503,
+                        "commit of an already-started txn must still be admitted after the HTTP window");
+            }
+        } finally {
+            Field flagField = GracefulExitFlag.class.getDeclaredField("GRACEFUL_EXIT");
+            flagField.setAccessible(true);
+            ((AtomicBoolean) flagField.get(null)).set(false);
+            ((AtomicLong) beginField.get(null)).set(0L);
+            GracefulExitFlag.resetHttpAdmissionState();
+        }
     }
 
     private Request newRequest(TransactionOperation txnOpt,
