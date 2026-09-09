@@ -197,25 +197,41 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "sc_agg");
 
-        // Neither an agg function nor KEY: ambiguous, so it must be rejected rather than silently
-        // promoted to a key column.
-        AlterTableStmt ambiguous = (AlterTableStmt) parseAndAnalyzeStmt(
-                "alter table test.sc_agg add column amb_col int default '0'");
-        DdlException exception = Assertions.assertThrows(DdlException.class, () ->
-                new SchemaChangeHandler().process(ambiguous.getAlterClauseList(), db, tbl));
-        Assertions.assertTrue(exception.getMessage().contains("must specify either an aggregate function"),
-                exception.getMessage());
-        Assertions.assertTrue(exception.getMessage().contains("allow_implicit_key_column_in_agg_add_column"),
-                exception.getMessage());
+        // The compiled default differs between branches, so pin the config and assert the guard
+        // itself rather than whichever default this branch happens to ship.
+        boolean saved = Config.allow_implicit_key_column_in_agg_add_column;
+        Config.allow_implicit_key_column_in_agg_add_column = false;
+        try {
+            // Neither an agg function nor KEY: ambiguous, so it must be rejected rather than silently
+            // promoted to a key column.
+            AlterTableStmt ambiguous = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "alter table test.sc_agg add column amb_col int default '0'");
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    new SchemaChangeHandler().process(ambiguous.getAlterClauseList(), db, tbl));
+            Assertions.assertTrue(exception.getMessage().contains("must specify either an aggregate function"),
+                    exception.getMessage());
+            Assertions.assertTrue(exception.getMessage().contains("allow_implicit_key_column_in_agg_add_column"),
+                    exception.getMessage());
+        } finally {
+            Config.allow_implicit_key_column_in_agg_add_column = saved;
+        }
 
-        // A type that cannot be a key column keeps its own pre-existing message, because KEY is not a
-        // legal alternative for it and the new message must not suggest one.
-        AlterTableStmt nonKeyable = (AlterTableStmt) parseAndAnalyzeStmt(
-                "alter table test.sc_agg add column amb_float float default '0'");
-        DdlException floatException = Assertions.assertThrows(DdlException.class, () ->
-                new SchemaChangeHandler().process(nonKeyable.getAlterClauseList(), db, tbl));
-        Assertions.assertTrue(floatException.getMessage().contains("type can not be key column"),
-                floatException.getMessage());
+        // A type that cannot be a key column keeps its own pre-existing message, because KEY is not
+        // a legal alternative for it and the new message must not suggest one. That rejection runs
+        // ahead of the config check, so it must hold whichever default a branch ships.
+        for (boolean allowImplicitKey : new boolean[] {false, true}) {
+            Config.allow_implicit_key_column_in_agg_add_column = allowImplicitKey;
+            try {
+                AlterTableStmt nonKeyable = (AlterTableStmt) parseAndAnalyzeStmt(
+                        "alter table test.sc_agg add column amb_float float default '0'");
+                DdlException floatException = Assertions.assertThrows(DdlException.class, () ->
+                        new SchemaChangeHandler().process(nonKeyable.getAlterClauseList(), db, tbl));
+                Assertions.assertTrue(floatException.getMessage().contains("type can not be key column"),
+                        "allowImplicitKey=" + allowImplicitKey + ": " + floatException.getMessage());
+            } finally {
+                Config.allow_implicit_key_column_in_agg_add_column = saved;
+            }
+        }
     }
 
     @Test

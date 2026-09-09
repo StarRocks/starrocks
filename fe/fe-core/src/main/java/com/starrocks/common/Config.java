@@ -1597,9 +1597,9 @@ public class Config extends ConfigBase {
     /**
      * On an aggregate table, ALTER TABLE ... ADD COLUMN with neither an aggregate function nor the
      * KEY keyword is ambiguous, and treating it as a key column changes the table's aggregation key
-     * and rewrites existing data. Default false rejects such a statement and asks the user to say
-     * which one they meant. Set true to restore the previous behavior of silently creating a key
-     * column. Mutable, but not persisted across a restart unless set WITH PERSISTENT.
+     * and rewrites existing data. When false, such a statement is rejected and the error names both
+     * options. When true, the column becomes a key column, which is the behavior before this was
+     * introduced. Mutable, but not persisted across a restart unless set WITH PERSISTENT.
      */
     @ConfField(mutable = true)
     public static boolean allow_implicit_key_column_in_agg_add_column = false;
