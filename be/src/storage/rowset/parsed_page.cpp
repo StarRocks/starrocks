@@ -352,9 +352,10 @@ public:
             // The data_decoder will handle null predicates
             auto nc = down_cast<NullableColumn*>(column);
 
-            // Pass the null flags starting from current offset
-            // The data_decoder will handle appending null flags to the column
-            const uint8_t* null_data = _null_flags.data() + _offset_in_page;
+            // Pass the null flags of the whole page: the decoder indexes them by the in-page ordinal of each row it
+            // reads. `range` may be sparse (several sub-ranges of this page merged by the column iterator), so a
+            // pointer shifted to range.begin() and walked linearly would misalign the flags after the first gap.
+            const uint8_t* null_data = _null_flags.data();
             RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(nc, range, compound_and_predicates, null_data,
                                                                   selection, selected_idx));
         }
