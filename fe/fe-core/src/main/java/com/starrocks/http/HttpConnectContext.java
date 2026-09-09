@@ -33,12 +33,18 @@ package com.starrocks.http;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TResultSinkFormatType;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 // one connection will create one HttpConnectContext
 public class HttpConnectContext extends ConnectContext {
@@ -66,6 +72,15 @@ public class HttpConnectContext extends ConnectContext {
     private String remoteAddress;
 
     private boolean isKeepAlive;
+
+    // Last HTTP write (LastHttpContent or FullHttpResponse). Awaited before
+    // finishHttpRequest/close so drain cannot observe active==0 while bytes remain.
+    private volatile ChannelFuture lastHttpWrite;
+
+    // Admitted HTTP requests still in flight on this channel. HTTP/1.1 pipelined requests share
+    // one HttpConnectContext, so closing the channel while this is non-zero would kill another
+    // admitted request still running; only close once it hits zero (and rejecting).
+    private final AtomicInteger channelAdmittedRequests = new AtomicInteger();
 
     // right now only support json type
     private TResultSinkFormatType resultSinkFormatType;
@@ -138,12 +153,82 @@ public class HttpConnectContext extends ConnectContext {
         isKeepAlive = keepAlive;
     }
 
+    public void setLastHttpWrite(ChannelFuture lastHttpWrite) {
+        this.lastHttpWrite = lastHttpWrite;
+    }
+
+    public void awaitLastHttpWrite() {
+        ChannelFuture f = lastHttpWrite;
+        if (f != null) {
+            f.awaitUninterruptibly();
+        }
+    }
+
+    // Called once per request after a successful HTTP admission claim on this channel. Matched by
+    // channelAdmittedRequests.decrementAndGet() in completeAdmittedHttpRequest. Synchronized on
+    // this context so the count and the decrement-then-close decision in
+    // completeAdmittedHttpRequest are atomic w.r.t. each other.
+    public void incrementAdmittedRequests() {
+        synchronized (this) {
+            channelAdmittedRequests.incrementAndGet();
+        }
+    }
+
+    // Wait for this request's final HTTP write, then drop the admission count. Always decrements
+    // the per-channel admitted count; closes the channel only when rejecting and that count
+    // reaches zero (so a pipelined admitted request sharing this channel is not killed).
+    // If called on the Netty event loop, defer via listener to avoid deadlock.
+    public void finishAdmittedHttpRequest() {
+        ChannelFuture f = lastHttpWrite;
+        if (f != null) {
+            Channel ch = f.channel();
+            if (ch != null && ch.eventLoop() != null && ch.eventLoop().inEventLoop()) {
+                f.addListener(future -> completeAdmittedHttpRequest());
+                return;
+            }
+            f.awaitUninterruptibly();
+        }
+        completeAdmittedHttpRequest();
+    }
+
+    private void completeAdmittedHttpRequest() {
+        // Always decrement (do NOT gate on isHttpRejecting(): short-circuit would skip the
+        // decrement while the window is still open, inflating the count so it never returns to
+        // zero once rejecting). Decrement, the close decision, and the close itself all share one
+        // monitor with incrementAdmittedRequests: otherwise a decrement-to-zero racing an increment
+        // for a just-admitted pipelined request could close the channel under it. HTTP/1.1
+        // pipelined requests share one HttpConnectContext; closing on one request's completion
+        // while another admitted request is still running on the same channel would kill it.
+        synchronized (this) {
+            int remaining = channelAdmittedRequests.decrementAndGet();
+            if (GracefulExitFlag.isHttpRejecting() && remaining == 0) {
+                ChannelHandlerContext ch = nettyChannel;
+                if (ch != null && ch.channel().isActive()) {
+                    ch.close();
+                }
+            }
+        }
+        GracefulExitFlag.finishHttpRequest();
+    }
+
     public boolean isOnlyOutputResultRaw() {
         return onlyOutputResultRaw;
     }
 
     public void setOnlyOutputResultRaw(boolean onlyOutputResultRaw) {
         this.onlyOutputResultRaw = onlyOutputResultRaw;
+    }
+
+    @Override
+    public synchronized void cleanup() {
+        try {
+            super.cleanup();
+        } finally {
+            if (nettyChannel != null) {
+                nettyChannel.close();
+            }
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
+        }
     }
 
     @Override

@@ -58,7 +58,7 @@ Upon receiving the signal:
 
 #### Timeout Control
 
-If a query runs for too long, FE forcibly exits after **60 seconds** (configurable via the `--timeout` option).
+If drain does not finish in time, FE's internal hard timeout is `max_graceful_exit_time_second` (default 120 seconds), after which the graceful-exit thread is killed. `stop_fe.sh --timeout` is a separate external SIGKILL backstop and has no default (the script waits until the process exits).
 
 ### BE/CN Graceful Exit Mechanism
 
@@ -100,15 +100,35 @@ From v3.4 onwards, FE no longer marks BE/CN as `DEAD` based on heartbeat failure
 
 #### `stop_fe.sh -g --timeout`
 
-- Description: Maximum waiting time before FE is force-killed.
-- Default: 60 (seconds)
-- How to apply: Specify it in the script command, for example, `--timeout 120`.
+- Description: External SIGKILL backstop. If the FE process is still alive after this many seconds, `stop_fe.sh` sends `SIGKILL`. This is not the FE internal hard timeout (`max_graceful_exit_time_second`).
+- Default: none. The script waits until the process exits.
+- How to apply: Specify it in the script command. Recommend a value at least `max_graceful_exit_time_second` (default 120) so the script does not kill FE while it is still draining. Example: `--timeout 120` with the default internal timeout.
 
 #### *Minimum LB detection time*
 
 - Description: LB requires at least 15 seconds to detect degraded health.
 - Default: 15 (seconds)
 - How to apply: Fixed value
+
+#### `graceful_exit_http_accept_window_ms`
+
+- Description: HTTP accept window after `SIGUSR1`, in milliseconds. Controls new-request admission on three HTTP entries: ExecuteSqlAction (HTTP SQL), LoadAction (stream load), and TransactionLoadAction (transaction stream load). HealthCheck returns 500 at T0 so the HTTP load balancer can detach. During this window the three HTTP entries still admit requests and idle HTTP keep-alives are kept. After it elapses, new requests on those entries return 503 with Connection: close, then idle HTTP keep-alives are closed. Must cover HTTP Load Balancer probe interval, unhealthy threshold, detach latency and margin. Must be smaller than the drain covered by `max_graceful_exit_time_second`.
+- Default: 60000
+- How to apply: Modify it in the `fe.conf` configuration file or update it dynamically.
+
+#### `min_graceful_exit_time_second`
+
+- Description: Minimum time the FE stays alive after graceful exit (SIGUSR1) is marked, measured from the signal. Probe failure fires at the very start: HealthAction returns 500 (HTTP probe, load) and `stopAccept()` closes the MySQL port (TCP probe, query). The FE must not exit before the Load Balancer notices these failures within its probe interval and stops routing; this wait must not be shorter than the Load Balancer detach latency (about 15 seconds). In practice `graceful_exit_http_accept_window_ms` is larger than this value, so this minimum is usually already satisfied when the accept-new window elapses. Must be smaller than `max_graceful_exit_time_second`.
+- Default: 15
+- How to apply: Modify it in the `fe.conf` configuration file or update it dynamically.
+- Timing relationship: Must be smaller than `max_graceful_exit_time_second`.
+
+#### `max_graceful_exit_time_second`
+
+- Description: Hard timeout for the whole graceful exit, measured from the signal (SIGUSR1). MUST be greater than `graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second`: the graceful-exit thread's hard timeout is join(max) measured from the signal, and the FE may not exit before the accept-new window elapses plus the post-window drain, so max must cover the whole window plus the minimum. If max < window + min the thread is force-killed before the drain completes, defeating graceful shutdown. Set window and max together.
+- Default: 120
+- How to apply: Modify it in the `fe.conf` configuration file or update it dynamically.
+- Timing relationship: Must be greater than `graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second`. Set these parameters together.
 
 ### BE/CN Configurations
 
@@ -187,17 +207,17 @@ Graceful Exit ensures:
 ### Perform FE Graceful Exit
 
 ```bash
-./bin/stop_fe.sh -g --timeout 60
+./bin/stop_fe.sh -g --timeout 120
 ```
 
 Parameters:
 
-- `--timeout`: The maximum time to wait before the FE node is force-killed.
+- `--timeout`: Optional external SIGKILL backstop. No default: without it the script waits until the FE process exits. The FE internal hard timeout is `max_graceful_exit_time_second` (default 120 seconds). If you set `--timeout`, use a value at least `max_graceful_exit_time_second` so the script does not SIGKILL FE while it is still draining.
 
 Behavior:
 
 - The system sends the `SIGUSR1` signal first.
-- After timeout, it falls back to `SIGKILL`.
+- If `--timeout` is set and the process is still alive after that many seconds, the script sends `SIGKILL`.
 
 #### Validate FE State
 

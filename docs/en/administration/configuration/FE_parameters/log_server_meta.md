@@ -896,6 +896,15 @@ This topic introduces the following types of FE configurations:
 - Description: The IP address of the FE node.
 - Introduced in: -
 
+### `graceful_exit_http_accept_window_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: ms
+- Is mutable: Yes
+- Description: HTTP accept window after `SIGUSR1`, in milliseconds. Controls new-request admission on three HTTP entries: ExecuteSqlAction (HTTP SQL), LoadAction (stream load), and TransactionLoadAction (transaction stream load). HealthCheck returns 500 at T0 so the HTTP load balancer can detach. JDBC does not use this window: `stopAccept()` closes the MySQL port at T0 and idle JDBC connections close from the start. During this window the three HTTP entries still admit requests and idle HTTP keep-alives are kept. After it elapses, new requests on those entries return 503 with Connection: close, then idle HTTP keep-alives are closed. Must cover HTTP LB probe interval, unhealthy threshold, detach latency and margin. Must be smaller than the drain covered by `max_graceful_exit_time_second`.
+- Introduced in: -
+
 ### `http_async_threads_num`
 
 - Default: 4096
@@ -990,6 +999,15 @@ This topic introduces the following types of FE configurations:
 - Description: The port on which the HTTPS server in the FE node listens.
 - Introduced in: v4.0
 
+### `max_graceful_exit_time_second`
+
+- Default: 120
+- Type: Long
+- Unit: s
+- Is mutable: Yes
+- Description: Hard timeout for the whole graceful exit, measured from the signal (SIGUSR1). MUST be greater than `graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second`: the graceful-exit thread's hard timeout is join(max) measured from the signal, and the FE may not exit before the accept-new window elapses plus the post-window drain, so max must cover the whole window plus the minimum. If max < window + min the thread is force-killed before the drain completes, defeating graceful shutdown. Set window and max together.
+- Introduced in: -
+
 ### `max_mysql_service_task_threads_num`
 
 - Default: 4096
@@ -1025,6 +1043,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Interval in seconds for the FE `MemoryUsageTracker` daemon to poll and record memory usage of the FE process and registered `MemoryTrackable` modules. When `memory_tracker_enable` is set to `true`, the tracker runs on this cadence, updates `MEMORY_USAGE`, and logs aggregated JVM and tracked-module usage.
 - Introduced in: v3.2.4
+
+### `min_graceful_exit_time_second`
+
+- Default: 15
+- Type: Long
+- Unit: s
+- Is mutable: Yes
+- Description: Minimum time the FE stays alive after graceful exit (SIGUSR1) is marked, measured from the signal. Probe failure fires at the very start: HealthAction returns 500 (HTTP probe, load) and `stopAccept()` closes the MySQL port (TCP probe, query). The FE must not exit before the Load Balancer notices these failures within its probe interval and stops routing; this wait must not be shorter than the Load Balancer detach latency (about 15 seconds). In practice `graceful_exit_http_accept_window_ms` is larger than this value, so this minimum is usually already satisfied when the accept-new window elapses. Must be smaller than `max_graceful_exit_time_second`.
+- Introduced in: -
 
 ### `mysql_nio_backlog_num`
 
