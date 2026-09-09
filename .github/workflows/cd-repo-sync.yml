@@ -176,8 +176,9 @@ jobs:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
           # Ensure the PAI-contributed label exists (adding a non-existent label 422s).
-          # Renamed from cd-contributed; consumers (ci-sync.yml, contributed-backport-label.yml,
-          # sync_checker.py) accept both during the transition.
+          # Renamed from cd-contributed; consumers accept both during the transition:
+          # ci-sync.yml + contributed-backport-label.yml (this repo), and sync_checker.py
+          # (StarRocks/elastic-service, not this repo — updated in companion PR #1464).
           gh label create PAI-contributed -R ${{ github.repository }} -c 5319e7 -f >/dev/null 2>&1 || true
           labels="PAI-contributed"
           for b in $(echo "${{ inputs.BACKPORT_BRANCHES }}" | tr ',' ' '); do
