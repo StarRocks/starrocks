@@ -10,7 +10,8 @@ run-name: "Repo Sync(CD PR #${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])"
 # Labels on the created SR PR (see "compute labels" step) — NO `sync` label on purpose:
 # pr-checker/ci-pipeline skip sync-labeled PRs, and we WANT native CI + native auto-backport.
 # (`sync` is CelerData's opt-OUT of auto-backport; the reverse direction opts IN.)
-#   - `cd-contributed` : provenance + FORWARD anti-loop marker (forward SR->CD skips it)
+#   - `PAI-contributed`: provenance + FORWARD anti-loop marker (forward SR->CD skips it;
+#                        renamed from `cd-contributed`, consumers accept both in transition)
 #   - `<version>`      : from BACKPORT_BRANCHES (branch-4.1 -> 4.1), so ci-merged auto-
 #                        backports to SR release branches via mergify on merge
 #   - `SHA:<commit>`   : source recovery
@@ -165,7 +166,7 @@ jobs:
       # Build the SR PR label set. NO `sync` label on purpose: pr-checker / ci-pipeline skip
       # sync-labeled PRs, and we WANT the SR PR to run native CI and be auto-backported by
       # ci-merged's mergify. (`sync` is CelerData's opt-OUT of auto-backport; we opt IN.)
-      #   cd-contributed -> provenance + forward anti-loop marker
+      #   PAI-contributed -> provenance + forward anti-loop marker
       #   <version>      -> BACKPORT_BRANCHES mapped to SR version labels (branch-4.1 -> 4.1),
       #                     so ci-merged fans out to SR branches via mergify on merge
       #   SHA / conflict -> source recovery + conflict flag
@@ -174,9 +175,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          # Ensure the cd-contributed label exists (adding a non-existent label 422s).
-          gh label create cd-contributed -R ${{ github.repository }} -c 5319e7 -f >/dev/null 2>&1 || true
-          labels="cd-contributed"
+          # Ensure the PAI-contributed label exists (adding a non-existent label 422s).
+          # Renamed from cd-contributed; consumers (ci-sync.yml, contributed-backport-label.yml,
+          # sync_checker.py) accept both during the transition.
+          gh label create PAI-contributed -R ${{ github.repository }} -c 5319e7 -f >/dev/null 2>&1 || true
+          labels="PAI-contributed"
           for b in $(echo "${{ inputs.BACKPORT_BRANCHES }}" | tr ',' ' '); do
             v="${b#branch-}"
             [ -n "$v" ] && labels="${labels},${v}"

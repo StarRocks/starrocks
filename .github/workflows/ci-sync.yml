@@ -39,7 +39,8 @@ jobs:
           #                        "sync" (e.g. the retired `cd-sync`) trips it too. A
           #                        `sync`-labelled change that mirrorship needs is
           #                        backfilled by hand, not by this workflow.
-          #   `cd-contributed`  -> came up from CelerData; skip the CD path only.
+          #   `PAI-contributed` -> came up from CelerData; skip the CD path only.
+          #                        (renamed from `cd-contributed`; both accepted in transition.)
           #   `ms-contributed`  -> came up from mirrorship; skip the MS path only.
           #
           # Mergify backports do NOT inherit these labels, so recompute from the source
@@ -54,7 +55,8 @@ jobs:
           # Whole-line match, like the mergify fallback below and
           # contributed-backport-label.yml. (The `sync` test above is a substring match; see
           # the marker list.)
-          echo "${labels}" | grep -qx 'cd-contributed' && skip_cd=true
+          # Accept the old `cd-contributed` or the new `PAI-contributed` (rename transition).
+          echo "${labels}" | grep -qxE 'cd-contributed|PAI-contributed' && skip_cd=true
           echo "${labels}" | grep -qx 'ms-contributed' && skip_ms=true
 
           if [[ "$skip_cd" != "true" || "$skip_ms" != "true" ]]; then
@@ -66,7 +68,7 @@ jobs:
             fi
             if [[ -n "$src" ]]; then
               src_labels=$(gh pr view "$src" -R ${{ github.repository }} --json labels -q '.labels[].name' || true)
-              echo "${src_labels}" | grep -qx 'cd-contributed' && skip_cd=true
+              echo "${src_labels}" | grep -qxE 'cd-contributed|PAI-contributed' && skip_cd=true
               echo "${src_labels}" | grep -qx 'ms-contributed' && skip_ms=true
             fi
           fi
