@@ -1161,7 +1161,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 标签清理的时间间隔。单位：秒。建议您指定较短的时间间隔，以确保可以及时清理历史标签。
+- 描述: 标签清理的时间间隔。单位：秒。建议您指定较短的时间间隔，以确保可以及时清理历史标签。该值必须大于 0。小于等于 0 的值将被拒绝，`ADMIN SET FRONTEND CONFIG` 和 FE 启动时加载 `fe.conf` 均会拒绝。
 - 引入版本: -
 
 ### `label_keep_max_num`
