@@ -41,6 +41,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
@@ -158,7 +159,7 @@ protected:
         // _tablet_mgr->get_cached_schema(schema_id) BEFORE consulting the tablet metadata
         // (table_schema_service.cpp:145-149), and put_tablet_metadata refreshes the metadata caches
         // but NOT the schema-id cache (tablet_manager.cpp:542). Since the rowset writers pass only
-        // schema->id() to DeltaWriterBuilder (add_index_schema_change_test.cpp:182), reusing the id
+        // schema->id() to DeltaWriterBuilder (add_index_schema_change_test.cpp:223), reusing the id
         // would hand the six-column writer the stale FIVE-column schema (delta_writer.cpp:600) and it
         // would emit another segment without c5 -- silently invalidating the "exactly one IDG entry"
         // assertion.
@@ -1316,6 +1317,20 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_on_light_added_column_emits_no_entry
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
     EXPECT_EQ(0, op.segment_entries_size()) << "the only segment has no c5, so no entry may be emitted";
+
+    // Pins the presence filter's PLACEMENT, not just its effect: it must run before the .idx
+    // allocation. Were it to move below, every assertion above would still hold while each skipped
+    // segment left an empty .idx object (and a _written_paths entry) behind -- orphan objects on
+    // every such ALTER, with no red test.
+    const std::string segment_dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+    int idx_files = 0;
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(segment_dir));
+    ASSERT_OK(fs->iterate_dir(segment_dir, [&](std::string_view name) {
+        idx_files += is_idx(name);
+        return true;
+    }));
+    EXPECT_EQ(0, idx_files) << "a fully skipped segment must allocate no index file, or the ALTER "
+                               "leaves orphan .idx objects behind";
 }
 
 // Regression guard for the mixed-index case. With two indexes where the segment holds one column and
