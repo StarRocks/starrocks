@@ -2405,7 +2405,13 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
     }
 }
 
+DEFINE_FAIL_POINT(fail_execute_index_major_compaction);
+
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
+    // Test-only: inject an index major compaction failure so callers can exercise their
+    // error-propagation paths.
+    FAIL_POINT_TRIGGER_EXECUTE(fail_execute_index_major_compaction,
+                               { return Status::InternalError("injected index major compaction failure"); });
     if (config::enable_pk_index_parallel_compaction) {
         return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
                                                            metadata, txn_log);

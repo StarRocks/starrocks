@@ -1438,11 +1438,14 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
     TxnLogPB temp_log;
     auto st = update_mgr->execute_index_major_compaction(metadata, &temp_log);
     if (!st.ok()) {
-        LOG(WARNING) << "SST compaction failed for tablet " << tablet_id << ": " << st
-                     << ". This will not fail the parallel compaction.";
-        // Don't fail the entire parallel compaction for SST compaction failure
-        // SST compaction can be retried in the next compaction cycle
-        return Status::OK();
+        // Propagate, like horizontal_compaction_task.cpp, vertical_compaction_task.cpp and
+        // cloud_native_index_compaction_task.cpp do for the same call. Swallowing it here let the
+        // index compactor stop for good while the flush side kept producing sstables, and it
+        // downgraded every consistency guard inside major compaction ("sstables are not ordered",
+        // "inconsistent fileset_id in sstables", "no matching sstable fileset found") to a single
+        // WARNING on this path only.
+        LOG(WARNING) << "SST compaction failed for tablet " << tablet_id << ": " << st;
+        return st;
     }
 
     // Copy SST compaction results from temp_log.op_compaction() to op_parallel
