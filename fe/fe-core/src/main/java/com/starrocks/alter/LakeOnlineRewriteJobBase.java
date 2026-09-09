@@ -1295,8 +1295,9 @@ public abstract class LakeOnlineRewriteJobBase
      *       {@code peekNextTransactionId()}'s prediction and a concurrent load may take it, so it is
      *       cleared and re-journaled; a null id classifies as NEEDS_RUN. Retryable.</li>
      *   <li>PREPARE/PREPARED - aborted here, so the next tick sees ABORTED rather than IN_FLIGHT.
-     *       Retryable, unless the abort itself fails, in which case the partition waits for the
-     *       transaction's own timeout and is NOT retryable now.</li>
+     *       Retryable, unless the abort fails or declines the transition, both of which leave the
+     *       partition waiting for the transaction's own timeout and NOT retryable now; the status is
+     *       re-read afterwards rather than assumed.</li>
      *   <li>COMMITTED - the deliberate publication wait: the lake publisher carries it to VISIBLE and
      *       {@link #classifyRewrite} then reports DONE, so there is nothing to abort and nothing to
      *       retry. Skipping the call also avoids the transaction manager refusing to abort a COMMITTED
@@ -1327,13 +1328,24 @@ public abstract class LakeOnlineRewriteJobBase
         try {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .abortTransaction(dbId, actualTxnId, reason);
-            return true;
         } catch (Exception e) {
             LOG.warn("online rewrite job {}: failed to abort rewrite txn {} for partition {} before "
                             + "retrying, so it waits for the transaction timeout instead: {}",
                     jobId, actualTxnId, physicalPartitionId, e.getMessage());
             return false;
         }
+        // Report what the transaction now IS, rather than inferring it from the abort having returned.
+        // abortTransaction is a no-op that returns normally whenever unprotectAbortTransaction declines
+        // the transition - today only for an already-ABORTED state, and for a PREPARED one when the
+        // caller did not ask for prepared transactions to be aborted, which this call does ask for. That
+        // second exemption is decided in GlobalTransactionMgr rather than here, so read the outcome
+        // instead of depending on it: only a state the next tick actually re-runs may claim a retry.
+        // (A concurrent commit is not this case - unprotectAbortTransaction throws
+        // TransactionAlreadyCommitException for COMMITTED/VISIBLE, which the catch above turns into a
+        // wait.) A vanished transaction classifies as NEEDS_RUN, so it counts as re-runnable.
+        TransactionState settled = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(dbId, actualTxnId);
+        return settled == null || settled.getTransactionStatus() == TransactionStatus.ABORTED;
     }
 
     /**

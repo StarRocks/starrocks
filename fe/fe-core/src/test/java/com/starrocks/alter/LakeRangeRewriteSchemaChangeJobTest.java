@@ -2443,10 +2443,13 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         List<Long> abortedTxnIds = new ArrayList<>();
         new MockUp<GlobalTransactionMgr>() {
+            // Models the real manager: the abort moves the transaction to ABORTED, which is what the
+            // production code re-reads afterwards instead of assuming the abort took effect.
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {
                 TransactionState state = new TransactionState();
-                state.setTransactionStatus(TransactionStatus.PREPARE);
+                state.setTransactionStatus(abortedTxnIds.contains(transactionId)
+                        ? TransactionStatus.ABORTED : TransactionStatus.PREPARE);
                 return state;
             }
 
@@ -2784,10 +2787,12 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // classifyRewrite returns NEEDS_RUN without consulting the manager while the journaled id is
         // still null, so getTransactionState here is reached only from the abort path under test.
         new MockUp<GlobalTransactionMgr>() {
+            // As above, the abort really moves the transaction to ABORTED.
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {
                 TransactionState state = new TransactionState();
-                state.setTransactionStatus(TransactionStatus.PREPARE);
+                state.setTransactionStatus(order.contains("abort")
+                        ? TransactionStatus.ABORTED : TransactionStatus.PREPARE);
                 return state;
             }
 
@@ -2957,6 +2962,55 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 "a partition whose transaction could not be aborted is waiting, not retrying");
         Assertions.assertNull(rewriteRetrySpentMs(job, physicalPartitionId),
                 "waiting for the transaction timeout must not count against the partition's window");
+    }
+
+    /**
+     * An abort that returns normally without moving the transaction leaves the partition just as
+     * unretryable as one that throws: the next tick still classifies the transaction as in flight and
+     * waits. So the outcome is read back from the transaction rather than inferred from the abort
+     * returning, and this pins that - the stub accepts the abort and reports PREPARE regardless.
+     *
+     * <p>No reachable path does this today: {@code unprotectAbortTransaction} only declines an
+     * already-ABORTED state, or a PREPARED one when the caller passes {@code abortPrepared == false},
+     * and {@code GlobalTransactionMgr} passes {@code true}. The point is that this method no longer
+     * depends on that argument being chosen correctly two classes away.
+     */
+    @Test
+    public void testAnAbortThatDeclinesTheTransitionIsNotTreatedAsRetryable() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        AtomicInteger abortCalls = new AtomicInteger();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                abortCalls.incrementAndGet();
+            }
+        };
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            insertStmt.setTxnId(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId());
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(1, abortCalls.get(), "the abort must have been attempted");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "a transaction still in PREPARE after the abort must not advertise a retry in Msg");
+        Assertions.assertNull(rewriteRetrySpentMs(job, physicalPartitionId),
+                "a partition that is not actually retryable must not spend its retry window");
     }
 
     /**
