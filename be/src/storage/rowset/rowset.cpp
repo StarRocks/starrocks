@@ -37,15 +37,7 @@
 #include <memory>
 #include <set>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/sync_point.h"
-#include "base/time/time.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
-#include "common/config_exec_fwd.h"
-#include "common/config_rowset_fwd.h"
->>>>>>> 076cce2 ([BugFix] Refresh rowset metadata cache charges after lazy loading (#77893))
+#include "common/config.h"
 #include "fmt/format.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -71,6 +63,7 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 
