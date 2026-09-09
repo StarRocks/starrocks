@@ -551,6 +551,7 @@ jobs:
       # requires 2 approving reviews, so the rescue path must also supply the
       # second one via APPROVE_PAT_2. Same rescue gate as above, plus main-only.
       - name: auto-approve 2/2 (rescue, main only)
+        continue-on-error: true
         if: >
           github.base_ref == 'main' &&
           needs.be-ut-refactor-compile.result != 'failure' &&
@@ -636,6 +637,7 @@ jobs:
       # main-only: release branches require a single approval, so the first
       # review already suffices there and a second is unnecessary.
       - name: auto-approve 2/2 (main only)
+        continue-on-error: true
         if: github.base_ref == 'main'
         uses: hmarr/auto-approve-action@v3
         with:
