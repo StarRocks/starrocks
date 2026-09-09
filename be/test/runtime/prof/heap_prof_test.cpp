@@ -89,4 +89,18 @@ TEST(HeapProfTest, toggling_the_profile_keeps_thread_active_init) {
 #endif
 }
 
+// has_enable() reads `prof.active` through je_mallctl, which returns EINVAL when the length does
+// not match the node's bool type -- after copying as many bytes as fit, so a failed read leaves
+// the buffer partly written rather than intact. A process not started with `prof:true` must
+// report false, and so must one whose read failed, which is why the helper checks the return
+// code before looking at the value.
+TEST(HeapProfTest, has_enable_is_false_without_startup_prof) {
+#ifndef __APPLE__
+    if (prof_enabled_at_startup()) {
+        GTEST_SKIP() << "the process was started with prof:true, so prof.active may legitimately be on";
+    }
+#endif
+    EXPECT_FALSE(HeapProf::getInstance().has_enable());
+}
+
 } // namespace starrocks
