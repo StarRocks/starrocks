@@ -264,7 +264,7 @@ public class TransactionStmtExecutor {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
-            throw ErrorReportException.report(ERR_TXN_NOT_EXIST, context.getTxnId());
+            throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, context.getTxnId());
         }
         TransactionState transactionState = explicitTxnState.getTransactionState();
         if (transactionState.getDbId() != 0 && transactionState.getDbId() != dbId) {
