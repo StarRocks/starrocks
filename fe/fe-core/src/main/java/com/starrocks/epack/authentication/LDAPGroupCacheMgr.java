@@ -36,6 +36,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.naming.NameNotFoundException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
@@ -89,11 +90,45 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
             return null;
         }
 
-        if (member2Groups.containsKey(integrationName)) {
-            return member2Groups.get(integrationName).getOrDefault(username, null);
+        Map<String, List<String>> memberToGroups = member2Groups.get(integrationName);
+        if (memberToGroups == null) {
+            return null;
         }
 
-        return null;
+        List<String> groups = memberToGroups.get(username);
+        if (groups != null) {
+            return groups;
+        }
+
+        // The cache is keyed by the member name exactly as the directory returned it, while the name
+        // here is whatever the client typed. The directory considers the two the same account, so
+        // fall back to a case-insensitive scan rather than reporting no groups at all, which this
+        // path turns into "Cannot map any role ids" and a refused login. This mirrors what
+        // AuthorizationMgr#getRoleIdListByGroup does for the community path.
+        //
+        // Relaxing the lookup rather than storing a normalized key also keeps the cache readable as
+        // what the directory actually said, and avoids a window where entries written under one rule
+        // are read under another - this cache is only rebuilt every ldap_cache_refresh_interval
+        // (900s by default).
+        List<Map.Entry<String, List<String>>> candidates = memberToGroups.entrySet().stream()
+                .filter(entry -> entry.getKey().equalsIgnoreCase(username))
+                .collect(Collectors.toList());
+        if (candidates.size() > 1) {
+            // Two directory members whose names differ only in case are two people, not one, and the
+            // map gives no stable way to say which was meant. Report no groups rather than hand out
+            // whichever entry iteration happened to yield first.
+            LOG.warn("member '{}' of security integration '{}' matches several cached members when " +
+                            "ignoring case: {}. Reporting no groups.",
+                    username, integrationName,
+                    candidates.stream().map(Map.Entry::getKey).collect(Collectors.joining(", ")));
+            return null;
+        }
+        return candidates.isEmpty() ? null : candidates.get(0).getValue();
+    }
+
+    @VisibleForTesting
+    public void setMemberToGroups(String integrationName, Map<String, List<String>> memberToGroups) {
+        member2Groups.put(integrationName, memberToGroups);
     }
 
     @Override

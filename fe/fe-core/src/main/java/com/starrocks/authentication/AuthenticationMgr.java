@@ -20,7 +20,9 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.persist.AlterUserInfo;
@@ -58,6 +60,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
@@ -190,8 +193,13 @@ public class AuthenticationMgr {
     }
 
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
+        return match(remoteUser, remoteHost, isDomain, info, false);
+    }
+
+    private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info,
+                          boolean ignoreUserCase) {
         // quickly filter unmatched entries by username
-        if (!info.matchUser(remoteUser)) {
+        if (!(ignoreUserCase ? info.matchUserCaseInsensitive(remoteUser) : info.matchUser(remoteUser))) {
             return false;
         }
         if (isDomain) {
@@ -211,13 +219,116 @@ public class AuthenticationMgr {
         }
     }
 
+    /**
+     * Resolve a login to the stored user it should authenticate against.
+     * <p>
+     * An ambiguous case-insensitive match yields null here. Call
+     * {@link #getBestMatchedUserIdentityForLogin(String, String)} on the authentication path, where
+     * ambiguity must be refused rather than silently resolved.
+     */
     public Map.Entry<UserIdentity, UserAuthenticationInfo> getBestMatchedUserIdentity(
+            String remoteUser, String remoteHost) {
+        List<Map.Entry<UserIdentity, UserAuthenticationInfo>> matched = matchUserIdentities(remoteUser, remoteHost);
+        if (matched.size() > 1) {
+            LOG.warn("user '{}'@'{}' matches several LDAP users when ignoring case: {}. Refusing to pick one.",
+                    remoteUser, remoteHost, describeUserNames(matched));
+            return null;
+        }
+        return matched.isEmpty() ? null : matched.get(0);
+    }
+
+    /**
+     * Same lookup as {@link #getBestMatchedUserIdentity(String, String)}, but an ambiguous
+     * case-insensitive match fails the login instead of resolving to one of the candidates. Which
+     * candidate "wins" would be decided by the entry ordering, i.e. by an implicit character order,
+     * and the candidates can carry completely different DNs and privileges.
+     */
+    public Map.Entry<UserIdentity, UserAuthenticationInfo> getBestMatchedUserIdentityForLogin(
+            String remoteUser, String remoteHost) throws AuthenticationException {
+        List<Map.Entry<UserIdentity, UserAuthenticationInfo>> matched = matchUserIdentities(remoteUser, remoteHost);
+        if (matched.size() > 1) {
+            // The conflicting names go to the log, not to the client: this runs before any password
+            // has been checked, so echoing them back would disclose which accounts exist, and with
+            // what host patterns, to anyone who can open a connection.
+            LOG.warn("user '{}'@'{}' matches several LDAP users when ignoring case: {}. Refusing the login.",
+                    remoteUser, remoteHost, describeUserNames(matched));
+            throw new AuthenticationException(ErrorCode.ERR_AMBIGUOUS_LDAP_USER, remoteUser);
+        }
+        return matched.isEmpty() ? null : matched.get(0);
+    }
+
+    /**
+     * @return the matching entries, best host first. At most one entry unless the case-insensitive
+     *         second pass found candidates that differ in more than just their host.
+     */
+    private List<Map.Entry<UserIdentity, UserAuthenticationInfo>> matchUserIdentities(
             String remoteUser, String remoteHost) {
         try {
             readLock();
-            return userToAuthenticationInfo.entrySet().stream()
+            // The entries are ordered ip > domain > '%', so the first exact hit is the best match.
+            Map.Entry<UserIdentity, UserAuthenticationInfo> exact = userToAuthenticationInfo.entrySet().stream()
                     .filter(entry -> match(remoteUser, remoteHost, entry.getKey().isDomain(), entry.getValue()))
                     .findFirst().orElse(null);
+            if (!Config.authentication_ldap_case_insensitive) {
+                return exact == null ? List.of() : List.of(exact);
+            }
+            if (exact != null && !exact.getValue().isLdapAuthPlugin()) {
+                // A native-password, JWT or OAuth2 user is its own account; another user whose name
+                // differs only in case is unrelated to it and must not make this login ambiguous.
+                return List.of(exact);
+            }
+
+            // Look for LDAP users whose name differs from the typed one only in case. This runs even
+            // when an exact entry matched, because under this flag those entries all denote one
+            // directory account: the same password opens every one of them, so leaving the exact
+            // spelling as a way to select which of their privilege sets applies would defeat the
+            // ambiguity check. Restricted to AUTHENTICATION_LDAP_SIMPLE users: relaxing it for
+            // native passwords would let an attacker probe 'Root', 'ROOT', ... for a user
+            // deliberately created as 'root'.
+            List<Map.Entry<UserIdentity, UserAuthenticationInfo>> ldapMatches =
+                    userToAuthenticationInfo.entrySet().stream()
+                            .filter(entry -> entry.getValue().isLdapAuthPlugin())
+                            .filter(entry -> match(remoteUser, remoteHost, entry.getKey().isDomain(),
+                                    entry.getValue(), true))
+                            .collect(Collectors.toList());
+            // Several entries carrying the same user name only means several host patterns matched,
+            // which the entry ordering already resolves. Entries carrying different user names are a
+            // genuine ambiguity and are all returned for the caller to reject.
+            boolean ambiguous = ldapMatches.stream().map(entry -> entry.getKey().getUser()).distinct().count() > 1;
+            if (ambiguous) {
+                return ldapMatches;
+            }
+            if (exact != null) {
+                return List.of(exact);
+            }
+            return ldapMatches.isEmpty() ? List.of() : List.of(ldapMatches.get(0));
+        } finally {
+            readUnlock();
+        }
+    }
+
+    private static String describeUserNames(List<Map.Entry<UserIdentity, UserAuthenticationInfo>> entries) {
+        return entries.stream().map(entry -> entry.getKey().toString()).distinct()
+                .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * Stored LDAP users whose name equals {@code user} ignoring case but is not identical to it.
+     * Used to keep such a pair from being created in the first place, because a login that matches
+     * both of them can only be refused.
+     */
+    public List<UserIdentity> getLdapUsersCollidingByCase(String user) {
+        try {
+            readLock();
+            // Use the same predicate the login uses rather than equalsIgnoreCase, so the guard
+            // cannot reject a pair that the login would in fact tell apart. The two fold case
+            // differently outside ASCII.
+            return userToAuthenticationInfo.entrySet().stream()
+                    .filter(entry -> entry.getValue().isLdapAuthPlugin())
+                    .filter(entry -> !entry.getKey().getUser().equals(user)
+                            && entry.getValue().matchUserCaseInsensitive(user))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
         } finally {
             readUnlock();
         }

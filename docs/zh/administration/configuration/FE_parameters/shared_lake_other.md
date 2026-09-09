@@ -891,6 +891,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
 - 引入版本: v4.2, v4.1.6
+### `authentication_ldap_case_insensitive`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
+- 引入版本: v4.2.0
 
 ### `authentication_ldap_simple_bind_base_dn`
 

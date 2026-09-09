@@ -14,6 +14,7 @@
 
 package com.starrocks.epack.authentication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -28,6 +29,7 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.naming.NamingEnumeration;
+import javax.naming.directory.Attribute;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
@@ -61,6 +63,18 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
 
     public static boolean authenticate(String username, String userPwd,
                                        LDAPSecurityIntegration securityIntegration) throws Exception {
+        return authenticate(username, userPwd, securityIntegration, null);
+    }
+
+    /**
+     * @param authContext when given, receives the user name exactly as the directory spells it, read
+     *                    from the entry that was found. This path always searches, so the
+     *                    authoritative spelling is in hand and there is no reason to fall back to a
+     *                    lowercase form StarRocks made up.
+     */
+    public static boolean authenticate(String username, String userPwd,
+                                       LDAPSecurityIntegration securityIntegration,
+                                       AccessControlContext authContext) throws Exception {
 
         DirContext rootCtx = null;
         NamingEnumeration<SearchResult> results = null;
@@ -115,6 +129,10 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
                         username, securityIntegration));
             }
             userDn = searchResult.getNameInNamespace();
+            if (authContext != null) {
+                authContext.setAuthenticatedUserName(
+                        readSearchAttrValue(searchResult, securityIntegration.getLdapUserSearchAttr()));
+            }
             return checkLdapUserPwd(securityIntegration, userDn, userPwd);
         } finally {
             if (results != null) {
@@ -126,6 +144,26 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
         }
     }
 
+    /**
+     * Read the value of the attribute the search filtered on, e.g. the entry's own spelling of
+     * `uid` or `sAMAccountName`. A default {@link SearchControls} returns every attribute, so this
+     * costs no extra round trip.
+     *
+     * @return null when the attribute is absent or is not textual
+     */
+    @VisibleForTesting
+    static String readSearchAttrValue(SearchResult result, String searchAttr) throws Exception {
+        if (result.getAttributes() == null) {
+            return null;
+        }
+        Attribute attribute = result.getAttributes().get(searchAttr);
+        if (attribute == null || attribute.size() == 0) {
+            return null;
+        }
+        Object value = attribute.get(0);
+        return value instanceof String ? (String) value : null;
+    }
+
     @Override
     public void authenticate(AccessControlContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
@@ -133,7 +171,8 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
                 .getAuthenticationMgr().getSecurityIntegration(securityIntegrationName);
         try {
             boolean authenticated = LDAPAuthProviderForExternal.authenticate(
-                    userIdentity.getUser(), StringUtils.stripEnd(new String(authResponse), "\0"), ldapSecurityIntegration);
+                    userIdentity.getUser(), StringUtils.stripEnd(new String(authResponse), "\0"),
+                    ldapSecurityIntegration, context);
             if (!authenticated) {
                 throw new AuthenticationException(String.format(
                         "external ldap authentication failure for user %s@%s", userIdentity.getUser(), userIdentity.getHost()));

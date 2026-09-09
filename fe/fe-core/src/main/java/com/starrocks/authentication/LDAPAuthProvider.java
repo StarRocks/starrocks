@@ -28,11 +28,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import javax.naming.Context;
+import javax.naming.InvalidNameException;
 import javax.naming.NamingEnumeration;
+import javax.naming.NamingException;
 import javax.naming.PartialResultException;
+import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
@@ -119,9 +123,19 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
         // The legacy `AS \'<dn>\'` form intentionally does not read memberOf, see below.
         boolean readMemberOf = ldapGroupSource.readsMemberOf() && !legacyPerUserDN;
+        // The entry's own spelling of the name, wanted only when the session identity is going to be
+        // taken from the directory rather than from what the client typed.
+        boolean readCanonicalName = Config.authentication_ldap_case_insensitive && !legacyPerUserDN;
         // Empty array means "return no attribute at all"; leaving it unset would make JNDI ask the
         // directory for every attribute of the entry and then throw them away.
-        String[] requestedAttributes = readMemberOf ? new String[] {ldapMemberOfAttr} : new String[0];
+        List<String> requested = new ArrayList<>();
+        if (readMemberOf) {
+            requested.add(ldapMemberOfAttr);
+        }
+        if (readCanonicalName) {
+            requested.add(ldapSearchFilter);
+        }
+        String[] requestedAttributes = requested.toArray(new String[0]);
 
         String distinguishedName;
         LdapUserEntry userEntry = null;
@@ -143,7 +157,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             } else {
                 // Priority 3: search-and-bind. The search that resolves the DN also carries the
                 // requested attributes back, so reading memberOf costs no extra request here.
-                if (readMemberOf) {
+                if (requestedAttributes.length > 0) {
                     userEntry = findUserEntryByRoot(user, requestedAttributes);
                     distinguishedName = userEntry.dn();
                 } else {
@@ -173,6 +187,11 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             throw new AuthenticationException(e.getMessage()).asTransient();
         }
 
+        if (readCanonicalName) {
+            authContext.setAuthenticatedUserName(
+                    userEntry == null ? null : readSearchAttrValue(userEntry.attributes()));
+        }
+
         if (readMemberOf) {
             // Authentication already succeeded at this point. A group-resolution failure must never
             // turn into an authentication failure, so everything below is contained.
@@ -190,6 +209,30 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             // make correctness depend on "nobody wrote it earlier", which is exactly the kind of
             // assumption that breaks when the field gets reused somewhere else later.
             authContext.setMemberOfGroups(Set.of());
+        }
+    }
+
+    /**
+     * Read the entry's own spelling of the attribute the search filtered on, e.g. `uid` or
+     * `sAMAccountName`. That is the authoritative form of the name; anything StarRocks derives on its
+     * own is a guess at a spelling the directory may not hold.
+     *
+     * @return null when the attribute was not returned or is not textual
+     */
+    private String readSearchAttrValue(Attributes attributes) {
+        if (attributes == null) {
+            return null;
+        }
+        try {
+            Attribute attribute = attributes.get(ldapSearchFilter);
+            if (attribute == null || attribute.size() == 0) {
+                return null;
+            }
+            Object value = attribute.get(0);
+            return value instanceof String ? (String) value : null;
+        } catch (NamingException e) {
+            LOG.debug("cannot read '{}' back from the user entry", ldapSearchFilter, e);
+            return null;
         }
     }
 
@@ -696,6 +739,35 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         if (username == null) {
             return null;
         }
-        return username.toLowerCase();
+        // Locale.ROOT, never the default locale: under a Turkish locale 'I' lowercases to the dotless
+        // 'i', which would silently change ASCII user names such as 'Li'.
+        return username.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Canonicalize an LDAP distinguished name so that two DNs which denote the same entry map to the
+     * same string. {@link LdapName} takes care of the RFC 4514 syntax (separator whitespace, escaping,
+     * attribute type case), and the extra lowercase covers attribute values, which LDAP and Active
+     * Directory also compare without regard to case.
+     *
+     * @param dn the distinguished name, may be null
+     * @return the canonical form, or a best-effort lowercase when the input is not a parsable DN
+     */
+    public static String canonicalDn(String dn) {
+        if (dn == null) {
+            return null;
+        }
+        try {
+            // Rebuilding the name from its parsed RDNs is what actually normalizes it: an LdapName that
+            // was constructed from a string hands that same string back from toString(), whitespace
+            // around the separators included.
+            LdapName parsed = new LdapName(dn);
+            return new LdapName(parsed.getRdns()).toString().toLowerCase(Locale.ROOT);
+        } catch (InvalidNameException e) {
+            // Expected whenever the distinguished name falls back to the bare user name, so this stays
+            // at debug level; lowercase is the best we can do and matches the previous behaviour.
+            LOG.debug("'{}' is not a valid LDAP distinguished name, fall back to lowercase", dn);
+            return dn.toLowerCase(Locale.ROOT);
+        }
     }
 }

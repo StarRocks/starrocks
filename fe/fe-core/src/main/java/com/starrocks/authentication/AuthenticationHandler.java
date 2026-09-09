@@ -141,7 +141,7 @@ public class AuthenticationHandler {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
+                authenticationMgr.getBestMatchedUserIdentityForLogin(user, remoteHost);
         if (matchedUserIdentity == null) {
             if (Config.enable_auth_check) {
                 LOG.debug("cannot find user {}@{}", user, remoteHost);
@@ -330,6 +330,9 @@ public class AuthenticationHandler {
                     continue;
                 }
                 authContext.setAuthenticationProvider(provider);
+                // Cleared per attempt: a value left by an earlier provider in the chain says nothing
+                // about the one that ends up succeeding.
+                authContext.setAuthenticatedUserName(null);
                 provider.authenticate(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
             } catch (AuthenticationException e) {
                 // A provider that could not reach its directory / IdP reports a transient failure: the same
@@ -350,8 +353,22 @@ public class AuthenticationHandler {
                     ? List.of(Config.group_provider)
                     : securityIntegration.getGroupProviderName();
 
+            // This user has no entry in the user table, so the name the client typed is the only thing
+            // StarRocks would otherwise identify it by - and for LDAP that name carries whatever casing
+            // the client felt like using. Settle on one spelling here, once, so the session, the audit
+            // log and current_user() all show the same identity. The directory's own spelling is the
+            // authoritative one; lowercase is only the fallback for the direct-bind path, which never
+            // searches and so never sees the entry.
+            String authenticatedUserName = user;
+            // `provider` is scoped to the try block above; the context holds the one that succeeded.
+            if (isLdapProvider(authContext.getAuthenticationProvider())
+                    && Config.authentication_ldap_case_insensitive) {
+                String fromDirectory = authContext.getAuthenticatedUserName();
+                authenticatedUserName = fromDirectory != null ? fromDirectory : LDAPAuthProvider.normalizeUsername(user);
+            }
+
             authenticationResult = new AuthenticationResult(
-                    UserIdentity.createEphemeralUserIdent(user, remoteHost),
+                    UserIdentity.createEphemeralUserIdent(authenticatedUserName, remoteHost),
                     groupProviderNames,
                     securityIntegration.getGroupAllowedLoginList(),
                     authMechanism);
@@ -432,7 +449,9 @@ public class AuthenticationHandler {
             boolean allowed = groups.stream()
                     .anyMatch(group -> group != null && allowedLowerCase.contains(group.toLowerCase(Locale.ROOT)));
             if (!allowed) {
-                throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user, Joiner.on(",").join(groups));
+                throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user,
+                        Joiner.on(",").join(groups),
+                        Joiner.on(",").join(authenticationResult.authenticatedGroupList));
             }
         }
 
@@ -485,6 +504,16 @@ public class AuthenticationHandler {
     private static boolean isMemberOfUsed(AccessControlContext accessControlContext) {
         AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
         return provider instanceof LDAPAuthProvider && ((LDAPAuthProvider) provider).isMemberOfUsed();
+    }
+
+    /**
+     * Whether the credentials were checked against an LDAP directory. Both providers count: the
+     * enterprise type='ldap' integration authenticates against a directory just as the community one
+     * does. It is not a subclass of {@link LDAPAuthProvider}, which is why this cannot be a single
+     * instanceof.
+     */
+    private static boolean isLdapProvider(AuthenticationProvider provider) {
+        return provider instanceof LDAPAuthProvider || provider instanceof LDAPAuthProviderForExternal;
     }
 
     /**

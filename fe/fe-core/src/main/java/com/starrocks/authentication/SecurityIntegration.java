@@ -17,8 +17,10 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Security integration specified in `Config.authentication_chain`.
@@ -72,19 +74,26 @@ public abstract class SecurityIntegration {
     }
 
     public List<String> getGroupProviderName() {
-        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER);
-        if (property == null || property.isBlank()) {
-            return List.of();
-        }
-        return List.of(property.split(",\\s*"));
+        return splitCommaSeparated(propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER));
     }
 
     public List<String> getGroupAllowedLoginList() {
-        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN);
+        return splitCommaSeparated(propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN));
+    }
+
+    /**
+     * Split a comma-separated property value. Administrators write these by hand in SQL, so tolerate
+     * whitespace anywhere around an item ("a , b") and drop empty items ("a,,b"). Splitting on ",\\s*"
+     * only removed whitespace that followed a comma, which left a trailing blank on items such as "a "
+     * and made them compare unequal to everything.
+     */
+    private static List<String> splitCommaSeparated(String property) {
         if (property == null || property.isBlank()) {
             return List.of();
-        } else {
-            return List.of(property.split(",\\s*"));
         }
+        return Arrays.stream(property.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .collect(Collectors.toUnmodifiableList());
     }
 }

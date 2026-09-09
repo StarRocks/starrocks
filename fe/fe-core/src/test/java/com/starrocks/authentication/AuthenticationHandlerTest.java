@@ -84,7 +84,7 @@ public class AuthenticationHandlerTest {
             }
 
             @Mock
-            private String findUserDNByRoot(String user) throws Exception {
+            private String findUserDNByRoot(String user, AccessControlContext ctx) throws Exception {
                 return "uid=test,ou=People,dc=starrocks,dc=com";
             }
         };

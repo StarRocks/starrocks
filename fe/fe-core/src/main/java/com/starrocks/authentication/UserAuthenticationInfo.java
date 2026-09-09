@@ -58,6 +58,11 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
     private boolean isAnyUser;
     private boolean isAnyHost;
     protected PatternMatcher userPattern;
+    /**
+     * Same pattern as {@link #userPattern}, compiled without regard to case. Only consulted for LDAP
+     * users, see {@link #matchUserCaseInsensitive(String)}.
+     */
+    protected PatternMatcher userPatternCaseInsensitive;
     protected PatternMatcher hostPattern;
 
     public UserAuthenticationInfo(UserAuthenticationInfo info) {
@@ -122,6 +127,24 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
         return isAnyUser || userPattern.match(remoteUser);
     }
 
+    /**
+     * Match the user name ignoring case. Reserved for LDAP users: an LDAP server resolves the same
+     * physical account no matter how the client capitalized the name, so StarRocks has to resolve the
+     * same stored user for it. Native-password users must keep using {@link #matchUser(String)}.
+     */
+    public boolean matchUserCaseInsensitive(String remoteUser) {
+        return isAnyUser || userPatternCaseInsensitive.match(remoteUser);
+    }
+
+    /**
+     * Whether this user authenticates through the LDAP plugin, i.e. was created with
+     * IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE.
+     */
+    public boolean isLdapAuthPlugin() {
+        return authPlugin != null
+                && authPlugin.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name());
+    }
+
     public boolean matchHost(String remoteHost) {
         return isAnyHost || hostPattern.match(remoteHost);
     }
@@ -130,6 +153,7 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
         isAnyUser = origUser.equals(ANY_USER);
         isAnyHost = origHost.equals(ANY_HOST);
         userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
+        userPatternCaseInsensitive = PatternMatcher.createMysqlPattern(origUser, false);
         hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
     }
 
