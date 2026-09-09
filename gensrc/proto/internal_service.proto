@@ -189,6 +189,13 @@ message PTabletWriterOpenRequest {
         // sender 0 is not present (the driver with _sender_id==0 never routed a
         // row that triggered `_incremental_open_node_channel` onto this CN).
         optional bool enable_per_partition_coordinator = 4;
+
+        // See TOlapTableSink.enable_shard_write. When true this CN receives only PART of the
+        // tablet's rows for this transaction, so the txn log its delta writer produces is a
+        // PARTIAL log. It must not be cached under the per-tablet metacache key
+        // `txn_log_location(tablet_id, txn_id)`: publish looks that key up first and would
+        // short-circuit on the partial log, silently dropping the other nodes' data.
+        optional bool shard_write = 5;
     };
 
     required PUniqueId id = 1;

@@ -61,6 +61,10 @@ public:
     // Cheaper than get_all_sstable_pbs: no protobuf copy, just string comparison.
     bool contains_sst(const std::string& filename) const;
 
+    // Append every sstable this fileset holds to |out|, in key order. Used by the merge-based
+    // publish path, which needs an iterator per sstable rather than a per-key lookup.
+    void collect_sstables(std::vector<PersistentIndexSstable*>* out) const;
+
     size_t memory_usage() const;
 
     void print_debug_info(std::stringstream& ss);

@@ -464,6 +464,29 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     const bool has_condition_update = (condition_column >= 0);
     // Skip early sst compact when condition update with pregenerate sst files.
     bool skip_early_sst_compact = false;
+    // Merge-based dedup. When the load already built this rowset's pk index sstables, the rows it
+    // shadows can be found by merging those sstables against the ones already in the index -- one
+    // ordered pass over both sides, instead of one index lookup per loaded key. Ruled out whenever a
+    // segment has to be read for its columns anyway (partial update, condition merge), and whenever
+    // the per-segment interleaving below carries meaning (delete files in the same transaction),
+    // because the merge collapses the whole rowset into a single step.
+    const bool use_merge_dedup = config::enable_pk_index_merge_dedup && use_cloud_native_pk_index(*metadata) &&
+                                 local_segments > 0 && op_write.ssts_size() == static_cast<int>(local_segments) &&
+                                 !has_condition_update && !op_write.has_txn_meta() && op_write.dels_meta_size() == 0 &&
+                                 op_write.rewrite_segments_meta_size() == 0;
+    if (use_merge_dedup) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
+        std::vector<const FileMetaPB*> merge_ssts;
+        std::vector<uint32_t> merge_rssids;
+        merge_ssts.reserve(local_segments);
+        merge_rssids.reserve(local_segments);
+        for (uint32_t local_id = 0; local_id < local_segments; ++local_id) {
+            merge_ssts.push_back(&op_write.ssts(local_id));
+            merge_rssids.push_back(rowset_id + rowset_segment_ids[local_id]);
+        }
+        RETURN_IF_ERROR(index.merge_dedup(metadata, merge_ssts, merge_rssids, metadata->version(), &new_deletes));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
+    }
     const bool is_row_mode_partial_update =
             op_write.has_txn_meta() && op_write.rewrite_segments_meta_size() > 0 && op_write.rowset().num_rows() > 0;
     const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution && is_row_mode_partial_update &&
@@ -525,7 +548,12 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             std::shared_ptr<DelVector> dv_generated_during_merge_update;
             uint32_t global_segment_id = rowset_segment_ids[local_id];
 
-            if (!use_parallel_partial_update || batch_end - batch_start <= 1) {
+            if (use_merge_dedup) {
+                // The merge above already produced every delete this rowset causes, so no segment is
+                // read here at all -- only the rssid to file mapping the rest of publish expects.
+                rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), local_id,
+                                                           replace_segments);
+            } else if (!use_parallel_partial_update || batch_end - batch_start <= 1) {
                 // Serial path: load + rewrite inline.
                 RETURN_IF_ERROR(state.load_segment(local_id, params, base_version, true /*resolve conflict*/,
                                                    false /*no need lock*/));
@@ -535,38 +563,44 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                            replace_segments);
             }
 
-            // PK index update + condition merge.
-            TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
-            DCHECK(state.upserts(local_id) != nullptr);
-            if (!has_condition_update) {
-                RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
-                                           op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
-            } else if (op_write.ssts_size() > 0) {
-                RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
-                                                                   condition_column, state.upserts(local_id), index,
-                                                                   &new_deletes));
-                auto itr = new_deletes.find(rowset_id + global_segment_id);
-                if (itr != new_deletes.end() && itr->second.size() > 0) {
-                    dv_generated_during_merge_update = std::make_shared<DelVector>();
-                    dv_generated_during_merge_update->init(metadata->version(), itr->second.data(), itr->second.size());
-                    builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
+            // Already done in one pass by the merge above; the state never loaded this segment, so
+            // nothing here has anything to read or release.
+            if (!use_merge_dedup) {
+                // PK index update + condition merge.
+                TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
+                DCHECK(state.upserts(local_id) != nullptr);
+                if (!has_condition_update) {
+                    RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index,
+                                               &new_deletes, op_write.ssts_size() > 0,
+                                               use_cloud_native_pk_index(*metadata)));
+                } else if (op_write.ssts_size() > 0) {
+                    RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
+                                                                       condition_column, state.upserts(local_id), index,
+                                                                       &new_deletes));
+                    auto itr = new_deletes.find(rowset_id + global_segment_id);
+                    if (itr != new_deletes.end() && itr->second.size() > 0) {
+                        dv_generated_during_merge_update = std::make_shared<DelVector>();
+                        dv_generated_during_merge_update->init(metadata->version(), itr->second.data(),
+                                                               itr->second.size());
+                        builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
+                    }
+                    skip_early_sst_compact = true;
+                } else {
+                    // NON-SST CONDITION MERGE PATH:
+                    // When SST files are absent, new-row condition values are read from the freshly
+                    // ingested segment file on demand. Compare work is parallelized per chunk; the
+                    // final index.upsert is applied serially after the barrier.
+                    RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
+                                                              state.upserts(local_id), index, &new_deletes));
                 }
-                skip_early_sst_compact = true;
-            } else {
-                // NON-SST CONDITION MERGE PATH:
-                // When SST files are absent, new-row condition values are read from the freshly
-                // ingested segment file on demand. Compare work is parallelized per chunk; the
-                // final index.upsert is applied serially after the barrier.
-                RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
-                                                          state.upserts(local_id), index, &new_deletes));
+                if (state.auto_increment_deletes(local_id) != nullptr) {
+                    RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(local_id), &new_deletes,
+                                                del_rebuild_rssid));
+                }
+                _index_cache.update_object_size(index_entry, index.memory_usage());
+                state.release_segment(local_id);
+                _update_state_cache.update_object_size(state_entry, state.memory_usage());
             }
-            if (state.auto_increment_deletes(local_id) != nullptr) {
-                RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(local_id), &new_deletes,
-                                            del_rebuild_rssid));
-            }
-            _index_cache.update_object_size(index_entry, index.memory_usage());
-            state.release_segment(local_id);
-            _update_state_cache.update_object_size(state_entry, state.memory_usage());
             if (op_write.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
                 DelvecPagePB delvec_page_pb = builder->delvec_page(rowset_id + global_segment_id);
                 delvec_page_pb.set_version(metadata->version());

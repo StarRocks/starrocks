@@ -261,6 +261,9 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         // false/unset, the legacy "sender_id == 0 collects all" rule is used.
         request.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(
                 _parent->_enable_lake_per_partition_coordinator_txn_log);
+        // Tells the CN its delta writers only see PART of each tablet's rows, so their txn logs must
+        // not be cached under the per-tablet metacache key that publish consults first.
+        request.mutable_lake_tablet_params()->set_shard_write(_parent->_enable_shard_write);
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);

@@ -14,6 +14,7 @@
 
 #include "data_sink/tablet/tablet_sink_sender.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/testutil/sync_point.h"
@@ -22,8 +23,11 @@
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
+#include "fmt/format.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/combined_txn_log_writer.h"
+#include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/shard_write_txn_log.h"
 
 namespace starrocks {
 
@@ -93,6 +97,38 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
 
     DCHECK(_index_id_to_tablet_be_map.find(channel->index_id()) != _index_id_to_tablet_be_map.end());
     auto& tablet_to_be = _index_id_to_tablet_be_map.find(channel->index_id())->second;
+    // Shard write picks ONE node per row up front. It cannot be decided inside the per-node loop
+    // below: that loop visits the same row once per node, and a counter advanced there would step
+    // a different number of times on each pass, so a row could be claimed by several nodes (data
+    // duplication) or by none (data loss).
+    if (_enable_shard_write) {
+        if (_row_target_node.size() < _tablet_ids.size()) {
+            _row_target_node.resize(_tablet_ids.size());
+        }
+        // Rows are handed out in runs of `shard_write_rows_per_node`. A run of 1 spreads every row
+        // and balances perfectly, but leaves each node a strided 1/N slice of the chunk, so the
+        // sender does N small per-column appends where it used to do one large one. A run at or
+        // above the chunk size routes a whole chunk's rows for a tablet to one node instead.
+        const uint64_t stride = std::max(1, config::shard_write_rows_per_node);
+        int64_t last_tablet_id = -1;
+        std::vector<int64_t>* last_be_ids = nullptr;
+        uint64_t* last_counter = nullptr;
+        for (unsigned short selection : selection_idx) {
+            const int64_t tablet_id = _tablet_ids[selection];
+            if (tablet_id != last_tablet_id) {
+                auto iter = tablet_to_be.find(tablet_id);
+                DCHECK(iter != tablet_to_be.end());
+                if (iter == tablet_to_be.end()) {
+                    return Status::InternalError(fmt::format("Unknown tablet_id {} in tablet be map", tablet_id));
+                }
+                last_tablet_id = tablet_id;
+                last_be_ids = &iter->second;
+                last_counter = &_shard_write_counters[tablet_id];
+            }
+            DCHECK(!last_be_ids->empty());
+            _row_target_node[selection] = (*last_be_ids)[((*last_counter)++ / stride) % last_be_ids->size()];
+        }
+    }
     // Acquire shared lock to protect against concurrent modification of _node_channels
     // during incremental partition opens (see IndexChannel::init with is_incremental=true).
     std::shared_lock<std::shared_mutex> lock(channel->_node_channels_mutex);
@@ -107,7 +143,15 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
 
-        if (_enable_replicated_storage) {
+        if (_enable_shard_write) {
+            // The node list of a tablet is a SHARD set, not a replica set: every row goes to exactly
+            // one of them, so each node receives a disjoint part of the tablet.
+            for (unsigned short selection : selection_idx) {
+                if (_row_target_node[selection] == be_id) {
+                    _node_select_idx.emplace_back(selection);
+                }
+            }
+        } else if (_enable_replicated_storage) {
             for (unsigned short selection : selection_idx) {
                 DCHECK(tablet_to_be.find(_tablet_ids[selection]) != tablet_to_be.end());
                 std::vector<int64_t>& be_ids = tablet_to_be.find(_tablet_ids[selection])->second;
@@ -326,17 +370,10 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
             }
         }
         if (status.ok() && write_txn_log) {
-            auto merge_txn_log = [this](NodeChannel* channel) {
-                for (auto& log : channel->txn_logs()) {
-                    _txn_log_map[log.partition_id()].add_txn_logs()->Swap(&log);
-                }
-            };
-
-            for (auto& index_channel : _channels) {
-                index_channel->for_each_node_channel(merge_txn_log);
+            status.update(_collect_txn_logs());
+            if (status.ok()) {
+                status.update(_write_combined_txn_log());
             }
-
-            status.update(_write_combined_txn_log());
         }
     } else {
         for_each_index_channel(
@@ -425,6 +462,56 @@ ExpectedTabletsByPartition TabletSinkSender::_expected_tablets_by_partition() co
         }
     }
     return expected;
+}
+
+Status TabletSinkSender::_collect_txn_logs() {
+    if (!_enable_shard_write) {
+        for (auto& index_channel : _channels) {
+            index_channel->for_each_node_channel([this](NodeChannel* channel) {
+                for (auto& log : channel->txn_logs()) {
+                    _txn_log_map[log.partition_id()].add_txn_logs()->Swap(&log);
+                }
+            });
+        }
+        return Status::OK();
+    }
+
+    // Shard write: several nodes wrote the same tablet, so each of them handed back a PARTIAL txn log
+    // for it. Fold them into a single log per tablet here, before the combined log is written out, so
+    // the {txn_id}.logs file publish reads still holds exactly one log per tablet.
+    //
+    // Walk the node channels in node-id order: the fold is a concatenation, and a stable input order
+    // keeps the resulting segment layout reproducible across retries of the same load.
+    std::map<int64_t, std::map<int64_t, TxnLogPB*>> tablet_log_by_partition;
+    size_t merged_logs = 0;
+    for (auto& index_channel : _channels) {
+        std::map<int64_t, NodeChannel*> ordered_nodes;
+        index_channel->for_each_node_channel(
+                [&ordered_nodes](NodeChannel* channel) { ordered_nodes.emplace(channel->node_id(), channel); });
+        for (auto& [node_id, channel] : ordered_nodes) {
+            for (auto& log : channel->txn_logs()) {
+                auto& tablet_logs = tablet_log_by_partition[log.partition_id()];
+                auto it = tablet_logs.find(log.tablet_id());
+                if (it == tablet_logs.end()) {
+                    auto* slot = _txn_log_map[log.partition_id()].add_txn_logs();
+                    slot->Swap(&log);
+                    // The structured arrays are the only ones merge_shard_write_txn_log maintains;
+                    // after-load makes them canonical and drops the deprecated parallel arrays that
+                    // the producing CN dual-wrote. put_combined_txn_log rebuilds those on save.
+                    lake::normalize_txn_log_after_load(slot);
+                    tablet_logs.emplace(slot->tablet_id(), slot);
+                    continue;
+                }
+                lake::normalize_txn_log_after_load(&log);
+                RETURN_IF_ERROR(lake::merge_shard_write_txn_log(it->second, &log));
+                ++merged_logs;
+            }
+        }
+    }
+    if (merged_logs > 0) {
+        VLOG(2) << "shard write: folded " << merged_logs << " extra txn logs, txn_id=" << _txn_id;
+    }
+    return Status::OK();
 }
 
 Status TabletSinkSender::_write_combined_txn_log() {

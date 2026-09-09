@@ -134,6 +134,14 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
+    // Resolve this transaction's shadowed rows with one N-way merge over the index's sstables and
+    // the load's own pre-built sstables, instead of one index lookup per loaded key. |new_ssts| and
+    // |new_rssids| are this rowset's per-segment sstables and the global rssids ingest_sst() will
+    // stamp them with, in segment order; |version| is the publish version. Fills |new_deletes| with
+    // exactly what the per-segment lookup path would have produced -- see the .cpp for why.
+    Status merge_dedup(const TabletMetadataPtr& metadata, const std::vector<const FileMetaPB*>& new_ssts,
+                       const std::vector<uint32_t>& new_rssids, int64_t version, DeletesMap* new_deletes);
+
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,

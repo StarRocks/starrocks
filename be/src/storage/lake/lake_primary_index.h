@@ -110,6 +110,11 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
+    // See LakePersistentIndex::merge_dedup. Callers gate on use_cloud_native_pk_index(), the same
+    // condition under which the underlying index exists.
+    Status merge_dedup(const TabletMetadataPtr& metadata, const std::vector<const FileMetaPB*>& new_ssts,
+                       const std::vector<uint32_t>& new_rssids, int64_t version, DeletesMap* new_deletes);
+
     // This function is used for handling delete operation in cloud native PK table.
     // Unlike the base PrimaryIndex::erase, it needs `del_rssid` to set up the rebuild point.
     //

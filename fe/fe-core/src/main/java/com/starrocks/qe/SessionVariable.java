@@ -252,6 +252,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
+    /**
+     * Shared-data only. Number of compute nodes that may write a SINGLE tablet in parallel within one
+     * load transaction. 1 (default) keeps today's behaviour: a tablet is written only by the compute
+     * node it is assigned to. A value > 1 lets FE hand the sink several nodes per tablet and the sink
+     * round-robins rows across them, decoupling write parallelism from the bucket count.
+     * Only takes effect while a partition has fewer tablets than the warehouse has alive CNs.
+     */
+    public static final String TABLET_WRITE_PARALLELISM = "tablet_write_parallelism";
+
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
@@ -1390,6 +1399,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
     private long loadMemLimit = 0L;
+
+    @VariableMgr.VarAttr(name = TABLET_WRITE_PARALLELISM)
+    private int tabletWriteParallelism = 1;
 
     @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
     private long queryMemLimit = 0L;
@@ -4124,6 +4136,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getLoadMemLimit() {
         return loadMemLimit;
+    }
+
+    public int getTabletWriteParallelism() {
+        return tabletWriteParallelism;
+    }
+
+    public void setTabletWriteParallelism(int tabletWriteParallelism) {
+        this.tabletWriteParallelism = tabletWriteParallelism;
     }
 
     public int getQueryTimeoutS() {
