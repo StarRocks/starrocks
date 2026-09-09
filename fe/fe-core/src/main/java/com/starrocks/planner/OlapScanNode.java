@@ -1128,10 +1128,15 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             if (RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER.equals(
                     probeRuntimeFilter.runtimeFilterType())) {
                 Expr expr = probeRuntimeFilter.getNodeIdToProbeExpr().get(getId().asInt());
-                if (expr instanceof SlotRef) {
+                // The probe slot may carry no column: a heavy expr pushed into this scan
+                // (PlanFragmentBuilder#buildProjectNode) occupies a slot in the scan's tuple with
+                // no backing column, and a TopN filter on that expr probes it here. Such a slot is
+                // never a sort key or partition column, so there is no hint to assign.
+                SlotDescriptor probeSlot =
+                        expr instanceof SlotRef ? desc.getSlot(((SlotRef) expr).getSlotId().asInt()) : null;
+                if (probeSlot != null && probeSlot.getColumn() != null) {
                     // check key columns
-                    SlotId cid = ((SlotRef) expr).getSlotId();
-                    String columnName = desc.getSlot(cid.asInt()).getColumn().getName();
+                    String columnName = probeSlot.getColumn().getName();
                     if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(columnName)) {
                         sortKeyAscHint = outputAscHint;
                     }

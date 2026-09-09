@@ -154,4 +154,15 @@ public class PushDownHeavyExprsTest {
                 "          <slot 12> : regexp_replace(get_json_object(7: field_text_1, '$.key_json_2'), " +
                 "'^\\\\[\\\\\"|\\\\\"]$', '')\n"), plan);
     }
+
+    @Test
+    public void testTopNFilterProbeOnHeavyExprSlot() throws Exception {
+        // ORDER BY a heavy expr + LIMIT puts a TopN runtime filter probe on the heavy-expr
+        // slot, which has no backing column. Serializing the scan node used to NPE in
+        // assignOrderByHints; only toThrift takes that path, so plan the query to thrift.
+        String q = "SELECT regexp_replace(field_varchar_1, 'x', 'y') AS s " +
+                "FROM tbl_transaction_001 ORDER BY s LIMIT 3";
+        String plan = UtFrameUtils.getPlanThriftString(ctx, q);
+        Assertions.assertTrue(plan.contains("SORT_NODE"), plan);
+    }
 }
