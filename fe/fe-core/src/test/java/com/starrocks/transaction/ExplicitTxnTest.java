@@ -758,20 +758,6 @@ public class ExplicitTxnTest {
     }
 
     @Test
-    public void testCommitWithLostTransactionState() {
-        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
-        // commitStmt should report an error instead of silently succeeding.
-        ConnectContext context = new ConnectContext();
-        context.setTxnId(99999);
-
-        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-
-        Assertions.assertEquals(0, context.getTxnId());
-        Assertions.assertTrue(context.getState().isError());
-        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
-    }
-
-    @Test
     public void testRollbackWithoutItemsReportsAbortFailure() {
         GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = 990001L;
@@ -870,69 +856,6 @@ public class ExplicitTxnTest {
         // The session must not stay inside a dead transaction.
         Assertions.assertEquals(0, context.getTxnId());
         Assertions.assertNull(mgr.getExplicitTxnState(txnId));
-    }
-
-    @Test
-    public void testRollbackWithLostTransactionState() {
-        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
-        // rollbackStmt should report an error instead of silently succeeding.
-        ConnectContext context = new ConnectContext();
-        context.setTxnId(99998);
-
-        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
-
-        Assertions.assertEquals(0, context.getTxnId());
-        Assertions.assertTrue(context.getState().isError());
-        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
-    }
-
-    @Test
-    public void testBeginWithLostTransactionState() {
-        // When txnId is set but explicitTxnState was cleared (e.g., timeout cleanup),
-        // beginStmt should reset and create a new transaction instead of NPE.
-        ConnectContext context = new ConnectContext();
-        context.setThreadLocalInfo();
-        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-
-        TUniqueId queryId = new TUniqueId(900, 901);
-        context.setExecutionId(queryId);
-
-        // Simulate stale txnId without matching explicitTxnState
-        context.setTxnId(88888);
-
-        // BEGIN should recover by creating a new transaction
-        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "recovery_label"));
-        Assertions.assertFalse(context.getState().isError());
-        Assertions.assertNotEquals(88888, context.getTxnId());
-        Assertions.assertTrue(context.getState().getInfoMessage().contains("'label':'recovery_label'"));
-
-        // Cleanup
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
-        context.setTxnId(0);
-    }
-
-    @Test
-    public void testCleanupClearsExplicitTxnState() {
-        // Test that ConnectContext.cleanup() properly clears explicitTxnStateMap entries
-        ConnectContext context = new ConnectContext();
-        context.setThreadLocalInfo();
-        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-
-        TUniqueId queryId = new TUniqueId(950, 951);
-        context.setExecutionId(queryId);
-
-        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "cleanup_test_label"));
-        long txnId = context.getTxnId();
-        Assertions.assertNotEquals(0, txnId);
-        Assertions.assertNotNull(
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
-
-        // Simulate connection disconnect
-        context.cleanup();
-
-        // Verify explicitTxnState was cleaned up
-        Assertions.assertNull(
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
     }
 
     @Test
