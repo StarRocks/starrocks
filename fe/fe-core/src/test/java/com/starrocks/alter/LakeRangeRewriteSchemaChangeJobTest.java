@@ -3014,6 +3014,89 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
+     * The attempt whose charge crosses the window cancels the job there and then. Deciding on the total
+     * BEFORE charging let that attempt be followed by one more full rewrite INSERT before anything
+     * noticed, and one INSERT may run for half the alter-job timeout, so that extra attempt could defer
+     * compaction well past the configured window.
+     */
+    @Test
+    public void testTheAttemptThatCrossesTheWindowCancelsWithoutStartingAnother() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            Config.lake_online_rewrite_partition_retry_timeout_second = 1;
+            Config.alter_scheduler_interval_millisecond = 0;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            AtomicInteger attempts = new AtomicInteger();
+            job.setRewriteExecutor((context, insertStmt) -> {
+                attempts.incrementAndGet();
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            });
+
+            // 850ms spent of a 1000ms window: this attempt's 200ms crosses it.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 850L);
+            AlterCancelException ex =
+                    Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+
+            Assertions.assertEquals(1, attempts.get(),
+                    "the attempt that crossed the window must not be followed by another INSERT");
+            Assertions.assertTrue(ex.getMessage().contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR),
+                    "the cancel must carry the real rewrite error, was: " + ex.getMessage());
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * The counterweight to cancelling as soon as the charge crosses the window: a partition whose single
+     * attempt costs more than the whole window still gets one retry. Without that, a rewrite that
+     * legitimately runs longer than the window would be cancelled by its first transient failure -
+     * discarding every partition already rewritten, which is the bug this retry exists to fix.
+     *
+     * <p>Driven by a scheduler interval larger than the window rather than by a long sleep, so one
+     * charge exceeds the window with no real waiting.
+     */
+    @Test
+    public void testTheFirstFailureOfAnEpisodeIsRetriedEvenIfItAloneExceedsTheWindow() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            Config.lake_online_rewrite_partition_retry_timeout_second = 1;
+            Config.alter_scheduler_interval_millisecond = 2000;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            AtomicInteger attempts = new AtomicInteger();
+            job.setRewriteExecutor((context, insertStmt) -> {
+                attempts.incrementAndGet();
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            });
+
+            // One charge is 2000ms against a 1000ms window, so only the guarantee can keep this alive.
+            job.runRunningJob();
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                    "the first failure of an episode must be retried even when it alone exceeds the window");
+            Assertions.assertTrue(rewriteRetrySpentMs(job, physicalPartitionId) >= 2000L,
+                    "the over-window charge must still be recorded");
+
+            // The guarantee is for the first failure only; the next one finds the window spent.
+            Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+            Assertions.assertEquals(2, attempts.get(), "exactly one retry may be granted");
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
      * A failed attempt is charged for how long it actually ran, not just for being an attempt. One rewrite
      * INSERT can run for a long time before it fails - its insert timeout is half the alter timeout - and
      * the scheduler sleeps only after a whole cycle, so a window converted into a fixed number of attempts
@@ -3043,14 +3126,14 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
             });
 
-            // 900ms spent of a 1000ms window: still inside it, so this attempt is retried - and charged.
-            setRewriteRetrySpentMs(job, physicalPartitionId, 900L);
+            // 700ms spent of a 1000ms window: this attempt's 200ms brings it to 900ms, still inside.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 700L);
             job.runRunningJob();
             long spentMs = rewriteRetrySpentMs(job, physicalPartitionId);
-            Assertions.assertTrue(spentMs >= 1100L,
+            Assertions.assertTrue(spentMs >= 900L,
                     "the attempt's own duration must be charged against the window, spent: " + spentMs);
             Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
-                    "the attempt that exhausts the window is still retried; the next one cancels");
+                    "an attempt that leaves the episode inside the window is retried");
 
             // Now over the window, so the next failure cancels rather than granting another long attempt.
             AlterCancelException ex =

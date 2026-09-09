@@ -1253,10 +1253,10 @@ public abstract class LakeOnlineRewriteJobBase
      */
     private boolean retryPartitionRewrite(long physicalPartitionId, String error, long attemptMs) {
         // One sample of the mutable window for the whole decision. Re-reading it would let an
-        // ADMIN SET FRONTEND CONFIG landing mid-decision make the gate below, the budget derived from it
-        // and the message reporting it disagree: dropping the value to 0 after the gate had already
-        // passed would still grant a retry the operator just disabled, because the budget floors at one
-        // attempt. Same rule as selectRequestedTabletCount above and TabletReshardUtils.adaptiveSplitBound.
+        // ADMIN SET FRONTEND CONFIG landing mid-decision make the gate below, the window the charge is
+        // compared against, and the window the message reports all disagree - so a value dropped to 0
+        // after the gate had passed could still grant the retry the operator just disabled. Same rule as
+        // selectRequestedTabletCount above and TabletReshardUtils.adaptiveSplitBound.
         int retryWindowSecond = Config.lake_online_rewrite_partition_retry_timeout_second;
         if (retryWindowSecond <= 0) {
             LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and retrying is "
@@ -1264,23 +1264,28 @@ public abstract class LakeOnlineRewriteJobBase
             return false;
         }
         long budgetMs = retryWindowSecond * 1000L;
-        // Read what earlier attempts spent BEFORE charging this one, so the first failure of an episode
-        // always gets a retry however long its attempt ran, and an episode overshoots the window by at
-        // most the attempt that exhausted it.
-        long spentMs = rewriteRetrySpentMs.getOrDefault(physicalPartitionId, 0L);
-        if (spentMs > budgetMs) {
+        boolean firstFailureOfEpisode = !rewriteRetrySpentMs.containsKey(physicalPartitionId);
+        // Charge this attempt BEFORE deciding, so the window is compared against what the episode has
+        // actually spent including it. Deciding on the running total first meant the attempt that
+        // crossed the window was followed by one more full rewrite INSERT before anything noticed, and
+        // one INSERT may run for half the alter timeout.
+        // One sample of the interval, and the only read of it in this decision.
+        long chargedMs = attemptMs + Math.max(0L, Config.alter_scheduler_interval_millisecond);
+        long spentMs = rewriteRetrySpentMs.merge(physicalPartitionId, chargedMs, Long::sum);
+        // The first failure of an episode is always retried, however long its attempt ran. A partition
+        // whose rewrite legitimately takes longer than the window would otherwise be cancelled by its
+        // first transient failure - discarding every partition already rewritten, which is the behavior
+        // this retry exists to replace. So an episode costs about the window, plus that one guaranteed
+        // retry when a single attempt is longer than the whole window.
+        if (!firstFailureOfEpisode && spentMs >= budgetMs) {
             LOG.warn("online rewrite job {}: rewrite INSERT for partition {} has spent {}s of its {}s "
                             + "retry window, cancelling the job: {}",
                     jobId, physicalPartitionId, spentMs / 1000, retryWindowSecond, error);
             return false;
         }
-        // One sample of the interval, and the only read of it in this decision.
-        long chargedMs = attemptMs + Math.max(0L, Config.alter_scheduler_interval_millisecond);
-        rewriteRetrySpentMs.put(physicalPartitionId, spentMs + chargedMs);
         LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} after {}ms, retrying on a "
                         + "later tick ({}s of its {}s retry window spent): {}",
-                jobId, physicalPartitionId, attemptMs, (spentMs + chargedMs) / 1000, retryWindowSecond,
-                error);
+                jobId, physicalPartitionId, attemptMs, spentMs / 1000, retryWindowSecond, error);
         return true;
     }
 
