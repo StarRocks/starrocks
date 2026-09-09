@@ -24,6 +24,7 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -49,6 +50,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
@@ -60,6 +62,7 @@
 #include "storage/types.h"
 #include "storage_primitive/column_predicate.h"
 #include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "storage_primitive/range.h"
 
 namespace starrocks::lake {
@@ -229,6 +232,90 @@ protected:
         delta_writer->close();
         CHECK_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         return version + 1;
+    }
+
+    // Same as write_one_rowset, but for a schema that has already grown c5 (post-light-ADD-COLUMN),
+    // so the segment this produces physically carries a c5 value and is eligible for an IDG entry.
+    int64_t write_one_rowset_with_c5(int64_t base_tablet_id, int64_t version, std::shared_ptr<TabletSchema> schema,
+                                     int nrows, int32_t c5, const std::string& vstr_prefix = "row") {
+        auto vschema = std::make_shared<Schema>(ChunkHelper::convert_schema(schema));
+        auto col_c0 = Int32Column::create();
+        auto col_c1 = Int32Column::create();
+        auto col_c2 = BinaryColumn::create();
+        auto col_c3 = Int32Column::create();
+        auto null_col_c3 = NullableColumn::create(std::move(col_c3), NullColumn::create());
+        auto col_c4 = BinaryColumn::create();
+        auto col_c5 = Int32Column::create();
+        auto null_col_c5 = NullableColumn::create(std::move(col_c5), NullColumn::create());
+        for (int i = 0; i < nrows; ++i) {
+            col_c0->append_datum(Datum(i + 1));
+            col_c1->append_datum(Datum(i * 7 + 3));
+            col_c2->append_datum(Datum(Slice(vstr_prefix + std::to_string(i))));
+            if (i % 3 == 0) {
+                null_col_c3->append_default();
+            } else {
+                null_col_c3->append_datum(Datum(i * 11));
+            }
+            col_c4->append_datum(Datum(Slice("ch" + std::to_string(i % 4))));
+            null_col_c5->append_datum(Datum(c5));
+        }
+        Chunk chunk({std::move(col_c0), std::move(col_c1), std::move(col_c2), std::move(null_col_c3), std::move(col_c4),
+                     std::move(null_col_c5)},
+                    vschema);
+        std::vector<uint32_t> indexes(nrows);
+        for (int i = 0; i < nrows; ++i) indexes[i] = i;
+
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_manager.get())
+                                                   .set_tablet_id(base_tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(schema->id())
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        CHECK_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
+        return version + 1;
+    }
+
+    // Open a TabletReader over the published metadata at `version` with an equality predicate on c5,
+    // and return how many rows match. Used to pin that a segment with no per-segment index for c5 is
+    // still scanned with the predicate evaluated row by row, rather than skipped or having its
+    // predicate silently dropped.
+    int64_t count_rows_matching_c5(int64_t tablet_id, int64_t version, int32_t value) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+        auto schema = TabletSchema::create(metadata->schema());
+        auto read_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(schema));
+
+        const auto c5_index = static_cast<ColumnId>(read_schema->num_fields() - 1);
+        auto type_info = get_type_info(TYPE_INT);
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(type_info, c5_index, std::to_string(value)));
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode(pred.get()));
+
+        TabletReader reader(_tablet_manager.get(), metadata, *read_schema);
+        CHECK_OK(reader.prepare());
+        TabletReaderParams params;
+        params.pred_tree = PredicateTree::create(std::move(root));
+        CHECK_OK(reader.open(params));
+
+        int64_t total_rows = 0;
+        auto read_chunk = ChunkFactory::new_chunk(*read_schema, 1024);
+        while (true) {
+            read_chunk->reset();
+            auto st = reader.get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        reader.close();
+        return total_rows;
     }
 
     // Construct a single-column TabletIndexPB.
@@ -1398,6 +1485,56 @@ TEST_F(AddIndexSchemaChangeTest, run_ngram_bloom_on_light_added_column_emits_no_
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
     EXPECT_EQ(0, op.segment_entries_size()) << "the only segment has no c5, so no entry may be emitted";
+}
+
+// The load-bearing guarantee behind the skip: a segment with no IDG entry for an indexed column is
+// still SCANNED, with the predicate evaluated row by row rather than erased. Assert on RESULTS, not
+// metadata -- a shape assertion cannot tell a retained predicate from a dropped one.
+TEST_F(AddIndexSchemaChangeTest, unindexed_segment_still_matches_predicates_on_light_added_column) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+
+    // Rowset 1: written BEFORE the light ADD COLUMN, so its segment has no c5 and will get no IDG
+    // entry. Its rows must read c5 as the declared default 7.
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/4);
+    version = publish_light_added_column(base_tablet_id, version, "c5", "INT");
+
+    // Rowset 2: written AFTER, physically carrying c5 = 42, so it DOES get an IDG entry.
+    ASSIGN_OR_ABORT(auto wide_metadata, _tablet_manager->get_tablet_metadata(base_tablet_id, version));
+    auto wide_schema = TabletSchema::create(wide_metadata->schema());
+    version = write_one_rowset_with_c5(base_tablet_id, version, wide_schema, /*nrows=*/3, /*c5=*/42);
+
+    // Build the BITMAP index on c5 through the handler, then publish so the op is applied.
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({"c5"});
+    request.__set_indexes_to_add({ix});
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+    CHECK_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, request.txn_id).status());
+    version++;
+
+    // Exactly one segment (the newer one) is indexed.
+    ASSIGN_OR_ABORT(auto after, _tablet_manager->get_tablet_metadata(base_tablet_id, version));
+    ASSERT_TRUE(after->has_idg_meta());
+    EXPECT_EQ(1, after->idg_meta().idgs_size());
+
+    // Now the point of the test: scan with a predicate on c5 and check ROW COUNTS.
+    //   c5 == 7  -> the 4 rows of the UNINDEXED segment (they read as the declared default)
+    //   c5 == 42 -> the 3 rows of the indexed segment
+    //   c5 == 99 -> none
+    EXPECT_EQ(4, count_rows_matching_c5(base_tablet_id, version, /*value=*/7));
+    EXPECT_EQ(3, count_rows_matching_c5(base_tablet_id, version, /*value=*/42));
+    EXPECT_EQ(0, count_rows_matching_c5(base_tablet_id, version, /*value=*/99));
 }
 
 } // namespace starrocks::lake
