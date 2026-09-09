@@ -35,6 +35,9 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 
@@ -45,6 +48,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /*
  * AuditEvent contains all information about audit log info.
@@ -97,6 +101,9 @@ public class AuditEvent {
     public String state = "";
     @AuditField(value = "ErrorCode")
     public String errorCode = "";
+    // The message the client received; errorCode alone only carries a coarse category.
+    @AuditField(value = "ErrorMessage", ignore_empty = true)
+    public String errorMessage = "";
     @AuditField(value = "Time")
     public long queryTime = -1;
     @AuditField(value = "ScanBytes")
@@ -189,6 +196,39 @@ public class AuditEvent {
     public long readRemoteCnt = 0;
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
     public String cacheHitRatio = "";
+
+    // NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR. \p{Cntrl} is US-ASCII only, so it covers the line
+    // terminators below 0x7F (LF, VT, FF, CR) but not these three, and a reader that follows the
+    // Unicode rules (java.util.Scanner) starts a new line on them all the same.
+    private static final String NON_ASCII_LINE_TERMINATORS = "\\u0085\\u2028\\u2029";
+
+    // The audit log keeps one record per line with '|' between the fields, so a message may carry neither.
+    private static final Pattern ERROR_MESSAGE_SEPARATORS =
+            Pattern.compile("[\\p{Cntrl}" + NON_ASCII_LINE_TERMINATORS + "|]+");
+
+    public static String collapseSeparators(String value) {
+        return Strings.isNullOrEmpty(value) ? "" : ERROR_MESSAGE_SEPARATORS.matcher(value).replaceAll(" ").trim();
+    }
+
+    public static String normalizeErrorMessage(String errorMessage) {
+        int maxLength = Config.audit_log_error_message_max_length;
+        if (maxLength <= 0 || Strings.isNullOrEmpty(errorMessage)) {
+            return "";
+        }
+        // The message quotes the very values that desensitizing the statement takes out.
+        if (Config.enable_sql_desensitize_in_log) {
+            return "";
+        }
+        // Redact credentials the same way the audited statement itself is, as defense in depth.
+        String normalized = collapseSeparators(SqlCredentialRedactor.redact(errorMessage));
+        if (normalized.length() > maxLength) {
+            // Back off one char rather than cut a surrogate pair in half.
+            int end = Character.isHighSurrogate(normalized.charAt(maxLength - 1)) ? maxLength - 1 : maxLength;
+            normalized = normalized.substring(0, end)
+                    + "... /* truncated, audit_log_error_message_max_length=" + maxLength + " */";
+        }
+        return normalized;
+    }
 
     public void calculateCacheHitRatio() {
         if (!isQuery || RunMode.isSharedNothingMode()) {
@@ -285,6 +325,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setErrorCode(String errorCode) {
             auditEvent.errorCode = errorCode;
+            return this;
+        }
+
+        public AuditEventBuilder setErrorMessage(String errorMessage) {
+            auditEvent.errorMessage = normalizeErrorMessage(errorMessage);
             return this;
         }
 
