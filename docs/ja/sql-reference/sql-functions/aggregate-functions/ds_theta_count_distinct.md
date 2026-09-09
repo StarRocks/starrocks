@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "COUNT(DISTINCT) より高速で高カーディナリティ列のメモリ使用量が少ない、近似的な distinct count を返す集計関数。"
+---
+
 # ds_theta_count_distinct
 
 `COUNT(DISTINCT col)` の結果に似た集計関数の近似値を返します。`ds_theta_count_distinct` は `COUNT(DISTINCT col)` よりも高速で、高いカーディナリティの列に対してメモリ使用量が少なくなります。

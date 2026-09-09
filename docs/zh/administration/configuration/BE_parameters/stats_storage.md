@@ -307,11 +307,11 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_binary_plain_delta_offset
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：高基数 string/varchar 列在回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
+- 描述：string/varchar 列因高基数或存在超过 1 MiB 的实际值而回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧，默认开启。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此在集群中仍有不支持该编码的 BE 在服务时（例如从此类版本滚动升级期间）、以及降级到此类版本之前，请先将其置为 `false`；并注意：用该编码写入的 segment 在此类版本上将无法读取。
 - 引入版本：v4.2.0
 
 ### default_num_rows_per_column_file_block
@@ -1135,15 +1135,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：快照文件清理的间隔。
 - 引入版本：-
 
-### sort_key_limit_size
-
-- 默认值：1024
-- 类型：Int
-- 单位：字节
-- 是否动态：是
-- 描述：单行编码后排序键的最大长度。如果导入（包括 Spark Load）或 Schema Change 会写入排序键超过该长度的数据行，则该操作会失败并返回不可重试的错误。该限制用于约束全量排序键索引页的大小及其加载后占用的内存。Compaction 与事务提交后的 Segment 重写不做该检查，因为此时事务已经提交，失败无法反馈给发起方；因此在该限制生效前写入的数据行不受影响。只要排序键可被编码，该检查就会生效，且不受 `enable_full_sort_key_index` 影响，以保证数据准入与 Segment 写入两侧的判断一致。设置为 0 或负数可关闭该检查。调高该值前请注意内存开销：全量排序键索引每个索引块保存一个条目，因此单个 Segment 的索引大小上限为 `ceil(Segment 行数 / num_rows_per_block) * sort_key_limit_size` 字节 —— 在默认值 1024 下，百万行 Segment 约 1 MB；调至 4096 则约 4 MB。该索引页在首次使用时读入内存，并在该 Segment 的整个生命周期内驻留，因此开销会随同时打开的 Segment 数量累加。这是最坏情况上限，只有当每个被索引的键都达到该限制时才会达到；实际占用取决于排序键的真实宽度，因此调高该限制本身并不会增加内存占用，只是抬高了上限。
-- 引入版本：-
-
 ### stale_memtable_flush_time_sec
 
 - 默认值：0
@@ -1290,6 +1281,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：是否为存算分离（Lake）主键表 tablet 使用精确行数统计。开启后会读取每个 rowset 在对象存储中的 delete vector 来扣减删除行，统计更准确，但会显著增加 `get_tablet_stats` RPC 的开销；关闭后使用 rowset 元数据中的近似 `num_dels`，可避免远端 I/O，但对“已删除但尚未 compaction”的行可能略有高估。
 - 引入版本：-
+
+### lake_enable_segment_tail_index_region
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Segment 写入时，是否把所有列的 ordinal index 放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的 ordinal index 写在该列数据页之后。页级 zone map 和 short key index 不受影响，位置保持不变。该配置仅影响写入侧，且仅在存算分离集群中生效：存算一体的 BE 无论该配置为何都写入原有布局。纵向 Compaction 同样会产生该索引区；部分列更新重写不会，因为它复制已有 segment 的前缀、只追加剩余的值列，这类 segment 保持原有布局。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
+- 引入版本：v4.2.0
 
 ### lake_tablet_stat_slow_log_ms
 

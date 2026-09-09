@@ -282,7 +282,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
-    ./storage/lake/lake_primary_index_selection_test.cpp
+    ./storage/lake/lake_persistent_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
@@ -378,6 +378,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
+    ./storage/rowset/segment_tail_index_region_test.cpp
     ./storage/rowset/segment_test.cpp
     ./storage/rowset/segment_writer_short_key_encode_test.cpp
     ./storage/rowset/segment_writer_sort_key_sampling_test.cpp

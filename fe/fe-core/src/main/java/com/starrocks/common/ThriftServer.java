@@ -25,7 +25,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.server.TServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
@@ -37,10 +36,16 @@ public class ThriftServer {
     private static final Logger LOG = LogManager.getLogger(ThriftServer.class);
     private int port;
     private TProcessor processor;
-    private TServer server;
+    private SRTThreadPoolServer server;
     private Thread serverThread;
     private Set<TNetworkAddress> connects;
     private static ThreadPoolExecutor executor;
+    // Read by the acceptor-stall gauge. MetricRepo.init() registers that gauge once per process,
+    // during GlobalStateMgr role transfer, which runs inside waitForReady() before StarRocksFEServer
+    // constructs the thrift server -- so there is no ThriftServer for the gauge to hold a reference to
+    // at registration time. It resolves this handle on each scrape instead, and reads 0 while the
+    // handle is null (before start, after stop).
+    private static volatile SRTThreadPoolServer activeServer;
 
     public ThriftServer(int port, TProcessor processor) {
         this.port = port;
@@ -60,7 +65,7 @@ public class ThriftServer {
                 new SRTThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
                         factory).processor(processor);
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
-                .newDaemonFixedThreadPool(Config.thrift_server_max_worker_threads,
+                .newDaemonFixedThreadPoolWithAbortPolicy(Config.thrift_server_max_worker_threads,
                         Config.thrift_server_queue_size,
                         "thrift-server-pool", true);
         // allow core thread time out so that the thread can be released
@@ -69,6 +74,7 @@ public class ThriftServer {
         serverArgs.executorService(threadPoolExecutor);
         executor = threadPoolExecutor;
         server = new SRTThreadPoolServer(serverArgs);
+        activeServer = server;
 
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
             ThreadPoolManager.setFixedThreadPoolSize(threadPoolExecutor, Config.thrift_server_max_worker_threads);
@@ -100,12 +106,17 @@ public class ThriftServer {
     public void stop() {
         if (server != null) {
             server.stop();
+            // The accept loop has exited, so its heartbeat is frozen. Drop the handle instead of
+            // letting the stall gauge climb forever against a server that is no longer accepting.
+            if (activeServer == server) {
+                activeServer = null;
+            }
         }
     }
 
     public void join() throws InterruptedException {
         if (server != null && server.isServing()) {
-            server.stop();
+            stop();
         }
         serverThread.join();
     }
@@ -120,5 +131,10 @@ public class ThriftServer {
 
     public static ThreadPoolExecutor getExecutor() {
         return executor;
+    }
+
+    public static long getAcceptorStallTimeMs() {
+        SRTThreadPoolServer currentServer = activeServer;
+        return currentServer == null ? 0 : currentServer.getAcceptorStallTimeMs();
     }
 }

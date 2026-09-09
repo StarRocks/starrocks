@@ -317,7 +317,17 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
         _params.vector_search_option->k = vector_options.vector_limit_k;
         for (const std::string& str : vector_options.query_vector) {
-            _params.vector_search_option->query_vector.push_back(std::stof(str));
+            // std::stof throws std::out_of_range / std::invalid_argument on a value that overflows
+            // float or is not a number, and the throw is uncaught here, so a query vector element the
+            // planner produced from a wrong-typed or out-of-range literal (e.g. 1e308, which exceeds
+            // FLT_MAX) aborts the BE. Parse without throwing and reject the query cleanly instead.
+            StringParser::ParseResult parse_result;
+            float value = StringParser::string_to_float<float>(str.data(), str.size(), &parse_result);
+            if (parse_result != StringParser::PARSE_SUCCESS) {
+                return Status::InvalidArgument(
+                        fmt::format("invalid query vector element for vector search: '{}'", str));
+            }
+            _params.vector_search_option->query_vector.push_back(value);
         }
         if (_runtime_state->query_options().__isset.ann_params) {
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;

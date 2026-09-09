@@ -18,6 +18,7 @@ import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
 import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
+import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FlatJsonConfig;
@@ -37,6 +38,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -192,6 +194,78 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 baseIndex.getDataSize(),
                 table.getName(),
                 physicalPartition);
+    }
+
+    @Test
+    public void testZeroTargetPreservesSingleTabletWithoutSampling() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            LakeRangeRewriteSchemaChangeJob job = newJob(request -> {
+                throw new AssertionError("K=1 must bypass sampling");
+            });
+
+            job.runPendingJob();
+
+            long partitionId = table.getPhysicalPartitions().iterator().next().getId();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+            Assertions.assertEquals(1, job.getTabletCount(partitionId));
+            Assertions.assertTrue(job.getBoundaries(partitionId).isEmpty());
+            Assertions.assertEquals(1, job.getShadowIndex(partitionId).getTablets().size());
+            Assertions.assertTrue(job.getShadowIndex(partitionId).getTablets().get(0)
+                    .getRange().getRange().isAll());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
+
+    @Test
+    public void testZeroTargetPreservesMultipleLatestIndexTablets() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            MaterializedIndex baseIndex = partition.getLatestIndex(table.getBaseIndexMetaId());
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            List<Tuple> sample = new ArrayList<>();
+            for (int i = 0; i < 1000; i++) {
+                sample.add(keyTuple(i, i));
+            }
+            LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(sample));
+
+            job.runPendingJob();
+
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+            Assertions.assertEquals(3, job.getTabletCount(partition.getId()));
+            Assertions.assertEquals(2, job.getBoundaries(partition.getId()).size());
+            Assertions.assertEquals(3, job.getShadowIndex(partition.getId()).getTablets().size());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
+
+    @Test
+    public void testNonZeroTargetKeepsExistingSelectorContract() {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(List.of()));
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            PendingPartitionPlan plan = newPendingPlan(partition);
+            int activeComputeNodeCount = 3;
+
+            Config.tablet_reshard_target_size = 1024;
+            int expected = TabletPreSplitCoordinator.selectTabletCount(
+                    new Estimates(plan.partitionDataSize, 0L), activeComputeNodeCount);
+            Assertions.assertEquals(expected,
+                    job.selectRequestedTabletCount(plan, activeComputeNodeCount));
+
+            Config.tablet_reshard_target_size = -1;
+            Assertions.assertThrows(IllegalStateException.class,
+                    () -> job.selectRequestedTabletCount(plan, activeComputeNodeCount));
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
     }
 
     @Test

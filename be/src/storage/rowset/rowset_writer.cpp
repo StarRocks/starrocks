@@ -1372,6 +1372,13 @@ Status VerticalRowsetWriter::final_flush() {
             LOG(WARNING) << "Fail to finalize segment footer, " << st;
             return st;
         }
+        // The tail index region is written by finalize_footer(), after _flush_columns() has done
+        // its accounting, so its bytes reach _total_index_size only here. Zero unless that layout
+        // is in use.
+        if (const uint64_t deferred = segment_writer->unreported_index_size(); deferred > 0) {
+            std::lock_guard<std::mutex> l(_lock);
+            _total_index_size += static_cast<int64_t>(deferred);
+        }
         if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
             auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
             partial_rowset_footer->set_position(footer_position);
