@@ -72,7 +72,17 @@ public:
 
     Status init_spaces(const std::vector<DirSpace>& dir_spaces);
 
+    // Synchronize the recorded quota of each directory with the quota actually applied in the cache engine,
+    // so that a failed or external quota update never leaves the monitor with a stale view.
+    void sync_dir_spaces(const std::vector<DirSpace>& actual_dir_spaces);
+
+    // Check the disk usage and stage the new quota into `dir_spaces()` when an adjustment is needed.
+    // Return true if the staged quota differs from the current one. The caller is responsible for
+    // applying the staged quota to the cache engine and calling `commit_adjustment()` once it succeeds.
     bool adjust_spaces(const AdjustContext& ctx);
+
+    // Notify that the quota staged by `adjust_spaces()` has been applied to the cache engine successfully.
+    void commit_adjustment();
 
     std::vector<DirSpace>& dir_spaces() { return _dir_spaces; }
 
@@ -115,6 +125,8 @@ private:
     std::shared_ptr<FileSystemWrapper> _fs = nullptr;
     int64_t _disk_free_period = 0;
     bool _disabled = false;
+    // Whether the quota staged by the last `adjust_spaces()` is still waiting to be applied.
+    bool _pending_adjustment = false;
 };
 
 class DiskSpaceMonitor {

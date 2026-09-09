@@ -434,7 +434,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- 默认值：7200
+- 默认值：180
 - 类型：Int
 - 单位：秒
 - 是否动态：是

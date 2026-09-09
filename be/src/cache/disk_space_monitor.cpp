@@ -14,6 +14,8 @@
 
 #include "cache/disk_space_monitor.h"
 
+#include <algorithm>
+
 #include "base/concurrency/await.h"
 #include "cache/datacache_utils.h"
 #include "common/config_cache_fwd.h"
@@ -62,21 +64,45 @@ bool DiskSpace::adjust_spaces(const AdjustContext& ctx) {
         return false;
     }
 
-    if (_disk_stats.used_bytes() < _disk_opts.low_level_size) {
+    int64_t used_bytes = _disk_stats.used_bytes();
+    if (used_bytes < _disk_opts.low_level_size) {
         _disk_free_period += _disk_opts.adjust_interval_s;
         if (!_allow_expansion(ctx)) {
             return false;
         }
-    } else if (_disk_stats.used_bytes() <= _disk_opts.high_level_size) {
+    } else if (used_bytes <= _disk_opts.high_level_size) {
         return false;
     }
 
-    int64_t old_cache_quota = cache_quota();
-    int64_t new_cache_quota = _calc_new_cache_quota(_cache_usage(ctx));
+    size_t old_cache_quota = cache_quota();
+    size_t new_cache_quota = _calc_new_cache_quota(_cache_usage(ctx));
     _update_spaces_by_cache_quota(new_cache_quota);
 
+    // Compare the aligned quota that will really be applied, otherwise a change swallowed by the alignment
+    // would be reported and applied repeatedly.
+    // The free period is only reset in `commit_adjustment()` after the cache engine accepts the new quota,
+    // otherwise a transient failure would postpone the next attempt by another `idle_for_expansion_s`.
+    _pending_adjustment = cache_quota() != old_cache_quota;
+    return _pending_adjustment;
+}
+
+void DiskSpace::sync_dir_spaces(const std::vector<DirSpace>& actual_dir_spaces) {
+    for (auto& dir : _dir_spaces) {
+        auto it = std::find_if(actual_dir_spaces.begin(), actual_dir_spaces.end(),
+                               [&dir](const DirSpace& actual) { return actual.path == dir.path; });
+        if (it != actual_dir_spaces.end()) {
+            dir.size = it->size;
+        }
+    }
+    _pending_adjustment = false;
+}
+
+void DiskSpace::commit_adjustment() {
+    if (!_pending_adjustment) {
+        return;
+    }
     _disk_free_period = 0;
-    return new_cache_quota != old_cache_quota;
+    _pending_adjustment = false;
 }
 
 size_t DiskSpace::cache_quota() {
@@ -300,7 +326,8 @@ void DiskSpaceMonitor::_adjust_datacache_callback() {
                 if (st.ok()) {
                     LOG(INFO) << "success to adjust datacache disk spaces to: " << to_string(dir_spaces);
                 } else {
-                    LOG(WARNING) << "fail to adjust datacache disk spaces, reason: " << st.message();
+                    LOG(WARNING) << "fail to adjust datacache disk spaces, reason: " << st.message()
+                                 << ", will retry in the next round";
                 }
             }
         }
@@ -360,12 +387,25 @@ void DiskSpaceMonitor::_update_cache_stats() {
     const auto metrics = _cache->cache_metrics();
     _total_cache_usage = metrics.disk_used_bytes;
     _total_cache_quota = metrics.disk_quota_bytes;
+
+    // Always start from the quota actually applied in the cache engine. It can differ from the recorded one
+    // if a previous update failed, or the quota was updated elsewhere, e.g. by modifying `datacache_disk_size`.
+    std::vector<DirSpace> actual_dir_spaces;
+    _cache->disk_spaces(&actual_dir_spaces);
+    for (auto& disk_space : _disk_spaces) {
+        disk_space.sync_dir_spaces(actual_dir_spaces);
+    }
 }
 
 Status DiskSpaceMonitor::_update_cache_quota(const std::vector<DirSpace>& dir_spaces) {
     _updating.store(true, std::memory_order_release);
     Status st = _cache->update_disk_spaces(dir_spaces);
     _updating.store(false, std::memory_order_release);
+    if (st.ok()) {
+        for (auto& disk_space : _disk_spaces) {
+            disk_space.commit_adjustment();
+        }
+    }
     return st;
 }
 
