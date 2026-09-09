@@ -20,7 +20,7 @@ description: "为 StarRocks BE 节点启用和可视化 Jemalloc 堆内存分析
 ADMIN EXECUTE ON <be_id> 'System.print(HeapProf.getInstance().enable_prof())'
 ```
 
-启用和禁用现在都通过 `jemalloc_conf` BE 配置项进行，因此该设置同时体现为 `information_schema.be_configs` 中的 `prof_active`，在那里修改该值走的是同一条代码路径。语句返回本次更新的状态而不是 `HeapProf` 对象；如果 BE 启动时未带 `prof:true`，则会失败。
+启用要求 BE 启动时 `jemalloc_conf` 中带有 `prof:true`（默认即为如此），否则语句会失败。当前设置也可以在 `information_schema.be_configs` 的 `prof_active` 中查看。
 
 `be_id`: BE/CN 节点的 ID。可以通过运行 SHOW BACKENDS 或 SHOW COMPUTE NODES 获取 ID。
 
