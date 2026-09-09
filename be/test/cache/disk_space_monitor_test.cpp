@@ -84,6 +84,49 @@ private:
     size_t _dir_capacity = 0;
 };
 
+// A cache engine wrapper which can make the disk space update fail on demand,
+// to simulate transient failures of the underlying cache engine.
+class FlakyDiskCacheEngine : public LocalDiskCacheEngine {
+public:
+    explicit FlakyDiskCacheEngine(LocalDiskCacheEngine* engine) : _engine(engine) {}
+
+    void set_fail_update(bool fail) { _fail_update = fail; }
+
+    bool is_initialized() const override { return _engine->is_initialized(); }
+    Status write(const std::string& key, const IOBuffer& buffer, DiskCacheWriteOptions* options) override {
+        return _engine->write(key, buffer, options);
+    }
+    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override {
+        return _engine->read(key, off, size, buffer, options);
+    }
+    bool exist(const std::string& key) const override { return _engine->exist(key); }
+    Status remove(const std::string& key) override { return _engine->remove(key); }
+    Status update_disk_spaces(const std::vector<DirSpace>& spaces) override {
+        if (_fail_update) {
+            return Status::InternalError("cache system is busy");
+        }
+        return _engine->update_disk_spaces(spaces);
+    }
+    Status update_inline_cache_count_limit(int32_t limit) override {
+        return _engine->update_inline_cache_count_limit(limit);
+    }
+    const DataCacheDiskMetrics cache_metrics() const override { return _engine->cache_metrics(); }
+    void record_read_remote(size_t size, int64_t latency_us) override { _engine->record_read_remote(size, latency_us); }
+    void record_read_cache(size_t size, int64_t latency_us) override { _engine->record_read_cache(size, latency_us); }
+    Status shutdown() override { return Status::OK(); }
+    bool has_disk_cache() const override { return _engine->has_disk_cache(); }
+    bool available() const override { return _engine->available(); }
+    void disk_spaces(std::vector<DirSpace>* spaces) const override { _engine->disk_spaces(spaces); }
+    size_t lookup_count() const override { return _engine->lookup_count(); }
+    size_t hit_count() const override { return _engine->hit_count(); }
+    Status prune() override { return _engine->prune(); }
+
+private:
+    LocalDiskCacheEngine* _engine;
+    bool _fail_update = false;
+};
+
 class DiskSpaceMonitorTest : public ::testing::Test {
 public:
     static const size_t kBlockSize;
@@ -374,6 +417,144 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
         metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 0);
     }
+}
+
+TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_from_zero) {
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
+    SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 40 * MB);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 1);
+
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 50 * MB);
+    auto block_cache = TestCacheUtils::create_cache(options);
+    auto local_cache = block_cache->local_cache();
+
+    SpaceInfo space_info = {.capacity = 100 * MB, .free = 20 * MB, .available = 10 * MB};
+    _mock_fs->set_space(1, ".", space_info);
+
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
+    insert_to_cache(block_cache.get(), 50);
+
+    {
+        config::enable_datacache_disk_auto_adjust = true;
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
+        auto metrics = local_cache->cache_metrics();
+        // other: 100M - 10M - 50M = 40M
+        // new quota: 100 * 0.7 - other = 30M < 40M = 0
+        ASSERT_EQ(metrics.disk_quota_bytes, 0);
+    }
+
+    // After the cache is disabled, the other data still occupies 65% of the disk, which is between
+    // the low level and the high level, so nothing happens.
+    config::datacache_min_disk_quota_for_adjustment = 10 * MB;
+    {
+        space_info = {.capacity = 100 * MB, .free = 40 * MB, .available = 35 * MB};
+        _mock_fs->set_space(1, ".", space_info);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
+        auto metrics = local_cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 0);
+    }
+
+    // The other data drops to 40% of the disk, which is below the low level, so the cache must be
+    // expanded again once the idle period passes.
+    {
+        space_info = {.capacity = 100 * MB, .free = 65 * MB, .available = 60 * MB};
+        _mock_fs->set_space(1, ".", space_info);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
+        auto metrics = local_cache->cache_metrics();
+        // new quota: 100 * 0.7 - 40M = 30M
+        ASSERT_EQ(metrics.disk_quota_bytes, 30 * MB);
+    }
+}
+
+TEST_F(DiskSpaceMonitorTest, retry_adjustment_after_update_failure) {
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
+    SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
+    // The idle period spans two rounds, so that the round after a failure is only allowed to expand
+    // if the free period accumulated before the failure has been kept.
+    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 2);
+
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
+    auto block_cache = TestCacheUtils::create_cache(options);
+    auto local_cache = block_cache->local_cache();
+    FlakyDiskCacheEngine flaky_cache(local_cache.get());
+
+    SpaceInfo space_info = {.capacity = 500 * MB, .free = 400 * MB, .available = 300 * MB};
+    _mock_fs->set_space(1, ".", space_info);
+
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(&flaky_cache, _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
+    insert_to_cache(block_cache.get(), 19);
+
+    {
+        // Round 1: the disk usage is below the low level, but the free period (1s) is still shorter
+        // than the idle period (2s), so nothing happens.
+        config::enable_datacache_disk_auto_adjust = true;
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
+        auto metrics = local_cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
+    }
+
+    {
+        // Round 2: the free period reaches 2s, the expansion is planned but the cache engine rejects it.
+        flaky_cache.set_fail_update(true);
+        auto ret = adjust_quota_once(space_monitor.get());
+        ASSERT_FALSE(ret.ok());
+        auto metrics = local_cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
+    }
+
+    {
+        // Round 3: the monitor must start from the quota really applied in the cache engine and retry
+        // immediately. The free period must not have been reset by the failed round, otherwise it
+        // would be 1s again and the expansion would be postponed by another idle period.
+        flaky_cache.set_fail_update(false);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
+        auto metrics = local_cache->cache_metrics();
+        // other: 500M - 300M - 19M = 181M
+        // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
+        ASSERT_EQ(metrics.disk_quota_bytes, 160 * MB);
+        ASSERT_EQ(space_monitor->all_dir_spaces()[0].size, 160 * MB);
+    }
+}
+
+TEST_F(DiskSpaceMonitorTest, sync_quota_updated_outside_monitor) {
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
+    SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
+
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
+    auto block_cache = TestCacheUtils::create_cache(options);
+    auto local_cache = block_cache->local_cache();
+
+    // The disk usage stays between the low level and the high level, so no adjustment is triggered.
+    SpaceInfo space_info = {.capacity = 500 * MB, .free = 200 * MB, .available = 150 * MB};
+    _mock_fs->set_space(1, ".", space_info);
+
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
+    ASSERT_EQ(space_monitor->all_dir_spaces()[0].size, 20 * MB);
+
+    // Update the quota directly, like what the `datacache_disk_size` config update does.
+    std::vector<DirSpace> dir_spaces = options.dir_spaces;
+    dir_spaces[0].size = 40 * MB;
+    ASSERT_OK(local_cache->update_disk_spaces(dir_spaces));
+
+    config::enable_datacache_disk_auto_adjust = true;
+    ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+    ASSERT_FALSE(changed);
+    ASSERT_EQ(space_monitor->all_dir_spaces()[0].size, 40 * MB);
 }
 
 TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
