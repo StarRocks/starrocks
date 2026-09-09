@@ -547,6 +547,29 @@ jobs:
           review-message: "Auto approved sync PR"
           github-token: ${{ secrets.APPROVE_PAT }}
 
+      # Second approval on main (see the auto-merge job for rationale): main
+      # requires 2 approving reviews, so the rescue path must also supply the
+      # second one via APPROVE_PAT_2. Same rescue gate as above, plus main-only.
+      - name: auto-approve 2/2 (rescue, main only)
+        if: >
+          github.base_ref == 'main' &&
+          needs.be-ut-refactor-compile.result != 'failure' &&
+          needs.be-ut-refactor-compile.result != 'cancelled' &&
+          contains(github.event.pull_request.title, '(sync #') &&
+          contains(needs.pr-label.outputs.labels, 'sync') &&
+          !contains(needs.pr-label.outputs.labels, 'pending') &&
+          (
+            (
+              contains(needs.pr-label.outputs.labels, 'ERROR') &&
+              !contains(needs.pr-label.outputs.labels, 'conflict')
+            ) ||
+            steps.clear-conflict.outputs.conflict_cleared == 'true'
+          )
+        uses: hmarr/auto-approve-action@v3
+        with:
+          review-message: "Auto approved sync PR (2/2)"
+          github-token: ${{ secrets.APPROVE_PAT_2 }}
+
       - name: enable automerge (rescue after stale label clear)
         if: >
           needs.be-ut-refactor-compile.result != 'failure' &&
@@ -606,6 +629,18 @@ jobs:
         with:
           review-message: "Auto approved sync PR"
           github-token: ${{ secrets.APPROVE_PAT }}
+
+      # main branch protection requires 2 approving reviews. APPROVE_PAT (first
+      # bot) supplies one; this second, DISTINCT writer bot (APPROVE_PAT_2)
+      # supplies the second so native auto-merge can satisfy branch protection.
+      # main-only: release branches require a single approval, so the first
+      # review already suffices there and a second is unnecessary.
+      - name: auto-approve 2/2 (main only)
+        if: github.base_ref == 'main'
+        uses: hmarr/auto-approve-action@v3
+        with:
+          review-message: "Auto approved sync PR (2/2)"
+          github-token: ${{ secrets.APPROVE_PAT_2 }}
 
       - name: automerge
         uses: peter-evans/enable-pull-request-automerge@v3
