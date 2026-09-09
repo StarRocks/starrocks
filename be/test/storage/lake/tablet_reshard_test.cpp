@@ -1259,6 +1259,47 @@ protected:
         return segment_file_size;
     }
 
+    // Write a real Segment file that contains ONLY the key column c0 = [0..num_rows).
+    // This is what a segment written before a light `ADD COLUMN c1` looks like on
+    // disk: the schema swap does not rewrite data, so the column is absent from
+    // the footer even though the tablet schema declares it.
+    uint64_t write_c0_only_segment(int64_t tablet_id, const std::string& segment_name, int num_rows) {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        schema_pb.set_id(2002);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_num_rows_per_row_block(65535);
+        auto* c0 = schema_pb.add_column();
+        c0->set_unique_id(1001);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        auto segment_path = _tablet_manager->segment_location(tablet_id, segment_name);
+
+        WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto wfile_or = fs::new_writable_file(fopts, segment_path);
+        CHECK_OK(wfile_or.status());
+
+        SegmentWriterOptions opts;
+        SegmentWriter writer(std::move(wfile_or.value()), 0, tablet_schema, opts);
+        CHECK_OK(writer.init());
+
+        auto col0 = Int32Column::create();
+        std::vector<int> v0(num_rows);
+        for (int i = 0; i < num_rows; ++i) v0[i] = i;
+        col0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        auto chunk_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto chunk = std::make_shared<Chunk>(Columns{std::move(col0)}, chunk_schema);
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t segment_file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&segment_file_size, &index_size, &footer_position));
+        return segment_file_size;
+    }
+
     std::vector<std::pair<uint64_t, int64_t>> write_two_column_bundled_segments(
             int64_t tablet_id, const std::string& bundle_name, int num_rows,
             const std::function<int(int)>& source_value_of, int key_start = 0) {
@@ -1410,13 +1451,20 @@ protected:
     // base segment. Verifies the rebuilt .cols row values (surviving children's
     // updates on their windows, base values on the gap) and that a gap delvec
     // masks the compacted child's rows.
-    void run_dcg_conflict_gap_rebuild_case(int compacted_index, int64_t txn_id) {
+    //
+    // With |c1_added_without_data_rewrite|, c1 instead arrives through a light
+    // ADD COLUMN: the base segment predates it and carries only c0, while the
+    // schema declares c1 with a default. The gap window then has no base values
+    // to copy and must fall back to that declared default.
+    void run_dcg_conflict_gap_rebuild_case(int compacted_index, int64_t txn_id,
+                                           bool c1_added_without_data_rewrite = false) {
         const int64_t base_version = 1;
         const int64_t new_version = 2;
         constexpr int kNumRows = 30;
         constexpr int kRangeRows = 10; // three equal key ranges: [0,10) [10,20) [20,30)
         constexpr int64_t kSchemaId = 4001;
         constexpr uint32_t kSharedRowsetId = 1;
+        constexpr int kC1Default = 7;
 
         const int64_t child_ids[3] = {next_id(), next_id(), next_id()};
         const int64_t merged_tablet = next_id();
@@ -1428,7 +1476,9 @@ protected:
         auto update_of = [](int child_index, int row) { return row + 100000 * (child_index + 1); };
         const std::string shared_segment_name = "shared_seg.dat";
         const uint64_t base_segment_size =
-                write_two_column_segment(merged_tablet, shared_segment_name, kNumRows, base_value_of);
+                c1_added_without_data_rewrite
+                        ? write_c0_only_segment(merged_tablet, shared_segment_name, kNumRows)
+                        : write_two_column_segment(merged_tablet, shared_segment_name, kNumRows, base_value_of);
 
         auto set_key_range = [&](TabletRangePB* range, int lower_key, int upper_key) {
             range->set_lower_bound_included(true);
@@ -1446,6 +1496,11 @@ protected:
             meta->set_next_rowset_id(10);
             const auto [c0_uid, c1_uid] = set_two_column_pk_schema(meta.get(), kSchemaId);
             (void)c0_uid;
+            if (c1_added_without_data_rewrite) {
+                // A light ADD COLUMN requires the new column to be nullable or to
+                // carry a default, so the reader always has something to fill with.
+                meta->mutable_schema()->mutable_column(1)->set_default_value(std::to_string(kC1Default));
+            }
             set_key_range(meta->mutable_range(), lower, upper);
 
             if (i == compacted_index) {
@@ -1548,7 +1603,10 @@ protected:
         ASSERT_EQ(kNumRows, static_cast<int>(values.size()));
         for (int row = 0; row < kNumRows; ++row) {
             const int range_index = row / kRangeRows;
-            const int expected = (range_index == compacted_index) ? base_value_of(row) : update_of(range_index, row);
+            int expected = update_of(range_index, row);
+            if (range_index == compacted_index) {
+                expected = c1_added_without_data_rewrite ? kC1Default : base_value_of(row);
+            }
             EXPECT_EQ(expected, values[row]) << "row " << row << " (range " << range_index << ")";
         }
     }
@@ -14720,6 +14778,127 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_middle_c
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_with_gap_last_child_compacts) {
     run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/2, /*txn_id=*/3103);
+}
+
+// Same gap rebuild, but c1 was introduced by a light ADD COLUMN that did not
+// rewrite the pre-existing base segment. The gap window therefore reads a column
+// the base segment does not physically contain; the rebuild must fill the
+// declared default instead of failing.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_gap_fill_with_light_added_column) {
+    run_dcg_conflict_gap_rebuild_case(/*compacted_index=*/1, /*txn_id=*/3104,
+                                      /*c1_added_without_data_rewrite=*/true);
+}
+
+// A .cols file claims exactly the column UIDs listed in its DCG entry, so a UID
+// the file does not physically contain is corruption and must keep failing --
+// substituting a default there would silently persist wrong values into the
+// rebuilt .cols. Both children's entries claim c1 and c2, but their .cols files
+// carry only c1; c2 exists in the tablet schema (with a default, so a
+// default-tolerant read would succeed) and is therefore not caught by the
+// rebuild schema's own missing-UID guard.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_donor_dcg_missing_column_still_fails) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    constexpr int kNumRows = 20;
+    constexpr int kBoundary = 10; // child A owns [0, 10), child B owns [10, 20)
+    constexpr uint32_t kSegmentRssid = 1;
+    constexpr int64_t kSchemaId = 4001;
+    constexpr int64_t kTxnId = 3105;
+    constexpr int32_t kC2Uid = 1003;
+
+    auto base_value_of = [](int row) { return row * 10; };
+    const std::string shared_segment_name = "shared_seg.dat";
+    const uint64_t base_segment_size =
+            write_two_column_segment(merged_tablet, shared_segment_name, kNumRows, base_value_of);
+
+    // Each child's .cols file physically holds c1 only.
+    const std::string cols_a_name = lake::gen_cols_filename(kTxnId);
+    const std::string cols_b_name = lake::gen_cols_filename(kTxnId + 1);
+    auto a_cell = [&](int row) { return row < kBoundary ? row + 100000 : base_value_of(row); };
+    auto b_cell = [&](int row) { return row >= kBoundary ? row + 200000 : base_value_of(row); };
+    write_c1_only_cols_file(child_a, cols_a_name, kNumRows, a_cell);
+    write_c1_only_cols_file(child_b, cols_b_name, kNumRows, b_cell);
+
+    auto build_child = [&](int64_t tablet_id, int lower_key, int upper_key, const std::string& cols_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(10);
+        const auto [c0_uid, c1_uid] = set_two_column_pk_schema(metadata.get(), kSchemaId);
+        (void)c0_uid;
+        auto* c2 = metadata->mutable_schema()->add_column();
+        c2->set_unique_id(kC2Uid);
+        c2->set_name("c2");
+        c2->set_type("INT");
+        c2->set_is_key(false);
+        c2->set_is_nullable(false);
+        c2->set_aggregation("REPLACE");
+        c2->set_default_value("42");
+
+        auto* tablet_range = metadata->mutable_range();
+        tablet_range->set_lower_bound_included(true);
+        tablet_range->set_upper_bound_included(false);
+        *tablet_range->mutable_lower_bound() = generate_sort_key(lower_key);
+        *tablet_range->mutable_upper_bound() = generate_sort_key(upper_key);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(kSegmentRssid);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(kNumRows);
+        rowset->set_data_size(base_segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(shared_segment_name);
+        segment_meta->set_size(base_segment_size);
+        segment_meta->set_shared(true);
+        stamp_physical_identity_uid(rowset, shared_segment_name); // same UID across siblings => one canonical rowset
+        *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
+        *rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(upper_key);
+        rowset->mutable_range()->set_lower_bound_included(true);
+        rowset->mutable_range()->set_upper_bound_included(false);
+        (*metadata->mutable_rowset_to_schema())[kSegmentRssid] = kSchemaId;
+
+        // The entry over-claims: it names c2 as well, but the file has only c1.
+        auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[kSegmentRssid];
+        dcg.add_column_files(cols_filename);
+        auto* claimed = dcg.add_unique_column_ids();
+        claimed->add_column_ids(c1_uid);
+        claimed->add_column_ids(kC2Uid);
+        dcg.add_versions(1);
+        dcg.add_shared_files(false);
+        return metadata;
+    };
+
+    EXPECT_OK(put_tablet_metadata(build_child(child_a, 0, kBoundary, cols_a_name)));
+    EXPECT_OK(put_tablet_metadata(build_child(child_b, kBoundary, kNumRows, cols_b_name)));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(child_a);
+    merging_tablet.add_old_tablet_ids(child_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(kTxnId + 2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_not_found()) << st.to_string();
+    // The message must name the .cols file and the claimed-but-absent UID, which
+    // proves the read reached the strict column iterator rather than tripping the
+    // rebuild schema's missing-UID guard first.
+    EXPECT_NE(std::string::npos, st.to_string().find(fmt::format("column of id {}", kC2Uid))) << st.to_string();
+    EXPECT_NE(std::string::npos, st.to_string().find(cols_a_name)) << st.to_string();
 }
 
 // When two children's DCG entries share a .cols filename but the entry

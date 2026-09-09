@@ -1316,12 +1316,20 @@ StatusOr<std::shared_ptr<Segment>> open_source_dcg_segment(TabletManager* tablet
                          /*partial_rowset_footer=*/nullptr, /*lake_io_opts=*/LakeIOOptions{}, tablet_manager);
 }
 
+// Which kind of segment a column range is being read from. A light ADD COLUMN
+// swaps the tablet schema without rewriting data, so a canonical data segment
+// written before it can legitimately lack a column the schema declares, and the
+// declared default is the right fill. A .cols file, by contrast, claims exactly
+// the UIDs listed in its DCG entry (TabletSchema::create_with_uid), so a column
+// missing there is corruption and must keep failing.
+enum class SegmentKind { CanonicalBase, DeltaColumnGroup };
+
 // Helper: read [row_begin, row_end) rows of |column_unique_id| from |segment|,
 // previously opened with |entry_schema| which must contain that UID. The
 // column values are appended to |destination|.
 Status read_column_range_from_segment(const std::shared_ptr<Segment>& segment, const TabletSchemaCSPtr& entry_schema,
                                       uint32_t column_unique_id, rowid_t row_begin, rowid_t row_end,
-                                      Column* destination) {
+                                      Column* destination, SegmentKind segment_kind) {
     const int32_t column_index = entry_schema->field_index(static_cast<ColumnUID>(column_unique_id));
     if (column_index < 0) {
         return Status::Corruption(
@@ -1330,7 +1338,10 @@ Status read_column_range_from_segment(const std::shared_ptr<Segment>& segment, c
     const auto& tablet_column = entry_schema->column(column_index);
     OlapReaderStatistics reader_statistics;
 
-    ASSIGN_OR_RETURN(auto column_iterator, segment->new_column_iterator(tablet_column, /*path=*/nullptr));
+    ASSIGN_OR_RETURN(auto column_iterator,
+                     segment_kind == SegmentKind::CanonicalBase
+                             ? segment->new_column_iterator_or_default(tablet_column, /*path=*/nullptr)
+                             : segment->new_column_iterator(tablet_column, /*path=*/nullptr));
 
     // Build a RandomAccessFile for the segment's file (required by
     // ColumnIteratorOptions::read_file). Segment's new_iterator path is too
@@ -1495,12 +1506,15 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
             if (window.is_gap) {
                 // No source DCG entry claims these rows (their old tablet was
                 // compacted away). They are masked by the merge gap delvec and
-                // never returned, so fill from the canonical base segment: real,
-                // already-indexed values keep the rebuilt .cols encodings and
-                // secondary indexes valid.
+                // never returned, so any valid value of the column is a correct
+                // fill; read the canonical base segment so the values stay
+                // consistent with the rest of the rebuilt .cols and its
+                // secondary indexes. A segment written before a light ADD COLUMN
+                // of this column does not contain it, and the declared default
+                // is substituted there.
                 RETURN_IF_ERROR(read_column_range_from_segment(base_segment, full_tablet_schema, unique_id,
                                                                window.range.begin(), window.range.end(),
-                                                               output_column.get()));
+                                                               output_column.get(), SegmentKind::CanonicalBase));
                 continue;
             }
             const DcgSurvivingEntry* selected_source = nullptr;
@@ -1511,7 +1525,7 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
             ASSIGN_OR_RETURN(auto source_segment, get_source_segment(selected_source));
             RETURN_IF_ERROR(read_column_range_from_segment(source_segment, entry_schemas[selected_source], unique_id,
                                                            window.range.begin(), window.range.end(),
-                                                           output_column.get()));
+                                                           output_column.get(), SegmentKind::DeltaColumnGroup));
         }
 
         if (output_column->size() != static_cast<size_t>(num_rows_in_target)) {
