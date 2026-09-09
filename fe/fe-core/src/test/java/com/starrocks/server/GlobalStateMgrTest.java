@@ -135,7 +135,7 @@ public class GlobalStateMgrTest {
     }
 
     @Test
-    public void testLabelCleanerIntervalIsMutable() throws Exception {
+    public void testLabelCleanerPicksUpIntervalChange() throws Exception {
         int originInterval = Config.label_clean_interval_second;
         try {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -148,7 +148,7 @@ public class GlobalStateMgrTest {
             FrontendDaemon labelCleaner = (FrontendDaemon) labelCleanerField.get(globalStateMgr);
             Assertions.assertEquals(3600 * 1000L, labelCleaner.getInterval());
 
-            // the running daemon picks up the new value without restarting the FE
+            // a running cycle applies the new value, so ADMIN SET FRONTEND CONFIG needs no FE restart
             Config.label_clean_interval_second = 600;
             Method runAfterCatalogReady = labelCleaner.getClass().getDeclaredMethod("runAfterCatalogReady");
             runAfterCatalogReady.setAccessible(true);
