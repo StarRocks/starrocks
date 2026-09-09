@@ -366,3 +366,9 @@ bool Status::is_moved_from(const char* state) {
 }
 
 } // namespace starrocks
+
+// DO NOT MERGE -- temporary marker so the `be/!(test)**` paths filter fires and
+// this PR runs BE UT + the BE total coverage merge, to measure BE-REPORT after
+// the checkout removal in #78905. Comment only: no coverable line is added, so
+// the incremental coverage report stays at 0/0. This PR will be closed, not
+// merged.
