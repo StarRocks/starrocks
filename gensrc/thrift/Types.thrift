@@ -728,3 +728,67 @@ struct TTabletRange {
     3: optional bool lower_bound_included
     4: optional bool upper_bound_included
 }
+
+// Metadata recognition does not enable computation for an edge algorithm.
+enum TGeoLogicalType {
+    UNKNOWN = 0,
+    GEOGRAPHY = 1,
+    GEOMETRY = 2
+}
+
+enum TGeoCoordinateSystem {
+    UNKNOWN = 0,
+    SPHERICAL = 1,
+    CARTESIAN = 2
+}
+
+enum TGeoEdgeAlgorithm {
+    UNKNOWN = 0,
+    SPHERICAL = 1,
+    VINCENTY = 2,
+    THOMAS = 3,
+    ANDOYER = 4,
+    KARNEY = 5,
+    PLANAR = 6
+}
+
+enum TGeoEncoding {
+    UNKNOWN = 0,
+    WKB = 1
+}
+
+enum TGeoDimension {
+    UNKNOWN = 0,
+    XY = 1,
+    XYZ = 2,
+    XYM = 3,
+    XYZM = 4,
+    MIXED = 5
+}
+
+enum TGeoValidationState {
+    UNKNOWN = 0,
+    UNVALIDATED = 1,
+    STRUCTURALLY_VALIDATED = 2,
+    SEMANTICALLY_VALIDATED = 3
+}
+
+// Standalone descriptors; not attached to TTypeDesc until native type integration.
+struct TGeoTypeDesc {
+    1: optional TGeoLogicalType logical_type
+    2: optional TGeoCoordinateSystem coordinate_system
+    3: optional TGeoEdgeAlgorithm edge_algorithm
+    4: optional string crs
+    5: optional i32 srid
+}
+
+struct TGeoStorageDesc {
+    1: optional TGeoEncoding encoding
+    2: optional TGeoDimension dimension
+    3: optional TGeoValidationState validation_state
+}
+
+struct TGeoColumnDesc {
+    1: optional TGeoTypeDesc type
+    2: optional TGeoStorageDesc storage
+}
