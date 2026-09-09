@@ -36,16 +36,14 @@
 
 #include <thrift/TProcessor.h>
 #include <thrift/server/TServer.h>
-#include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TTransport.h>
 
+#include <memory>
 #include <thread>
 #include <unordered_map>
-#include <utility>
 
 #include "base/metrics.h"
 #include "common/status.h"
-#include "common/util/thrift_util.h"
 
 namespace starrocks {
 
@@ -68,13 +66,14 @@ namespace starrocks {
 // on every connection instead of caching it at factory construction time. This way a
 // runtime change takes effect on subsequent connections without restarting the BE.
 // In-flight connections keep the limit they were created with, which is the desired behavior.
+//
+// The implementation lives in thrift_server.cpp so that this header only needs to see
+// TTransportFactory (the base class) and does not drag in thrift's TBufferTransports or
+// thrift_util.h transitively.
 class ConfigurableBufferedTransportFactory : public apache::thrift::transport::TTransportFactory {
 public:
     std::shared_ptr<apache::thrift::transport::TTransport> getTransport(
-            std::shared_ptr<apache::thrift::transport::TTransport> transport) override {
-        return std::make_shared<apache::thrift::transport::TBufferedTransport>(std::move(transport),
-                                                                               create_thrift_configuration());
-    }
+            std::shared_ptr<apache::thrift::transport::TTransport> transport) override;
 };
 
 // Utility class for all Thrift servers. Runs a TNonblockingServer(default) or a

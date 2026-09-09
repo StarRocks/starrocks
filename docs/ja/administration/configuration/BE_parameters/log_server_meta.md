@@ -459,7 +459,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: Bytes
 - 変更可能: はい
-- 説明: BE Thrift 層が単一の `TFramedTransport` フレームに許可する最大フレームサイズ（バイト）。この値は thrift の `TConfiguration` に対応し、クライアント側の（デ）シリアライズ経路と受信 RPC を受け付けるサーバ側トランスポートの両方に適用されます。この制限は `TFramedTransport` が使用される場合にのみ有効です（BE Thrift サーバはデフォルトで `THREADED` モードで `TBufferedTransport` を使用するため、主に `NON_BLOCKING` サーバ経路に関連します）。`thrift_max_message_size` と競合する場合は、小さい方の値が使用されます。この設定は動的設定のため、実行時の変更は変更後に確立された接続にのみ有効で、既に確立されている接続は作成時の値を維持し、全接続に反映させるには再接続が必要になる場合があります。
+- 説明: BE Thrift 層が単一の `TFramedTransport` フレームに許可する最大フレームサイズ（バイト）。この値は thrift の `TConfiguration` に対応し、クライアント側の（デ）シリアライズ経路と受信 RPC を受け付けるサーバ側トランスポートの両方に適用されます。この制限は `TFramedTransport` が使用され、かつトランスポートが `TConfiguration` を付けて作成される場合にのみ有効です。BE Thrift サーバはデフォルトで `THREADED` モードで `TBufferedTransport` を使用し、`NON_BLOCKING` サーバ経路も既定の `TTransportFactory` を使用するため、この設定は既定のサーバ接続には適用されません。`thrift_max_message_size` と競合する場合は、小さい方の値が使用されます。この設定は動的設定のため、実行時の変更は変更後に確立された接続にのみ有効で、既に確立されている接続は作成時の値を維持し、全接続に反映させるには再接続が必要になる場合があります。
 - 導入バージョン: -
 
 ### thrift_max_message_size
