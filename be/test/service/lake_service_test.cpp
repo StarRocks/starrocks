@@ -167,6 +167,7 @@ protected:
         segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
         segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
         segment_meta->set_num_rows(10);
+        segment_meta->set_segment_idx(0);
 
         auto* range = metadata->mutable_range();
         range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower_key));
@@ -188,6 +189,7 @@ protected:
         rowset->set_overlapped(false);
         rowset->set_num_rows(10);
         rowset->set_data_size(100);
+        rowset->set_num_dels(3);
         // Production rowset producers mint a uid; emulate that here so the
         // strict-uid invariant in tablet_merger holds when MERGE later runs.
         lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
@@ -197,6 +199,7 @@ protected:
         segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(lower_key));
         segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(upper_key - 1));
         segment_meta->set_num_rows(10);
+        segment_meta->set_segment_idx(0);
 
         auto* range = metadata->mutable_range();
         range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower_key));
@@ -237,10 +240,13 @@ protected:
             sort_key += 100;
             segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(sort_key));
             segment_meta->set_num_rows(100);
+            segment_meta->set_segment_idx(i);
         }
-        log.mutable_op_write()->mutable_rowset()->set_data_size(data_size);
-        log.mutable_op_write()->mutable_rowset()->set_num_rows(num_rows);
-        log.mutable_op_write()->mutable_rowset()->set_overlapped(num_segments > 1);
+        auto* rowset = log.mutable_op_write()->mutable_rowset();
+        rowset->set_data_size(data_size);
+        rowset->set_num_rows(num_rows);
+        rowset->set_overlapped(num_segments > 1);
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
         return log;
     }
 
@@ -266,12 +272,15 @@ protected:
             segment_meta->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_keys[i]));
             segment_meta->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_keys[i]));
             segment_meta->set_num_rows(segment_num_rows[i]);
+            segment_meta->set_segment_idx(i);
             total_rows += segment_num_rows[i];
             total_size += segment_sizes[i];
         }
-        log.mutable_op_write()->mutable_rowset()->set_data_size(total_size);
-        log.mutable_op_write()->mutable_rowset()->set_num_rows(total_rows);
-        log.mutable_op_write()->mutable_rowset()->set_overlapped(min_keys.size() > 1);
+        auto* rowset = log.mutable_op_write()->mutable_rowset();
+        rowset->set_data_size(total_size);
+        rowset->set_num_rows(total_rows);
+        rowset->set_overlapped(min_keys.size() > 1);
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
         return log;
     }
 
@@ -1508,6 +1517,8 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
     rowset->set_overlapped(false);
     rowset->set_num_rows(150);
     rowset->set_data_size(1500);
+    rowset->set_num_dels(50);
+    lake::tablet_reshard_helper::ensure_rowset_uid(rowset);
 
     auto* segment_meta0 = rowset->add_segment_metas();
     segment_meta0->set_filename("seg_0");
@@ -1515,6 +1526,7 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
     segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
     segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(50));
     segment_meta0->set_num_rows(100);
+    segment_meta0->set_segment_idx(0);
 
     auto* segment_meta1 = rowset->add_segment_metas();
     segment_meta1->set_filename("seg_1");
@@ -1522,6 +1534,7 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
     segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
     segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(150));
     segment_meta1->set_num_rows(50);
+    segment_meta1->set_segment_idx(1);
 
     _tablet_id = metadata->id();
     auto tablet = std::make_shared<lake::Tablet>(_tablet_mgr, _tablet_id);
@@ -1550,6 +1563,9 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
     builder.append_delvec(ndv1, rowset->id() + 1);
 
     ASSERT_OK(builder.finalize(next_id()));
+    ASSIGN_OR_ABORT(auto persisted_metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, metadata->version()));
+    ASSERT_TRUE(persisted_metadata->rowsets(0).has_num_dels());
+    ASSERT_EQ(50, persisted_metadata->rowsets(0).num_dels());
 
     ReshardingTabletInfoPB resharding_tablet_info;
     auto* splitting_tablet_info = resharding_tablet_info.mutable_splitting_tablet_info();
@@ -1592,9 +1608,8 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
     }
     EXPECT_EQ(150, total_rows);
     EXPECT_EQ(1500, total_size);
-    // Parent had 40 deletes on seg_0 and 10 on seg_1 = 50 total. The split reads those
-    // through UpdateManager::get_rowset_num_deletes (num_dels unset on the parent rowset)
-    // and the largest-remainder allocator must conserve the sum.
+    // Parent had 40 deletes on seg_0 and 10 on seg_1 = 50 total. Current publish materializes
+    // that rowset-level anchor, and the largest-remainder allocator must conserve the sum.
     EXPECT_EQ(50, total_num_dels);
 }
 
@@ -1754,10 +1769,13 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
                       generate_sort_key(100).SerializeAsString());
             ASSERT_TRUE(new_metadata->rowsets(0).has_range());
             ASSERT_TRUE(new_metadata->rowsets(1).has_range());
-            EXPECT_EQ(new_metadata->rowsets(0).range().SerializeAsString(),
-                      old_metadata_1->range().SerializeAsString());
-            EXPECT_EQ(new_metadata->rowsets(1).range().SerializeAsString(),
-                      old_metadata_2->range().SerializeAsString());
+            std::set<std::string> actual_ranges;
+            for (const auto& rowset : new_metadata->rowsets()) {
+                actual_ranges.insert(rowset.range().SerializeAsString());
+            }
+            EXPECT_EQ((std::set<std::string>{old_metadata_1->range().SerializeAsString(),
+                                             old_metadata_2->range().SerializeAsString()}),
+                      actual_ranges);
         }
 
         {
@@ -1788,9 +1806,12 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         seg_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         seg_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(10));
         seg_meta1->set_num_rows(10);
-        log1.mutable_op_write()->mutable_rowset()->set_data_size(100);
-        log1.mutable_op_write()->mutable_rowset()->set_num_rows(10);
-        log1.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        seg_meta1->set_segment_idx(0);
+        auto* rowset1 = log1.mutable_op_write()->mutable_rowset();
+        rowset1->set_data_size(100);
+        rowset1->set_num_rows(10);
+        rowset1->set_overlapped(false);
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset1);
         ASSERT_OK(_tablet_mgr->put_txn_log(log1));
 
         TxnLog log2;
@@ -1803,9 +1824,12 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         seg_meta2->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
         seg_meta2->mutable_sort_key_max()->CopyFrom(generate_sort_key(60));
         seg_meta2->set_num_rows(10);
-        log2.mutable_op_write()->mutable_rowset()->set_data_size(100);
-        log2.mutable_op_write()->mutable_rowset()->set_num_rows(10);
-        log2.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        seg_meta2->set_segment_idx(0);
+        auto* rowset2 = log2.mutable_op_write()->mutable_rowset();
+        rowset2->set_data_size(100);
+        rowset2->set_num_rows(10);
+        rowset2->set_overlapped(false);
+        lake::tablet_reshard_helper::ensure_rowset_uid(rowset2);
         ASSERT_OK(_tablet_mgr->put_txn_log(log2));
 
         publish_request.add_txn_ids(txn_id);

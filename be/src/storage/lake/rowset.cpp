@@ -23,6 +23,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
+#include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
@@ -48,6 +49,7 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/empty_iterator.h"
 #include "storage_primitive/projection_iterator.h"
 #include "storage_primitive/schema_helper.h"
 #include "storage_primitive/union_iterator.h"
@@ -657,9 +659,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
     // Size the result up front and write each iterator to its segment's position, so the returned
     // vector stays positionally aligned with `segments` (and its size always equals num_segments).
-    // Callers index it by position and assert on the size; a segment that produces no iterator -- a
-    // lost segment (experimental_lake_ignore_lost_segment) or an EndOfFile segment -- is left as the
-    // default null in its own slot. Mirrors get_each_segment_iterator_with_delvec.
+    // Callers index it by position and assert on the size. Plain reads expose zero-row segments as
+    // non-null empty iterators, while lost segments (experimental_lake_ignore_lost_segment) and
+    // EndOfFile segments remain null in their own slots. The delvec-aware API intentionally keeps
+    // zero-row slots null for its positional contract.
     std::vector<ChunkIteratorPtr> seg_iterators(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
@@ -695,6 +698,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
                                   fmt::format("unexpected null segment in get_each_segment_iterator, "
                                               "tablet:{} rowset:{} segidx:{}",
                                               tablet_id(), metadata().id(), i));
+            continue;
+        }
+        // A zero-row segment cannot initialize a tablet-range iterator because it has no last
+        // block. Return an explicit empty iterator for plain positional reads; the delvec-aware
+        // API below preserves its historical null slot for the same segment.
+        if (seg_ptr->num_rows() == 0) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
         RETURN_IF_ERROR(set_segment_tablet_range(segments[i].segment_meta_pos, shared_segment_range, &seg_options));
@@ -759,6 +769,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
                                   fmt::format("unexpected null segment in get_each_segment_iterator_with_delvec, "
                                               "tablet:{} rowset:{} segidx:{}",
                                               tablet_id(), metadata().id(), i));
+            continue;
+        }
+        if (seg_ptr->num_rows() == 0) {
+            // Delvec-aware positional callers use a null slot to represent a zero-row segment.
             continue;
         }
         // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
