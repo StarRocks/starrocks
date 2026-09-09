@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <climits>
 #include <functional>
 #include <map>
@@ -96,7 +97,8 @@ public:
 
 private:
     // execute the task
-    void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, const ExecFinishCallback& cb);
+    void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, const ExecFinishCallback& cb,
+                   bool admission_already_granted);
 
     void err_handler(StreamLoadContext* ctx, const Status& st, std::string_view err_msg);
 
