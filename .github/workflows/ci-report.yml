@@ -372,14 +372,23 @@ jobs:
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
       SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
+      # Scratch dir, deliberately not the tracked `be/`. See FE_UT_UNPACK_DIR.
+      BE_UT_UNPACK_DIR: be-ut-report
     steps:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+      # No checkout here on purpose: this job never reads repo source. Its
+      # inputs are the OSS objects downloaded below (be_ut_coverage.xml /
+      # base_version.txt / diff.txt), /var/lib/ci-tool and /var/local/env --
+      # exactly like FE-REPORT and JAVA-EXTENSION-REPORT, neither of which
+      # checks anything out. The `fetch-depth: 0` clone that used to sit here
+      # cost ~158s of pure fetch per run (1394 branches + 307 tags, no reuse
+      # because CLEAN wipes the workspace first), and it checked out
+      # origin/main rather than the PR head, so the tree was not even the code
+      # under test. The only thing it really provided was a `be/` directory for
+      # the download step to cd into; ${BE_UT_UNPACK_DIR} replaces that.
 
       - name: Download BE UT XML
         id: download-ut-xml
@@ -395,7 +404,7 @@ jobs:
               echo "::error::BE UT failed!"
               exit 1
             fi
-            cd be
+            rm -rf ${BE_UT_UNPACK_DIR} && mkdir ${BE_UT_UNPACK_DIR} && cd ${BE_UT_UNPACK_DIR}
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . -f 1>/dev/null
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/base_version.txt . -f 1>/dev/null
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/diff.txt . -f 1>/dev/null
@@ -442,7 +451,7 @@ jobs:
           && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
           && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         env:
-          be_path: ${{ github.workspace }}/be
+          be_path: ${{ github.workspace }}/${{ env.BE_UT_UNPACK_DIR }}
           merge_outcome: ${{ steps.merge.outcome }}
           total_xml: ${{ steps.merge.outputs.COV_XML }}
         run: |
