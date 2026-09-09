@@ -16,6 +16,7 @@ package com.starrocks.connector.unified;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -52,10 +53,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
@@ -250,6 +254,13 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getPartitions(table, partitionNames);
+    }
+
+    @Override
+    public Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
+                                          ScalarOperator predicate, FileContent fileContent) {
+        ConnectorMetadata metadata = metadataOfTable(icebergTable);
+        return metadata.getDeleteFiles(icebergTable, snapshotId, predicate, fileContent);
     }
 
     @Override
