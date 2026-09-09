@@ -1238,6 +1238,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`.
 - Introduced in: -
 
+### `max_get_loads_result_count`
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of load records that FE returns in one response when a BE or CN scans `information_schema.loads`. When a scan matches more records than this, FE returns a page and a cursor, and the BE or CN requests the next page until all records are read; query results are unaffected, only the number of RPC round-trips behind one scan changes. A page is cut at a job boundary, so one load job's rows are never split across two pages and a page can slightly exceed this value. Raising it reduces round-trips but grows each response, which risks exceeding the message size limit of the BE-side RPC client; lowering it bounds each response at the cost of more round-trips. Paging applies only when the BE or CN is new enough to send the cursor; an older one still receives the whole result set in a single response.
+- Introduced in: -
+
 ### `max_load_initial_open_partition_number`
 
 - Default: 4096

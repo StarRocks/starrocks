@@ -632,6 +632,10 @@ struct TGetLoadsParams {
     18: optional i64 load_finish_time_to_ms
     19: optional i64 create_time_from_ms
     20: optional i64 create_time_to_ms
+    // Only return loads whose job id >= this value. Setting the field is how a caller
+    // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
+    // result set unpaged when it is absent, so an old BE keeps its previous behavior.
+    21: optional i64 start_job_id_offset
 }
 
 struct TTrackingLoadInfo {
@@ -696,6 +700,8 @@ struct TLoadInfo {
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+    // max job id in loads + 1, if set to 0 or absent, it means reaches end
+    2: optional i64 next_job_id_offset
 }
 
 struct TRoutineLoadJobInfo {

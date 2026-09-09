@@ -229,21 +229,20 @@ bool SchemaLoadsScanner::_fill_datetime_column_from_ms(Column* column, bool is_s
 
 Status SchemaLoadsScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
-    TGetLoadsParams load_params;
     if (nullptr != _param->db) {
-        load_params.__set_db(*(_param->db));
+        _load_params.__set_db(*(_param->db));
     } else if (std::string db_name; _parse_expr_predicate("DB_NAME", db_name)) {
-        load_params.__set_db(db_name);
+        _load_params.__set_db(db_name);
     }
 
     if (std::string table_name; _parse_expr_predicate("TABLE_NAME", table_name)) {
-        load_params.__set_table_name(table_name);
+        _load_params.__set_table_name(table_name);
     }
     if (std::string user; _parse_expr_predicate("USER", user)) {
-        load_params.__set_user(user);
+        _load_params.__set_user(user);
     }
     if (std::string state_str; _parse_expr_predicate("STATE", state_str)) {
-        load_params.__set_state(state_str);
+        _load_params.__set_state(state_str);
     }
 
     // BE evaluates the SQL literal in the session timezone (a wall-clock value
@@ -256,12 +255,12 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
     DateTimeRangeBound load_start_time_to;
     _parse_datetime_range_predicates(_param, "LOAD_START_TIME", session_tz, load_start_time_from, load_start_time_to);
     if (load_start_time_from.has_value) {
-        load_params.__set_load_start_time_from(load_start_time_from.str_value);
-        load_params.__set_load_start_time_from_ms(load_start_time_from.epoch_ms);
+        _load_params.__set_load_start_time_from(load_start_time_from.str_value);
+        _load_params.__set_load_start_time_from_ms(load_start_time_from.epoch_ms);
     }
     if (load_start_time_to.has_value) {
-        load_params.__set_load_start_time_to(load_start_time_to.str_value);
-        load_params.__set_load_start_time_to_ms(load_start_time_to.epoch_ms);
+        _load_params.__set_load_start_time_to(load_start_time_to.str_value);
+        _load_params.__set_load_start_time_to_ms(load_start_time_to.epoch_ms);
     }
 
     DateTimeRangeBound load_finish_time_from;
@@ -269,37 +268,49 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
     _parse_datetime_range_predicates(_param, "LOAD_FINISH_TIME", session_tz, load_finish_time_from,
                                      load_finish_time_to);
     if (load_finish_time_from.has_value) {
-        load_params.__set_load_finish_time_from(load_finish_time_from.str_value);
-        load_params.__set_load_finish_time_from_ms(load_finish_time_from.epoch_ms);
+        _load_params.__set_load_finish_time_from(load_finish_time_from.str_value);
+        _load_params.__set_load_finish_time_from_ms(load_finish_time_from.epoch_ms);
     }
     if (load_finish_time_to.has_value) {
-        load_params.__set_load_finish_time_to(load_finish_time_to.str_value);
-        load_params.__set_load_finish_time_to_ms(load_finish_time_to.epoch_ms);
+        _load_params.__set_load_finish_time_to(load_finish_time_to.str_value);
+        _load_params.__set_load_finish_time_to_ms(load_finish_time_to.epoch_ms);
     }
 
     DateTimeRangeBound create_time_from;
     DateTimeRangeBound create_time_to;
     _parse_datetime_range_predicates(_param, "CREATE_TIME", session_tz, create_time_from, create_time_to);
     if (create_time_from.has_value) {
-        load_params.__set_create_time_from(create_time_from.str_value);
-        load_params.__set_create_time_from_ms(create_time_from.epoch_ms);
+        _load_params.__set_create_time_from(create_time_from.str_value);
+        _load_params.__set_create_time_from_ms(create_time_from.epoch_ms);
     }
     if (create_time_to.has_value) {
-        load_params.__set_create_time_to(create_time_to.str_value);
-        load_params.__set_create_time_to_ms(create_time_to.epoch_ms);
+        _load_params.__set_create_time_to(create_time_to.str_value);
+        _load_params.__set_create_time_to_ms(create_time_to.epoch_ms);
     }
 
     if (nullptr != _param->label) {
-        load_params.__set_label(*(_param->label));
+        _load_params.__set_label(*(_param->label));
     }
     if (_param->job_id != -1) {
-        load_params.__set_job_id(_param->job_id);
+        _load_params.__set_job_id(_param->job_id);
     }
 
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
-    RETURN_IF_ERROR(SchemaHelper::get_loads(_ss_state, load_params, &_result));
+    return _fetch_page(0);
+}
+
+Status SchemaLoadsScanner::_fetch_page(int64_t start_job_id_offset) {
+    // Setting the cursor is also how this BE tells FE it can handle a paged response.
+    _load_params.__set_start_job_id_offset(start_job_id_offset);
+    // Reset so a response that omits next_job_id_offset does not inherit the previous
+    // page's cursor.
+    _result = TGetLoadsResult();
+    RETURN_IF_ERROR(SchemaHelper::get_loads(_ss_state, _load_params, &_result));
     _cur_idx = 0;
+    // An FE too old to paginate leaves next_job_id_offset unset, which reads as "no more
+    // pages" - that single response already carried the whole result set.
+    _next_job_id_offset = _result.__isset.next_job_id_offset ? _result.next_job_id_offset : 0;
     return Status::OK();
 }
 
@@ -547,12 +558,18 @@ Status SchemaLoadsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("call this before initial.");
     }
-    if (_cur_idx >= _result.loads.size()) {
-        *eos = true;
-        return Status::OK();
-    }
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("invalid parameter.");
+    }
+    // Pull pages until one has rows to hand out. FE only cuts a page once it is full, so
+    // this normally spins at most once; the loop is what keeps an empty page from ending
+    // the scan early or yielding an empty chunk.
+    while (_cur_idx >= _result.loads.size()) {
+        if (_next_job_id_offset == 0) {
+            *eos = true;
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(_fetch_page(_next_job_id_offset));
     }
     *eos = false;
     return fill_chunk(chunk);
