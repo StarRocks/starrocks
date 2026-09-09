@@ -391,7 +391,7 @@ my_mv = MaterializedView(
     metadata,
     definition="SELECT name, count(*) as cnt FROM my_table GROUP BY name",
     schema='my_schema',
-    starrocks_refresh='ASYNC',
+    starrocks_refresh='ON_CHANGE',
     starrocks_properties={'replication_num': '1'},
 )
 ```

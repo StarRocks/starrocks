@@ -176,7 +176,7 @@ user_stats_mv = MaterializedView(
     'user_stats_mv',
     metadata,
     definition='SELECT id, COUNT(*) AS cnt FROM my_core_table GROUP BY id',
-    starrocks_refresh='ASYNC'
+    starrocks_refresh='ON_CHANGE'
 )
 
 # Create the view and MV in the database

@@ -3,6 +3,13 @@ Version history
 
 **Unreleased**
 
+- Support the `ON_CHANGE` refresh keyword that StarRocks 26.2 introduced for
+  base-table-change-triggered materialized views, which rejects the bare `ASYNC` it replaces.
+  Reflection accepts either spelling and keeps reporting `ASYNC`, Alembic autogenerate treats
+  them as the same refresh mode, and DDL is emitted with the keyword the connected server
+  accepts, so one metadata definition works against every supported release. The scheduled
+  mode (`ASYNC EVERY(...)`) is unchanged.
+
 - Add the `starrocks_temp_view_schema` Alembic option (`context.configure(...)`) to designate
   the schema in which the transient view used to canonicalize view/MV definitions is created.
   Lets a locked-down migration user be granted the required privileges on a single schema

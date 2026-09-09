@@ -150,7 +150,7 @@ The basic MV lifecycle tests are currently skipped. The following MV features ne
   - `PARTITION BY`
   - `DISTRIBUTED BY`
   - `ORDER BY`
-  - `REFRESH ASYNC/MANUAL/INCREMENTAL`
+  - `REFRESH ON_CHANGE/ASYNC/MANUAL/INCREMENTAL`
 - **ALTER operations**:
   - `RENAME TO`
   - `SET REFRESH ...`

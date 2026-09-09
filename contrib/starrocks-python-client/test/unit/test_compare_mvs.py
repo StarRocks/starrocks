@@ -250,10 +250,17 @@ class TestCompareMaterializedView:
             ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)"),
             ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
             ("ASYNC", "IMMEDIATE ASYNC"),
+            # StarRocks 26.2+ reflects the untimed asynchronous refresh as ON_CHANGE, for views
+            # created before the rename too, so metadata still on ASYNC must not read as a diff.
+            ("ON_CHANGE", "ASYNC"),
+            ("ON_CHANGE", "IMMEDIATE ASYNC"),
+            ("DEFERRED ON_CHANGE", "DEFERRED ASYNC"),
+            ("ON_CHANGE", "ON_CHANGE"),
+            ("on_change", "ASYNC"),
         ],
     )
     def test_no_change_mv_refresh_schedule_alias(self, conn_refresh, meta_refresh):
-        """No change: 4.1 SCHEDULE refresh keyword is equivalent to metadata ASYNC."""
+        """No change: the SCHEDULE (4.1) and ON_CHANGE (26.2) keywords are equivalent to ASYNC."""
         upgrade_ops = ops.UpgradeOps([])
         conn_mv = self._create_reflected_mv("my_mv", definition="SELECT 1", refresh=conn_refresh)
         meta_mv = MaterializedView("my_mv", MetaData(), definition="SELECT 1", starrocks_refresh=meta_refresh)

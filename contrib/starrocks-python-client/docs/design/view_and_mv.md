@@ -54,7 +54,7 @@ To unify the representation of View and MaterializedView using the `Table` class
 | **Partitioning**         | `table.dialect_options['starrocks']['partition_by']`   | TABLE, MV          | `starrocks_partition_by='...'`        | Passed via kwargs                      |
 | **Distribution**         | `table.dialect_options['starrocks']['distributed_by']` | TABLE, MV          | `starrocks_distributed_by='...'`      | Passed via kwargs                      |
 | **Ordering Key**         | `table.dialect_options['starrocks']['order_by']`       | TABLE, MV          | `starrocks_order_by='...'`            | Passed via kwargs                      |
-| **Refresh**              | `table.dialect_options['starrocks']['refresh']`        | MV                 | `starrocks_refresh='IMMEDIATE ASYNC'` | Passed via kwargs                      |
+| **Refresh**              | `table.dialect_options['starrocks']['refresh']`        | MV                 | `starrocks_refresh='IMMEDIATE ON_CHANGE'` | Passed via kwargs                      |
 | **Properties**           | `table.dialect_options['starrocks']['properties']`     | TABLE, MV          | `starrocks_properties={...}`          | Passed via kwargs                      |
 | **Security Type**        | `table.dialect_options['starrocks']['security']`       | VIEW               | `starrocks_security='DEFINER'`        | Passed via kwargs                      |
 
@@ -112,7 +112,7 @@ MaterializedView(
     starrocks_partition_by: Optional[str] = None,
     starrocks_distributed_by: Optional[str] = None,
     starrocks_order_by: Optional[str] = None,
-    starrocks_refresh: Optional[str] = None,  # "[IMMEDIATE|DEFERRED] {ASYNC|MANUAL}"
+    starrocks_refresh: Optional[str] = None,  # "[IMMEDIATE|DEFERRED] {ON_CHANGE|MANUAL}"
     starrocks_properties: Optional[Dict[str, str]] = None,
     **kwargs
 )
@@ -193,7 +193,7 @@ view = View('user_view', metadata, definition=stmt)
 mv = MaterializedView('user_stats', metadata,
                      definition='SELECT user_id, COUNT(*) FROM orders GROUP BY user_id',
                      starrocks_partition_by='user_id',
-                     starrocks_refresh='ASYNC')
+                     starrocks_refresh='ON_CHANGE')
 
 # Materialized View (with all options)
 mv = MaterializedView('order_mv', metadata,
@@ -204,7 +204,7 @@ mv = MaterializedView('order_mv', metadata,
                      starrocks_partition_by='user_id',
                      starrocks_distributed_by='HASH(user_id) BUCKETS 10',
                      starrocks_order_by='user_id',
-                     starrocks_refresh='IMMEDIATE ASYNC',
+                     starrocks_refresh='IMMEDIATE ON_CHANGE',
                      starrocks_properties={'replication_num': '3'})
 ```
 
@@ -1353,7 +1353,7 @@ my_view = Table('v1', metadata,
 1. **`visit_create_table` Extension**: Check `table_kind`, dispatch to corresponding method.
 2. **Code Reuse**: `visit_create_view` directly calls `_compile_create_view_from_table`.
 3. **Attribute Extraction**: Extract from `table.info` and `table.dialect_options`.
-4. **Refresh Parsing**: Parse `starrocks_refresh` into `REFRESH IMMEDIATE ASYNC` etc.
+4. **Refresh Parsing**: Parse `starrocks_refresh` into `REFRESH IMMEDIATE ON_CHANGE` etc.
 5. **Error Handling**: Throw `CompileError` if required attributes are missing.
 
 **Example**:
@@ -1461,7 +1461,7 @@ Based on [StarRocks ALTER MATERIALIZED VIEW documentation](https://docs.starrock
 
 1. **`refresh`** - Modify refresh strategy
 
-   - Syntax: `ALTER MATERIALIZED VIEW mv_name REFRESH {ASYNC|MANUAL} ...`
+   - Syntax: `ALTER MATERIALIZED VIEW mv_name REFRESH {ON_CHANGE|MANUAL} ...`
    - Can be detected in schema comparison and generate `AlterMaterializedViewOp`
 
 2. **`properties`** - Modify properties
@@ -1637,12 +1637,17 @@ class AlterMaterializedViewOp(ops.MigrateOperation):
 ```python
 # Do not subdivide moment and type in refresh, pass it as a single string
 MaterializedView('mv1', 'SELECT ...',
-                starrocks_refresh='IMMEDIATE ASYNC')
+                starrocks_refresh='IMMEDIATE ON_CHANGE')
 ```
 
-**Internal Storage**: Unified as `dialect_options['starrocks']['refresh'] = 'IMMEDIATE ASYNC'`.
+**Internal Storage**: Unified as `dialect_options['starrocks']['refresh'] = 'IMMEDIATE ON_CHANGE'`.
 
-**Compile-time Parsing**: `'IMMEDIATE ASYNC'` → `REFRESH IMMEDIATE ASYNC`.
+**Compile-time Parsing**: `'IMMEDIATE ON_CHANGE'` → `REFRESH IMMEDIATE ON_CHANGE`.
+
+The base-table-change-triggered mode is spelled `ASYNC` before StarRocks 26.2 and `ON_CHANGE`
+from 26.2 on, which rejects the old spelling. Either input is accepted; the keyword actually
+sent is chosen from `dialect.server_version_info`, so one metadata definition serves every
+release. The scheduled mode (`ASYNC EVERY(...)`) is unaffected.
 
 ### 7.2 Columns Support
 
@@ -1702,7 +1707,7 @@ my_mv = MaterializedView(
     comment='Daily stats',
     starrocks_partition_by='RANGE(date)',
     starrocks_distributed_by='HASH(date) BUCKETS 8',
-    starrocks_refresh='IMMEDIATE ASYNC'
+    starrocks_refresh='IMMEDIATE ON_CHANGE'
 )
 ```
 
@@ -1734,7 +1739,7 @@ my_mv = MaterializedView(
     selectable_stmt,
     metadata,
     starrocks_partition_by='RANGE(date)',
-    starrocks_refresh='IMMEDIATE ASYNC'
+    starrocks_refresh='IMMEDIATE ON_CHANGE'
 )
 ```
 
@@ -1828,7 +1833,7 @@ def upgrade():
         comment='Daily stats',
         starrocks_partition_by='RANGE(date)',
         starrocks_distributed_by='HASH(date) BUCKETS 8',
-        starrocks_refresh='IMMEDIATE ASYNC'
+        starrocks_refresh='IMMEDIATE ON_CHANGE'
     )
 ```
 

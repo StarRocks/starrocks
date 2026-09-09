@@ -51,7 +51,7 @@
 - Options: `OR REPLACE`, `IF NOT EXISTS`, schema qualification
 - Definition from Selectable object
 - Comment attribute
-- Refresh strategy: `ASYNC`, `MANUAL`, `DEFERRED`, `IMMEDIATE` with `START WITH` / `EVERY` clauses
+- Refresh strategy: `ON_CHANGE` (`ASYNC` before 26.2), `MANUAL`, `DEFERRED`, `IMMEDIATE` with `START WITH` / `EVERY` clauses
 - Partition by: simple column, expression-based (`date_trunc`)
 - Distributed by: `HASH`, `RANDOM`, multiple columns, bucket number
 - Order by: single and multiple columns
