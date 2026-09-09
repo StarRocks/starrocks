@@ -26,6 +26,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/threadpool.h"
 
@@ -4569,6 +4570,81 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     EXPECT_TRUE(merged.output_rowset().overlapped()); // merged output is overlapped
 
     _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// A failing PK index major compaction must fail the parallel compaction, exactly as it does on the
+// three non-parallel paths (horizontal_compaction_task.cpp, vertical_compaction_task.cpp,
+// cloud_native_index_compaction_task.cpp all RETURN_IF_ERROR the same call).
+//
+// Swallowing it here returned Status::OK() after one WARNING, so the data compaction reported
+// success while the index compactor made no progress -- and every consistency guard inside major
+// compaction ("sstables are not ordered", "inconsistent fileset_id in sstables", "no matching
+// sstable fileset found") was silent on this path only. Both directions are asserted: armed, so a
+// typo'd failpoint name cannot make the test vacuous; disarmed, so the path is not failing
+// unconditionally.
+TEST_F(TabletParallelCompactionManagerTest, test_index_major_compaction_failure_fails_parallel_compaction) {
+    int64_t tablet_id = 10023;
+    int64_t txn_id = 20023;
+    int64_t version = 11;
+
+    // A cloud-native persistent-index PK tablet is the only shape that reaches
+    // execute_index_major_compaction from the parallel path.
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto register_completed_state = [&](int64_t id) {
+        auto state = std::make_shared<TabletParallelCompactionState>();
+        state->tablet_id = tablet_id;
+        state->txn_id = id;
+        state->version = version;
+        state->max_parallel = 1;
+
+        auto ctx = std::make_unique<CompactionTaskContext>(id, tablet_id, version, false, true, nullptr);
+        ctx->subtask_id = 0;
+        ctx->txn_log = std::make_unique<TxnLogPB>();
+        ctx->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+        state->completed_subtasks.push_back(std::move(ctx));
+
+        _manager->register_tablet_state_for_test(tablet_id, id, state);
+    };
+
+    auto set_failpoint_mode = [](const std::string& name, FailPointTriggerModeType mode) {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(mode);
+        auto* fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(name);
+        ASSERT_NE(nullptr, fp) << "failpoint " << name << " is not registered";
+        fp->setMode(trigger_mode);
+    };
+
+    // Take the serial branch of execute_index_major_compaction so the disarmed leg below returns OK
+    // deterministically: the parallel branch needs a LakePersistentIndexParallelCompactMgr, which
+    // TestBase only wires up when StorageEnv happens to have one. The failpoint sits ahead of this
+    // branch, so the armed leg is unaffected.
+    const bool saved_parallel = config::enable_pk_index_parallel_compaction;
+    config::enable_pk_index_parallel_compaction = false;
+    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = saved_parallel; });
+
+    // Armed: the injected failure must reach the caller.
+    register_completed_state(txn_id);
+    set_failpoint_mode("fail_execute_index_major_compaction", FailPointTriggerModeType::ENABLE);
+    auto failed = _manager->get_merged_txn_log(tablet_id, txn_id);
+    set_failpoint_mode("fail_execute_index_major_compaction", FailPointTriggerModeType::DISABLE);
+
+    ASSERT_FALSE(failed.ok());
+    EXPECT_NE(std::string::npos, failed.status().to_string().find("injected index major compaction failure"))
+            << failed.status();
+    _manager->cleanup_tablet(tablet_id, txn_id);
+
+    // Disarmed: the same tablet and state must merge cleanly.
+    register_completed_state(txn_id + 1);
+    auto ok = _manager->get_merged_txn_log(tablet_id, txn_id + 1);
+    EXPECT_TRUE(ok.ok()) << ok.status();
+    _manager->cleanup_tablet(tablet_id, txn_id + 1);
 }
 
 } // namespace starrocks::lake

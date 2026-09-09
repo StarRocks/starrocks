@@ -174,8 +174,21 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
         return result;
     }
 
-    SizeTieredLevel* selected_level = *priority_levels.begin();
-    if (selected_level->fileset_indexes.size() < min_compaction_filesets) {
+    // Walk the levels in score order and take the first one that actually has enough filesets to
+    // compact. Stopping at the highest-scoring level alone starves the index whenever a level of
+    // one fileset sorts ahead of a level that holds two or more: the round then produces no index
+    // compaction while the flush side keeps adding sstables. The level bonus rewards small levels,
+    // so at the shipped config a fileset below pk_index_size_tiered_min_level_size ties a
+    // two-fileset level on score, and LevelComparator's tie-break on `fileset_indexes[0] >` puts
+    // the newer, single-fileset level first.
+    SizeTieredLevel* selected_level = nullptr;
+    for (auto* level : priority_levels) {
+        if (level->fileset_indexes.size() >= min_compaction_filesets) {
+            selected_level = level;
+            break;
+        }
+    }
+    if (selected_level == nullptr) {
         return result;
     }
 
