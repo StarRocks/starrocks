@@ -33,16 +33,15 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 
-import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 
@@ -68,7 +67,7 @@ public class PartitionDescAnalyzer {
             TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
             if (timeUnitType == null) {
                 throw new SemanticException("Batch build partition does not support time interval type.");
-            } else if (!MultiRangePartitionDesc.SUPPORTED_TIME_UNIT_TYPE.contains(timeUnitType)) {
+            } else if (!PartitionTimeUtils.BATCH_PARTITION_TIME_UNITS.contains(timeUnitType)) {
                 throw new SemanticException("Batch build partition does not support time interval type: " + timeUnit);
             }
         }
@@ -218,55 +217,26 @@ public class PartitionDescAnalyzer {
 
         TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(partitionGranularity);
         Preconditions.checkNotNull(timeUnitType);
+        if (!PartitionTimeUtils.BATCH_PARTITION_TIME_UNITS.contains(timeUnitType)) {
+            throw new SemanticException("Batch build partition does not support time interval type: " +
+                    partitionGranularity);
+        }
 
-        LocalDateTime standardBeginTime;
-        LocalDateTime standardEndTime;
+        LocalDateTime standardBeginTime =
+                PartitionTimeUtils.alignToUnitStart(partitionBeginDateTime, timeUnitType, dayOfWeek, dayOfMonth);
+        LocalDateTime standardEndTime =
+                PartitionTimeUtils.alignToUnitStart(partitionEndDateTime, timeUnitType, dayOfWeek, dayOfMonth);
+        if (standardBeginTime.equals(standardEndTime)) {
+            standardEndTime = PartitionTimeUtils.plus(standardEndTime, timeUnitType, partitionStep);
+        }
         String extraMsg = "";
-        switch (timeUnitType) {
-            case HOUR:
-                standardBeginTime = partitionBeginDateTime.withMinute(0).withSecond(0).withNano(0);
-                standardEndTime = partitionEndDateTime.withMinute(0).withSecond(0).withNano(0);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusHours(partitionStep);
-                }
-                break;
-            case DAY:
-                standardBeginTime = partitionBeginDateTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                standardEndTime = partitionEndDateTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusDays(partitionStep);
-                }
-                break;
-            case WEEK:
-                standardBeginTime = partitionBeginDateTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
-                standardEndTime = partitionEndDateTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusWeeks(partitionStep);
-                }
-                extraMsg = "with start day of week " + dayOfWeek;
-                break;
-            case MONTH:
-                standardBeginTime = partitionBeginDateTime.withDayOfMonth(dayOfMonth);
-                standardEndTime = partitionEndDateTime.withDayOfMonth(dayOfMonth);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusMonths(partitionStep);
-                }
-                extraMsg = "with start day of month " + dayOfMonth;
-                break;
-            case YEAR:
-                standardBeginTime = partitionBeginDateTime.withDayOfYear(1);
-                standardEndTime = partitionEndDateTime.withDayOfYear(1);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusYears(partitionStep);
-                }
-                break;
-            default:
-                throw new SemanticException("Batch build partition does not support time interval type: " +
-                        partitionGranularity);
+        if (timeUnitType == TimestampArithmeticExpr.TimeUnit.WEEK) {
+            extraMsg = "with start day of week " + dayOfWeek;
+        } else if (timeUnitType == TimestampArithmeticExpr.TimeUnit.MONTH) {
+            extraMsg = "with start day of month " + dayOfMonth;
         }
         if (!(standardBeginTime.equals(partitionBeginDateTime) && standardEndTime.equals(partitionEndDateTime))) {
-            DateTimeFormatter outputDateFormat = partitionColumnType.isDate()
-                    ? DateUtils.DATE_FORMATTER_UNIX : DateUtils.DATE_TIME_FORMATTER_UNIX;
+            DateTimeFormatter outputDateFormat = PartitionTimeUtils.getPartitionBoundFormatter(partitionColumnType);
 
             String msg = "Batch build partition range [" +
                     partitionBeginDateTime.format(outputDateFormat) + "," +
