@@ -16,6 +16,8 @@ package com.starrocks.connector.paimon;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -28,7 +30,10 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.paimon.data.BinaryString;
-import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.data.Decimal;
+import org.apache.paimon.data.GenericArray;
+import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.predicate.And;
 import org.apache.paimon.predicate.CompoundPredicate;
 import org.apache.paimon.predicate.Equal;
@@ -55,6 +60,7 @@ import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
+import org.apache.paimon.utils.InstantiationUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -301,105 +307,44 @@ public class PaimonPredicateConverterTest {
     }
 
     @Test
-    public void testPaimonCastPredicate() {
-        // double to int
-        ConstantOperator doubleValue = ConstantOperator.createDouble(11.11);
-        CastOperator cast0 = new CastOperator(Type.INT, F0);
-        Predicate result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast0, doubleValue));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate0 = (LeafPredicate) result;
-        Assertions.assertEquals(11, leafPredicate0.literals().get(0));
-        // string to date
-        ConstantOperator string = ConstantOperator.createVarchar("2025-01-01");
-        CastOperator cast1 = new CastOperator(Type.DATE, F1);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast1, string));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate1 = (LeafPredicate) result;
-        Assertions.assertEquals(BinaryString.fromString("2025-01-01"), leafPredicate1.literals().get(0));
-        // float to double
-        ConstantOperator floatValue = ConstantOperator.createFloat(11.11);
-        CastOperator cast2 = new CastOperator(Type.DOUBLE, F2);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast2, floatValue));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate2 = (LeafPredicate) result;
-        Assertions.assertEquals(11.11, leafPredicate2.literals().get(0));
-        // date to string
-        ConstantOperator date = ConstantOperator.createDate(
-                LocalDate.parse("2025-01-01").atTime(0, 0, 0, 0));
-        CastOperator cast3 = new CastOperator(Type.STRING, F3);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast3, date));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate3 = (LeafPredicate) result;
-        Assertions.assertEquals(20089, leafPredicate3.literals().get(0));
-        // bool to string
-        ConstantOperator bool = ConstantOperator.createBoolean(true);
-        CastOperator cast4 = new CastOperator(Type.INT, F1);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast4, bool));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate4 = (LeafPredicate) result;
-        Assertions.assertEquals(BinaryString.fromString("1"), leafPredicate4.literals().get(0));
-        // bool to int
-        ConstantOperator bool2 = ConstantOperator.createBoolean(false);
-        CastOperator cast5 = new CastOperator(Type.INT, F0);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast5, bool2));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate5 = (LeafPredicate) result;
-        Assertions.assertEquals(0, leafPredicate5.literals().get(0));
-        // datetime to string
-        ConstantOperator ts = ConstantOperator.createDatetime(
-                LocalDate.parse("2025-01-01").atTime(0, 0, 0, 0));
-        CastOperator cast6 = new CastOperator(Type.VARCHAR, F1);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast6, ts));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate6 = (LeafPredicate) result;
-        Assertions.assertEquals(BinaryString.fromString("2025-01-01 00:00:00"), leafPredicate6.literals().get(0));
-        // tinyInt to bool
-        ConstantOperator stringBool = ConstantOperator.createTinyInt((byte) 0);
-        CastOperator cast7 = new CastOperator(Type.BOOLEAN, F4);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast7, stringBool));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate7 = (LeafPredicate) result;
-        Assertions.assertEquals(false, leafPredicate7.literals().get(0));
-        // string to datetime
-        ConstantOperator stringTime = ConstantOperator.createVarchar("2025-01-01 00:00:00");
-        CastOperator cast8 = new CastOperator(Type.DATETIME, F5);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast8, stringTime));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate8 = (LeafPredicate) result;
-        Assertions.assertEquals(1735689600000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
-        // smallInt to string
-        ConstantOperator si = ConstantOperator.createSmallInt((short) 200);
-        CastOperator cast9 = new CastOperator(Type.VARCHAR, F1);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast9, si));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate9 = (LeafPredicate) result;
-        Assertions.assertEquals(BinaryString.fromString("200"), leafPredicate9.literals().get(0));
-        // int to long
-        ConstantOperator i = ConstantOperator.createInt(200);
-        CastOperator cast10 = new CastOperator(Type.BIGINT, F6);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast10, i));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate10 = (LeafPredicate) result;
-        Assertions.assertEquals(200L, leafPredicate10.literals().get(0));
-        // int to smallint
-        ConstantOperator is = ConstantOperator.createInt(200);
-        CastOperator cast11 = new CastOperator(Type.BIGINT, F8);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast11, is));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate11 = (LeafPredicate) result;
-        Assertions.assertEquals((short) 200, leafPredicate11.literals().get(0));
-        // int to tinyint
-        ConstantOperator it = ConstantOperator.createInt(10);
-        CastOperator cast12 = new CastOperator(Type.BIGINT, F9);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast12, it));
-        Assertions.assertTrue(result instanceof LeafPredicate);
-        LeafPredicate leafPredicate12 = (LeafPredicate) result;
-        Assertions.assertEquals((byte) 10, leafPredicate12.literals().get(0));
-        // can not cast to decimal
-        ConstantOperator d = ConstantOperator.createDouble(14.11);
-        CastOperator cast99 = new CastOperator(Type.DEFAULT_DECIMAL128, F7);
-        result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast99, d));
-        Assertions.assertNull(result);
+    public void testCastOnColumnIsNotPushedDown() {
+        // a cast on the column can change the comparison (rounding, narrowing, string formats), so the
+        // predicate stays with StarRocks, same as the BE converter which only accepts bare slots
+        Object[][] cases = {
+                {Type.INT, F0, ConstantOperator.createDouble(11.11)},
+                {Type.DATE, F1, ConstantOperator.createVarchar("2025-01-01")},
+                {Type.DOUBLE, F2, ConstantOperator.createFloat(11.11)},
+                {Type.STRING, F3, ConstantOperator.createDate(LocalDate.parse("2025-01-01").atTime(0, 0))},
+                {Type.INT, F1, ConstantOperator.createBoolean(true)},
+                {Type.INT, F0, ConstantOperator.createBoolean(false)},
+                {Type.VARCHAR, F1, ConstantOperator.createDatetime(LocalDate.parse("2025-01-01").atTime(0, 0))},
+                {Type.BOOLEAN, F4, ConstantOperator.createTinyInt((byte) 0)},
+                {Type.DATETIME, F5, ConstantOperator.createVarchar("2025-01-01 00:00:00")},
+                {Type.BIGINT, F6, ConstantOperator.createInt(200)},
+                {Type.BIGINT, F8, ConstantOperator.createInt(200)},
+                {Type.BIGINT, F9, ConstantOperator.createInt(10)},
+                {Type.DEFAULT_DECIMAL128, F7, ConstantOperator.createDouble(14.11)},
+        };
+        for (Object[] c : cases) {
+            CastOperator cast = new CastOperator((Type) c[0], (ColumnRefOperator) c[1]);
+            Predicate result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast, (ConstantOperator) c[2]));
+            Assertions.assertNull(result, "cast to " + c[0] + " on " + ((ColumnRefOperator) c[1]).getName());
+        }
+        Assertions.assertNull(CONVERTER.convert(new IsNullPredicateOperator(false, new CastOperator(Type.BIGINT, F0))));
+        Assertions.assertNull(CONVERTER.convert(new InPredicateOperator(false, new CastOperator(Type.BIGINT, F0),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(2))));
+
+        // CAST(d AS DECIMAL(15,1)) = 1.2 on DECIMAL(15,2): stored 1.16 matches the SQL predicate after
+        // rounding but not a pushed-down d = 1.20, so it must not be pushed; the bare column still is
+        RowType rowType = new RowType(List.of(new DataField(0, "d", new DecimalType(15, 2))));
+        PaimonPredicateConverter converter = new PaimonPredicateConverter(rowType);
+        ColumnRefOperator d = new ColumnRefOperator(0,
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 2), "d", true, false);
+        ConstantOperator lit = ConstantOperator.createDecimal(new BigDecimal("1.2"),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 1));
+        CastOperator rounding = new CastOperator(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 1), d);
+        Assertions.assertNull(converter.convert(new BinaryPredicateOperator(BinaryType.EQ, rounding, lit)));
+        assertDecimalLeaf(converter.convert(new BinaryPredicateOperator(BinaryType.EQ, d, lit)), Equal.class, "1.20", 15, 2);
     }
 
     @Test
@@ -449,5 +394,92 @@ public class PaimonPredicateConverterTest {
         ScalarOperator op52 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, op22.clone());
         Predicate convert2 = CONVERTER.convert(op52);
         Assertions.assertTrue(convert2 == null);
+    }
+
+    private static Predicate convertDecimalPredicate(PrimitiveType srType, int precision, int scale,
+                                                     BinaryType op, ConstantOperator literal) {
+        RowType rowType = new RowType(List.of(new DataField(0, "d", new DecimalType(precision, scale))));
+        ColumnRefOperator col = new ColumnRefOperator(0,
+                ScalarType.createDecimalV3Type(srType, precision, scale), "d", true, false);
+        return new PaimonPredicateConverter(rowType).convert(new BinaryPredicateOperator(op, col, literal));
+    }
+
+    private static void assertDecimalLeaf(Predicate result, Class<?> function, String expected, int precision,
+                                          int scale) {
+        Assertions.assertNotNull(result, "decimal predicate must be pushed down");
+        Assertions.assertTrue(result instanceof LeafPredicate);
+        LeafPredicate leaf = (LeafPredicate) result;
+        Assertions.assertTrue(function.isInstance(leaf.function()));
+        Decimal literal = (Decimal) leaf.literals().get(0);
+        Assertions.assertEquals(precision, literal.precision());
+        Assertions.assertEquals(scale, literal.scale());
+        Assertions.assertEquals(new BigDecimal(expected), literal.toBigDecimal());
+    }
+
+    @Test
+    public void testDecimalColumnPredicateUsesColumnPrecisionAndScale() {
+        Predicate d64 = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createDecimal(new BigDecimal("5.00"),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 2)));
+        assertDecimalLeaf(d64, LessThan.class, "5.00", 15, 2);
+
+        Predicate d32 = convertDecimalPredicate(PrimitiveType.DECIMAL32, 9, 2, BinaryType.EQ,
+                ConstantOperator.createDecimal(new BigDecimal("123.45"),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)));
+        assertDecimalLeaf(d32, Equal.class, "123.45", 9, 2);
+
+        Predicate d128 = convertDecimalPredicate(PrimitiveType.DECIMAL128, 38, 9, BinaryType.GE,
+                ConstantOperator.createDecimal(new BigDecimal("12345678901234567890.123456789"),
+                        Type.DEFAULT_DECIMAL128));
+        assertDecimalLeaf(d128, GreaterOrEqual.class, "12345678901234567890.123456789", 38, 9);
+    }
+
+    @Test
+    public void testDecimalColumnWithIntegerLiteral() {
+        Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createInt(5));
+        assertDecimalLeaf(result, LessThan.class, "5.00", 15, 2);
+    }
+
+    @Test
+    public void testDecimalLiteralSurvivesPredicateSerialization() throws Exception {
+        // the JNI reader gets the predicate through this serialization; a wrong scale used to become 5e14 here
+        Predicate pushed = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("0.05"),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 2)));
+        assertDecimalLeaf(pushed, GreaterThan.class, "0.05", 15, 2);
+        Predicate roundTrip = InstantiationUtil.deserializeObject(InstantiationUtil.serializeObject(pushed),
+                getClass().getClassLoader());
+        assertDecimalLeaf(roundTrip, GreaterThan.class, "0.05", 15, 2);
+        InternalRow minValues = GenericRow.of(Decimal.fromBigDecimal(new BigDecimal("0.00"), 15, 2));
+        InternalRow maxValues = GenericRow.of(Decimal.fromBigDecimal(new BigDecimal("0.10"), 15, 2));
+        Assertions.assertTrue(roundTrip.test(100, minValues, maxValues, new GenericArray(new Long[] {0L})));
+
+        Predicate trailingZeros = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createDecimal(new BigDecimal("5.000"),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 3)));
+        assertDecimalLeaf(trailingZeros, LessThan.class, "5.00", 15, 2);
+    }
+
+    @Test
+    public void testDecimalLiteralExceedingColumnPrecisionIsNotPushedDown() {
+        // 21 digits do not fit DECIMAL(15,2); Decimal.fromBigDecimal returns null instead of truncating
+        Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("100000000000000000000"),
+                        Type.DEFAULT_DECIMAL128));
+        Assertions.assertNull(result);
+        // 13 integer digits is the most DECIMAL(15,2) holds
+        Predicate fits = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.GT,
+                ConstantOperator.createDecimal(new BigDecimal("9999999999999.99"),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 2)));
+        assertDecimalLeaf(fits, GreaterThan.class, "9999999999999.99", 15, 2);
+    }
+
+    @Test
+    public void testDecimalLiteralWiderScaleThanColumnIsNotPushedDown() {
+        Predicate result = convertDecimalPredicate(PrimitiveType.DECIMAL64, 15, 2, BinaryType.LT,
+                ConstantOperator.createDecimal(new BigDecimal("5.005"),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 3)));
+        Assertions.assertNull(result);
     }
 }
