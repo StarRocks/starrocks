@@ -3240,7 +3240,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
 
-    def assert_admin_execute_prints(self, script, pattern):
+    def assert_any_backend_script_prints(self, script, pattern):
         """Run a Wren script on one backend and check the printed result against a regex.
 
         ADMIN EXECUTE needs a concrete backend id, and `ALL BACKENDS` only exists on newer
