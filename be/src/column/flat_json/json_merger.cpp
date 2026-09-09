@@ -25,10 +25,36 @@
 #include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "common/logging.h"
 #include "gutil/casts.h"
 #include "types/json_value.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
+
+namespace {
+
+// JSON_MERGE_FUNC is keyed by the storage types a flat subcolumn can actually hold, while the leaf
+// type reaching the merger comes from the query's ColumnAccessPath and so is whatever the FE asked
+// to read the subfield as. The two key sets have drifted before -- JSON_EXTRACT_FUNC accepts
+// TYPE_CHAR and TYPE_BOOLEAN, JSON_MERGE_FUNC accepts neither -- and a DCHECK is a no-op in
+// release, so `.at()` used to throw std::out_of_range out of a void function and take the whole BE
+// process down with std::terminate. Degrade the one value to JSON null instead: a wrong-typed leaf
+// must not be an availability event, and merging it through the wrong reader would be worse than
+// losing it (merge_json down_casts its column, so a mismatched type there is undefined behaviour).
+void merge_leaf_or_null(vpack::Builder* builder, const std::string_view& name, LogicalType type, const Column* src,
+                        size_t idx) {
+    auto it = flat_json::JSON_MERGE_FUNC.find(type);
+    if (it != flat_json::JSON_MERGE_FUNC.end()) {
+        it->second(builder, name, src, idx);
+        return;
+    }
+    LOG_EVERY_N(WARNING, 100) << "no flat json merge function for leaf type " << type_to_string(type)
+                              << " (path: " << name << "), the value is returned as JSON null";
+    builder->addUnchecked(name.data(), name.size(), vpack::Value(vpack::ValueType::Null));
+}
+
+} // namespace
 
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
         : _src_paths(paths), _has_remain(has_remain) {
@@ -310,9 +336,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
             DCHECK(child->op == JsonFlatPath::OP_INCLUDE);
             auto col = _src_columns[child->index];
             if (!col->is_null(index)) {
-                DCHECK(flat_json::JSON_MERGE_FUNC.contains(child->type));
-                auto func = flat_json::JSON_MERGE_FUNC.at(child->type);
-                func(builder, child_name, col, index);
+                merge_leaf_or_null(builder, child_name, child->type, col, index);
             }
             continue;
         }
@@ -338,9 +362,7 @@ void JsonMerger::_merge_json(const JsonFlatPath* root, vpack::Builder* builder, 
             DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_ROOT);
             auto col = _src_columns[child->index];
             if (!col->is_null(index)) {
-                DCHECK(flat_json::JSON_MERGE_FUNC.contains(child->type));
-                auto func = flat_json::JSON_MERGE_FUNC.at(child->type);
-                func(builder, child_name, col, index);
+                merge_leaf_or_null(builder, child_name, child->type, col, index);
             }
             continue;
         }

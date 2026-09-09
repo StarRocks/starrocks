@@ -33,7 +33,7 @@ public class IcebergVariantSubfieldPrunePlanTest extends ConnectorPlanTestBase {
                 "from iceberg0.unpartitioned_db.variant_t0";
 
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/v/a/b(bigint(20)), /v/profile/department(varchar)]");
+        assertContains(plan, "ColumnAccessPath: [/v/a/b(bigint(20)), /v/profile/department(varchar(2147482624))]");
 
         ExecPlan execPlan = getExecPlan(sql);
         List<ScanNode> scanNodes = execPlan.getScanNodes();
@@ -44,7 +44,7 @@ public class IcebergVariantSubfieldPrunePlanTest extends ConnectorPlanTestBase {
         Assertions.assertNotNull(scanNode.getColumnAccessPaths());
         Assertions.assertFalse(scanNode.getColumnAccessPaths().isEmpty());
         Assertions.assertTrue(scanNode.getColumnAccessPaths().stream()
-                .anyMatch(path -> "/v/a/b(bigint(20)), /v/profile/department(varchar)".equals(path.explain())));
+                .anyMatch(path -> "/v/a/b(bigint(20)), /v/profile/department(varchar(2147482624))".equals(path.explain())));
 
         TPlan thrift = scanNode.treeToThrift();
         Assertions.assertTrue(thrift.getNodes().get(0).getHdfs_scan_node().isSetColumn_access_paths());
@@ -62,7 +62,7 @@ public class IcebergVariantSubfieldPrunePlanTest extends ConnectorPlanTestBase {
 
         String plan = getVerboseExplain(sql);
         assertContains(plan,
-                "ColumnAccessPath: [/v/\"profile.name\"/first(varchar), /v/a/b(bigint(20)), /v/mixed/path(variant)]");
+                "ColumnAccessPath: [/v/\"profile.name\"/first(varchar(2147482624)), /v/a/b(bigint(20)), /v/mixed/path(variant)]");
 
         ExecPlan execPlan = getExecPlan(sql);
         List<ScanNode> scanNodes = execPlan.getScanNodes();
@@ -72,7 +72,7 @@ public class IcebergVariantSubfieldPrunePlanTest extends ConnectorPlanTestBase {
         IcebergScanNode scanNode = (IcebergScanNode) scanNodes.get(0);
         Assertions.assertNotNull(scanNode.getColumnAccessPaths());
         Assertions.assertEquals(1, scanNode.getColumnAccessPaths().size());
-        Assertions.assertEquals("/v/\"profile.name\"/first(varchar), /v/a/b(bigint(20)), /v/mixed/path(variant)",
+        Assertions.assertEquals("/v/\"profile.name\"/first(varchar(2147482624)), /v/a/b(bigint(20)), /v/mixed/path(variant)",
                 scanNode.getColumnAccessPaths().get(0).explain());
 
         TPlan thrift = scanNode.treeToThrift();

@@ -24,8 +24,11 @@ import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
@@ -80,7 +83,63 @@ public class ColumnAccessPath {
         this.children = Lists.newArrayList();
         this.fromPredicate = false;
         this.extended = false;
-        this.valueType = valueType;
+        this.valueType = normalizeStorageValueType(valueType);
+    }
+
+    /**
+     * The value type recorded on an access path is an <em>expression</em> type -- typically the target
+     * type of a cast such as {@code CAST(json_col->'$.s' AS char)} -- but BE consumes it as a
+     * <em>storage</em> column type: it becomes the type (and declared width) of the synthetic
+     * TabletColumn that materializes the flat-JSON / VARIANT subfield, and the leaf type the JSON
+     * merger dispatches on. The two layers do not accept the same shapes:
+     *
+     * <ul>
+     *   <li>A length-less CHAR/VARCHAR carries the wildcard sentinel {@code -1}
+     *       ({@link ScalarType#isWildcardChar()}), which is legal and meaningful in the expression
+     *       world but reaches BE as an {@code int32} that downstream code reads unsigned, i.e.
+     *       4294967295.</li>
+     *   <li>CHAR has no storage counterpart on this path at all: the flat subfield on disk is always
+     *       VARCHAR, and BE's own cast factory rewrites CHAR to VARCHAR before evaluating
+     *       ({@code be/src/exprs/cast_expr.cpp}), so the CHAR only survives as a storage type that
+     *       parts of the storage layer are not prepared for.</li>
+     * </ul>
+     *
+     * <p>Normalizing here -- the single place a value type is recorded -- keeps the expression world
+     * untouched (the cast still reports CHAR to the user) while the storage world only ever sees a
+     * plain, properly-sized VARCHAR.</p>
+     *
+     * <p>The declared width is deliberately dropped rather than clamped, unlike
+     * {@code AnalyzerUtils#transformTableColumnType} which keeps {@code min(len, max)} when it
+     * materializes a real column. Here the width has never been enforced: BE reads the subfield
+     * through the string reader and ignores it, so {@code CAST(j->'$.s' AS char(3))} does not
+     * truncate a stored subfield. The one place the width was read is
+     * {@code DefaultValueColumnIterator}'s CHAR branch, and there it truncated -- which is a
+     * behaviour {@code CAST} is not supposed to have anywhere in StarRocks
+     * ({@code be/src/exprs/cast_expr_tpl.hpp}: "neglect of the length of char/varchar and return
+     * input column directly"). Clamping to {@code min(len, max)} would preserve exactly that one
+     * wrong behaviour; taking the max drops the width the way every other string cast does.</p>
+     *
+     * <p>Callers outside this class use it to compare two recorded value types on the same
+     * footing: an already-normalized one against a raw one would differ by primitive type and
+     * degrade the merged path to JSON.</p>
+     */
+    public static Type normalizeStorageValueType(Type valueType) {
+        if (!(valueType instanceof ScalarType scalarType)) {
+            return valueType;
+        }
+        PrimitiveType primitiveType = scalarType.getPrimitiveType();
+        if (primitiveType != PrimitiveType.CHAR && primitiveType != PrimitiveType.VARCHAR) {
+            return valueType;
+        }
+        int maxLength = TypeFactory.getOlapMaxVarcharLength();
+        if (primitiveType == PrimitiveType.VARCHAR && scalarType.getLength() == maxLength) {
+            // already the storage shape, don't allocate on this per-query path
+            return valueType;
+        }
+        // Must build a new type: CharType.CHAR and VarcharType.VARCHAR are shared singletons and
+        // ScalarType#setLength mutates in place, so normalizing by setLength would corrupt the
+        // wildcard types process-wide.
+        return TypeFactory.createVarcharType(maxLength);
     }
 
     /**
@@ -173,7 +232,7 @@ public class ColumnAccessPath {
     }
 
     public void setValueType(Type valueType) {
-        this.valueType = valueType;
+        this.valueType = normalizeStorageValueType(valueType);
     }
 
     public Type getValueType() {

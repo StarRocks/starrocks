@@ -942,6 +942,39 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testRepeatedCharSubfieldReadKeepsSubColumnPath() throws Exception {
+        // A CHAR read of a JSON subfield is recorded as VARCHAR, because CHAR is not a type a flat
+        // sub-column can be stored as. normalizePath() merges two recordings of the same leaf with
+        // deriveCompatibleValueType, which compares primitive types and falls through to JSON when
+        // they differ -- so the recorded type and the type being merged in have to be normalized on
+        // the same terms. They were not: ColumnAccessPath normalized, the collector's own AccessPath
+        // did not, and any subfield read as CHAR more than once (a projection and a predicate, two
+        // projections) degraded to reading the whole document instead of the sub-column.
+        String path = "ColumnAccessPath: [/j1/s(varchar(2147482624))]";
+
+        assertContains(getVerboseExplain("select cast(j1->'$.s' as char) from js0"), path);
+        assertContains(getVerboseExplain(
+                "select cast(j1->'$.s' as char), upper(cast(j1->'$.s' as char)) from js0"), path);
+        assertContains(getVerboseExplain(
+                "select cast(j1->'$.s' as char) from js0 where cast(j1->'$.s' as char) = 'x'"), path);
+        assertContains(getVerboseExplain(
+                "select cast(j1->'$.s' as char(20)) from js0 where cast(j1->'$.s' as char(20)) = 'x'"), path);
+        // A width-declared and a length-less CHAR of the same leaf also have to agree.
+        assertContains(getVerboseExplain(
+                "select cast(j1->'$.s' as char(20)) from js0 where cast(j1->'$.s' as char) = 'x'"), path);
+        // Mixing CHAR and VARCHAR used to degrade to JSON before the normalization; it no longer does.
+        assertContains(getVerboseExplain(
+                "select cast(j1->'$.s' as char), cast(j1->'$.s' as varchar) from js0"), path);
+        // Control: VARCHAR alone was never affected either way.
+        assertContains(getVerboseExplain(
+                "select cast(j1->'$.s' as varchar) from js0 where cast(j1->'$.s' as varchar) = 'x'"), path);
+        // Genuinely incompatible reads must still fall back to reading the document.
+        assertContains(getVerboseExplain(
+                "select cast(j1->'$.s' as char), cast(j1->'$.s' as bigint) from js0"),
+                "ColumnAccessPath: [/j1/s(json)]");
+    }
+
+    @Test
     public void testJsonPathMerge() throws Exception {
         String sql = "select " +
                 "get_json_int(j1, '$.a.b.c1'), " +
@@ -1166,7 +1199,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "abs[(get_json_double[([2: j1, JSON, true], '$.a');");
         assertContains(plan, "concat[(get_json_string[([2: j1, JSON, true], '$.b');");
-        assertContains(plan, "ColumnAccessPath: [/j1/a(double), /j1/b(varchar)]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(double), /j1/b(varchar(2147482624))]");
 
         sql = "select abs(j1->'$.a'), concat(j1->'$.a', 'abc') from js0;";
         plan = getVerboseExplain(sql);

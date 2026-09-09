@@ -63,19 +63,20 @@ public class JsonPathRewriteTest extends PlanTestBase {
                 Arguments.of(
                         "select get_json_string(c2, 'f2') as f2_str from extend_predicate",
                         "  1:Project\n  |  <slot 3> : 4: c2.f2\n",
-                        "ExtendedColumnAccessPath: [/c2(varchar)/f2(varchar)]"
+                        "ExtendedColumnAccessPath: [/c2(varchar(2147482624))/f2(varchar(2147482624))]"
                 ),
                 // [2]
                 Arguments.of(
                         "select get_json_string(c2, '$.f2.f3') as f2_str from extend_predicate",
                         "  1:Project\n  |  <slot 3> : 4: c2.f2.f3\n",
-                        "ExtendedColumnAccessPath: [/c2(varchar)/f2(varchar)/f3(varchar)]"
+                        "ExtendedColumnAccessPath: [/c2(varchar(2147482624))/f2(varchar(2147482624))/f3(varchar(2147482624))]"
                 ),
                 // [3]
                 Arguments.of(
                         "select get_json_string(c2, 'f1.f2.f3') as f2_str from extend_predicate",
                         "  1:Project\n  |  <slot 3> : 4: c2.f1.f2.f3\n",
-                        "ExtendedColumnAccessPath: [/c2(varchar)/f1(varchar)/f2(varchar)/f3(varchar)]"
+                        "ExtendedColumnAccessPath: [/c2(varchar(2147482624))/f1(varchar(2147482624))"
+                                + "/f2(varchar(2147482624))/f3(varchar(2147482624))]"
                 ),
                 // [4]
                 Arguments.of(
@@ -138,7 +139,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "  3:Project\n" +
                                 "  |  <slot 3> : 3: c1\n" +
                                 "  |  <slot 8> : 9: c2.f8\n",
-                        "ExtendedColumnAccessPath: [/c2(varchar)/f8(varchar)]"
+                        "ExtendedColumnAccessPath: [/c2(varchar(2147482624))/f8(varchar(2147482624))]"
                 ),
                 // [12] Join: self-join with JSON predicate pushdown
                 Arguments.of(
@@ -189,7 +190,8 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "select * from extend_predicate where get_json_int(c2, 'f10') = 1 or get_json_string(c2, " +
                                 "'f11') = 'abc'",
                         "PREDICATES: (3: c2.f10 = 1) OR (4: c2.f11 = 'abc')",
-                        " ExtendedColumnAccessPath: [/c2(bigint(20))/f10(bigint(20)), /c2(varchar)/f11(varchar)]"
+                        " ExtendedColumnAccessPath: [/c2(bigint(20))/f10(bigint(20)), "
+                                + "/c2(varchar(2147482624))/f11(varchar(2147482624))]"
                 ),
                 // [17] JSON expression in nested function
                 Arguments.of(
@@ -216,7 +218,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "0:MetaScan\n" +
                                 "     Table: extend_predicate\n" +
                                 "     <id 6> : dict_merge_c2.f1\n",
-                        "     ExtendedColumnAccessPath: [/c2(varchar)/f1(varchar)]\n"
+                        "     ExtendedColumnAccessPath: [/c2(varchar(2147482624))/f1(varchar(2147482624))]\n"
                 ),
                 // [21] Test parameter type validation - get_json_string(string, string) should not be rewritten
                 Arguments.of(
@@ -406,7 +408,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
             String sql = "select get_json_string(j_new, 'f1') from json_rename";
             String verbosePlan = getVerboseExplain(sql);
             // The ExtendedColumnAccessPath should still be rooted at the original ColumnId "j"
-            assertContains(verbosePlan, "ExtendedColumnAccessPath: [/j(varchar)/f1(varchar)]");
+            assertContains(verbosePlan, "ExtendedColumnAccessPath: [/j(varchar(2147482624))/f1(varchar(2147482624))]");
         } finally {
             starRocksAssert.dropTable("json_rename");
         }
@@ -451,7 +453,8 @@ public class JsonPathRewriteTest extends PlanTestBase {
             String okSql =
                     "select get_json_string(j, 'Campaign') a, get_json_string(j, 'title') b from json_case_collision";
             String okPlan = getVerboseExplain(okSql);
-            assertContains(okPlan, "ExtendedColumnAccessPath: [/j(varchar)/Campaign(varchar), /j(varchar)/title(varchar)]");
+            assertContains(okPlan, "ExtendedColumnAccessPath: [/j(varchar(2147482624))/Campaign(varchar(2147482624)), "
+                    + "/j(varchar(2147482624))/title(varchar(2147482624))]");
         } finally {
             starRocksAssert.dropTable("json_case_collision");
         }
@@ -550,7 +553,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
                             + "where get_json_int(a.j, '$.x') = 1 and get_json_string(b.j, '$.x') = '2'");
             // Each side keeps the type its own expression asked for.
             assertContains(plan, "ExtendedColumnAccessPath: [/j(bigint(20))/x(bigint(20))]");
-            assertContains(plan, "ExtendedColumnAccessPath: [/j(varchar)/x(varchar)]");
+            assertContains(plan, "ExtendedColumnAccessPath: [/j(varchar(2147482624))/x(varchar(2147482624))]");
         } finally {
             starRocksAssert.dropTable("json_cross_scan");
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
@@ -577,7 +580,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
                             + "select count(*) from c c1 join c c2 on c1.k = c2.k "
                             + "where get_json_int(c1.j, '$.x') = 1 and get_json_string(c2.j, '$.x') = '2'");
             assertContains(plan, "ExtendedColumnAccessPath: [/j(bigint(20))/x(bigint(20))]");
-            assertContains(plan, "ExtendedColumnAccessPath: [/j(varchar)/x(varchar)]");
+            assertContains(plan, "ExtendedColumnAccessPath: [/j(varchar(2147482624))/x(varchar(2147482624))]");
         } finally {
             starRocksAssert.dropTable("json_cte_scan");
             connectContext.getSessionVariable().setCboCteReuse(cteReuse);

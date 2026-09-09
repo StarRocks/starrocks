@@ -1,0 +1,100 @@
+-- name: test_json_subfield_char_type_leak
+-- CAST(json->'$.x' AS char) records CHAR as the *storage* type of the flat-JSON subfield, and CHAR
+-- is not a type a flat subfield can have: the sub-column on disk is VARCHAR. The BE's flat-JSON
+-- merge table (JSON_MERGE_FUNC) is keyed by the types a sub-column can hold, so it has no entry for
+-- TYPE_CHAR, and the lookup sat behind a DCHECK -- a no-op in release. On a table whose read path
+-- runs the merge (AGGREGATE / UNIQUE, which reconstruct the JSON column through
+-- JsonColumn::unflatten) the lookup threw std::out_of_range out of a void function and took the
+-- whole BE process down with std::terminate (ERROR 5905: No alive backend or compute node). The
+-- extraction table (JSON_EXTRACT_FUNC) does map TYPE_CHAR, which is why writing and the v2 rewrite
+-- path never noticed the asymmetry.
+--
+-- Normalizing the recorded value type to VARCHAR before it leaves FE removes CHAR from the set of
+-- types the merge can ever be asked for. The declared width goes with it: it was never enforced on
+-- this path -- the subfield is read through the string reader -- so char(3) must not truncate, and
+-- must return exactly what char, varchar and get_json_string return.
+--
+-- The JSON column is added by ALTER after the first load on purpose: the rowsets written before it
+-- carry no `j`, which is what puts the extended/default-value column on the read path next to the
+-- flattened one.
+create table agg_${uuid0} (id int, x int replace) aggregate key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table uniq_${uuid0} (id int, x int) unique key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table dup_${uuid0} (id int, x int) duplicate key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+insert into agg_${uuid0} values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8);
+insert into uniq_${uuid0} values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8);
+insert into dup_${uuid0} values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8);
+alter table agg_${uuid0} add column j json replace default '{"f2":"x"}';
+function: wait_alter_table_finish()
+alter table uniq_${uuid0} add column j json default '{"f2":"x"}';
+function: wait_alter_table_finish()
+alter table dup_${uuid0} add column j json default '{"f2":"x"}';
+function: wait_alter_table_finish()
+
+-- 8 rows per table, enough documents with a stable shape for the subfields to be flattened.
+insert into agg_${uuid0} values
+ (1,1,parse_json('{"a":1,"s":"hello"}')),(2,2,parse_json('{"a":2,"s":"world"}')),
+ (3,3,parse_json('{"a":3,"s":"alpha"}')),(4,4,parse_json('{"a":4,"s":"bravo"}')),
+ (5,5,parse_json('{"a":5,"s":"charlie"}')),(6,6,parse_json('{"a":6,"s":"delta"}')),
+ (7,7,parse_json('{"a":7,"s":"echo"}')),(8,8,parse_json('{"a":8,"s":"foxtrot"}'));
+insert into uniq_${uuid0} values
+ (1,1,parse_json('{"a":1,"s":"hello"}')),(2,2,parse_json('{"a":2,"s":"world"}')),
+ (3,3,parse_json('{"a":3,"s":"alpha"}')),(4,4,parse_json('{"a":4,"s":"bravo"}')),
+ (5,5,parse_json('{"a":5,"s":"charlie"}')),(6,6,parse_json('{"a":6,"s":"delta"}')),
+ (7,7,parse_json('{"a":7,"s":"echo"}')),(8,8,parse_json('{"a":8,"s":"foxtrot"}'));
+insert into dup_${uuid0} values
+ (1,1,parse_json('{"a":1,"s":"hello"}')),(2,2,parse_json('{"a":2,"s":"world"}')),
+ (3,3,parse_json('{"a":3,"s":"alpha"}')),(4,4,parse_json('{"a":4,"s":"bravo"}')),
+ (5,5,parse_json('{"a":5,"s":"charlie"}')),(6,6,parse_json('{"a":6,"s":"delta"}')),
+ (7,7,parse_json('{"a":7,"s":"echo"}')),(8,8,parse_json('{"a":8,"s":"foxtrot"}'));
+
+-- Guard against a false pass: if nothing was flattened the merge is never reached and every query
+-- below would pass on a broken build.
+select flat_json_meta(j) from agg_${uuid0} [_META_];
+select flat_json_meta(j) from uniq_${uuid0} [_META_];
+
+set cbo_prune_subfield = true;
+
+-- The poison queries. With the v2 rewrite off the read goes through unflatten()/JsonMerger, which
+-- is where the unmapped CHAR killed the process.
+set cbo_json_v2_rewrite = false;
+[ORDER]select id, cast(j->'$.s' as char) as s from agg_${uuid0} order by id;
+[ORDER]select id, cast(j->'$.s' as char) as s from uniq_${uuid0} order by id;
+[ORDER]select id, cast(j->'$.s' as char) as s from dup_${uuid0} order by id;
+select count(*) from agg_${uuid0} where cast(j->'$.s' as char) = 'hello';
+
+-- The v2 rewrite path reads the sub-column directly and always worked; it is the yardstick.
+set cbo_json_v2_rewrite = true;
+[ORDER]select id, cast(j->'$.s' as char) as s from agg_${uuid0} order by id;
+[ORDER]select id, cast(j->'$.s' as char) as s from uniq_${uuid0} order by id;
+[ORDER]select id, cast(j->'$.s' as char) as s from dup_${uuid0} order by id;
+select count(*) from agg_${uuid0} where cast(j->'$.s' as char) = 'hello';
+
+-- A declared width is not a truncation: char(3) must still answer 'charlie', like char and varchar.
+[ORDER]select id, cast(j->'$.s' as char(3)) as s from agg_${uuid0} order by id;
+[ORDER]select id, cast(j->'$.s' as varchar) as s from agg_${uuid0} order by id;
+[ORDER]select id, cast(j->'$.s' as varchar(3)) as s from agg_${uuid0} order by id;
+[ORDER]select id, get_json_string(j, '$.s') as s from agg_${uuid0} order by id;
+-- and no zero padding creeps in on either the flattened or the defaulted rows
+[ORDER]select id, hex(cast(j->'$.s' as char(20))) as s from agg_${uuid0} order by id;
+[ORDER]select id, hex(cast(j->'$.f2' as char(20))) as s from agg_${uuid0} order by id;
+
+-- The cast's own type is unchanged: only the storage-side value type was normalized.
+select distinct typeof(cast(j->'$.s' as char)) from agg_${uuid0};
+select distinct typeof(cast(j->'$.s' as char(3))) from agg_${uuid0};
+select distinct typeof(cast(j->'$.s' as varchar)) from agg_${uuid0};
+
+-- Ordering by the subfield exercises the sub-column read on its own, without a cast wrapper in the
+-- way: the value type is now VARCHAR, so the reader is used directly instead of through a cast
+-- iterator, and the order must be the storage order.
+[ORDER]select cast(j->'$.s' as char) as s from agg_${uuid0} order by s;
+select min(cast(j->'$.s' as char)), max(cast(j->'$.s' as char)) from agg_${uuid0};
+
+drop table agg_${uuid0};
+drop table uniq_${uuid0};
+drop table dup_${uuid0};

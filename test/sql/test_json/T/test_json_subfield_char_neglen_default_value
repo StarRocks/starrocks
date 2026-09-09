@@ -39,8 +39,31 @@ select k, cast(j->'$.f2' as char) as c from t2_${uuid0} order by k;
 -- hex() makes any zero padding visible: 68656C6C6F and nothing more, on both sides.
 select k, hex(cast(j->'$.f2' as char)) as c from t_${uuid0} order by k;
 select k, hex(cast(j->'$.f2' as char)) as c from t2_${uuid0} order by k;
--- A cast that does declare a width keeps padding the default value out to it, unchanged.
+-- Declaring a width changes nothing either, and that is the point: the width used to be honoured
+-- on this path and nowhere else. DefaultValueColumnIterator's CHAR branch zero-padded the default
+-- value out to the declared width, so the SAME expression over the SAME logical value answered
+-- 68656C6C6F00...00 here and a bare 68656C6C6F on t2_ -- and a bare 68656C6C6F from a real CHAR(20)
+-- table column, from CAST(varchar_col AS char(20)) and from CAST('hello' AS char(20)) as well.
+-- The normalization drops the width before it reaches storage, so all of them now agree.
 select k, hex(cast(j->'$.f2' as char(20))) as c from t_${uuid0} order by k;
+select k, hex(cast(j->'$.f2' as char(20))) as c from t2_${uuid0} order by k;
+-- A width narrower than the value used to TRUNCATE, and only here. The CHAR branch allocated a
+-- buffer of the declared width and copied the whole default value into it, so char(3) over 'hello'
+-- both answered 'hel' and wrote two bytes past a three-byte allocation. Everywhere else StarRocks
+-- neglects the width of a string cast on purpose (be/src/exprs/cast_expr_tpl.hpp), so t2_ -- and a
+-- real CHAR(3) column, and CAST('hello' AS char(3)) -- answer 'hello'.
+select k, hex(cast(j->'$.f2' as char(3))) as c from t_${uuid0} order by k;
+select k, hex(cast(j->'$.f2' as char(3))) as c from t2_${uuid0} order by k;
+select k, cast(j->'$.f2' as char(3)) as c from t_${uuid0} order by k;
+-- The width reached the predicate as well, so a sized CHAR over the defaulted rows answered with
+-- the wrong row set in both directions: the zero-padded value never equalled 'hello', and the
+-- truncated one wrongly equalled 'hel'. t2_ stores the same subfield and is the yardstick.
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char(20)) = 'hello';
+select count(*) from t2_${uuid0} where cast(j->'$.f2' as char(20)) = 'hello';
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char(3)) = 'hel';
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char(3)) = 'hello';
+-- length() saw the padded width too.
+select distinct length(cast(j->'$.f2' as char(20))) from t_${uuid0};
 -- The paths that already worked stay as they were.
 select k, cast(j->'$.f2' as varchar) as c from t_${uuid0} order by k;
 select k, cast(j->'$.f2' as string) as c from t_${uuid0} order by k;

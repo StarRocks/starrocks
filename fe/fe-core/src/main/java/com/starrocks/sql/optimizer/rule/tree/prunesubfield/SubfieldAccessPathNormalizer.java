@@ -80,7 +80,12 @@ public class SubfieldAccessPathNormalizer {
         }
 
         public void setValueType(Type valueType) {
-            this.valueType = valueType;
+            // Normalize on the way in, on the same terms as ColumnAccessPath. normalizePath()
+            // compares a ColumnAccessPath's (already normalized) value type against this one, so
+            // leaving CHAR here would make the two differ by primitive type and send every
+            // repeated CHAR read of a subfield -- a projection plus a predicate, say -- down
+            // deriveCompatibleValueType's JSON branch, losing the sub-column read entirely.
+            this.valueType = ColumnAccessPath.normalizeStorageValueType(valueType);
         }
     }
 

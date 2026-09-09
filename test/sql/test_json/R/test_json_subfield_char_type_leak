@@ -1,0 +1,278 @@
+-- name: test_json_subfield_char_type_leak
+create table agg_${uuid0} (id int, x int replace) aggregate key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table uniq_${uuid0} (id int, x int) unique key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table dup_${uuid0} (id int, x int) duplicate key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into agg_${uuid0} values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8);
+-- result:
+-- !result
+insert into uniq_${uuid0} values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8);
+-- result:
+-- !result
+insert into dup_${uuid0} values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8);
+-- result:
+-- !result
+alter table agg_${uuid0} add column j json replace default '{"f2":"x"}';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+alter table uniq_${uuid0} add column j json default '{"f2":"x"}';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+alter table dup_${uuid0} add column j json default '{"f2":"x"}';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into agg_${uuid0} values
+ (1,1,parse_json('{"a":1,"s":"hello"}')),(2,2,parse_json('{"a":2,"s":"world"}')),
+ (3,3,parse_json('{"a":3,"s":"alpha"}')),(4,4,parse_json('{"a":4,"s":"bravo"}')),
+ (5,5,parse_json('{"a":5,"s":"charlie"}')),(6,6,parse_json('{"a":6,"s":"delta"}')),
+ (7,7,parse_json('{"a":7,"s":"echo"}')),(8,8,parse_json('{"a":8,"s":"foxtrot"}'));
+-- result:
+-- !result
+insert into uniq_${uuid0} values
+ (1,1,parse_json('{"a":1,"s":"hello"}')),(2,2,parse_json('{"a":2,"s":"world"}')),
+ (3,3,parse_json('{"a":3,"s":"alpha"}')),(4,4,parse_json('{"a":4,"s":"bravo"}')),
+ (5,5,parse_json('{"a":5,"s":"charlie"}')),(6,6,parse_json('{"a":6,"s":"delta"}')),
+ (7,7,parse_json('{"a":7,"s":"echo"}')),(8,8,parse_json('{"a":8,"s":"foxtrot"}'));
+-- result:
+-- !result
+insert into dup_${uuid0} values
+ (1,1,parse_json('{"a":1,"s":"hello"}')),(2,2,parse_json('{"a":2,"s":"world"}')),
+ (3,3,parse_json('{"a":3,"s":"alpha"}')),(4,4,parse_json('{"a":4,"s":"bravo"}')),
+ (5,5,parse_json('{"a":5,"s":"charlie"}')),(6,6,parse_json('{"a":6,"s":"delta"}')),
+ (7,7,parse_json('{"a":7,"s":"echo"}')),(8,8,parse_json('{"a":8,"s":"foxtrot"}'));
+-- result:
+-- !result
+select flat_json_meta(j) from agg_${uuid0} [_META_];
+-- result:
+[]
+["nulls(TINYINT), a(BIGINT), s(VARCHAR)"]
+-- !result
+select flat_json_meta(j) from uniq_${uuid0} [_META_];
+-- result:
+["nulls(TINYINT), a(BIGINT), s(VARCHAR)"]
+[]
+-- !result
+set cbo_prune_subfield = true;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+[ORDER]select id, cast(j->'$.s' as char) as s from agg_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, cast(j->'$.s' as char) as s from uniq_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, cast(j->'$.s' as char) as s from dup_${uuid0} order by id;
+-- result:
+1	None
+1	hello
+2	None
+2	world
+3	None
+3	alpha
+4	None
+4	bravo
+5	None
+5	charlie
+6	None
+6	delta
+7	None
+7	echo
+8	None
+8	foxtrot
+-- !result
+select count(*) from agg_${uuid0} where cast(j->'$.s' as char) = 'hello';
+-- result:
+1
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+[ORDER]select id, cast(j->'$.s' as char) as s from agg_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, cast(j->'$.s' as char) as s from uniq_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, cast(j->'$.s' as char) as s from dup_${uuid0} order by id;
+-- result:
+1	None
+1	hello
+2	None
+2	world
+3	None
+3	alpha
+4	None
+4	bravo
+5	None
+5	charlie
+6	None
+6	delta
+7	None
+7	echo
+8	None
+8	foxtrot
+-- !result
+select count(*) from agg_${uuid0} where cast(j->'$.s' as char) = 'hello';
+-- result:
+1
+-- !result
+[ORDER]select id, cast(j->'$.s' as char(3)) as s from agg_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, cast(j->'$.s' as varchar) as s from agg_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, cast(j->'$.s' as varchar(3)) as s from agg_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, get_json_string(j, '$.s') as s from agg_${uuid0} order by id;
+-- result:
+1	hello
+2	world
+3	alpha
+4	bravo
+5	charlie
+6	delta
+7	echo
+8	foxtrot
+-- !result
+[ORDER]select id, hex(cast(j->'$.s' as char(20))) as s from agg_${uuid0} order by id;
+-- result:
+1	68656C6C6F
+2	776F726C64
+3	616C706861
+4	627261766F
+5	636861726C6965
+6	64656C7461
+7	6563686F
+8	666F7874726F74
+-- !result
+[ORDER]select id, hex(cast(j->'$.f2' as char(20))) as s from agg_${uuid0} order by id;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+-- !result
+select distinct typeof(cast(j->'$.s' as char)) from agg_${uuid0};
+-- result:
+char
+-- !result
+select distinct typeof(cast(j->'$.s' as char(3))) from agg_${uuid0};
+-- result:
+char
+-- !result
+select distinct typeof(cast(j->'$.s' as varchar)) from agg_${uuid0};
+-- result:
+varchar
+-- !result
+[ORDER]select cast(j->'$.s' as char) as s from agg_${uuid0} order by s;
+-- result:
+alpha
+bravo
+charlie
+delta
+echo
+foxtrot
+hello
+world
+-- !result
+select min(cast(j->'$.s' as char)), max(cast(j->'$.s' as char)) from agg_${uuid0};
+-- result:
+alpha	world
+-- !result
+drop table agg_${uuid0};
+-- result:
+-- !result
+drop table uniq_${uuid0};
+-- result:
+-- !result
+drop table dup_${uuid0};
+-- result:
+-- !result

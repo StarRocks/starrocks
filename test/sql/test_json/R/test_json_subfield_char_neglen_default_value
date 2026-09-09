@@ -72,9 +72,53 @@ select k, hex(cast(j->'$.f2' as char)) as c from t2_${uuid0} order by k;
 -- !result
 select k, hex(cast(j->'$.f2' as char(20))) as c from t_${uuid0} order by k;
 -- result:
-1	68656C6C6F000000000000000000000000000000
-2	68656C6C6F000000000000000000000000000000
-3	68656C6C6F000000000000000000000000000000
+1	68656C6C6F
+2	68656C6C6F
+3	68656C6C6F
+-- !result
+select k, hex(cast(j->'$.f2' as char(20))) as c from t2_${uuid0} order by k;
+-- result:
+1	68656C6C6F
+2	68656C6C6F
+3	68656C6C6F
+-- !result
+select k, hex(cast(j->'$.f2' as char(3))) as c from t_${uuid0} order by k;
+-- result:
+1	68656C6C6F
+2	68656C6C6F
+3	68656C6C6F
+-- !result
+select k, hex(cast(j->'$.f2' as char(3))) as c from t2_${uuid0} order by k;
+-- result:
+1	68656C6C6F
+2	68656C6C6F
+3	68656C6C6F
+-- !result
+select k, cast(j->'$.f2' as char(3)) as c from t_${uuid0} order by k;
+-- result:
+1	hello
+2	hello
+3	hello
+-- !result
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char(20)) = 'hello';
+-- result:
+3
+-- !result
+select count(*) from t2_${uuid0} where cast(j->'$.f2' as char(20)) = 'hello';
+-- result:
+3
+-- !result
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char(3)) = 'hel';
+-- result:
+0
+-- !result
+select count(*) from t_${uuid0} where cast(j->'$.f2' as char(3)) = 'hello';
+-- result:
+3
+-- !result
+select distinct length(cast(j->'$.f2' as char(20))) from t_${uuid0};
+-- result:
+5
 -- !result
 select k, cast(j->'$.f2' as varchar) as c from t_${uuid0} order by k;
 -- result:

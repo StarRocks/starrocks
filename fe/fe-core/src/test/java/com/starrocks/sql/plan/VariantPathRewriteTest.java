@@ -165,7 +165,7 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
         String verbose = getVerboseExplain(sql);
         assertContains(verbose, "ColumnAccessPath:");
         assertContains(verbose, "/v(bigint(20))/metrics(bigint(20))/views(bigint(20))");
-        assertContains(verbose, "/v(varchar)/profile(varchar)/department(varchar)");
+        assertContains(verbose, "/v(varchar(2147482624))/profile(varchar(2147482624))/department(varchar(2147482624))");
     }
 
     @Test
@@ -235,7 +235,7 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
         try {
             String sql = "select get_variant_int(v, '$.a.b'), get_variant_string(v, '$.c') from " + VARIANT_TABLE;
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "ColumnAccessPath: [/v/a/b(bigint(20)), /v/c(varchar)]");
+            assertContains(plan, "ColumnAccessPath: [/v/a/b(bigint(20)), /v/c(varchar(2147482624))]");
 
             sql = "select get_variant_int(v, '$.a'), get_variant_string(v, '$.a') from " + VARIANT_TABLE;
             plan = getVerboseExplain(sql);
@@ -260,7 +260,7 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
             sql = "select get_variant_int(v, 'a.b'), get_variant_string(v, '$.\"profile.name\".first') from "
                     + VARIANT_TABLE;
             plan = getVerboseExplain(sql);
-            assertContains(plan, "ColumnAccessPath: [/v/\"profile.name\"/first(varchar), /v/a/b(bigint(20))]");
+            assertContains(plan, "ColumnAccessPath: [/v/\"profile.name\"/first(varchar(2147482624)), /v/a/b(bigint(20))]");
 
             sql = "select variant_query(v, '$.a.b'), get_variant_string(v, '$.a.b') from " + VARIANT_TABLE;
             plan = getVerboseExplain(sql);

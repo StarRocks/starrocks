@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -188,6 +189,29 @@ TEST(JsonMergerTest, WholeColumnMergeStillNullsAnEmptyResult) {
     EXPECT_FALSE(result->is_null(1));
     EXPECT_EQ(JsonValue::parse(R"({"o": {}})").value(), value_at(result, 1));
     EXPECT_TRUE(result->is_null(2));
+}
+
+// The leaf type reaching the merger is whatever the query asked to read the subfield as, not a type
+// the storage layer promises to hold, and JSON_MERGE_FUNC is keyed by the latter -- it has no entry
+// for TYPE_CHAR (which JSON_EXTRACT_FUNC does accept) nor for TYPE_BOOLEAN. The lookup used to be
+// `JSON_MERGE_FUNC.at(type)` behind a DCHECK, so in a release build an unmapped leaf threw
+// std::out_of_range out of a void function and killed the BE process. Degrade the value instead.
+TEST(JsonMergerTest, UnmappedLeafTypeDegradesToNullInsteadOfCrashing) {
+    auto mapped = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    mapped->append_datum(Datum(int64_t{7}));
+    auto unmapped = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    unmapped->append_datum(Datum(Slice("hello")));
+
+    Columns columns;
+    columns.emplace_back(std::move(mapped));
+    columns.emplace_back(std::move(unmapped));
+
+    JsonMerger merger({"k", "s"}, {TYPE_BIGINT, TYPE_CHAR});
+
+    auto result = merger.merge(columns);
+
+    ASSERT_EQ(1, result->size());
+    EXPECT_EQ(JsonValue::parse(R"({"k": 7, "s": null})").value(), *result->get(0).get_json());
 }
 
 } // namespace starrocks
