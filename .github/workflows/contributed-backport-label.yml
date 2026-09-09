@@ -2,20 +2,23 @@ name: Contributed Backport Label
 run-name: Contributed Backport Label(#${{ github.event.number }})
 
 # Anti-loop helper for the CD->SR reverse sync. A mergify backport PR does NOT inherit
-# labels, so backporting a `cd-contributed` main PR would lose the marker and let ci-sync.yml
+# labels, so backporting a `PAI-contributed` main PR would lose the marker and let ci-sync.yml
 # bounce the fix back to CelerData. When a backport PR opens against a release branch, if its
-# source main PR carries `cd-contributed`, add `cd-contributed` to this backport PR too —
+# source main PR carries the contributed marker, add `PAI-contributed` to this backport PR too —
 # before it can merge — so the forward anti-loop skips it.
 #
-# Generic name reserves room for other `*-contributed` sources later; today only
-# `cd-contributed` is handled.
+# RENAME TRANSITION (cd-contributed -> PAI-contributed): producers now emit `PAI-contributed`;
+# the source-PR check below accepts EITHER the old `cd-contributed` or the new `PAI-contributed`
+# so in-flight PRs still labeled with the old name keep working until they are migrated.
+#
+# Generic name reserves room for other `*-contributed` sources later.
 
 on:
   pull_request_target:
     types: [opened]
     # All release branches (glob) — no need to update when a new branch is cut. `main`
     # is not matched. Over-triggering is harmless: the job early-exits unless the PR is a
-    # backport whose source main PR carries cd-contributed.
+    # backport whose source main PR carries the contributed marker.
     branches:
       - 'branch-*'
 
@@ -26,7 +29,7 @@ permissions:
 
 jobs:
   add_label:
-    name: Add cd-contributed label to backport PRs
+    name: Add PAI-contributed label to backport PRs
     if: github.repository == 'StarRocks/starrocks'
     runs-on: ubuntu-latest
     env:
@@ -36,7 +39,7 @@ jobs:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       TITLE: ${{ github.event.pull_request.title }}
     steps:
-      - name: add cd-contributed if source main PR has it
+      - name: add PAI-contributed if source main PR has it
         run: |
           set -eo pipefail
           # A mergify backport PR: head `mergify/bp/<branch>/pr-<SR_main>`, or title `(backport #N)`.
@@ -49,11 +52,12 @@ jobs:
           if [[ -z "$src" ]]; then
             echo "not a backport PR; nothing to do"; exit 0
           fi
-          # Does the source (main) PR carry cd-contributed?
-          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qx 'cd-contributed'; then
-            gh label create cd-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
-            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label cd-contributed
-            echo "added cd-contributed to #$PR_NUMBER (source main #$src)"
+          # Does the source (main) PR carry the contributed marker? Accept the old
+          # `cd-contributed` or the new `PAI-contributed` during the rename transition.
+          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qxE 'cd-contributed|PAI-contributed'; then
+            gh label create PAI-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
+            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label PAI-contributed
+            echo "added PAI-contributed to #$PR_NUMBER (source main #$src)"
           else
-            echo "source main #$src has no cd-contributed; skip"
+            echo "source main #$src has no contributed marker; skip"
           fi
