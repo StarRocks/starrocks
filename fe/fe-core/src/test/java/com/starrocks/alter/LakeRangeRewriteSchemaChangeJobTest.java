@@ -2451,8 +2451,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             }
 
             @Mock
-            public void abortTransaction(long dbId, long transactionId, String reason)
-                    throws com.starrocks.common.StarRocksException {
+            public void abortTransaction(long dbId, long transactionId, String reason) {
                 abortedTxnIds.add(transactionId);
             }
         };
@@ -2492,8 +2491,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             }
 
             @Mock
-            public void abortTransaction(long dbId, long transactionId, String reason)
-                    throws com.starrocks.common.StarRocksException {
+            public void abortTransaction(long dbId, long transactionId, String reason) {
                 abortCalled.set(true);
             }
         };
@@ -2845,12 +2843,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             Assertions.assertEquals(1, consecutiveRewriteFailures(job, physicalPartitionId).intValue(),
                     "one failed attempt must count as exactly one against the budget");
 
-            // Simulate a long stretch during which this partition is not attempted at all: with a
-            // wall-clock budget this is what would silently exhaust it. The counter must not move.
-            Thread.sleep(50);
-            Assertions.assertEquals(1, consecutiveRewriteFailures(job, physicalPartitionId).intValue(),
-                    "time in which the partition was not attempted must not count against its budget");
-
+            // The counter is driven by attempts, so ticks that do not reach this partition cannot move
+            // it however long they take. Under a wall-clock budget the assertion above already reads a
+            // timestamp instead of a count, which is what pins this behavior.
             job.runRunningJob();
             Assertions.assertEquals(2, consecutiveRewriteFailures(job, physicalPartitionId).intValue(),
                     "only actual attempts may count against the budget");
@@ -2907,6 +2902,59 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 "a committed rewrite awaiting publication must not advertise a retry in Msg");
         Assertions.assertNull(consecutiveRewriteFailures(job, physicalPartitionId),
                 "the publication wait must not count against the partition's retry budget");
+    }
+
+    /**
+     * The other way a failed attempt is left non-retryable: its transaction is still in PREPARE but the
+     * abort itself fails. The partition then waits for the transaction's own timeout, because
+     * {@code classifyRewrite} keeps reporting IN_FLIGHT until then - so this must not claim a retry, must
+     * not spend the budget, and must not cancel the job either.
+     */
+    @Test
+    public void testAnAbortFailureLeavesThePartitionWaitingRatherThanRetryingOrCancelling() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        AtomicLong preparedTxnId = new AtomicLong(-1);
+        AtomicInteger abortAttempts = new AtomicInteger();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                if (transactionId != preparedTxnId.get()) {
+                    return null;
+                }
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                abortAttempts.incrementAndGet();
+                throw new IllegalStateException("transaction manager rejected the abort");
+            }
+        };
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            preparedTxnId.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(1, abortAttempts.get(),
+                "a PREPARE transaction left by a failed attempt must have been offered for abort");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                "an abort that fails must leave the job running, not cancel it");
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "a partition whose transaction could not be aborted is waiting, not retrying");
+        Assertions.assertNull(consecutiveRewriteFailures(job, physicalPartitionId),
+                "waiting for the transaction timeout must not count against the partition's budget");
     }
 
     /**

@@ -1239,18 +1239,23 @@ public abstract class LakeOnlineRewriteJobBase
      * @return true when the caller should return and let a later tick retry, false when it should cancel
      */
     private boolean retryPartitionRewrite(long physicalPartitionId, String error) {
-        if (Config.lake_online_rewrite_partition_retry_timeout_second <= 0) {
+        // One sample of the mutable window for the whole decision. Re-reading it would let an
+        // ADMIN SET FRONTEND CONFIG landing mid-decision make the gate below, the budget derived from it
+        // and the message reporting it disagree: dropping the value to 0 after the gate had already
+        // passed would still grant a retry the operator just disabled, because the budget floors at one
+        // attempt. Same rule as selectRequestedTabletCount above and TabletReshardUtils.adaptiveSplitBound.
+        int retryWindowSecond = Config.lake_online_rewrite_partition_retry_timeout_second;
+        if (retryWindowSecond <= 0) {
             LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and retrying is "
                     + "disabled: {}", jobId, physicalPartitionId, error);
             return false;
         }
-        int maxFailures = maxConsecutiveRewriteFailures();
+        int maxFailures = maxConsecutiveRewriteFailures(retryWindowSecond);
         int failures = consecutiveRewriteFailures.merge(physicalPartitionId, 1, Integer::sum);
         if (failures > maxFailures) {
             LOG.warn("online rewrite job {}: rewrite INSERT failed {} consecutive times for partition {}, "
                             + "exhausting the {}s retry window, cancelling the job: {}",
-                    jobId, failures, physicalPartitionId,
-                    Config.lake_online_rewrite_partition_retry_timeout_second, error);
+                    jobId, failures, physicalPartitionId, retryWindowSecond, error);
             return false;
         }
         LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}, retrying on a later tick "
@@ -1265,9 +1270,16 @@ public abstract class LakeOnlineRewriteJobBase
      * attempt per tick for the partition it is working on. Converting the window this way keeps the
      * config meaning "how long we keep retrying this partition" while making the budget immune to time
      * the job spends waiting on a different partition.
+     *
+     * <p>The window arrives as a parameter so that one retry decision applies a single sample of it. The
+     * tick is read here instead, which is that same single sample: this is the only place in a decision
+     * that reads it.
+     *
+     * @param retryWindowSecond the caller's sample of {@code
+     *         lake_online_rewrite_partition_retry_timeout_second}, already known to be positive
      */
-    private static int maxConsecutiveRewriteFailures() {
-        long budgetMs = Config.lake_online_rewrite_partition_retry_timeout_second * 1000L;
+    private static int maxConsecutiveRewriteFailures(int retryWindowSecond) {
+        long budgetMs = retryWindowSecond * 1000L;
         long tickMs = Math.max(1L, Config.alter_scheduler_interval_millisecond);
         return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, budgetMs / tickMs));
     }
