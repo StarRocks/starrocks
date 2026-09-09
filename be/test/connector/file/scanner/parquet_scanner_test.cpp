@@ -16,6 +16,7 @@
 
 #include <arrow/builder.h>
 #include <arrow/io/file.h>
+#include <arrow/io/memory.h>
 #include <gtest/gtest.h>
 #include <parquet/api/schema.h>
 #include <parquet/api/writer.h>
@@ -30,7 +31,9 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/status.h"
+#include "fs/fs.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "io/string_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -39,6 +42,86 @@
 #include "types/type_descriptor.h"
 
 namespace starrocks {
+
+TEST(ParquetGeoReaderTest, EmptyFileKeepsExistingInferenceAndEof) {
+    for (const auto& logical : {::parquet::LogicalType::Geography(), ::parquet::LogicalType::Geometry()}) {
+        auto shape = ::parquet::schema::PrimitiveNode::Make("shape", ::parquet::Repetition::OPTIONAL, logical,
+                                                            ::parquet::Type::BYTE_ARRAY);
+        auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+                ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {shape}));
+        auto sink_result = arrow::io::BufferOutputStream::Create();
+        ASSERT_TRUE(sink_result.ok());
+        auto sink = sink_result.ValueOrDie();
+        auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
+        writer->Close();
+        auto result = sink->Finish();
+        ASSERT_TRUE(result.ok());
+        auto file = std::make_shared<RandomAccessFile>(
+                std::make_shared<io::StringInputStream>(result.ValueOrDie()->ToString()), "empty-geo.parquet");
+        ScannerCounter counter;
+        std::shared_ptr<arrow::io::RandomAccessFile> input = std::make_shared<ParquetChunkFile>(file, 0, &counter);
+        ParquetReaderWrap reader(std::move(input), 1, 0, result.ValueOrDie()->size());
+        std::vector<SlotDescriptor> inferred;
+        ASSERT_TRUE(reader.get_schema(&inferred).ok());
+        ASSERT_EQ(1, inferred.size());
+        EXPECT_EQ(TYPE_VARBINARY, inferred[0].type().type);
+        SlotDescriptor binary(0, "shape", TypeDescriptor::create_varbinary_type(1024));
+        EXPECT_TRUE(reader.init_parquet_reader({&binary}).is_end_of_file());
+        SlotDescriptor missing(1, "missing", TypeDescriptor(TYPE_INT));
+        ParquetReaderWrap ordinary(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
+                                   result.ValueOrDie()->size());
+        EXPECT_TRUE(ordinary.init_parquet_reader({&missing}).is_end_of_file());
+        // Empty-file projections keep the original EOF behavior for every column.
+        ParquetReaderWrap mixed(std::make_shared<ParquetChunkFile>(file, 0, &counter), 2, 0,
+                                result.ValueOrDie()->size());
+        EXPECT_TRUE(mixed.init_parquet_reader({&missing, &binary}).is_end_of_file());
+    }
+}
+
+TEST(ParquetGeoReaderTest, AnnotatedColumnsKeepExistingReads) {
+    for (const auto& logical : {::parquet::LogicalType::Geography(), ::parquet::LogicalType::Geometry()}) {
+        auto id = ::parquet::schema::PrimitiveNode::Make("id", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
+        auto shape = ::parquet::schema::PrimitiveNode::Make("shape", ::parquet::Repetition::REQUIRED, logical,
+                                                            ::parquet::Type::BYTE_ARRAY);
+        auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
+                ::parquet::schema::GroupNode::Make("root", ::parquet::Repetition::REQUIRED, {id, shape}));
+        auto sink_result = arrow::io::BufferOutputStream::Create();
+        ASSERT_TRUE(sink_result.ok());
+        auto sink = sink_result.ValueOrDie();
+        auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
+        auto* group = writer->AppendRowGroup();
+        const int32_t value = 42;
+        static_cast<::parquet::Int32Writer*>(group->NextColumn())->WriteBatch(1, nullptr, nullptr, &value);
+        const uint8_t wkb[21] = {1, 1}; // Little-endian WKB POINT(0 0).
+        const ::parquet::ByteArray bytes(sizeof(wkb), wkb);
+        static_cast<::parquet::ByteArrayWriter*>(group->NextColumn())->WriteBatch(1, nullptr, nullptr, &bytes);
+        writer->Close();
+        auto result = sink->Finish();
+        ASSERT_TRUE(result.ok());
+        auto file = std::make_shared<RandomAccessFile>(
+                std::make_shared<io::StringInputStream>(result.ValueOrDie()->ToString()), "projected-geo.parquet");
+        ScannerCounter counter;
+        ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
+                                 result.ValueOrDie()->size());
+        SlotDescriptor supported(0, "id", TypeDescriptor(TYPE_INT));
+        auto status = reader.init_parquet_reader({&supported});
+        ASSERT_TRUE(status.ok()) << status;
+        auto batch = reader.get_batch();
+        ASSERT_NE(nullptr, batch);
+        ASSERT_EQ(1, batch->num_rows());
+        ASSERT_EQ(1, batch->num_columns());
+        EXPECT_EQ(42, std::static_pointer_cast<arrow::Int32Array>(batch->column(0))->Value(0));
+        for (auto type : {TypeDescriptor::create_varbinary_type(1024)}) {
+            // Each reader owns and closes its Arrow wrapper independently.
+            ParquetReaderWrap rejected(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
+                                       result.ValueOrDie()->size());
+            SlotDescriptor unsupported(1, "shape", type);
+            ASSERT_TRUE(rejected.init_parquet_reader({&unsupported}).ok());
+            ASSERT_NE(nullptr, rejected.get_batch());
+            EXPECT_EQ(1, rejected.get_batch()->num_rows());
+        }
+    }
+}
 
 class ParquetScannerTest : public ::testing::Test {
 public:
