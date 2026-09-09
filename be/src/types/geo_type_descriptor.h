@@ -17,78 +17,71 @@
 #include <optional>
 #include <string>
 
-#include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 
 namespace starrocks {
 
-// Standalone metadata, not a native SQL type. Preserve optional-field presence,
-// including explicit UNKNOWN. Reject unrecognized enum numbers at conversion
-// boundaries; never substitute a supported default. No payload inspection here.
+// Normalized internal metadata, not a native SQL type. Missing wire fields become
+// UNKNOWN / empty CRS / default subdescriptors; only parsed SRID retains presence.
+// Fixed-underlying-type enums preserve unrecognized int32 values. Conversion is
+// policy-free: callers decide which kinds, algorithms, CRS and dimensions they support.
 struct GeoTypeDescriptor {
-    std::optional<TGeoLogicalType::type> logical_type;
-    std::optional<TGeoCoordinateSystem::type> coordinate_system;
-    std::optional<TGeoEdgeAlgorithm::type> edge_algorithm;
-    std::optional<std::string> crs;
+    PGeoLogicalType logical_type = GEO_LOGICAL_TYPE_UNKNOWN;
+    PGeoCoordinateSystem coordinate_system = GEO_COORDINATE_SYSTEM_UNKNOWN;
+    PGeoEdgeAlgorithm edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
+    std::string crs;
     std::optional<int32_t> srid;
 
-    static StatusOr<GeoTypeDescriptor> from_thrift(const TGeoTypeDesc& thrift);
-    static StatusOr<GeoTypeDescriptor> from_protobuf(const PGeoTypeDesc& protobuf);
-    StatusOr<TGeoTypeDesc> to_thrift() const;
-    StatusOr<PGeoTypeDesc> to_protobuf() const;
+    static GeoTypeDescriptor from_thrift(const TGeoTypeDesc& thrift);
+    static GeoTypeDescriptor from_protobuf(const PGeoTypeDesc& protobuf);
+    TGeoTypeDesc to_thrift() const;
+    PGeoTypeDesc to_protobuf() const;
 
-    // Exact metadata equality, NOT SQL type compatibility.
-    bool operator==(const GeoTypeDescriptor& rhs) const;
-    bool operator!=(const GeoTypeDescriptor& rhs) const { return !(*this == rhs); }
+    // Exact normalized metadata equality, not SQL type compatibility.
+    bool operator==(const GeoTypeDescriptor& rhs) const = default;
 };
 
 struct GeoStorageDescriptor {
-    std::optional<TGeoEncoding::type> encoding;
-    std::optional<TGeoDimension::type> dimension;
-    std::optional<TGeoValidationState::type> validation_state;
+    PGeoEncoding encoding = GEO_ENCODING_UNKNOWN;
+    PGeoDimension dimension = GEO_DIMENSION_UNKNOWN;
+    PGeoValidationState validation_state = GEO_VALIDATION_STATE_UNKNOWN;
 
-    static StatusOr<GeoStorageDescriptor> from_thrift(const TGeoStorageDesc& thrift);
-    static StatusOr<GeoStorageDescriptor> from_protobuf(const PGeoStorageDesc& protobuf);
-    StatusOr<TGeoStorageDesc> to_thrift() const;
-    StatusOr<PGeoStorageDesc> to_protobuf() const;
+    static GeoStorageDescriptor from_thrift(const TGeoStorageDesc& thrift);
+    static GeoStorageDescriptor from_protobuf(const PGeoStorageDesc& protobuf);
+    TGeoStorageDesc to_thrift() const;
+    PGeoStorageDesc to_protobuf() const;
 
-    // Exact metadata equality, NOT SQL type compatibility.
-    bool operator==(const GeoStorageDescriptor& rhs) const;
-    bool operator!=(const GeoStorageDescriptor& rhs) const { return !(*this == rhs); }
+    // Exact normalized metadata equality, not SQL type compatibility.
+    bool operator==(const GeoStorageDescriptor& rhs) const = default;
 };
 
 struct GeoColumnDescriptor {
-    std::optional<GeoTypeDescriptor> type;
-    std::optional<GeoStorageDescriptor> storage;
+    GeoTypeDescriptor type;
+    GeoStorageDescriptor storage;
 
-    static StatusOr<GeoColumnDescriptor> from_thrift(const TGeoColumnDesc& thrift);
-    static StatusOr<GeoColumnDescriptor> from_protobuf(const PGeoColumnDesc& protobuf);
-    StatusOr<TGeoColumnDesc> to_thrift() const;
-    StatusOr<PGeoColumnDesc> to_protobuf() const;
+    static GeoColumnDescriptor from_thrift(const TGeoColumnDesc& thrift);
+    static GeoColumnDescriptor from_protobuf(const PGeoColumnDesc& protobuf);
+    TGeoColumnDesc to_thrift() const;
+    PGeoColumnDesc to_protobuf() const;
 
-    // Exact metadata equality, NOT SQL type compatibility.
-    bool operator==(const GeoColumnDescriptor& rhs) const;
-    bool operator!=(const GeoColumnDescriptor& rhs) const { return !(*this == rhs); }
+    bool operator==(const GeoColumnDescriptor& rhs) const = default;
 };
 
-// Compatibility operates on recognized descriptor enum values (checked at
-// conversion boundaries), without repeating wire validation at each call site.
-// Conservative CRS comparison: identifiers must be present, nonempty and equal.
-// No alias normalization, reprojection or inference from the optional parsed SRID.
+// Callers establish supported semantics before using these compatibility predicates.
+// CRS identifiers must be nonempty and equal: no alias normalization, reprojection
+// or inference from the optional parsed SRID.
 bool is_geo_semantically_compatible(const GeoTypeDescriptor& lhs, const GeoTypeDescriptor& rhs);
 
-// Semantic compatibility only: does not enable an algorithm/function or prove
-// row-level dimensions. Encoding and producer-validation state are not overload identity.
+// Semantic compatibility is not capability validation or a row-dimension guarantee.
+// Encoding and producer-validation state do not determine overload identity.
 bool is_geo_compute_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDescriptor& rhs);
 
-// No payload conversion. Both sides must declare WKB; validation state is irrelevant.
-// UNKNOWN/MIXED (or absent) target dimension is unconstrained. A constrained target
-// requires the same guaranteed source dimension, without dropping coordinates.
+// No payload conversion: both sides must declare WKB. UNKNOWN/MIXED target dimension
+// is unconstrained; otherwise the source must guarantee the same dimension.
 bool is_geo_assignment_compatible(const GeoColumnDescriptor& source, const GeoColumnDescriptor& target);
 
-// Unlike assignment, UNION ALL may combine dimensions without relabeling rows.
-// Result dimension must be derived separately; compatibility is not an XY guarantee.
+// UNION ALL may combine dimensions; derive the result dimension separately.
 bool is_geo_union_all_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDescriptor& rhs);
 
 } // namespace starrocks

@@ -292,18 +292,26 @@ enum PGeoValidationState {
 }
 
 // Standalone descriptors; not attached to PTypeDesc until native type integration.
+// Enum numbers use int32 so unknown values survive transport; callers validate support.
 message PGeoTypeDesc {
-    optional PGeoLogicalType logical_type = 1;
-    optional PGeoCoordinateSystem coordinate_system = 2;
-    optional PGeoEdgeAlgorithm edge_algorithm = 3;
+    // PGeoLogicalType
+    optional int32 logical_type = 1;
+    // PGeoCoordinateSystem
+    optional int32 coordinate_system = 2;
+    // PGeoEdgeAlgorithm
+    optional int32 edge_algorithm = 3;
     optional string crs = 4;
     optional int32 srid = 5;
 }
 
+// Enum numbers use int32 so unknown values survive transport; callers validate support.
 message PGeoStorageDesc {
-    optional PGeoEncoding encoding = 1;
-    optional PGeoDimension dimension = 2;
-    optional PGeoValidationState validation_state = 3;
+    // PGeoEncoding
+    optional int32 encoding = 1;
+    // PGeoDimension
+    optional int32 dimension = 2;
+    // PGeoValidationState
+    optional int32 validation_state = 3;
 }
 
 message PGeoColumnDesc {

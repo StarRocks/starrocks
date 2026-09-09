@@ -774,18 +774,26 @@ enum TGeoValidationState {
 }
 
 // Standalone descriptors; not attached to TTypeDesc until native type integration.
+// Enum numbers use i32 so unknown values survive transport; callers validate support.
 struct TGeoTypeDesc {
-    1: optional TGeoLogicalType logical_type
-    2: optional TGeoCoordinateSystem coordinate_system
-    3: optional TGeoEdgeAlgorithm edge_algorithm
+    // TGeoLogicalType
+    1: optional i32 logical_type
+    // TGeoCoordinateSystem
+    2: optional i32 coordinate_system
+    // TGeoEdgeAlgorithm
+    3: optional i32 edge_algorithm
     4: optional string crs
     5: optional i32 srid
 }
 
+// Enum numbers use i32 so unknown values survive transport; callers validate support.
 struct TGeoStorageDesc {
-    1: optional TGeoEncoding encoding
-    2: optional TGeoDimension dimension
-    3: optional TGeoValidationState validation_state
+    // TGeoEncoding
+    1: optional i32 encoding
+    // TGeoDimension
+    2: optional i32 dimension
+    // TGeoValidationState
+    3: optional i32 validation_state
 }
 
 struct TGeoColumnDesc {
