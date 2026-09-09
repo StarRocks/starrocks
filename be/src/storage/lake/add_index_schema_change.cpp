@@ -222,8 +222,10 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     // process-root tracker (or null in bare unit tests); both are safe.
     MemTracker* mem_tracker = CurrentThread::mem_tracker();
 
+    int total_segments = 0;
     for (const auto& rowset : base_metadata->rowsets()) {
         for (int seg_idx = 0; seg_idx < rowset.segment_metas_size(); ++seg_idx) {
+            ++total_segments;
             uint32_t rssid = get_rssid(rowset, seg_idx);
             // Capture by value to keep task self-contained; the `rowset`
             // reference would dangle if we captured by reference and the
@@ -260,6 +262,15 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         }
     }
     Status run_st = runner.wait();
+    if (run_st.ok() && op_add_index->segment_entries_size() < total_segments) {
+        // Both counts are read on this thread after every task has completed, so no synchronization
+        // is needed. Logged once per tablet: it gives an operator the denominator behind the
+        // segment_entries count, which is otherwise indistinguishable from a fully indexed tablet.
+        const int skipped = total_segments - op_add_index->segment_entries_size();
+        LOG(INFO) << "AddIndexSchemaChange: tablet " << _new_tablet.id() << " indexed "
+                  << op_add_index->segment_entries_size() << " of " << total_segments << " segments; " << skipped
+                  << " hold none of the indexed columns (light ADD COLUMN does not rewrite data)";
+    }
     if (!run_st.ok()) {
         // Best-effort remove any .idx files already written by tasks that
         // succeeded before the first failure. The caller (schema_change.cpp)
@@ -333,6 +344,10 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     // alter legitimately lacks the new column. Build only the indexes whose columns this segment
     // physically holds. Every uid here is already known to the logical schema (validated in run()),
     // so a miss is exactly the light-added case. If nothing is buildable, emit no IDG entry at all.
+    // Note this SKIPS rather than substituting the column's default: an index over synthesized
+    // defaults would advertise coverage of data the segment does not hold. Where a value must be
+    // materialized instead -- the delta-column-group rebuild in tablet_merger.cpp -- the default is
+    // substituted, because there is nothing to skip.
     std::vector<TabletIndexPB> indexes_to_build;
     indexes_to_build.reserve(_indexes_to_build.size());
     for (const auto& ix : _indexes_to_build) {
@@ -340,9 +355,11 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
         for (int i = 0; i < ix.col_unique_id_size(); i++) {
             if (segment->column_with_uid(ix.col_unique_id(i)) == nullptr) {
                 segment_holds_every_column = false;
-                LOG(INFO) << "AddIndexSchemaChange: skip index " << ix.index_id() << " on segment " << rssid
-                          << " of tablet " << _new_tablet.id() << ": column uid " << ix.col_unique_id(i)
-                          << " is absent from the segment (light ADD COLUMN does not rewrite data)";
+                // Per segment per index, so INFO would be O(segments) on a wide tablet; run() logs a
+                // single per-tablet summary instead.
+                VLOG(2) << "AddIndexSchemaChange: skip index " << ix.index_id() << " on segment " << rssid
+                        << " of tablet " << _new_tablet.id() << ": column uid " << ix.col_unique_id(i)
+                        << " is absent from the segment (light ADD COLUMN does not rewrite data)";
                 break;
             }
         }
@@ -434,8 +451,11 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     RETURN_IF_ERROR(idx_writer.finalize());
 
     // 4. Populate the IDG entry that the caller will hang off OpAddIndex. This MUST mirror the build
-    //    loop above: a key advertising an index the .idx file does not contain makes readers trust it
-    //    and fail with Corruption (column_reader.cpp bitmap/bloom lookup paths).
+    //    loop above, because the entry describes what the .idx file actually contains. A key for an
+    //    index the file lacks is wrong metadata: it is inert for a column the segment omits entirely
+    //    (the reader finds no column reader and never consults the entry), but a reader that does
+    //    reach such a key trusts it and fails with Corruption (column_reader.cpp bitmap/bloom
+    //    lookup paths).
     for (const auto& ix : indexes_to_build) {
         auto* k = out_entry->add_keys();
         k->set_col_unique_id(ix.col_unique_id(0));
