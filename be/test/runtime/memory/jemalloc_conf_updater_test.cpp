@@ -23,8 +23,8 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
-#include "common/config_update_registry.h"
 #include "common/config_memory_allocator_fwd.h"
+#include "common/config_update_registry.h"
 #include "common/configbase.h"
 #include "fmt/format.h"
 #include "jemalloc/jemalloc.h"
@@ -337,9 +337,8 @@ TEST_F(JemallocConfUpdaterTest, conf_with_prof_active) {
 // code path -- including the rollback the registry performs when applying fails.
 TEST_F(JemallocConfUpdaterTest, set_prof_active_via_config_goes_through_the_hook) {
     auto* registry = ConfigUpdateRegistry::instance();
-    registry->register_callback(kJemallocConfName, [] {
-        return JemallocConfUpdater::instance().update(config::jemalloc_conf.value());
-    });
+    registry->register_callback(kJemallocConfName,
+                                [] { return JemallocConfUpdater::instance().update(config::jemalloc_conf.value()); });
     registry->set_ready();
     DeferOp reset([registry] { registry->TEST_reset(); });
 
