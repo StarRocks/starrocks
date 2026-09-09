@@ -47,6 +47,7 @@
 #include "gutil/macros.h"
 #include "io/input_stream.h"
 #include "storage/row_store_encoder_factory.h"
+#include "storage/rowset/ordinal_page_index.h" // DeferredOrdinalIndex
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"
 #include "storage_primitive/flat_json_config.h"
@@ -154,6 +155,12 @@ public:
 
     uint32_t segment_id() const { return _segment_id; }
 
+    // Index bytes written after finalize_columns() returned, which the vertical rowset writer must
+    // fold into its own index-size total: it accumulates from finalize_columns(), and the tail
+    // region is written later, from finalize_footer(). Left at zero on the horizontal path, whose
+    // finalize() already reported them.
+    uint64_t unreported_index_size() const { return _unreported_small_index_region_size; }
+
     const DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
     const std::string& segment_path() const;
@@ -190,6 +197,7 @@ public:
     const std::vector<VariantTuple>& get_sort_key_samples() const { return _sort_key_samples; }
 
 private:
+    Status _write_small_index_region(uint64_t* index_size);
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
@@ -216,6 +224,32 @@ private:
     // test), so both indexes have one entry per block with matching num_items / rows-per-block.
     std::unique_ptr<ShortKeyIndexBuilder> _full_sort_key_index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
+    // Ordinal-index builders taken from column writers that have otherwise finished, accumulated
+    // across every finalize_columns() call and flushed as one contiguous region by
+    // finalize_footer(). A vertical writer calls finalize_columns() once per column group, so an
+    // early group's ordinal index can only reach the tail by outliving the last group's data.
+    //
+    // Only the builders are held: the writers themselves are destroyed on the usual schedule, so
+    // what survives here is roughly 17 bytes per page and nothing else -- no zone map, bitmap or
+    // bloom state, whose finish() flushes but does not return its memory.
+    std::vector<DeferredOrdinalIndex> _deferred_ordinal_indexes;
+    // Whether this segment uses the tail index region, decided once in the constructor and never
+    // re-read. Two reasons it is latched rather than consulted per call:
+    //   * config::lake_enable_segment_tail_index_region is mutable, and a vertical writer finalizes one
+    //     column group at a time -- a flip mid-segment would produce a hybrid, some groups'
+    //     ordinal indexes in the advertised tail and the rest still inline;
+    //   * the shared-data check below is a global lookup, and this is a per-column-group path.
+    const bool _tail_index_layout;
+    // Cleared when init() continues an existing segment (partial-update rewrite): the copied
+    // columns keep their original scattered index pages, so a tail region built from the appended
+    // columns alone would describe only part of the segment.
+    bool _tail_index_layout_usable;
+    bool _small_index_region_deferred = false;
+    // Bytes of the tail region, recorded only when _write_small_index_region() had no index_size
+    // out-param to add them to -- i.e. when it ran from finalize_footer() on the vertical path.
+    // The horizontal path reports them through finalize()'s index_size and leaves this at zero,
+    // so a caller adding both can never double count.
+    uint64_t _unreported_small_index_region_size = 0;
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
