@@ -233,7 +233,10 @@ public class TransactionStmtExecutor {
             databaseTransactionMgr.upsertTransactionState(transactionState);
         }
 
-        transactionState.addTableIdList(tableId);
+        // activateTable may already have added this table when the load started.
+        if (!transactionState.getTableIdList().contains(tableId)) {
+            transactionState.addTableIdList(tableId);
+        }
 
         // record modified table id in explicit txn state for later SELECT validation
         explicitTxnState.addModifiedTableId(tableId);
@@ -259,9 +262,25 @@ public class TransactionStmtExecutor {
     public static TransactionState activateTable(long dbId, long tableId, ConnectContext context)
             throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
-                context.getTxnId(), dbId);
-        globalTransactionMgr.activateExplicitTransactionTable(context.getTxnId(), dbId, tableId);
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
+        if (explicitTxnState == null) {
+            throw ErrorReportException.report(ERR_TXN_NOT_EXIST, context.getTxnId());
+        }
+        TransactionState transactionState = explicitTxnState.getTransactionState();
+        if (transactionState.getDbId() != 0 && transactionState.getDbId() != dbId) {
+            throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
+        }
+        if (transactionState.getDbId() == 0) {
+            transactionState.setDbId(dbId);
+            DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getDatabaseTransactionMgr(dbId);
+            databaseTransactionMgr.upsertTransactionState(transactionState);
+        }
+        if (!transactionState.getTableIdList().contains(tableId)) {
+            transactionState.addTableIdList(tableId);
+        }
+        // record modified table id in explicit txn state for later SELECT validation
+        explicitTxnState.addModifiedTableId(tableId);
         return transactionState;
     }
 
