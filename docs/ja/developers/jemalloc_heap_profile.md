@@ -20,17 +20,19 @@ description: "StarRocks BE ノードの Jemalloc ヒーププロファイル有�
 ADMIN EXECUTE ON <be_id> 'System.print(HeapProf.getInstance().enable_prof())'
 ```
 
+有効化と無効化は `jemalloc_conf` BE 設定を経由するようになったため、この設定は `information_schema.be_configs` の `prof_active` としても確認でき、そこで値を変更した場合も同じコードパスを通ります。ステートメントは `HeapProf` オブジェクトではなく更新のステータスを返し、BE が `prof:true` なしで起動されている場合は失敗します。
+
 `be_id`: BE/CN ノードの ID。SHOW BACKENDS または SHOW COMPUTE NODES を実行して ID を取得できます。
 
 例:
 
 ```SQL
 mysql> admin execute on 10001 'System.print(HeapProf.getInstance().enable_prof())';
-+----------------------+
-| result               |
-+----------------------+
-| instance of HeapProf |
-+----------------------+
++--------+
+| result |
++--------+
+| OK     |
++--------+
 1 row in set (0.00 sec)
 ```
 
@@ -62,11 +64,11 @@ ADMIN EXECUTE ON <be_id> 'System.print(HeapProf.getInstance().disable_prof())'
 
 ```SQL
 mysql> admin execute on 10001 'System.print(HeapProf.getInstance().disable_prof())';
-+----------------------+
-| result               |
-+----------------------+
-| instance of HeapProf |
-+----------------------+
++--------+
+| result |
++--------+
+| OK     |
++--------+
 1 row in set (0.00 sec)
 ```
 
