@@ -1,0 +1,147 @@
+-- name: test_json_subfield_agg_replace_if_not_null
+-- An AGGREGATE KEY table merges the rows of one key on read, one column at a time. The v2 JSON path
+-- rewrite (cbo_json_v2_rewrite, on by default) turns get_json_xxx(j,'$.f') into a synthetic subfield
+-- column attached to the scan, and that column is materialized per segment -- below the merge. The
+-- merge therefore runs the subfield column's own aggregation over the subfield alone, and the backend
+-- gives it REPLACE.
+--
+-- REPLACE is wrong for a REPLACE_IF_NOT_NULL root: a later row whose JSON is NULL must not win the
+-- merge, but its subfield is NULL too, and REPLACE lets that NULL win. Reading the whole JSON column
+-- of the same table answered correctly, so one query said {"a":1,...,"s":"hello1"} and the next said
+-- the subfield was NULL.
+--
+-- Mirroring REPLACE_IF_NOT_NULL onto the subfield does not fix it either -- measured, not reasoned:
+-- "the JSON is NULL" and "the JSON has no such key" reach the subfield column as the same NULL, and
+-- the second one must overwrite (agg_ifnn_absent_key below). No per-column aggregation can tell the
+-- two apart, so the rewrite is declined for such a root and the expression stays on the JSON column.
+--
+-- Every query is paired with the same query at cbo_json_v2_rewrite=false, which merges first and reads
+-- the subfield afterwards: that is the answer, and the two must agree row for row.
+create table agg_ifnn_${uuid0} (k int, j json replace_if_not_null) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table agg_ifnn_noflat_${uuid0} (k int, j json replace_if_not_null) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+create table agg_ifnn_absent_key_${uuid0} (k int, j json replace_if_not_null) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table agg_replace_${uuid0} (k int, j json replace) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table uniq_${uuid0} (k int, j json) unique key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table dup_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+
+-- Eight rows so the JSON column is actually flattened, then a second load that supersedes every key
+-- with a NULL JSON. REPLACE_IF_NOT_NULL means the first load survives.
+insert into agg_ifnn_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+insert into agg_ifnn_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+
+insert into agg_ifnn_noflat_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+insert into agg_ifnn_noflat_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+
+-- The second load is NOT NULL, so it wins the merge -- and it has no `s` key, so `$.s` is NULL. This is
+-- the case that a REPLACE_IF_NOT_NULL subfield column gets wrong in the other direction.
+insert into agg_ifnn_absent_key_${uuid0} values
+  (1, parse_json('{"a":1,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"s":"hello8"}'));
+insert into agg_ifnn_absent_key_${uuid0} values
+  (1, parse_json('{"a":11}')),(2, parse_json('{"a":12}')),(3, parse_json('{"a":13}')),(4, parse_json('{"a":14}')),
+  (5, parse_json('{"a":15}')),(6, parse_json('{"a":16}')),(7, parse_json('{"a":17}')),(8, parse_json('{"a":18}'));
+
+insert into agg_replace_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+insert into agg_replace_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+
+insert into uniq_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+insert into uniq_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+
+insert into dup_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+
+-- The bug: every row came back NULL here while the JSON column below said otherwise.
+[ORDER]select k, get_json_string(j,'$.s') from agg_ifnn_${uuid0} order by k;
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_ifnn_${uuid0} order by k;
+[ORDER]select k, j from agg_ifnn_${uuid0} order by k;
+-- Reading the subfield beside the whole column has to give the same subfield.
+[ORDER]select k, get_json_string(j,'$.s'), j from agg_ifnn_${uuid0} order by k;
+-- A predicate on the subfield goes through the same rewrite.
+select count(*) from agg_ifnn_${uuid0} where get_json_string(j,'$.s') = 'hello3';
+select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ count(*) from agg_ifnn_${uuid0} where get_json_string(j,'$.s') = 'hello3';
+-- Other value types of the same rewrite.
+[ORDER]select k, get_json_int(j,'$.a'), get_json_double(j,'$.f'), get_json_bool(j,'$.b') from agg_ifnn_${uuid0} order by k;
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_int(j,'$.a'), get_json_double(j,'$.f'), get_json_bool(j,'$.b') from agg_ifnn_${uuid0} order by k;
+
+-- Not a flat-JSON bug: the same table with flattening off was wrong the same way.
+[ORDER]select k, get_json_string(j,'$.s') from agg_ifnn_noflat_${uuid0} order by k;
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_ifnn_noflat_${uuid0} order by k;
+
+-- The newer JSON wins and has no `s`, so the subfield is NULL. A REPLACE_IF_NOT_NULL subfield column
+-- answers `hello<k>` here, which is the older JSON's value pasted onto the newer JSON.
+[ORDER]select k, get_json_string(j,'$.s') from agg_ifnn_absent_key_${uuid0} order by k;
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_ifnn_absent_key_${uuid0} order by k;
+[ORDER]select k, j from agg_ifnn_absent_key_${uuid0} order by k;
+
+-- Controls that were always right and must stay right: REPLACE keeps the pushdown, and so do UNIQUE
+-- and DUPLICATE.
+[ORDER]select k, get_json_string(j,'$.s') from agg_replace_${uuid0} order by k;
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_replace_${uuid0} order by k;
+[ORDER]select k, get_json_string(j,'$.s') from uniq_${uuid0} order by k;
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from uniq_${uuid0} order by k;
+[ORDER]select k, get_json_string(j,'$.s') from dup_${uuid0} order by k;
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from dup_${uuid0} order by k;
+
+drop table agg_ifnn_${uuid0};
+drop table agg_ifnn_noflat_${uuid0};
+drop table agg_ifnn_absent_key_${uuid0};
+drop table agg_replace_${uuid0};
+drop table uniq_${uuid0};
+drop table dup_${uuid0};

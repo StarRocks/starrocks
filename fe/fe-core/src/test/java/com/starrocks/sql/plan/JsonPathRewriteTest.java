@@ -796,6 +796,58 @@ public class JsonPathRewriteTest extends PlanTestBase {
         Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
     }
 
+    /**
+     * An AGG or UNIQUE table merges the rows of one key on read, one column at a time, and the
+     * extended column is materialized per segment -- below that merge. The merge therefore runs the
+     * extended column's own aggregation over the subfield alone.
+     *
+     * <p>Only REPLACE means the same thing there as on the JSON it was cut from. REPLACE_IF_NOT_NULL
+     * does not: "the JSON is NULL" and "the JSON has no such key" reach the subcolumn as one NULL,
+     * and the two have to merge differently. Measured on a cluster, both single-column aggregations
+     * answer one of them wrong -- REPLACE returns NULL for a key whose older JSON should have
+     * survived the merge, REPLACE_IF_NOT_NULL carries that older subfield onto the newer JSON. So no
+     * extended column is built over such a root; the expression stays on the JSON column, which
+     * merges first and reads the subfield afterwards.
+     */
+    @Test
+    public void testDeclineRewriteWhenTheAggregationCannotRunOnTheSubcolumn() throws Exception {
+        starRocksAssert.withTable("create table json_agg_replace_if_not_null (k int, j json replace_if_not_null)"
+                + " aggregate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withTable("create table json_agg_replace (k int, j json replace)"
+                + " aggregate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withTable("create table json_unique (k int, j json)"
+                + " unique key(k) distributed by hash(k) buckets 1 properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain("select get_json_string(j, '$.s') from json_agg_replace_if_not_null");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+            // Declining leaves the expression on the JSON column, which answers correctly, and the
+            // subfield pruning channel still prunes the read.
+            assertContains(plan, "get_json_string");
+            assertContains(plan, "ColumnAccessPath");
+
+            // The predicate side goes through the same rewrite.
+            plan = getVerboseExplain(
+                    "select k from json_agg_replace_if_not_null where get_json_string(j, '$.s') = 'x'");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+            // REPLACE is faithful on a subfield, so the pushdown stays.
+            plan = getVerboseExplain("select get_json_string(j, '$.s') from json_agg_replace");
+            Assertions.assertTrue(plan.contains("ExtendedColumnAccessPath"), plan);
+
+            // Every UNIQUE value column is REPLACE.
+            plan = getVerboseExplain("select get_json_string(j, '$.s') from json_unique");
+            Assertions.assertTrue(plan.contains("ExtendedColumnAccessPath"), plan);
+
+            // A DUPLICATE table's value columns carry no aggregation at all.
+            plan = getVerboseExplain("select get_json_string(c2, '$.s') from extend_predicate");
+            Assertions.assertTrue(plan.contains("ExtendedColumnAccessPath"), plan);
+        } finally {
+            starRocksAssert.dropTable("json_agg_replace_if_not_null");
+            starRocksAssert.dropTable("json_agg_replace");
+            starRocksAssert.dropTable("json_unique");
+        }
+    }
+
     private static String jsonPathOfDepth(int depth) {
         StringBuilder path = new StringBuilder("$");
         for (int i = 0; i < depth; i++) {

@@ -26,6 +26,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -171,6 +172,52 @@ public class JsonPathRewriteRule extends TransformationRule {
 
         public Map<ColumnRefOperator, Column> getExtendedColumns() {
             return extendedColumns;
+        }
+
+        /**
+         * Whether the JSON column's aggregation still means the same thing once it is applied to a
+         * synthetic subfield column instead of to the JSON column itself.
+         *
+         * <p>An AGG or UNIQUE table merges the rows of one key on read, one column at a time, and the
+         * extended column is materialized per segment -- below that merge. So the merge runs the
+         * extended column's own aggregation over the subfield alone, with no access to the JSON it was
+         * cut from, which is faithful only when the root's aggregation does not depend on any other
+         * column of the row.
+         *
+         * <p>REPLACE does not depend on it: the newest row wins whatever it holds, and the subfield of
+         * the newest row is the subfield of the winning JSON. Every UNIQUE value column is REPLACE,
+         * and so is every PRIMARY KEY value column, which is why those models never reach this.
+         *
+         * <p>REPLACE_IF_NOT_NULL does depend on it. "The JSON is NULL" and "the JSON has no such key"
+         * both reach the subcolumn as the same NULL, yet the two have to merge differently: the first
+         * must keep the older subfield, because the older JSON won the merge; the second must
+         * overwrite it with NULL, because the newer JSON won and simply has no such key. Measured on a
+         * cluster, each single-column aggregation gets one of the two wrong -- REPLACE answers NULL
+         * where the older JSON should have survived, REPLACE_IF_NOT_NULL carries the older subfield
+         * onto the newer JSON. What decides between them lives in another column, which a per-column
+         * aggregation cannot see, so there is no extended column to build. Leaving the expression on
+         * the JSON column merges first and reads the subfield afterwards, which is the answer
+         * cbo_json_v2_rewrite=false gives, and the subfield pruning channel (ColumnAccessPath) still
+         * prunes the read.
+         */
+        public boolean aggregationSurvivesTheSubcolumn(Column jsonColumn) {
+            if (!aggregationSurvivesTheSubcolumn(jsonColumn.getAggregationType())) {
+                return false;
+            }
+            // The extended column is created against scanTable when that table owns the column, the
+            // way getOrCreateColumn() below resolves it. Both are checked, because being wrong in
+            // this direction only costs a pushdown.
+            if (scanTable != null) {
+                Column targetColumn = scanTable.getColumn(jsonColumn.getName());
+                if (targetColumn != null && !aggregationSurvivesTheSubcolumn(targetColumn.getAggregationType())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static boolean aggregationSurvivesTheSubcolumn(AggregateType aggregation) {
+            return AggregateType.isNullOrNone(aggregation) || aggregation == AggregateType.REPLACE;
         }
 
         /**
@@ -614,6 +661,12 @@ public class JsonPathRewriteRule extends TransformationRule {
             // which answers correctly.
             String rootColumnName = tableAndColumn.second.getColumnId().getId();
             if (rootColumnName.indexOf('.') >= 0 || rootColumnName.indexOf('"') >= 0) {
+                return call;
+            }
+
+            // The merge of an AGG table cannot run this column's aggregation on a subfield of it. See
+            // JsonPathRewriteContext#aggregationSurvivesTheSubcolumn.
+            if (!context.aggregationSurvivesTheSubcolumn(tableAndColumn.second)) {
                 return call;
             }
 

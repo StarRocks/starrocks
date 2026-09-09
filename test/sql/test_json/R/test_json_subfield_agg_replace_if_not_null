@@ -1,0 +1,327 @@
+-- name: test_json_subfield_agg_replace_if_not_null
+create table agg_ifnn_${uuid0} (k int, j json replace_if_not_null) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table agg_ifnn_noflat_${uuid0} (k int, j json replace_if_not_null) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+create table agg_ifnn_absent_key_${uuid0} (k int, j json replace_if_not_null) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table agg_replace_${uuid0} (k int, j json replace) aggregate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table uniq_${uuid0} (k int, j json) unique key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table dup_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into agg_ifnn_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+-- result:
+-- !result
+insert into agg_ifnn_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+-- result:
+-- !result
+insert into agg_ifnn_noflat_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+-- result:
+-- !result
+insert into agg_ifnn_noflat_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+-- result:
+-- !result
+insert into agg_ifnn_absent_key_${uuid0} values
+  (1, parse_json('{"a":1,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"s":"hello8"}'));
+-- result:
+-- !result
+insert into agg_ifnn_absent_key_${uuid0} values
+  (1, parse_json('{"a":11}')),(2, parse_json('{"a":12}')),(3, parse_json('{"a":13}')),(4, parse_json('{"a":14}')),
+  (5, parse_json('{"a":15}')),(6, parse_json('{"a":16}')),(7, parse_json('{"a":17}')),(8, parse_json('{"a":18}'));
+-- result:
+-- !result
+insert into agg_replace_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+-- result:
+-- !result
+insert into agg_replace_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+-- result:
+-- !result
+insert into uniq_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+-- result:
+-- !result
+insert into uniq_${uuid0} values (1,NULL),(2,NULL),(3,NULL),(4,NULL),(5,NULL),(6,NULL),(7,NULL),(8,NULL);
+-- result:
+-- !result
+insert into dup_${uuid0} values
+  (1, parse_json('{"a":1,"b":true,"f":1.5,"s":"hello1"}')),
+  (2, parse_json('{"a":2,"b":true,"f":2.5,"s":"hello2"}')),
+  (3, parse_json('{"a":3,"b":true,"f":3.5,"s":"hello3"}')),
+  (4, parse_json('{"a":4,"b":true,"f":4.5,"s":"hello4"}')),
+  (5, parse_json('{"a":5,"b":true,"f":5.5,"s":"hello5"}')),
+  (6, parse_json('{"a":6,"b":true,"f":6.5,"s":"hello6"}')),
+  (7, parse_json('{"a":7,"b":true,"f":7.5,"s":"hello7"}')),
+  (8, parse_json('{"a":8,"b":true,"f":8.5,"s":"hello8"}'));
+-- result:
+-- !result
+[ORDER]select k, get_json_string(j,'$.s') from agg_ifnn_${uuid0} order by k;
+-- result:
+1	hello1
+2	hello2
+3	hello3
+4	hello4
+5	hello5
+6	hello6
+7	hello7
+8	hello8
+-- !result
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_ifnn_${uuid0} order by k;
+-- result:
+1	hello1
+2	hello2
+3	hello3
+4	hello4
+5	hello5
+6	hello6
+7	hello7
+8	hello8
+-- !result
+[ORDER]select k, j from agg_ifnn_${uuid0} order by k;
+-- result:
+1	{"a": 1, "b": true, "f": 1.5, "s": "hello1"}
+2	{"a": 2, "b": true, "f": 2.5, "s": "hello2"}
+3	{"a": 3, "b": true, "f": 3.5, "s": "hello3"}
+4	{"a": 4, "b": true, "f": 4.5, "s": "hello4"}
+5	{"a": 5, "b": true, "f": 5.5, "s": "hello5"}
+6	{"a": 6, "b": true, "f": 6.5, "s": "hello6"}
+7	{"a": 7, "b": true, "f": 7.5, "s": "hello7"}
+8	{"a": 8, "b": true, "f": 8.5, "s": "hello8"}
+-- !result
+[ORDER]select k, get_json_string(j,'$.s'), j from agg_ifnn_${uuid0} order by k;
+-- result:
+1	hello1	{"a": 1, "b": true, "f": 1.5, "s": "hello1"}
+2	hello2	{"a": 2, "b": true, "f": 2.5, "s": "hello2"}
+3	hello3	{"a": 3, "b": true, "f": 3.5, "s": "hello3"}
+4	hello4	{"a": 4, "b": true, "f": 4.5, "s": "hello4"}
+5	hello5	{"a": 5, "b": true, "f": 5.5, "s": "hello5"}
+6	hello6	{"a": 6, "b": true, "f": 6.5, "s": "hello6"}
+7	hello7	{"a": 7, "b": true, "f": 7.5, "s": "hello7"}
+8	hello8	{"a": 8, "b": true, "f": 8.5, "s": "hello8"}
+-- !result
+select count(*) from agg_ifnn_${uuid0} where get_json_string(j,'$.s') = 'hello3';
+-- result:
+1
+-- !result
+select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ count(*) from agg_ifnn_${uuid0} where get_json_string(j,'$.s') = 'hello3';
+-- result:
+1
+-- !result
+[ORDER]select k, get_json_int(j,'$.a'), get_json_double(j,'$.f'), get_json_bool(j,'$.b') from agg_ifnn_${uuid0} order by k;
+-- result:
+1	1	1.5	1
+2	2	2.5	1
+3	3	3.5	1
+4	4	4.5	1
+5	5	5.5	1
+6	6	6.5	1
+7	7	7.5	1
+8	8	8.5	1
+-- !result
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_int(j,'$.a'), get_json_double(j,'$.f'), get_json_bool(j,'$.b') from agg_ifnn_${uuid0} order by k;
+-- result:
+1	1	1.5	1
+2	2	2.5	1
+3	3	3.5	1
+4	4	4.5	1
+5	5	5.5	1
+6	6	6.5	1
+7	7	7.5	1
+8	8	8.5	1
+-- !result
+[ORDER]select k, get_json_string(j,'$.s') from agg_ifnn_noflat_${uuid0} order by k;
+-- result:
+1	hello1
+2	hello2
+3	hello3
+4	hello4
+5	hello5
+6	hello6
+7	hello7
+8	hello8
+-- !result
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_ifnn_noflat_${uuid0} order by k;
+-- result:
+1	hello1
+2	hello2
+3	hello3
+4	hello4
+5	hello5
+6	hello6
+7	hello7
+8	hello8
+-- !result
+[ORDER]select k, get_json_string(j,'$.s') from agg_ifnn_absent_key_${uuid0} order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+-- !result
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_ifnn_absent_key_${uuid0} order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+-- !result
+[ORDER]select k, j from agg_ifnn_absent_key_${uuid0} order by k;
+-- result:
+1	{"a": 11}
+2	{"a": 12}
+3	{"a": 13}
+4	{"a": 14}
+5	{"a": 15}
+6	{"a": 16}
+7	{"a": 17}
+8	{"a": 18}
+-- !result
+[ORDER]select k, get_json_string(j,'$.s') from agg_replace_${uuid0} order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+-- !result
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from agg_replace_${uuid0} order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+-- !result
+[ORDER]select k, get_json_string(j,'$.s') from uniq_${uuid0} order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+-- !result
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from uniq_${uuid0} order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+-- !result
+[ORDER]select k, get_json_string(j,'$.s') from dup_${uuid0} order by k;
+-- result:
+1	hello1
+2	hello2
+3	hello3
+4	hello4
+5	hello5
+6	hello6
+7	hello7
+8	hello8
+-- !result
+[ORDER]select /*+SET_VAR(cbo_json_v2_rewrite=false)*/ k, get_json_string(j,'$.s') from dup_${uuid0} order by k;
+-- result:
+1	hello1
+2	hello2
+3	hello3
+4	hello4
+5	hello5
+6	hello6
+7	hello7
+8	hello8
+-- !result
+drop table agg_ifnn_${uuid0};
+-- result:
+-- !result
+drop table agg_ifnn_noflat_${uuid0};
+-- result:
+-- !result
+drop table agg_ifnn_absent_key_${uuid0};
+-- result:
+-- !result
+drop table agg_replace_${uuid0};
+-- result:
+-- !result
+drop table uniq_${uuid0};
+-- result:
+-- !result
+drop table dup_${uuid0};
+-- result:
+-- !result

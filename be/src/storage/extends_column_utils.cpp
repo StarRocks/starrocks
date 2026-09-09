@@ -147,9 +147,15 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_access_paths(const TabletSchemaCSPt
         const auto& root_column = tablet_schema->column(static_cast<size_t>(root_column_index));
         inherit_default_value_from_json(&column, root_column, path.get());
 
-        // For UNIQUE/AGG tables, extended flat JSON subcolumns act as value columns and
-        // must have a valid aggregation method for pre-aggregation. Use REPLACE, which is
-        // consistent with value-column semantics in these models.
+        // For UNIQUE/AGG tables the synthetic subcolumn is a value column, so the merge needs an
+        // aggregation for it, and REPLACE is the only one that means the same thing on a subfield as
+        // on the JSON it was cut from: the newest row wins whatever it holds. Every UNIQUE value
+        // column carries it. It is not a guess about the rest -- FE (JsonPathRewriteRule) declines to
+        // build an extended column over any other aggregation, because none of them can be executed
+        // one column at a time: REPLACE_IF_NOT_NULL has to tell "the JSON is NULL" apart from "the
+        // JSON has no such key", and both reach this column as the same NULL. Refusing here instead
+        // is not an option -- the slot FE already planned for would have no field to bind to, and the
+        // scan fails with "invalid field name".
         auto keys_type = tablet_schema->keys_type();
         if (keys_type == KeysType::UNIQUE_KEYS || keys_type == KeysType::AGG_KEYS) {
             column.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
