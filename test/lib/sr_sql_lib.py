@@ -3248,11 +3248,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         numeric id through getBackendOrComputeNode(), so either kind serves. Which node is
         picked does not matter for anything per-process and identical everywhere.
         """
-        node_ids = self.get_all_backend_ids()
-        if not node_ids:
-            res = self.execute_sql("show compute nodes;", ori=True)
-            tools.assert_true(res["status"], res["msg"])
-            node_ids = [str(row[0]) for row in res["result"]]
+        node_ids = self.get_all_backend_ids() or self.get_all_compute_node_ids()
 
         tools.assert_true(len(node_ids) > 0, "no backend or compute node to run ADMIN EXECUTE on")
         return node_ids[0]
@@ -3276,9 +3272,13 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         )
         return "OK"
 
-    def get_all_backend_ids(self) -> List[str]:
-        """Return ids of all alive backends (fallback to all rows if Alive not found)."""
-        res = self.execute_sql("show backends;", ori=True)
+    def _alive_node_ids(self, sql, id_column_names) -> List[str]:
+        """Ids of the alive rows of a `show backends`/`show compute nodes` style result.
+
+        Both listings include dead nodes, so the Alive column decides. It is only ignored when
+        the column is absent, in which case every row is returned rather than none.
+        """
+        res = self.execute_sql(sql, ori=True)
         tools.assert_true(res["status"], res["msg"])
 
         alive_idx = None
@@ -3286,24 +3286,32 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for i, col_info in enumerate(res["desc"]):
             if col_info[0] == "Alive":
                 alive_idx = i
-            if col_info[0] in ("BackendId", "BackendID", "BackendId "):
+            if col_info[0] in id_column_names:
                 id_idx = i
         if id_idx is None:
             id_idx = 0
 
-        be_ids: List[str] = []
+        node_ids: List[str] = []
         if alive_idx is not None:
             for row in res["result"]:
                 try:
                     if str(row[alive_idx]).lower() == "true":
-                        be_ids.append(str(row[id_idx]))
+                        node_ids.append(str(row[id_idx]))
                 except Exception:
                     continue
         else:
             for row in res["result"]:
-                be_ids.append(str(row[id_idx]))
+                node_ids.append(str(row[id_idx]))
 
-        return be_ids
+        return node_ids
+
+    def get_all_backend_ids(self) -> List[str]:
+        """Return ids of all alive backends (fallback to all rows if Alive not found)."""
+        return self._alive_node_ids("show backends;", ("BackendId", "BackendID", "BackendId "))
+
+    def get_all_compute_node_ids(self) -> List[str]:
+        """Return ids of all alive compute nodes (empty on a shared-nothing cluster)."""
+        return self._alive_node_ids("show compute nodes;", ("ComputeNodeId", "ComputeNodeID"))
 
     def set_vlog_level_for_all_be(self, prefixes, level: int):
         """Set VLOG level for one or more file-prefix patterns on all alive backends.
