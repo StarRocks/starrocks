@@ -3240,24 +3240,30 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
 
-    def get_any_backend_id(self) -> str:
-        """Return the id of one alive backend.
+    def get_any_worker_node_id(self) -> str:
+        """Return the id of one node that can run ADMIN EXECUTE.
 
-        ADMIN EXECUTE needs a concrete id, and `ALL BACKENDS` only exists on newer versions, so
-        cases look one up instead of naming a node. Which one does not matter for anything that
-        is per-process and identical on every node.
+        Takes the union of backends and compute nodes, the way _get_backend_http_endpoints()
+        does: a shared-data cluster may run only compute nodes, and ADMIN EXECUTE resolves a
+        numeric id through getBackendOrComputeNode(), so either kind serves. Which node is
+        picked does not matter for anything per-process and identical everywhere.
         """
-        backend_ids = self.get_all_backend_ids()
-        tools.assert_true(len(backend_ids) > 0, "no alive backend to run ADMIN EXECUTE on")
-        return backend_ids[0]
+        node_ids = self.get_all_backend_ids()
+        if not node_ids:
+            res = self.execute_sql("show compute nodes;", ori=True)
+            tools.assert_true(res["status"], res["msg"])
+            node_ids = [str(row[0]) for row in res["result"]]
 
-    def assert_backend_script_prints(self, backend_id, script, pattern):
-        """Run a Wren script on `backend_id` and match what it printed against a regex.
+        tools.assert_true(len(node_ids) > 0, "no backend or compute node to run ADMIN EXECUTE on")
+        return node_ids[0]
+
+    def assert_node_script_prints(self, node_id, script, pattern):
+        """Run a Wren script on `node_id` and match what it printed against a regex.
 
         The regex lives here because a `function:` result is compared for equality, and the
         printed text carries per-cluster numbers.
         """
-        sql = "admin execute on %s '%s'" % (backend_id, script)
+        sql = "admin execute on %s '%s'" % (node_id, script)
         res = self.execute_sql(sql, ori=True)
         tools.assert_true(res["status"], "%s failed: %s" % (sql, res.get("msg", "")))
 

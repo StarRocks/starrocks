@@ -1,14 +1,14 @@
--- name: test_script_object_tostring @native
-[UC]function: be_id=get_any_backend_id()
-function: assert_backend_script_prints('${be_id}', 'System.print(StorageEngine.do_compaction(1, "base"))', '.*Not Found tablet:1.*')
+-- name: test_script_object_tostring
+[UC]function: node_id=get_any_worker_node_id()
+function: assert_node_script_prints('${node_id}', 'System.print(StorageEngine.do_compaction(1, "base"))', '.*Not Found tablet:1.*')
 -- result:
 OK
 -- !result
-function: assert_backend_script_prints('${be_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
+function: assert_node_script_prints('${node_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
 -- result:
 OK
 -- !result
-function: assert_backend_script_prints('${be_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker().toString())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
+function: assert_node_script_prints('${node_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker().toString())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
 -- result:
 OK
 -- !result

@@ -1,20 +1,21 @@
--- name: test_script_object_tostring @native
+-- name: test_script_object_tostring
 -- Wren resolves System.print(x) through the getter x.toString (wren.c, System.writeObject_).
 -- The script bindings used to register toString as a method only, so printing a bound object
 -- produced the placeholder "instance of <Class>" and the text was unreachable that way.
 --
--- The scripts say GlobalEnv rather than RuntimeEnv, and the backend id is looked up rather
--- than named, because ALL BACKENDS and RuntimeEnv do not exist on every branch this reaches.
+-- The scripts say GlobalEnv rather than RuntimeEnv, and the node id is looked up rather than
+-- named, because ALL BACKENDS and RuntimeEnv do not exist on every branch this reaches. The
+-- lookup covers compute nodes too, so the case also runs on a shared-data cluster.
 
 -- The id is environment specific, so it is captured rather than asserted.
-[UC]function: be_id=get_any_backend_id()
+[UC]function: node_id=get_any_worker_node_id()
 
 -- Status: tablet 1 does not exist, so do_compaction() returns InvalidArgument.
-function: assert_backend_script_prints('${be_id}', 'System.print(StorageEngine.do_compaction(1, "base"))', '.*Not Found tablet:1.*')
+function: assert_node_script_prints('${node_id}', 'System.print(StorageEngine.do_compaction(1, "base"))', '.*Not Found tablet:1.*')
 
 -- MemTracker: debug_string() is a single line shaped "limit: N; reserve_limit: N; ...".
-function: assert_backend_script_prints('${be_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
+function: assert_node_script_prints('${node_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
 
 -- The method spelling stays supported: before the getter existed it was the only way to reach
 -- the text, so it is what existing scripts use.
-function: assert_backend_script_prints('${be_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker().toString())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
+function: assert_node_script_prints('${node_id}', 'System.print(GlobalEnv.GetInstance().process_mem_tracker().toString())', '.*limit: -?[0-9]+; reserve_limit: -?[0-9]+; consumption: [0-9]+.*')
