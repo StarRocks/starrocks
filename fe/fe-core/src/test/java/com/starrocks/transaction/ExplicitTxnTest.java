@@ -758,8 +758,6 @@ public class ExplicitTxnTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testCommitWithLostTransactionState() {
         // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
         // commitStmt should report an error instead of silently succeeding.
@@ -938,7 +936,6 @@ public class ExplicitTxnTest {
     }
 
     @Test
->>>>>>> 45942c3 ([BugFix] Create partitions for multi-table transaction stream load (#78790))
     public void testReshardPlanningReservations() throws Exception {
         GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
