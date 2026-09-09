@@ -65,8 +65,9 @@ Status BinaryPlainPageDecoder<Type>::init() {
     _num_elems = decode_fixed32_le((const uint8_t*)&_data[_data.get_size() - sizeof(uint32_t)]);
     _offsets_pos = static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
     if (!_delta_offset) {
-        // Absolute offsets: alias directly into the page (zero-copy).
-        _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
+        // The string payload has arbitrary length, so the absolute-offset trailer is not
+        // guaranteed to be uint32-aligned. Keep it as bytes and decode each value safely.
+        _encoded_offsets = reinterpret_cast<const uint8_t*>(_data.data + _offsets_pos);
     } else {
         // Delta-encoded: prefix-sum the on-disk deltas into an owned absolute-offset array so
         // that every other decoder method (which expects absolute offsets) is unchanged.
@@ -77,10 +78,8 @@ Status BinaryPlainPageDecoder<Type>::init() {
             acc += decode_fixed32_le(deltas + i * sizeof(uint32_t));
             _abs_offsets[i] = acc;
         }
-        _offsets_ptr = _abs_offsets.data();
         _offsets_materialized = true;
     }
-    // TODO: align offset
 
     if (_data.size < config::small_dictionary_page_size) {
         _parsed_datas = std::vector<Slice>();
@@ -256,13 +255,7 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
             auto* dst_offsets = offsets_buf.data() + current_offset_sz;
             // vectorized loop
             for (uint32_t i = idx; i < end - 1; i++) {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-                auto offset = _offsets_ptr[i + 1];
-#else
-                // direct call offset_uncheck() will break auto-vectorized
-                // maybe we can remove this condition compile after we upgrade the toolchain
                 auto offset = offset_uncheck(i + 1);
-#endif
                 const uint64_t current_offset = begin_offset + static_cast<uint64_t>(offset - page_data_offset);
                 *dst_offsets++ = static_cast<OffsetValue>(current_offset);
             }
@@ -376,13 +369,7 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
 
         const uint32_t page_data_offset = offset_uncheck(idx);
         for (uint32_t i = idx; i < end - 1; i++) {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-            auto offset = _offsets_ptr[i + 1];
-#else
-            // direct call offset_uncheck() will break auto-vectorized
-            // maybe we can remove this condition compile after we upgrade the toolchain
             auto offset = offset_uncheck(i + 1);
-#endif
 
             uint32_t current_offset = offset - page_data_offset;
             temp_offsets.set(i - idx + 1, current_offset);
