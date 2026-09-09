@@ -19,6 +19,7 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 
+import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 /*
@@ -35,6 +36,11 @@ public class RemoteFileScanContext {
     }
 
     public String tableLocation = null;
+
+    // Every partition path this scan will touch, when the whole set is known before the first
+    // lookup happens. Connectors that can resolve many partitions in one call use it to do so
+    // instead of resolving them one by one. Null when the partitions are discovered lazily.
+    public List<String> scanPartitionPaths = null;
 
     // ---- concurrent initialization -----
     public ReentrantLock lock = new ReentrantLock();

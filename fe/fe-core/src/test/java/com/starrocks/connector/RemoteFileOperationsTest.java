@@ -48,6 +48,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
@@ -439,5 +440,51 @@ public class RemoteFileOperationsTest {
         Assertions.assertEquals(4, result.get(1).getPartitionNames().size());
         Assertions.assertEquals(8, result.get(2).getPartitionNames().size());
         Assertions.assertEquals(2, result.get(3).getPartitionNames().size());
+    }
+
+    @Test
+    public void testScanContextCarriesEveryPartitionPath() {
+        FeConstants.runningUnitTest = true;
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        List<RemoteFileScanContext> observed = java.util.Collections.synchronizedList(new ArrayList<>());
+        RemoteFileIO capturingIO = new RemoteFileIO() {
+            @Override
+            public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
+                observed.add(pathKey.getScanContext());
+                return com.google.common.collect.ImmutableMap.of(pathKey, Lists.newArrayList());
+            }
+
+            @Override
+            public org.apache.hadoop.fs.FileStatus[] getFileStatus(Path... files) {
+                return new org.apache.hadoop.fs.FileStatus[0];
+            }
+        };
+
+        CachingRemoteFileIO cachingIO = new CachingRemoteFileIO(capturingIO, executor, 10, 10, 0.1);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingIO, executor, executor,
+                false, false, new Configuration());
+
+        HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        Map<String, Partition> partitions =
+                metastore.getPartitionsByNames("db1", "table1", Lists.newArrayList("col1=1", "col1=2"));
+        List<Partition> partitionList = Lists.newArrayList(partitions.values());
+
+        ops.getRemoteFiles(new HudiTable(), partitionList, GetRemoteFilesParams.newBuilder().build());
+
+        Assertions.assertEquals(partitionList.size(), observed.size());
+        // every partition lookup shares one context ...
+        RemoteFileScanContext context = observed.get(0);
+        Assertions.assertNotNull(context);
+        for (RemoteFileScanContext seen : observed) {
+            Assertions.assertSame(context, seen);
+        }
+        // ... and that context knows the whole partition set up front, so connectors able to
+        // resolve many partitions at once do not have to resolve them one by one.
+        Assertions.assertNotNull(context.scanPartitionPaths);
+        List<String> expected = partitionList.stream().map(Partition::getFullPath).sorted().collect(Collectors.toList());
+        List<String> actual = context.scanPartitionPaths.stream().sorted().collect(Collectors.toList());
+        Assertions.assertEquals(expected, actual);
     }
 }

@@ -80,11 +80,31 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                             createInMemoryFileSystemViewWithTimeline(engineContext, metaClient, metadataConfig, timeline);
                     ctx.hudiLastInstant = lastInstant.get();
                     ctx.hudiTimeline = timeline;
+                    loadPartitionsUpfront(ctx);
                 }
             }
         } finally {
             ctx.lock.unlock();
         }
+    }
+
+    /**
+     * Resolve every partition of this scan in one call, when the whole set is known upfront.
+     * <p>
+     * A metadata-table backed view resolves one partition per lookup, and each lookup reopens the
+     * metadata readers, which re-reads the rollback metadata of the data table's timeline. Resolving
+     * the partitions one by one therefore re-reads that metadata once per partition, while a single
+     * batched call reads it once per metadata file slice.
+     */
+    private void loadPartitionsUpfront(RemoteFileScanContext ctx) {
+        if (ctx.scanPartitionPaths == null || ctx.scanPartitionPaths.isEmpty()) {
+            return;
+        }
+        StoragePath basePath = new StoragePath(ctx.tableLocation);
+        List<String> partitionNames = ctx.scanPartitionPaths.stream()
+                .map(path -> FSUtils.getRelativePartitionPath(basePath, new StoragePath(path)))
+                .collect(Collectors.toList());
+        ctx.hudiFsView.loadPartitions(partitionNames);
     }
 
     private void destroyHudiContext(RemoteFileScanContext ctx) {

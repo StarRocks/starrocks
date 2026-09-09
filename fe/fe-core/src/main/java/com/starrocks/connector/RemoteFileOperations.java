@@ -100,6 +100,7 @@ public class RemoteFileOperations {
             isRecursive = params.getIsRecursive().get();
         }
         RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
+        scanContext.scanPartitionPaths = partitions.stream().map(Partition::getFullPath).collect(Collectors.toList());
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
             RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive);
