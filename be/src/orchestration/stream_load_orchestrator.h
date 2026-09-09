@@ -29,7 +29,7 @@ class StreamLoadOrchestrator {
 public:
     StreamLoadOrchestrator(ExecEnv* exec_env, FragmentMgr* fragment_mgr);
 
-    Status execute_plan_fragment(StreamLoadContext* ctx);
+    Status execute_plan_fragment(StreamLoadContext* ctx, bool admission_already_granted = false);
 
 private:
     // Legacy (non-pipeline) BE-local execution via FragmentMgr + PlanFragmentExecutor.
@@ -38,7 +38,7 @@ private:
     Status _execute_plan_fragment_by_pipeline(StreamLoadContext* ctx);
 
     ExecEnv* _exec_env;
-    [[maybe_unused]] FragmentMgr* _fragment_mgr;
+    FragmentMgr* _fragment_mgr;
 };
 
 } // namespace orchestration

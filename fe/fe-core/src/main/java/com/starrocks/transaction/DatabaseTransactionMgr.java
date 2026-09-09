@@ -2098,6 +2098,38 @@ public class DatabaseTransactionMgr {
         return txnInfos;
     }
 
+    /**
+     * Running BE-coordinated txns on {@code coordinateHost} with txnId &lt; {@code maxTxnIdExclusive}.
+     * If the coordinator's backendId is set ({@code >= 0}), it must equal {@code backendId};
+     * otherwise (legacy, backendId == -1) host match is enough.
+     */
+    public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, long backendId,
+                                                                 long maxTxnIdExclusive, int limit) {
+        ArrayList<Pair<Long, Long>> txnInfos = new ArrayList<>();
+        readLock();
+        try {
+            idToRunningTransactionState.values().stream()
+                    .filter(t -> isRestartAbortCandidate(t, coordinateHost, backendId, maxTxnIdExclusive))
+                    .limit(limit)
+                    .forEach(t -> txnInfos.add(new Pair<>(t.getDbId(), t.getTransactionId())));
+        } finally {
+            readUnlock();
+        }
+        return txnInfos;
+    }
+
+    private static boolean isRestartAbortCandidate(TransactionState t, String coordinateHost, long backendId,
+                                                   long maxTxnIdExclusive) {
+        TransactionState.TxnCoordinator coordinator = t.getCoordinator();
+        if (coordinator.sourceType != TransactionState.TxnSourceType.BE
+                || !coordinator.ip.equals(coordinateHost)
+                || t.getTransactionId() >= maxTxnIdExclusive) {
+            return false;
+        }
+        long coordBeId = coordinator.getBackendId();
+        return coordBeId < 0 || coordBeId == backendId;
+    }
+
     public Long getTransactionNumByCoordinateBe(String coordinateHost) {
         readLock();
         try {

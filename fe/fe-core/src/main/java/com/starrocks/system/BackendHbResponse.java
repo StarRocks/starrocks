@@ -64,6 +64,9 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private long memLimitBytes;
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;
+    @SerializedName(value = "stiw")
+    private long shutdownTxnIdWatermark = 0L;
+
 
     @SerializedName(value = "statusCode")
     private TStatusCode statusCode = TStatusCode.OK;
@@ -161,6 +164,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public void setStatusCode(TStatusCode statusCode) {
         this.statusCode = statusCode;
+    }
+
+    public long getShutdownTxnIdWatermark() {
+        return shutdownTxnIdWatermark;
+    }
+
+    public void setShutdownTxnIdWatermark(long shutdownTxnIdWatermark) {
+        this.shutdownTxnIdWatermark = shutdownTxnIdWatermark;
     }
 
 

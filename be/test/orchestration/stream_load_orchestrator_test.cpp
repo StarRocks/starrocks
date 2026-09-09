@@ -16,15 +16,28 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/process_exit.h"
+#include "common/system/cpu_info.h"
 #include "compute_env/load/stream_load_context.h"
 #include "exec/exec_env.h"
 
-namespace starrocks::orchestration {
+namespace starrocks {
 
-TEST(StreamLoadOrchestratorTest, execute_plan_fragment_preserves_be_test_sync_point) {
+extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<bool> k_starrocks_force_reject;
+
+namespace orchestration {
+class StreamLoadOrchestratorTest : public testing::Test {
+protected:
+    static void SetUpTestSuite() { CpuInfo::init(); }
+};
+
+TEST_F(StreamLoadOrchestratorTest, execute_plan_fragment_preserves_be_test_sync_point) {
     ExecEnv exec_env;
     StreamLoadOrchestrator stream_load_orchestrator(&exec_env, nullptr);
     StreamLoadContext ctx(nullptr);
@@ -43,4 +56,39 @@ TEST(StreamLoadOrchestratorTest, execute_plan_fragment_preserves_be_test_sync_po
     ASSERT_EQ("TestFail", status.message());
 }
 
-} // namespace starrocks::orchestration
+// Verify the guard releases its count when rejection occurs.
+TEST_F(StreamLoadOrchestratorTest, execute_plan_fragment_rejects_when_force_reject) {
+    ASSERT_TRUE(set_process_exit());
+    force_reject_exec_plan_fragment();
+    DeferOp reset_exit([] {
+        k_starrocks_exit.store(false);
+        k_starrocks_force_reject.store(false);
+    });
+
+    ExecEnv exec_env;
+    StreamLoadOrchestrator stream_load_orchestrator(&exec_env, nullptr);
+    StreamLoadContext ctx(nullptr);
+
+    Status status = stream_load_orchestrator.execute_plan_fragment(&ctx);
+    ASSERT_TRUE(status.is_service_unavailable());
+    EXPECT_EQ(0, shutdown_work_inflight());
+}
+
+TEST_F(StreamLoadOrchestratorTest, execute_plan_fragment_skips_gate_when_already_granted) {
+    ASSERT_TRUE(set_process_exit());
+    force_reject_exec_plan_fragment();
+    DeferOp reset_exit([] {
+        k_starrocks_exit.store(false);
+        k_starrocks_force_reject.store(false);
+    });
+
+    ExecEnv exec_env;
+    StreamLoadOrchestrator stream_load_orchestrator(&exec_env, nullptr);
+    StreamLoadContext ctx(nullptr);
+
+    ASSERT_OK(stream_load_orchestrator.execute_plan_fragment(&ctx, true));
+    EXPECT_EQ(0, shutdown_work_inflight());
+}
+
+} // namespace orchestration
+} // namespace starrocks

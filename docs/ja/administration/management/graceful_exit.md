@@ -14,7 +14,7 @@ Graceful Exit は、StarRocks FE、BE、CN ノードの**非破壊的なアッ�
 
 Graceful Exit は以下を保証します：
 
-- ノードは、終了が始まると**新しいタスクの受け入れを停止**します。
+- FE はグレースフル終了の開始時に新しい作業の受け入れを停止します。BE/CN は設定された受付ウィンドウの終了後に新しい作業の受け入れを停止します。
 - 既存のクエリとロードジョブは、制御された時間枠内で**完了することが許可**されます。
 - システムコンポーネント（FE/BE/CN）は、クラスターが正しくトラフィックを再ルーティングするように**状態変更を調整**します。
 
@@ -82,13 +82,15 @@ stop_cn.sh -g
 
 シグナルを受信すると：
 
-- BE/CN ノードは自分自身を**EXITING**とマークします。
-- **新しいクエリフラグメント**を拒否し、`INTERNAL_ERROR` を返します。
-- 既存のフラグメントの処理を続行します。
+- BE/CN ノードは自身を**EXITING**とマークします。
+- `graceful_exit_wait_for_frontend_heartbeat` が `true` の場合、新しいリクエストを受け入れ続け、次のいずれか早い方で受け入れを停止します：FE がシャットダウンを確認した後（ハートビートリクエストで返される `LastHeartbeat` 値の増加により確認。ある FE からの最初の値は baseline に過ぎません）の admission 遅延、または Graceful Shutdown 開始から計測される fallback の期限。この admission ウィンドウ中は、新しいトランザクション BEGIN も引き続き受け入れられます。cutoff 後に到着した新しい BEGIN は、FE がすでにシャットダウンを確認している場合のみ HTTP 307 で FE リーダーにリダイレクトされます。cutoff が確認なしの fallback 期限である場合、またはリダイレクトが無効な場合は、HTTP 307 ではなく SERVICE_UNAVAILABLE JSON を返します。シャットダウン中に別の FE リーダーが確認を開始した場合（リーダー切り替え）、今回のシャットダウンの残りの間リダイレクトは無効化され、リクエストは明示的なエラーを受け取ります。
+- `graceful_exit_wait_for_frontend_heartbeat` が `false` の場合、Graceful Shutdown の開始と同時に新しいリクエストの拒否を開始します。
+- その後、**新しいリクエスト**（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）を拒否し、すでに admission 済みの処理を続行します。
+- BEGIN が成功したトランザクションの LOAD、PREPARE、COMMIT、ROLLBACK は、drain が有効な間は元の coordinator で引き続き処理されます。
 
 #### フライト中のクエリの待機ループ
 
-BE/CN が既存のフラグメントの終了を待つ動作は、BE/CN の設定 `loop_count_wait_fragments_finish` によって制御されます（デフォルト：2）。実際の待機時間は `loop_count_wait_fragments_finish × 10 秒`（デフォルトでは 20 秒）です。タイムアウト後もフラグメントが残っている場合、BE/CN は通常のSHUTDOWNを続行します（スレッド、ネットワーク、その他のプロセスを閉じる）。
+BE/CN が admission 済みの処理（クエリフラグメント、ロード、short-circuit クエリ）を待機する時間は、`loop_count_wait_fragments_finish × 10 秒`（デフォルト 60 秒）を上限とします。このハード上限に達すると、BE/CN は新しいリクエストの admission を停止して teardown に進み、残っている admission 済みの処理が完了することは保証されません。書き込みを受信する BE 上の Load Channel（そのノードはローカルのクエリやトランザクションコンテキストを持たない場合がある）も admission 済みの処理としてカウントされるため、書き込み専用のレプリカノードは channel が drain 中でも早期に破棄されません。
 
 #### 改善された FE 認識
 
@@ -115,20 +117,34 @@ v3.4 以降、FE はハートビートの失敗に基づいて BE/CN を `DEAD` 
 #### `loop_count_wait_fragments_finish`
 
 - 説明：BE/CN が既存のフラグメントを待機する期間。値に 10 秒を掛けます。
-- デフォルト：2
+- デフォルト：6
 - 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
 
 #### `graceful_exit_wait_for_frontend_heartbeat`
 
-- 説明：BE/CN がハートビートを介して FE が**SHUTDOWN**を確認するのを待つかどうか。v3.4.5 以降。
-- デフォルト：false
+- 説明：true の場合、BE は新しい FE がシャットダウンを確認するまで待機し（ハートビートリクエストで返される `LastHeartbeat` 値の増加により確認。ある FE からの最初の値は baseline に過ぎません）、その後 `graceful_exit_reject_delay_ms` の間新しいリクエストを受け入れ続けてから拒否を開始します。フィールドを持たない旧バージョンの FE は、楽観的な互換動作にフォールバックします（シャットダウン heartbeat 応答の構築時に遅延が開始されます）。false の場合、BE は Graceful Shutdown 開始と同時に新しいリクエストの拒否を開始します。既に BEGIN されたトランザクションは、この設定にかかわらず排空ウィンドウ中は引き続き受け入れられます。delay 中の新しい BEGIN も引き続き受け入れられます。
+- デフォルト：true
+- 適用方法：BE/CN 設定ファイルで変更します。BE/CN の再起動が必要です。
+
+#### `graceful_exit_reject_delay_ms`
+
+- 説明：新しい FE が `LastHeartbeat` の増加によってシャットダウンを確認した後、ノードが新しいリクエストの拒否を開始するまでの、新しい処理（新しい BEGIN、新しいロード、新しいフラグメント）を受け入れ続ける遅延（ミリ秒）。ある FE からの最初の値は baseline に過ぎず、このウィンドウは開きません。この期間中、ノードは正常なノードとして新しいリクエストを受け入れて実行し続け、FE がこのノードへの新しいフラグメントのスケジュールを停止する時間を確保します。
+- デフォルト：10000
 - 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
+- タイミング関係：排空予算 `loop_count_wait_fragments_finish` × 10 秒より短く、待機が期限切れになる前に拒否が開始されるようにします。
+
+#### `graceful_exit_reject_fallback_ms`
+
+- 説明：FE の確認（`LastHeartbeat` の増加）がない場合でも、Graceful Exit の開始から BE/CN が新しいリクエストを拒否するまでの絶対上限（ミリ秒）。確認に基づく admission ウィンドウも制限し、FE が確認しない、または大幅に遅れて確認する場合の無制限な受け入れを防ぎます。
+- デフォルト：15000
+- 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
+- タイミング関係：排空予算 `loop_count_wait_fragments_finish` × 10 秒（デフォルト 60000）より小さく、排空待機が期限切れになる前に新しいリクエストの受け入れが停止されるようにします。
 
 #### `stop_be.sh -g --timeout`, `stop_cn.sh -g --timeout`
 
-- 説明：BE/CN が強制終了されるまでの最大待機時間。BE/CN の待機期間に達する前に終了しないように、`loop_count_wait_fragments_finish` * 10 より大きい値に設定します。
+- 説明：BE/CN が強制終了されるまでの最大待機時間。Graceful Exit 全体の所要時間を見込んで設定します。受け入れ済み作業の排空（`loop_count_wait_fragments_finish` × 10 秒）、その後のストレージクリーンアップ、その他の stop/join を含みます。設定上の予算と実際の所要時間に余裕を持たせてください。`--timeout 300` は例であり、プロセスが 300 秒以内に安全に終了することを保証しません。
 - デフォルト：false
-- 適用方法：スクリプトコマンドで指定します。例：`--timeout 30`。
+- 適用方法：スクリプトコマンドで指定します。例：`--timeout 300`。
 
 ### グローバルスイッチ
 
@@ -182,7 +198,6 @@ Graceful Exit は以下を保証します：
 **設定**：
 
 - `loop_count_wait_fragments_finish` を正の整数に設定してください。
-- `graceful_exit_wait_for_frontend_heartbeat` を `true` に設定し、FE が BE の「EXITING」状態を検出できるようにします。
 
 ### FE Graceful Exit の実行
 
@@ -275,4 +290,4 @@ FE ログ `fe.log`、BE ログ `be.log`、または CN ログ `cn.log` を確認
 
 ### ノードの状態が SHUTDOWN でない
 
-ノードの状態が `SHUTDOWN` でない場合、`loop_count_wait_fragments_finish` が正の整数に設定されているか、BE/CN が終了前にハートビートを報告したかどうかを確認してください（そうでない場合、`graceful_exit_wait_for_frontend_heartbeat` を `true` に設定します）。
+ノードの状態が `SHUTDOWN` でない場合、`loop_count_wait_fragments_finish` が正の整数であり、BE が heartbeat を介してシャットダウン状態を報告したかどうかを確認してください。

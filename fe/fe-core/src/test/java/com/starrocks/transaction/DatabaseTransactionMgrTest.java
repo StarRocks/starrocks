@@ -627,6 +627,35 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testGetTransactionIdByCoordinateBeFiltersBackendId() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        String host = "samehost";
+        long txnBe1 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "coord_be1_" + System.nanoTime(),
+                TransactionState.TxnCoordinator.fromBackend(host, 11L),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+        long txnBe2 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "coord_be2_" + System.nanoTime(),
+                TransactionState.TxnCoordinator.fromBackend(host, 22L),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+        long txnLegacy = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "coord_legacy_" + System.nanoTime(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, host),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+
+        List<Pair<Long, Long>> forBe1 = masterDbTransMgr.getTransactionIdByCoordinateBe(
+                host, 11L, Long.MAX_VALUE, 100);
+        java.util.Set<Long> ids = forBe1.stream().map(p -> p.second).collect(java.util.stream.Collectors.toSet());
+        Assertions.assertTrue(ids.contains(txnBe1));
+        Assertions.assertTrue(ids.contains(txnLegacy));
+        Assertions.assertFalse(ids.contains(txnBe2));
+    }
+
+    @Test
     public void testGetSingleTranInfo() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);

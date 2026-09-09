@@ -91,6 +91,25 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                    << " BE/CN:" << config::enable_transparent_data_encryption;
     }
 
+    // Heartbeat ack tells us whether an FE has observed this BE's shutdown. Three cases:
+    // - No ack field (legacy FE): keep the optimistic delay for mixed-version timing, but
+    //   disable BEGIN 307 — the old FE returns cached coordinators without availability
+    //   checks and would bounce the client back to this BE.
+    // - Ack advanced for the current acking FE: that FE saw the shutdown heartbeat, so this
+    //   BE is globally marked down; open the delay window and BEGIN redirect.
+    // - Ack unchanged or from a different FE (leader handover): not comparable/not advanced —
+    //   stay unaware and disable redirect; the fallback deadline rejects instead.
+    if (process_exit_in_progress()) {
+        std::string ack_source = fmt::format("{}:{}:{}", master_info.network_address.hostname,
+                                             master_info.network_address.port, master_info.epoch);
+        if (!master_info.__isset.last_heartbeat_time_ms) {
+            set_frontend_aware_of_exit();
+            disable_begin_redirect();
+        } else if (advance_heartbeat_ack(ack_source, master_info.last_heartbeat_time_ms)) {
+            set_frontend_aware_of_exit();
+        }
+    }
+
     StatusOr<CmpResult> res;
     // reject master's heartbeat when exit
     if (process_exit_in_progress() || is_process_crashing()) {
@@ -155,10 +174,6 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
             reboot_time = static_cast<int64_t>(currTime);
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
-    }
-    if (process_exit_in_progress()) {
-        // Just assume this response can reach the frontend side.
-        set_frontend_aware_of_exit();
     }
 }
 

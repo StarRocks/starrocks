@@ -41,6 +41,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.LeaderDaemon;
@@ -68,6 +70,7 @@ import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodeType;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -257,16 +260,45 @@ public class HeartbeatMgr extends LeaderDaemon {
                             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(hbResponse.getBeId());
                 }
                 if (computeNode != null) {
+                    ComputeNode.Status prevStatus = computeNode.getStatus();
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
                         ThriftConnectionPool.backendPool.clearPool(
                                 new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
-                        if (!isReplay && !computeNode.isAlive()) {
-                            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                                    .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
+                        // A graceful shutdown BE keeps draining in-flight loads, so its
+                        // coordinator transactions must not be aborted here; only a
+                        // DISCONNECTED BE (failed heartbeat_retry_times) is aborted, so a
+                        // single transient heartbeat loss does not kill a draining load.
+                        if (computeNode.getStatus() == ComputeNode.Status.SHUTDOWN) {
+                            if (!isReplay) {
+                                long peek = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                        .peekNextTransactionId();
+                                if (peek > computeNode.getShutdownTxnIdWatermark()) {
+                                    computeNode.setShutdownTxnIdWatermark(peek);
+                                    isChanged = true;
+                                }
+                                hbResponse.setShutdownTxnIdWatermark(computeNode.getShutdownTxnIdWatermark());
+                            } else if (hbResponse.getShutdownTxnIdWatermark()
+                                    > computeNode.getShutdownTxnIdWatermark()) {
+                                computeNode.setShutdownTxnIdWatermark(hbResponse.getShutdownTxnIdWatermark());
+                            }
+                        }
+                        if (!isReplay && !computeNode.isAlive()
+                                && computeNode.getStatus() == ComputeNode.Status.DISCONNECTED) {
+                            abortCoordinatorTxnsOnBe(computeNode);
                         }
                     } else {
+                        if (prevStatus == ComputeNode.Status.SHUTDOWN) {
+                            if (!isReplay) {
+                                LOG.info("BE {} {}:{} skipped DISCONNECTED after graceful shutdown "
+                                                + "(fast restart: SHUTDOWN -> OK); abort txnId < watermark",
+                                        computeNode.getId(), computeNode.getHost(), computeNode.getHeartbeatPort());
+                                abortShutdownSnapshotTxns(computeNode);
+                            } else {
+                                computeNode.setShutdownTxnIdWatermark(0);
+                            }
+                        }
                         if (RunMode.isSharedDataMode() && !isReplay) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
@@ -303,6 +335,31 @@ public class HeartbeatMgr extends LeaderDaemon {
         return false;
     }
 
+    private static void abortCoordinatorTxnsOnBe(ComputeNode computeNode) {
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
+    }
+
+    // Abort this BE's coordinator txns with txnId < last observed SHUTDOWN watermark.
+    // Txn ids at/after the watermark are not aborted.
+    private static void abortShutdownSnapshotTxns(ComputeNode computeNode) {
+        long watermark = computeNode.getShutdownTxnIdWatermark();
+        if (watermark <= 0) {
+            return;
+        }
+        GlobalTransactionMgr gtm = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        List<Pair<Long, Long>> txns = gtm.getTransactionIdByCoordinateBe(
+                computeNode.getHost(), computeNode.getId(), watermark, Integer.MAX_VALUE);
+        for (Pair<Long, Long> txn : txns) {
+            try {
+                gtm.abortTransaction(txn.first, txn.second, "coordinate BE is down after graceful shutdown restart");
+            } catch (StarRocksException e) {
+                LOG.warn("Abort txn on coordinate BE {} failed, msg={}", computeNode.getHost(), e.getMessage());
+            }
+        }
+        computeNode.setShutdownTxnIdWatermark(0);
+    }
+
     // backend heartbeat
     public static class BackendHeartbeatHandler implements Callable<HeartbeatResponse> {
         private final ComputeNode computeNode;
@@ -322,6 +379,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
+                copiedMasterInfo.setLast_heartbeat_time_ms(computeNode.getLastUpdateMs());
                 copiedMasterInfo.setBackend_id(computeNodeId);
                 copiedMasterInfo.setMin_active_txn_id(
                         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
