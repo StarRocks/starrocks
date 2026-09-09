@@ -54,6 +54,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -115,6 +116,7 @@ import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -1632,36 +1634,28 @@ public class AnalyzerUtils {
      * used by both partition clause creation and dedup key generation.
      */
     public static String truncateToPartitionBoundary(String dateValue, String granularity) throws AnalysisException {
+        TimeUnit timeUnit = toAutoPartitionTimeUnit(granularity,
+                "unsupported automatic partition granularity: " + granularity);
         try {
             if ("NULL".equalsIgnoreCase(dateValue)) {
                 dateValue = "0000-01-01";
             }
             DateTimeFormatter fmt = DateUtils.probeFormat(dateValue);
             LocalDateTime dt = DateUtils.parseStringWithDefaultHSM(dateValue, fmt);
-            switch (granularity.toLowerCase()) {
-                case "minute":
-                    dt = dt.withSecond(0).withNano(0);
-                    return dt.format(DateUtils.MINUTE_FORMATTER_UNIX);
-                case "hour":
-                    dt = dt.withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.HOUR_FORMATTER_UNIX);
-                case "day":
-                    dt = dt.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.DATEKEY_FORMATTER_UNIX);
-                case "month":
-                    dt = dt.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.MONTH_FORMATTER_UNIX);
-                case "year":
-                    dt = dt.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.YEAR_FORMATTER_UNIX);
-                default:
-                    throw new AnalysisException("unsupported automatic partition granularity: " + granularity);
-            }
-        } catch (AnalysisException e) {
-            throw e;
+            dt = PartitionTimeUtils.truncateToUnitStart(dt, timeUnit);
+            return dt.format(PartitionTimeUtils.getPartitionNameFormatter(timeUnit));
         } catch (Exception e) {
             throw new AnalysisException("failed to parse partition value: " + dateValue);
         }
+    }
+
+    /** Resolves an automatic partition granularity into its time unit. */
+    private static TimeUnit toAutoPartitionTimeUnit(String granularity, String errorMessage) throws AnalysisException {
+        TimeUnit timeUnit = TimeUnit.fromName(granularity);
+        if (timeUnit == null || !PartitionTimeUtils.AUTO_PARTITION_TIME_UNITS.contains(timeUnit)) {
+            throw new AnalysisException(errorMessage);
+        }
+        return timeUnit;
     }
 
     public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
@@ -1884,30 +1878,10 @@ public class AnalyzerUtils {
 
                 beginDateTimeFormat = DateUtils.probeFormat(partitionItem);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
-                switch (granularity.toLowerCase()) {
-                    case "minute":
-                        beginTime = beginTime.withSecond(0).withNano(0);
-                        endTime = beginTime.plusMinutes(interval);
-                        break;
-                    case "hour":
-                        beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusHours(interval);
-                        break;
-                    case "day":
-                        beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusDays(interval);
-                        break;
-                    case "month":
-                        beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusMonths(interval);
-                        break;
-                    case "year":
-                        beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusYears(interval);
-                        break;
-                    default:
-                        throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
-                }
+                TimeUnit timeUnit = toAutoPartitionTimeUnit(granularity,
+                        "unsupported automatic partition granularity:" + granularity);
+                beginTime = PartitionTimeUtils.truncateToUnitStart(beginTime, timeUnit);
+                endTime = PartitionTimeUtils.plus(beginTime, timeUnit, interval);
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
@@ -1939,18 +1913,16 @@ public class AnalyzerUtils {
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
                                                            LocalDateTime endTime) throws AnalysisException {
         boolean isMaxValue;
-        DateTimeFormatter outputDateFormat;
         if (partitionType.isDate()) {
-            outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
             isMaxValue =
                     endTime.isAfter(TimeUtils.MAX_DATE.atTime(0, 0, 0));
         } else if (partitionType.isDatetime()) {
-            outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
             isMaxValue = endTime.isAfter(
                     TimeUtils.MAX_DATETIME);
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }
+        DateTimeFormatter outputDateFormat = PartitionTimeUtils.getPartitionBoundFormatter(partitionType);
         String lowerBound = beginTime.format(outputDateFormat);
 
         PartitionValue upperPartitionValue;
