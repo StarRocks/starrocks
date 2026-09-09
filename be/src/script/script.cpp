@@ -116,10 +116,17 @@ static uint64_t get_minor_number(EditVersion& self) {
     return self.minor_number();
 }
 
+// Status::to_string() takes a defaulted argument, so its member pointer does not fit the
+// zero-argument getter form propReadonly() binds. Wrap it.
+static std::string status_to_string(Status& self) {
+    return self.to_string();
+}
+
 static void bind_common(ForeignModule& m) {
     {
         auto& cls = m.klass<Status>("Status");
         cls.func<&Status::to_string>("toString");
+        cls.propReadonlyExt<&status_to_string>("toString");
         REG_METHOD(Status, ok);
     }
 }
@@ -190,6 +197,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(MemTracker, peak_consumption);
         REG_METHOD(MemTracker, parent);
         cls.funcExt<&memtracker_debug_string>("toString");
+        cls.propReadonlyExt<&memtracker_debug_string>("toString");
     }
     {
         auto& cls = m.klass<FileWriteStat>("FileWriteStat");
@@ -475,6 +483,7 @@ public:
             REG_METHOD(TabletSchema, keys_type);
             REG_METHOD(TabletSchema, mem_usage);
             cls.func<&TabletSchema::debug_string>("toString");
+            cls.propReadonly<&TabletSchema::debug_string>("toString");
         }
         {
             auto& cls = m.klass<Tablet>("Tablet");
@@ -501,12 +510,14 @@ public:
         {
             auto& cls = m.klass<EditVersionPB>("EditVersionPB");
             cls.funcExt<&proto_to_json<EditVersionPB>>("toString");
+            cls.propReadonlyExt<&proto_to_json<EditVersionPB>>("toString");
         }
         {
             auto& cls = m.klass<EditVersionMetaPB>("EditVersionMetaPB");
             REG_METHOD(EditVersionMetaPB, version);
             REG_METHOD(EditVersionMetaPB, creation_time);
             cls.funcExt<&proto_to_json<EditVersionMetaPB>>("toString");
+            cls.propReadonlyExt<&proto_to_json<EditVersionMetaPB>>("toString");
         }
         {
             auto& cls = m.klass<TabletUpdatesPB>("TabletUpdatesPB");
@@ -516,12 +527,14 @@ public:
             REG_METHOD(TabletUpdatesPB, next_rowset_id);
             REG_METHOD(TabletUpdatesPB, next_log_id);
             cls.funcExt<&proto_to_json<TabletUpdatesPB>>("toString");
+            cls.propReadonlyExt<&proto_to_json<TabletUpdatesPB>>("toString");
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
             cls.funcExt<&get_major_number>("major_number");
             cls.funcExt<&get_minor_number>("minor_number");
             cls.func<&EditVersion::to_string>("toString");
+            cls.propReadonly<&EditVersion::to_string>("toString");
         }
         {
             auto& cls = m.klass<CompactionInfo>("CompactionInfo");
