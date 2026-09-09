@@ -758,6 +758,107 @@ public class ExplicitTxnTest {
     }
 
     @Test
+    public void testRollbackWithoutItemsReportsAbortFailure() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990001L;
+        TransactionState state = addExplicitState(mgr, txnId, "rollback-abort-fails", 60_000L);
+        // Registered with a database by a load that produced no item.
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
+                throw new StarRocksException("abort failed for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+        // The explicit state is cleared as for any rollback, but the failure is reported instead of ABORTED.
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("abort failed for test"));
+    }
+
+    @Test
+    public void testCommitWithoutItemsAbortsRegisteredTransaction() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        addExplicitState(mgr, txnId, "commit-without-items", 60_000L);
+        // The INSERT path registers the transaction before it executes; a failed INSERT leaves the
+        // transaction registered without an item.
+        mgr.registerExplicitTransactionState(txnId, db1.getId());
+        mgr.activateExplicitTransactionTable(txnId, db1.getId(), table1.getId());
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                mgr.getTransactionState(db1.getId(), txnId).getTransactionStatus());
+        int runningBefore = mgr.getDatabaseTransactionMgr(db1.getId()).getRunningTxnNums();
+
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertFalse(context.getState().isError(), context.getState().getErrorMessage());
+        Assertions.assertEquals("{'label':'commit-without-items', 'status':'VISIBLE', 'txnId':'" + txnId + "'}",
+                context.getState().getInfoMessage());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        // The registered transaction is aborted instead of lingering PREPARE until its timeout: it no
+        // longer counts as running, no longer blocks the table and its label can be used again.
+        Assertions.assertEquals(TransactionStatus.ABORTED,
+                mgr.getTransactionState(db1.getId(), txnId).getTransactionStatus());
+        Assertions.assertEquals(runningBefore - 1, mgr.getDatabaseTransactionMgr(db1.getId()).getRunningTxnNums());
+        Assertions.assertTrue(mgr.isPreviousTransactionsFinished(txnId + 1, db1.getId(), List.of(table1.getId())));
+        Assertions.assertEquals(TransactionStatus.ABORTED,
+                mgr.getLabelTransactionState(db1.getId(), "commit-without-items").getTransactionStatus());
+    }
+
+    @Test
+    public void testCommitWithoutItemsReportsAbortFailure() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990002L;
+        TransactionState state = addExplicitState(mgr, txnId, "commit-abort-fails", 60_000L);
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
+                throw new StarRocksException("abort failed for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("abort failed for test"));
+    }
+
+    @Test
+    public void testRollbackWithoutItemsClearsStateWhenAbortThrowsUnchecked() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990003L;
+        TransactionState state = addExplicitState(mgr, txnId, "rollback-abort-unchecked", 60_000L);
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                throw new IllegalStateException("unchecked abort failure for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO)));
+        // The session must not stay inside a dead transaction.
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+    }
+
+    @Test
     public void testReshardPlanningReservations() throws Exception {
         GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
