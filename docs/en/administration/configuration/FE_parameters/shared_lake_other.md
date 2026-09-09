@@ -856,6 +856,35 @@ This topic introduces the following types of FE configurations:
 - Description: The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+### `authentication_failure_cache_capacity`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many rejected credentials `authentication_failure_cache_ttl_second` remembers at most. It bounds the memory a client - or an attacker cycling usernames - can occupy; the oldest entries are evicted first.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a credential rejected by the security integration chain is remembered, so that a client retrying the same wrong password does not produce one LDAP bind per attempt - which is what drives Active Directory's `badPwdCount` toward locking the account out. The cache key includes a hash of the credential, so correcting the password takes effect immediately instead of after the TTL, and a failure caused by the directory being unreachable is never cached. Set to `0` to disable.
+- Introduced in: v4.2, v4.1.6
+### `authentication_ldap_case_insensitive`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case. When this item is set to `true`, a login whose name differs only in case from a user created with `AUTHENTICATION_LDAP_SIMPLE` still resolves to that user, so its per-user DN and the roles granted to it apply; and a login authenticated by an LDAP security integration takes its session identity from the name held by the directory rather than the one typed by the client. Because this both widens which stored user a login may resolve to and changes the value reported by `current_user()` and `SHOW PROCESSLIST`, it is disabled by default. Users authenticated by native password, JWT, or OAuth2 are never affected. If two users created with `AUTHENTICATION_LDAP_SIMPLE` have names that differ only in case, a login matching both of them is refused rather than resolved to either. Group names are matched without regard to case independently of this item.
+- Introduced in: v4.2.0
+
+>>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
 ### `authentication_ldap_simple_bind_base_dn`
 
 - Default: Empty string

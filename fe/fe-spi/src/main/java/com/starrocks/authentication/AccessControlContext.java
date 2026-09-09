@@ -55,6 +55,11 @@ public class AccessControlContext {
     // The authentication provider used for this authentication.
     private AuthenticationProvider authenticationProvider = null;
 
+    /**
+     * @see #getAuthenticatedUserName()
+     */
+    private String authenticatedUserName = null;
+
     // After negotiate and switching with the client,
     // the auth plugin type used for this authentication is finally determined.
     private String authPlugin = null;
@@ -89,6 +94,19 @@ public class AccessControlContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    /**
+     * The user name exactly as the directory holds it, filled in by an authentication provider that
+     * looked the entry up. Null when the provider had no chance to read it, for example when it bound
+     * directly through a DN pattern instead of searching.
+     */
+    public String getAuthenticatedUserName() {
+        return authenticatedUserName;
+    }
+
+    public void setAuthenticatedUserName(String authenticatedUserName) {
+        this.authenticatedUserName = authenticatedUserName;
     }
 
     public void setDistinguishedName(String distinguishedName) {
