@@ -40,7 +40,7 @@
 #include <utility>
 #include <vector>
 
-#include "common/config_rowset_fwd.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
