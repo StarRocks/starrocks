@@ -344,10 +344,12 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     // alter legitimately lacks the new column. Build only the indexes whose columns this segment
     // physically holds. Every uid here is already known to the logical schema (validated in run()),
     // so a miss is exactly the light-added case. If nothing is buildable, emit no IDG entry at all.
-    // Note this SKIPS rather than substituting the column's default: an index over synthesized
-    // defaults would advertise coverage of data the segment does not hold. Where a value must be
-    // materialized instead -- the delta-column-group rebuild in tablet_merger.cpp -- the default is
-    // substituted, because there is nothing to skip.
+    // Note this SKIPS rather than substituting the column's default. An index over the synthesized
+    // defaults would not be wrong -- every row of such a segment does read as the default -- but it
+    // would be unusable: with no physical column there is no column reader through which the entry
+    // could be consulted, so building it would only cost I/O. Where a value must instead be
+    // materialized -- the delta column group rebuild in tablet_merger.cpp -- the default is
+    // substituted, because a rebuilt .cols file has to carry every row.
     std::vector<TabletIndexPB> indexes_to_build;
     indexes_to_build.reserve(_indexes_to_build.size());
     for (const auto& ix : _indexes_to_build) {

@@ -42,9 +42,13 @@ class IndexFileWriter;
 // Orchestrates the ADD INDEX fast-path for a single lake tablet alter job.
 //
 // Given a base tablet + a set of new indexes, this class walks every
-// rowset/segment of the base tablet's visible version, builds one .idx file
-// per segment containing all new index blobs, and fills an OpAddIndex TxnLog
-// whose SegmentEntries reference the .idx files by relative path.
+// rowset/segment of the base tablet's visible version, builds at most one .idx
+// file per segment holding the indexes whose columns that segment physically
+// contains, and fills an OpAddIndex TxnLog whose SegmentEntries reference the
+// .idx files by relative path. A segment holding none of the indexed columns --
+// possible after a light ADD COLUMN, which does not rewrite data -- gets no
+// file and no entry. So SegmentEntries is not necessarily one per segment, and
+// an entry does not necessarily carry every requested index.
 //
 // Per-segment work is submitted to SegmentTaskRunner (which runs on the
 // dedicated lake_schema_change pool). Errors propagate through the runner's
