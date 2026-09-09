@@ -1,0 +1,15 @@
+-- name: test_script_object_tostring @native
+-- Wren resolves System.print(x) through the getter x.toString. The script bindings used to
+-- register toString as a method only, so printing a bound object produced the placeholder
+-- "instance of <Class>" and the text the binding exists to produce was unreachable.
+
+-- Status: the error message must reach the result cell. Tablet 1 does not exist, so
+-- do_compaction() returns InvalidArgument("Not Found tablet:1").
+admin execute on all backends 'System.print(StorageEngine.do_compaction(1, "base"))';
+
+-- MemTracker: debug_string() is a single line shaped "limit: N; reserve_limit: N; ...".
+admin execute on all backends 'System.print(RuntimeEnv.GetInstance().process_mem_tracker())';
+
+-- The method spelling stays available, because before the getter existed it was the only way
+-- to obtain the text and is what existing scripts use.
+admin execute on all backends 'System.print(RuntimeEnv.GetInstance().process_mem_tracker().toString())';
