@@ -2077,20 +2077,16 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+        // The analyzer already qualified the ref: taking the catalog from the session instead
+        // would check a different table than the one being truncated.
+        TableName tableName = TableName.fromTableRef(statement.getTblRef());
         try {
-            String dbName = statement.getDbName();
-            if (dbName == null) {
-                dbName = context.getDatabase();
-            }
-
-            Authorizer.checkTableAction(context,
-                    new TableName(context.getCurrentCatalog(), dbName, statement.getTblName()),
-                    PrivilegeType.DELETE);
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    context.getCurrentCatalog(),
+                    tableName.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), statement.getTblName());
+                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
         return null;
     }
