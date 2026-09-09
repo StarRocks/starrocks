@@ -1,0 +1,88 @@
+-- name: test_flat_json_property_validation
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_bad_null_factor (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.null.factor"="5.0");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal flat json null factor: 5.0.')
+-- !result
+create table t_bad_sparsity_factor (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.sparsity.factor"="-2.0");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal flat json sparsity factor: -2.0.')
+-- !result
+create table t_bad_column_max (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.column.max"="-7");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal flat json column max: -7.')
+-- !result
+create table t_bad_sparsity_text (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.sparsity.factor"="abc");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Flat json sparsity factor: For input string: "abc".')
+-- !result
+create table t_disabled_with_factors (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false","flat_json.column.max"="50");
+-- result:
+E: (1064, 'flat JSON configuration must be set after enabling flat JSON.')
+-- !result
+create table t_ok (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.column.max"="50",
+             "flat_json.null.factor"="0.2","flat_json.sparsity.factor"="0.4");
+-- result:
+-- !result
+insert into t_ok values (1, parse_json('{"a": 1, "b": "x"}')), (2, parse_json('{"a": 2, "b": "y"}'));
+-- result:
+-- !result
+[ORDER]select k, get_json_int(j, '$.a'), get_json_string(j, '$.b') from t_ok order by k;
+-- result:
+1	1	x
+2	2	y
+-- !result
+create table t_boundaries (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.column.max"="0",
+             "flat_json.null.factor"="0","flat_json.sparsity.factor"="1");
+-- result:
+-- !result
+create table t_plain (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1");
+-- result:
+-- !result
+insert into t_plain values (1, parse_json('{"a": 1}'));
+-- result:
+-- !result
+[ORDER]select k, get_json_int(j, '$.a') from t_plain order by k;
+-- result:
+1	1
+-- !result
+alter table t_ok set ("flat_json.null.factor"="5.0");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal flat json null factor: 5.0.')
+-- !result
+alter table t_ok set ("flat_json.sparsity.factor"="-2.0");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal flat json sparsity factor: -2.0.')
+-- !result
+alter table t_ok set ("flat_json.column.max"="-7");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal flat json column max: -7.')
+-- !result
+alter table t_ok set ("flat_json.sparsity.factor"="abc");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Flat json sparsity factor: For input string: "abc".')
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

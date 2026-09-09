@@ -947,8 +947,14 @@ public class OlapTableFactory implements AbstractTableFactory {
         }
 
         try {
-            boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
-                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
+            // Use the same analyzers the ALTER path uses (AlterTableClauseAnalyzer and
+            // SchemaChangeHandler.updateFlatJsonMeta) so CREATE and ALTER accept exactly the same
+            // values and report the same message. The generic analyzeBooleanProp/analyzerDoubleProp/
+            // analyzeIntProp helpers used here before only parse, they do not range-check, so
+            // CREATE TABLE stored values ALTER TABLE rejects -- e.g. a negative flat_json.column.max,
+            // which JsonPathDeriver::_finalize() reads as "no limit" (_max_column > 0 ? _max_column
+            // : SIZE_MAX), the opposite of what the user asked for.
+            boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
 
             // Check if other flat JSON properties are set when flat_json.enable is false
             if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
@@ -957,20 +963,32 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
             }
 
-            double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
-                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
-            double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
-                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
-            int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
-                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+            double flatJsonNullFactor =
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                            ? PropertyAnalyzer.analyzeFlatJsonNullFactor(properties)
+                            : Config.flat_json_null_factor;
+            double flatJsonSparsityFactory =
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                            ? PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties)
+                            : Config.flat_json_sparsity_factory;
+            int flatJsonColumnMax =
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)
+                            ? PropertyAnalyzer.analyzeFlatJsonColumnMax(properties)
+                            : Config.flat_json_column_max;
+
+            // The analyzers above only read. Drop the keys they consumed, as the generic helpers
+            // did, so the leftover "Unknown properties" check still passes.
+            removeFlatJsonProperties(properties);
 
             FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
                     flatJsonSparsityFactory, flatJsonColumnMax);
 
             table.setFlatJsonConfig(flatJsonConfig);
             LOG.info("create table {} set flat json config: {}", tableName, flatJsonConfig.toString());
-        } catch (AnalysisException e) {
-            throw new DdlException("Failed to process flat JSON configuration: " + e.getMessage(), e);
+        } catch (SemanticException e) {
+            // Report the analyzer's message verbatim, so CREATE and ALTER read the same, but as a
+            // DdlException: createTable() only unwinds (and unbinds the storage volume) for that.
+            throw new DdlException(e.getMessage(), e);
         }
     }
 
@@ -979,5 +997,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+    }
+
+    private void removeFlatJsonProperties(Map<String, String> properties) {
+        properties.remove(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        properties.remove(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+        properties.remove(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+        properties.remove(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
     }
 }

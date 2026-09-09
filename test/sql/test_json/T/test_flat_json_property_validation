@@ -1,0 +1,57 @@
+-- name: test_flat_json_property_validation
+-- CREATE TABLE used to accept flat_json.* values that ALTER TABLE rejects: it read them with the
+-- generic analyzerDoubleProp/analyzeIntProp helpers, which parse but do not range-check. The value
+-- then reached the BE, where a negative flat_json.column.max is read as "no limit"
+-- (JsonPathDeriver::_finalize: _max_column > 0 ? _max_column : SIZE_MAX) -- the opposite of the
+-- tighter limit the user asked for -- and an out-of-range null/sparsity factor disables the
+-- corresponding extraction gate outright. Both statements now go through the same
+-- PropertyAnalyzer.analyzeFlatJson* analyzers, so they accept the same values and say the same thing.
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_bad_null_factor (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.null.factor"="5.0");
+create table t_bad_sparsity_factor (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.sparsity.factor"="-2.0");
+create table t_bad_column_max (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.column.max"="-7");
+create table t_bad_sparsity_text (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.sparsity.factor"="abc");
+
+-- The pre-existing "factors need flat_json.enable=true" check is unchanged.
+create table t_disabled_with_factors (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false","flat_json.column.max"="50");
+
+-- In-range values are still accepted and the table still works.
+create table t_ok (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.column.max"="50",
+             "flat_json.null.factor"="0.2","flat_json.sparsity.factor"="0.4");
+insert into t_ok values (1, parse_json('{"a": 1, "b": "x"}')), (2, parse_json('{"a": 2, "b": "y"}'));
+[ORDER]select k, get_json_int(j, '$.a'), get_json_string(j, '$.b') from t_ok order by k;
+
+-- The boundary values the analyzers allow stay allowed.
+create table t_boundaries (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true","flat_json.column.max"="0",
+             "flat_json.null.factor"="0","flat_json.sparsity.factor"="1");
+
+-- A table with no flat_json property at all is untouched.
+create table t_plain (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1");
+insert into t_plain values (1, parse_json('{"a": 1}'));
+[ORDER]select k, get_json_int(j, '$.a') from t_plain order by k;
+
+-- ALTER TABLE rejects the same values, with the same message as CREATE TABLE above.
+alter table t_ok set ("flat_json.null.factor"="5.0");
+alter table t_ok set ("flat_json.sparsity.factor"="-2.0");
+alter table t_ok set ("flat_json.column.max"="-7");
+alter table t_ok set ("flat_json.sparsity.factor"="abc");
+
+drop database db_${uuid0};
