@@ -247,14 +247,14 @@ std::string serialize_jemalloc_conf(const JemallocOptions& options) {
 
 StatusOr<std::string> jemalloc_conf_with_prof_active(std::string_view conf, bool active) {
     ASSIGN_OR_RETURN(JemallocOptions options, parse_jemalloc_conf(conf));
-    auto it = options.find(kProfActive);
-    if (it == options.end()) {
-        // Adding the option would claim a setting the process never started with, and every
-        // supported startup path spells it out, so treat its absence as a broken config.
-        return Status::NotSupported(fmt::format(
-                "jemalloc_conf carries no '{}', so heap profiling cannot be toggled through it", kProfActive));
-    }
-    it->second = active ? "true" : "false";
+    // The option is inserted when `conf` does not carry it. That is not a claim about how the
+    // process started -- `prof_active` is one of the options jemalloc lets us change at runtime,
+    // and jemalloc defaults it to false, so its absence means profiling is armed but idle, which
+    // is exactly the state a caller wants to leave. --jemalloc_debug reaches it: it starts the BE
+    // with `junk:true,tcache:false,prof:true`, no `prof_active` in sight. Whether profiling is
+    // armed at all is apply_prof_active()'s call, which reads opt.prof instead of looking for a
+    // string in the config.
+    options[kProfActive] = active ? "true" : "false";
     return serialize_jemalloc_conf(options);
 }
 

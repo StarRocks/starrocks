@@ -327,8 +327,16 @@ TEST_F(JemallocConfUpdaterTest, conf_with_prof_active) {
     ASSIGN_OR_ABORT(options, parse_jemalloc_conf(off));
     EXPECT_EQ("false", options["prof_active"]);
 
-    // Inventing the option would claim a setting the process never started with.
-    EXPECT_TRUE(jemalloc_conf_with_prof_active("dirty_decay_ms:5000", true).status().is_not_supported());
+    // The option is inserted when it is missing, which is the state --jemalloc_debug starts the
+    // BE in: `junk:true,tcache:false,prof:true` arms profiling without naming prof_active.
+    ASSIGN_OR_ABORT(std::string from_debug_conf,
+                    jemalloc_conf_with_prof_active("junk:true,tcache:false,prof:true", true));
+    ASSIGN_OR_ABORT(options, parse_jemalloc_conf(from_debug_conf));
+    EXPECT_EQ("true", options["prof_active"]);
+    EXPECT_EQ("true", options["prof"]);
+    EXPECT_EQ("false", options["tcache"]);
+
+    // Only an unparsable conf fails here.
     EXPECT_TRUE(jemalloc_conf_with_prof_active("dirty_decay_ms", true).status().is_invalid_argument());
 }
 
