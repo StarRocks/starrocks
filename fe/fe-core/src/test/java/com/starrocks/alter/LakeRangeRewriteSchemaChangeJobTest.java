@@ -852,31 +852,31 @@ public class LakeRangeRewriteSchemaChangeJobTest {
      * state; reaching it reflectively from this test keeps the production class free of a test-only setter.
      */
     @SuppressWarnings("unchecked")
-    private static void setConsecutiveRewriteFailures(LakeOnlineRewriteJobBase job, long physicalPartitionId,
-                                                      int failures) throws Exception {
+    private static void setRewriteRetrySpentMs(LakeOnlineRewriteJobBase job, long physicalPartitionId,
+                                               long spentMs) throws Exception {
         java.lang.reflect.Field field =
-                LakeOnlineRewriteJobBase.class.getDeclaredField("consecutiveRewriteFailures");
+                LakeOnlineRewriteJobBase.class.getDeclaredField("rewriteRetrySpentMs");
         field.setAccessible(true);
-        ((Map<Long, Integer>) field.get(job)).put(physicalPartitionId, failures);
+        ((Map<Long, Long>) field.get(job)).put(physicalPartitionId, spentMs);
     }
 
-    /** The counter a partition has accumulated, or null when it has no failure streak. */
+    /** What a partition's retry episode has spent, or null when it has no failure streak. */
     @SuppressWarnings("unchecked")
-    private static Integer consecutiveRewriteFailures(LakeOnlineRewriteJobBase job, long physicalPartitionId)
+    private static Long rewriteRetrySpentMs(LakeOnlineRewriteJobBase job, long physicalPartitionId)
             throws Exception {
         java.lang.reflect.Field field =
-                LakeOnlineRewriteJobBase.class.getDeclaredField("consecutiveRewriteFailures");
+                LakeOnlineRewriteJobBase.class.getDeclaredField("rewriteRetrySpentMs");
         field.setAccessible(true);
-        return ((Map<Long, Integer>) field.get(job)).get(physicalPartitionId);
+        return ((Map<Long, Long>) field.get(job)).get(physicalPartitionId);
     }
 
     /** Whether the failure-streak map is empty, i.e. the state a replayed job starts from. */
     @SuppressWarnings("unchecked")
     private static boolean rewriteFailureMapIsEmpty(LakeOnlineRewriteJobBase job) throws Exception {
         java.lang.reflect.Field field =
-                LakeOnlineRewriteJobBase.class.getDeclaredField("consecutiveRewriteFailures");
+                LakeOnlineRewriteJobBase.class.getDeclaredField("rewriteRetrySpentMs");
         field.setAccessible(true);
-        return ((Map<Long, Integer>) field.get(job)).isEmpty();
+        return ((Map<Long, Long>) field.get(job)).isEmpty();
     }
 
     /**
@@ -2611,10 +2611,10 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             job.runRunningJob();
             Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
-            // Age the recorded first failure past the 60s window, then fail again with a DIFFERENT error.
-            // Push the counter to the edge of the window (60 s / 10 s tick = 6 attempts) so the next
-            // failure exhausts it, instead of waiting out six real scheduler ticks.
-            setConsecutiveRewriteFailures(job, physicalPartitionId, 6);
+            // Seed the episode as having already spent more than the 60s window, so the next failure
+            // exhausts it, instead of waiting out six real scheduler ticks. Then fail again with a
+            // DIFFERENT error, to pin which one the cancel reports.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 61_000L);
             AlterCancelException ex =
                     Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
             Assertions.assertTrue(ex.getMessage().contains("Query cancelled by crash of backends."),
@@ -2688,9 +2688,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             });
 
             job.runRunningJob();                                     // attempt 1: fails, streak starts
-            // Age it past the window. If the streak is NOT cleared by the success below, the third
-            // attempt's failure will find an expired window and cancel the job.
-            setConsecutiveRewriteFailures(job, physicalPartitionId, 6);
+            // Spend the window. If the streak is NOT cleared by the success below, the third attempt's
+            // failure will find an exhausted window and cancel the job.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 61_000L);
             job.runRunningJob();                                     // attempt 2: succeeds, streak cleared
             job.runRunningJob();                                     // attempt 3: fails in a FRESH window
 
@@ -2840,17 +2840,19 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                     context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
 
             job.runRunningJob();
-            Assertions.assertEquals(1, consecutiveRewriteFailures(job, physicalPartitionId).intValue(),
-                    "one failed attempt must count as exactly one against the budget");
+            long afterFirst = rewriteRetrySpentMs(job, physicalPartitionId);
+            Assertions.assertTrue(afterFirst >= 10_000L && afterFirst < 20_000L,
+                    "one failed attempt must charge about one scheduler gap, was: " + afterFirst);
 
-            // The counter is driven by attempts, so ticks that do not reach this partition cannot move
-            // it however long they take. Under a wall-clock budget the assertion above already reads a
-            // timestamp instead of a count, which is what pins this behavior.
+            // Only this partition's own attempts move the meter, so ticks spent elsewhere cannot drain
+            // it however long they take. Under a plain elapsed-time window the assertion above reads a
+            // timestamp instead, which is what pins this behavior.
             job.runRunningJob();
-            Assertions.assertEquals(2, consecutiveRewriteFailures(job, physicalPartitionId).intValue(),
-                    "only actual attempts may count against the budget");
+            long afterSecond = rewriteRetrySpentMs(job, physicalPartitionId);
+            Assertions.assertTrue(afterSecond >= 20_000L && afterSecond < 30_000L,
+                    "a second attempt must charge a second gap and no more, was: " + afterSecond);
             Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
-                    "two attempts must not exhaust a six-attempt window");
+                    "two attempts must not exhaust a 60s window");
         } finally {
             Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
             Config.alter_scheduler_interval_millisecond = savedTick;
@@ -2900,8 +2902,8 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         job.getInfo(infos);
         Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
                 "a committed rewrite awaiting publication must not advertise a retry in Msg");
-        Assertions.assertNull(consecutiveRewriteFailures(job, physicalPartitionId),
-                "the publication wait must not count against the partition's retry budget");
+        Assertions.assertNull(rewriteRetrySpentMs(job, physicalPartitionId),
+                "the publication wait must not count against the partition's retry window");
     }
 
     /**
@@ -2953,8 +2955,58 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         job.getInfo(infos);
         Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
                 "a partition whose transaction could not be aborted is waiting, not retrying");
-        Assertions.assertNull(consecutiveRewriteFailures(job, physicalPartitionId),
-                "waiting for the transaction timeout must not count against the partition's budget");
+        Assertions.assertNull(rewriteRetrySpentMs(job, physicalPartitionId),
+                "waiting for the transaction timeout must not count against the partition's window");
+    }
+
+    /**
+     * A failed attempt is charged for how long it actually ran, not just for being an attempt. One rewrite
+     * INSERT can run for a long time before it fails - its insert timeout is half the alter timeout - and
+     * the scheduler sleeps only after a whole cycle, so a window converted into a fixed number of attempts
+     * would let a 600s setting stretch over hours while the vacuum pin is held and compaction deferred.
+     *
+     * <p>Pinned with the scheduler gap set to 0, so the charge under test is the attempt duration alone,
+     * and with the episode seeded just inside a 1s window so one short attempt tips it over. The sleep in
+     * the stub is load-bearing, unlike a sleep that merely lets time pass: the assertion cannot pass
+     * unless the production path measures real elapsed time across the executor call.
+     */
+    @Test
+    public void testAFailedAttemptIsChargedForHowLongItRan() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            Config.lake_online_rewrite_partition_retry_timeout_second = 1;
+            Config.alter_scheduler_interval_millisecond = 0;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            job.setRewriteExecutor((context, insertStmt) -> {
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            });
+
+            // 900ms spent of a 1000ms window: still inside it, so this attempt is retried - and charged.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 900L);
+            job.runRunningJob();
+            long spentMs = rewriteRetrySpentMs(job, physicalPartitionId);
+            Assertions.assertTrue(spentMs >= 1100L,
+                    "the attempt's own duration must be charged against the window, spent: " + spentMs);
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                    "the attempt that exhausts the window is still retried; the next one cancels");
+
+            // Now over the window, so the next failure cancels rather than granting another long attempt.
+            AlterCancelException ex =
+                    Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+            Assertions.assertTrue(ex.getMessage().contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR),
+                    "the cancel must carry the real rewrite error, was: " + ex.getMessage());
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
     }
 
     /**

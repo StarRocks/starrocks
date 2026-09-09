@@ -126,21 +126,26 @@ public abstract class LakeOnlineRewriteJobBase
     // stable for the job's lifetime. Not serialized; re-resolved after replay on first tick.
     private transient String cachedDbName;
 
-    // Transient: how many consecutive failed attempts each physical partition's rewrite INSERT has made
-    // (a successful attempt, or the partition publishing, drops the entry). Drives the bounded retry in
-    // runPartitionRewrite.
+    // Transient: how much wall-clock time each physical partition's own retry episode has already
+    // consumed - summed, over its consecutive failed attempts, as how long the attempt ran plus the one
+    // scheduler gap its retry costs. A successful attempt, or the partition publishing, drops the entry.
     //
-    // Counted in ATTEMPTS rather than wall-clock time deliberately. runRunningJob returns at the first
-    // partition that is not DONE, so a partition is only attempted on ticks that actually reach it; with
-    // elapsed time, waiting for a SIBLING partition to publish would spend this partition's budget and
-    // cancel the whole job after a single real retry. The configured window is converted to a number of
-    // ticks instead, which is the same thing whenever the job is working on this partition and degrades
-    // to "this many retries" when it is busy elsewhere.
+    // Charged per ATTEMPT rather than measured as time elapsed since the first failure, and all three
+    // parts of that are load-bearing:
+    //   - nothing accrues on a tick that does not reach this partition. runRunningJob returns at the
+    //     first partition that is not DONE, so plain elapsed time would let waiting for a SIBLING
+    //     partition to publish spend this partition's window and cancel the job after one real retry.
+    //   - the attempt's own duration is charged, because a rewrite INSERT can run for a long time before
+    //     it fails (its insert timeout is half the alter timeout), so counting attempts alone would let
+    //     a 600s window stretch over hours - and the vacuum pin it holds, plus the compaction it defers,
+    //     are the reason the window exists.
+    //   - the scheduler gap is charged, so a partition whose attempts fail immediately still exhausts
+    //     the window in roughly the configured time instead of spinning until the job's own deadline.
     //
     // Not serialized: the job's absolute deadline (createTimeMs + timeoutMs) is already durable, so a
-    // replayed job simply starts its budget over - which is the right behavior, since a failover re-runs
+    // replayed job simply starts its window over - which is the right behavior, since a failover re-runs
     // the partition anyway.
-    private final transient Map<Long, Integer> consecutiveRewriteFailures = Maps.newHashMap();
+    private final transient Map<Long, Long> rewriteRetrySpentMs = Maps.newHashMap();
 
     @Override
     protected void resetTransientState() {
@@ -150,7 +155,7 @@ public abstract class LakeOnlineRewriteJobBase
         // enabling graceful in-place demotion for shared-data mode, audit the remaining transient state
         // here (cachedDbName is self-healing, but the per-partition rewrite bookkeeping in
         // partitionStates and any unlogged state transitions need the OptimizeJobV2-style reset).
-        consecutiveRewriteFailures.clear();
+        rewriteRetrySpentMs.clear();
     }
 
     /**
@@ -973,7 +978,7 @@ public abstract class LakeOnlineRewriteJobBase
                     // must be cleared on observed progress, not off the transient map that replay
                     // leaves empty. clearRetryDiagnostic only clears THIS partition's message, so a
                     // sibling partition that is still retrying keeps reporting its stall.
-                    consecutiveRewriteFailures.remove(plan.physicalPartitionId);
+                    rewriteRetrySpentMs.remove(plan.physicalPartitionId);
                     clearRetryDiagnostic(plan.physicalPartitionId);
                     continue;
                 case IN_FLIGHT:
@@ -1153,7 +1158,11 @@ public abstract class LakeOnlineRewriteJobBase
             stateOf(plan.physicalPartitionId).rewriteTxnId = rewriteTxnId;
             persistStateChange(this, JobState.RUNNING);
 
+            // Time the attempt: a failure charges its own duration against the partition's retry window,
+            // because this INSERT may run for a long time before failing.
+            long attemptStartMs = System.currentTimeMillis();
             getRewriteExecutor().execute(context, insertStmt);
+            long attemptMs = System.currentTimeMillis() - attemptStartMs;
 
             // Re-confirm the txn id the INSERT actually used (defends against a concurrent txn slipping
             // in between the peek and beginTransaction) and re-journal it for the resume classifier.
@@ -1177,14 +1186,14 @@ public abstract class LakeOnlineRewriteJobBase
                     // publication or transaction-timeout wait, which is what this branch just decided is
                     // not happening. One journal write at most, because the IN_FLIGHT arm above does not
                     // re-enter runPartitionRewrite, so this branch is reached once per episode.
-                    consecutiveRewriteFailures.remove(plan.physicalPartitionId);
+                    rewriteRetrySpentMs.remove(plan.physicalPartitionId);
                     clearRetryDiagnostic(plan.physicalPartitionId);
                     LOG.warn("online rewrite job {}: rewrite INSERT reported an error for partition {}, but "
                                     + "its transaction is not in a retryable state; waiting instead: {}",
                             jobId, plan.physicalPartitionId, error);
                     return;
                 }
-                if (retryPartitionRewrite(plan.physicalPartitionId, error)) {
+                if (retryPartitionRewrite(plan.physicalPartitionId, error, attemptMs)) {
                     // The partition is retryable, so record why, for SHOW ALTER TABLE COLUMN's Msg column:
                     // getInfo emits errMsg regardless of job state, and checkTableStable already reports a
                     // waiting job this way.
@@ -1202,7 +1211,7 @@ public abstract class LakeOnlineRewriteJobBase
             // The attempt reached the executor without error: end any failure streak for this partition
             // and drop the retry diagnostic it published, so the message does not outlive the failure
             // through the publication wait.
-            consecutiveRewriteFailures.remove(plan.physicalPartitionId);
+            rewriteRetrySpentMs.remove(plan.physicalPartitionId);
             clearRetryDiagnostic(plan.physicalPartitionId);
         } catch (AlterCancelException e) {
             throw e;
@@ -1228,17 +1237,21 @@ public abstract class LakeOnlineRewriteJobBase
      * reports through the {@code ConnectContext}; a throw that escapes it is still terminal, which is why
      * the surrounding {@code catch} converts one straight to {@link AlterCancelException}.
      *
-     * <p>The budget is per partition and counts CONSECUTIVE failed attempts, reset by a successful
-     * attempt or by the partition publishing, because one job can legitimately meet several independent
-     * node restarts.
+     * <p>The window is per partition and is spent by that partition's own consecutive failed attempts -
+     * each charging how long it ran plus the one scheduler gap before it can be retried - reset by a
+     * successful attempt or by the partition publishing, because one job can legitimately meet several
+     * independent node restarts. Time the job spends elsewhere is not charged to it; see
+     * {@link #rewriteRetrySpentMs}.
      *
      * <p>Retrying is safe: an aborted attempt publishes nothing into the shadow index. The flip anchors
      * only the journaled txn id of the attempt that committed, and post-watershed double-writes are
      * replayed by version rather than by txn, so a re-run cannot double-count.
      *
+     * @param attemptMs how long the failed attempt ran, charged against the window along with one
+     *         scheduler gap
      * @return true when the caller should return and let a later tick retry, false when it should cancel
      */
-    private boolean retryPartitionRewrite(long physicalPartitionId, String error) {
+    private boolean retryPartitionRewrite(long physicalPartitionId, String error, long attemptMs) {
         // One sample of the mutable window for the whole decision. Re-reading it would let an
         // ADMIN SET FRONTEND CONFIG landing mid-decision make the gate below, the budget derived from it
         // and the message reporting it disagree: dropping the value to 0 after the gate had already
@@ -1250,38 +1263,25 @@ public abstract class LakeOnlineRewriteJobBase
                     + "disabled: {}", jobId, physicalPartitionId, error);
             return false;
         }
-        int maxFailures = maxConsecutiveRewriteFailures(retryWindowSecond);
-        int failures = consecutiveRewriteFailures.merge(physicalPartitionId, 1, Integer::sum);
-        if (failures > maxFailures) {
-            LOG.warn("online rewrite job {}: rewrite INSERT failed {} consecutive times for partition {}, "
-                            + "exhausting the {}s retry window, cancelling the job: {}",
-                    jobId, failures, physicalPartitionId, retryWindowSecond, error);
+        long budgetMs = retryWindowSecond * 1000L;
+        // Read what earlier attempts spent BEFORE charging this one, so the first failure of an episode
+        // always gets a retry however long its attempt ran, and an episode overshoots the window by at
+        // most the attempt that exhausted it.
+        long spentMs = rewriteRetrySpentMs.getOrDefault(physicalPartitionId, 0L);
+        if (spentMs > budgetMs) {
+            LOG.warn("online rewrite job {}: rewrite INSERT for partition {} has spent {}s of its {}s "
+                            + "retry window, cancelling the job: {}",
+                    jobId, physicalPartitionId, spentMs / 1000, retryWindowSecond, error);
             return false;
         }
-        LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}, retrying on a later tick "
-                        + "(consecutive failure {} of {}): {}",
-                jobId, physicalPartitionId, failures, maxFailures, error);
+        // One sample of the interval, and the only read of it in this decision.
+        long chargedMs = attemptMs + Math.max(0L, Config.alter_scheduler_interval_millisecond);
+        rewriteRetrySpentMs.put(physicalPartitionId, spentMs + chargedMs);
+        LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} after {}ms, retrying on a "
+                        + "later tick ({}s of its {}s retry window spent): {}",
+                jobId, physicalPartitionId, attemptMs, (spentMs + chargedMs) / 1000, retryWindowSecond,
+                error);
         return true;
-    }
-
-    /**
-     * How many consecutive failed attempts one partition's rewrite gets before the job is cancelled: the
-     * configured retry window expressed in scheduler ticks, because a RUNNING job makes at most one
-     * attempt per tick for the partition it is working on. Converting the window this way keeps the
-     * config meaning "how long we keep retrying this partition" while making the budget immune to time
-     * the job spends waiting on a different partition.
-     *
-     * <p>The window arrives as a parameter so that one retry decision applies a single sample of it. The
-     * tick is read here instead, which is that same single sample: this is the only place in a decision
-     * that reads it.
-     *
-     * @param retryWindowSecond the caller's sample of {@code
-     *         lake_online_rewrite_partition_retry_timeout_second}, already known to be positive
-     */
-    private static int maxConsecutiveRewriteFailures(int retryWindowSecond) {
-        long budgetMs = retryWindowSecond * 1000L;
-        long tickMs = Math.max(1L, Config.alter_scheduler_interval_millisecond);
-        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, budgetMs / tickMs));
     }
 
     /**

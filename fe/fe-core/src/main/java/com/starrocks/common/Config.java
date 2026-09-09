@@ -3881,8 +3881,11 @@ public class Config extends ConfigBase {
                     "crashing mid-INSERT fails that one partition; retrying lets the job resume it " +
                     "instead of discarding every partition it has already rewritten. Should exceed the " +
                     "time a node takes to come back, and stays far below alter_table_timeout_second " +
-                    "because compaction on the table is deferred for as long as the rewrite runs. Set " +
-                    "to 0 to cancel the job on the first failure. Default: 600")
+                    "because compaction on the table is deferred for as long as the rewrite runs. It " +
+                    "is spent only by that partition's own failed attempts, each charged for how long " +
+                    "it ran plus one alter_scheduler_interval_millisecond, so waiting on a different " +
+                    "partition does not consume it. Set to 0 to cancel the job on the first failure. " +
+                    "Default: 600")
     public static int lake_online_rewrite_partition_retry_timeout_second = 600;
 
     /**
