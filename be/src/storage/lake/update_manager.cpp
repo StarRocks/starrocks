@@ -854,6 +854,8 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     uint64_t total_rows = 0;
     uint64_t total_data_size = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
+    // Rows superseded within this load, keyed by the synthesized segment they live in.
+    std::map<uint32_t, std::vector<uint32_t>> new_deletes_by_rssid;
 
     DCHECK_EQ(insert_rowids_by_segment.size(), op_write.rowset().segment_metas_size());
 
@@ -934,15 +936,36 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         RETURN_IF_ERROR(index.upsert(rowset_id + new_segment_id, 0, *pk_column_for_upsert, 0,
                                      pk_column_for_upsert->size(), &segment_deletes));
 
+        // These deletes are not necessarily empty. The index probe that classified a row as an
+        // insert runs once, before the first insert, so every occurrence of a key within this load
+        // is classified as an insert and the loop above makes them supersede each other: the upsert
+        // for a later segment returns deletes against an earlier segment of this same load. Collect
+        // them per rssid and write each segment's vector once, after the loop.
         for (auto& [rssid, del_ids] : segment_deletes) {
-            DCHECK(del_ids.empty()) << "del_ids should be empty for new row segments, but got " << del_ids.size()
-                                    << " deletes for rssid=" << rssid;
             if (del_ids.empty()) continue;
-            DelVectorPtr dv = std::make_shared<DelVector>();
-            dv->init(metadata->version(), del_ids.data(), del_ids.size());
-            builder->append_delvec(dv, rssid);
-            segment_id_to_add_dels_new_acc[rssid] += del_ids.size();
+            auto& acc = new_deletes_by_rssid[rssid];
+            acc.insert(acc.end(), del_ids.begin(), del_ids.end());
         }
+    }
+
+    // Merge into the segment's current delete vector rather than writing a fresh one, exactly like
+    // the delete half below: append_delvec() replaces _delvecs[rssid], so a fresh vector would
+    // discard marks already placed on that segment and bring those rows back to life. Collecting
+    // first and appending once per rssid also keeps the publish buffer proportional to the rows
+    // deleted -- append_delvec() only repoints the map entry and never reclaims the bytes an earlier
+    // call wrote, so appending per iteration would leave every intermediate vector in the delvec
+    // file. get_del_vec() returns an empty vector for an rssid that has none, so a segment deleted
+    // from only once is written exactly as before.
+    for (auto& [rssid, del_ids] : new_deletes_by_rssid) {
+        TabletSegmentId tsid;
+        tsid.tablet_id = tablet->id();
+        tsid.segment_id = rssid;
+        DelVectorPtr old_delvec;
+        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false, &old_delvec));
+        DelVectorPtr dv_new;
+        old_delvec->add_dels_as_new_version(del_ids, metadata->version(), &dv_new);
+        builder->append_delvec(dv_new, rssid);
+        segment_id_to_add_dels_new_acc[rssid] += del_ids.size();
     }
 
     new_rows_op.mutable_rowset()->set_num_rows(total_rows);
