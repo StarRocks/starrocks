@@ -40,7 +40,7 @@
 #include <utility>
 #include <vector>
 
-#include "common/config_rowset_fwd.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
@@ -456,13 +456,9 @@ protected:
 private:
     int64_t _mem_usage() const { return sizeof(Rowset) + _rowset_path.length(); }
 
-<<<<<<< HEAD
-    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs, KVStore* kvstore);
-=======
     void _update_metadata_cache_charge(size_t charge);
 
-    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs);
->>>>>>> 076cce2 ([BugFix] Refresh rowset metadata cache charges after lazy loading (#77893))
+    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs, KVStore* kvstore);
 
     Status _link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
