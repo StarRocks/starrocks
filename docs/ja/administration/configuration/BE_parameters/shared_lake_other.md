@@ -428,7 +428,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- デフォルト: 7200
+- デフォルト: 180
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい

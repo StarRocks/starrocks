@@ -92,7 +92,7 @@ CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
 
 // The silent period, only when the disk usage falls bellow the low level for a time longer than this period,
 // the disk expansion can be triggered
-CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
+CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "180");
 
 // The minimum total disk quota bytes to adjust, once the quota to adjust is less than this value,
 // cache quota will be reset to zero to avoid overly frequent population and eviction.

@@ -437,7 +437,7 @@ This topic introduces the following types of BE configurations:
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- Default: 7200
+- Default: 180
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
