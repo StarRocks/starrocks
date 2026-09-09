@@ -375,6 +375,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否使用绑定到 Compute Engine 的服务账户。
 - 引入版本: v3.5.1
 
+### `group_provider`
+
+- 默认值: 空
+- 类型: String[]
+- 单位: -
+- 是否可变: Yes
+- 描述: 集群级默认 Group Provider 列表，多个之间用逗号分隔。对使用本地认证的用户生效；从 v4.2 起，未设置自身 `group_provider` 属性的 Security Integration 也会回退到该值，此前版本在这种情况下不会查询任何 Group Provider。参见[认证用户组](../../user_privs/group_provider.md)。
+- 引入版本: v3.5
+
 ### `hdfs_file_system_expire_seconds`
 
 - 默认值: 300
@@ -891,6 +900,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于搜索用户身份验证信息的管理员密码。
 - 引入版本: -
 
+### `authentication_ldap_simple_group_source`
+
+- 默认值: group_provider
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 经 LDAP 认证的用户，其用户组从哪里来的集群级默认值。取值：`group_provider`（只使用已配置的 Group Provider，与低版本行为一致）、`memberof`（只使用用户自身 LDAP 条目上的组成员属性）、`both`（两者取并集）。Security Integration 上的同名属性会覆盖该值。非法取值按 `group_provider` 处理并打印 ERROR 日志，避免一处笔误导致所有 LDAP 用户无法登录。
+- 引入版本: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- 默认值: memberOf
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 用户条目上承载组成员关系的属性名的集群级默认值，在 `authentication_ldap_simple_group_source` 取 `memberof` 或 `both` 时使用。`memberOf` 适用于 Active Directory 以及安装了 `memberof` overlay 的 OpenLDAP；Oracle Directory Server 与 389 Directory Server 使用 `isMemberOf`。Security Integration 上的同名属性会覆盖该值。
+- 引入版本: v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - 默认值: 空字符串
@@ -915,7 +942,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 在 LDAP 对象中标识用户的属性名称。
+- 描述: 用户条目上承载登录名的属性名，用于拼接搜索绑定模式的过滤器。`uid` 适用于 OpenLDAP；Active Directory 上请设为 `sAMAccountName`，因为 AD 条目的 RDN 是显示名，而它的 `uid` 除非管理员填过否则为空。这个选择同时排除了 `authentication_ldap_simple_bind_dn_pattern`——详见 [Security Integration](../../user_privs/authentication/security_integration.md) 里的同名属性。
 - 引入版本: -
 
 ### `backup_clean_check_interval_seconds`

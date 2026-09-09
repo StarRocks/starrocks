@@ -374,6 +374,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
+### `group_provider`
+
+- Default: Empty
+- Type: String[]
+- Unit: -
+- Is mutable: Yes
+- Description: The cluster-wide default list of Group Providers, separated by commas. It applies to natively authenticated users, and from v4.2 also to a security integration that sets no `group_provider` property of its own - earlier versions consulted no Group Provider at all in that case. See [Authenticate User Groups](../../user_privs/group_provider.md).
+- Introduced in: v3.5
+
 ### `hdfs_file_system_expire_seconds`
 
 - Default: 300
@@ -891,6 +900,24 @@ This topic introduces the following types of FE configurations:
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
+### `authentication_ldap_simple_group_source`
+
+- Default: group_provider
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for where the groups of an LDAP-authenticated user come from. Valid values: `group_provider` (only the configured group providers, the behavior of earlier versions), `memberof` (only the group membership attribute of the user's own LDAP entry), `both` (the union of the two). A security integration property of the same name overrides this value. An illegal value is treated as `group_provider` and logged at ERROR level, so that a typo cannot lock every LDAP user out.
+- Introduced in: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- Default: memberOf
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for the name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. `memberOf` fits Active Directory and OpenLDAP with the `memberof` overlay installed; Oracle Directory Server and 389 Directory Server use `isMemberOf`. A security integration property of the same name overrides this value.
+- Introduced in: v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - Default: Empty string
@@ -915,7 +942,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The name of the attribute that identifies users in LDAP objects.
+- Description: The name of the attribute that carries the login name on a user entry, used to build the search filter of search-and-bind mode. `uid` suits OpenLDAP; on Active Directory set it to `sAMAccountName`, because an AD entry's RDN is the display name and its `uid` is empty unless an administrator populated it. That choice also rules out `authentication_ldap_simple_bind_dn_pattern` - see the property of the same name in [Security Integration](../../user_privs/authentication/security_integration.md).
 - Introduced in: -
 
 ### `backup_clean_check_interval_seconds`
