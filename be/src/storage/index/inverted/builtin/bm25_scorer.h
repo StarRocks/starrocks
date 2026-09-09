@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -21,6 +22,7 @@
 
 #include "common/status.h"
 #include "storage_primitive/bm25_search_option.h"
+#include "storage_primitive/range.h"
 #include "storage_primitive/rowid_types.h"
 
 namespace roaring {
@@ -32,8 +34,22 @@ namespace starrocks {
 class FreqsIterator;
 class IndexReadOptions;
 
-// I8: Phase-2 scoring engine. score-all now; WAND lands later as a sibling implementation behind the
-// same run() interface (so segment_iterator / stats / storage never change for WAND).
+// Non-owning candidate membership for the BM25 top-k scorer. It wraps the scan's own SparseRange
+// instead of a materialized Roaring bitmap, which is what SegmentIterator holds; a null view accepts
+// every row. Membership is exact for a sorted range (binary search) and for an unsorted one (linear).
+class BM25CandidateView {
+public:
+    BM25CandidateView(std::nullptr_t) {}
+    BM25CandidateView(const SparseRange<>* ranges) : _ranges(ranges) {}
+
+    bool contains(rowid_t docid) const;
+    bool empty() const;
+
+private:
+    const SparseRange<>* _ranges = nullptr;
+};
+
+// Phase-2 scoring interface shared by exhaustive and exact top-k implementations.
 class BM25Scorer {
 public:
     virtual ~BM25Scorer() = default;

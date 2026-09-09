@@ -233,6 +233,27 @@ TEST_F(Bm25SegmentScoringTest, topk_narrows_scan_to_best_rows) {
     }
 }
 
+// The pruning-ratio counters must survive the WAND path. It reads its candidates straight off _scan_range
+// instead of materializing a bitmap, so a candidate count taken from that bitmap would report 0 candidates
+// beside N scored rows -- and only the WAND path prunes, so the ratio would be lost exactly where it matters.
+TEST_F(Bm25SegmentScoringTest, topk_reports_candidate_and_scored_rows) {
+    auto schema = make_schema();
+    auto seg = build_segment(schema, {"apple banana apple", "banana cherry", "apple cherry cherry cherry"});
+
+    auto opt = make_option("apple cherry", /*topk=*/2);
+    ASSIGN_OR_ABORT(auto stats,
+                    build_tablet_bm25_stats(*schema, *opt, {seg}, LakeIOOptions{}, /*use_page_cache=*/true, &_stats));
+
+    auto scores = run_scan(schema, seg, opt, stats);
+    ASSERT_EQ(2u, scores.size());
+    // No MATCH predicate narrowed the scan here, so the candidate set is the whole segment.
+    EXPECT_EQ(3, _stats.bm25_candidate_rows);
+    EXPECT_GT(_stats.bm25_scored_rows, 0);
+    EXPECT_LE(_stats.bm25_scored_rows, _stats.bm25_candidate_rows);
+    EXPECT_EQ(1, _stats.bm25_segments_scored);
+    EXPECT_EQ(0, _stats.bm25_segments_no_pruning);
+}
+
 // enable_gin_filter off: _apply_inverted_index does not narrow _scan_range, so the MATCH predicate stays
 // residual (evaluated per-chunk). A top-k pushdown would then let a partial MATCH_ALL match take a slot and be
 // dropped afterwards -> under-return. BM25 must fall back to score-all: with topk=2 but gin off, all 3 rows are

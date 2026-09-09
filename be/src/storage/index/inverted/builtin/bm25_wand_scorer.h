@@ -24,10 +24,6 @@
 #include "storage/index/inverted/builtin/bm25_scorer.h"
 #include "storage_primitive/rowid_types.h"
 
-namespace roaring {
-class Roaring;
-}
-
 namespace starrocks {
 
 class BlockPostingIterator;
@@ -36,9 +32,10 @@ class IndexReadOptions;
 
 // Block-max WAND top-k scorer (Broder et al. 2003; Ding & Suel 2011): DAAT traversal over one posting
 // cursor per query term. Term-level bounds (max over the block directory) drive pivot selection; a
-// stateless directory recheck of the pivot's covering blocks gates every decode, and a failed recheck
-// skips a whole block range. Returns at most `topk` entries; every returned score is exact (bounds only
-// gate which docs get fully scored), so downstream consumes it exactly like ScoreAllScorer's output.
+// monotone cached directory recheck of the pivot's covering blocks avoids repeated directory search
+// and bound calculation. Cursor order is maintained incrementally after each advance. Returns at most
+// `topk` entries; every returned score is exact (bounds only gate which docs get fully scored), so
+// downstream consumes it exactly like ScoreAllScorer's output.
 class WandScorer : public BM25Scorer {
 public:
     // shared_threshold (nullable) is a monotonically increasing accumulator of "some scorer's k-th
@@ -46,7 +43,7 @@ public:
     // publishes its own k-th best back. Under today's serial per-tablet segment scan this is exact
     // cross-segment carry-over; under concurrent scorers a stale read only prunes less, never wrong.
     WandScorer(const BM25Stats& stats, FreqsIterator* freqs, const IndexReadOptions& read_opts,
-               std::vector<int64_t> term_ords, const roaring::Roaring* candidates, int64_t topk,
+               std::vector<int64_t> term_ords, BM25CandidateView candidates, int64_t topk,
                std::atomic<double>* shared_threshold = nullptr);
     ~WandScorer() override;
 
@@ -60,26 +57,35 @@ private:
         std::unique_ptr<BlockPostingIterator> it;
         double idf = 0.0;
         double ub = 0.0;    // upper bound of this term's contribution over its whole posting list
-        uint32_t doc = 0;   // current docid
+        uint32_t doc = 0;   // current exact posting docid
         uint32_t idx = 0;   // index of `doc` within the decoded block
         bool valid = false; // false once the posting list is exhausted
+
+        // Directory-only block-bound cursor. WAND pivots never move backwards, so the block covering
+        // successive pivots can be found by a monotone walk instead of a binary search from block 0.
+        uint32_t bound_block = 0;
+        // Cached block upper bound and the block it belongs to, so a bound is computed once per block
+        // however many pivots land in it, and only when a recheck actually asks for it.
+        double bound_ub = 0.0;
+        uint32_t ub_block = UINT32_MAX;
     };
 
     Status _open_cursors();
     // Advance to the first posting with docid >= target; clears `valid` past the end of the list.
     Status _next_geq(TermCursor* c, uint32_t target);
-    // Advance by exactly one posting (cheaper than _next_geq for the aligned-cursor case).
+    // Advance by exactly one posting.
     Status _advance(TermCursor* c);
     // Local upper bound of c's contribution to any doc inside the block covering `docid`, plus that
-    // block's last docid. Stateless directory binary search: no decode, no cursor movement. Returns 0
-    // with *block_last = UINT32_MAX when c has no posting >= docid.
-    double _block_ub_at(const TermCursor& c, uint32_t docid, uint32_t* block_last) const;
+    // block's last docid. Uses a monotone directory cursor and caches the bound for repeated pivots in
+    // the same block; no posting decode or posting-cursor movement. Returns 0 with
+    // *block_last = UINT32_MAX when c has no posting >= docid.
+    double _block_ub_at(TermCursor* c, uint32_t docid, uint32_t* block_last);
 
     const BM25Stats& _stats;
     FreqsIterator* _freqs;
     const IndexReadOptions& _read_opts;
     std::vector<int64_t> _term_ords;
-    const roaring::Roaring* _candidates;
+    BM25CandidateView _candidates;
     int64_t _topk;
     std::atomic<double>* _shared_threshold;
     std::vector<TermCursor> _cursors;

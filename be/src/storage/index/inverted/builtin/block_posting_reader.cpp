@@ -26,19 +26,22 @@
 
 namespace starrocks {
 
-// Seek the iterator to `ord` and read its single variable-length value into `out` (copied, so it
-// stays valid after the scratch column is destroyed).
-static Status read_blob_at(IndexedColumnIterator* iter, ordinal_t ord, std::string* out) {
+// Seek the iterator to `ord` and read its single variable-length value into `out`. The caller owns
+// both scratch objects and reuses their capacity across block reads.
+static Status read_blob_at(IndexedColumnIterator* iter, ordinal_t ord, MutableColumnPtr& column, std::string* out) {
     RETURN_IF_ERROR(iter->seek_to_ordinal(ord));
     // Read the single variable-length value via the same path the bitmap index reader uses for its
     // binary IndexedColumns (ChunkFactory column + ColumnViewer<TYPE_VARCHAR>).
-    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
+    if (column == nullptr) {
+        column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
+    }
+    column->reset_column();
     size_t n = 1;
     RETURN_IF_ERROR(iter->next_batch(&n, column.get()));
     if (n != 1) {
         return Status::Corruption("block posting: short read");
     }
-    ColumnViewer<TYPE_VARCHAR> viewer(std::move(column));
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
     Slice s = viewer.value(0);
     out->assign(s.data, s.size);
     return Status::OK();
@@ -93,8 +96,8 @@ BlockPostingIterator::BlockPostingIterator(std::unique_ptr<IndexedColumnIterator
 BlockPostingIterator::~BlockPostingIterator() = default;
 
 Status BlockPostingIterator::seek_to_term(uint32_t term_ordinal) {
-    std::string blob;
-    RETURN_IF_ERROR(read_blob_at(_dir_iter.get(), term_ordinal, &blob));
+    RETURN_IF_ERROR(read_blob_at(_dir_iter.get(), term_ordinal, _blob_column_scratch, &_blob_scratch));
+    const std::string& blob = _blob_scratch;
     if (blob.size() < 8) {
         return Status::Corruption("block posting: directory entry too small");
     }
@@ -133,21 +136,28 @@ Status BlockPostingIterator::next_block() {
     return _load_block(idx);
 }
 
+uint32_t BlockPostingIterator::lower_bound_block(uint32_t target_docid, uint32_t from_block) const {
+    const uint32_t begin = std::min(from_block, _num_blocks);
+    const auto it = std::lower_bound(_last_docid.begin() + begin, _last_docid.end(), target_docid);
+    return static_cast<uint32_t>(it - _last_docid.begin());
+}
+
 Status BlockPostingIterator::seek_block(uint32_t target_docid) {
     // _last_docid is ascending; lower_bound returns the first block whose last_docid >= target_docid.
     // Search the whole directory (not just from _cur_block forward): WAND drives this monotonically,
     // but a full-range search costs the same O(log n) and stays correct even for a backward target,
     // removing the footgun of silently returning a later block instead of the covering one.
-    const auto it = std::lower_bound(_last_docid.begin(), _last_docid.end(), target_docid);
-    if (it == _last_docid.end()) {
+    const uint32_t block = lower_bound_block(target_docid);
+    if (block == _num_blocks) {
         return Status::NotFound("block posting: no block covers target docid");
     }
-    return _load_block(static_cast<uint32_t>(it - _last_docid.begin()));
+    return _load_block(block);
 }
 
 Status BlockPostingIterator::_load_block(uint32_t block_idx_in_term) {
-    std::string blob;
-    RETURN_IF_ERROR(read_blob_at(_block_iter.get(), _first_block_id + block_idx_in_term, &blob));
+    RETURN_IF_ERROR(
+            read_blob_at(_block_iter.get(), _first_block_id + block_idx_in_term, _blob_column_scratch, &_blob_scratch));
+    const std::string& blob = _blob_scratch;
     if (blob.size() < 5) { // doc_count(1) + first_docid(4)
         return Status::Corruption("block posting: block too small");
     }
@@ -166,18 +176,18 @@ Status BlockPostingIterator::_load_block(uint32_t block_idx_in_term) {
 
     _docids.resize(n);
     _tfs.resize(n);
-    std::vector<uint32_t> gaps(n - 1);
+    _gaps_scratch.resize(n - 1);
     // Even for n == 1 (no gaps) the writer emits a 2-byte empty PFOR header, which decode()
     // consumes and returns non-zero for; a 0 return therefore always means a corrupt/truncated
     // gap stream and must be rejected (rather than silently re-reading these bytes as tfs).
-    const size_t c1 = gin_pfor::decode(p, end - p, n - 1, gaps.data());
+    const size_t c1 = gin_pfor::decode(p, end - p, n - 1, _gaps_scratch.data());
     if (c1 == 0) {
         return Status::Corruption("block posting: bad gap stream");
     }
     p += c1;
     _docids[0] = first_docid;
     for (uint32_t i = 1; i < n; ++i) {
-        _docids[i] = _docids[i - 1] + gaps[i - 1];
+        _docids[i] = _docids[i - 1] + _gaps_scratch[i - 1];
     }
     const size_t c2 = gin_pfor::decode(p, end - p, n, _tfs.data());
     if (c2 == 0) {

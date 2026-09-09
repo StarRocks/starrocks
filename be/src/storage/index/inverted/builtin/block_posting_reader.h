@@ -19,8 +19,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
+#include "column/column.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -83,6 +85,7 @@ public:
     size_t cur_block_size() const { return _block_n; }
     const uint32_t* docids() const { return _docids.data(); } // segment rowids of current block
     const uint32_t* tfs() const { return _tfs.data(); }       // term frequencies of current block
+    uint32_t cur_block_index() const { return _cur_block; }
 
     // WAND-facing per-block statistics + block skip (valid only after next_block/seek_block has
     // positioned the cursor on a block; DCHECK guards misuse before the first positioning call).
@@ -117,6 +120,10 @@ public:
         return block_idx < _num_blocks ? _min_doclen[block_idx] : 0;
     }
 
+    // Directory-only lookup used by WAND's monotone block-bound cursor. Returns num_blocks() when no
+    // block can contain a posting >= target_docid. `from_block` avoids reconsidering a consumed prefix.
+    uint32_t lower_bound_block(uint32_t target_docid, uint32_t from_block = 0) const;
+
     // Advance to the first block whose last_docid >= target_docid and decode it.
     Status seek_block(uint32_t target_docid);
 
@@ -129,6 +136,12 @@ private:
 
     std::unique_ptr<IndexedColumnIterator> _block_iter;
     std::unique_ptr<IndexedColumnIterator> _dir_iter;
+
+    // Reused across directory and posting reads. IndexedColumnIterator::next_batch appends into a
+    // column, so reset it between reads; the string and gap vectors retain capacity across blocks.
+    MutableColumnPtr _blob_column_scratch;
+    std::string _blob_scratch;
+    std::vector<uint32_t> _gaps_scratch;
 
     // current term's directory
     uint32_t _num_blocks = 0;

@@ -426,6 +426,12 @@ TEST_F(BlockPostingTest, directory_stats_accessors) {
     // Directory accessors are valid right after seek_to_term, before any block decode.
     ASSERT_OK(it->seek_to_term(0));
     ASSERT_EQ(3u, it->num_blocks());
+    EXPECT_EQ(0u, it->lower_bound_block(0));
+    EXPECT_EQ(0u, it->lower_bound_block(127));
+    EXPECT_EQ(1u, it->lower_bound_block(128));
+    EXPECT_EQ(2u, it->lower_bound_block(299, 1));
+    EXPECT_EQ(3u, it->lower_bound_block(300));
+
     // Directory stats must match what cur_block_* reports while walking the blocks.
     for (uint32_t b = 0; b < it->num_blocks(); ++b) {
         ASSERT_OK(it->next_block());

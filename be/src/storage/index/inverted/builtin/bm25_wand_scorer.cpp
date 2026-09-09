@@ -15,8 +15,8 @@
 #include "storage/index/inverted/builtin/bm25_wand_scorer.h"
 
 #include <algorithm>
+#include <iterator>
 #include <queue>
-#include <roaring/roaring.hh>
 #include <utility>
 
 #include "storage/index/inverted/builtin/block_posting_reader.h"
@@ -35,7 +35,7 @@ void store_max(std::atomic<double>* target, double value) {
 } // namespace
 
 WandScorer::WandScorer(const BM25Stats& stats, FreqsIterator* freqs, const IndexReadOptions& read_opts,
-                       std::vector<int64_t> term_ords, const roaring::Roaring* candidates, int64_t topk,
+                       std::vector<int64_t> term_ords, BM25CandidateView candidates, int64_t topk,
                        std::atomic<double>* shared_threshold)
         : _stats(stats),
           _freqs(freqs),
@@ -74,6 +74,10 @@ Status WandScorer::_open_cursors() {
 }
 
 Status WandScorer::_next_geq(TermCursor* c, uint32_t target) {
+    if (!c->valid || c->doc >= target) {
+        return Status::OK();
+    }
+
     while (true) {
         const uint32_t* docids = c->it->docids();
         const uint32_t* end = docids + c->it->cur_block_size();
@@ -83,13 +87,14 @@ Status WandScorer::_next_geq(TermCursor* c, uint32_t target) {
             c->doc = *pos;
             return Status::OK();
         }
-        Status st = c->it->seek_block(target); // NotFound == past the last block == list exhausted
+        Status st = c->it->seek_block(target);
         if (st.is_not_found()) {
             c->valid = false;
             return Status::OK();
         }
         RETURN_IF_ERROR(st);
-        c->idx = 0; // loop: lower_bound inside the freshly decoded covering block always hits
+        c->bound_block = c->it->cur_block_index();
+        c->idx = 0;
     }
 }
 
@@ -103,33 +108,37 @@ Status WandScorer::_advance(TermCursor* c) {
         return Status::OK();
     }
     RETURN_IF_ERROR(c->it->next_block());
+    c->bound_block = c->it->cur_block_index();
     c->idx = 0;
     c->doc = c->it->docids()[0];
     return Status::OK();
 }
 
-double WandScorer::_block_ub_at(const TermCursor& c, uint32_t docid, uint32_t* block_last) const {
-    uint32_t lo = 0;
-    uint32_t hi = c.it->num_blocks();
-    while (lo < hi) { // first block whose last_docid >= docid == the only block that can contain it
-        uint32_t mid = lo + (hi - lo) / 2;
-        if (c.it->block_last_docid(mid) < docid) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
+double WandScorer::_block_ub_at(TermCursor* c, uint32_t docid, uint32_t* block_last) {
+    if (c->bound_block < c->it->num_blocks() && c->it->block_last_docid(c->bound_block) < docid) {
+        c->bound_block = c->it->lower_bound_block(docid, c->bound_block + 1);
     }
-    if (lo == c.it->num_blocks()) {
+    if (c->bound_block == c->it->num_blocks()) {
         *block_last = UINT32_MAX;
         return 0.0;
     }
-    *block_last = c.it->block_last_docid(lo);
-    return bm25_term(c.it->block_max_tf(lo), c.it->block_min_doclen(lo), c.idf, _stats);
+    // Recompute whenever the cached bound belongs to another block, whether this call walked the cursor
+    // forward or _advance/_next_geq moved it since the last recheck.
+    if (c->ub_block != c->bound_block) {
+        c->bound_ub =
+                bm25_term(c->it->block_max_tf(c->bound_block), c->it->block_min_doclen(c->bound_block), c->idf, _stats);
+        c->ub_block = c->bound_block;
+    }
+    *block_last = c->it->block_last_docid(c->bound_block);
+    return c->bound_ub;
 }
 
 Status WandScorer::run(std::unordered_map<rowid_t, double>* id2score) {
     if (_topk <= 0) {
         return Status::InternalError("WandScorer requires topk > 0");
+    }
+    if (_candidates.empty()) {
+        return Status::OK();
     }
     RETURN_IF_ERROR(_open_cursors());
     const auto k = static_cast<size_t>(_topk);
@@ -141,26 +150,65 @@ Status WandScorer::run(std::unordered_map<rowid_t, double>* id2score) {
     std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> heap;
     double threshold = (_shared_threshold != nullptr) ? _shared_threshold->load(std::memory_order_relaxed) : 0.0;
 
+    const auto doc_less = [](const TermCursor* lhs, const TermCursor* rhs) { return lhs->doc < rhs->doc; };
     std::vector<TermCursor*> order;
-    while (true) {
-        order.clear();
-        for (auto& c : _cursors) {
-            if (c.valid) {
-                order.push_back(&c);
+    order.reserve(_cursors.size());
+    for (auto& cursor : _cursors) {
+        if (cursor.valid) {
+            order.push_back(&cursor);
+        }
+    }
+    std::sort(order.begin(), order.end(), doc_less);
+
+    // Every mutation below advances a prefix of `order`. The untouched suffix remains sorted, so sort
+    // only the moved cursors and merge them back. This replaces a rebuild + full sort on every WAND
+    // iteration with O(T) maintenance (and no sort at all when one cursor moves).
+    std::vector<TermCursor*> moved;
+    std::vector<TermCursor*> merge_scratch;
+    moved.reserve(order.size());
+    merge_scratch.reserve(order.size());
+    auto restore_advanced_prefix = [&](size_t count) {
+        DCHECK_LE(count, order.size());
+        if (count == 1) {
+            TermCursor* cursor = order.front();
+            order.erase(order.begin());
+            if (cursor->valid) {
+                order.insert(std::upper_bound(order.begin(), order.end(), cursor, doc_less), cursor);
+            }
+            return;
+        }
+
+        moved.clear();
+        for (size_t i = 0; i < count; ++i) {
+            if (order[i]->valid) {
+                moved.push_back(order[i]);
             }
         }
-        if (order.empty()) {
-            break;
+        std::sort(moved.begin(), moved.end(), doc_less);
+        merge_scratch.clear();
+        std::merge(moved.begin(), moved.end(), order.begin() + count, order.end(), std::back_inserter(merge_scratch),
+                   doc_less);
+        order.swap(merge_scratch);
+    };
+    auto restore_advanced_cursor = [&](size_t index) {
+        DCHECK_LT(index, order.size());
+        TermCursor* cursor = order[index];
+        order.erase(order.begin() + index);
+        if (cursor->valid) {
+            order.insert(std::upper_bound(order.begin(), order.end(), cursor, doc_less), cursor);
         }
-        std::sort(order.begin(), order.end(), [](const TermCursor* a, const TermCursor* b) { return a->doc < b->doc; });
+    };
+
+    while (!order.empty()) {
         if (_shared_threshold != nullptr) {
             // Concurrent scorers may have raised the accumulator meanwhile; a stale read only prunes less.
             threshold = std::max(threshold, _shared_threshold->load(std::memory_order_relaxed));
         }
 
-        // Level 1 -- pivot: first cursor whose term-bound prefix sum could still beat the threshold.
-        // Term bounds are strictly positive (RSJ+1 idf > 0, block max_tf >= 1), so with no threshold
-        // yet (empty heap, no seed) every cursor is admitted and the heap fills in pure DAAT order.
+        // Level 1 follows BMW: whole-list term bounds select a candidate pivot, then Level 2 applies
+        // block-local bounds. Replacing these global bounds with the cursors' current-block bounds is
+        // unsafe: a low-scoring current block can precede a later high-scoring block. With no threshold
+        // yet (empty heap, no seed), every cursor is admitted and the heap fills in pure DAAT order.
         size_t p = order.size();
         double acc = 0.0;
         for (size_t i = 0; i < order.size(); ++i) {
@@ -189,7 +237,7 @@ Status WandScorer::run(std::unordered_map<rowid_t, double>* id2score) {
             uint32_t min_block_last = UINT32_MAX;
             for (size_t i = 0; i <= pset; ++i) {
                 uint32_t bl;
-                block_sum += _block_ub_at(*order[i], pivot, &bl);
+                block_sum += _block_ub_at(order[i], pivot, &bl);
                 min_block_last = std::min(min_block_last, bl);
             }
             if (block_sum <= threshold) {
@@ -201,8 +249,8 @@ Status WandScorer::run(std::unordered_map<rowid_t, double>* id2score) {
                 if (pset + 1 < order.size()) {
                     boundary = std::min(boundary, order[pset + 1]->doc);
                 }
-                // Advance ONE pivot-set cursor (largest term bound frees the most bound mass); the
-                // rest stay put so docs holding other terms remain discoverable as future pivots.
+                // Move one pivot-set cursor across the dead range. Reinsert that cursor directly so
+                // the rest of the already-sorted order remains intact.
                 size_t victim = 0;
                 for (size_t i = 1; i <= pset; ++i) {
                     if (order[i]->ub > order[victim]->ub) {
@@ -210,19 +258,19 @@ Status WandScorer::run(std::unordered_map<rowid_t, double>* id2score) {
                     }
                 }
                 RETURN_IF_ERROR(_next_geq(order[victim], boundary));
+                restore_advanced_cursor(victim);
                 continue;
             }
         }
 
         if (order[0]->doc == pivot) {
-            // Cursors aligned on pivot: score it exactly (the only place a block gets decoded).
-            if (_candidates == nullptr || _candidates->contains(pivot)) {
+            // Cursors aligned on pivot: score it exactly.
+            if (_candidates.contains(pivot)) {
                 ASSIGN_OR_RETURN(uint32_t dl, _freqs->doc_len(pivot));
                 double score = 0.0;
-                for (const TermCursor* c : order) {
-                    if (c->doc == pivot) {
-                        score += bm25_term(c->it->tfs()[c->idx], dl, c->idf, _stats);
-                    }
+                for (size_t i = 0; i <= pset; ++i) {
+                    const TermCursor* cursor = order[i];
+                    score += bm25_term(cursor->it->tfs()[cursor->idx], dl, cursor->idf, _stats);
                 }
                 ++_docs_scored;
                 // Admission to the heap requires strictly beating the threshold (not just the heap
@@ -244,14 +292,15 @@ Status WandScorer::run(std::unordered_map<rowid_t, double>* id2score) {
                     }
                 }
             }
-            for (TermCursor* c : order) {
-                if (c->doc == pivot) {
-                    RETURN_IF_ERROR(_advance(c));
-                }
+            const size_t advanced = pset + 1;
+            for (size_t i = 0; i < advanced; ++i) {
+                RETURN_IF_ERROR(_advance(order[i]));
             }
+            restore_advanced_prefix(advanced);
         } else {
             // Not aligned yet: jump the lagging cursor with the smallest docid up to the pivot.
             RETURN_IF_ERROR(_next_geq(order[0], pivot));
+            restore_advanced_prefix(1);
         }
     }
 

@@ -404,8 +404,8 @@ private:
     };
 
     // BM25 relevance-scoring context, only created when a BM25 search option is present. Phase-2:
-    // after the MATCH filter fixes the survivor rowids, ScoreAllScorer fills id2score_map, then the
-    // __bm25_score column is emitted per output chunk.
+    // after the MATCH filter fixes the survivor rowids, the selected scorer fills id2score_map, then
+    // the __bm25_score column is emitted per output chunk.
     struct BM25Context {
         std::unordered_map<rowid_t, double> id2score_map;
         BM25Stats stats;               // tablet-local Phase-1 result (N/avgdl/idf/terms), injected via read opts
@@ -3556,7 +3556,6 @@ Status SegmentIterator::_apply_bm25_scoring() {
     // survivors in before _rewrite_predicates (so WAND ranks live rows only and the LIMIT holds real
     // survivors), and PK delete vectors were applied earlier. A score-all query (topk == 0) does not narrow,
     // so it needs no pre-apply -- the read loop's per-chunk filter still removes deleted rows.
-    roaring::Roaring candidates = range2roaring(_scan_range);
     // Top-k pushdown also requires the MATCH filter to have narrowed _scan_range. With enable_gin_filter off,
     // _apply_inverted_index skipped the index and left MATCH residual (evaluated per-chunk), so a MATCH_ALL row
     // matching only some terms could take a top-k slot and then be dropped -> under-return. Fall back to score-
@@ -3567,12 +3566,15 @@ Status SegmentIterator::_apply_bm25_scoring() {
     // projected score() without LIMIT, or the gin-off fallback): plain TAAT scorer over every matched row.
     // Both are BM25Scorer::run() and return identical scores.
     std::unique_ptr<BM25Scorer> scorer;
+    roaring::Roaring candidates;
     if (topk_pushdown) {
         // shared_threshold lets each segment seed its WAND pruning bound from earlier segments' k-th best
         // (one atomic per tablet, created in Phase-1); null falls back to per-segment pruning.
         scorer = std::make_unique<WandScorer>(_bm25_ctx->stats, freqs.get(), index_opts, std::move(ordinals),
-                                              &candidates, _bm25_ctx->topk, _bm25_ctx->stats.shared_threshold.get());
+                                              BM25CandidateView(&_scan_range), _bm25_ctx->topk,
+                                              _bm25_ctx->stats.shared_threshold.get());
     } else {
+        candidates = range2roaring(_scan_range);
         // topk=0: ScoreAllScorer trims id2score to _topk when _topk>0, which would re-drop real MATCH_ALL rows
         // in the gin-off fallback -- pass 0 so every matched row is scored and the coordinator TopN takes the limit.
         scorer = std::make_unique<ScoreAllScorer>(_bm25_ctx->stats, freqs.get(), index_opts, std::move(ordinals),
@@ -3595,19 +3597,27 @@ Status SegmentIterator::_apply_bm25_scoring() {
     // filter off _apply_inverted_index skipped the index, so the range still holds rows carrying none of the
     // query terms -- they were never scoring candidates, and counting them would show a pruning ratio on the
     // one path that prunes nothing. Gin-off always takes score-all, whose docs_scored is that exact set.
+    // The WAND path reads the candidates straight off _scan_range instead of materializing the bitmap, so
+    // take the count from the range itself -- span_size() sums the range sizes, i.e. the cardinality the
+    // bitmap would have had, and the top-k narrowing below has not run yet.
     _opts.stats->bm25_candidate_rows +=
-            _opts.enable_gin_filter ? static_cast<int64_t>(candidates.cardinality()) : scored_rows;
+            _opts.enable_gin_filter
+                    ? static_cast<int64_t>(topk_pushdown ? _scan_range.span_size() : candidates.cardinality())
+                    : scored_rows;
     RETURN_IF_ERROR(run_st);
 
     // Top-k pushdown: the scorer kept only this segment's top-k rows by score, so narrow _scan_range to
     // those rows -- the scan reads/emits only the top-k, not every matched row (the coordinator TopN still
-    // merges across segments). candidates came from the delete-narrowed _scan_range, so all are live.
+    // merges across segments). The candidate view came from the delete-narrowed _scan_range, so all are live.
     if (topk_pushdown) {
         roaring::Roaring topk_ids;
         for (const auto& kv : _bm25_ctx->id2score_map) {
             topk_ids.add(kv.first);
         }
-        _scan_range = _scan_range.intersection(roaring2range(topk_ids));
+        // Assign, don't intersect: every scored row came from _scan_range (both the WAND candidate view and
+        // the score-all bitmap are derived from it), so intersecting is an identity that still costs
+        // O(scan_ranges * topk_ranges) -- up to 8.4e4 x 96 per segment on a 1M-doc corpus.
+        _scan_range = roaring2range(topk_ids);
     }
     return Status::OK();
 }

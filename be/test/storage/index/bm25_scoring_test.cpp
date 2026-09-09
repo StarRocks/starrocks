@@ -45,6 +45,7 @@
 #include "storage/rowset/options.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
+#include "storage_primitive/roaring2range.h"
 
 namespace starrocks {
 
@@ -393,6 +394,32 @@ TEST_F(Bm25ScoringTest, tablet_local_rejects_docs_only_segment) {
     EXPECT_FALSE(st.ok());
 }
 
+TEST_F(Bm25ScoringTest, candidate_view_preserves_sparse_range_membership) {
+    BM25CandidateView unrestricted(nullptr);
+    EXPECT_FALSE(unrestricted.empty());
+    EXPECT_TRUE(unrestricted.contains(0));
+    EXPECT_TRUE(unrestricted.contains(UINT32_MAX));
+
+    SparseRange<> ranges;
+    ranges.add(Range<>(1, 3));
+    ranges.add(Range<>(5, 7));
+    BM25CandidateView sorted(&ranges);
+    EXPECT_FALSE(sorted.empty());
+    EXPECT_FALSE(sorted.contains(0));
+    EXPECT_TRUE(sorted.contains(1));
+    EXPECT_TRUE(sorted.contains(6));
+    EXPECT_FALSE(sorted.contains(7));
+
+    ranges.set_sorted(false);
+    BM25CandidateView unsorted(&ranges);
+    EXPECT_TRUE(unsorted.contains(2));
+    EXPECT_TRUE(unsorted.contains(5));
+    EXPECT_FALSE(unsorted.contains(4));
+
+    SparseRange<> empty;
+    EXPECT_TRUE(BM25CandidateView(&empty).empty());
+}
+
 // ---- WandScorer: block-max WAND top-k equals ScoreAll's top-k, every returned score exact ----
 
 TEST_F(Bm25ScoringTest, wand_matches_score_all_topk) {
@@ -486,8 +513,9 @@ TEST_F(Bm25ScoringTest, wand_prunes_below_threshold_docs) {
 
 TEST_F(Bm25ScoringTest, wand_block_check_skips_outlier_term) {
     // 299 docs of "alpha" (tf=1, dl=1); the last doc repeats alpha x50. The outlier lifts the term's
-    // GLOBAL bound above any threshold (a classic-WAND regression would decode and score all 300),
-    // but blocks 0/1 keep local max_tf=1, so the block-max recheck skips them without decoding.
+    // GLOBAL bound above any threshold. Level 1 must retain that whole-list bound or it could stop in
+    // a low-scoring current block and miss the later outlier. Blocks 0/1 keep local max_tf=1, so the
+    // Level-2 block-max recheck skips their postings without scoring them.
     std::vector<Row> rows;
     for (int i = 0; i < 299; ++i) {
         rows.push_back({"alpha"});
@@ -526,6 +554,49 @@ TEST_F(Bm25ScoringTest, wand_block_check_skips_outlier_term) {
     EXPECT_LE(wand.docs_scored(), 50);
 }
 
+TEST_F(Bm25ScoringTest, wand_reuses_block_bounds_across_dead_ranges) {
+    // Two dense terms have low-scoring first blocks and a shared outlier in the final block. Their
+    // global term bounds stay high, forcing Level 1 to keep producing pivots, while the combined local
+    // bound proves blocks 0 and 1 non-competitive. The scorer must cross those dead ranges one cursor
+    // at a time and still return the exact top-1, scoring only a fraction of the 300 rows.
+    std::vector<Row> rows;
+    rows.reserve(300);
+    for (int i = 0; i < 299; ++i) {
+        rows.push_back({"alpha beta"});
+    }
+    std::string outlier;
+    for (int i = 0; i < 50; ++i) {
+        outlier += "alpha beta ";
+    }
+    rows.push_back({std::move(outlier)});
+    auto seg = open_segment(kTestDir + "/wand_bulk_skip", INVERTED_INDEX_PARSER_ENGLISH, rows);
+
+    std::vector<Slice> terms{Slice("alpha"), Slice("beta")};
+    std::vector<int64_t> ords;
+    ASSERT_OK(seg->br()->lookup_term_ordinals(*seg->opts, terms, &ords));
+    std::vector<Bm25SegmentHandle> handles{{seg->br(), seg->num_rows, seg->opts.get()}};
+    TabletLocalProvider provider(std::move(handles), 1.2, 0.75);
+    ASSIGN_OR_ABORT(BM25Stats s, provider.get_stats(terms));
+
+    ASSIGN_OR_ABORT(auto freqs_ref, seg->br()->new_freqs_iterator(*seg->opts));
+    std::unordered_map<rowid_t, double> full;
+    ScoreAllScorer ref(s, freqs_ref.get(), *seg->opts, ords, /*candidates=*/nullptr, /*topk=*/0);
+    ASSERT_OK(ref.run(&full));
+    ASSERT_EQ(300u, full.size());
+    ASSERT_GT(full[299], full[0]);
+
+    std::atomic<double> shared(full[0]);
+    ASSIGN_OR_ABORT(auto freqs_wand, seg->br()->new_freqs_iterator(*seg->opts));
+    std::unordered_map<rowid_t, double> got;
+    WandScorer wand(s, freqs_wand.get(), *seg->opts, ords, /*candidates=*/nullptr, /*topk=*/1, &shared);
+    ASSERT_OK(wand.run(&got));
+
+    ASSERT_EQ(1u, got.size());
+    ASSERT_TRUE(got.count(299));
+    EXPECT_NEAR(full[299], got[299], 1e-9);
+    EXPECT_LE(wand.docs_scored(), 44);
+}
+
 TEST_F(Bm25ScoringTest, wand_respects_candidates_absent_and_dup_terms) {
     auto seg = open_segment(kTestDir + "/wand_cand", INVERTED_INDEX_PARSER_ENGLISH,
                             {{"apple banana apple"},
@@ -553,13 +624,18 @@ TEST_F(Bm25ScoringTest, wand_respects_candidates_absent_and_dup_terms) {
     candidates.add(0);
     candidates.add(1);
     candidates.add(3);
+    // WAND is only ever handed the scan's SparseRange, while ScoreAll takes the bitmap; both encode the
+    // same candidate set here, so the two scorers stay comparable.
+    SparseRange<> candidate_ranges;
+    candidate_ranges.add(Range<>(0, 2));
+    candidate_ranges.add(Range<>(3, 4));
 
     std::unordered_map<rowid_t, double> full;
     ScoreAllScorer ref(s, freqs_ref.get(), *seg->opts, ords, &candidates, /*topk=*/0);
     ASSERT_OK(ref.run(&full));
 
     std::unordered_map<rowid_t, double> got;
-    WandScorer wand(s, freqs_wand.get(), *seg->opts, ords, &candidates, /*topk=*/2);
+    WandScorer wand(s, freqs_wand.get(), *seg->opts, ords, &candidate_ranges, /*topk=*/2);
     ASSERT_OK(wand.run(&got));
 
     ASSERT_EQ(2u, got.size());
@@ -662,63 +738,85 @@ TEST_F(Bm25ScoringTest, wand_shared_threshold_carries_across_scorers) {
 }
 
 TEST_F(Bm25ScoringTest, wand_randomized_matches_score_all) {
-    // Fixed-seed random corpus + random candidates, checked at several k: differential testing is the
-    // widest net for silent-ranking bugs (e.g. a missing boundary clamp) that targeted fixtures miss.
-    const char* kVocab[] = {"alpha", "bravo", "carol", "delta", "eagle", "fox",  "golf",   "hotel", "india",  "julia",
-                            "kilo",  "lima",  "mike",  "nancy", "oscar", "papa", "quebec", "romeo", "sierra", "tango"};
-    std::mt19937 rng(12345);
-    std::uniform_int_distribution<int> word_pick(0, 19);
-    std::uniform_int_distribution<int> len_pick(1, 8);
+    // Fixed-seed random corpus crosses posting and window-sized rowid boundaries. Duplicate/absent
+    // terms, four candidate densities, three BM25 parameter corners, and three K values exercise the
+    // block-bound cache and incremental-order invariants against ScoreAll over a broad state space.
+    const char* kVocab[] = {"alpha", "bravo", "carol", "delta", "eagle", "fox",
+                            "golf",  "hotel", "india", "julia", "kilo",  "lima"};
+    std::mt19937 rng(8675309);
+    std::uniform_int_distribution<int> word_pick(0, 11);
+    std::uniform_int_distribution<int> len_pick(1, 10);
     std::vector<Row> rows;
-    for (int i = 0; i < 400; ++i) {
+    rows.reserve(4300);
+    for (int i = 0; i < 4300; ++i) {
         std::string doc;
         const int len = len_pick(rng);
         for (int j = 0; j < len; ++j) {
-            if (j > 0) {
+            if (!doc.empty()) {
                 doc += ' ';
             }
             doc += kVocab[word_pick(rng)];
         }
-        rows.push_back({doc});
+        rows.push_back({std::move(doc)});
     }
     auto seg = open_segment(kTestDir + "/wand_rand", INVERTED_INDEX_PARSER_ENGLISH, rows);
 
-    std::vector<Slice> terms{Slice("alpha"), Slice("kilo"), Slice("tango")};
+    std::vector<Slice> terms{Slice("alpha"), Slice("carol"), Slice("eagle"), Slice("golf"),
+                             Slice("india"), Slice("kilo"),  Slice("alpha"), Slice("missing")};
     std::vector<int64_t> ords;
     ASSERT_OK(seg->br()->lookup_term_ordinals(*seg->opts, terms, &ords));
+    ASSERT_EQ(-1, ords.back());
 
-    std::vector<Bm25SegmentHandle> handles;
-    handles.push_back({seg->br(), seg->num_rows, seg->opts.get()});
+    std::vector<Bm25SegmentHandle> handles{{seg->br(), seg->num_rows, seg->opts.get()}};
     TabletLocalProvider provider(std::move(handles), 1.2, 0.75);
-    ASSIGN_OR_ABORT(BM25Stats s, provider.get_stats(terms));
+    ASSIGN_OR_ABORT(BM25Stats base_stats, provider.get_stats(terms));
 
-    roaring::Roaring candidates;
     std::uniform_real_distribution<double> coin(0.0, 1.0);
-    for (uint32_t r = 0; r < 400; ++r) {
-        if (coin(rng) < 0.7) {
-            candidates.add(r);
-        }
+    std::vector<double> candidate_draws;
+    candidate_draws.reserve(rows.size());
+    for (uint32_t row = 0; row < rows.size(); ++row) {
+        candidate_draws.push_back(coin(rng));
     }
 
-    for (int64_t k : {int64_t(1), int64_t(7), int64_t(100)}) {
-        ASSIGN_OR_ABORT(auto freqs_ref, seg->br()->new_freqs_iterator(*seg->opts));
-        ASSIGN_OR_ABORT(auto freqs_wand, seg->br()->new_freqs_iterator(*seg->opts));
-        std::unordered_map<rowid_t, double> full;
-        ScoreAllScorer ref(s, freqs_ref.get(), *seg->opts, ords, &candidates, /*topk=*/0);
-        ASSERT_OK(ref.run(&full));
-        std::unordered_map<rowid_t, double> got;
-        WandScorer wand(s, freqs_wand.get(), *seg->opts, ords, &candidates, k);
-        ASSERT_OK(wand.run(&got));
-
-        auto expect = top_scores(full, k);
-        auto actual = top_scores(got, k);
-        ASSERT_EQ(expect.size(), actual.size()) << "k=" << k;
-        for (size_t i = 0; i < expect.size(); ++i) {
-            EXPECT_NEAR(expect[i], actual[i], 1e-9) << "k=" << k << " rank=" << i;
+    for (double density : {0.01, 0.10, 0.70, 1.00}) {
+        roaring::Roaring candidates;
+        for (uint32_t row = 0; row < rows.size(); ++row) {
+            if (candidate_draws[row] < density) {
+                candidates.add(row);
+            }
         }
-        for (const auto& [id, score] : got) {
-            ASSERT_TRUE(full.count(id)) << "k=" << k;
-            EXPECT_NEAR(full[id], score, 1e-9) << "k=" << k;
+        // SegmentIterator only ever hands WAND the scan's SparseRange through BM25CandidateView, so the
+        // differential runs over that representation; the reference ScoreAllScorer keeps the bitmap, which
+        // also pins the two encodings to the same candidate set.
+        const SparseRange<> candidate_ranges = roaring2range(candidates);
+        for (const auto& [k1, b] : {std::pair{0.0, 0.0}, std::pair{1.2, 0.75}, std::pair{2.0, 1.0}}) {
+            BM25Stats s = base_stats;
+            s.k1 = k1;
+            s.b = b;
+            for (int64_t k : {int64_t(1), int64_t(7), int64_t(100)}) {
+                ASSIGN_OR_ABORT(auto freqs_ref, seg->br()->new_freqs_iterator(*seg->opts));
+                std::unordered_map<rowid_t, double> full;
+                ScoreAllScorer ref(s, freqs_ref.get(), *seg->opts, ords, &candidates, /*topk=*/0);
+                ASSERT_OK(ref.run(&full));
+
+                ASSIGN_OR_ABORT(auto freqs_wand, seg->br()->new_freqs_iterator(*seg->opts));
+                std::unordered_map<rowid_t, double> got;
+                WandScorer wand(s, freqs_wand.get(), *seg->opts, ords, BM25CandidateView(&candidate_ranges), k);
+                ASSERT_OK(wand.run(&got));
+
+                auto expect = top_scores(full, k);
+                auto actual = top_scores(got, k);
+                ASSERT_EQ(expect.size(), actual.size())
+                        << "density=" << density << " k1=" << k1 << " b=" << b << " k=" << k;
+                for (size_t i = 0; i < expect.size(); ++i) {
+                    EXPECT_NEAR(expect[i], actual[i], 1e-9)
+                            << "density=" << density << " k1=" << k1 << " b=" << b << " k=" << k << " rank=" << i;
+                }
+                for (const auto& [id, score] : got) {
+                    ASSERT_TRUE(full.count(id));
+                    EXPECT_NEAR(full[id], score, 1e-9) << "density=" << density << " row=" << id;
+                }
+            }
         }
     }
 }

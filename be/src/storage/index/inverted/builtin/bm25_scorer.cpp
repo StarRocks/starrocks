@@ -26,6 +26,36 @@
 
 namespace starrocks {
 
+bool BM25CandidateView::contains(rowid_t docid) const {
+    if (_ranges == nullptr) {
+        return true;
+    }
+    if (!_ranges->is_sorted()) {
+        for (size_t i = 0; i < _ranges->size(); ++i) {
+            if ((*_ranges)[i].begin() <= docid && docid < (*_ranges)[i].end()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    size_t lo = 0;
+    size_t hi = _ranges->size();
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        if ((*_ranges)[mid].end() <= docid) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < _ranges->size() && (*_ranges)[lo].begin() <= docid;
+}
+
+bool BM25CandidateView::empty() const {
+    return _ranges != nullptr && _ranges->empty();
+}
+
 ScoreAllScorer::ScoreAllScorer(const BM25Stats& stats, FreqsIterator* freqs, const IndexReadOptions& read_opts,
                                std::vector<int64_t> term_ords, const roaring::Roaring* candidates, int64_t topk)
         : _stats(stats),
