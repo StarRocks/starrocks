@@ -21,6 +21,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -58,6 +59,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/storage_metrics.h"
+#include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/schema_helper.h"
 
@@ -162,22 +164,20 @@ void union_delvec(DelVector* target, DelVector& source, int64_t version) {
     target->union_with(version, source.roaring() != nullptr ? *source.roaring() : empty);
 }
 
-// Duplicate detection for merge: two rowsets are the same logical rowset across
-// split siblings iff they carry the same global uid. The uid is minted once at
-// rowset creation and carried verbatim by CopyFrom across SPLIT and cross-publish,
-// so siblings descended from one logical rowset (split-pruned, or a concurrent
-// write cross-published to every old tablet) compare equal, while an independently
-// produced rowset (e.g. a post-split local compaction output) carries a fresh uid
-// and never aliases. A rowset without a valid uid is never treated as a duplicate.
-bool is_duplicate_rowset(const RowsetMetadataPB& a, const RowsetMetadataPB& b) {
-    return tablet_reshard_helper::same_rowset_uid(a, b);
-}
+enum class RowsetOccurrenceRole { CONTRIBUTOR, EXACT_DUPLICATE };
 
 struct RowsetEmissionDecision {
     int canonical_index = -1;
     bool emit = false;
-    bool discard = false;
+    RowsetOccurrenceRole role = RowsetOccurrenceRole::CONTRIBUTOR;
     bool non_pk_skip_dedup_fired = false;
+};
+
+struct RowsetOccurrenceRef {
+    size_t context_index;
+    int rowset_index;
+    const RowsetMetadataPB* rowset;
+    TabletRangePB effective_range;
 };
 
 using RowsetEmissionPlan = std::vector<std::vector<RowsetEmissionDecision>>;
@@ -297,6 +297,7 @@ struct CanonicalAllocationPlan {
     size_t selected_context_index = 0;
     RowsetMetadataPB source_form_rowset;
     std::optional<int64_t> schema_id;
+    std::optional<uint32_t> recovery_target;
     std::vector<TabletRangePB> contributor_ranges;
 };
 
@@ -309,111 +310,178 @@ struct TabletMergeAllocationPlan {
 
 DEFINE_FAIL_POINT(tablet_merge_before_delete_predicate_range);
 
-struct PlannedCanonicalRowset {
-    const RowsetMetadataPB* rowset = nullptr;
-    TabletRangePB range;
-    int output_index = -1;
-};
-
-// Plan the exact rowsets that materialization will emit in (version, old-tablet-index)
-// order. This is the single source of truth for duplicate decisions: allocation
-// planning reconciles sibling occurrences into canonical atoms and occurrence
-// aliases, then materialization uses the recorded canonical index directly.
-StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<TabletMergeContext>& merge_contexts,
-                                                        bool discard_empty_rowsets) {
-    RowsetEmissionPlan plan(merge_contexts.size());
-    std::vector<int> current_indices(merge_contexts.size(), 0);
-    for (size_t i = 0; i < merge_contexts.size(); ++i) {
-        plan[i].resize(merge_contexts[i].metadata()->rowsets_size());
-    }
-
-    const bool is_pk = is_primary_key(*merge_contexts.front().metadata());
-    int64_t current_version = -1;
-    int next_output_index = 0;
-    std::vector<PlannedCanonicalRowset> canonicals;
-
-    for (;;) {
-        int source_index = -1;
-        int64_t min_version = std::numeric_limits<int64_t>::max();
-        for (int i = 0; i < static_cast<int>(merge_contexts.size()); ++i) {
-            if (current_indices[i] >= merge_contexts[i].metadata()->rowsets_size()) continue;
-            const int64_t version = merge_contexts[i].metadata()->rowsets(current_indices[i]).version();
-            if (version < min_version) {
-                min_version = version;
-                source_index = i;
-            }
-        }
-        if (source_index < 0) break;
-
-        const int rowset_index = current_indices[source_index]++;
-        const auto& source_metadata = *merge_contexts[source_index].metadata();
-        const auto& rowset = source_metadata.rowsets(rowset_index);
-        if (discard_empty_rowsets && rowset.segment_metas_size() == 0 && rowset.del_files_size() == 0 &&
-            !rowset.has_delete_predicate()) {
-            plan[source_index][rowset_index].discard = true;
-            continue;
-        }
-        if (rowset.version() != current_version) {
-            current_version = rowset.version();
-            canonicals.clear();
-        }
-
-        // Search the current version's canonical rowsets. Delete predicates dedup
-        // by version, normal rowsets by uid; non-PK same-uid siblings dedup only
-        // when their ranges are contiguous, so the canonical range cannot span a
-        // gap left by a compacted sibling.
-        int canonical_plan_index = -1;
-        bool non_pk_skip_dedup_fired = false;
-        for (int i = 0; i < static_cast<int>(canonicals.size()); ++i) {
-            if (rowset.has_delete_predicate()) {
-                if (canonicals[i].rowset->has_delete_predicate()) {
-                    canonical_plan_index = i;
-                    break;
-                }
-                continue;
-            }
-            if (!is_duplicate_rowset(rowset, *canonicals[i].rowset)) continue;
-
-            const auto& incoming_range =
-                    tablet_reshard_helper::effective_old_tablet_local_range(rowset, source_metadata);
-            if (is_pk || tablet_reshard_helper::ranges_are_contiguous(canonicals[i].range, incoming_range)) {
-                canonical_plan_index = i;
-                if (!is_pk) {
-                    ASSIGN_OR_RETURN(canonicals[i].range,
-                                     tablet_reshard_helper::union_range(canonicals[i].range, incoming_range));
-                }
-                break;
-            }
-            non_pk_skip_dedup_fired = true;
-        }
-
-        auto& decision = plan[source_index][rowset_index];
-        if (canonical_plan_index >= 0) {
-            decision.canonical_index = canonicals[canonical_plan_index].output_index;
-            continue;
-        }
-
-        decision.emit = true;
-        decision.canonical_index = next_output_index++;
-        decision.non_pk_skip_dedup_fired = non_pk_skip_dedup_fired;
-        PlannedCanonicalRowset canonical;
-        canonical.rowset = &rowset;
-        canonical.output_index = decision.canonical_index;
-        RowsetMetadataPB canonical_copy;
-        canonical_copy.CopyFrom(rowset);
-        RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&canonical_copy, source_metadata.range()));
-        canonical.range.CopyFrom(canonical_copy.range());
-        canonicals.emplace_back(std::move(canonical));
-    }
-
-    return plan;
-}
+Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* occurrence);
+Status reconcile_duplicate_dels(CanonicalAllocationPlan* canonical, const RowsetMetadataPB& occurrence);
+bool same_range(const TabletRange& a, const TabletRange& b);
 
 std::optional<int64_t> rowset_schema_id(const TabletMergeContext& context, uint32_t rowset_id) {
     const auto& mapping = context.metadata()->rowset_to_schema();
     auto iter = mapping.find(rowset_id);
     if (iter == mapping.end()) return std::nullopt;
     return iter->second;
+}
+
+std::string stable_rowset_mode(RowsetMetadataPB rowset) {
+    rowset.clear_id();
+    rowset.clear_overlapped();
+    rowset.clear_deprecated_segments();
+    rowset.clear_deprecated_segment_size();
+    rowset.clear_deprecated_segment_encryption_metas();
+    rowset.clear_deprecated_bundle_file_offsets();
+    rowset.clear_deprecated_shared_segments();
+    rowset.clear_num_rows();
+    rowset.clear_data_size();
+    rowset.clear_num_dels();
+    rowset.clear_segment_metas();
+    rowset.clear_range();
+    rowset.clear_del_files();
+    rowset.clear_max_compact_input_rowset_id();
+    return rowset.SerializeAsString();
+}
+
+Status validate_complete_segment_set(const RowsetMetadataPB& first, const RowsetMetadataPB& other) {
+    if (first.segment_metas_size() != other.segment_metas_size()) {
+        return Status::Corruption("tablet merge rowsets have different complete segment sets");
+    }
+    // Preflight already requires explicit, strictly increasing indices. Compare the
+    // entire immutable declaration at each index; only ownership may differ.
+    for (int i = 0; i < first.segment_metas_size(); ++i) {
+        SegmentMetadataPB a(first.segment_metas(i));
+        SegmentMetadataPB b(other.segment_metas(i));
+        a.clear_shared();
+        b.clear_shared();
+        if (a.SerializeAsString() != b.SerializeAsString()) {
+            return Status::Corruption("tablet merge rowsets have conflicting complete segment declarations");
+        }
+    }
+    return Status::OK();
+}
+
+Status validate_exact_duplicate(const RowsetMetadataPB& first, const RowsetMetadataPB& other) {
+    if (first.num_rows() != other.num_rows() || first.data_size() != other.data_size() ||
+        first.num_dels() != other.num_dels() ||
+        first.has_max_compact_input_rowset_id() != other.has_max_compact_input_rowset_id() ||
+        first.segment_metas_size() != other.segment_metas_size()) {
+        return Status::Corruption("tablet merge equal-range rowsets disagree on stats, cursor or complete segment set");
+    }
+    CanonicalAllocationPlan copy;
+    copy.source_form_rowset.CopyFrom(first);
+    RETURN_IF_ERROR(validate_complete_segment_set(first, other));
+    return reconcile_duplicate_dels(&copy, other);
+}
+
+// Decide every occurrence globally before allocating RSSIDs or performing I/O.
+// Array order is not a version-order guarantee (compaction can make it nonmonotonic).
+StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<TabletMergeContext>& merge_contexts) {
+    RowsetEmissionPlan plan(merge_contexts.size());
+    using GroupKey = std::tuple<int, int64_t, int64_t>;
+    std::map<GroupKey, std::vector<RowsetOccurrenceRef>> groups;
+    for (size_t i = 0; i < merge_contexts.size(); ++i) {
+        const auto& source = *merge_contexts[i].metadata();
+        plan[i].resize(source.rowsets_size());
+        for (int j = 0; j < source.rowsets_size(); ++j) {
+            const auto& rowset = source.rowsets(j);
+            auto range = tablet_reshard_helper::effective_old_tablet_local_range(rowset, source);
+            const auto key = rowset.has_delete_predicate() ? GroupKey{1, rowset.version(), 0}
+                                                           : GroupKey{0, rowset.uid().hi(), rowset.uid().lo()};
+            groups[key].push_back({i, j, &rowset, std::move(range)});
+        }
+    }
+    const bool is_pk = is_primary_key(*merge_contexts.front().metadata());
+    using CanonicalOrderKey = std::tuple<int64_t, int, int64_t, int64_t, std::string, int64_t>;
+    std::map<CanonicalOrderKey, std::vector<RowsetOccurrenceRef>> canonicals;
+    for (auto& [key, occurrences] : groups) {
+        if (!occurrences.front().rowset->has_delete_predicate()) {
+            const auto& first = occurrences.front();
+            const auto mode = stable_rowset_mode(*first.rowset);
+            const auto schema = rowset_schema_id(merge_contexts[first.context_index], first.rowset->id());
+            for (const auto& occurrence : occurrences) {
+                if (stable_rowset_mode(*occurrence.rowset) != mode ||
+                    occurrence.rowset->has_max_compact_input_rowset_id() !=
+                            first.rowset->has_max_compact_input_rowset_id() ||
+                    occurrence.rowset->del_files().empty() != first.rowset->del_files().empty() ||
+                    rowset_schema_id(merge_contexts[occurrence.context_index], occurrence.rowset->id()) != schema) {
+                    return Status::Corruption("tablet merge same-uid rowsets have conflicting canonical modes");
+                }
+                if (!first.rowset->del_files().empty()) {
+                    RETURN_IF_ERROR(validate_complete_segment_set(*first.rowset, *occurrence.rowset));
+                }
+            }
+        }
+        auto occurrence_key = [&](const auto& ref) {
+            return std::tuple{ref.effective_range.lower_bound().SerializeAsString(),
+                              ref.effective_range.upper_bound().SerializeAsString(),
+                              ref.effective_range.SerializeAsString(),
+                              merge_contexts[ref.context_index].metadata()->id(), ref.rowset_index};
+        };
+        std::sort(occurrences.begin(), occurrences.end(),
+                  [&](const auto& a, const auto& b) { return occurrence_key(a) < occurrence_key(b); });
+        // Components use boundary adjacency, not serialized-byte ordering, which
+        // need not be the typed ordering of the range keys.
+        std::vector<size_t> components(occurrences.size());
+        for (size_t i = 0; i < components.size(); ++i) components[i] = i;
+        auto root = [&](size_t i) {
+            while (components[i] != i) i = components[i];
+            return i;
+        };
+        for (size_t i = 0; i < occurrences.size(); ++i) {
+            const auto& incoming = occurrences[i];
+            for (size_t j = 0; j < i; ++j) {
+                const auto& earlier = occurrences[j];
+                bool adjacent = true;
+                if (!incoming.rowset->has_delete_predicate()) {
+                    TabletRange incoming_range;
+                    TabletRange earlier_range;
+                    RETURN_IF_ERROR(incoming_range.from_proto(incoming.effective_range));
+                    RETURN_IF_ERROR(earlier_range.from_proto(earlier.effective_range));
+                    if (same_range(incoming_range, earlier_range)) {
+                        RETURN_IF_ERROR(validate_exact_duplicate(*earlier.rowset, *incoming.rowset));
+                        plan[incoming.context_index][incoming.rowset_index].role =
+                                RowsetOccurrenceRole::EXACT_DUPLICATE;
+                    } else {
+                        ASSIGN_OR_RETURN(auto intersection, earlier_range.intersect(incoming_range));
+                        if (!intersection.is_empty()) {
+                            return Status::Corruption("tablet merge same-uid rowset ranges strictly overlap");
+                        }
+                    }
+                    adjacent = is_pk || tablet_reshard_helper::ranges_are_contiguous(earlier.effective_range,
+                                                                                     incoming.effective_range);
+                }
+                if (adjacent) components[root(i)] = root(j);
+            }
+        }
+        std::map<size_t, std::vector<RowsetOccurrenceRef>> parts;
+        for (size_t i = 0; i < occurrences.size(); ++i) parts[root(i)].emplace_back(occurrences[i]);
+        bool skipped = false;
+        for (auto& [component, refs] : parts) {
+            const auto& first = refs.front();
+            TabletRangePB range = first.effective_range;
+            for (size_t i = 1; i < refs.size(); ++i) {
+                ASSIGN_OR_RETURN(range, tablet_reshard_helper::union_range(range, refs[i].effective_range));
+            }
+            const auto& rowset = *first.rowset;
+            const CanonicalOrderKey order{rowset.version(),
+                                          std::get<0>(key),
+                                          std::get<1>(key),
+                                          std::get<2>(key),
+                                          range.lower_bound().SerializeAsString(),
+                                          merge_contexts[first.context_index].metadata()->id()};
+            plan[first.context_index][first.rowset_index].non_pk_skip_dedup_fired = skipped;
+            skipped = true;
+            canonicals.emplace(order, std::move(refs));
+        }
+    }
+    int output_index = 0;
+    for (const auto& [key, refs] : canonicals) {
+        for (size_t i = 0; i < refs.size(); ++i) {
+            auto& decision = plan[refs[i].context_index][refs[i].rowset_index];
+            decision.canonical_index = output_index;
+            decision.emit = i == 0;
+        }
+        ++output_index;
+    }
+
+    return plan;
 }
 
 std::string normalized_physical_base_key(const SegmentMetadataPB& segment) {
@@ -596,6 +664,100 @@ Status validate_del_replay_span(uint32_t origin, uint32_t offset) {
     return Status::OK();
 }
 
+Status validate_del_coordinate(const RowsetMetadataPB& containing_rowset, const DelfileWithRowsetId& del) {
+    const uint32_t offset = del.has_op_offset() ? del.op_offset() : get_max_segment_idx(containing_rowset);
+    RETURN_IF_ERROR(validate_del_replay_span(del.origin_rowset_id(), offset));
+    if (del.origin_rowset_id() != containing_rowset.id()) return Status::OK();
+    if (containing_rowset.segment_metas_size() == 0) {
+        return offset == 0 ? Status::OK() : Status::Corruption("segmentless self-origin del offset is not zero");
+    }
+    return offset <= get_max_segment_idx(containing_rowset)
+                   ? Status::OK()
+                   : Status::Corruption("self-origin del offset exceeds rowset replay span");
+}
+
+bool same_range(const TabletRange& a, const TabletRange& b) {
+    return a.lower_bound() == b.lower_bound() && a.upper_bound() == b.upper_bound() &&
+           (a.is_minimum() || a.lower_bound_included() == b.lower_bound_included()) &&
+           (a.is_maximum() || a.upper_bound_included() == b.upper_bound_included());
+}
+
+Status validate_canonical_rowset(const RowsetMetadataPB& rowset, const TabletMetadataPB& source) {
+    if (!tablet_reshard_helper::has_valid_uid(rowset)) {
+        return Status::Corruption("tablet merge source rowset has no valid uid");
+    }
+    if (rowset.num_rows() < 0 || rowset.data_size() < 0 || rowset.num_dels() < 0) {
+        return Status::Corruption("tablet merge source rowset has invalid statistics");
+    }
+    if (rowset.has_delete_predicate() &&
+        (rowset.segment_metas_size() != 0 || rowset.del_files_size() != 0 || rowset.num_rows() != 0 ||
+         rowset.data_size() != 0 || rowset.num_dels() != 0)) {
+        return Status::Corruption("tablet merge predicate rowset has a noncanonical payload");
+    }
+    if (!rowset.has_delete_predicate() && rowset.segment_metas_size() == 0 && rowset.del_files_size() == 0) {
+        return Status::Corruption("tablet merge source has an empty ordinary rowset");
+    }
+    TabletRange effective;
+    TabletRange parent;
+    const auto& range = tablet_reshard_helper::effective_old_tablet_local_range(rowset, source);
+    RETURN_IF_ERROR(TabletRangeHelper::validate_tablet_range(range));
+    RETURN_IF_ERROR(effective.from_proto(range));
+    RETURN_IF_ERROR(parent.from_proto(source.range()));
+    ASSIGN_OR_RETURN(auto intersection, effective.intersect(parent));
+    if (effective.is_empty() || !same_range(effective, intersection)) {
+        return Status::Corruption("tablet merge rowset range is empty or outside its source tablet");
+    }
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+        const auto& segment = rowset.segment_metas(i);
+        if (!segment.has_num_rows()) {
+            return Status::Corruption("tablet merge source segment has no explicit row count");
+        }
+        if (segment.num_rows() < 0 || segment.size() < 0) {
+            return Status::Corruption("tablet merge source segment has negative statistics");
+        }
+        if (!segment.has_segment_idx()) {
+            return Status::Corruption("tablet merge source segment has no explicit segment_idx");
+        }
+        if (i > 0 && segment.segment_idx() <= rowset.segment_metas(i - 1).segment_idx()) {
+            return Status::Corruption("tablet merge source segment indices are not strictly increasing");
+        }
+        if (uint64_t{rowset.id()} + segment.segment_idx() > UINT32_MAX) {
+            return Status::Corruption("tablet merge source segment RSSID overflows uint32");
+        }
+    }
+    for (const auto& del : rowset.del_files()) RETURN_IF_ERROR(validate_del_coordinate(rowset, del));
+    return Status::OK();
+}
+
+Status validate_merge_inputs(const std::vector<TabletMergeContext>& contexts, const TabletRangePB& target_range) {
+    std::vector<TabletRange> ranges(contexts.size());
+    for (size_t i = 0; i < contexts.size(); ++i) {
+        const auto& source = *contexts[i].metadata();
+        RETURN_IF_ERROR(TabletRangeHelper::validate_tablet_range(source.range()));
+        RETURN_IF_ERROR(ranges[i].from_proto(source.range()));
+        if (ranges[i].is_empty()) return Status::Corruption("tablet merge source tablet range is empty");
+        for (const auto& rowset : source.rowsets()) RETURN_IF_ERROR(validate_canonical_rowset(rowset, source));
+    }
+    std::sort(ranges.begin(), ranges.end(), [](const auto& a, const auto& b) {
+        if (a.is_minimum() != b.is_minimum()) return a.is_minimum();
+        return a.lower_bound().compare(b.lower_bound()) < 0;
+    });
+    TabletRange cover = ranges.front();
+    for (size_t i = 1; i < ranges.size(); ++i) {
+        const auto& left = ranges[i - 1];
+        const auto& right = ranges[i];
+        if (left.is_maximum() || right.is_minimum() || left.upper_bound() != right.lower_bound() ||
+            left.upper_bound_included() == right.lower_bound_included()) {
+            return Status::Corruption("tablet merge source ranges are not a nonoverlapping contiguous cover");
+        }
+        cover = cover.union_with(right);
+    }
+    TabletRange target;
+    RETURN_IF_ERROR(target.from_proto(target_range));
+    if (!same_range(cover, target)) return Status::Corruption("tablet merge source ranges do not cover target");
+    return Status::OK();
+}
+
 Status reconcile_duplicate_dels(CanonicalAllocationPlan* canonical, const RowsetMetadataPB& occurrence) {
     auto* selected = &canonical->source_form_rowset;
     if (selected->del_files_size() != occurrence.del_files_size()) {
@@ -646,15 +808,15 @@ Status validate_primary_affine_span(const RssidProjection& projection, uint64_t 
     return Status::OK();
 }
 
-StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std::vector<TabletMergeContext>& contexts,
-                                                                       bool discard_empty_rowsets) {
+StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(
+        const std::vector<TabletMergeContext>& contexts) {
     bool force_context_span_projection = false;
     TEST_SYNC_POINT_CALLBACK("tablet_merge_test:force_context_span_projection", &force_context_span_projection);
     bool drop_primary_atom = false;
     TEST_SYNC_POINT_CALLBACK("tablet_merge_test:drop_primary_atom", &drop_primary_atom);
 
     TabletMergeAllocationPlan result;
-    ASSIGN_OR_RETURN(auto emission, build_rowset_emission_plan(contexts, discard_empty_rowsets));
+    ASSIGN_OR_RETURN(auto emission, build_rowset_emission_plan(contexts));
     int canonical_count = 0;
     for (const auto& decisions : emission) {
         for (const auto& decision : decisions) {
@@ -694,7 +856,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
         const auto& metadata = *contexts[context_index].metadata();
         for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
             const auto& decision = emission[context_index][rowset_index];
-            if (decision.discard || decision.emit) continue;
+            if (decision.canonical_index < 0 || decision.emit) continue;
             const auto& occurrence = metadata.rowsets(rowset_index);
             DCHECK(tablet_reshard_helper::has_valid_uid(occurrence))
                     << "rowset reaching reshard merge must carry a valid uid: rowset_id=" << occurrence.id()
@@ -718,12 +880,22 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
                 RETURN_IF_ERROR(union_canonical_range(&canonical, occurrence_range));
                 continue;
             }
-            canonical.contributor_ranges.emplace_back(occurrence_range);
             RETURN_IF_ERROR(union_canonical_range(&canonical, occurrence_range));
-            canonical.source_form_rowset.set_num_rows(canonical.source_form_rowset.num_rows() + occurrence.num_rows());
-            canonical.source_form_rowset.set_data_size(canonical.source_form_rowset.data_size() +
-                                                       occurrence.data_size());
-            canonical.source_form_rowset.set_num_dels(canonical.source_form_rowset.num_dels() + occurrence.num_dels());
+            if (decision.role == RowsetOccurrenceRole::CONTRIBUTOR) {
+                canonical.contributor_ranges.emplace_back(occurrence_range);
+                int64_t num_rows = 0;
+                int64_t data_size = 0;
+                int64_t num_dels = 0;
+                if (__builtin_add_overflow(canonical.source_form_rowset.num_rows(), occurrence.num_rows(), &num_rows) ||
+                    __builtin_add_overflow(canonical.source_form_rowset.data_size(), occurrence.data_size(),
+                                           &data_size) ||
+                    __builtin_add_overflow(canonical.source_form_rowset.num_dels(), occurrence.num_dels(), &num_dels)) {
+                    return Status::Corruption("tablet merge contributor statistics overflow int64");
+                }
+                canonical.source_form_rowset.set_num_rows(num_rows);
+                canonical.source_form_rowset.set_data_size(data_size);
+                canonical.source_form_rowset.set_num_dels(num_dels);
+            }
             RETURN_IF_ERROR(reconcile_segments(&canonical.source_form_rowset, &occurrence));
             RETURN_IF_ERROR(reconcile_duplicate_dels(&canonical, occurrence));
         }
@@ -765,7 +937,11 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
 
     result.projections.resize(contexts.size());
     uint32_t cursor = 1;
-    for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
+    std::vector<size_t> context_order;
+    for (size_t i = 0; i < contexts.size(); ++i) context_order.push_back(i);
+    std::sort(context_order.begin(), context_order.end(),
+              [&](size_t a, size_t b) { return contexts[a].metadata()->id() < contexts[b].metadata()->id(); });
+    for (size_t context_index : context_order) {
         if (force_context_span_projection && !atoms[context_index].empty()) {
             atoms[context_index] = {{0, contexts[context_index].metadata()->next_rowset_id()}};
         }
@@ -773,12 +949,20 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
         cursor = result.projections[context_index].target_end();
     }
 
+    for (auto& canonical : result.canonicals) {
+        if (canonical.source_form_rowset.has_max_compact_input_rowset_id()) {
+            ASSIGN_OR_RETURN(canonical.recovery_target,
+                             result.projections[canonical.selected_context_index].map_primary_rssid(
+                                     canonical.source_form_rowset.max_compact_input_rowset_id()));
+        }
+    }
+
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         const auto& metadata = *contexts[context_index].metadata();
         for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
             const auto& decision = emission[context_index][rowset_index];
             const auto& occurrence = metadata.rowsets(rowset_index);
-            if (decision.discard || decision.emit || occurrence.has_delete_predicate()) continue;
+            if (decision.canonical_index < 0 || decision.emit || occurrence.has_delete_predicate()) continue;
             const auto& canonical = result.canonicals[decision.canonical_index];
             const auto& canonical_rowset = canonical.source_form_rowset;
             ASSIGN_OR_RETURN(
@@ -803,8 +987,26 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
                 }
                 RETURN_IF_ERROR(add_alias(static_cast<uint32_t>(source), uint64_t{canonical_target} + index));
             }
+            if (canonical.recovery_target.has_value()) {
+                RETURN_IF_ERROR(result.projections[context_index].add_occurrence_alias(
+                        occurrence.max_compact_input_rowset_id(), *canonical.recovery_target));
+            }
         }
         result.projections[context_index].finalize_aliases();
+        for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
+            const auto& decision = emission[context_index][rowset_index];
+            const auto& occurrence = metadata.rowsets(rowset_index);
+            if (decision.canonical_index < 0 || occurrence.has_delete_predicate() ||
+                !occurrence.has_max_compact_input_rowset_id())
+                continue;
+            const auto& projection = result.projections[context_index];
+            const uint32_t raw_key = occurrence.max_compact_input_rowset_id();
+            ASSIGN_OR_RETURN(auto mapped, projection.map_occurrence_rssid(raw_key));
+            if (projection.has_divergent_occurrence_alias(raw_key) ||
+                mapped != *result.canonicals[decision.canonical_index].recovery_target) {
+                return Status::Corruption("tablet merge occurrence recovery keys do not remain equivalent");
+            }
+        }
     }
 
     for (const auto& canonical : result.canonicals) {
@@ -816,10 +1018,6 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
         RETURN_IF_ERROR(validate_primary_affine_span(projection, rowset.id(), extent_end, "canonical extent"));
         ASSIGN_OR_RETURN(auto mapped_id, projection.map_primary_rssid(rowset.id()));
         if (mapped_id >= cursor) return Status::Corruption("tablet merge canonical target is outside cursor");
-        if (rowset.has_max_compact_input_rowset_id()) {
-            ASSIGN_OR_RETURN(auto mapped, projection.map_primary_rssid(rowset.max_compact_input_rowset_id()));
-            (void)mapped;
-        }
         for (const auto& del : rowset.del_files()) {
             const uint32_t offset = del.has_op_offset() ? del.op_offset() : final_max;
             RETURN_IF_ERROR(validate_primary_affine_span(projection, del.origin_rowset_id(),
@@ -829,14 +1027,19 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
     }
 
     std::optional<uint32_t> previous_recovery_target;
-    for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
+    for (size_t context_index : context_order) {
         std::map<uint32_t, uint32_t> groups;
         for (const auto& canonical : result.canonicals) {
             if (canonical.selected_context_index != context_index) continue;
             const auto& rowset = canonical.source_form_rowset;
             const uint32_t raw_key =
                     rowset.has_max_compact_input_rowset_id() ? rowset.max_compact_input_rowset_id() : rowset.id();
-            ASSIGN_OR_RETURN(uint32_t target_key, result.projections[context_index].map_primary_rssid(raw_key));
+            uint32_t target_key;
+            if (canonical.recovery_target.has_value()) {
+                target_key = *canonical.recovery_target;
+            } else {
+                ASSIGN_OR_RETURN(target_key, result.projections[context_index].map_primary_rssid(raw_key));
+            }
             if (result.projections[context_index].has_divergent_occurrence_alias(raw_key)) {
                 return Status::Corruption("tablet merge recovery key has a divergent occurrence alias");
             }
@@ -871,9 +1074,8 @@ Status materialize_planned_rowsets(const TabletMergeAllocationPlan& plan, Tablet
         const auto& projection = plan.projections[canonical.selected_context_index];
         ASSIGN_OR_RETURN(auto mapped_id, projection.map_primary_rssid(output.id()));
         output.set_id(mapped_id);
-        if (output.has_max_compact_input_rowset_id()) {
-            ASSIGN_OR_RETURN(auto mapped, projection.map_primary_rssid(output.max_compact_input_rowset_id()));
-            output.set_max_compact_input_rowset_id(mapped);
+        if (canonical.recovery_target.has_value()) {
+            output.set_max_compact_input_rowset_id(*canonical.recovery_target);
         }
         for (auto& del : *output.mutable_del_files()) {
             ASSIGN_OR_RETURN(auto mapped, projection.map_primary_rssid(del.origin_rowset_id()));
@@ -2696,9 +2898,14 @@ PersistentIndexSstablePB normalized_preflight_sstable_form(const PersistentIndex
     normalized.clear_version();
     normalized.clear_filename();
     normalized.clear_filesize();
+    normalized.clear_max_rss_rowid();
     normalized.clear_encryption_meta();
     normalized.clear_shared();
+    normalized.clear_shared_rssid();
+    normalized.clear_shared_version();
+    normalized.clear_delvec();
     normalized.clear_fileset_id();
+    normalized.clear_rssid_offset();
     normalized.clear_generation_version();
     return normalized;
 }
@@ -3439,9 +3646,6 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // build task never skips another source's unbuilt rowsets (see the helper for the invariant).
     reconcile_vector_index_built_version(merge_contexts, new_tablet_metadata.get());
 
-    const bool discard_empty_rowsets = !skip_sstable_merge && is_primary_key(*merge_contexts.front().metadata());
-    ASSIGN_OR_RETURN(auto allocation_plan, build_tablet_merge_allocation_plan(merge_contexts, discard_empty_rowsets));
-
     // Merge tablet-level range via union_range
     TabletRangePB merged_range = merge_contexts.front().metadata()->range();
     for (size_t i = 1; i < merge_contexts.size(); ++i) {
@@ -3450,11 +3654,14 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     }
     new_tablet_metadata->mutable_range()->CopyFrom(merged_range);
 
+    RETURN_IF_ERROR(validate_merge_inputs(merge_contexts, merged_range));
+    ASSIGN_OR_RETURN(auto allocation_plan, build_tablet_merge_allocation_plan(merge_contexts));
+
     RETURN_IF_ERROR(preflight_merge_sources(merge_contexts, allocation_plan, *new_tablet_metadata));
 
     FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_rssid_reassign);
 
-    // Phase 2: Merge rowsets (version-driven k-way merge with dedup).
+    // Phase 2: Materialize the globally ordered canonical rowsets.
     // canonical_contribs collects each canonical rowset's contributing
     // old tablets' old-tablet-local ranges; consumed by the PK fail-fast coverage
     // check below and by gap-delvec synthesis.
