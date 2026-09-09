@@ -621,6 +621,12 @@ FROM test;
 * 描述：Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数据进行过滤，过滤通常发生在 Join 阶段。当多表进行 Join 时，往往伴随着谓词下推等优化手段进行数据过滤，以减少 Join 表的数据扫描以及 shuffle 等阶段产生的 IO，从而提升查询性能。StarRocks 中有两种 RF，分别是 Local RF 和 Global RF。Local RF 应用于 Broadcast Hash Join 场景。Global RF 应用于 Shuffle Join 场景。
 * 默认值 `true`，表示打开 global runtime filter 开关。关闭该开关后, 不生成 Global RF, 但是依然会生成 Local RF。
 
+### enable_runtime_filter_partition_prune
+
+* 描述：是否启用 Join Runtime Filter 动态分区裁剪。仅支持存算一体部署。开启后，BE 根据 Join Runtime Filter 跳过不匹配的分区，或停止这些分区的后续扫描。支持普通 RANGE 分区的第一列和 LIST 分区列，Join 探针必须是未经过表达式或字典编码改写的分区列。
+* 默认值：`false`
+* 数据类型：Boolean
+
 ### enable_group_by_compressed_key
 
 * 描述：是否利用准确的统计信息来压缩 GROUP BY Key 列。有效值：`true` 和 `false`。

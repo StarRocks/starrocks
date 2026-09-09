@@ -27,6 +27,7 @@
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "runtime/runtime_env.h"
+#include "types/time_types.h"
 
 namespace {
 
@@ -68,6 +69,7 @@ int main(int argc, char** argv) {
     starrocks::config::thrift_max_frame_size = 16384000;
     starrocks::config::thrift_max_recursion_depth = 64;
 
+    starrocks::date::init_date_cache();
     starrocks::CpuInfo::init();
     starrocks::DiskInfo::init();
     starrocks::MemInfo::init();
