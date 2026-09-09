@@ -16,17 +16,7 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#define private public
-#include "storage/rowset/metadata_cache.h"
-#undef private
-
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
-#include "common/config_rowset_fwd.h"
->>>>>>> 076cce2 ([BugFix] Refresh rowset metadata cache charges after lazy loading (#77893))
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -37,6 +27,8 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -62,27 +54,18 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-<<<<<<< HEAD
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
-        for (long key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
-=======
         for (size_t segment_id = 0; segment_id < num_segments; ++segment_id) {
             const size_t begin = keys.size() * segment_id / num_segments;
             const size_t end = keys.size() * (segment_id + 1) / num_segments;
-            auto chunk = ChunkFactory::new_chunk(schema, end - begin);
-            auto cols = chunk->columns();
+            auto chunk = ChunkHelper::new_chunk(schema, end - begin);
+            auto& cols = chunk->columns();
             for (size_t i = begin; i < end; ++i) {
                 int64_t key = keys[i];
-                cols[0]->as_mutable_ptr()->append_datum(Datum(key));
-                cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
-                cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                cols[0]->append_datum(Datum(key));
+                cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+                cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
             }
             EXPECT_TRUE(writer->flush_chunk(*chunk).ok());
->>>>>>> 076cce2 ([BugFix] Refresh rowset metadata cache charges after lazy loading (#77893))
         }
         return *writer->build();
     }
@@ -204,21 +187,6 @@ TEST_F(MetadataCacheTest, test_warmup) {
     }
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(MetadataCacheTest, test_warmup_uses_touch_without_releasing_handle) {
-    MetadataCache metadata_cache(1);
-    auto* recording_cache = new RecordingCache();
-    metadata_cache._cache.reset(recording_cache);
-
-    metadata_cache._warmup("rowset_warmup_key");
-
-    ASSERT_EQ(1, recording_cache->touch_calls);
-    ASSERT_EQ("rowset_warmup_key", recording_cache->last_touch_key);
-    ASSERT_EQ(0, recording_cache->lookup_calls);
-    ASSERT_EQ(0, recording_cache->release_calls);
-}
-
 TEST_F(MetadataCacheTest, update_charge_on_last_reader_release) {
     constexpr size_t kMetadataCacheCapacity = 10 * 1024 * 1024;
     const size_t num_rows = 1000;
@@ -322,7 +290,7 @@ TEST_F(MetadataCacheTest, update_charge_ignores_replaced_rowset) {
     // entry must not receive a delayed charge update from the original object.
     RowsetSharedPtr replacement;
     ASSERT_TRUE(RowsetFactory::create_rowset(tablet->tablet_schema(), original->rowset_path(), original->rowset_meta(),
-                                             &replacement, nullptr)
+                                             &replacement)
                         .ok());
     ASSERT_TRUE(replacement->load().ok());
     metadata_cache.cache_rowset(replacement.get());
@@ -722,7 +690,6 @@ TEST_F(MetadataCacheReaderTest, charge_growth_can_evict_rowset_on_close) {
     ASSERT_EQ(0, rowset->segment_memory_usage());
 }
 
->>>>>>> 076cce2 ([BugFix] Refresh rowset metadata cache charges after lazy loading (#77893))
 TEST_F(MetadataCacheTest, test_concurrency_issue) {
     const size_t N = 100;
     vector<int64_t> keys;
