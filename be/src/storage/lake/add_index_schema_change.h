@@ -75,8 +75,12 @@ private:
     // TabletManager::load_segment, opens one column iterator per index to
     // build, dispatches to the per-index-type builder, finalizes the
     // IndexFileWriter, and fills the caller-supplied IDG entry.
+    // |out_built| is set false when this segment holds none of the indexed columns -- a light
+    // ADD COLUMN does not rewrite data, so a pre-existing segment can legitimately lack one. The
+    // caller then emits no IDG entry for the segment; index presence is per segment
+    // (LakeIndexDeltaGroupLoader::load) and a reader with no entry falls back to an unindexed scan.
     Status build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset, uint32_t rssid,
-                                 IndexDeltaGroupEntryPB* out_entry);
+                                 IndexDeltaGroupEntryPB* out_entry, bool* out_built);
 
     // Build a BITMAP index for `column` of an already-opened Segment and
     // write its blob into `target_wfile`. The resulting ColumnIndexMetaPB is

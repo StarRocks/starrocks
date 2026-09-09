@@ -146,6 +146,40 @@ protected:
         return metadata;
     }
 
+    // A 6th column the base rowset writer does not write, so a segment written with the base schema
+    // legitimately lacks it -- the post-light-ADD-COLUMN state. `type` picks INT or VARCHAR so the
+    // same helper serves the bitmap/bloom cases and the ngram case.
+    int64_t publish_light_added_column(int64_t tablet_id, int64_t version, const char* name, const char* type) {
+        ASSIGN_OR_ABORT(auto published, _tablet_manager->get_tablet_metadata(tablet_id, version));
+        auto mutated = std::make_shared<TabletMetadata>(*published);
+        auto* schema = mutated->mutable_schema();
+        // A fresh schema id + bumped schema version, matching real schema evolution. WITHOUT this the
+        // helper is broken: TableSchemaService::_get_local_schema returns
+        // _tablet_mgr->get_cached_schema(schema_id) BEFORE consulting the tablet metadata
+        // (table_schema_service.cpp:145-149), and put_tablet_metadata refreshes the metadata caches
+        // but NOT the schema-id cache (tablet_manager.cpp:542). Since the rowset writers pass only
+        // schema->id() to DeltaWriterBuilder (add_index_schema_change_test.cpp:182), reusing the id
+        // would hand the six-column writer the stale FIVE-column schema (delta_writer.cpp:600) and it
+        // would emit another segment without c5 -- silently invalidating the "exactly one IDG entry"
+        // assertion.
+        schema->set_id(next_id());
+        schema->set_schema_version(schema->schema_version() + 1);
+        auto* col = schema->add_column();
+        col->set_unique_id(_c5_uid);
+        col->set_name(name);
+        col->set_type(type);
+        if (std::string(type) == "VARCHAR") {
+            col->set_length(32);
+        }
+        col->set_is_key(false);
+        col->set_is_nullable(true);
+        col->set_default_value("7");
+        col->set_aggregation("NONE");
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*mutated));
+        CHECK_OK(_tablet_manager->create_schema_file(tablet_id, *schema));
+        return version;
+    }
+
     // Build a chunk with `nrows` rows and append it as a single segment via
     // DeltaWriter, advancing the tablet to version 2. Each call writes one
     // rowset; call twice to produce a 2-rowset / 2-segment tablet at v3.
@@ -229,6 +263,7 @@ protected:
     const int32_t _c2_uid = 102;
     const int32_t _c3_uid = 103;
     const int32_t _c4_uid = 104; // CHAR column, exercises feed_index_from_column's repad path
+    const int32_t _c5_uid = 105; // added by a light ADD COLUMN, absent from segments written earlier
 
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<FixedLocationProvider> _location_provider;
@@ -1260,6 +1295,94 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_pool_thread_inherits_mem_limit) {
     sc_tracker.release(sc_tracker.consumption());
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_mem_limit_exceeded()) << st.to_string();
+}
+
+// A light ADD COLUMN does not rewrite data, so a segment written before the alter legitimately lacks
+// the new column. Building an index on that column must succeed and simply emit no IDG entry for the
+// segment -- index presence is per segment (LakeIndexDeltaGroupLoader::load returns OK with an empty
+// result), and a reader with no entry falls back to an unindexed scan with the predicate retained.
+TEST_F(AddIndexSchemaChangeTest, run_bitmap_on_light_added_column_emits_no_entry) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+    version = publish_light_added_column(base_tablet_id, version, "c5", "INT");
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    EXPECT_EQ(0, op.segment_entries_size()) << "the only segment has no c5, so no entry may be emitted";
+}
+
+// Regression guard for the mixed-index case. With two indexes where the segment holds one column and
+// not the other, the .idx file contains only the buildable index -- so the IDG entry must advertise
+// only that one. Advertising both would make a reader trust a key the file lacks and return
+// Corruption (column_reader.cpp bitmap/bloom lookup paths).
+TEST_F(AddIndexSchemaChangeTest, run_mixed_indexes_advertises_only_the_buildable_one) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+    version = publish_light_added_column(base_tablet_id, version, "c5", "INT");
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid),  // present in the segment
+                                       make_index(IndexType::BITMAP, _c5_uid)}; // absent
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& entry = op.segment_entries(0).entry();
+    ASSERT_EQ(1, entry.keys_size()) << "the entry must not advertise an index the .idx file lacks";
+    EXPECT_EQ(_c1_uid, entry.keys(0).col_unique_id());
+}
+
+// Same shape as run_bitmap_on_light_added_column_emits_no_entry, through the plain-bloom builder:
+// build_bloom_for_column reaches the strict column iterator before its own null-reader check, so it
+// too must be guarded by the per-segment presence filter.
+TEST_F(AddIndexSchemaChangeTest, run_plain_bloom_on_light_added_column_emits_no_entry) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+    version = publish_light_added_column(base_tablet_id, version, "c5", "INT");
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    EXPECT_EQ(0, op.segment_entries_size()) << "the only segment has no c5, so no entry may be emitted";
+}
+
+// Same shape again for NGRAMBF, which needs a VARCHAR column and real index_properties (mirrors
+// run_ngrambf_with_index_properties). NGRAMBF shares BloomFilterIndexWriter with plain bloom but
+// takes a different branch in build_idg_for_segment's switch, so it needs its own coverage.
+TEST_F(AddIndexSchemaChangeTest, run_ngram_bloom_on_light_added_column_emits_no_entry) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+    version = publish_light_added_column(base_tablet_id, version, "c5", "VARCHAR");
+
+    // index_properties JSON as produced by TabletIndex::to_schema_pb.
+    const std::string props = R"({"properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c5_uid, /*index_id=*/0, props)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    EXPECT_EQ(0, op.segment_entries_size()) << "the only segment has no c5, so no entry may be emitted";
 }
 
 } // namespace starrocks::lake

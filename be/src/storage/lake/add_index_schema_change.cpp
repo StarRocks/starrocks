@@ -183,6 +183,25 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         op_add_index->add_new_indexes()->CopyFrom(ix);
     }
 
+    // Validate every declared index column against the LOGICAL schema up front. Only a uid that the
+    // schema knows may later be treated as "physically absent from this segment because a light
+    // ADD COLUMN did not rewrite data"; a uid the schema does not know at all is a caller error and
+    // must keep failing here rather than being silently skipped per segment.
+    {
+        auto tablet_schema = _new_tablet.get_schema();
+        for (const auto& ix : _indexes_to_build) {
+            if (ix.col_unique_id_size() == 0) {
+                return Status::InternalError("TabletIndex has no columns");
+            }
+            for (int i = 0; i < ix.col_unique_id_size(); i++) {
+                if (tablet_schema->field_index(ix.col_unique_id(i)) < 0) {
+                    return Status::InternalError(
+                            strings::Substitute("column with unique_id $0 not found in schema", ix.col_unique_id(i)));
+                }
+            }
+        }
+    }
+
     SegmentTaskRunner runner(_lake_schema_change_pool, config::lake_schema_change_per_tablet_parallelism);
 
     auto base_metadata = _base_tablet.metadata();
@@ -218,7 +237,12 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
                 // on task exit, leaving the pool thread's TLS clean.
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
                 IndexDeltaGroupEntryPB entry;
-                RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
+                bool built = false;
+                RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry, &built));
+                if (!built) {
+                    // This segment holds none of the indexed columns; leave it without an entry.
+                    return Status::OK();
+                }
                 std::lock_guard<std::mutex> lg(_op_mtx);
                 auto* se = op_add_index->add_segment_entries();
                 se->set_segment_id(rssid);
@@ -268,8 +292,9 @@ void AddIndexSchemaChange::cleanup_written_idx_files() {
 }
 
 Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset,
-                                                   uint32_t rssid, IndexDeltaGroupEntryPB* out_entry) {
+                                                   uint32_t rssid, IndexDeltaGroupEntryPB* out_entry, bool* out_built) {
     DCHECK(out_entry != nullptr);
+    DCHECK(out_built != nullptr);
 
     const auto& seg_name = rowset_meta.segment_metas(seg_idx_in_rowset).filename();
     // segments in rowset_meta carry relative filenames; resolve them against
@@ -303,6 +328,32 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
                      _tablet_mgr->load_segment(seg_fileinfo, seg_idx_in_rowset, &footer_size_hint, read_opts,
                                                /*fill_meta_cache*/ true, tablet_schema));
 
+    // A light ADD COLUMN swaps the schema without rewriting data, so a segment written before the
+    // alter legitimately lacks the new column. Build only the indexes whose columns this segment
+    // physically holds. Every uid here is already known to the logical schema (validated in run()),
+    // so a miss is exactly the light-added case. If nothing is buildable, emit no IDG entry at all.
+    std::vector<TabletIndexPB> indexes_to_build;
+    indexes_to_build.reserve(_indexes_to_build.size());
+    for (const auto& ix : _indexes_to_build) {
+        bool segment_holds_every_column = true;
+        for (int i = 0; i < ix.col_unique_id_size(); i++) {
+            if (segment->column_with_uid(ix.col_unique_id(i)) == nullptr) {
+                segment_holds_every_column = false;
+                LOG(INFO) << "AddIndexSchemaChange: skip index " << ix.index_id() << " on segment " << rssid
+                          << " of tablet " << _new_tablet.id() << ": column uid " << ix.col_unique_id(i)
+                          << " is absent from the segment (light ADD COLUMN does not rewrite data)";
+                break;
+            }
+        }
+        if (segment_holds_every_column) {
+            indexes_to_build.push_back(ix);
+        }
+    }
+    if (indexes_to_build.empty()) {
+        *out_built = false;
+        return Status::OK();
+    }
+
     // 2. Allocate the .idx file. Default WritableFileOptions leave
     //    skip_fill_local_cache=false so writes populate local cache,
     //    mirroring the DCG .cols behaviour — the first query after the
@@ -332,7 +383,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     //    IndexFileWriter. Unsupported types are a soft failure at this
     //    phase (NotSupported); the caller will abort the txn log and the
     //    .idx file will be garbage-collected as an orphan.
-    for (const auto& ix : _indexes_to_build) {
+    for (const auto& ix : indexes_to_build) {
         if (ix.col_unique_id_size() == 0) {
             return Status::InternalError("TabletIndex has no columns");
         }
@@ -381,8 +432,10 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
 
     RETURN_IF_ERROR(idx_writer.finalize());
 
-    // 4. Populate the IDG entry that the caller will hang off OpAddIndex.
-    for (const auto& ix : _indexes_to_build) {
+    // 4. Populate the IDG entry that the caller will hang off OpAddIndex. This MUST mirror the build
+    //    loop above: a key advertising an index the .idx file does not contain makes readers trust it
+    //    and fail with Corruption (column_reader.cpp bitmap/bloom lookup paths).
+    for (const auto& ix : indexes_to_build) {
         auto* k = out_entry->add_keys();
         k->set_col_unique_id(ix.col_unique_id(0));
         k->set_index_type(ix.index_type());
@@ -393,6 +446,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
         out_entry->set_encryption_meta(encryption_meta);
     }
     out_entry->set_file_size(static_cast<int64_t>(idx_writer.file_size()));
+    *out_built = true;
     return Status::OK();
 }
 
