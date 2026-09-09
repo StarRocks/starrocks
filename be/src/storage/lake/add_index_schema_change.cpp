@@ -263,7 +263,8 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     if (!run_st.ok()) {
         // Best-effort remove any .idx files already written by tasks that
         // succeeded before the first failure. The caller (schema_change.cpp)
-        // will fall back to the legacy rewrite path; without this cleanup
+        // surfaces the error so FE cancels the alter -- it deliberately does
+        // NOT fall back to the legacy rewrite path -- so without this cleanup
         // the orphan .idx files would sit on object storage until a later
         // compaction or vacuum reclaims them, and could also confuse any
         // tool that scans segment dirs.
