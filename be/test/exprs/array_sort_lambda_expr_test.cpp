@@ -20,21 +20,20 @@
 #include <thread>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "exprs/expr_executor.h"
 #include "exprs/lambda_function.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
-#include "types/datum.h"
+#include "runtime/types.h"
+#include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -123,8 +122,8 @@ protected:
     void evaluate_concurrently(ArraySortLambdaExpr* expr, int num_threads, int iterations, Check check) {
         ExprContext root_ctx(expr);
         std::vector<ExprContext*> ctxs = {&root_ctx};
-        ASSERT_OK(ExprExecutor::prepare(ctxs, &_runtime_state));
-        ASSERT_OK(ExprExecutor::open(ctxs, &_runtime_state));
+        ASSERT_OK(Expr::prepare(ctxs, &_runtime_state));
+        ASSERT_OK(Expr::open(ctxs, &_runtime_state));
 
         std::vector<ExprContext*> clones(num_threads, nullptr);
         for (auto& clone : clones) {
@@ -154,9 +153,9 @@ protected:
         ASSERT_EQ(0, failures.load());
 
         for (auto* clone : clones) {
-            ExprExecutor::close(clone, &_runtime_state);
+            clone->close(&_runtime_state);
         }
-        ExprExecutor::close(ctxs, &_runtime_state);
+        Expr::close(ctxs, &_runtime_state);
     }
 
     RuntimeState _runtime_state;
@@ -201,8 +200,8 @@ TEST_F(ArraySortLambdaExprTest, invalid_comparator_error_is_not_cached) {
     auto* expr = make_array_sort(TExprOpcode::LE);
     ExprContext ctx(expr);
     std::vector<ExprContext*> ctxs = {&ctx};
-    ASSERT_OK(ExprExecutor::prepare(ctxs, &_runtime_state));
-    ASSERT_OK(ExprExecutor::open(ctxs, &_runtime_state));
+    ASSERT_OK(Expr::prepare(ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(ctxs, &_runtime_state));
     auto chunk = make_chunk();
     for (int i = 0; i < 3; ++i) {
         auto result = ctx.evaluate(expr, chunk.get());
@@ -210,7 +209,7 @@ TEST_F(ArraySortLambdaExprTest, invalid_comparator_error_is_not_cached) {
         ASSERT_TRUE(result.status().is_invalid_argument()) << result.status();
         ASSERT_NE(std::string::npos, result.status().message().find("irreflexivity")) << result.status();
     }
-    ExprExecutor::close(ctxs, &_runtime_state);
+    Expr::close(ctxs, &_runtime_state);
 }
 
 } // namespace starrocks
