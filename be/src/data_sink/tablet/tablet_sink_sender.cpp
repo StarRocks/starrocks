@@ -94,7 +94,7 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
 }
 
 void TabletSinkSender::set_enable_shard_write(bool enable,
-                                             std::unordered_map<int64_t, std::vector<SlotId>> key_slots_by_index) {
+                                              std::unordered_map<int64_t, std::vector<SlotId>> key_slots_by_index) {
     _enable_shard_write = enable;
     _shard_write_key_slots = std::move(key_slots_by_index);
     if (_enable_shard_write) {
@@ -148,7 +148,8 @@ Status TabletSinkSender::_assign_shard_write_targets(
             auto iter = tablet_to_be.find(_tablet_ids[selection]);
             DCHECK(iter != tablet_to_be.end());
             if (iter == tablet_to_be.end()) {
-                return Status::InternalError(fmt::format("Unknown tablet_id {} in tablet be map", _tablet_ids[selection]));
+                return Status::InternalError(
+                        fmt::format("Unknown tablet_id {} in tablet be map", _tablet_ids[selection]));
             }
             const std::vector<int64_t>& be_ids = iter->second;
             DCHECK(!be_ids.empty());
