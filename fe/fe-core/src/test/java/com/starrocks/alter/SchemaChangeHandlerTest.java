@@ -197,8 +197,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "sc_agg");
 
-        // The compiled default differs between branches, so pin the config and assert the guard
-        // itself rather than whichever default this branch happens to ship.
+        // Pin the config and assert the guard itself, not whichever default the branch ships.
+        // The compiled default is expected to differ between branches over time.
         boolean saved = Config.allow_implicit_key_column_in_agg_add_column;
         Config.allow_implicit_key_column_in_agg_add_column = false;
         try {

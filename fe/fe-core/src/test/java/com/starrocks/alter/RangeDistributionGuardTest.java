@@ -589,9 +589,8 @@ public class RangeDistributionGuardTest {
                 "AGGREGATE KEY(k1)\n" +
                 "order by(k1)\n" +
                 "properties('replication_num' = '1');");
-        // No KEY keyword and no aggregate -> AGG promotion turns this into a key. That promotion is
-        // rejected by default now, so exercise the routing predicate under the legacy config, which is
-        // the mode where the promotion still happens.
+        // No KEY keyword and no aggregate -> AGG promotion turns this into a key. Pin the config on,
+        // so this keeps exercising the routing predicate whichever default the branch ships.
         boolean savedAllowImplicitKey = Config.allow_implicit_key_column_in_agg_add_column;
         Config.allow_implicit_key_column_in_agg_add_column = true;
         try {
