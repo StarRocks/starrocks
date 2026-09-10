@@ -2325,9 +2325,6 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(timeout > 0, "print_hit_materialized_view: timeout must be positive, got %s" % timeout)
         tools.assert_true(interval > 0, "print_hit_materialized_view: interval must be positive, got %s" % interval)
 
-        if not expects:
-            time.sleep(1)
-
         def check_mv():
             sql = "explain %s" % (query)
             res = self.retry_execute_sql(sql, True)
@@ -2340,26 +2337,25 @@ class StarrocksSQLApiLib(object):
                     if plan.find(expect) <= 0:
                         return False
                 return True
-            else:
-                mvs = []
-                for line in plan.split('\n'):
-                    if 'MaterializedView: true' in line:
-                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
-                        if mv_name:
-                            mvs.append(mv_name)
-                mvs.sort()
-                print("Hit materialized views:", ", ".join(mvs))
-                return mvs
+            mvs = []
+            for line in plan.split('\n'):
+                if 'MaterializedView: true' in line:
+                    mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
+                    if mv_name:
+                        mvs.append(mv_name)
+            mvs.sort()
+            print("Hit materialized views:", ", ".join(mvs))
+            return mvs
 
-        # Poll until the rewrite shows up. MV partition staleness state propagates
-        # asynchronously after base-table writes, so the optimizer may not pick the
-        # expected rewrite (e.g. UNION) on the first explain call right after an INSERT.
-        deadline = time.time() + timeout
+        if not expects:
+            time.sleep(1)
+            return self._with_materialized_view_rewrite(check_mv)
+
+        deadline = time.monotonic() + timeout
         while True:
-            result = self._with_materialized_view_rewrite(check_mv)
-            if not isinstance(result, bool) or result:
-                return result
-            if time.time() >= deadline:
+            if self._with_materialized_view_rewrite(check_mv):
+                return True
+            if time.monotonic() >= deadline:
                 return False
             time.sleep(interval)
 
@@ -2405,13 +2401,13 @@ class StarrocksSQLApiLib(object):
             time.sleep(1)
             return self._with_materialized_view_rewrite(extract_mvs)
 
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
         while True:
             last_result = self._with_materialized_view_rewrite(extract_mvs)
             hit_set = set(last_result.split(",")) if last_result else set()
             if all(e in hit_set for e in expects):
                 return last_result
-            if time.time() >= deadline:
+            if time.monotonic() >= deadline:
                 return last_result
             time.sleep(interval)
 
