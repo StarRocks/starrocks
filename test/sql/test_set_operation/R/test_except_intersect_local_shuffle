@@ -1,0 +1,260 @@
+-- name: test_except_intersect_local_shuffle
+create table t1 (idx bigint, k bigint) duplicate key(idx)
+  distributed by hash(idx) buckets 32 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select s1, s1 % 3 from table(generate_series(1, 10)) s(s1);
+-- result:
+-- !result
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+-- result:
+0
+-- !result
+select count(*) from (
+  select z.idx from (select idx from t1 union select idx from t1) z
+  except
+  select idx from t1) x;
+-- result:
+0
+-- !result
+select count(*) from (
+  select idx, k from t1
+  except
+  select z.idx, z.k from (select idx, k from t1 union select idx, k from t1) z) x;
+-- result:
+0
+-- !result
+select count(*) from (
+  select idx from t1
+  intersect
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+-- result:
+10
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+-- result:
+0
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+-- result:
+0
+-- !result
+set pipeline_dop = 8;
+-- result:
+-- !result
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+-- result:
+0
+-- !result
+set pipeline_dop = 0;
+-- result:
+-- !result
+select count(*) from (
+  select k from t1
+  except
+  select z.k from (select k from t1 union select k from t1) z) x;
+-- result:
+0
+-- !result
+select idx from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 where idx <= 7 union select idx from t1 where idx <= 7) z) x
+order by idx;
+-- result:
+8
+9
+10
+-- !result
+create table a (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+-- result:
+-- !result
+create table b (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+-- result:
+-- !result
+create table c (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into a select s1, s1 % 7 from table(generate_series(1, 5000)) s(s1);
+-- result:
+-- !result
+insert into b select s1, s1 % 7 from table(generate_series(1, 3000)) s(s1);
+-- result:
+-- !result
+insert into c select s1, s1 % 7 from table(generate_series(2000, 6000)) s(s1);
+-- result:
+-- !result
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z) x;
+-- result:
+3000
+-- !result
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+-- result:
+2000
+-- !result
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z
+  intersect
+  select y.id from (select id from c union select id from c) y) x;
+-- result:
+1001
+-- !result
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select y.id from (select id from b union select id from b) y) x;
+-- result:
+2000
+-- !result
+select count(*), min(id), max(id), sum(id) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select y.id from (select id from b union select id from b) y) x;
+-- result:
+2000	3001	5000	8001000
+-- !result
+create table cg1 (k bigint, v bigint) duplicate key(k)
+  distributed by hash(k) buckets 8 properties("replication_num" = "1", "colocate_with" = "grp_setop_align");
+-- result:
+-- !result
+create table cg2 (k bigint, v bigint) duplicate key(k)
+  distributed by hash(k) buckets 8 properties("replication_num" = "1", "colocate_with" = "grp_setop_align");
+-- result:
+-- !result
+insert into cg1 select s1, s1 from table(generate_series(1, 1000)) s(s1);
+-- result:
+-- !result
+insert into cg2 select s1, s1 from table(generate_series(500, 1500)) s(s1);
+-- result:
+-- !result
+select count(*), min(k), max(k) from (select k from cg1 except select k from cg2) x;
+-- result:
+499	1	499
+-- !result
+select count(*), min(k), max(k) from (select k from cg1 intersect select k from cg2) x;
+-- result:
+501	500	1000
+-- !result
+select count(*), min(k), max(k) from (
+  select k from cg1
+  intersect
+  select k from cg2
+  intersect
+  select k from cg1 where k >= 600) x;
+-- result:
+401	600	1000
+-- !result
+select count(*) from (
+  select k from cg1
+  except
+  select z.k from (select k from cg2 union select k from cg2) z) x;
+-- result:
+499
+-- !result
+set enable_wait_dependent_event = true;
+-- result:
+-- !result
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+-- result:
+0
+-- !result
+select count(*) from (
+  select z.idx from (select idx from t1 union select idx from t1) z
+  except
+  select idx from t1) x;
+-- result:
+0
+-- !result
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+-- result:
+2000
+-- !result
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z) x;
+-- result:
+3000
+-- !result
+select count(*), min(k), max(k) from (select k from cg1 except select k from cg2) x;
+-- result:
+499	1	499
+-- !result
+set enable_wait_dependent_event = false;
+-- result:
+-- !result
+set enable_runtime_adaptive_dop = true;
+-- result:
+-- !result
+select count(*) from (
+  select idx from t1
+  except
+  select z.idx from (select idx from t1 union select idx from t1) z) x;
+-- result:
+0
+-- !result
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+-- result:
+2000
+-- !result
+select count(*) from (
+  select id from a
+  intersect
+  select z.id from (select id from b union select id from b) z) x;
+-- result:
+3000
+-- !result
+set enable_wait_dependent_event = true;
+-- result:
+-- !result
+select count(*) from (
+  select z.id from (select id from a union select id from a) z
+  except
+  select id from b) x;
+-- result:
+2000
+-- !result
+set enable_wait_dependent_event = false;
+-- result:
+-- !result
+set enable_runtime_adaptive_dop = false;
+-- result:
+-- !result
