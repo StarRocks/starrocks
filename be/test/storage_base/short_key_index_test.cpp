@@ -106,62 +106,6 @@ TEST_F(ShortKeyIndexTest, buider) {
     }
 }
 
-// A SORT_KEY_PAGE built via finalize_full_sort_key() carries the sort-key arity and round-trips.
-TEST_F(ShortKeyIndexTest, finalize_full_sort_key_page) {
-    ShortKeyIndexBuilder builder(0, 1024);
-
-    std::vector<std::string> keys;
-    for (int i = 1000; i < 2000; i += 2) {
-        keys.push_back(std::to_string(i));
-        builder.add_item(keys.back());
-    }
-    std::vector<Slice> slices;
-    PageFooterPB footer;
-    auto st = builder.finalize_full_sort_key(9000 * 1024, &slices, &footer, /*num_sort_key_columns=*/3);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(SORT_KEY_PAGE, footer.type());
-    ASSERT_TRUE(footer.has_sort_key_page_footer());
-
-    std::string buf;
-    for (auto& slice : slices) {
-        buf.append(slice.data, slice.size);
-    }
-
-    ShortKeyIndexDecoder decoder;
-    st = decoder.parse(buf, footer.sort_key_page_footer());
-    ASSERT_TRUE(st.ok());
-
-    ASSERT_EQ(3, decoder.num_sort_key_columns());
-
-    // entries still round-trip byte-for-byte
-    ASSERT_EQ(keys.size(), decoder.num_items());
-    for (size_t i = 0; i < keys.size(); ++i) {
-        ASSERT_EQ(keys[i], decoder.key(i).to_string());
-    }
-}
-
-// A legacy SHORT_KEY_PAGE reports 0 sort-key columns.
-TEST_F(ShortKeyIndexTest, finalize_short_key_page) {
-    ShortKeyIndexBuilder builder(0, 1024);
-    builder.add_item("abc");
-
-    std::vector<Slice> slices;
-    PageFooterPB footer;
-    auto st = builder.finalize(1024, &slices, &footer);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(SHORT_KEY_PAGE, footer.type());
-
-    ShortKeyIndexDecoder decoder;
-    std::string buf;
-    for (auto& slice : slices) {
-        buf.append(slice.data, slice.size);
-    }
-    st = decoder.parse(buf, footer.short_key_page_footer());
-    ASSERT_TRUE(st.ok());
-
-    ASSERT_EQ(0, decoder.num_sort_key_columns());
-}
-
 // parse() must runtime-validate the offset table (not just DCHECK) so a checksum-valid page with a
 // corrupt/out-of-range offset is rejected cleanly instead of letting key(i) read out of bounds.
 TEST_F(ShortKeyIndexTest, parse_rejects_out_of_range_offset) {

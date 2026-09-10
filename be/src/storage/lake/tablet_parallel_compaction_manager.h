@@ -398,7 +398,26 @@ private:
 
     // Collect sort key bounds from all segments across all rowsets.
     // Returns SegmentSplitInfo (defined in tablet_splitter.h) for each segment.
-    static StatusOr<std::vector<SegmentSplitInfo>> _collect_segment_key_bounds(const std::vector<RowsetPtr>& rowsets);
+    //
+    // Each segment's sort key is also sampled through SegmentSplitInfo::load_samples, which turns
+    // it from one coarse [min, max] range into a run of sub-segments with known row counts -- that
+    // is what lets the boundaries below divide an overlapping set of rowsets evenly. Sampling only
+    // ever ADDS precision: a segment whose file fails to load, whose LoadedSegment is null
+    // (skipped/ignored/lost), or whose schema does not resolve degrades to its coarse [min, max]
+    // range rather than failing the split.
+    //
+    // |split_width| scales the per-segment sample budget and must be the width the caller can
+    // actually produce, NOT its max_parallel: the budget is 32 samples per unit of width, so a
+    // width taken from a user-set table property buys page reads for splits that will never happen
+    // (see _create_range_split_groups). It must also be >= 2, or the budget is all zeroes.
+    //
+    // Unlike tablet_splitter's build_segments_from_rowsets, the tuples returned here are NOT
+    // projected onto the tablet's current sort key: they stay in each segment's own key space,
+    // which is what the compaction subtasks then seek with. Both paths now enter the sampler
+    // through the same load_samples, but only the split path, which persists its boundaries as
+    // tablet ranges, has to lift them.
+    static StatusOr<std::vector<SegmentSplitInfo>> _collect_segment_key_bounds(const std::vector<RowsetPtr>& rowsets,
+                                                                               int64_t split_width);
 
     // Create SubtaskGroups using range split strategy.
     // Uses calculate_range_split_boundaries() from tablet_splitter to calculate boundaries.
@@ -427,6 +446,10 @@ private:
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_unshare_groups_pack_whole_rowsets);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_unshare_groups_mixed_part_counts);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_validate_unshare_coverage_rejects_a_missing_rowset);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, subtask_count_stays_at_the_target_for_this_fixture);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, range_split_subtasks_are_balanced_with_sampling);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, requested_width_is_floored_at_two);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, requested_width_tracks_the_achievable_width);
 
     TabletManager* _tablet_mgr;
 

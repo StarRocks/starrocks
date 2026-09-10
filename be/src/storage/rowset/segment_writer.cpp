@@ -55,7 +55,6 @@
 #include "runtime/current_thread.h"
 #include "storage/base/short_key_index.h"
 #include "storage/chunk_variant_helper.h"
-#include "storage/full_sort_key_codec.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/row_store_encoder.h"
@@ -98,13 +97,11 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
           _tablet_schema(std::move(tablet_schema)),
           _opts(std::move(opts)),
           _wfile(std::move(wfile)),
-          // Declaration order: _tail_index_layout precedes _full_sort_key_index, and the
-          // initializer list has to match it or -Wreorder fires.
+          // _tail_index_layout_usable is seeded FROM _tail_index_layout, so it has to be
+          // initialized after it -- which the declaration order guarantees. Keep the list in
+          // declaration order or -Wreorder fires.
           _tail_index_layout(config::lake_enable_segment_tail_index_region && is_shared_data_mode()),
-          _tail_index_layout_usable(_tail_index_layout),
-          _full_sort_key_index(
-                  config::enable_full_sort_key_index &&
-                  is_full_sort_key_encodable(*_tablet_schema->schema(), _tablet_schema->sort_key_idxes())) {
+          _tail_index_layout_usable(_tail_index_layout) {
     CHECK_NOTNULL(_wfile.get());
 }
 
@@ -174,9 +171,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
         if (footer->has_short_key_index_page()) {
             *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
-        }
-        if (footer->has_full_sort_key_index_page()) {
-            *_footer.mutable_full_sort_key_index_page() = footer->full_sort_key_index_page();
         }
         _verify_footer();
         // in partial update, key columns have been written in partial segment
@@ -319,8 +313,8 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             sort_column_idx_by_column_index[column_index] = i;
         }
     }
-    // Only a key-columns pass builds the short key / full sort key index out of these positions (see
-    // the `if (_has_key)` branch of append_chunk), so only it needs the whole sort key present. A
+    // Only a key-columns pass builds the short key index out of these positions (see the
+    // `if (_has_key)` branch of append_chunk), so only it needs the whole sort key present. A
     // value-only pass -- a partial-update segment rewrite, or a vertical writer's value column group
     // -- never touches _sort_column_indexes, and demanding the full sort key there is a false alarm:
     // fatal once ORDER BY puts value columns into a primary key table's sort key, since the pass then
@@ -345,35 +339,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
     _has_key = has_key;
     if (_has_key) {
-        // The legacy truncated short key index is ALWAYS built (footer field 9).
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
-        // Additionally build the full sort key index (footer field 11) when enabled.
-        if (_full_sort_key_index) {
-            _full_sort_key_index_builder =
-                    std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
-        }
     }
 
-    // Sort-key sampler one-shot init: arm only on the first key-columns pass.
-    // The vertical writer (general_tablet_writer.cpp) re-enters this init() for
-    // each non-key column group on the same SegmentWriter; we must preserve the
-    // previously armed state and the already-collected samples. Use the
-    // `has_key` parameter rather than the `_has_key` member so the check is
-    // independent of assignment ordering above.
-    //
-    // The vertical writer's invariant (general_tablet_writer.cpp:247) requires
-    // the first write_columns() call to have is_key=true, so _num_rows_written
-    // must be 0 here when has_key first becomes true. The DCHECK makes this
-    // contract crash-loud in debug/test builds; in release we fall back to
-    // leaving the sampler disabled instead of sampling mid-stream.
-    if (!_full_sort_key_index && has_key && !_sort_column_indexes.empty() && _sort_key_sample_row_interval == 0) {
-        DCHECK_EQ(_num_rows_written, 0) << "sampler arm requires fresh writer";
-        const int64_t row_interval = config::segment_sort_key_sample_row_interval;
-        if (_num_rows_written == 0 && row_interval > 0) {
-            _sort_key_sample_row_interval = row_interval;
-            _next_sort_key_sample_row_index = row_interval;
-        }
-    }
     const auto& column = _tablet_schema->columns().back();
     if (column.name() == Schema::FULL_ROW_COLUMN) {
         std::vector<ColumnId> cids(_tablet_schema->num_columns() - 1);
@@ -391,8 +359,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
     file_info.sort_key_min = _sort_key_min;
     file_info.sort_key_max = _sort_key_max;
-    file_info.sort_key_samples = std::move(_sort_key_samples);
-    file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
 }
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,
@@ -406,9 +372,6 @@ uint64_t SegmentWriter::estimate_segment_size() {
         size += column_writer->estimate_buffer_size();
     }
     size += _index_builder->size();
-    if (_full_sort_key_index_builder != nullptr) {
-        size += _full_sort_key_index_builder->size();
-    }
     return size;
 }
 
@@ -533,7 +496,6 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(_write_short_key_index());
         *index_size += _wfile->size() - index_offset;
         _index_builder.reset();
-        _full_sort_key_index_builder.reset();
     }
 
     if (defer_small_index) {
@@ -594,28 +556,13 @@ Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* foo
 }
 
 Status SegmentWriter::_write_short_key_index() {
-    // The legacy truncated short key index is ALWAYS written to footer field 9, so old binaries and
-    // read-OFF queries keep working.
-    {
-        std::vector<Slice> body;
-        PageFooterPB footer;
-        RETURN_IF_ERROR(_index_builder->finalize(_num_rows, &body, &footer));
-        PagePointer pp;
-        // short key index page is not compressed right now
-        RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
-        pp.to_proto(_footer.mutable_short_key_index_page());
-    }
-    // Additionally write the full, untruncated, all-sort-column order-preserving sort key index to
-    // footer field 11 when enabled.
-    if (_full_sort_key_index) {
-        std::vector<Slice> body;
-        PageFooterPB footer;
-        RETURN_IF_ERROR(_full_sort_key_index_builder->finalize_full_sort_key(
-                _num_rows, &body, &footer, /*num_sort_key_columns=*/_sort_column_indexes.size()));
-        PagePointer pp;
-        RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
-        pp.to_proto(_footer.mutable_full_sort_key_index_page());
-    }
+    std::vector<Slice> body;
+    PageFooterPB footer;
+    RETURN_IF_ERROR(_index_builder->finalize(_num_rows, &body, &footer));
+    PagePointer pp;
+    // short key index page is not compressed right now
+    RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
+    pp.to_proto(_footer.mutable_short_key_index_page());
     return Status::OK();
 }
 
@@ -661,14 +608,8 @@ Status SegmentWriter::_append_sort_key_index_entry(const Chunk& chunk, size_t ro
             }
         }
         SeekTuple tuple(*chunk.schema(), std::move(values));
-        // The legacy truncated short key index is ALWAYS built (footer field 9).
         size_t keys = _tablet_schema->num_short_key_columns();
         RETURN_IF_ERROR(_index_builder->add_item(tuple.short_key_encode(keys, _sort_column_indexes, 0)));
-        // When enabled, ADDITIONALLY record the full untruncated sort key at the SAME block boundary.
-        if (_full_sort_key_index) {
-            RETURN_IF_ERROR(
-                    _full_sort_key_index_builder->add_item(tuple.full_sort_key_encode(_sort_column_indexes, 0)));
-        }
     });
     return Status::OK();
 }
@@ -711,16 +652,6 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
             // At the begin of one block, so add a short key index entry
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
                 RETURN_IF_ERROR(_append_sort_key_index_entry(chunk, i));
-            }
-            // Sort-key sample: take one tuple every _sort_key_sample_row_interval
-            // rows. Samples are at 0-indexed rows interval, 2*interval, 3*interval,
-            // ... so samples[k] is the key at row (k+1) * interval. The producer
-            // invariant samples.size() * interval < num_rows holds strictly
-            // because the last sample lands at row N*interval (< num_rows).
-            if (!_full_sort_key_index && _sort_key_sample_row_interval > 0 &&
-                _num_rows_written == _next_sort_key_sample_row_index) {
-                _sort_key_samples.emplace_back(build_variant_tuple_from_chunk_row(chunk, i, _sort_column_indexes));
-                _next_sort_key_sample_row_index += _sort_key_sample_row_interval;
             }
             ++_num_rows_written;
         }

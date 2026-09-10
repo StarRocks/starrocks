@@ -458,24 +458,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 Tablet 数比较多或者单个 Tablet 数据量比较大的场景下大幅降低 Compaction 的开销。
 - 引入版本：-
 
-### enable_full_sort_key_index
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：全量排序键索引的写入侧开关。开启后，Segment Writer 会在始终写入的旧版截断短键索引页之外，**额外**写入一个完整、未截断、包含所有排序键列的保序全量排序键索引页，并不再写入由 `segment_sort_key_sample_row_interval` 控制的元数据排序键采样。无论该配置是否开启，旧版截断短键索引页都会照常写入，因此早于该特性的 BE/CN 版本读取 Segment 不受影响（无降级风险）。该配置仅影响新写入的 Segment，磁盘上已存在的 Segment 不受影响。
-- 引入版本：-
-
-### enable_full_sort_key_index_read
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：全量排序键索引的读取侧开关。开启后，查询读路径（Segment Seek 与逻辑扫描切分）在 Segment 存在全量排序键索引页时使用该页；关闭后，所有 Segment（包括已带有全量页的）都回退到旧版截断短键索引页。由于两个配置都默认开启且旧版页始终存在，关闭该开关即可让新发起的查询立即停止使用全量排序键索引（回退阀），无需重写数据。Tablet Split 与 Range-Split 并行 Compaction 不受该开关影响。
-- 引入版本：-
-
 ### enable_lazy_delta_column_compaction
 
 - 默认值：true
@@ -1115,6 +1097,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 单位：秒
 - 是否动态：是
 - 描述：快照文件清理的间隔。
+- 引入版本：-
+
+### sort_key_max_samples_per_tablet
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：计算 Tablet 拆分边界时，从单个 Tablet 中采集的排序键样本数量上限。当 Segment 的 Short Key 索引已经完整编码了整个排序键时，样本来自该索引；否则来自该 Segment 数据页的有限次读取，因此该值也限制了这部分读放大。默认值与 FE 参数 `tablet_reshard_max_split_count` 保持一致，因为将一个 Tablet 拆分为 K 个 Range 需要 K-1 个内部边界点。将该值设置为 `0` 会禁用采样，此时拆分边界仅根据每个 Segment 的最小值和最大值排序键推导，精度较低但仍然正确。
 - 引入版本：-
 
 ### stale_memtable_flush_time_sec
