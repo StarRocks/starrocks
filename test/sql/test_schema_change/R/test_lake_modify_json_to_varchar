@@ -1,0 +1,124 @@
+-- name: test_lake_modify_json_to_varchar @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_long (k INT, j JSON) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_long VALUES (1, parse_json(concat('{"a":"', repeat('x', 2000), '"}')));
+-- result:
+-- !result
+SELECT length(CAST(j AS VARCHAR)) AS json_text_len FROM t_long;
+-- result:
+2009
+-- !result
+ALTER TABLE t_long MODIFY COLUMN j VARCHAR(1024);
+-- result:
+-- !result
+function: wait_table_schema_change_finish("db_${uuid0}", "t_long", "CANCELLED")
+-- result:
+CANCELLED
+-- !result
+function: assert_index_schema_columns("db_${uuid0}", "t_long", "t_long", "k|int|YES|true", "j|json|YES|false")
+-- result:
+None
+-- !result
+INSERT INTO t_long VALUES (2, parse_json('{"b":1}'));
+-- result:
+-- !result
+ALTER TABLE t_long COMPACT;
+-- result:
+-- !result
+function: wait_compaction_finish("t_long", 1)
+-- result:
+None
+-- !result
+SELECT count(*) AS rows_after_compaction FROM t_long;
+-- result:
+2
+-- !result
+SELECT k, length(CAST(j AS VARCHAR)) AS json_text_len FROM t_long ORDER BY k;
+-- result:
+1	2009
+2	8
+-- !result
+CREATE TABLE t_short (k INT, j JSON) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_short VALUES (1, parse_json('{"a":1}')), (2, parse_json('{"b":"two"}'));
+-- result:
+-- !result
+ALTER TABLE t_short MODIFY COLUMN j VARCHAR(1024);
+-- result:
+-- !result
+function: wait_table_schema_change_finish("db_${uuid0}", "t_short", "FINISHED")
+-- result:
+FINISHED
+-- !result
+function: assert_index_schema_columns("db_${uuid0}", "t_short", "t_short", "k|int|YES|true", "j|varchar(1024)|YES|false")
+-- result:
+None
+-- !result
+SELECT k, j FROM t_short ORDER BY k;
+-- result:
+1	{"a": 1}
+2	{"b": "two"}
+-- !result
+CREATE TABLE t_int (k INT, v INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_int VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+[UC]function: t_int_job_count=get_schema_change_job_count("db_${uuid0}", "t_int")
+[UC]function: t_int_index_snapshot=get_index_identity_snapshot("db_${uuid0}", "t_int")
+ALTER TABLE t_int MODIFY COLUMN v BIGINT;
+-- result:
+-- !result
+function: assert_sync_fast_path("db_${uuid0}", "t_int", ${t_int_job_count}, '${t_int_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("db_${uuid0}", "t_int", "t_int", "k|int|YES|true", "v|bigint|YES|false")
+-- result:
+None
+-- !result
+SELECT k, v FROM t_int ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+CREATE TABLE t_varchar (k INT, v VARCHAR(10)) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_varchar VALUES (1, 'abc'), (2, 'de');
+-- result:
+-- !result
+[UC]function: t_varchar_job_count=get_schema_change_job_count("db_${uuid0}", "t_varchar")
+[UC]function: t_varchar_index_snapshot=get_index_identity_snapshot("db_${uuid0}", "t_varchar")
+ALTER TABLE t_varchar MODIFY COLUMN v VARCHAR(100);
+-- result:
+-- !result
+function: assert_sync_fast_path("db_${uuid0}", "t_varchar", ${t_varchar_job_count}, '${t_varchar_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("db_${uuid0}", "t_varchar", "t_varchar", "k|int|YES|true", "v|varchar(100)|YES|false")
+-- result:
+None
+-- !result
+SELECT k, v FROM t_varchar ORDER BY k;
+-- result:
+1	abc
+2	de
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

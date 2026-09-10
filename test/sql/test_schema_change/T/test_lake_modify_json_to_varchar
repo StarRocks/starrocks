@@ -1,0 +1,74 @@
+-- name: test_lake_modify_json_to_varchar @cloud
+-- ALTER TABLE ... MODIFY COLUMN <json column> VARCHAR(n) used to be answered by fast schema
+-- evolution in shared-data mode: metadata only, no rewrite, no validation, CreateTime == FinishTime.
+-- Nothing then checked that the stored JSON text actually fits in n bytes, so a tablet could end up
+-- with 2009-byte values behind a varchar(1024) schema. That is not merely cosmetic. The schema swap
+-- only lands on the tablet when the FIRST write after the ALTER applies its txn log, and from then on
+-- compaction reads the old JSON rowsets through the new VARCHAR schema and dies on the length check:
+--
+--   Fail to compact tablet 15694. version=3 txn_id=2211 cost=0s
+--     : Invalid argument: string length(2009) > limit(1028), string: {"a": "xxx...
+--
+-- BE does not retry past that and FE keeps scheduling it, so the partition's compaction score only
+-- ever grows. The engine already knew to reject the conversion -- forcing the same ALTER onto the
+-- rewrite path (by pairing it with a key-column change) cancels the job with exactly that error --
+-- the fast path just never gave the check a chance to run.
+--
+-- The cause was a vacuously-true guard: the fast path was gated on canReuseZonemapIndex(), which
+-- returns true for any source type that has no zonemap at all, and JSON has none. "Can the zonemap
+-- be reused" got read as "can the data stay as it is".
+create database db_${uuid0};
+use db_${uuid0};
+
+-- 1) JSON longer than the target VARCHAR: must NOT take the fast path. It falls back to a rewrite
+-- job, the rewrite runs the length check, and the job is CANCELLED with the column left as JSON.
+CREATE TABLE t_long (k INT, j JSON) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+INSERT INTO t_long VALUES (1, parse_json(concat('{"a":"', repeat('x', 2000), '"}')));
+SELECT length(CAST(j AS VARCHAR)) AS json_text_len FROM t_long;
+ALTER TABLE t_long MODIFY COLUMN j VARCHAR(1024);
+function: wait_table_schema_change_finish("db_${uuid0}", "t_long", "CANCELLED")
+function: assert_index_schema_columns("db_${uuid0}", "t_long", "t_long", "k|int|YES|true", "j|json|YES|false")
+-- Because the column kept its type, the write-then-compact sequence that used to wedge the tablet
+-- forever now goes through. The write matters: without it the tablet metadata never picks up the new
+-- schema and compaction succeeds even on a broken build, which is how this defect hides.
+INSERT INTO t_long VALUES (2, parse_json('{"b":1}'));
+ALTER TABLE t_long COMPACT;
+function: wait_compaction_finish("t_long", 1)
+SELECT count(*) AS rows_after_compaction FROM t_long;
+SELECT k, length(CAST(j AS VARCHAR)) AS json_text_len FROM t_long ORDER BY k;
+
+-- 2) JSON that does fit: the conversion is not blocked, it just stops being instant. The rewrite job
+-- runs to completion and the column really does become VARCHAR.
+CREATE TABLE t_short (k INT, j JSON) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+INSERT INTO t_short VALUES (1, parse_json('{"a":1}')), (2, parse_json('{"b":"two"}'));
+ALTER TABLE t_short MODIFY COLUMN j VARCHAR(1024);
+function: wait_table_schema_change_finish("db_${uuid0}", "t_short", "FINISHED")
+function: assert_index_schema_columns("db_${uuid0}", "t_short", "t_short", "k|int|YES|true", "j|varchar(1024)|YES|false")
+SELECT k, j FROM t_short ORDER BY k;
+
+-- 3) Non-JSON MODIFY COLUMN is untouched: INT -> BIGINT still resolves synchronously on the fast
+-- path, keeping the same index id and adding exactly one instantly-finished job.
+CREATE TABLE t_int (k INT, v INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+INSERT INTO t_int VALUES (1, 10), (2, 20);
+[UC]function: t_int_job_count=get_schema_change_job_count("db_${uuid0}", "t_int")
+[UC]function: t_int_index_snapshot=get_index_identity_snapshot("db_${uuid0}", "t_int")
+ALTER TABLE t_int MODIFY COLUMN v BIGINT;
+function: assert_sync_fast_path("db_${uuid0}", "t_int", ${t_int_job_count}, '${t_int_index_snapshot}')
+function: assert_index_schema_columns("db_${uuid0}", "t_int", "t_int", "k|int|YES|true", "v|bigint|YES|false")
+SELECT k, v FROM t_int ORDER BY k;
+
+-- 4) VARCHAR widening is untouched as well.
+CREATE TABLE t_varchar (k INT, v VARCHAR(10)) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("replication_num" = "1");
+INSERT INTO t_varchar VALUES (1, 'abc'), (2, 'de');
+[UC]function: t_varchar_job_count=get_schema_change_job_count("db_${uuid0}", "t_varchar")
+[UC]function: t_varchar_index_snapshot=get_index_identity_snapshot("db_${uuid0}", "t_varchar")
+ALTER TABLE t_varchar MODIFY COLUMN v VARCHAR(100);
+function: assert_sync_fast_path("db_${uuid0}", "t_varchar", ${t_varchar_job_count}, '${t_varchar_index_snapshot}')
+function: assert_index_schema_columns("db_${uuid0}", "t_varchar", "t_varchar", "k|int|YES|true", "v|varchar(100)|YES|false")
+SELECT k, v FROM t_varchar ORDER BY k;
+
+drop database db_${uuid0};

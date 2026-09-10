@@ -1144,6 +1144,15 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        // JSON has no zonemap, so canReuseZonemapIndex() below trivially returns true for it and would let
+        // JSON -> CHAR/VARCHAR take the fast path. That conversion must not skip the rewrite: the stored JSON
+        // text can be longer than the target string length, and only the rewrite path validates it. Taking the
+        // fast path leaves oversized values behind an undersized schema, which later breaks compaction with
+        // "string length(N) > limit(M)" forever. Fall back to the rewrite path so the length check can run.
+        if (oriColumn.getType().isJsonType() && modColumn.getType().getPrimitiveType().isCharFamily()) {
+            return false;
+        }
+
         // Not need for widen varchar length
         if (!SchemaChangeTypeCompatibility.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
             return false;
