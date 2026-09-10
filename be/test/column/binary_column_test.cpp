@@ -750,4 +750,40 @@ PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupport
     ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
 }
 
+
+// Regression test for the ASAN global-buffer-overflow reported as StarRocksTest#12188:
+//   BinaryColumnBase<uint32_t>::deserialize_and_append_batch_nullable() <- NullableColumn::
+//   deserialize_and_append_batch() <- AggHashSetOfSerializedKey::insert_keys_to_columns() <-
+//   Aggregator::convert_hash_set_to_chunk().
+//
+// convert_hash_set_to_chunk() sizes `hash_set.results` to the whole chunk size and then fills only
+// the first `read_index` entries. A streaming DISTINCT aggregation that AggregateDistinctStreaming
+// SourceOperator::_output_chunk_from_hash_set() has just reset drains a brand new, empty hash set,
+// so read_index is 0 and every Slice in the buffer is still default constructed -- Slice() points
+// its data at the 1-byte "" literal. Both deserialize_and_append_batch overloads peeked at srcs[0]
+// to size a reserve() before consulting chunk_size, reading 4 bytes off the end of that literal.
+//
+// Deserializing zero rows must not touch srcs[0] at all.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_deserialize_and_append_batch_zero_chunk_size) {
+    // Exactly what Aggregator::convert_hash_set_to_chunk() hands down when the hash set is empty:
+    // a full-size buffer of default constructed slices, and a row count of 0.
+    Buffer<Slice> srcs(4096);
+    ASSERT_EQ(0u, srcs[0].size);
+
+    auto column = BinaryColumn::create();
+    column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, column->size());
+
+    auto large_column = LargeBinaryColumn::create();
+    large_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, large_column->size());
+
+    // The nullable wrapper is the path the crash actually took.
+    auto nullable_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    nullable_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, nullable_column->size());
+    ASSERT_FALSE(nullable_column->has_null());
+}
+
 } // namespace starrocks

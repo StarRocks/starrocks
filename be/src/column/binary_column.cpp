@@ -1148,6 +1148,12 @@ const uint8_t* BinaryColumnBase<T>::deserialize_and_append(const uint8_t* pos) {
 
 template <typename T>
 void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
+    // Callers hand down a full-size slice buffer and a row count, and the entries past that count
+    // may still be default constructed -- Slice() points its data at a 1-byte "" literal. Bail out
+    // before the reserve heuristic peeks at srcs[0], which would read past that literal.
+    if (chunk_size == 0) {
+        return;
+    }
     // max size of one string is 2^32, so use uint32_t not T
     uint32_t string_size = *((uint32_t*)srcs[0].data);
     get_bytes().reserve(chunk_size * string_size * 2);
@@ -1212,6 +1218,11 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
 template <typename T>
 void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                                 Buffer<uint8_t>& is_nulls, bool& has_null) {
+    // See deserialize_and_append_batch(): srcs[0] is only guaranteed to be a real key when there
+    // is at least one row to append.
+    if (chunk_size == 0) {
+        return;
+    }
     const uint32_t string_size = *((bool*)srcs[0].data) // is null
                                          ? 4
                                          : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
