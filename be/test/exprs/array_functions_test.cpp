@@ -6309,6 +6309,30 @@ TEST_F(ArrayFunctionsTest, array_repeat_variant_uses_column_copy) {
     expect_variant_array_row(result, 2, {});
 }
 
+// repeat() pre-sizes its elements column from the counted total. For a VARIANT element that
+// reservation has to land on the base payload the rows are written to, not on the VariantRowValue
+// pool the column inherits from ObjectColumn and never touches: sizeof(VariantRowValue) is ~90
+// bytes, and the total is only capped by MAX_CAPACITY_LIMIT, so a large count would reserve
+// gigabytes for a vector that stays empty while the payload still grew geometrically.
+TEST_F(ArrayFunctionsTest, array_repeat_variant_sizes_base_payload_not_object_pool) {
+    auto source = make_nullable_variant_values({std::string("1"), std::string(R"({"a":2})")});
+    auto repeat_data = Int32Column::create();
+    repeat_data->append(64);
+    repeat_data->append(64);
+
+    auto result = ArrayFunctions::repeat(nullptr, {source, repeat_data}).value();
+    expect_variant_array_row(result, 0, std::vector<std::optional<std::string>>(64, std::string("1")));
+    expect_variant_array_row(result, 1, std::vector<std::optional<std::string>>(64, std::string(R"({"a":2})")));
+
+    const auto* array = down_cast<const ArrayColumn*>(result.get());
+    const auto* elements = down_cast<const NullableColumn*>(array->elements_column().get());
+    const auto* variants = down_cast<const VariantColumn*>(elements->data_column().get());
+    ASSERT_EQ(128, variants->size());
+    EXPECT_EQ(0, variants->get_pool().capacity());
+    EXPECT_GE(variants->metadata_column()->capacity(), 128);
+    EXPECT_GE(variants->remain_value_column()->capacity(), 128);
+}
+
 TEST_F(ArrayFunctionsTest, array_slice_variant_uses_element_ranges) {
     auto elements = make_nullable_variant_values(
             {std::string("1"), std::string(R"({"a":2})"), std::nullopt, std::string("4"), std::string(R"({"x":1})"),

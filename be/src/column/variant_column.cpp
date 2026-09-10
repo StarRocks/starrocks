@@ -640,6 +640,31 @@ size_t VariantColumn::byte_size(size_t from, size_t sz) const {
     return bytes;
 }
 
+// A VariantColumn never writes to the `_pool` it inherits from ObjectColumn: rows live in the
+// metadata/remain base payload and in the shredded typed columns, which is also the set that
+// size(), capacity() and byte_size() report on. Left inherited, reserve(n) would allocate
+// n * sizeof(VariantRowValue) for a vector that stays empty while the columns that do receive the
+// rows still grow geometrically - the cost of the reservation without any of its benefit.
+//
+// Only the base payload is reserved here. It is the fixed part of the layout, and both of its
+// columns are BinaryColumn, whose reserve sizes the offsets alone, so the cost is exactly the row
+// count the caller asked for. The shredded typed columns are deliberately left out: how many there
+// are and what they hold comes from how the data was shredded, not from anything the caller can
+// see, so fanning out would make reserve(n) cost O(shredded paths * n) with a shape no caller can
+// predict - and a typed field of ARRAY/MAP/STRUCT type reserves n inner elements per level on top
+// of that, which is not proportional to what the rows will actually contain. JsonColumn declines
+// to reserve its flat columns for the same reason. Nothing is lost on the paths that pre-size a
+// variant result: clone_empty() returns an unshredded column, whose whole storage is the base
+// payload.
+void VariantColumn::reserve(size_t n) {
+    if (_metadata_column != nullptr) {
+        _metadata_column->reserve(n);
+    }
+    if (_remain_value_column != nullptr) {
+        _remain_value_column->reserve(n);
+    }
+}
+
 void VariantColumn::resize(size_t n) {
     if (_metadata_column != nullptr) {
         _metadata_column->resize(n);

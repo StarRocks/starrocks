@@ -407,6 +407,59 @@ PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
     EXPECT_GE(memory_usage, 0);
 }
 
+// ObjectColumn::reserve pre-sizes the inherited VariantRowValue pool, which a VariantColumn never
+// writes to. The override has to reach the columns that actually receive the rows, otherwise a
+// caller sizing a variant result up front pays for a vector that stays empty while the base payload
+// it meant to size still grows geometrically.
+PARALLEL_TEST(VariantColumnTest, test_reserve_sizes_base_payload_not_object_pool) {
+    auto column = VariantColumn::create();
+    constexpr size_t kRows = 4096;
+
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    EXPECT_EQ(0, column->size());
+    EXPECT_TRUE(column->empty());
+
+    // A reservation must not disturb what a later append reads back.
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    ASSERT_EQ(1, column->size());
+    VariantRowValue row_buffer;
+    const VariantRowValue* row = column->get_row_value(0, &row_buffer);
+    ASSERT_NE(nullptr, row);
+    auto json = row->to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"({"a":1})", json.value());
+    EXPECT_EQ(0, column->get_pool().capacity());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_reserve_skips_shredded_typed_columns) {
+    auto column = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    append_json_variant_row(metadata.get(), remain.get(), R"({})");
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
+    column->set_shredded_columns({"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))},
+                                 std::move(typed), std::move(metadata), std::move(remain));
+    const size_t typed_capacity_before = column->typed_columns()[0]->capacity();
+
+    constexpr size_t kRows = 2048;
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    // The shredded schema is data-dependent in both width and element type, so the reservation
+    // stops at the base payload. This typed field is an ARRAY: forwarding would have reserved
+    // kRows inner elements on top of the kRows offsets, for arrays the rows may not contain.
+    ASSERT_EQ(1, column->typed_columns().size());
+    EXPECT_EQ(typed_capacity_before, column->typed_columns()[0]->capacity());
+    EXPECT_EQ(1, column->size());
+}
+
 PARALLEL_TEST(VariantColumnTest, test_clone_shredded_schema_integrity) {
     auto src = VariantColumn::create();
     auto metadata = BinaryColumn::create();
