@@ -306,6 +306,10 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
             delete_delvec_sid_range.emplace_back(it->id(), it->id() + std::max(it->segments_size(), 1) - 1);
             // Collect del files.
             _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            // Drop the delete_predicate before archiving the input rowset into compaction_inputs.
+            // compaction_inputs is consumed only by vacuum/file cleanup, never by readers, so the
+            // predicate is pure metadata bloat once the rowset is compacted away.
+            (*it).clear_delete_predicate();
             _tablet_meta->mutable_compaction_inputs()->Add(std::move(*it));
             it = _tablet_meta->mutable_rowsets()->erase(it);
             del_range_ss << "[" << delete_delvec_sid_range.back().first << "," << delete_delvec_sid_range.back().second
