@@ -750,7 +750,6 @@ PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupport
     ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
 }
 
-
 // Regression test for the ASAN global-buffer-overflow reported as StarRocksTest#12188:
 //   BinaryColumnBase<uint32_t>::deserialize_and_append_batch_nullable() <- NullableColumn::
 //   deserialize_and_append_batch() <- AggHashSetOfSerializedKey::insert_keys_to_columns() <-
