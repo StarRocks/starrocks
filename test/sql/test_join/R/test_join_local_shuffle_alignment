@@ -1,0 +1,129 @@
+-- name: test_join_local_shuffle_alignment
+create table ja (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+-- result:
+-- !result
+create table jb (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 32 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into ja select s1, s1 % 7 from table(generate_series(1, 5000)) s(s1);
+-- result:
+-- !result
+insert into jb select s1, s1 % 7 from table(generate_series(1, 3000)) s(s1);
+-- result:
+-- !result
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+select count(*) from jb where jb.id in (select z.id from (select id from ja union select id from ja) z);
+-- result:
+3000
+-- !result
+select count(*) from (select id from ja union select id from ja) y
+  join (select id from jb union select id from jb) z on y.id = z.id;
+-- result:
+3000
+-- !result
+select count(*) from (select id from ja union select id from ja) z left semi join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+select count(*) from (select id from ja union select id from ja) z left anti join jb on z.id = jb.id;
+-- result:
+2000
+-- !result
+select count(*), min(id), max(id), sum(id) from
+  (select z.id from (select id from ja union select id from ja) z join jb on z.id = jb.id) x;
+-- result:
+3000	1	3000	4501500
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+set pipeline_dop = 16;
+-- result:
+-- !result
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+set pipeline_dop = 0;
+-- result:
+-- !result
+select count(*) from ja join (select id from jb union select id from jb) z on ja.id = z.id;
+-- result:
+3000
+-- !result
+select count(*) from (select g from ja union select g from ja) z join jb on z.g = jb.g;
+-- result:
+3000
+-- !result
+set enable_wait_dependent_event = true;
+-- result:
+-- !result
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+select count(*) from ja join (select id from jb union select id from jb) z on ja.id = z.id;
+-- result:
+3000
+-- !result
+select count(*) from ja join jb on ja.id = jb.id;
+-- result:
+3000
+-- !result
+select count(*) from (select id from ja union select id from ja) z
+  left join (select id from jb union select id from jb) y on z.id = y.id;
+-- result:
+5000
+-- !result
+set enable_wait_dependent_event = false;
+-- result:
+-- !result
+set enable_runtime_adaptive_dop = true;
+-- result:
+-- !result
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+select count(*) from ja join (select id from jb union select id from jb) z on ja.id = z.id;
+-- result:
+3000
+-- !result
+select count(*) from ja join jb on ja.id = jb.id;
+-- result:
+3000
+-- !result
+select count(*), min(z.id), max(z.id) from (select id from ja union select id from ja) z
+  join jb on z.id = jb.id;
+-- result:
+3000	1	3000
+-- !result
+set enable_wait_dependent_event = true;
+-- result:
+-- !result
+select count(*) from (select id from ja union select id from ja) z join jb on z.id = jb.id;
+-- result:
+3000
+-- !result
+set enable_wait_dependent_event = false;
+-- result:
+-- !result
+set enable_runtime_adaptive_dop = false;
+-- result:
+-- !result
