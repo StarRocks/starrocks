@@ -261,6 +261,26 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
+    // A cache miss here is read as "this table set no flat_json properties", so the segment is
+    // written with the be.conf globals instead of the table's own settings. Left as is, on purpose:
+    //
+    //   * The load path genuinely has no metadata to read. DeltaWriterImpl carries neither a
+    //     metadata nor a version, and its schema comes from TabletSchemaService::get_schema_for_load
+    //     (schema cache, then an FE RPC), not from a tablet metadata.
+    //   * There is no "latest, and fetch it if absent" accessor. Every get_tablet_metadata overload
+    //     takes a version; without one the only route is list_tablet_metadata, which its own comment
+    //     calls "The most expensive way!". Fetching by version does not populate the latest-metadata
+    //     cache key either -- only cache_tablet_metadata() on publish does -- so a fetch-on-miss here
+    //     would LIST once per load, not once per cold tablet.
+    //   * The window is self-healing and costs no correctness. Only a table that sets flat_json.*
+    //     differing from the globals is affected at all; the rows are written and read correctly
+    //     either way, and compaction rewrites the segment from version-pinned metadata
+    //     (tablet_merger.cpp, update_manager.cpp), restoring the table's own shape.
+    //
+    // Closing it properly needs a table-level config cache with its own invalidation, which is a
+    // larger change than the window justifies. Measured: a table with flat_json.enable=false gets a
+    // flattened segment on a cold write, queries over the mixed table stay correct, and
+    // ALTER TABLE ... COMPACT returns it to the unflattened shape.
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
         metadata && metadata->has_flat_json_config()) {
         opts.flat_json_config = std::make_shared<FlatJsonConfig>();
@@ -596,6 +616,26 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
+    // A cache miss here is read as "this table set no flat_json properties", so the segment is
+    // written with the be.conf globals instead of the table's own settings. Left as is, on purpose:
+    //
+    //   * The load path genuinely has no metadata to read. DeltaWriterImpl carries neither a
+    //     metadata nor a version, and its schema comes from TabletSchemaService::get_schema_for_load
+    //     (schema cache, then an FE RPC), not from a tablet metadata.
+    //   * There is no "latest, and fetch it if absent" accessor. Every get_tablet_metadata overload
+    //     takes a version; without one the only route is list_tablet_metadata, which its own comment
+    //     calls "The most expensive way!". Fetching by version does not populate the latest-metadata
+    //     cache key either -- only cache_tablet_metadata() on publish does -- so a fetch-on-miss here
+    //     would LIST once per load, not once per cold tablet.
+    //   * The window is self-healing and costs no correctness. Only a table that sets flat_json.*
+    //     differing from the globals is affected at all; the rows are written and read correctly
+    //     either way, and compaction rewrites the segment from version-pinned metadata
+    //     (tablet_merger.cpp, update_manager.cpp), restoring the table's own shape.
+    //
+    // Closing it properly needs a table-level config cache with its own invalidation, which is a
+    // larger change than the window justifies. Measured: a table with flat_json.enable=false gets a
+    // flattened segment on a cold write, queries over the mixed table stay correct, and
+    // ALTER TABLE ... COMPACT returns it to the unflattened shape.
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
         metadata && metadata->has_flat_json_config()) {
         opts.flat_json_config = std::make_shared<FlatJsonConfig>();

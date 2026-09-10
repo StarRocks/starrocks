@@ -28,6 +28,10 @@
 #include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoding_types.h"
 
+namespace starrocks {
+class FlatJsonConfig;
+}
+
 namespace starrocks::lake {
 
 using CrossPublishRowSelectorPtr = std::unique_ptr<CrossPublishRowSelector>;
@@ -88,6 +92,12 @@ struct RowsetUpdateStateParams {
     const Tablet* tablet;
     const RssidFileInfoContainer& container;
 };
+
+// The table-level flat JSON config any segment written during this publish must carry. It is read from
+// the version-pinned publish metadata, not from TabletManager's metadata cache: a cache miss there would
+// silently fall back to the be.conf globals and undo the table's own flat_json properties. Returns
+// nullptr for a table that carries no config, which is what SegmentWriter reads as "use the globals".
+std::shared_ptr<FlatJsonConfig> publish_flat_json_config(const RowsetUpdateStateParams& params);
 
 class RowsetUpdateState {
 public:

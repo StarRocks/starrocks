@@ -192,11 +192,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepar
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     SegmentWriterOptions writer_options;
 
-    if (auto metadata = params.tablet->tablet_mgr()->get_latest_cached_tablet_metadata(params.tablet->id());
-        metadata && metadata->has_flat_json_config()) {
-        writer_options.flat_json_config = std::make_shared<FlatJsonConfig>();
-        writer_options.flat_json_config->update(metadata->flat_json_config());
-    }
+    writer_options.flat_json_config = publish_flat_json_config(params);
 
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());

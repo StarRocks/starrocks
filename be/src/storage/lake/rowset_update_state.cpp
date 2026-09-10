@@ -581,11 +581,7 @@ static Status append_no_old_row_values(const TabletColumn* tablet_column,
 // materializing one per segment.
 static const Filter kNoRowSelector;
 
-// The table-level flat JSON config the rewritten segment must be written with. It is read from the
-// version-pinned publish metadata, not from TabletManager's metadata cache: a cache miss there would
-// silently fall back to the be.conf globals and undo the table's own flat_json properties. Returns
-// nullptr for a table that carries no config, which is what SegmentWriter reads as "use the globals".
-static std::shared_ptr<FlatJsonConfig> rewrite_flat_json_config(const RowsetUpdateStateParams& params) {
+std::shared_ptr<FlatJsonConfig> publish_flat_json_config(const RowsetUpdateStateParams& params) {
     if (params.metadata == nullptr || !params.metadata->has_flat_json_config()) {
         return nullptr;
     }
@@ -679,7 +675,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     const Filter& owned = _upserts[segment_id] != nullptr ? _upserts[segment_id]->standalone_owned() : kNoRowSelector;
     const bool filter_unowned_rows = !owned.empty();
 
-    auto flat_json_config = rewrite_flat_json_config(params);
+    auto flat_json_config = publish_flat_json_config(params);
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {

@@ -498,10 +498,14 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
             // must all be flat json type
             JsonPathDeriver deriver;
 
-            if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
-                metadata && metadata->has_flat_json_config()) {
+            // _tablet_metadata is the version this reader was opened on, so the table's own
+            // flat_json properties are already in hand. Probing TabletManager's cache for them
+            // instead only added a way to lose them: a miss there yields no config at all, and the
+            // deriver then falls back to the be.conf globals -- deciding the compacted column's
+            // shape from the wrong settings on a table that set its own.
+            if (_tablet_metadata->has_flat_json_config()) {
                 auto flat_json_config = std::make_shared<FlatJsonConfig>();
-                flat_json_config->update(metadata->flat_json_config());
+                flat_json_config->update(_tablet_metadata->flat_json_config());
                 deriver.init_flat_json_config(flat_json_config.get());
             }
 

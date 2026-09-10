@@ -28,13 +28,17 @@
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
+#include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
@@ -42,16 +46,19 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -6405,6 +6412,267 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
     EXPECT_TRUE(st.is_internal_error()) << "got: " << st.to_string();
     EXPECT_NE(std::string::npos, st.message().find("unique id"))
             << "expected 'unique id' in message; got: " << st.message();
+}
+
+// A table's flat JSON properties must survive a lake column-mode partial update whose tablet
+// metadata happens not to be in TabletManager's cache.
+//
+// ColumnModePartialUpdateHandler::_prepare_delta_column_group_writer builds the SegmentWriterOptions
+// for the .cols delta column group by hand, so it does not go through RowsetWriterContext where the
+// other writers pick the table config up. It used to read the config through
+// TabletManager::get_latest_cached_tablet_metadata(), which only probes the metacache and never
+// falls back to the object store, and it treated "not cached" as "this table sets no config".
+// That probe misses right after a BE restart, after an LRU eviction, and on any node that has not
+// itself published this tablet -- the options then carry no config and SegmentWriter falls back to
+// config::enable_json_flat, so a table created with "flat_json.enable" = "false" has its JSON
+// column silently flattened, with the table property still reading "false" and nothing in the log
+// or the metrics to say otherwise.
+//
+// The publish metadata the handler is already handed is version-pinned, so reading the config from
+// there is both correct and free. Pruning the metacache below is what a BE restart does to it.
+class LakeColumnModeFlatJsonConfigTest : public TestBase {
+public:
+    LakeColumnModeFlatJsonConfigTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+
+        //  | column | type | KEY | NULL |
+        //  +--------+------+-----+------+
+        //  |   c0   |  INT | YES |  NO  |
+        //  |   c1   |  INT | NO  |  YES |
+        //  |   c2   | JSON | NO  |  YES |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(true);
+            c1->set_aggregation("REPLACE");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("JSON");
+            c2->set_is_key(false);
+            c2->set_is_nullable(true);
+            c2->set_aggregation("REPLACE");
+        }
+
+        // The partial update carries the key and the JSON column only, so the .cols file it produces
+        // holds exactly the JSON column -- the thing under test.
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_JSON});
+        _slot_pointers.emplace_back(&_slots[0]);
+        _slot_pointers.emplace_back(&_slots[1]);
+
+        _full_slot_cid_map.emplace(0, 0);
+        _full_slot_cid_map.emplace(1, 1);
+        _full_slot_cid_map.emplace(2, 2);
+        _partial_slot_cid_map.emplace(0, 0);
+        _partial_slot_cid_map.emplace(2, 1);
+
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    }
+
+    void TearDown() override {
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        remove_test_dir_or_die();
+    }
+
+    // The table was created with the given "flat_json.enable"; the other knobs keep the be.conf
+    // defaults, exactly as an FE-issued TFlatJsonConfig does.
+    void set_table_flat_json_enable(bool enable) {
+        auto* flat_json_config = _tablet_metadata->mutable_flat_json_config();
+        flat_json_config->set_flat_json_enable(enable);
+        flat_json_config->set_flat_json_null_factor(config::json_flat_null_factor);
+        flat_json_config->set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+        flat_json_config->set_flat_json_max_column_max(config::json_flat_column_max);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    // Rows whose JSON values all share the same two keys, i.e. the shape the flattener does extract.
+    Chunk generate_data(int64_t chunk_size, bool partial, int update_ratio) {
+        auto c0 = Int32Column::create();
+        auto c2 = JsonColumn::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            auto json = JsonValue::parse(strings::Substitute(R"({"a": $0, "b": $1})", i, i * update_ratio));
+            CHECK(json.ok());
+            c2->append(&json.value());
+        }
+        if (partial) {
+            return Chunk({std::move(c0), std::move(c2)}, _partial_slot_cid_map);
+        }
+        auto c1 = Int32Column::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c1->append(i * update_ratio);
+        }
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _full_slot_cid_map);
+    }
+
+    // Every physical place the JSON column ends up, as <where, was it written flat>: the base
+    // segments of every rowset, and the .cols delta column groups the update produced.
+    std::vector<std::pair<std::string, bool>> collect_json_column_forms(int64_t version) {
+        std::vector<std::pair<std::string, bool>> forms;
+        const auto tablet_id = _tablet_metadata->id();
+        auto metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version).value();
+        const auto j_uid = static_cast<size_t>(_tablet_schema->column(2).unique_id());
+        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        auto form_of = [&](const std::string& kind, const std::string& name) {
+            auto path = _tablet_mgr->segment_location(tablet_id, name);
+            auto segment = Segment::open(fs, FileInfo{path}, 0, _tablet_schema).value();
+            const ColumnReader* reader = segment->column_with_uid(j_uid);
+            if (reader != nullptr) {
+                forms.emplace_back(kind + " " + name, reader->is_flat_json());
+            }
+        };
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& seg_meta : rowset.segment_metas()) {
+                form_of("segment", seg_meta.filename());
+            }
+        }
+        for (const auto& [rssid, dcg_ver] : metadata->dcg_meta().dcgs()) {
+            for (const auto& name : dcg_ver.column_files()) {
+                form_of("cols", name);
+            }
+        }
+        return forms;
+    }
+
+    // One full load, then one COLUMN_UPDATE_MODE partial update of the JSON column, with the
+    // metacache pruned in between so the publish runs against a cold cache the way it does after a
+    // BE restart. Returns the physical form of the JSON column everywhere it landed.
+    std::vector<std::pair<std::string, bool>> load_then_column_update_with_cold_cache(int64_t chunk_size) {
+        const auto tablet_id = _tablet_metadata->id();
+        auto indexes = std::vector<uint32_t>(chunk_size);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        int64_t version = 1;
+
+        auto chunk_full = generate_data(chunk_size, false, 3);
+        {
+            const auto txn_id = next_id();
+            auto delta_writer = DeltaWriterBuilder()
+                                        .set_tablet_manager(_tablet_mgr.get())
+                                        .set_tablet_id(tablet_id)
+                                        .set_txn_id(txn_id)
+                                        .set_partition_id(_partition_id)
+                                        .set_mem_tracker(_mem_tracker.get())
+                                        .set_schema_id(_tablet_schema->id())
+                                        .build()
+                                        .value();
+            CHECK_OK(delta_writer->open());
+            CHECK_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+            CHECK_OK(delta_writer->finish_with_txnlog());
+            delta_writer->close();
+            CHECK_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        }
+
+        auto chunk_partial = generate_data(chunk_size, true, 5);
+        const auto txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_mgr.get())
+                                    .set_tablet_id(tablet_id)
+                                    .set_txn_id(txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(_tablet_schema->id())
+                                    .set_slot_descriptors(&_slot_pointers)
+                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                    .build()
+                                    .value();
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        // What a BE restart leaves behind: the tablet metadata is no longer cached, so a writer that
+        // asks the cache for the table's flat JSON config gets nothing back.
+        _tablet_mgr->metacache()->prune();
+        CHECK(_tablet_mgr->get_latest_cached_tablet_metadata(tablet_id) == nullptr);
+
+        CHECK_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        return collect_json_column_forms(version);
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_column_mode_flat_json_config";
+
+protected:
+    constexpr static int64_t kChunkSize = 128;
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = next_id();
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _full_slot_cid_map;
+    Chunk::SlotHashMap _partial_slot_cid_map;
+};
+
+TEST_F(LakeColumnModeFlatJsonConfigTest, column_update_keeps_table_flat_json_config_on_cold_cache) {
+    // The defect only shows when the be.conf global says "flatten": the table's "do not" is then the
+    // only thing that can stop it.
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    set_table_flat_json_enable(false);
+
+    auto forms = load_then_column_update_with_cold_cache(kChunkSize);
+
+    size_t num_segments = 0;
+    size_t num_cols = 0;
+    for (const auto& [where, is_flat] : forms) {
+        (where.rfind("cols ", 0) == 0 ? num_cols : num_segments)++;
+    }
+    // Guard against a vacuous pass: without a .cols file the loop below proves nothing about the
+    // SegmentWriter the column-mode apply builds.
+    ASSERT_GT(num_segments, 0u);
+    ASSERT_GT(num_cols, 0u) << "the update did not produce a delta column group";
+    for (const auto& [where, is_flat] : forms) {
+        EXPECT_FALSE(is_flat) << where << " ignored the table's flat_json.enable=false";
+    }
+}
+
+// Control: a table that sets no flat_json property at all carries no flat_json_config, and every
+// writer must keep following config::enable_json_flat -- a cold cache must not change that either.
+TEST_F(LakeColumnModeFlatJsonConfigTest, column_update_follows_globals_when_table_sets_no_config) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    ASSERT_FALSE(_tablet_metadata->has_flat_json_config());
+
+    auto forms = load_then_column_update_with_cold_cache(kChunkSize);
+
+    size_t num_cols = 0;
+    for (const auto& [where, is_flat] : forms) {
+        if (where.rfind("cols ", 0) == 0) {
+            num_cols++;
+        }
+    }
+    ASSERT_GT(num_cols, 0u) << "the update did not produce a delta column group";
+    for (const auto& [where, is_flat] : forms) {
+        EXPECT_TRUE(is_flat) << where << " should still follow config::enable_json_flat";
+    }
 }
 
 } // namespace starrocks::lake
