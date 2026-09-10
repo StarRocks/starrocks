@@ -237,6 +237,25 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
             self_keys_match_buckets ? bucket_properties : std::vector<TBucketProperty>{});
 }
 
+OpFactories PipelineBuilderContext::interpolate_local_forced_shuffle_exchange(
+        RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
+        const std::vector<ExprContext*>& partition_expr_ctxs, TPartitionType::type part_type,
+        const std::vector<TBucketProperty>& bucket_properties) {
+    // ShufflePartitioner indexes bucket_properties by partition-column position, so a scheme settled
+    // on one child is only usable on another when the two line up 1:1; otherwise fall back to the
+    // plain hash of this child's own keys, which every child can produce. (maybe_interpolate_local_
+    // shuffle_exchange makes the same size check for its self-keys branch.)
+    if (!bucket_properties.empty() && bucket_properties.size() != partition_expr_ctxs.size()) {
+        return _do_maybe_interpolate_local_shuffle_exchange(state, plan_node_id, pred_operators, partition_expr_ctxs,
+                                                            TPartitionType::HASH_PARTITIONED, {});
+    }
+    // No could_local_shuffle() early-out and no reading of THIS source's partition type or bucket
+    // properties on purpose -- see the header; the caller passes the first child's scheme for all of
+    // them. do_maybe_... still skips at DOP 1, which is safe because every child runs at the same DOP.
+    return _do_maybe_interpolate_local_shuffle_exchange(state, plan_node_id, pred_operators, partition_expr_ctxs,
+                                                        part_type, bucket_properties);
+}
+
 OpFactories PipelineBuilderContext::maybe_interpolate_local_bucket_shuffle_exchange(
         RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
         const std::vector<ExprContext*>& partition_expr_ctxs) {
@@ -476,6 +495,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState
     for (const auto& pipeline : _dependent_pipelines) {
         downstream_source_op->add_group_dependent_pipeline(pipeline);
     }
+    // A node that builds a subtree outside its own push_dependent_pipeline() scope binds itself to
+    // these afterwards -- see PipelineBuilderContext::bind_dependent_pipeline_between().
+    record_group_dependent_source(downstream_source_op.get());
 
     return {std::move(downstream_source_op)};
 }
@@ -597,6 +619,32 @@ void PipelineBuilderContext::push_dependent_pipeline(const Pipeline* pipeline) {
 }
 void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
+}
+
+void PipelineBuilderContext::bind_dependent_pipeline_between(const BuilderMark& begin, const BuilderMark& end,
+                                                             const Pipeline* dependency, bool apply_events) {
+    DCHECK_LE(begin.num_pipelines, end.num_pipelines);
+    DCHECK_LE(end.num_pipelines, _pipelines.size());
+    DCHECK_LE(begin.num_group_dependent_sources, end.num_group_dependent_sources);
+    DCHECK_LE(end.num_group_dependent_sources, _group_dependent_sources.size());
+
+    // Not optional: see the header. This is what keeps a hash join's builders ahead of its probers
+    // and its prober dop a multiple of the builder dop.
+    for (size_t i = begin.num_group_dependent_sources; i < end.num_group_dependent_sources; ++i) {
+        _group_dependent_sources[i]->add_group_dependent_pipeline(dependency);
+    }
+
+    if (!apply_events || !_fragment_context->runtime_state()->enable_wait_dependent_event()) {
+        return;
+    }
+    for (size_t i = begin.num_pipelines; i < end.num_pipelines; ++i) {
+        Pipeline* pipeline = _pipelines[i].get();
+        // The caller keeps anything that feeds `dependency` out of the range; `dependency` itself is
+        // registered after `end` for the same reason.
+        DCHECK(pipeline != dependency);
+        pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
+        pipeline->pipeline_event()->add_dependency(dependency->pipeline_event());
+    }
 }
 
 int64_t PipelineBuilderContext::_prev_limit_size(const OpFactories& pred_operators) {
