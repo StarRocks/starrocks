@@ -61,10 +61,19 @@ public class SqlBlackList {
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try (LockCloseable ignored = new LockCloseable(updateLock)) {
-            int cnt = reader.readInt();
-            for (int i = 0; i < cnt; i++) {
-                SqlBlackListPersistInfo sqlBlackListPersistInfo = reader.readJson(SqlBlackListPersistInfo.class);
-                put(sqlBlackListPersistInfo.id, Pattern.compile(sqlBlackListPersistInfo.pattern));
+            try {
+                int cnt = reader.readInt();
+                for (int i = 0; i < cnt; i++) {
+                    SqlBlackListPersistInfo sqlBlackListPersistInfo = reader.readJson(SqlBlackListPersistInfo.class);
+                    Pattern pattern = Pattern.compile(sqlBlackListPersistInfo.pattern);
+                    BlackListSql blackListSql = sqlBlackListMap.get(pattern.toString());
+                    if (blackListSql == null) {
+                        ids.set(Math.max(ids.get(), sqlBlackListPersistInfo.id + 1));
+                        sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, sqlBlackListPersistInfo.id));
+                    }
+                }
+            } finally {
+                refreshSnapshot();
             }
             LOG.info("loaded {} SQL blacklist patterns", sqlBlackListMap.size());
         }
