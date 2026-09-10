@@ -19,6 +19,7 @@
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
@@ -202,6 +203,14 @@ public:
         }
 
         return {};
+    }
+
+    Status do_visit(const ConstColumn& col) {
+        // A constant column keeps a single physical row that stands for every logical row, so the
+        // payload of row `_row` always lives at index 0 of the wrapped data column. Without this
+        // overload the visit falls through to the NotSupported template below, which cast_nested_to_json
+        // silently turns into a NULL unless ALLOW_THROW_EXCEPTION is set.
+        return cast_datum_to_json(col.data_column(), 0, _field_name, _builder, _unindexed_struct);
     }
 
     Status do_visit(const NullableColumn& col) {

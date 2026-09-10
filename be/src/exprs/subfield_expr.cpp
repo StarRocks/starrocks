@@ -46,6 +46,14 @@ public:
             return ColumnHelper::create_const_null_column(num_rows);
         }
 
+        // A constant column reports `num_rows` logical rows but only keeps a single physical row.
+        // Walking into it below would hand back a one-row field column, which would then be paired
+        // with a `num_rows`-sized null column and read out of bounds by every downstream operator.
+        // Unfold it up front, the same way ArrayElementExpr handles a constant array.
+        if (col->is_constant()) {
+            col = ColumnHelper::unfold_const_column(_children.at(0)->type(), num_rows, col);
+        }
+
         NullColumnPtr union_null_column = NullColumn::create(num_rows, false);
 
         for (size_t i = 0; i < _used_subfield_names.size(); i++) {

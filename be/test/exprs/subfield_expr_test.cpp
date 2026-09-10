@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/struct_column.h"
 #include "exprs/mock_vectorized_expr.h"
 
@@ -238,5 +239,55 @@ TEST_F(SubfieldExprTest, subfield_multi_level_test) {
     EXPECT_EQ("'smith'", result->debug_item(0));
     EXPECT_EQ("NULL", result->debug_item(1));
     EXPECT_EQ("'cruise'", result->debug_item(2));
+}
+
+// A constant struct column, such as the one CAST(<constant json> AS STRUCT<...>) returns, reports
+// `kNumRows` logical rows but keeps a single physical row. SubfieldExpr used to walk straight into
+// that single row and pair the resulting one-row field column with a `kNumRows`-sized null column,
+// so every row past the first read uninitialized heap memory (an int field) or walked off the end
+// of the offsets (a varchar field, a BE SIGSEGV).
+TEST_F(SubfieldExprTest, subfield_const_column_test) {
+    constexpr size_t kNumRows = 10;
+
+    TypeDescriptor struct_type;
+    struct_type.type = LogicalType::TYPE_STRUCT;
+    struct_type.children.emplace_back(LogicalType::TYPE_INT);
+    struct_type.field_names.emplace_back("id");
+    struct_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
+    struct_type.field_names.emplace_back("name");
+
+    auto one_row = ColumnHelper::create_column(struct_type, false);
+    DatumStruct datum_struct;
+    datum_struct.push_back(7);
+    datum_struct.push_back("hello");
+    one_row->append_datum(datum_struct);
+    auto const_column = ConstColumn::create(std::move(one_row), kNumRows);
+    ASSERT_EQ(kNumRows, const_column->size());
+
+    {
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+        expr->add_child(new_fake_const_expr(const_column->clone(), struct_type));
+        auto result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kNumRows, result->size());
+        const auto* subfield_column = ColumnHelper::get_data_column(result.get());
+        ASSERT_EQ(kNumRows, subfield_column->size());
+        for (size_t i = 0; i < kNumRows; i++) {
+            EXPECT_FALSE(result->is_null(i)) << "row " << i;
+            EXPECT_EQ("7", subfield_column->debug_item(i)) << "row " << i;
+        }
+    }
+
+    {
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_VARCHAR), {"name"});
+        expr->add_child(new_fake_const_expr(const_column->clone(), struct_type));
+        auto result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kNumRows, result->size());
+        const auto* subfield_column = ColumnHelper::get_data_column(result.get());
+        ASSERT_EQ(kNumRows, subfield_column->size());
+        for (size_t i = 0; i < kNumRows; i++) {
+            EXPECT_FALSE(result->is_null(i)) << "row " << i;
+            EXPECT_EQ("'hello'", subfield_column->debug_item(i)) << "row " << i;
+        }
+    }
 }
 } // namespace starrocks

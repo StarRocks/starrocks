@@ -1,0 +1,113 @@
+-- name: test_json_cast_const_to_struct_row_count
+-- Regression for casting a *constant* JSON value to STRUCT / MAP.
+--
+-- ColumnViewer unpacks a constant column, so CastJsonToStruct / CastJsonToMap only ever build a
+-- single physical row for a constant input. Two independent defects followed from that:
+--
+--   1. CastJsonToStruct wraps the single row back into a ConstColumn (correct), but two consumers
+--      did not know how to read a constant column:
+--        * SubfieldExpr paired that one-row field column with a null column sized for the whole
+--          chunk, so every row past the first read uninitialized heap memory (garbage integers) or
+--          walked off the end of a BinaryColumn (BE SIGSEGV for a varchar field).
+--        * CastColumnItemVisitor had no ConstColumn overload, fell through to the NotSupported
+--          template, and cast_nested_to_json silently turned that into NULL, so to_json() of a
+--          constant cast-to-struct returned NULL.
+--   2. CastJsonToMap / CastVariantToMap did *not* wrap, unlike CastJsonToArray and
+--      CastJsonToStruct, so they handed a one-row non-constant column into a many-row chunk and
+--      MapElementExpr indexed the map offsets out of bounds (BE SIGSEGV).
+--
+-- Every assertion below is "the same correct value on every row"; the broken values were
+-- uninitialized memory and differed from run to run.
+drop database if exists test_json_cast_const_to_struct_row_count;
+CREATE DATABASE test_json_cast_const_to_struct_row_count;
+USE test_json_cast_const_to_struct_row_count;
+
+CREATE TABLE t (
+  id int,
+  j json
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO t VALUES
+ (1,  parse_json('{"c":101,"s":"r01"}')),
+ (2,  parse_json('{"c":102,"s":"r02"}')),
+ (3,  parse_json('{"c":103,"s":"r03"}')),
+ (4,  parse_json('{"c":104,"s":"r04"}')),
+ (5,  parse_json('{"c":105,"s":"r05"}')),
+ (6,  parse_json('{"c":106,"s":"r06"}')),
+ (7,  parse_json('{"c":107,"s":"r07"}')),
+ (8,  parse_json('{"c":108,"s":"r08"}')),
+ (9,  parse_json('{"c":109,"s":"r09"}')),
+ (10, parse_json('{"c":110,"s":"r10"}')),
+ (11, parse_json('{"c":111,"s":"r11"}')),
+ (12, parse_json('{"c":112,"s":"r12"}'));
+
+-- ------------------------------------------------------------------
+-- 1. to_json() over a constant cast-to-struct. Used to return NULL.
+-- ------------------------------------------------------------------
+select to_json(cast(parse_json('{"c":1}') as struct<c int>)) as v;
+select to_json(cast(parse_json('{"c":1,"d":"x"}') as struct<c int, d varchar>)) as v;
+select cast(parse_json('{"c":1}') as struct<c int>) as s, cast(parse_json('{"c":1}') as struct<c int>) is null as isnull;
+
+-- The NotSupported that used to be swallowed into a NULL must be gone, not merely hidden.
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+select to_json(cast(parse_json('{"c":1}') as struct<c int>)) as v;
+set sql_mode = '';
+
+-- to_json() of a constant struct over a 12 row table: every row carries the same object.
+select id, to_json(cast(parse_json('{"c":1}') as struct<c int>)) as v from t order by id;
+
+-- ------------------------------------------------------------------
+-- 2. Constant subfield over a multi row table. Used to read uninitialized heap memory.
+-- ------------------------------------------------------------------
+select id, cast(parse_json('{"c":7}') as struct<c int>).c as v from t order by id;
+select count(*) as rows_seen, count(distinct v) as distinct_values, min(v) as min_v, max(v) as max_v
+from (select cast(parse_json('{"c":7}') as struct<c int>).c as v from t) x;
+
+-- ------------------------------------------------------------------
+-- 3. Constant varchar subfield over a multi row table. Used to SIGSEGV the BE.
+-- ------------------------------------------------------------------
+select id, cast(parse_json('{"c":"hello"}') as struct<c varchar>).c as v from t order by id;
+select count(*) as rows_seen, count(distinct v) as distinct_values, min(v) as min_v, max(v) as max_v
+from (select cast(parse_json('{"c":"hello"}') as struct<c varchar>).c as v from t) x;
+
+-- ------------------------------------------------------------------
+-- 4. Nested struct, and a struct field that stays JSON.
+-- ------------------------------------------------------------------
+select to_json(cast(parse_json('{"a":{"b":5},"z":9}') as struct<a struct<b int>, z int>)) as v;
+select id, cast(parse_json('{"a":{"b":5},"z":9}') as struct<a struct<b int>, z int>).a.b as v from t order by id;
+select id, cast(parse_json('{"a":{"b":5},"z":9}') as struct<a struct<b int>, z int>).z as v from t order by id;
+select to_json(cast(parse_json('{"a":{"b":5},"z":9}') as struct<a json, z int>)) as v;
+select id, cast(parse_json('{"a":{"b":5},"z":9}') as struct<a json, z int>).a as v from t order by id;
+
+-- ------------------------------------------------------------------
+-- 5. Non constant input (a real JSON column) must be untouched.
+-- ------------------------------------------------------------------
+select id, cast(j as struct<c int, s varchar>).c as c, cast(j as struct<c int, s varchar>).s as s from t order by id;
+select id, to_json(cast(j as struct<c int, s varchar>)) as v from t order by id;
+select id, cast(j as map<varchar, json>)['c'] as v from t order by id;
+select id, to_json(cast(j as map<varchar, int>)) as v from t order by id;
+
+-- ------------------------------------------------------------------
+-- 6. Controls: struct shapes that were already correct must stay correct.
+-- ------------------------------------------------------------------
+select to_json(named_struct('c', 1)) as v;
+select id, named_struct('c', 7).c as v from t order by id;
+select id, cast(row(7) as struct<c int>).c as v from t order by id;
+select id, cast(parse_json('[1,2,3]') as array<int>)[2] as v from t order by id;
+select id, cast(parse_json('[{"c":7}]') as array<struct<c int>>)[1].c as v from t order by id;
+
+-- ------------------------------------------------------------------
+-- 7. Constant cast-to-MAP: the mirror image defect (missing constant wrapper).
+-- ------------------------------------------------------------------
+select cast(parse_json('{"c":7}') as map<varchar, int>)['c'] as v;
+select id, cast(parse_json('{"c":7}') as map<varchar, int>)['c'] as v from t order by id;
+select count(*) as rows_seen, count(distinct v) as distinct_values, min(v) as min_v, max(v) as max_v
+from (select cast(parse_json('{"c":7}') as map<varchar, int>)['c'] as v from t) x;
+select id, cast(parse_json('{"c":"hello"}') as map<varchar, varchar>)['c'] as v from t order by id;
+select to_json(cast(parse_json('{"c":7}') as map<varchar, int>)) as v;
+select id, to_json(cast(parse_json('{"c":7}') as map<varchar, int>)) as v from t order by id;
+select id, cast(map('c', 7) as map<varchar, int>)['c'] as v from t order by id;
+
+drop database test_json_cast_const_to_struct_row_count;

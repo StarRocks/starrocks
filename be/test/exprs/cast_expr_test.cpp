@@ -22,7 +22,9 @@
 #include "base/string/slice.h"
 #include "butil/time.h"
 #include "column/array_column.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/variant_column.h"
@@ -3090,6 +3092,76 @@ TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch
     auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
     ASSERT_EQ(1, result->size());
     ASSERT_TRUE(result->is_null(0));
+}
+
+// A constant JSON source is unpacked by ColumnViewer, so every JSON -> nested type cast only builds
+// a single physical row and has to re-wrap the result in a ConstColumn; CastJsonToMap did not, and
+// handed a one-row non-constant column into a chunk of many rows (BE SIGSEGV in MapElementExpr).
+// cast_nested_to_json in turn had no ConstColumn overload, fell through to the NotSupported
+// template and silently produced NULL for to_json() of a constant cast-to-struct.
+TEST_F(VectorizedCastExprTest, const_json_to_nested_keeps_row_count) {
+    constexpr size_t kNumRows = 10;
+
+    auto json = JsonValue::parse(R"({"c":7})");
+    ASSERT_TRUE(json.ok());
+    auto json_column = JsonColumn::create();
+    json_column->append(&json.value());
+    ColumnPtr const_json = ConstColumn::create(std::move(json_column), kNumRows);
+    ASSERT_EQ(kNumRows, const_json->size());
+
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    cast_expr.child_type = to_thrift(TYPE_JSON);
+
+    TExprNode child_node = cast_expr;
+    child_node.type = gen_type_desc(to_thrift(TYPE_JSON));
+
+    // CAST(<constant json> AS STRUCT<c INT>)
+    {
+        cast_expr.type = gen_struct_type_desc({to_thrift(TYPE_INT)}, {"c"});
+        ObjectPool pool;
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+        ASSERT_TRUE(expr != nullptr);
+        MockColumnExpr child(child_node, const_json);
+        expr->_children.push_back(&child);
+
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kNumRows, result->size());
+
+        // to_json() over the constant struct.
+        auto json_result = cast_nested_to_json(result, /*allow_throw_exception=*/true);
+        ASSERT_TRUE(json_result.ok()) << json_result.status();
+        ASSERT_EQ(kNumRows, (*json_result)->size());
+        for (size_t i = 0; i < kNumRows; i++) {
+            EXPECT_FALSE((*json_result)->is_null(i)) << "row " << i;
+            EXPECT_EQ(R"({"c": 7})", (*json_result)->debug_item(i)) << "row " << i;
+        }
+    }
+
+    // CAST(<constant json> AS MAP<VARCHAR,INT>)
+    {
+        cast_expr.type = gen_map_type_desc(to_thrift(TYPE_VARCHAR), to_thrift(TYPE_INT));
+        ObjectPool pool;
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+        ASSERT_TRUE(expr != nullptr);
+        MockColumnExpr child(child_node, const_json);
+        expr->_children.push_back(&child);
+
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kNumRows, result->size());
+
+        auto json_result = cast_nested_to_json(result, /*allow_throw_exception=*/true);
+        ASSERT_TRUE(json_result.ok()) << json_result.status();
+        ASSERT_EQ(kNumRows, (*json_result)->size());
+        for (size_t i = 0; i < kNumRows; i++) {
+            EXPECT_FALSE((*json_result)->is_null(i)) << "row " << i;
+            EXPECT_EQ(R"({"c": 7})", (*json_result)->debug_item(i)) << "row " << i;
+        }
+    }
 }
 
 } // namespace starrocks
