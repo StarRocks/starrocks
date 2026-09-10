@@ -1963,7 +1963,126 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertTrue(trueRows >= 990L);
         Assertions.assertTrue(falseRows <= 10L);
     }
+    @Test
+    public void testInPredicatePropagatesMCVs() {
+        final var col = new ColumnRefOperator(0, IntegerType.INT, "flag", true);
+        final var hist = new Histogram(List.of(), Map.of("0", 300L, "1", 700L, "2", 500L));
+        final var stats = Statistics.builder()
+                .setOutputRowCount(1_000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(1).setNullsFraction(0)
+                        .setAverageRowSize(4).setDistinctValuesCount(2)
+                        .setHistogram(hist).build())
+                .build();
 
+        final var in = new InPredicateOperator(false, col, new ConstantOperator(1, IntegerType.INT));
+        final var notIn = new InPredicateOperator(true, col, new ConstantOperator(1, IntegerType.INT));
+
+        final var resultIn = ExpressionStatisticCalculator.calculate(in, stats);
+        final var resultNotIn = ExpressionStatisticCalculator.calculate(notIn, stats);
+
+        {
+            Assertions.assertNotNull(resultIn.getHistogram());
+            long trueRows = resultIn.getHistogram().getMCV().getOrDefault("1", 0L);
+            Assertions.assertEquals(700L, trueRows);
+            long falseRows = resultIn.getHistogram().getMCV().getOrDefault("0", 0L);
+            Assertions.assertEquals(800L, falseRows);
+        }
+        {
+            Assertions.assertNotNull(resultNotIn.getHistogram());
+            long trueRows = resultNotIn.getHistogram().getMCV().getOrDefault("1", 0L);
+            Assertions.assertEquals(800L, trueRows);
+            long falseRows = resultNotIn.getHistogram().getMCV().getOrDefault("0", 0L);
+            Assertions.assertEquals(700L, falseRows);
+        }
+    }
+    @Test
+    public void testInPredicateStatisticsWithNoNulls() {
+        // GIVEN
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "col", true);
+        final var inputNullsFraction = 0;
+        final var colStat = ColumnStatistic.builder() //
+                .setMinValue(0) //
+                .setMaxValue(999_999) //
+                .setDistinctValuesCount(1_000_237) //
+                .setNullsFraction(inputNullsFraction) //
+                .setAverageRowSize(8) //
+                .build();
+        final var statistics = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+
+
+        final var in = new InPredicateOperator(col, new ConstantOperator(5, IntegerType.INT));
+
+        // WHEN
+        final var inStat = ExpressionStatisticCalculator.calculate(in, statistics);
+
+        // THEN
+        Assertions.assertFalse(inStat.isUnknown());
+        Assertions.assertEquals(0, inStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1, inStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(inputNullsFraction, inStat.getNullsFraction(), 0.001);
+        Assertions.assertEquals(2, inStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertTrue(inStat.getHistogram() == null);
+    }
+
+    @Test
+    public void testInPredicateStatisticsWithNulls() {
+        // GIVEN
+        final var col = new ColumnRefOperator(1, IntegerType.BIGINT, "col", true);
+        final var inputNullsFraction = 0.3;
+        final var colStat = ColumnStatistic.builder() //
+                .setMinValue(0) //
+                .setMaxValue(999_999) //
+                .setDistinctValuesCount(700_000) //
+                .setNullsFraction(inputNullsFraction) //
+                .setAverageRowSize(8) //
+                .build();
+        final var stats = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+        final var in = new InPredicateOperator(col, new ConstantOperator(5, IntegerType.INT));
+
+        // WHEN
+        final var inStat = ExpressionStatisticCalculator.calculate(in, stats);
+
+        // THEN
+        Assertions.assertFalse(inStat.isUnknown());
+        Assertions.assertEquals(2, inStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertTrue(inStat.getHistogram() == null);
+        Assertions.assertEquals(inputNullsFraction, inStat.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testInPredicateStatisticsWithNullInMatchList() {
+        // GIVEN
+        final var col = new ColumnRefOperator(1, IntegerType.BIGINT, "col", true);
+        final var inputNullsFraction = 0.3;
+        final var colStat = ColumnStatistic.builder() //
+                .setMinValue(0) //
+                .setMaxValue(999_999) //
+                .setDistinctValuesCount(700_000) //
+                .setNullsFraction(inputNullsFraction) //
+                .setAverageRowSize(8) //
+                .build();
+        final var stats = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+        final var in = new InPredicateOperator(col, ConstantOperator.NULL);
+
+        // WHEN
+        final var inStat = ExpressionStatisticCalculator.calculate(in, stats);
+
+        // THEN
+        Assertions.assertFalse(inStat.isUnknown());
+        Assertions.assertEquals(1, inStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertTrue(inStat.getHistogram() == null);
+        Assertions.assertEquals(Double.NaN, inStat.getNullsFraction(), 0.001);
+    }
     @Test
     public void testIfWithIsNullPredicateHasCorrectNdv() {
         // GIVEN
