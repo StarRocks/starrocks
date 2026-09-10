@@ -149,6 +149,21 @@ public class MVMetaVersionRepairer {
                         curBasePartitionInfo.getLastRefreshTime());
                 continue;
             }
+            // The repair overwrites BOTH the recorded version and lastRefreshTime, while the check above
+            // only proves the MV was current under isBaseTableChanged's version disjunct. An MV can be
+            // stale purely through the other disjunct (visibleVersionTime > lastRefreshTime), which is
+            // load-bearing for materialized-view base tables whose partitions are overwritten in place and
+            // for tables whose latest physical partition changed. Advancing the watermark in that state
+            // would erase a change the MV never consumed, so a producer that can report the pre-commit
+            // version time must also prove the MV was not behind on it.
+            if (info.getLastVersionTime() >= 0
+                    && curBasePartitionInfo.getLastRefreshTime() < info.getLastVersionTime()) {
+                LOG.info("Base table {} partition {} version time not match, lastRefreshTime {}(mv) < " +
+                                "pre-commit visible version time {}(table), skip to repair",
+                        table.getName(), info.getPartitionName(), curBasePartitionInfo.getLastRefreshTime(),
+                        info.getLastVersionTime());
+                continue;
+            }
             needToUpdatePartitionInfos.add(info);
         }
         return needToUpdatePartitionInfos;
