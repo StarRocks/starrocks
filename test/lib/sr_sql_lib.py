@@ -2678,8 +2678,8 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(interval > 0, "wait_global_dict_ready: interval must be positive, got %s" % interval)
 
         sql = "explain costs select distinct %s from %s" % (column_name, table_name)
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             res = self.execute_sql(sql, True)
             if not res["status"]:
                 tools.assert_true(False, "acquire dictionary error")
