@@ -20,6 +20,7 @@ ADD_BE_LIB(Types
     decimalv2_value.cpp
     int128_to_double.cpp
     hll.cpp
+    geo_type_descriptor.cpp
     json_value.cpp
     json_value_converter.cpp
     simple_json_path.cpp
