@@ -13,15 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import Column, MetaData, Table, insert
+from sqlalchemy.dialects import registry
 
 from starrocks import datatype
 from starrocks.dialect import StarRocksDialect
 
 _DIALECT = StarRocksDialect()
+
+registry.register("starrocks", "starrocks.dialect", "StarRocksDialect")
 
 
 def _sub_type_reprs(structured_type):
@@ -318,3 +323,106 @@ class TestMapNonStringKeys:
         result = _process(datatype.MAP(datatype.VARCHAR(10), datatype.INTEGER), '{"a":1}')
         assert list(result.keys()) == ["a"]
         assert isinstance(list(result.keys())[0], str)
+
+
+def _bind(type_obj, value):
+    """Call bind_processor and apply it to value."""
+    proc = type_obj.bind_processor(dialect=_DIALECT)
+    if proc is None:
+        return value
+    return proc(value)
+
+
+class TestStructuredTypeBindProcessor:
+    """bind_processor must JSON-encode Python values for parameter binding.
+
+    Without this, the DBAPI driver falls back to escaping lists/dicts as SQL
+    tuples (e.g. ``('a', 'b')``), which is invalid syntax for structured
+    literals.
+    """
+
+    def test_array_encodes_list_as_json(self):
+        assert _bind(datatype.ARRAY(datatype.VARCHAR(10)), ["a", "b"]) == '["a", "b"]'
+
+    def test_array_null_returns_none(self):
+        assert _bind(datatype.ARRAY(datatype.INTEGER), None) is None
+
+    def test_nested_array_encodes_as_json(self):
+        assert _bind(datatype.ARRAY(datatype.ARRAY(datatype.INTEGER)), [[1, 2], [3]]) == "[[1, 2], [3]]"
+
+    def test_map_encodes_dict_as_json(self):
+        assert _bind(datatype.MAP(datatype.VARCHAR(10), datatype.INTEGER), {"a": 1}) == '{"a": 1}'
+
+    def test_map_null_returns_none(self):
+        assert _bind(datatype.MAP(datatype.VARCHAR(10), datatype.INTEGER), None) is None
+
+    def test_struct_encodes_dict_as_json(self):
+        t = datatype.STRUCT(name=datatype.VARCHAR(10), age=datatype.INTEGER)
+        assert _bind(t, {"name": "Alice", "age": 30}) == '{"name": "Alice", "age": 30}'
+
+    def test_struct_null_returns_none(self):
+        t = datatype.STRUCT(name=datatype.VARCHAR(10))
+        assert _bind(t, None) is None
+
+    def test_decimal_values_are_encoded_via_default_str(self):
+        # json.dumps can't serialize Decimal natively; bind_processor must
+        # fall back to str() rather than raising.
+        result = _bind(datatype.ARRAY(datatype.DECIMAL(9, 3)), [Decimal("1.500")])
+        assert json.loads(result) == ["1.500"]
+
+
+def _compile_insert(table):
+    """Compile an INSERT statement for `table` against the StarRocks dialect."""
+    return str(insert(table).compile(dialect=_DIALECT))
+
+
+class TestStructuredTypeBindExpression:
+    """bind_expression must wrap bind params in a CAST the compiler can render.
+
+    The MySQL/MariaDB SQL compiler that StarRocksSQLCompiler inherits from
+    only knows how to CAST to a hardcoded set of types and silently drops
+    the cast (with a warning) for anything else. StarRocksSQLCompiler must
+    recognize StructuredType so this doesn't happen for ARRAY/MAP/STRUCT.
+    """
+
+    def test_array_casts_bind_param_directly(self):
+        table = Table("t", MetaData(), Column("fruits", datatype.ARRAY(datatype.VARCHAR(50))))
+
+        sql = _compile_insert(table)
+
+        assert "CAST(" in sql
+        assert "AS ARRAY<VARCHAR(50)>)" in sql
+        # ARRAY supports casting a JSON-encoded VARCHAR directly; no parse_json needed.
+        assert "parse_json" not in sql
+
+    def test_map_casts_via_parse_json(self):
+        table = Table(
+            "t",
+            MetaData(),
+            Column("kv", datatype.MAP(datatype.VARCHAR(10), datatype.INTEGER)),
+        )
+
+        sql = _compile_insert(table)
+
+        assert "CAST(parse_json(" in sql
+        assert "AS MAP<VARCHAR(10), INTEGER>)" in sql
+
+    def test_struct_casts_via_parse_json(self):
+        table = Table(
+            "t",
+            MetaData(),
+            Column("info", datatype.STRUCT(name=datatype.VARCHAR(10), age=datatype.INTEGER)),
+        )
+
+        sql = _compile_insert(table)
+
+        assert "CAST(parse_json(" in sql
+        assert "AS STRUCT<name VARCHAR(10), age INTEGER>)" in sql
+
+    def test_no_cast_is_skipped_warning(self, recwarn):
+        """Regression guard: casting a structured type must not warn/skip."""
+        table = Table("t", MetaData(), Column("fruits", datatype.ARRAY(datatype.INTEGER)))
+
+        _compile_insert(table)
+
+        assert not any("does not support CAST" in str(w.message) for w in recwarn.list)
