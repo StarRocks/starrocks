@@ -341,8 +341,9 @@ public class HeartbeatMgr extends LeaderDaemon {
     }
 
     // Abort this BE's coordinator txns with txnId < last observed SHUTDOWN watermark.
-    // Txn ids at/after the watermark are not aborted. PREPARED is kept (abortPrepared=false),
-    // same as DISCONNECTED: LOAD already finished and FE can still COMMIT.
+    // Same batch size as DISCONNECTED. Leftover PREPARE times out. PREPARED is kept
+    // (abortPrepared=false) so FE can still COMMIT. Watermark is cleared after this
+    // one-shot; later OK heartbeats do not abort again.
     private static void abortShutdownSnapshotTxns(ComputeNode computeNode) {
         long watermark = computeNode.getShutdownTxnIdWatermark();
         if (watermark <= 0) {
@@ -350,7 +351,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         }
         GlobalTransactionMgr gtm = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         List<Pair<Long, Long>> txns = gtm.getTransactionIdByCoordinateBe(
-                computeNode.getHost(), computeNode.getId(), watermark, Integer.MAX_VALUE);
+                computeNode.getHost(), computeNode.getId(), watermark, 100);
         for (Pair<Long, Long> txn : txns) {
             try {
                 gtm.abortTransaction(txn.first, txn.second,

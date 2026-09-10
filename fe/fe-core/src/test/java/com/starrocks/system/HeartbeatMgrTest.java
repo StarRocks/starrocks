@@ -395,7 +395,7 @@ public class HeartbeatMgrTest {
                 txnMgr.peekNextTransactionId();
                 minTimes = 1;
                 result = 100L;
-                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, Integer.MAX_VALUE);
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
                 minTimes = 1;
                 result = java.util.List.of(new Pair<>(5L, 10L), new Pair<>(6L, 20L));
             }
@@ -435,7 +435,7 @@ public class HeartbeatMgrTest {
                 txnMgr.peekNextTransactionId();
                 minTimes = 1;
                 result = 100L;
-                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, Integer.MAX_VALUE);
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
                 result = java.util.List.of(new Pair<>(5L, 10L));
             }
         };
@@ -463,7 +463,7 @@ public class HeartbeatMgrTest {
             {
                 txnMgr.peekNextTransactionId();
                 returns(100L, 150L);
-                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 150L, Integer.MAX_VALUE);
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 150L, 100);
                 result = java.util.List.of(new Pair<>(1L, 120L));
             }
         };
@@ -496,7 +496,7 @@ public class HeartbeatMgrTest {
             {
                 txnMgr.peekNextTransactionId();
                 returns(100L, 90L);
-                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, Integer.MAX_VALUE);
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
                 result = java.util.List.of(new Pair<>(1L, 50L));
             }
         };
@@ -528,7 +528,7 @@ public class HeartbeatMgrTest {
             {
                 txnMgr.peekNextTransactionId();
                 minTimes = 0;
-                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, Integer.MAX_VALUE);
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
                 result = java.util.List.of(new Pair<>(5L, 10L));
             }
         };
@@ -569,7 +569,7 @@ public class HeartbeatMgrTest {
                 result = cn;
                 txnMgr.peekNextTransactionId();
                 result = 50L;
-                txnMgr.getTransactionIdByCoordinateBe("10.0.0.1", 7L, 50L, Integer.MAX_VALUE);
+                txnMgr.getTransactionIdByCoordinateBe("10.0.0.1", 7L, 50L, 100);
                 result = java.util.List.of(new Pair<>(1L, 9L));
             }
         };
@@ -581,7 +581,7 @@ public class HeartbeatMgrTest {
 
         new Verifications() {
             {
-                txnMgr.getTransactionIdByCoordinateBe("10.0.0.1", 7L, 50L, Integer.MAX_VALUE);
+                txnMgr.getTransactionIdByCoordinateBe("10.0.0.1", 7L, 50L, 100);
                 times = 1;
                 txnMgr.abortTransaction(1L, 9L, anyString, false);
                 times = 1;
