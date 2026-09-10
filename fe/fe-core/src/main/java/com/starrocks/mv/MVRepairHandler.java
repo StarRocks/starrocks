@@ -37,17 +37,32 @@ public interface MVRepairHandler {
         private final long lastVersion; // last commit partition visible version
         private final long newVersion; // new commit partition visible version
         private final long newVersionTime; // new commit partition visible version time
+        // Visible version time the partition had BEFORE this commit, or -1 when the producer cannot
+        // report it. MVMetaVersionRepairer uses it to prove the MV was not already stale through
+        // isBaseTableChanged's version-time disjunct; producers that pass -1 keep the weaker
+        // version-only check.
+        private final long lastVersionTime;
 
         public PartitionRepairInfo(long partitionId,
                                    String partitionName,
                                    long lastVersion,
                                    long newVersion,
                                    long newVersionTime) {
+            this(partitionId, partitionName, lastVersion, newVersion, newVersionTime, -1L);
+        }
+
+        public PartitionRepairInfo(long partitionId,
+                                   String partitionName,
+                                   long lastVersion,
+                                   long newVersion,
+                                   long newVersionTime,
+                                   long lastVersionTime) {
             this.partitionId = partitionId;
             this.partitionName = partitionName;
             this.newVersion = newVersion;
             this.newVersionTime = newVersionTime;
             this.lastVersion = lastVersion;
+            this.lastVersionTime = lastVersionTime;
         }
 
         public long getPartitionId() {
@@ -68,6 +83,10 @@ public interface MVRepairHandler {
 
         public long getLastVersion() {
             return lastVersion;
+        }
+
+        public long getLastVersionTime() {
+            return lastVersionTime;
         }
     }
 
