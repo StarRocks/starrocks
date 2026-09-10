@@ -4854,11 +4854,10 @@ public class Config extends ConfigBase {
      * HTTP accept window after SIGUSR1, in milliseconds. Controls new-request admission on the
      * three HTTP entries: ExecuteSqlAction (HTTP SQL), LoadAction (stream load), and
      * TransactionLoadAction (transaction stream load). HealthCheck returns 500 at T0 so the HTTP
-     * load balancer can detach. JDBC does not use this window: stopAccept() closes the MySQL port
-     * at T0 and idle JDBC connections close from the start. During this window the three HTTP
+     * load balancer can detach. During this window the three HTTP
      * entries still admit requests and idle HTTP keep-alives are kept. After it elapses, new
      * requests on those entries get 503 + Connection: close, then idle HTTP keep-alives are closed.
-     * Must cover HTTP LB probe interval, unhealthy threshold, detach latency and margin. Must be
+     * Must cover HTTP Load Balancer probe interval, unhealthy threshold, detach latency and margin. Must be
      * smaller than the drain covered by max_graceful_exit_time_second.
      */
     @ConfField(mutable = true)

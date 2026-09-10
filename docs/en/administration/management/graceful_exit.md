@@ -58,7 +58,7 @@ Upon receiving the signal:
 
 #### Timeout Control
 
-If a query runs for too long, FE forcibly exits after **120 seconds** (configurable via the `--timeout` option).
+If drain does not finish in time, FE's internal hard timeout is `max_graceful_exit_time_second` (default 120 seconds), after which the graceful-exit thread is killed. `stop_fe.sh --timeout` is a separate external SIGKILL backstop and has no default (the script waits until the process exits).
 
 ### BE/CN Graceful Exit Mechanism
 
@@ -100,9 +100,9 @@ From v3.4 onwards, FE no longer marks BE/CN as `DEAD` based on heartbeat failure
 
 #### `stop_fe.sh -g --timeout`
 
-- Description: Maximum waiting time before FE is force-killed.
-- Default: 120 (seconds)
-- How to apply: Specify it in the script command. It must exceed the full graceful-exit duration: the accept-new window (`graceful_exit_http_accept_window_ms`) plus the post-window minimum (`min_graceful_exit_time_second`), e.g. `--timeout 120` for the default 60000 ms + 15 s. A smaller value force-kills the FE before the drain completes.
+- Description: External SIGKILL backstop. If the FE process is still alive after this many seconds, `stop_fe.sh` sends `SIGKILL`. This is not the FE internal hard timeout (`max_graceful_exit_time_second`).
+- Default: none. The script waits until the process exits.
+- How to apply: Specify it in the script command. Recommend a value at least `max_graceful_exit_time_second` (default 120) so the script does not kill FE while it is still draining. Example: `--timeout 120` with the default internal timeout.
 
 #### *Minimum LB detection time*
 
@@ -112,7 +112,7 @@ From v3.4 onwards, FE no longer marks BE/CN as `DEAD` based on heartbeat failure
 
 #### `graceful_exit_http_accept_window_ms`
 
-- Description: HTTP accept window after `SIGUSR1`, in milliseconds. Controls new-request admission on three HTTP entries: ExecuteSqlAction (HTTP SQL), LoadAction (stream load), and TransactionLoadAction (transaction stream load). HealthCheck returns 500 at T0 so the HTTP load balancer can detach. JDBC does not use this window: `stopAccept()` closes the MySQL port at T0 and idle JDBC connections close from the start. During this window the three HTTP entries still admit requests and idle HTTP keep-alives are kept. After it elapses, new requests on those entries return 503 with Connection: close, then idle HTTP keep-alives are closed. Must cover HTTP LB probe interval, unhealthy threshold, detach latency and margin. Must be smaller than the drain covered by `max_graceful_exit_time_second`.
+- Description: HTTP accept window after `SIGUSR1`, in milliseconds. Controls new-request admission on three HTTP entries: ExecuteSqlAction (HTTP SQL), LoadAction (stream load), and TransactionLoadAction (transaction stream load). HealthCheck returns 500 at T0 so the HTTP load balancer can detach. During this window the three HTTP entries still admit requests and idle HTTP keep-alives are kept. After it elapses, new requests on those entries return 503 with Connection: close, then idle HTTP keep-alives are closed. Must cover HTTP Load Balancer probe interval, unhealthy threshold, detach latency and margin. Must be smaller than the drain covered by `max_graceful_exit_time_second`.
 - Default: 60000
 - How to apply: Modify it in the `fe.conf` configuration file or update it dynamically.
 
@@ -212,12 +212,12 @@ Graceful Exit ensures:
 
 Parameters:
 
-- `--timeout`: The maximum time to wait before the FE node is force-killed. It must exceed the full graceful-exit duration (the accept-new window `graceful_exit_http_accept_window_ms` plus the post-window minimum `min_graceful_exit_time_second`); use at least `--timeout 120` with the default settings. A smaller timeout force-kills the FE before the drain completes.
+- `--timeout`: Optional external SIGKILL backstop. No default: without it the script waits until the FE process exits. The FE internal hard timeout is `max_graceful_exit_time_second` (default 120 seconds). If you set `--timeout`, use a value at least `max_graceful_exit_time_second` so the script does not SIGKILL FE while it is still draining.
 
 Behavior:
 
 - The system sends the `SIGUSR1` signal first.
-- After timeout, it falls back to `SIGKILL`.
+- If `--timeout` is set and the process is still alive after that many seconds, the script sends `SIGKILL`.
 
 #### Validate FE State
 
