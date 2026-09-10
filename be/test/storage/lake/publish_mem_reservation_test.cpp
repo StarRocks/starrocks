@@ -314,6 +314,41 @@ TEST(PublishMemReservationTest, OutOfRangeUrgentPctIsClamped) {
     proc.release(9900 * KB);
 }
 
+// --- Zero and negative estimates: admit, reserve nothing, stay symmetric -----------------------
+// A publish whose estimated footprint rounds to nothing must never be gated, and must never charge the
+// tracker, so the destructor has nothing to release. A negative estimate is clamped rather than passed
+// through, because release(-N) against a bounded tracker would silently inflate the budget.
+TEST(PublishMemReservationTest, ZeroAndNegativeEstimateAdmitWithoutReserving) {
+    MemTracker t(100 * KB, "p3-test", nullptr);
+    std::atomic<bool> slot{false};
+
+    {
+        PublishMemReservation zero(&t, 0, slot);
+        EXPECT_TRUE(zero.admitted());
+        EXPECT_EQ(0, zero.consumed_bytes());
+        EXPECT_EQ(0, t.consumption()); // nothing charged while still in scope
+    }
+    EXPECT_EQ(0, t.consumption());
+    EXPECT_FALSE(slot.load()); // the zero route never reaches the oversized slot
+
+    {
+        // Clamped to 0, so it behaves exactly like the zero case rather than releasing a negative.
+        PublishMemReservation negative(&t, -1 * KB, slot);
+        EXPECT_TRUE(negative.admitted());
+        EXPECT_EQ(0, negative.consumed_bytes());
+    }
+    EXPECT_EQ(0, t.consumption());
+    EXPECT_FALSE(slot.load());
+
+    // A negative estimate must not have inflated the budget: a normal publish still fits and still charges.
+    {
+        PublishMemReservation normal(&t, 40 * KB, slot);
+        EXPECT_TRUE(normal.admitted());
+        EXPECT_EQ(40 * KB, normal.consumed_bytes());
+    }
+    EXPECT_EQ(0, t.consumption());
+}
+
 // --- nullptr tracker (gate not wired): admit, touch nothing ------------------------------------
 TEST(PublishMemReservationTest, NullTrackerAlwaysAdmits) {
     std::atomic<bool> slot{false};
