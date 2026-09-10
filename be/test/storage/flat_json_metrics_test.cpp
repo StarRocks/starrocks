@@ -75,6 +75,14 @@ TEST(FlatJsonMetricsTest, InstallRegistersDurationAndCompactionMetrics) {
 
     metrics.flat_json_compaction_fallback_total.increment(12);
     assert_metric_value(&registry, "flat_json_compaction_fallback_total", "12");
+
+    // The write path counts a failed flatten and a declined one separately, so both have to be
+    // registered -- an unregistered counter increments happily and is simply never scraped.
+    metrics.flat_json_write_fallback_total.increment(13);
+    assert_metric_value(&registry, "flat_json_write_fallback_total", "13");
+
+    metrics.flat_json_write_declined_total.increment(14);
+    assert_metric_value(&registry, "flat_json_write_declined_total", "14");
 }
 
 } // namespace starrocks

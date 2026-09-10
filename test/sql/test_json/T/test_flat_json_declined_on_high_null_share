@@ -1,0 +1,92 @@
+-- name: test_flat_json_declined_on_high_null_share
+-- A JSON column whose NULL share is above json_flat_null_factor (0.3 by default) is not flattened:
+-- JsonPathDeriver::check_null_factor() stops before it reads a single document. That decision is
+-- correct, but it used to leave no trace anywhere. The reason was dropped when derived() returned
+-- void, the writer saw only an empty path list, and an empty path list is what a column of
+-- unstructured documents produces too -- a case FlatJsonColumnWriter::finish() is deliberately
+-- silent about. So a user who switched flat_json on for the column got a plain JSON column, no
+-- warning, no counter, and the only trace was a VLOG(8) that needs a be.conf edit and a BE restart.
+-- The fix carries the reason out of the deriver, counts it in flat_json_write_declined_total and
+-- names the column in be.WARNING. Neither of those is observable from SQL, so what this file can
+-- pin is the other half: WHICH columns take that decision, and -- just as important -- which ones
+-- must keep taking the silent path instead. If the boundary below ever moves, the signal is being
+-- raised on a different population than the one it was designed for.
+-- Four tables, same 10 rows' worth of shape, differing only in how many rows are NULL:
+--   t_n40 4/10 NULL -> above the factor, real documents present -> declined, and reported
+--   t_n20 2/10 NULL -> below the factor                         -> flattened
+--   t_all 10/10 NULL -> above the factor, nothing to flatten    -> declined, deliberately silent
+--   t_uns 0/10 NULL, no two documents sharing a key             -> never declined; nothing to
+--                                                                  extract, deliberately silent
+create table t_n40_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_n20_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_all_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_uns_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+insert into t_n40_${uuid0} values
+  (1, parse_json('{"a":1,"b":"x"}')),
+  (2, parse_json('{"a":2,"b":"x"}')),
+  (3, parse_json('{"a":3,"b":"x"}')),
+  (4, parse_json('{"a":4,"b":"x"}')),
+  (5, parse_json('{"a":5,"b":"x"}')),
+  (6, parse_json('{"a":6,"b":"x"}')),
+  (7, NULL), (8, NULL), (9, NULL), (10, NULL);
+insert into t_n20_${uuid0} values
+  (1, parse_json('{"a":1,"b":"x"}')),
+  (2, parse_json('{"a":2,"b":"x"}')),
+  (3, parse_json('{"a":3,"b":"x"}')),
+  (4, parse_json('{"a":4,"b":"x"}')),
+  (5, parse_json('{"a":5,"b":"x"}')),
+  (6, parse_json('{"a":6,"b":"x"}')),
+  (7, parse_json('{"a":7,"b":"x"}')),
+  (8, parse_json('{"a":8,"b":"x"}')),
+  (9, NULL), (10, NULL);
+insert into t_all_${uuid0} values
+  (1, NULL), (2, NULL), (3, NULL), (4, NULL), (5, NULL),
+  (6, NULL), (7, NULL), (8, NULL), (9, NULL), (10, NULL);
+insert into t_uns_${uuid0} values
+  (1, parse_json('{"k1":1}')),
+  (2, parse_json('{"k2":2}')),
+  (3, parse_json('{"k3":3}')),
+  (4, parse_json('{"k4":4}')),
+  (5, parse_json('{"k5":5}')),
+  (6, parse_json('{"k6":6}')),
+  (7, parse_json('{"k7":7}')),
+  (8, parse_json('{"k8":8}')),
+  (9, parse_json('{"k9":9}')),
+  (10, parse_json('{"k10":10}'));
+-- count(*) alongside the meta because flat_json_meta() de-duplicates by shape: a bare
+-- `select flat_json_meta(j)` cannot tell one segment from several that happen to agree.
+-- t_n40: this is the defect's table. The two documents' keys are in every non-NULL row, so the only
+-- thing standing between this column and ["nulls, a, b"] is the NULL share.
+select count(*) as segments, flat_json_meta(j) from t_n40_${uuid0}[_META_];
+-- t_n20: the same documents, two fewer NULL rows, and the column flattens. This is what makes the
+-- line above a decision about NULLs rather than about the documents.
+select count(*) as segments, flat_json_meta(j) from t_n20_${uuid0}[_META_];
+-- t_all: also above the factor, but with no document to flatten at all. Reporting a reason here
+-- would put a line in the log on every flush of any JSON column that is simply not populated yet,
+-- so this one has to stay in the silent path even though it takes the same branch as t_n40.
+select count(*) as segments, flat_json_meta(j) from t_all_${uuid0}[_META_];
+-- t_uns: no NULLs at all, so the deriver reads every document and finds no key worth extracting.
+-- Empty for a completely different reason, and the one the silence was designed for -- warning
+-- about this population is the failure mode the new signal must not have.
+select count(*) as segments, flat_json_meta(j) from t_uns_${uuid0}[_META_];
+-- Flatness is a storage layout, so declining to flatten must not change a single answer. Read the
+-- declined column back whole and through a subfield, against the flattened table as the reference.
+select k, cast(j as string) as whole from t_n40_${uuid0} order by k;
+select k, get_json_int(j, '$.a') as a, get_json_string(j, '$.b') as b from t_n40_${uuid0} order by k;
+select k, get_json_int(j, '$.a') as a, get_json_string(j, '$.b') as b from t_n20_${uuid0} order by k;
+select count(*) as rows_with_a from t_n40_${uuid0} where json_exists(j, '$.a');
+select count(*) as rows_with_a from t_n20_${uuid0} where json_exists(j, '$.a');
+select k, cast(j as string) as whole from t_all_${uuid0} order by k;
+select k, cast(j as string) as whole from t_uns_${uuid0} order by k;
+drop table t_n40_${uuid0};
+drop table t_n20_${uuid0};
+drop table t_all_${uuid0};
+drop table t_uns_${uuid0};

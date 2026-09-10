@@ -47,6 +47,7 @@ void FlatJsonMetrics::install(MetricRegistry* registry) {
     REGISTER_FLAT_JSON_METRIC(flat_json_compaction_schema_change_total);
     REGISTER_FLAT_JSON_METRIC(flat_json_compaction_fallback_total);
     REGISTER_FLAT_JSON_METRIC(flat_json_write_fallback_total);
+    REGISTER_FLAT_JSON_METRIC(flat_json_write_declined_total);
 
 #undef REGISTER_FLAT_JSON_METRIC
 }

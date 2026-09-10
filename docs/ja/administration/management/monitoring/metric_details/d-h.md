@@ -376,6 +376,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 平均
 - 説明: スキーマ変更中のジョブの数。
 
+## `flat_json_write_declined_total`
+
+- 単位: 個
+- タイプ: 累積値
+- 説明: セグメント内の NULL 行の割合が `json_flat_null_factor` を超えていたため、ロードが JSON カラムを平坦化しないと判断し、通常の JSON として書き込んだ累積回数。**segment ごと・JSON カラムごと**にカウントされます。これは失敗ではなく判断であるため、`starrocks_be_flat_json_write_fallback_total` とは別に集計されます。`json_flat_null_factor` を上げればこの判断は変わります。すべての行が NULL のカラムは、平坦化する対象がそもそも無いため、この指標には計上されません。平坦化されるはずのカラムでこの値が 0 でなく増加し続けている場合、そのデータは通常の JSON として保存されています。BE ログの `FlatJsonColumnWriter declined to flatten` の行に、カラム名と行数が記録されます。
+
 ## `float_column_pool_bytes`
 
 - 単位: バイト

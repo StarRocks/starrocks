@@ -78,6 +78,25 @@ StatusOr<size_t> JsonPathDeriver::check_null_factor(const std::vector<const Colu
     if (null_count > total_rows * _max_json_null_factor) {
         VLOG(8) << "flat json, null_count[" << null_count << "], row[" << total_rows
                 << "], null_factor: " << _max_json_null_factor;
+        // Record WHY, so that the caller can report it: the returned status is swallowed by
+        // derived(), and what the caller used to see -- an empty path list -- is indistinguishable
+        // from "these documents had nothing worth extracting", which is deliberately silent.
+        //
+        // But only when the decision is worth reporting. A column in which EVERY row is NULL has
+        // genuinely nothing to flatten, so declining it is not a decision the user would want to
+        // hear about; reporting it would put a line in the log on every flush of any JSON column
+        // that is simply not populated yet. The interesting case is the one in between: real
+        // documents are there, and the threshold is the only thing keeping them from being
+        // flattened.
+        //
+        // Counts and a config value only -- see JsonPathDeriver::declined_reason(): this message is
+        // logged verbatim and must never carry document content.
+        if (null_count < total_rows) {
+            _declined_reason = Status::InternalError(
+                    fmt::format("too many NULL rows to flatten: {} of {} rows are NULL, which is above "
+                                "json_flat_null_factor {}",
+                                null_count, total_rows, _max_json_null_factor));
+        }
         return Status::InternalError("json flat null factor too high");
     }
 
@@ -121,9 +140,12 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     DCHECK(_path_root == nullptr);
 
     if (json_datas.empty()) {
+        // No input at all, so there is nothing to say about it: leave _declined_reason OK.
         return;
     }
 
+    // check_null_factor() has already recorded the reason in _declined_reason when the decision it
+    // took is one the caller should report; the status itself only says whether to stop here.
     auto res = check_null_factor(json_datas);
     if (!res.ok()) {
         return;

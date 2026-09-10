@@ -376,6 +376,12 @@ description: "Alphabetical d - h"
 - 类型: 平均值
 - 描述: 模式变更中的作业数量。
 
+## `flat_json_write_declined_total`
+
+- 单位: 个
+- 类型: 累积值
+- 描述: 导入决定不打平某个 JSON 列、转而按普通 JSON 写入的累计次数，原因是该 segment 中 NULL 行的占比高于 `json_flat_null_factor`。按**每个 segment 的每个 JSON 列**计数。这是一次决策而非失败，因此与 `starrocks_be_flat_json_write_fallback_total` 分开统计——调高 `json_flat_null_factor` 即可改变该决策。整列全为 NULL 的情况不计入本指标，因为本就没有可打平的内容。若某个你预期会被打平的列上该值非零且持续增长，说明这部分数据正以普通 JSON 形式存储；BE 日志中对应的 `FlatJsonColumnWriter declined to flatten` 一行会给出列名与行数。
+
 ## `float_column_pool_bytes`
 
 - 单位: 字节

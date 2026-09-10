@@ -507,6 +507,93 @@ TEST_F(JsonFlattenerTest, testClean) {
     }
 }
 
+// The deriver can stop before it reads a single document, on a rule of its own with a config knob
+// behind it. What it hands back then is an empty path list -- the very same thing it hands back for
+// a column of unstructured documents, which the writer is deliberately silent about. So the reason
+// has to survive the call, or a column the user asked to flatten stays plain with nothing to see.
+TEST_F(JsonFlattenerTest, testDeclinedReasonNullFactor) {
+    ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(R"({"a": 1, "b": "x"})"));
+    config::json_flat_null_factor = 0.3;
+
+    // 4 NULL rows out of 10 is above the factor: nothing is extracted, and the reason must say so.
+    {
+        MutableColumnPtr input_mut = JsonColumn::create();
+        JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
+        ColumnPtr input = ColumnPtr(std::move(input_mut));
+        auto nulls_mut = NullColumn::create();
+        auto* nulls = down_cast<NullColumn*>(nulls_mut.get());
+        for (int i = 0; i < 10; i++) {
+            if (i < 4) {
+                json_input->append_default();
+                nulls->append(1);
+            } else {
+                json_input->append(&json_value);
+                nulls->append(0);
+            }
+        }
+        auto column = NullableColumn::create(input, std::move(nulls_mut));
+
+        JsonPathDeriver jf;
+        std::vector<const Column*> columns{column.get()};
+        jf.derived(columns);
+
+        EXPECT_TRUE(jf.flat_paths().empty());
+        ASSERT_FALSE(jf.declined_reason().ok());
+        std::string reason(jf.declined_reason().message());
+        EXPECT_NE(std::string::npos, reason.find("json_flat_null_factor")) << reason;
+        EXPECT_NE(std::string::npos, reason.find("4 of 10")) << reason;
+    }
+
+    // 2 NULL rows out of 10 is below the factor. Same documents, same shape: this is the control
+    // that shows the NULL rows are what the assertion above is about.
+    {
+        MutableColumnPtr input_mut = JsonColumn::create();
+        JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
+        ColumnPtr input = ColumnPtr(std::move(input_mut));
+        auto nulls_mut = NullColumn::create();
+        auto* nulls = down_cast<NullColumn*>(nulls_mut.get());
+        for (int i = 0; i < 10; i++) {
+            if (i < 2) {
+                json_input->append_default();
+                nulls->append(1);
+            } else {
+                json_input->append(&json_value);
+                nulls->append(0);
+            }
+        }
+        auto column = NullableColumn::create(input, std::move(nulls_mut));
+
+        JsonPathDeriver jf;
+        std::vector<const Column*> columns{column.get()};
+        jf.derived(columns);
+
+        EXPECT_EQ((std::vector<std::string>{"a", "b"}), jf.flat_paths());
+        EXPECT_TRUE(jf.declined_reason().ok()) << jf.declined_reason();
+    }
+
+    // Every row NULL is also above the factor, but there is genuinely nothing to flatten, so it
+    // stays silent: an unpopulated JSON column must not report a reason on every flush.
+    {
+        MutableColumnPtr input_mut = JsonColumn::create();
+        JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
+        ColumnPtr input = ColumnPtr(std::move(input_mut));
+        auto nulls_mut = NullColumn::create();
+        auto* nulls = down_cast<NullColumn*>(nulls_mut.get());
+        for (int i = 0; i < 10; i++) {
+            json_input->append_default();
+            nulls->append(1);
+        }
+        auto column = NullableColumn::create(input, std::move(nulls_mut));
+
+        JsonPathDeriver jf;
+        std::vector<const Column*> columns{column.get()};
+        jf.derived(columns);
+
+        EXPECT_TRUE(jf.flat_paths().empty());
+        EXPECT_TRUE(jf.declined_reason().ok()) << jf.declined_reason();
+    }
+}
+
 TEST_F(JsonFlattenerTest, testComplexJsonExtract) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto json_column = JsonColumn::create();

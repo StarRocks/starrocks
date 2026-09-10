@@ -1,0 +1,162 @@
+-- name: test_flat_json_declined_on_high_null_share
+create table t_n40_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_n20_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_all_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_uns_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t_n40_${uuid0} values
+  (1, parse_json('{"a":1,"b":"x"}')),
+  (2, parse_json('{"a":2,"b":"x"}')),
+  (3, parse_json('{"a":3,"b":"x"}')),
+  (4, parse_json('{"a":4,"b":"x"}')),
+  (5, parse_json('{"a":5,"b":"x"}')),
+  (6, parse_json('{"a":6,"b":"x"}')),
+  (7, NULL), (8, NULL), (9, NULL), (10, NULL);
+-- result:
+-- !result
+insert into t_n20_${uuid0} values
+  (1, parse_json('{"a":1,"b":"x"}')),
+  (2, parse_json('{"a":2,"b":"x"}')),
+  (3, parse_json('{"a":3,"b":"x"}')),
+  (4, parse_json('{"a":4,"b":"x"}')),
+  (5, parse_json('{"a":5,"b":"x"}')),
+  (6, parse_json('{"a":6,"b":"x"}')),
+  (7, parse_json('{"a":7,"b":"x"}')),
+  (8, parse_json('{"a":8,"b":"x"}')),
+  (9, NULL), (10, NULL);
+-- result:
+-- !result
+insert into t_all_${uuid0} values
+  (1, NULL), (2, NULL), (3, NULL), (4, NULL), (5, NULL),
+  (6, NULL), (7, NULL), (8, NULL), (9, NULL), (10, NULL);
+-- result:
+-- !result
+insert into t_uns_${uuid0} values
+  (1, parse_json('{"k1":1}')),
+  (2, parse_json('{"k2":2}')),
+  (3, parse_json('{"k3":3}')),
+  (4, parse_json('{"k4":4}')),
+  (5, parse_json('{"k5":5}')),
+  (6, parse_json('{"k6":6}')),
+  (7, parse_json('{"k7":7}')),
+  (8, parse_json('{"k8":8}')),
+  (9, parse_json('{"k9":9}')),
+  (10, parse_json('{"k10":10}'));
+-- result:
+-- !result
+select count(*) as segments, flat_json_meta(j) from t_n40_${uuid0}[_META_];
+-- result:
+1	[]
+-- !result
+select count(*) as segments, flat_json_meta(j) from t_n20_${uuid0}[_META_];
+-- result:
+1	["nulls(TINYINT), a(BIGINT), b(VARCHAR)"]
+-- !result
+select count(*) as segments, flat_json_meta(j) from t_all_${uuid0}[_META_];
+-- result:
+1	[]
+-- !result
+select count(*) as segments, flat_json_meta(j) from t_uns_${uuid0}[_META_];
+-- result:
+1	[]
+-- !result
+select k, cast(j as string) as whole from t_n40_${uuid0} order by k;
+-- result:
+1	{"a": 1, "b": "x"}
+2	{"a": 2, "b": "x"}
+3	{"a": 3, "b": "x"}
+4	{"a": 4, "b": "x"}
+5	{"a": 5, "b": "x"}
+6	{"a": 6, "b": "x"}
+7	None
+8	None
+9	None
+10	None
+-- !result
+select k, get_json_int(j, '$.a') as a, get_json_string(j, '$.b') as b from t_n40_${uuid0} order by k;
+-- result:
+1	1	x
+2	2	x
+3	3	x
+4	4	x
+5	5	x
+6	6	x
+7	None	None
+8	None	None
+9	None	None
+10	None	None
+-- !result
+select k, get_json_int(j, '$.a') as a, get_json_string(j, '$.b') as b from t_n20_${uuid0} order by k;
+-- result:
+1	1	x
+2	2	x
+3	3	x
+4	4	x
+5	5	x
+6	6	x
+7	7	x
+8	8	x
+9	None	None
+10	None	None
+-- !result
+select count(*) as rows_with_a from t_n40_${uuid0} where json_exists(j, '$.a');
+-- result:
+6
+-- !result
+select count(*) as rows_with_a from t_n20_${uuid0} where json_exists(j, '$.a');
+-- result:
+8
+-- !result
+select k, cast(j as string) as whole from t_all_${uuid0} order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+9	None
+10	None
+-- !result
+select k, cast(j as string) as whole from t_uns_${uuid0} order by k;
+-- result:
+1	{"k1": 1}
+2	{"k2": 2}
+3	{"k3": 3}
+4	{"k4": 4}
+5	{"k5": 5}
+6	{"k6": 6}
+7	{"k7": 7}
+8	{"k8": 8}
+9	{"k9": 9}
+10	{"k10": 10}
+-- !result
+drop table t_n40_${uuid0};
+-- result:
+-- !result
+drop table t_n20_${uuid0};
+-- result:
+-- !result
+drop table t_all_${uuid0};
+-- result:
+-- !result
+drop table t_uns_${uuid0};
+-- result:
+-- !result

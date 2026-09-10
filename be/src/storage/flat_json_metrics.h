@@ -48,6 +48,12 @@ public:
     // _flat_column(), so a fallback is already counted as a flat segment write by the time it happens.
     // Counts only genuine failures -- a column with nothing worth flattening is not a fallback.
     METRIC_DEFINE_INT_COUNTER(flat_json_write_fallback_total, MetricUnit::OPERATIONS);
+    // Loads that DECIDED not to flatten a column and wrote it as plain JSON instead. Deliberately
+    // separate from flat_json_write_fallback_total: that one means flattening was attempted and
+    // failed, this one means the deriver refused to attempt it because a configured threshold said
+    // so. Folding the two together would cost the fallback counter its meaning as a failure signal,
+    // and a decision that a config knob can reverse is not a failure.
+    METRIC_DEFINE_INT_COUNTER(flat_json_write_declined_total, MetricUnit::OPERATIONS);
 
 private:
     MetricRegistry* _registry = nullptr;

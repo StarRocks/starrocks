@@ -118,6 +118,38 @@ Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
         // Not a failure: the deriver looked and found nothing worth extracting, which is the ordinary
         // outcome for a column of unstructured or highly variable documents. finish() tells this apart
         // from a genuine failure by the status kind, so that ordinary tables do not log a warning.
+        //
+        // Except when the deriver never looked. It can stop on a rule of its own before reading a
+        // single document -- today, when the share of NULL rows is above json_flat_null_factor -- and
+        // the empty path list it hands back then says the same thing as the ordinary outcome above.
+        // So a user who switched flat_json on for this column got a plain JSON column and no signal
+        // at all: the silence below is meant for "nothing to extract", and this is not that.
+        const Status& declined = deriver.declined_reason();
+        if (!declined.ok()) {
+            // NOT flat_json_write_fallback_total: that counter means flattening was attempted and
+            // failed. This is a decision with a config knob behind it, not a failure, and counting
+            // it there would cost that counter its meaning.
+            FlatJsonMetrics::instance()->flat_json_write_declined_total.increment(1);
+            size_t num_rows = 0;
+            for (const auto& col : json_datas) {
+                num_rows += col->size();
+            }
+            // Not sampled, for the same reason as the fallback line in finish(): one writer is built
+            // per column per segment, so this is already one line per affected column per flush, and
+            // sampling would make the surviving lines name an arbitrary one of several columns.
+            // Unlike a fallback, a decline is a standing property of the data and the configuration
+            // rather than a rare failure, so it repeats for as long as that holds -- which is why the
+            // deriver keeps quiet about the one case where a decline says nothing an operator could
+            // act on (an all-NULL column, see JsonPathDeriver::check_null_factor).
+            //
+            // The message is printed in full here, unlike the fallback's: a decline reason is built
+            // by the deriver out of row counts and a config value only, never out of a customer
+            // document. The fallback's can come from any sub-writer, including StringColumnWriter's
+            // length check, which embeds the entire offending value.
+            LOG(WARNING) << "FlatJsonColumnWriter declined to flatten, column unique_id=" << _json_meta->unique_id()
+                         << (_column_name.empty() ? "" : " (" + _column_name + ")") << ", rows: " << num_rows
+                         << ", reason: " << declined.message();
+        }
         return Status::NotFound("doesn't have flat column.");
     }
 

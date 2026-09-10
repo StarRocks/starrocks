@@ -376,6 +376,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Average
 - Description: Number of jobs in schema change.
 
+## `flat_json_write_declined_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON columns that a load decided not to flatten, writing them as plain JSON instead, because the share of NULL rows in the segment was above `json_flat_null_factor`. Counted once per JSON column per segment. This is a decision rather than a failure, which is why it is separate from `starrocks_be_flat_json_write_fallback_total`: raising `json_flat_null_factor` reverses it. A column in which every row is NULL is not counted, because it has nothing to flatten. A non-zero and growing value on a column you expect to be flat means that data is being stored as plain JSON; the matching `FlatJsonColumnWriter declined to flatten` line in the BE log names the column and gives the row counts.
+
 ## `float_column_pool_bytes`
 
 - Unit: Bytes

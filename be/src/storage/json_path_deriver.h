@@ -27,6 +27,7 @@
 
 #include "column/flat_json/json_flat_path.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "types/logical_type.h"
 
@@ -51,6 +52,21 @@ public:
     StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas);
 
     void derived(const std::vector<const ColumnReader*>& json_readers);
+
+    // Why derived() gave up before it looked at the documents, when it gave up on a rule of its own
+    // rather than because there was nothing to extract. OK() means no such decision was taken, which
+    // covers both a successful derivation and an ordinary empty result.
+    //
+    // An empty flat_paths() alone cannot tell the two apart, and the difference matters: "these
+    // documents have no common structure" is the expected outcome for a column of unstructured
+    // documents and is deliberately silent, while "I refused to look because of a configured
+    // threshold" is a decision the user asked for flattening and did not get, with a knob behind it.
+    // Before this existed the reason survived only as a VLOG(8), i.e. only reachable by editing
+    // be.conf and restarting the BE.
+    //
+    // The message is meant to be logged verbatim, so a reason must be composed out of row counts and
+    // configuration values only -- never out of document content.
+    const Status& declined_reason() const { return _declined_reason; }
 
     bool has_remain_json() const { return _has_remain; }
 
@@ -95,6 +111,9 @@ private:
     bool _generate_filter = false;
     std::shared_ptr<BloomFilter> _remain_filter = nullptr;
     std::unordered_set<std::string_view> _remain_keys;
+
+    // see declined_reason()
+    Status _declined_reason;
 };
 
 } // namespace starrocks
