@@ -1602,7 +1602,7 @@ public class Config extends ConfigBase {
      * introduced. Mutable, but not persisted across a restart unless set WITH PERSISTENT.
      */
     @ConfField(mutable = true)
-    public static boolean allow_implicit_key_column_in_agg_add_column = false;
+    public static boolean allow_implicit_key_column_in_agg_add_column = true;
 
     /**
      * The alter handler max worker threads
