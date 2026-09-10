@@ -340,9 +340,9 @@ public class HeartbeatMgr extends LeaderDaemon {
                 .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
     }
 
-    // Abort this BE's coordinator txns with txnId < last observed SHUTDOWN watermark.
-    // Same batch size as DISCONNECTED. Leftover PREPARE times out. PREPARED is kept
-    // (abortPrepared=false) so FE can still COMMIT. Watermark is cleared after this
+    // Abort this BE's coordinator PREPARE txns with txnId < last observed SHUTDOWN watermark.
+    // Same batch size as DISCONNECTED. PREPARED is not queried (does not consume the 100).
+    // Leftover PREPARE times out. abortPrepared=false. Watermark is cleared after this
     // one-shot; later OK heartbeats do not abort again.
     private static void abortShutdownSnapshotTxns(ComputeNode computeNode) {
         long watermark = computeNode.getShutdownTxnIdWatermark();

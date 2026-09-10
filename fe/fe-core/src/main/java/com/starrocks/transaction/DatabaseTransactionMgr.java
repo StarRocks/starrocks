@@ -2099,7 +2099,8 @@ public class DatabaseTransactionMgr {
     }
 
     /**
-     * Running BE-coordinated txns on {@code coordinateHost} with txnId &lt; {@code maxTxnIdExclusive}.
+     * Running BE-coordinated PREPARE txns on {@code coordinateHost} with txnId &lt; {@code maxTxnIdExclusive}.
+     * Only PREPARE is eligible; PREPARED is preserved and COMMITTED is not abortable.
      * If the coordinator's backendId is set ({@code >= 0}), it must equal {@code backendId};
      * otherwise (legacy, backendId == -1) host match is enough.
      */
@@ -2120,6 +2121,9 @@ public class DatabaseTransactionMgr {
 
     private static boolean isRestartAbortCandidate(TransactionState t, String coordinateHost, long backendId,
                                                    long maxTxnIdExclusive) {
+        if (t.getTransactionStatus() != TransactionStatus.PREPARE) {
+            return false;
+        }
         TransactionState.TxnCoordinator coordinator = t.getCoordinator();
         if (coordinator.sourceType != TransactionState.TxnSourceType.BE
                 || !coordinator.ip.equals(coordinateHost)

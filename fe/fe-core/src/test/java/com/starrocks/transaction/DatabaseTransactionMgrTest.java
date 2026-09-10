@@ -678,6 +678,64 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testRestartAbortQuerySkipsPreparedAndDoesNotConsumeLimit() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        String host = "prepquota";
+        long backendId = 33L;
+        java.util.Set<Long> preparedIds = new java.util.HashSet<>();
+        for (int i = 0; i < 20; i++) {
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                    "prep_skip_" + i + "_" + System.nanoTime(),
+                    TransactionState.TxnCoordinator.fromBackend(host, backendId),
+                    TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Config.stream_load_default_timeout_second);
+            masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, -1,
+                    buildTabletCommitInfoList(), Lists.newArrayList(), null);
+            preparedIds.add(txnId);
+        }
+        long prepareA = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "prep_keep_a_" + System.nanoTime(),
+                TransactionState.TxnCoordinator.fromBackend(host, backendId),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+        long prepareB = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "prep_keep_b_" + System.nanoTime(),
+                TransactionState.TxnCoordinator.fromBackend(host, backendId),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+        long committedId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "prep_committed_" + System.nanoTime(),
+                TransactionState.TxnCoordinator.fromBackend(host, backendId),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, committedId,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                masterDbTransMgr.getTransactionState(committedId).getTransactionStatus());
+
+        List<Pair<Long, Long>> limited = masterDbTransMgr.getTransactionIdByCoordinateBe(
+                host, backendId, Long.MAX_VALUE, 2);
+        java.util.Set<Long> ids = limited.stream().map(p -> p.second).collect(java.util.stream.Collectors.toSet());
+        Assertions.assertEquals(2, ids.size());
+        Assertions.assertTrue(ids.contains(prepareA));
+        Assertions.assertTrue(ids.contains(prepareB));
+        for (Long preparedId : preparedIds) {
+            Assertions.assertFalse(ids.contains(preparedId));
+        }
+        Assertions.assertFalse(ids.contains(committedId));
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                masterDbTransMgr.getTransactionState(prepareA).getTransactionStatus());
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                masterDbTransMgr.getTransactionState(prepareB).getTransactionStatus());
+    }
+
+    @Test
     public void testGetSingleTranInfo() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
