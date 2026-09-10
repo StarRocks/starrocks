@@ -24,8 +24,9 @@ namespace starrocks {
 
 // Normalized internal metadata, not a native SQL type. Missing wire fields become
 // UNKNOWN / empty CRS / default subdescriptors; only parsed SRID retains presence.
-// Fixed-underlying-type enums preserve unrecognized int32 values. Conversion is
-// policy-free: callers decide which kinds, algorithms, CRS and dimensions they support.
+// Unrecognized Thrift enum values normalize to UNKNOWN. Protobuf conversions use
+// the generated proto2 enum accessors, without interpreting unknown fields.
+// Callers supply declared enum values and decide which semantics an operation supports.
 struct GeoTypeDescriptor {
     PGeoLogicalType logical_type = GEO_LOGICAL_TYPE_UNKNOWN;
     PGeoCoordinateSystem coordinate_system = GEO_COORDINATE_SYSTEM_UNKNOWN;

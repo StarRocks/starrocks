@@ -47,15 +47,19 @@ static_assert(static_cast<int>(TGeoValidationState::SEMANTICALLY_VALIDATED) ==
 
 } // namespace
 
+// Normalize unknown Thrift enum numbers at the input boundary; support policy belongs to callers.
 GeoTypeDescriptor GeoTypeDescriptor::from_thrift(const TGeoTypeDesc& thrift) {
     GeoTypeDescriptor result;
-    result.logical_type =
-            thrift.__isset.logical_type ? static_cast<PGeoLogicalType>(thrift.logical_type) : GEO_LOGICAL_TYPE_UNKNOWN;
-    result.coordinate_system = thrift.__isset.coordinate_system
-                                       ? static_cast<PGeoCoordinateSystem>(thrift.coordinate_system)
-                                       : GEO_COORDINATE_SYSTEM_UNKNOWN;
-    result.edge_algorithm = thrift.__isset.edge_algorithm ? static_cast<PGeoEdgeAlgorithm>(thrift.edge_algorithm)
-                                                          : GEO_EDGE_ALGORITHM_UNKNOWN;
+    result.logical_type = thrift.__isset.logical_type && PGeoLogicalType_IsValid(thrift.logical_type)
+                                  ? static_cast<PGeoLogicalType>(thrift.logical_type)
+                                  : GEO_LOGICAL_TYPE_UNKNOWN;
+    result.coordinate_system =
+            thrift.__isset.coordinate_system && PGeoCoordinateSystem_IsValid(thrift.coordinate_system)
+                    ? static_cast<PGeoCoordinateSystem>(thrift.coordinate_system)
+                    : GEO_COORDINATE_SYSTEM_UNKNOWN;
+    result.edge_algorithm = thrift.__isset.edge_algorithm && PGeoEdgeAlgorithm_IsValid(thrift.edge_algorithm)
+                                    ? static_cast<PGeoEdgeAlgorithm>(thrift.edge_algorithm)
+                                    : GEO_EDGE_ALGORITHM_UNKNOWN;
     if (thrift.__isset.crs) result.crs = thrift.crs;
     if (thrift.__isset.srid) result.srid = thrift.srid;
     return result;
@@ -63,9 +67,9 @@ GeoTypeDescriptor GeoTypeDescriptor::from_thrift(const TGeoTypeDesc& thrift) {
 
 GeoTypeDescriptor GeoTypeDescriptor::from_protobuf(const PGeoTypeDesc& protobuf) {
     GeoTypeDescriptor result;
-    result.logical_type = static_cast<PGeoLogicalType>(protobuf.logical_type());
-    result.coordinate_system = static_cast<PGeoCoordinateSystem>(protobuf.coordinate_system());
-    result.edge_algorithm = static_cast<PGeoEdgeAlgorithm>(protobuf.edge_algorithm());
+    result.logical_type = protobuf.logical_type();
+    result.coordinate_system = protobuf.coordinate_system();
+    result.edge_algorithm = protobuf.edge_algorithm();
     result.crs = protobuf.crs();
     if (protobuf.has_srid()) result.srid = protobuf.srid();
     return result;
@@ -73,9 +77,9 @@ GeoTypeDescriptor GeoTypeDescriptor::from_protobuf(const PGeoTypeDesc& protobuf)
 
 TGeoTypeDesc GeoTypeDescriptor::to_thrift() const {
     TGeoTypeDesc result;
-    result.__set_logical_type(static_cast<int32_t>(logical_type));
-    result.__set_coordinate_system(static_cast<int32_t>(coordinate_system));
-    result.__set_edge_algorithm(static_cast<int32_t>(edge_algorithm));
+    result.__set_logical_type(static_cast<TGeoLogicalType::type>(logical_type));
+    result.__set_coordinate_system(static_cast<TGeoCoordinateSystem::type>(coordinate_system));
+    result.__set_edge_algorithm(static_cast<TGeoEdgeAlgorithm::type>(edge_algorithm));
     result.__set_crs(crs);
     if (srid) result.__set_srid(*srid);
     return result;
@@ -83,9 +87,9 @@ TGeoTypeDesc GeoTypeDescriptor::to_thrift() const {
 
 PGeoTypeDesc GeoTypeDescriptor::to_protobuf() const {
     PGeoTypeDesc result;
-    result.set_logical_type(static_cast<int32_t>(logical_type));
-    result.set_coordinate_system(static_cast<int32_t>(coordinate_system));
-    result.set_edge_algorithm(static_cast<int32_t>(edge_algorithm));
+    result.set_logical_type(logical_type);
+    result.set_coordinate_system(coordinate_system);
+    result.set_edge_algorithm(edge_algorithm);
     result.set_crs(crs);
     if (srid) result.set_srid(*srid);
     return result;
@@ -93,9 +97,13 @@ PGeoTypeDesc GeoTypeDescriptor::to_protobuf() const {
 
 GeoStorageDescriptor GeoStorageDescriptor::from_thrift(const TGeoStorageDesc& thrift) {
     GeoStorageDescriptor result;
-    result.encoding = thrift.__isset.encoding ? static_cast<PGeoEncoding>(thrift.encoding) : GEO_ENCODING_UNKNOWN;
-    result.dimension = thrift.__isset.dimension ? static_cast<PGeoDimension>(thrift.dimension) : GEO_DIMENSION_UNKNOWN;
-    result.validation_state = thrift.__isset.validation_state
+    result.encoding = thrift.__isset.encoding && PGeoEncoding_IsValid(thrift.encoding)
+                              ? static_cast<PGeoEncoding>(thrift.encoding)
+                              : GEO_ENCODING_UNKNOWN;
+    result.dimension = thrift.__isset.dimension && PGeoDimension_IsValid(thrift.dimension)
+                               ? static_cast<PGeoDimension>(thrift.dimension)
+                               : GEO_DIMENSION_UNKNOWN;
+    result.validation_state = thrift.__isset.validation_state && PGeoValidationState_IsValid(thrift.validation_state)
                                       ? static_cast<PGeoValidationState>(thrift.validation_state)
                                       : GEO_VALIDATION_STATE_UNKNOWN;
     return result;
@@ -103,25 +111,25 @@ GeoStorageDescriptor GeoStorageDescriptor::from_thrift(const TGeoStorageDesc& th
 
 GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const PGeoStorageDesc& protobuf) {
     GeoStorageDescriptor result;
-    result.encoding = static_cast<PGeoEncoding>(protobuf.encoding());
-    result.dimension = static_cast<PGeoDimension>(protobuf.dimension());
-    result.validation_state = static_cast<PGeoValidationState>(protobuf.validation_state());
+    result.encoding = protobuf.encoding();
+    result.dimension = protobuf.dimension();
+    result.validation_state = protobuf.validation_state();
     return result;
 }
 
 TGeoStorageDesc GeoStorageDescriptor::to_thrift() const {
     TGeoStorageDesc result;
-    result.__set_encoding(static_cast<int32_t>(encoding));
-    result.__set_dimension(static_cast<int32_t>(dimension));
-    result.__set_validation_state(static_cast<int32_t>(validation_state));
+    result.__set_encoding(static_cast<TGeoEncoding::type>(encoding));
+    result.__set_dimension(static_cast<TGeoDimension::type>(dimension));
+    result.__set_validation_state(static_cast<TGeoValidationState::type>(validation_state));
     return result;
 }
 
 PGeoStorageDesc GeoStorageDescriptor::to_protobuf() const {
     PGeoStorageDesc result;
-    result.set_encoding(static_cast<int32_t>(encoding));
-    result.set_dimension(static_cast<int32_t>(dimension));
-    result.set_validation_state(static_cast<int32_t>(validation_state));
+    result.set_encoding(encoding);
+    result.set_dimension(dimension);
+    result.set_validation_state(validation_state);
     return result;
 }
 
