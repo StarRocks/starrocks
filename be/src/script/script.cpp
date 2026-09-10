@@ -29,6 +29,7 @@
 #include "io/io_profiler.h"
 #include "platform/key_cache.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "runtime/prof/heap_prof.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet.h"
@@ -134,6 +135,18 @@ static void bind_common(ForeignModule& m) {
 
 std::string memtracker_debug_string(MemTracker& self) {
     return self.debug_string();
+}
+
+// Bound in place of HeapProf::enable_prof/disable_prof so that toggling heap profiling from
+// `ADMIN EXECUTE` goes through the `jemalloc_conf` config, the same path an operator editing
+// information_schema.be_configs takes. Keeping these out of HeapProf is deliberate: the config
+// update hook calls HeapProf, so a call back the other way would deadlock on HeapProf's mutex.
+static Status heap_prof_enable_prof(HeapProf& /*self*/) {
+    return set_prof_active_via_config(true);
+}
+
+static Status heap_prof_disable_prof(HeapProf& /*self*/) {
+    return set_prof_active_via_config(false);
 }
 
 static std::vector<FileWriteStat> get_file_write_history() {
@@ -273,8 +286,8 @@ void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<HeapProf>("HeapProf");
         REG_STATIC_METHOD(HeapProf, getInstance);
-        REG_METHOD(HeapProf, enable_prof);
-        REG_METHOD(HeapProf, disable_prof);
+        cls.funcExt<&heap_prof_enable_prof>("enable_prof");
+        cls.funcExt<&heap_prof_disable_prof>("disable_prof");
         REG_METHOD(HeapProf, has_enable);
         REG_METHOD(HeapProf, snapshot);
         REG_METHOD(HeapProf, to_dot_format);
