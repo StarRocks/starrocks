@@ -44,11 +44,27 @@ namespace starrocks {
 
 class JsonScannerTest : public ::testing::Test {
 protected:
+    // A single string literal expression, which is the shape the FE sends for a constant DEFAULT.
+    static TExpr string_literal_expr(const std::string& value) {
+        TExpr expr;
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::STRING_LITERAL);
+        node.__set_type(TypeDescriptor::create_varchar_type(1024).to_thrift());
+        node.__set_num_children(0);
+        node.__set_is_nullable(false);
+        TStringLiteral literal;
+        literal.__set_value(value);
+        node.__set_string_literal(literal);
+        expr.nodes.emplace_back(node);
+        return expr;
+    }
+
     std::unique_ptr<JsonScanner> create_json_scanner(const std::vector<TypeDescriptor>& types,
                                                      const std::vector<TBrokerRangeDesc>& ranges,
                                                      const std::vector<std::string>& col_names,
                                                      size_t file_size_limit = 1024 * 1024,
-                                                     const std::vector<TRoutineLoadMetaColumn>& meta_cols = {}) {
+                                                     const std::vector<TRoutineLoadMetaColumn>& meta_cols = {},
+                                                     const std::map<TSlotId, TExpr>& default_expr_of_src_slot = {}) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -91,6 +107,10 @@ protected:
 
         if (!meta_cols.empty()) {
             params->__set_stream_source_meta_columns(meta_cols);
+        }
+
+        if (!default_expr_of_src_slot.empty()) {
+            params->__set_default_expr_of_src_slot(default_expr_of_src_slot);
         }
 
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
@@ -872,6 +892,155 @@ TEST_F(JsonScannerTest, test_ndjson) {
     EXPECT_EQ("['v3', 'server', NULL, NULL]", chunk->debug_row(2));
     EXPECT_EQ("['v4', 'server', NULL, NULL]", chunk->debug_row(3));
     EXPECT_EQ("['v5', 'server', NULL, NULL]", chunk->debug_row(4));
+}
+
+static const char* kAbsentKeyFile = "./be/test/exec/test_data/json_scanner/test_default_on_absent_key.json";
+
+// A column named in the load, whose row has no key for it, takes its DEFAULT rather than NULL.
+// A key that is present with a null value is a supplied value and stays NULL, and a column with no
+// default registered keeps today's behavior.
+TEST_F(JsonScannerTest, test_default_on_absent_key) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path(kAbsentKeyFile);
+    ranges.emplace_back(range);
+
+    // Only k2 has a default. k3 is absent from every row and has none, so it stays NULL throughout.
+    std::map<TSlotId, TExpr> defaults;
+    defaults[1] = string_literal_expr("defaulted");
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "k2", "k3"}, 1024 * 1024, {}, defaults);
+    ASSERT_OK(scanner->open());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(3, chunk->num_columns());
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'supplied', NULL]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'defaulted', NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['v3', NULL, NULL]", chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'defaulted', NULL]", chunk->debug_row(3));
+
+    scanner->close();
+}
+
+// With jsonpaths a column is never filled, because extract_from_object cannot tell a key that is
+// absent from one that is present with a null value. Both rows below keep today's NULL rather than
+// risk overwriting a supplied null with the column's DEFAULT.
+TEST_F(JsonScannerTest, test_no_default_fill_with_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.k1", "$.k2"])";
+    range.__isset.json_root = false;
+    range.__set_path(kAbsentKeyFile);
+    ranges.emplace_back(range);
+
+    std::map<TSlotId, TExpr> defaults;
+    defaults[1] = string_literal_expr("defaulted");
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "k2"}, 1024 * 1024, {}, defaults);
+    ASSERT_OK(scanner->open());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'supplied']", chunk->debug_row(0));
+    EXPECT_EQ("['v2', NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['v3', NULL]", chunk->debug_row(2));
+    EXPECT_EQ("['v4', NULL]", chunk->debug_row(3));
+
+    scanner->close();
+}
+
+// The default is converted into the column's type. A default that cannot be converted yields NULL
+// here, which a non strict load keeps and a strict load would reject as a bad row; this scanner is
+// not in strict mode. The FE casts the default at plan time and validates it at DDL time, so an
+// unconvertible default should not reach the BE, but it must not corrupt the chunk if it does.
+TEST_F(JsonScannerTest, test_default_on_absent_key_casts_to_column_type) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor(TYPE_INT));
+    types.emplace_back(TypeDescriptor(TYPE_INT));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path(kAbsentKeyFile);
+    ranges.emplace_back(range);
+
+    std::map<TSlotId, TExpr> defaults;
+    defaults[1] = string_literal_expr("99");
+    defaults[2] = string_literal_expr("not a number");
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "k2", "k3"}, 1024 * 1024, {}, defaults);
+    ASSERT_OK(scanner->open());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(3, chunk->num_columns());
+    EXPECT_EQ(4, chunk->num_rows());
+
+    // k2 is a string in this file, so only the rows that lack the key carry the parsed default.
+    EXPECT_EQ("['v2', 99, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['v4', 99, NULL]", chunk->debug_row(3));
+
+    scanner->close();
+}
+
+// Without the load asking for it, an absent key stays NULL. This is the behavior every load that
+// does not set the property keeps.
+TEST_F(JsonScannerTest, test_absent_key_is_null_without_defaults) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path(kAbsentKeyFile);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "k2"});
+    ASSERT_OK(scanner->open());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_rows());
+    EXPECT_EQ("['v1', 'supplied']", chunk->debug_row(0));
+    EXPECT_EQ("['v2', NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['v3', NULL]", chunk->debug_row(2));
+    EXPECT_EQ("['v4', NULL]", chunk->debug_row(3));
+
+    scanner->close();
 }
 
 TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {

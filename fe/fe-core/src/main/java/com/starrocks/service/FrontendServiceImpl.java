@@ -1749,7 +1749,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try (var scope = context.bindScope()) {
-            result.setParams(streamLoadPutImpl(context, request));
+            result.setParams(streamLoadPutImpl(context, request, result));
         } catch (LockTimeoutException e) {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.TIMEOUT);
@@ -1772,6 +1772,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     TExecPlanFragmentParams streamLoadPutImpl(ConnectContext context, TStreamLoadPutRequest request)
+            throws StarRocksException, LockTimeoutException {
+        return streamLoadPutImpl(context, request, null);
+    }
+
+    TExecPlanFragmentParams streamLoadPutImpl(ConnectContext context, TStreamLoadPutRequest request,
+                                              TStreamLoadPutResult result)
             throws StarRocksException, LockTimeoutException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
@@ -1812,6 +1818,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         try {
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+            if (result != null) {
+                // Report what this FE actually settled on rather than what was asked for, so the BE
+                // can tell an applied option from one an older FE dropped on the floor.
+                result.setFill_default_on_absent_key(streamLoadInfo.isFillDefaultOnAbsentKey());
+            }
 
             TExecPlanFragmentParams plan;
             Coordinator coord;

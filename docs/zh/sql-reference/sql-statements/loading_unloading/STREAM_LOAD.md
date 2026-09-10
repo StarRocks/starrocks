@@ -79,6 +79,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 -H "json_root: <json_path>"
 -H "envelope: debezium"
 -H "ignore_json_size: true | false"
+-H "fill_default_on_absent_key: true | false"
 -H "compression: <compression_algorithm> | Content-Encoding: <compression_algorithm>"
 ```
 
@@ -147,6 +148,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 | json_root         | 否       | 您希望从 JSON 数据文件中加载的 JSON 数据的根元素。仅当使用匹配模式加载 JSON 数据时，才需要指定此参数。该参数的值为有效的 JsonPath 字符串。默认情况下，该参数值为空，表示将加载 JSON 数据文件的所有数据。更多信息，请参阅本主题的「[使用指定根元素的匹配模式加载 JSON 数据](#load-json-data-using-matched-mode-with-root-element-specified)」部分。|
 | envelope          | 否       | 指定 JSON 数据的 CDC envelope 格式。有效值：`debezium`。默认值：未设置（无 envelope 包装）。当设置为 `debezium` 时，StarRocks 将每条 JSON 消息解析为 Debezium CDC 事件。消息必须包含一个 `op` 字段（`c`=创建，`u`=更新，`d`=删除，`r`=快照读取）以及一个 `after` 字段（用于 c/u/r）或 `before` 字段（用于 d），用于保存实际行数据。`payload` 为 `null` 的墓碑消息将被静默跳过。不能与 `json_root` 或 `strip_outer_array` 同时使用。|
 | ignore_json_size  | 否       | 指定是否检查 HTTP 请求中 JSON 正文的大小。<br />**注意**<br />默认情况下，HTTP 请求中 JSON 正文的大小不能超过 100 MB。如果 JSON 正文超过 100 MB，将报告错误「The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming.」。为避免此错误，您可以在 HTTP 请求头中添加 `"ignore_json_size:true"`，以指示系统不检查 JSON 正文大小。|
+| fill_default_on_absent_key | 否 | 用于指定当某一行 JSON 数据中不存在某个列对应的键时，该列取什么值。取值范围：`true` 和 `false`。默认值：`false`。<br />默认情况下，这类列会导入 `NULL`，从而覆盖该列的 `DEFAULT`。如果指定该参数取值为 `true`，则会改为导入该列的 `DEFAULT`。如果键存在但取值为 `null`，则视为用户显式提供的值，仍然导入 `NULL`，与该参数的取值无关。<br />**说明**<br />该参数仅在 `format` 为 `json` 时生效，且不能与 `partial_update` 同时使用，因为部分更新本身就会保留未提供列的原有值。<br />常量 `DEFAULT` 会被填充，包括 `ARRAY<INT> DEFAULT [1, 2]` 这类复杂常量，以及 `current_timestamp()`、`now()`、`uuid()`、`uuid_numeric()` 这几个默认函数。以下情况不会被填充，仍保持现有的 `NULL` 行为：没有 `DEFAULT` 的列；`DEFAULT` 为其他表达式的列；`AUTO_INCREMENT` 列；通过 `columns` 中的映射表达式计算得到的列；主键表、更新表和聚合表中的键列，因为填充键列会导致所有缺失该键的行取到同一个键并相互合并；以及聚合表中声明为 `REPLACE_IF_NOT_NULL` 的列，因为这类列正是依赖“键缺失”来保留原有值。明细表（Duplicate Key）的键仅用于排序，因此会像普通列一样被填充。<br />不能与 `jsonpaths` 同时使用。解析路径时无法区分“键不存在”和“键存在但取值为 `null`”，因此在该路径下无法进行填充；此时导入会直接报错，而不是静默地不做任何事情。<br />该参数适用于本次导入提供的所有列；未指定 `columns` 时，即为整个表结构。<br />FE 和 BE 都必须支持该参数。不支持的版本会直接忽略它且不报错，因此可以通过导入结果中是否包含 `"FillDefaultOnAbsentKey": true` 来确认其是否生效。Merge Commit 导入不会返回该确认字段，但该参数仍然生效。|
 | compression, Content-Encoding | 否 | 数据传输过程中应用的编码算法。支持的算法包括 GZIP、BZIP2、LZ4_FRAME 和 ZSTD。示例：`curl --location-trusted -u root:  -v '<table_url>' \-X PUT  -H "expect:100-continue" \-H 'format: json' -H 'compression: lz4_frame'   -T ./b.json.lz4`。|
 
 加载 JSON 数据时，还需注意每个 JSON 对象的大小不能超过 4 GB。如果 JSON 数据文件中某个 JSON 对象超过 4 GB，将报告错误「This parser can't support a document that big.」。

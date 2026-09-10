@@ -338,6 +338,10 @@ struct TBrokerScanRangeParams {
     // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
     // field. Empty for non-routine-load and for jobs without an INCLUDE METADATA clause.
     35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
+    // Source slot id -> the destination column's DEFAULT as an expression, for columns that should
+    // fall back to their default when the row's JSON object has no key for them. Only populated
+    // when fill_default_on_absent_key is set on the load.
+    36: optional map<Types.TSlotId, Exprs.TExpr> default_expr_of_src_slot
 }
 
 // Broker scan range

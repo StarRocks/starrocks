@@ -64,4 +64,10 @@ public interface StreamLoadParams {
     Optional<String> getJsonRoot();
     Optional<Boolean> getStripOuterArray();
     Optional<TEnvelopeType> getEnvelope() throws StarRocksException;
+
+    /**
+     * Whether a column that is named in the columns list but has no key in a given JSON object
+     * should take that column's DEFAULT instead of NULL.
+     */
+    Optional<Boolean> getFillDefaultOnAbsentKey() throws StarRocksException;
 }

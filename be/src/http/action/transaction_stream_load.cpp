@@ -449,6 +449,15 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     if (!http_req->header(HTTP_JSONROOT).empty()) {
         request.__set_json_root(http_req->header(HTTP_JSONROOT));
     }
+    if (!http_req->header(HTTP_FILL_DEFAULT_ON_ABSENT_KEY).empty()) {
+        if (boost::iequals(http_req->header(HTTP_FILL_DEFAULT_ON_ABSENT_KEY), "true")) {
+            request.__set_fill_default_on_absent_key(true);
+        } else if (boost::iequals(http_req->header(HTTP_FILL_DEFAULT_ON_ABSENT_KEY), "false")) {
+            request.__set_fill_default_on_absent_key(false);
+        } else {
+            return Status::InvalidArgument("Invalid fill_default_on_absent_key format. Must be bool type");
+        }
+    }
     if (!http_req->header(HTTP_STRIP_OUTER_ARRAY).empty()) {
         if (boost::iequals(http_req->header(HTTP_STRIP_OUTER_ARRAY), "true")) {
             request.__set_strip_outer_array(true);
@@ -568,6 +577,9 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
         LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << " " << ctx->brief();
         return plan_status;
     }
+    // Same as the streaming path: the FE's answer is what is reported, not our header parsing.
+    ctx->fill_default_on_absent_key =
+            ctx->put_result.__isset.fill_default_on_absent_key && ctx->put_result.fill_default_on_absent_key;
     VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
 
     if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {

@@ -1102,12 +1102,19 @@ struct TStreamLoadPutRequest {
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
     102: optional i64 backend_id
+    // When true, a column that IS named in the columns list but whose key is absent from a given
+    // JSON object takes that column's DEFAULT instead of NULL. A key that is present with a null
+    // value still stores null. Off by default; JSON only.
+    103: optional bool fill_default_on_absent_key
 }
 
 struct TStreamLoadPutResult {
     1: required Status.TStatus status
     // valid when status is OK
     2: optional InternalService.TExecPlanFragmentParams params
+    // Whether this FE understood and applied fill_default_on_absent_key. An FE that predates the
+    // option leaves this unset, which is how a BE tells "applied" from "silently ignored".
+    3: optional bool fill_default_on_absent_key
 }
 
 struct TMergeCommitRequest {
