@@ -80,8 +80,8 @@ TEST(GeoTypeDescriptorTest, AllAlgorithmsAndStorageStatesRoundTrip) {
                     desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
                 }
                 desc.type.srid = 4326;
-                desc.storage.dimension = static_cast<PGeoDimension>(dim);
-                desc.storage.validation_state = static_cast<PGeoValidationState>(state);
+                desc.storage.dimension = static_cast<GeoDimensionPB>(dim);
+                desc.storage.validation_state = static_cast<GeoValidationStatePB>(state);
                 check_round_trip(desc.type);
                 check_round_trip(desc.storage);
                 check_round_trip(desc);
@@ -158,8 +158,8 @@ TEST(GeoTypeDescriptorTest, AlgorithmsRemainDistinctForCompatibility) {
         for (int right = GEO_EDGE_ALGORITHM_SPHERICAL; right <= GEO_EDGE_ALGORITHM_PLANAR; ++right) {
             auto source = geography();
             auto target = geography();
-            source.type.edge_algorithm = static_cast<PGeoEdgeAlgorithm>(left);
-            target.type.edge_algorithm = static_cast<PGeoEdgeAlgorithm>(right);
+            source.type.edge_algorithm = static_cast<GeoEdgeAlgorithmPB>(left);
+            target.type.edge_algorithm = static_cast<GeoEdgeAlgorithmPB>(right);
             EXPECT_EQ(left == right, is_geo_compute_compatible(source, target));
         }
     }
@@ -239,17 +239,17 @@ std::string protobuf_enum_wire(int field, int32_t value) {
 
 TEST(GeoTypeDescriptorTest, WireFieldsUseDeclaredEnums) {
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.logical_type), TGeoLogicalType::type>);
-    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.logical_type()), PGeoLogicalType>);
+    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.logical_type()), GeoLogicalTypePB>);
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.coordinate_system), TGeoCoordinateSystem::type>);
-    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.coordinate_system()), PGeoCoordinateSystem>);
+    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.coordinate_system()), GeoCoordinateSystemPB>);
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.edge_algorithm), TGeoEdgeAlgorithm::type>);
-    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.edge_algorithm()), PGeoEdgeAlgorithm>);
+    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.edge_algorithm()), GeoEdgeAlgorithmPB>);
     static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.encoding), TGeoEncoding::type>);
-    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.encoding()), PGeoEncoding>);
+    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.encoding()), GeoEncodingPB>);
     static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.dimension), TGeoDimension::type>);
-    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.dimension()), PGeoDimension>);
+    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.dimension()), GeoDimensionPB>);
     static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.validation_state), TGeoValidationState::type>);
-    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.validation_state()), PGeoValidationState>);
+    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.validation_state()), GeoValidationStatePB>);
 }
 
 constexpr std::array unknown_values = {127, -1, std::numeric_limits<int32_t>::max(),
@@ -348,7 +348,7 @@ TEST(GeoTypeDescriptorTest, ValidationStateAndParsedSridAreNotTypeIdentity) {
     auto source = geography();
     for (int state = GEO_VALIDATION_STATE_UNKNOWN; state <= GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED; ++state) {
         auto target = source;
-        target.storage.validation_state = static_cast<PGeoValidationState>(state);
+        target.storage.validation_state = static_cast<GeoValidationStatePB>(state);
         target.type.srid = 4326;
         EXPECT_NE(source, target);
         EXPECT_TRUE(is_geo_semantically_compatible(source.type, target.type));
@@ -400,8 +400,8 @@ TEST(GeoTypeDescriptorTest, DimensionDoesNotAffectSemanticComparison) {
         for (int target_dim = GEO_DIMENSION_UNKNOWN; target_dim <= GEO_DIMENSION_MIXED; ++target_dim) {
             auto source = geography();
             auto target = geography();
-            source.storage.dimension = static_cast<PGeoDimension>(source_dim);
-            target.storage.dimension = static_cast<PGeoDimension>(target_dim);
+            source.storage.dimension = static_cast<GeoDimensionPB>(source_dim);
+            target.storage.dimension = static_cast<GeoDimensionPB>(target_dim);
             EXPECT_EQ(source_dim == target_dim, source == target);
             EXPECT_TRUE(is_geo_semantically_compatible(source.type, target.type));
             // Semantic comparison neither derives a result dimension nor checks row dimensions.

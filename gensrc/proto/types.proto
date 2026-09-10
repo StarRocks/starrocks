@@ -248,19 +248,19 @@ enum PrimaryKeyEncodingTypePB {
 }
 
 // Metadata recognition does not enable computation for an edge algorithm.
-enum PGeoLogicalType {
+enum GeoLogicalTypePB {
     GEO_LOGICAL_TYPE_UNKNOWN = 0;
     GEO_LOGICAL_TYPE_GEOGRAPHY = 1;
     GEO_LOGICAL_TYPE_GEOMETRY = 2;
 }
 
-enum PGeoCoordinateSystem {
+enum GeoCoordinateSystemPB {
     GEO_COORDINATE_SYSTEM_UNKNOWN = 0;
     GEO_COORDINATE_SYSTEM_SPHERICAL = 1;
     GEO_COORDINATE_SYSTEM_CARTESIAN = 2;
 }
 
-enum PGeoEdgeAlgorithm {
+enum GeoEdgeAlgorithmPB {
     GEO_EDGE_ALGORITHM_UNKNOWN = 0;
     GEO_EDGE_ALGORITHM_SPHERICAL = 1;
     GEO_EDGE_ALGORITHM_VINCENTY = 2;
@@ -270,12 +270,12 @@ enum PGeoEdgeAlgorithm {
     GEO_EDGE_ALGORITHM_PLANAR = 6;
 }
 
-enum PGeoEncoding {
+enum GeoEncodingPB {
     GEO_ENCODING_UNKNOWN = 0;
     GEO_ENCODING_WKB = 1;
 }
 
-enum PGeoDimension {
+enum GeoDimensionPB {
     GEO_DIMENSION_UNKNOWN = 0;
     GEO_DIMENSION_XY = 1;
     GEO_DIMENSION_XYZ = 2;
@@ -284,7 +284,7 @@ enum PGeoDimension {
     GEO_DIMENSION_MIXED = 5;
 }
 
-enum PGeoValidationState {
+enum GeoValidationStatePB {
     GEO_VALIDATION_STATE_UNKNOWN = 0;
     GEO_VALIDATION_STATE_UNVALIDATED = 1;
     GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED = 2;
@@ -293,17 +293,17 @@ enum PGeoValidationState {
 
 // Standalone descriptors; not attached to PTypeDesc until native type integration.
 message GeoTypeDescPB {
-    optional PGeoLogicalType logical_type = 1;
-    optional PGeoCoordinateSystem coordinate_system = 2;
-    optional PGeoEdgeAlgorithm edge_algorithm = 3;
+    optional GeoLogicalTypePB logical_type = 1;
+    optional GeoCoordinateSystemPB coordinate_system = 2;
+    optional GeoEdgeAlgorithmPB edge_algorithm = 3;
     optional string crs = 4;
     optional int32 srid = 5;
 }
 
 message GeoStorageDescPB {
-    optional PGeoEncoding encoding = 1;
-    optional PGeoDimension dimension = 2;
-    optional PGeoValidationState validation_state = 3;
+    optional GeoEncodingPB encoding = 1;
+    optional GeoDimensionPB dimension = 2;
+    optional GeoValidationStatePB validation_state = 3;
 }
 
 message GeoColumnDescPB {

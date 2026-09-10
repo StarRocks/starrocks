@@ -28,9 +28,9 @@ namespace starrocks {
 // the generated proto2 enum accessors, without interpreting unknown fields.
 // Callers supply declared enum values and decide which semantics an operation supports.
 struct GeoTypeDescriptor {
-    PGeoLogicalType logical_type = GEO_LOGICAL_TYPE_UNKNOWN;
-    PGeoCoordinateSystem coordinate_system = GEO_COORDINATE_SYSTEM_UNKNOWN;
-    PGeoEdgeAlgorithm edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
+    GeoLogicalTypePB logical_type = GEO_LOGICAL_TYPE_UNKNOWN;
+    GeoCoordinateSystemPB coordinate_system = GEO_COORDINATE_SYSTEM_UNKNOWN;
+    GeoEdgeAlgorithmPB edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
     std::string crs;
     std::optional<int32_t> srid;
 
@@ -44,9 +44,9 @@ struct GeoTypeDescriptor {
 };
 
 struct GeoStorageDescriptor {
-    PGeoEncoding encoding = GEO_ENCODING_UNKNOWN;
-    PGeoDimension dimension = GEO_DIMENSION_UNKNOWN;
-    PGeoValidationState validation_state = GEO_VALIDATION_STATE_UNKNOWN;
+    GeoEncodingPB encoding = GEO_ENCODING_UNKNOWN;
+    GeoDimensionPB dimension = GEO_DIMENSION_UNKNOWN;
+    GeoValidationStatePB validation_state = GEO_VALIDATION_STATE_UNKNOWN;
 
     static GeoStorageDescriptor from_thrift(const TGeoStorageDesc& thrift);
     static GeoStorageDescriptor from_protobuf(const GeoStorageDescPB& protobuf);

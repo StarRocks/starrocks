@@ -50,15 +50,15 @@ static_assert(static_cast<int>(TGeoValidationState::SEMANTICALLY_VALIDATED) ==
 // Normalize unknown Thrift enum numbers at the input boundary; support policy belongs to callers.
 GeoTypeDescriptor GeoTypeDescriptor::from_thrift(const TGeoTypeDesc& thrift) {
     GeoTypeDescriptor result;
-    result.logical_type = thrift.__isset.logical_type && PGeoLogicalType_IsValid(thrift.logical_type)
-                                  ? static_cast<PGeoLogicalType>(thrift.logical_type)
+    result.logical_type = thrift.__isset.logical_type && GeoLogicalTypePB_IsValid(thrift.logical_type)
+                                  ? static_cast<GeoLogicalTypePB>(thrift.logical_type)
                                   : GEO_LOGICAL_TYPE_UNKNOWN;
     result.coordinate_system =
-            thrift.__isset.coordinate_system && PGeoCoordinateSystem_IsValid(thrift.coordinate_system)
-                    ? static_cast<PGeoCoordinateSystem>(thrift.coordinate_system)
+            thrift.__isset.coordinate_system && GeoCoordinateSystemPB_IsValid(thrift.coordinate_system)
+                    ? static_cast<GeoCoordinateSystemPB>(thrift.coordinate_system)
                     : GEO_COORDINATE_SYSTEM_UNKNOWN;
-    result.edge_algorithm = thrift.__isset.edge_algorithm && PGeoEdgeAlgorithm_IsValid(thrift.edge_algorithm)
-                                    ? static_cast<PGeoEdgeAlgorithm>(thrift.edge_algorithm)
+    result.edge_algorithm = thrift.__isset.edge_algorithm && GeoEdgeAlgorithmPB_IsValid(thrift.edge_algorithm)
+                                    ? static_cast<GeoEdgeAlgorithmPB>(thrift.edge_algorithm)
                                     : GEO_EDGE_ALGORITHM_UNKNOWN;
     if (thrift.__isset.crs) result.crs = thrift.crs;
     if (thrift.__isset.srid) result.srid = thrift.srid;
@@ -97,14 +97,14 @@ GeoTypeDescPB GeoTypeDescriptor::to_protobuf() const {
 
 GeoStorageDescriptor GeoStorageDescriptor::from_thrift(const TGeoStorageDesc& thrift) {
     GeoStorageDescriptor result;
-    result.encoding = thrift.__isset.encoding && PGeoEncoding_IsValid(thrift.encoding)
-                              ? static_cast<PGeoEncoding>(thrift.encoding)
+    result.encoding = thrift.__isset.encoding && GeoEncodingPB_IsValid(thrift.encoding)
+                              ? static_cast<GeoEncodingPB>(thrift.encoding)
                               : GEO_ENCODING_UNKNOWN;
-    result.dimension = thrift.__isset.dimension && PGeoDimension_IsValid(thrift.dimension)
-                               ? static_cast<PGeoDimension>(thrift.dimension)
+    result.dimension = thrift.__isset.dimension && GeoDimensionPB_IsValid(thrift.dimension)
+                               ? static_cast<GeoDimensionPB>(thrift.dimension)
                                : GEO_DIMENSION_UNKNOWN;
-    result.validation_state = thrift.__isset.validation_state && PGeoValidationState_IsValid(thrift.validation_state)
-                                      ? static_cast<PGeoValidationState>(thrift.validation_state)
+    result.validation_state = thrift.__isset.validation_state && GeoValidationStatePB_IsValid(thrift.validation_state)
+                                      ? static_cast<GeoValidationStatePB>(thrift.validation_state)
                                       : GEO_VALIDATION_STATE_UNKNOWN;
     return result;
 }
