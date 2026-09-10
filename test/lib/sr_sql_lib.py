@@ -2667,14 +2667,16 @@ class StarrocksSQLApiLib(object):
 
     def wait_global_dict_ready(self, column_name, table_name, timeout=60, interval=0.1):
         """
-        wait global dict ready
+        wait until the global dict for table_name:column_name is collected
 
         The first EXPLAIN only asks the FE for a dictionary it does not have yet; CacheDictManager
-        loads it asynchronously from the BE, so the plan gains its Decode node one poll later. That
-        load takes tens of milliseconds for the row counts these cases use, hence the 0.1s interval:
-        polling once a second spent ~0.9s of pure sleep per call, and this helper is called 89 times
-        across the suite (42 of them in test_global_dict/global_dict_with_union alone).
+        loads it asynchronously from the BE, so the plan gains its Decode node a poll later rather
+        than on the first call. Poll rather than sleep between checks: the load finishes long
+        before a whole second has passed.
         """
+        tools.assert_true(timeout > 0, "wait_global_dict_ready: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "wait_global_dict_ready: interval must be positive, got %s" % interval)
+
         sql = "explain costs select distinct %s from %s" % (column_name, table_name)
         deadline = time.time() + timeout
         while time.time() < deadline:
