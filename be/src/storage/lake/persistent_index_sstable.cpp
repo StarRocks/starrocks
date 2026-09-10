@@ -74,6 +74,10 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         options.filter_policy = _filter_policy.get();
     }
     options.block_cache = cache;
+    // Verify block checksums when reading the index/meta blocks, so corrupted bytes
+    // (usually from the local cache) fail deterministically as Corruption instead of
+    // being misparsed, and can be healed by the drop-cache-and-retry below.
+    options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<sstable::Table> table;
     auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
@@ -160,6 +164,9 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    // Catch corrupted data blocks as Corruption (instead of silently returning wrong
+    // index values) so the drop-cache-and-retry below can heal a bad local cache.
+    options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<RandomAccessFile> rf;
     if (config::enable_pk_index_parallel_execution) {
         RandomAccessFileOptions opts;
@@ -284,6 +291,34 @@ Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_
     return _sst->sample_keys(keys, sample_interval_bytes);
 }
 
+<<<<<<< HEAD
+=======
+Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, const Slice& seek_key,
+                                                const Slice& stop_key, size_t max_samples) const {
+    if (_sst == nullptr) {
+        return Status::InvalidArgument("SSTable is not initialized");
+    }
+    std::vector<std::string> separators;
+    RETURN_IF_ERROR(_sst->sample_keys_in_range(&separators, seek_key, stop_key, max_samples));
+
+    sstable::ReadOptions options;
+    options.fill_cache = false;
+    // The seeks below read real data blocks; catch corrupted bytes as Corruption
+    // instead of letting them feed wrong keys into the split samples.
+    options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+    std::unique_ptr<sstable::Iterator> iterator(_sst->NewIterator(options));
+    for (const auto& separator : separators) {
+        iterator->Seek(Slice(separator));
+        if (!iterator->Valid()) {
+            RETURN_IF_ERROR(iterator->status());
+            continue;
+        }
+        keys->emplace_back(iterator->key().to_string());
+    }
+    return iterator->status();
+}
+
+>>>>>>> 64b0c46 ([BugFix] Verify block checksums on PK index sstable reads (#77479))
 StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
         const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
