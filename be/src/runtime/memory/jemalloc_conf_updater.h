@@ -37,6 +37,21 @@ StatusOr<JemallocOptions> parse_jemalloc_conf(std::string_view conf);
 // own string under --jemalloc_debug and --check_mem_leak, so the two can differ.
 std::string startup_jemalloc_conf(std::string_view config_value);
 
+// Renders `options` back into a jemalloc option string. Option order is the map's, so a string
+// that went through parse_jemalloc_conf() comes back normalized rather than byte identical.
+std::string serialize_jemalloc_conf(const JemallocOptions& options);
+
+// `conf` with its `prof_active` set to `active`, inserting the option when `conf` does not carry
+// it -- --jemalloc_debug starts the BE without it. Only a `conf` that cannot be parsed fails
+// here; whether profiling is armed at all is checked when the option is applied.
+StatusOr<std::string> jemalloc_conf_with_prof_active(std::string_view conf, bool active);
+
+// Turns heap profiling on or off by updating the `jemalloc_conf` config, so that the config
+// stays the single place that says whether profiling is on. This is what the HeapProf script
+// bindings call; it must never be reached from HeapProf itself, because the config update hook
+// calls into HeapProf and a call back the other way would deadlock on HeapProf's own mutex.
+Status set_prof_active_via_config(bool active);
+
 // Applies the runtime-mutable subset of the `jemalloc_conf` config.
 //
 // Most jemalloc options are frozen once the process is initialized, because their
@@ -64,11 +79,6 @@ public:
 
 private:
     JemallocConfUpdater() = default;
-
-    // `prof.active` can also be toggled through HeapProf (`ADMIN EXECUTE`), which
-    // bypasses this config. Refresh the baseline from the live value so that the
-    // config becomes authoritative again instead of drifting away from jemalloc.
-    static void refresh_prof_active(JemallocOptions* options);
 
     std::mutex _mutex;
     JemallocOptions _applied;
