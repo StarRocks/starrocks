@@ -115,6 +115,61 @@ enum TTypeNodeType {
     STRUCT
 }
 
+// Logical semantics for a native geo value. The WKB payload does not encode
+// this distinction, so it must be transported with the type descriptor.
+enum TGeoLogicalType {
+    UNKNOWN = 0,
+    GEOGRAPHY = 1,
+    GEOMETRY = 2
+}
+
+enum TGeoCoordinateSystem {
+    UNKNOWN = 0,
+    SPHERICAL = 1,
+    CARTESIAN = 2
+}
+
+enum TGeoEdgeAlgorithm {
+    UNKNOWN = 0,
+    GEODESIC = 1,
+    LINEAR = 2
+}
+
+enum TGeoEncoding {
+    UNKNOWN = 0,
+    WKB = 1
+}
+
+enum TGeoDimension {
+    UNKNOWN = 0,
+    XY = 1,
+    XYZ = 2,
+    XYM = 3,
+    XYZM = 4,
+    MIXED = 5
+}
+
+enum TGeoValidationState {
+    UNKNOWN = 0,
+    UNVALIDATED = 1,
+    STRUCTURALLY_VALIDATED = 2,
+    SEMANTICALLY_VALIDATED = 3
+}
+
+struct TGeoTypeDesc {
+    1: optional TGeoLogicalType logical_type
+    2: optional TGeoCoordinateSystem coordinate_system
+    3: optional TGeoEdgeAlgorithm edge_algorithm
+    4: optional string crs
+    5: optional i32 srid
+}
+
+struct TGeoStorageDesc {
+    1: optional TGeoEncoding encoding
+    2: optional TGeoDimension dimension
+    3: optional TGeoValidationState validation_state
+}
+
 struct TScalarType {
     1: required TPrimitiveType type
 
@@ -131,6 +186,11 @@ struct TScalarType {
     // UTC instant that must be shifted into the session timezone (Hive/Iceberg/Paimon LTZ);
     // Paimon TIMESTAMP sets it to true so the reader keeps the wall clock unshifted.
     5: optional bool datetime_is_ntz
+
+    // Only meaningful for native GEOGRAPHY/GEOMETRY values. These descriptors
+    // deliberately separate logical semantics from the canonical WKB payload.
+    6: optional TGeoTypeDesc geo_type_desc
+    7: optional TGeoStorageDesc geo_storage_desc
 }
 
 // Represents a field in a STRUCT type.
