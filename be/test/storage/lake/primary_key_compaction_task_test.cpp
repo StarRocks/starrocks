@@ -66,16 +66,9 @@ public:
         config::max_segment_file_size = _max_segment_file_size;
         config::vector_chunk_size = _vector_chunk_size;
         config::enable_pk_size_tiered_compaction_strategy = _pk_size_tiered;
-        config::enable_lake_pk_compaction_score_gate = _score_gate;
-        config::lake_pk_compaction_min_level_score = _min_level_score;
-        config::lake_pk_compaction_min_benefit_cost_ratio = _min_benefit_cost_ratio;
-        config::lake_pk_compaction_emergency_score = _emergency_score;
-        config::lake_pk_compaction_size_overflow_ratio = _size_overflow_ratio;
-        config::lake_pk_compaction_delvec_benefit_weight = _delvec_benefit_weight;
         config::l0_max_mem_usage = _l0_max_mem_usage;
         config::lake_publish_version_slow_log_ms = _publish_slow_log_ms;
         config::enable_light_pk_compaction_publish = _light_pk_publish;
-        config::primary_key_compaction_replace_batch_rows = _replace_batch_rows;
     }
 
 private:
@@ -90,16 +83,9 @@ private:
     int64_t _max_segment_file_size = config::max_segment_file_size;
     int32_t _vector_chunk_size = config::vector_chunk_size;
     bool _pk_size_tiered = config::enable_pk_size_tiered_compaction_strategy;
-    bool _score_gate = config::enable_lake_pk_compaction_score_gate;
-    double _min_level_score = config::lake_pk_compaction_min_level_score;
-    double _min_benefit_cost_ratio = config::lake_pk_compaction_min_benefit_cost_ratio;
-    double _emergency_score = config::lake_pk_compaction_emergency_score;
-    double _size_overflow_ratio = config::lake_pk_compaction_size_overflow_ratio;
-    double _delvec_benefit_weight = config::lake_pk_compaction_delvec_benefit_weight;
     int64_t _l0_max_mem_usage = config::l0_max_mem_usage;
     int64_t _publish_slow_log_ms = config::lake_publish_version_slow_log_ms;
     bool _light_pk_publish = config::enable_light_pk_compaction_publish;
-    int32_t _replace_batch_rows = config::primary_key_compaction_replace_batch_rows;
 };
 
 class LakePrimaryKeyCompactionTest : public TestBase, public testing::WithParamInterface<CompactionParam> {
