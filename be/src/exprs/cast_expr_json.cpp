@@ -141,8 +141,17 @@ public:
         const auto& val_col = col.values_column();
 
         auto key_col = col.keys_column();
+        // The keys column is shared by every row of the chunk, so the null check must be scoped to
+        // the keys of this row, i.e. [map_start, map_start + map_size). Testing the whole column
+        // would let a single row with a null key turn every other row of the same chunk into NULL,
+        // which makes the result of a row depend on which other rows happen to be scanned with it.
+        // has_null() is only used as a cheap column-wide shortcut for the common no-null case.
         if (key_col->has_null()) {
-            return Status::NotSupported("key of Map should not be null");
+            for (size_t i = map_start; i < map_start + map_size; i++) {
+                if (key_col->is_null(i)) {
+                    return Status::NotSupported("key of Map should not be null");
+                }
+            }
         }
         if (key_col->is_nullable()) {
             key_col = ColumnHelper::as_column<NullableColumn>(key_col)->data_column();

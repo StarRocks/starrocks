@@ -1,0 +1,83 @@
+-- name: test_to_json_map_null_key_row_scope
+
+drop database if exists test_to_json_map_null_key_row_scope;
+create database test_to_json_map_null_key_row_scope;
+use test_to_json_map_null_key_row_scope;
+
+-- A map key that is NULL cannot be represented in JSON, so to_json() of that map is NULL
+-- (or an error under ALLOW_THROW_EXCEPTION). That verdict must be reached per row: a bad
+-- row must not turn the other rows of the same chunk into NULL.
+-- map_from_arrays() is used because map{null:null} can only build a single constant row.
+
+CREATE TABLE `m_tail` (
+  `k` int(11) NOT NULL,
+  `ks` array<varchar(20)> NULL,
+  `vs` array<int(11)> NULL
+)
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO m_tail VALUES
+  (1, ["a","b"], [1,2]),
+  (2, ["a","b"], [1,2]),
+  (3, ["a","b"], [1,2]),
+  (4, ["a","b"], [1,2]),
+  (5, ["a","b"], [1,2]),
+  (6, ["a","b"], [1,2]),
+  (7, ["a","b"], [1,2]),
+  (8, [null,"b"], [1,2]);
+
+-- the only bad row is filtered out before the cast
+select k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 7 order by k;
+
+-- the bad row now reaches the cast: rows 1..7 must keep the very same values as above,
+-- only row 8 becomes NULL
+select k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 8 order by k;
+
+-- same statement, no predicate at all
+select k, to_json(map_from_arrays(ks, vs)) from m_tail order by k;
+
+-- 7 rows survive the conversion
+select count(to_json(map_from_arrays(ks, vs))) from m_tail;
+
+-- the result of one row must not depend on how the optimizer places the predicate
+select k, j from (select k, to_json(map_from_arrays(ks, vs)) as j from m_tail) t where k = 1;
+select k, j from (select k, to_json(map_from_arrays(ks, vs)) as j from m_tail) t order by k;
+
+-- bad rows at the head, in the middle and at the tail, plus a row whose keys are all NULL
+CREATE TABLE `m_mixed` (
+  `k` int(11) NOT NULL,
+  `ks` array<varchar(20)> NULL,
+  `vs` array<int(11)> NULL
+)
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO m_mixed VALUES
+  (1, [null,"b"], [1,2]),
+  (2, ["a","b"], [1,2]),
+  (3, ["a",null], [1,2]),
+  (4, ["a","b"], [1,2]),
+  (5, [null,null], [1,2]),
+  (6, ["a","b"], [1,2]),
+  (7, ["a","b"], [1,2]),
+  (8, ["a",null], [1,2]);
+
+select k, to_json(map_from_arrays(ks, vs)) from m_mixed order by k;
+select count(to_json(map_from_arrays(ks, vs))) from m_mixed;
+
+-- only the good rows, selected one by one
+select k, to_json(map_from_arrays(ks, vs)) from m_mixed where k in (2,4,6,7) order by k;
+
+-- ALLOW_THROW_EXCEPTION keeps failing the whole statement as soon as one row has a null key
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 7 order by k;
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 8 order by k;
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_mixed where k in (2,4,6,7) order by k;
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_mixed order by k;
+
+-- without ALLOW_THROW_EXCEPTION the same rows are NULL instead of raising
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY')*/ k, to_json(map_from_arrays(ks, vs)) from m_mixed order by k;
+
+drop database test_to_json_map_null_key_row_scope;

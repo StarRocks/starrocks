@@ -1,0 +1,164 @@
+-- name: test_to_json_map_null_key_row_scope
+drop database if exists test_to_json_map_null_key_row_scope;
+-- result:
+-- !result
+create database test_to_json_map_null_key_row_scope;
+-- result:
+-- !result
+use test_to_json_map_null_key_row_scope;
+-- result:
+-- !result
+CREATE TABLE `m_tail` (
+  `k` int(11) NOT NULL,
+  `ks` array<varchar(20)> NULL,
+  `vs` array<int(11)> NULL
+)
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO m_tail VALUES
+  (1, ["a","b"], [1,2]),
+  (2, ["a","b"], [1,2]),
+  (3, ["a","b"], [1,2]),
+  (4, ["a","b"], [1,2]),
+  (5, ["a","b"], [1,2]),
+  (6, ["a","b"], [1,2]),
+  (7, ["a","b"], [1,2]),
+  (8, [null,"b"], [1,2]);
+-- result:
+-- !result
+select k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 7 order by k;
+-- result:
+1	{"a": 1, "b": 2}
+2	{"a": 1, "b": 2}
+3	{"a": 1, "b": 2}
+4	{"a": 1, "b": 2}
+5	{"a": 1, "b": 2}
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+-- !result
+select k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 8 order by k;
+-- result:
+1	{"a": 1, "b": 2}
+2	{"a": 1, "b": 2}
+3	{"a": 1, "b": 2}
+4	{"a": 1, "b": 2}
+5	{"a": 1, "b": 2}
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+8	None
+-- !result
+select k, to_json(map_from_arrays(ks, vs)) from m_tail order by k;
+-- result:
+1	{"a": 1, "b": 2}
+2	{"a": 1, "b": 2}
+3	{"a": 1, "b": 2}
+4	{"a": 1, "b": 2}
+5	{"a": 1, "b": 2}
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+8	None
+-- !result
+select count(to_json(map_from_arrays(ks, vs))) from m_tail;
+-- result:
+7
+-- !result
+select k, j from (select k, to_json(map_from_arrays(ks, vs)) as j from m_tail) t where k = 1;
+-- result:
+1	{"a": 1, "b": 2}
+-- !result
+select k, j from (select k, to_json(map_from_arrays(ks, vs)) as j from m_tail) t order by k;
+-- result:
+1	{"a": 1, "b": 2}
+2	{"a": 1, "b": 2}
+3	{"a": 1, "b": 2}
+4	{"a": 1, "b": 2}
+5	{"a": 1, "b": 2}
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+8	None
+-- !result
+CREATE TABLE `m_mixed` (
+  `k` int(11) NOT NULL,
+  `ks` array<varchar(20)> NULL,
+  `vs` array<int(11)> NULL
+)
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO m_mixed VALUES
+  (1, [null,"b"], [1,2]),
+  (2, ["a","b"], [1,2]),
+  (3, ["a",null], [1,2]),
+  (4, ["a","b"], [1,2]),
+  (5, [null,null], [1,2]),
+  (6, ["a","b"], [1,2]),
+  (7, ["a","b"], [1,2]),
+  (8, ["a",null], [1,2]);
+-- result:
+-- !result
+select k, to_json(map_from_arrays(ks, vs)) from m_mixed order by k;
+-- result:
+1	None
+2	{"a": 1, "b": 2}
+3	None
+4	{"a": 1, "b": 2}
+5	None
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+8	None
+-- !result
+select count(to_json(map_from_arrays(ks, vs))) from m_mixed;
+-- result:
+4
+-- !result
+select k, to_json(map_from_arrays(ks, vs)) from m_mixed where k in (2,4,6,7) order by k;
+-- result:
+2	{"a": 1, "b": 2}
+4	{"a": 1, "b": 2}
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+-- !result
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 7 order by k;
+-- result:
+1	{"a": 1, "b": 2}
+2	{"a": 1, "b": 2}
+3	{"a": 1, "b": 2}
+4	{"a": 1, "b": 2}
+5	{"a": 1, "b": 2}
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+-- !result
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_tail where k <= 8 order by k;
+-- result:
+[REGEX].*key of Map should not be null.*
+-- !result
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_mixed where k in (2,4,6,7) order by k;
+-- result:
+2	{"a": 1, "b": 2}
+4	{"a": 1, "b": 2}
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+-- !result
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ k, to_json(map_from_arrays(ks, vs)) from m_mixed order by k;
+-- result:
+[REGEX].*key of Map should not be null.*
+-- !result
+select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY')*/ k, to_json(map_from_arrays(ks, vs)) from m_mixed order by k;
+-- result:
+1	None
+2	{"a": 1, "b": 2}
+3	None
+4	{"a": 1, "b": 2}
+5	None
+6	{"a": 1, "b": 2}
+7	{"a": 1, "b": 2}
+8	None
+-- !result
+drop database test_to_json_map_null_key_row_scope;
+-- result:
+-- !result
