@@ -969,11 +969,6 @@ jobs:
             echo "pom_filter=`cat pom_filter.txt`" >> $GITHUB_OUTPUT
           fi
 
-      - name: Checkout Code
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.base_ref }}
-          
       - name: UPDATE ECI & RUN BUILD
         id: run_build
         shell: bash
