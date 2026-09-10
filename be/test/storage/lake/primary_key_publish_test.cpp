@@ -1060,7 +1060,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     t2.join();
     ASSERT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     SyncPoint::GetInstance()->DisableProcessing();
-    config::skip_pk_preload = true;
+    config::skip_pk_preload = old_val;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
