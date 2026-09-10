@@ -21,22 +21,14 @@
 #include <cstdlib>
 #include <string>
 
-<<<<<<< HEAD
 #include "common/config.h"
 #include "common/configbase.h"
+#include "common/prof/heap_prof.h"
 #include "fmt/format.h"
+#include "http/action/update_config_action.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/exec_env.h"
 #include "testutil/assert.h"
-=======
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "common/config_memory_allocator_fwd.h"
-#include "common/config_update_registry.h"
-#include "common/configbase.h"
-#include "fmt/format.h"
-#include "jemalloc/jemalloc.h"
-#include "runtime/prof/heap_prof.h"
->>>>>>> 920430a ([Refactor] Toggle heap profiling through jemalloc_conf instead of beside it (#78873))
 
 namespace starrocks {
 
@@ -350,13 +342,13 @@ TEST_F(JemallocConfUpdaterTest, conf_with_prof_active) {
 
 // set_prof_active_via_config() must reach JemallocConfUpdater through the config hook, so that
 // toggling profiling from `ADMIN EXECUTE` and editing information_schema.be_configs share one
-// code path -- including the rollback the registry performs when applying fails.
+// code path -- including the rollback UpdateConfigAction performs when applying fails.
 TEST_F(JemallocConfUpdaterTest, set_prof_active_via_config_goes_through_the_hook) {
-    auto* registry = ConfigUpdateRegistry::instance();
-    registry->register_callback(kJemallocConfName,
-                                [] { return JemallocConfUpdater::instance().update(config::jemalloc_conf.value()); });
-    registry->set_ready();
-    DeferOp reset([registry] { registry->TEST_reset(); });
+    // Constructing it publishes it as UpdateConfigAction::instance(), which is what
+    // set_prof_active_via_config() reaches for. It has to outlive the test: the instance pointer
+    // has no setter, so a stack object would leave the rest of the binary with a dangling one.
+    static UpdateConfigAction update_config_action(ExecEnv::GetInstance());
+    (void)update_config_action;
 
     ASSERT_OK(config::set_config(kJemallocConfName, startup_conf()));
     JemallocConfUpdater::instance().init(startup_conf());
