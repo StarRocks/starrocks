@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <thread>
+
 #include "gen_cpp/data.pb.h"
 
 namespace starrocks {
@@ -79,6 +82,151 @@ TEST_F(QueryStatisticsTest, basic) {
     ASSERT_EQ(s2.get_cpu_ns(), 0);
     ASSERT_EQ(s2.get_read_local_cnt(), 0);
     ASSERT_EQ(s2.get_read_remote_cnt(), 0);
+}
+
+TEST_F(QueryStatisticsTest, AIStatisticsAbsentWithoutCompletedTasks) {
+    QueryStatistics statistics;
+    PQueryStatistics pb;
+    TAuditStatistics thrift;
+    statistics.to_pb(&pb);
+    statistics.to_params(&thrift);
+    EXPECT_FALSE(pb.has_ai_statistics());
+    EXPECT_FALSE(thrift.__isset.ai_statistics);
+}
+
+TEST_F(QueryStatisticsTest, AIStatisticsRoundTripAndConsumingMerge) {
+    AIExecutionStatistics task;
+    task.task_count = 1;
+    task.request_count = 2;
+    task.retry_count = 3;
+    task.timeout_count = 4;
+    task.error_count = 5;
+    task.http_time_ns = 6;
+    task.prompt_tokens = 7;
+    task.completion_tokens = 8;
+    task.total_tokens = 9;
+    task.prompt_usage_count = 10;
+    task.completion_usage_count = 11;
+    task.total_usage_count = 12;
+    QueryStatistics source;
+    source.add_ai_statistics(task);
+    PQueryStatistics pb;
+    source.to_pb(&pb);
+    ASSERT_TRUE(pb.has_ai_statistics());
+    EXPECT_EQ(1, pb.ai_statistics().task_count());
+    EXPECT_EQ(2, pb.ai_statistics().request_count());
+    EXPECT_EQ(3, pb.ai_statistics().retry_count());
+    EXPECT_EQ(4, pb.ai_statistics().timeout_count());
+    EXPECT_EQ(5, pb.ai_statistics().error_count());
+    EXPECT_EQ(6, pb.ai_statistics().http_time_ns());
+    EXPECT_EQ(7, pb.ai_statistics().prompt_tokens());
+    EXPECT_EQ(8, pb.ai_statistics().completion_tokens());
+    EXPECT_EQ(9, pb.ai_statistics().total_tokens());
+    EXPECT_EQ(10, pb.ai_statistics().prompt_usage_count());
+    EXPECT_EQ(11, pb.ai_statistics().completion_usage_count());
+    EXPECT_EQ(12, pb.ai_statistics().total_usage_count());
+
+    QueryStatistics destination;
+    destination.merge_pb(pb);
+    destination.merge(0, source);
+    destination.merge(0, source); // The source has already been drained.
+    TAuditStatistics thrift;
+    destination.to_params(&thrift);
+    ASSERT_TRUE(thrift.__isset.ai_statistics);
+    EXPECT_EQ(2, thrift.ai_statistics.task_count);
+    EXPECT_EQ(4, thrift.ai_statistics.request_count);
+    EXPECT_EQ(6, thrift.ai_statistics.retry_count);
+    EXPECT_EQ(8, thrift.ai_statistics.timeout_count);
+    EXPECT_EQ(10, thrift.ai_statistics.error_count);
+    EXPECT_EQ(12, thrift.ai_statistics.http_time_ns);
+    EXPECT_EQ(14, thrift.ai_statistics.prompt_tokens);
+    EXPECT_EQ(16, thrift.ai_statistics.completion_tokens);
+    EXPECT_EQ(18, thrift.ai_statistics.total_tokens);
+    EXPECT_EQ(20, thrift.ai_statistics.prompt_usage_count);
+    EXPECT_EQ(22, thrift.ai_statistics.completion_usage_count);
+    EXPECT_EQ(24, thrift.ai_statistics.total_usage_count);
+    PQueryStatistics drained;
+    source.to_pb(&drained);
+    EXPECT_FALSE(drained.has_ai_statistics());
+
+    destination.clear();
+    // Reusing a destination must also remove the old optional payload.
+    destination.to_pb(&pb);
+    destination.to_params(&thrift);
+    EXPECT_FALSE(pb.has_ai_statistics());
+    EXPECT_FALSE(thrift.__isset.ai_statistics);
+}
+
+TEST_F(QueryStatisticsTest, AIStatisticsRejectNegativeAndSaturate) {
+    QueryStatistics statistics;
+    PQueryStatistics pb;
+    auto* ai = pb.mutable_ai_statistics();
+    ai->set_task_count(1);
+    ai->set_request_count(-1);
+    ai->set_total_tokens(std::numeric_limits<int64_t>::max());
+    ai->set_total_usage_count(1);
+    statistics.merge_pb(pb);
+    statistics.merge_pb(pb);
+    PQueryStatistics result;
+    statistics.to_pb(&result);
+    EXPECT_EQ(2, result.ai_statistics().task_count());
+    EXPECT_EQ(0, result.ai_statistics().request_count());
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), result.ai_statistics().total_tokens());
+    EXPECT_EQ(2, result.ai_statistics().total_usage_count());
+}
+
+TEST_F(QueryStatisticsTest, AIStatisticsConcurrentMergeDoesNotLoseTasks) {
+    QueryStatistics source;
+    QueryStatistics destination;
+    constexpr int kTasks = 1000;
+    std::thread producer([&] {
+        AIExecutionStatistics task;
+        task.task_count = 1;
+        task.request_count = 2;
+        for (int i = 0; i < kTasks; ++i) {
+            source.add_ai_statistics(task);
+        }
+    });
+    for (int i = 0; i < kTasks; ++i) {
+        destination.merge(0, source);
+    }
+    producer.join();
+    destination.merge(0, source);
+    PQueryStatistics pb;
+    destination.to_pb(&pb);
+    EXPECT_EQ(kTasks, pb.ai_statistics().task_count());
+    EXPECT_EQ(2 * kTasks, pb.ai_statistics().request_count());
+}
+
+TEST_F(QueryStatisticsTest, AIStatisticsUsageRequiresValidTokenAndCoveragePair) {
+    QueryStatistics statistics;
+    PQueryStatistics invalid;
+    auto* ai = invalid.mutable_ai_statistics();
+    ai->set_task_count(1);
+    ai->set_prompt_tokens(-1);
+    ai->set_prompt_usage_count(1);
+    ai->set_completion_usage_count(1); // The token value is absent, not reported zero.
+    ai->set_total_tokens(12);          // No usage count: not an observed token value.
+    statistics.merge_pb(invalid);
+    PQueryStatistics result;
+    statistics.to_pb(&result);
+    EXPECT_EQ(0, result.ai_statistics().prompt_usage_count());
+    EXPECT_EQ(0, result.ai_statistics().completion_usage_count());
+    EXPECT_EQ(0, result.ai_statistics().total_usage_count());
+    EXPECT_EQ(0, result.ai_statistics().total_tokens());
+
+    ai->set_prompt_tokens(0);
+    ai->set_completion_tokens(4);
+    ai->set_completion_usage_count(-1);
+    ai->set_total_usage_count(0);
+    statistics.merge_pb(invalid);
+    statistics.to_pb(&result);
+    EXPECT_EQ(1, result.ai_statistics().prompt_usage_count());
+    EXPECT_EQ(0, result.ai_statistics().prompt_tokens());
+    EXPECT_EQ(0, result.ai_statistics().completion_usage_count());
+    EXPECT_EQ(0, result.ai_statistics().total_usage_count());
+    EXPECT_EQ(0, result.ai_statistics().completion_tokens());
+    EXPECT_EQ(0, result.ai_statistics().total_tokens());
 }
 
 } // namespace starrocks

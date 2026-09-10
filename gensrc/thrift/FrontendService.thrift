@@ -879,6 +879,22 @@ struct TAuditStatisticsItem {
     3: optional i64 table_id
 }
 
+// Additive observed AI task statistics; token usage counts distinguish unknown from reported zero.
+struct TAIExecutionStatistics {
+    1: optional i64 task_count
+    2: optional i64 request_count
+    3: optional i64 retry_count
+    4: optional i64 timeout_count
+    5: optional i64 error_count
+    6: optional i64 http_time_ns
+    7: optional i64 prompt_tokens
+    8: optional i64 completion_tokens
+    9: optional i64 total_tokens
+    10: optional i64 prompt_usage_count
+    11: optional i64 completion_usage_count
+    12: optional i64 total_usage_count
+}
+
 struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
@@ -890,6 +906,7 @@ struct TAuditStatistics {
     9: optional list<TAuditStatisticsItem> stats_items
     11: optional i64 read_local_cnt
     12: optional i64 read_remote_cnt
+    13: optional TAIExecutionStatistics ai_statistics
 }
 
 struct TReportAuditStatisticsParams {

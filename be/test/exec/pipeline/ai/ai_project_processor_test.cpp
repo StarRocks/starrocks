@@ -271,9 +271,10 @@ public:
         }
 
         if (inline_success) {
-            callback(success_result("result-" + suffix(request.prompt)));
+            callback(success_result("result-" + suffix(request.prompt)), {.task_count = 1, .request_count = 1});
         } else if (inline_row_failure) {
-            callback(AISanitizedRowFailure{.failure_class = AISanitizedFailureClass::PROVIDER_RESPONSE});
+            callback(AISanitizedRowFailure{.failure_class = AISanitizedFailureClass::PROVIDER_RESPONSE},
+                     {.task_count = 1, .request_count = 1, .error_count = 1});
         } else {
             const auto [iterator, inserted] =
                     pending.emplace(request.task_id, Pending{std::string(request.model), std::string(request.prompt),
@@ -285,7 +286,10 @@ public:
         return std::make_unique<ManualTaskHandle>(std::move(handle_state));
     }
 
-    void succeed(std::string_view prompt) { complete(prompt, success_result("result-" + suffix(prompt))); }
+    void succeed(std::string_view prompt,
+                 const AIExecutionStatistics& statistics = {.task_count = 1, .request_count = 1}) {
+        complete(prompt, success_result("result-" + suffix(prompt)), statistics);
+    }
 
     void succeed_with_memory_tracking(std::string_view prompt, const std::shared_ptr<ResultMemoryState>& memory_state) {
         ResultMemoryContext memory(memory_state);
@@ -313,7 +317,7 @@ public:
             ASSERT_NE(pending.end(), iterator);
             Pending task = std::move(iterator->second);
             pending.erase(iterator);
-            task.callback(AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED});
+            task.callback(AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED}, {.task_count = 1});
         }
     }
 
@@ -371,13 +375,14 @@ private:
         return std::move(result).value();
     }
 
-    void complete(std::string_view prompt, AITaskResult result) {
+    void complete(std::string_view prompt, AITaskResult result,
+                  const AIExecutionStatistics& statistics = {.task_count = 1, .request_count = 1}) {
         auto iterator = std::find_if(pending.begin(), pending.end(),
                                      [&](const auto& entry) { return entry.second.prompt == prompt; });
         ASSERT_NE(pending.end(), iterator) << prompt;
         Pending task = std::move(iterator->second);
         pending.erase(iterator);
-        task.callback(std::move(result));
+        task.callback(std::move(result), statistics);
     }
 };
 
@@ -995,6 +1000,7 @@ TEST(AIProjectProcessorTest, SqlNullRowsDoNotSubmitHttpTasks) {
     ASSERT_OK(processor->try_process(&state, 0));
     EXPECT_TRUE(submitter->submitted_prompts.empty());
     EXPECT_FALSE(processor->pending_finish(0));
+    EXPECT_TRUE(processor->statistics(0).empty());
 
     auto output = processor->pull_chunk(&state, 0);
     ASSERT_TRUE(output.ok()) << output.status();
@@ -1201,6 +1207,40 @@ TEST(AIProjectProcessorTest, DopLanesKeepDataAndTerminalStateIsolated) {
     EXPECT_FALSE(lane_zero_output.ok());
     EXPECT_OK(processor->set_source_finished(0));
     EXPECT_OK(processor->set_source_finished(1));
+}
+
+TEST(AIProjectProcessorTest, StatisticsStayLaneLocalAndIncludeCallbacksAfterSourceFinish) {
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto processor = make_processor(buffer, projection, submitter, "ignore", 2);
+    ASSERT_NE(nullptr, processor);
+    put_and_finish(buffer, make_input_chunk(0, 1), 0);
+    put_and_finish(buffer, make_input_chunk(100, 1), 1);
+    RuntimeState state;
+    ASSERT_OK(processor->try_process(&state, 0));
+    ASSERT_OK(processor->try_process(&state, 1));
+    EXPECT_EQ(0, processor->statistics(0).task_count);
+    EXPECT_EQ(0, processor->statistics(1).task_count);
+
+    submitter->succeed(
+            "prompt-0",
+            {.task_count = 1, .request_count = 2, .retry_count = 1, .prompt_tokens = 7, .prompt_usage_count = 1});
+    EXPECT_EQ(1, processor->statistics(0).task_count);
+    EXPECT_EQ(2, processor->statistics(0).request_count);
+    EXPECT_EQ(7, processor->statistics(0).prompt_tokens);
+    EXPECT_EQ(0, processor->statistics(1).task_count);
+
+    ASSERT_OK(processor->set_source_finished(1));
+    EXPECT_TRUE(processor->pending_finish(1));
+    submitter->succeed("prompt-100",
+                       {.task_count = 1, .request_count = 1, .prompt_tokens = 11, .prompt_usage_count = 1});
+    EXPECT_FALSE(processor->pending_finish(1));
+    EXPECT_EQ(1, processor->statistics(1).task_count);
+    EXPECT_EQ(1, processor->statistics(1).request_count);
+    EXPECT_EQ(11, processor->statistics(1).prompt_tokens);
+    EXPECT_EQ(7, processor->statistics(0).prompt_tokens);
+    EXPECT_EQ(2, processor->statistics(0).request_count) << "snapshots must not drain or increment counters";
 }
 
 TEST(AIProjectProcessorTest, SourceFinishImmediatelyReleasesCompletedSuccessMemory) {

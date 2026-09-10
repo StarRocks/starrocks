@@ -134,6 +134,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.plugin.AuditEvent;
+import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
@@ -360,8 +361,8 @@ public class StmtExecutor {
     private boolean isProxy;
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
+    // Authoritative result-batch or forwarded statistics; coordinator snapshots are read on demand.
     private PQueryStatistics statisticsForAuditLog;
-    private boolean statisticsForAuditLogFromPlaceholder = false;
     private List<StmtExecutor> subStmtExecutors;
     // Set as soon as a cancellation reaches this statement, by whatever route: KILL QUERY, a cancelled
     // TaskRun, a closed client. cancel() itself only reaches the coordinator, so once a statement has
@@ -1444,6 +1445,19 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addReadRemoteCnt(execStats.readRemoteCnt != null ? execStats.readRemoteCnt : 0);
         context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
         context.getAuditEventBuilder().addTransmittedBytes(execStats.transmittedBytes != null ? execStats.transmittedBytes : 0);
+        if (execStats.aiStatistics != null) {
+            AIExecutionStatisticsPB ai = execStats.aiStatistics;
+            context.getAuditEventBuilder()
+                    .addAITaskCount(ai.taskCount)
+                    .addAIRequestCount(ai.requestCount)
+                    .addAIRetryCount(ai.retryCount)
+                    .addAITimeoutCount(ai.timeoutCount)
+                    .addAIErrorCount(ai.errorCount)
+                    .addAIHttpTimeNs(ai.httpTimeNs)
+                    .addAIPromptTokens(ai.promptTokens, ai.promptUsageCount)
+                    .addAICompletionTokens(ai.completionTokens, ai.completionUsageCount)
+                    .addAITotalTokens(ai.totalTokens, ai.totalUsageCount);
+        }
     }
 
     private void clearQueryScopeHintContext() {
@@ -2240,7 +2254,6 @@ public class StmtExecutor {
     void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
-            statisticsForAuditLogFromPlaceholder = false;
             if (!isOutfileQuery) {
                 context.getState().setEof();
             } else {
@@ -3268,48 +3281,39 @@ public class StmtExecutor {
 
     public void setQueryStatistics(PQueryStatistics statistics) {
         this.statisticsForAuditLog = statistics;
-        this.statisticsForAuditLogFromPlaceholder = false;
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        if (statisticsForAuditLog == null) {
-            statisticsForAuditLog = coord != null ? coord.getAuditStatistics() : null;
-            if (statisticsForAuditLog == null) {
-                statisticsForAuditLog = new PQueryStatistics();
-                statisticsForAuditLogFromPlaceholder = true;
-            } else {
-                statisticsForAuditLogFromPlaceholder = false;
-            }
-        } else if (statisticsForAuditLogFromPlaceholder && coord != null) {
-            // Refresh placeholder stats with coordinator audit statistics when they arrive.
-            PQueryStatistics coordinatorStats = coord.getAuditStatistics();
-            if (coordinatorStats != null) {
-                statisticsForAuditLog = coordinatorStats;
-                statisticsForAuditLogFromPlaceholder = false;
-            }
+        PQueryStatistics statistics = statisticsForAuditLog;
+        if (statistics == null && coord != null) {
+            // Read a fresh snapshot so late reports remain visible to later audit/detail consumers.
+            statistics = coord.getAuditStatistics();
         }
-        if (statisticsForAuditLog.scanBytes == null) {
-            statisticsForAuditLog.scanBytes = 0L;
+        if (statistics == null) {
+            statistics = new PQueryStatistics();
         }
-        if (statisticsForAuditLog.scanRows == null) {
-            statisticsForAuditLog.scanRows = 0L;
+        if (statistics.scanBytes == null) {
+            statistics.scanBytes = 0L;
         }
-        if (statisticsForAuditLog.cpuCostNs == null) {
-            statisticsForAuditLog.cpuCostNs = 0L;
+        if (statistics.scanRows == null) {
+            statistics.scanRows = 0L;
         }
-        if (statisticsForAuditLog.memCostBytes == null) {
-            statisticsForAuditLog.memCostBytes = 0L;
+        if (statistics.cpuCostNs == null) {
+            statistics.cpuCostNs = 0L;
         }
-        if (statisticsForAuditLog.spillBytes == null) {
-            statisticsForAuditLog.spillBytes = 0L;
+        if (statistics.memCostBytes == null) {
+            statistics.memCostBytes = 0L;
         }
-        if (statisticsForAuditLog.readLocalCnt == null) {
-            statisticsForAuditLog.readLocalCnt = 0L;
+        if (statistics.spillBytes == null) {
+            statistics.spillBytes = 0L;
         }
-        if (statisticsForAuditLog.readRemoteCnt == null) {
-            statisticsForAuditLog.readRemoteCnt = 0L;
+        if (statistics.readLocalCnt == null) {
+            statistics.readLocalCnt = 0L;
         }
-        return statisticsForAuditLog;
+        if (statistics.readRemoteCnt == null) {
+            statistics.readRemoteCnt = 0L;
+        }
+        return statistics;
     }
 
     public void handleInsertOverwrite(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {

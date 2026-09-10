@@ -30,6 +30,7 @@
 #include "exec_primitive/pipeline/primitives/operator_exec_stats.h"
 #include "gen_cpp/InternalService_types.h" // for TPipelineProfileLevel, TTimeUnit
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "platform/llm/ai_execution_statistics.h"
 
 namespace starrocks {
 class GlobalLateMaterilizationContextMgr;
@@ -228,6 +229,11 @@ public:
     void consume_delta_scan_stats(QueryStatistics* query_statistic);
     void add_total_scan_stats(QueryStatistics* query_statistic);
 
+    // Publish a completed task before making its result visible to downstream operators.
+    void add_ai_statistics(const AIExecutionStatistics& statistics) noexcept;
+    AIExecutionStatistics ai_statistics() const;
+    AIExecutionStatistics consume_delta_ai_statistics();
+
 private:
     static int64_t _now_ms() { return MonotonicMillis(); }
 
@@ -267,6 +273,12 @@ private:
     SpinLock _scan_stats_lock;
     // table level scan stats
     phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
+
+    mutable SpinLock _ai_statistics_lock;
+    // Terminal callbacks must not allocate: an allocation failure before the
+    // result callback would prevent the processor's pending-finish barrier from draining.
+    AIExecutionStatistics _total_ai_statistics;
+    AIExecutionStatistics _delta_ai_statistics;
 
     // TODO: QueryContext still owns the query MemTracker lifecycle; migrate this reference when QueryContext
     // lifecycle is refactored.

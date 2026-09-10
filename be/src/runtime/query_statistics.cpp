@@ -49,6 +49,23 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     statistics->set_transmitted_bytes(transmitted_bytes);
     {
         std::lock_guard l(_lock);
+        if (_ai_statistics != nullptr && !_ai_statistics->empty()) {
+            auto* ai = statistics->mutable_ai_statistics();
+            ai->set_task_count(_ai_statistics->task_count);
+            ai->set_request_count(_ai_statistics->request_count);
+            ai->set_retry_count(_ai_statistics->retry_count);
+            ai->set_timeout_count(_ai_statistics->timeout_count);
+            ai->set_error_count(_ai_statistics->error_count);
+            ai->set_http_time_ns(_ai_statistics->http_time_ns);
+            ai->set_prompt_tokens(_ai_statistics->prompt_tokens);
+            ai->set_completion_tokens(_ai_statistics->completion_tokens);
+            ai->set_total_tokens(_ai_statistics->total_tokens);
+            ai->set_prompt_usage_count(_ai_statistics->prompt_usage_count);
+            ai->set_completion_usage_count(_ai_statistics->completion_usage_count);
+            ai->set_total_usage_count(_ai_statistics->total_usage_count);
+        } else {
+            statistics->clear_ai_statistics();
+        }
         for (const auto& [table_id, stats_item] : _stats_items) {
             auto new_stats_item = statistics->add_stats_items();
             new_stats_item->set_table_id(table_id);
@@ -81,6 +98,24 @@ void QueryStatistics::to_params(TAuditStatistics* params) {
     params->__set_transmitted_bytes(transmitted_bytes);
     {
         std::lock_guard l(_lock);
+        if (_ai_statistics != nullptr && !_ai_statistics->empty()) {
+            TAIExecutionStatistics ai;
+            ai.__set_task_count(_ai_statistics->task_count);
+            ai.__set_request_count(_ai_statistics->request_count);
+            ai.__set_retry_count(_ai_statistics->retry_count);
+            ai.__set_timeout_count(_ai_statistics->timeout_count);
+            ai.__set_error_count(_ai_statistics->error_count);
+            ai.__set_http_time_ns(_ai_statistics->http_time_ns);
+            ai.__set_prompt_tokens(_ai_statistics->prompt_tokens);
+            ai.__set_completion_tokens(_ai_statistics->completion_tokens);
+            ai.__set_total_tokens(_ai_statistics->total_tokens);
+            ai.__set_prompt_usage_count(_ai_statistics->prompt_usage_count);
+            ai.__set_completion_usage_count(_ai_statistics->completion_usage_count);
+            ai.__set_total_usage_count(_ai_statistics->total_usage_count);
+            params->__set_ai_statistics(ai);
+        } else {
+            params->__isset.ai_statistics = false;
+        }
         for (const auto& [table_id, stats_item] : _stats_items) {
             auto new_stats_item = params->stats_items.emplace_back();
             new_stats_item.__set_table_id(table_id);
@@ -102,6 +137,10 @@ void QueryStatistics::clear() {
     transmitted_bytes = 0;
     _stats_items.clear();
     _exec_stats_items.clear();
+    {
+        std::lock_guard l(_lock);
+        _ai_statistics.reset();
+    }
 }
 
 void QueryStatistics::update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes) {
@@ -150,6 +189,17 @@ void QueryStatistics::add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
     this->scan_bytes += scan_bytes;
 }
 
+void QueryStatistics::add_ai_statistics(const AIExecutionStatistics& statistics) {
+    if (statistics.empty()) {
+        return;
+    }
+    std::lock_guard l(_lock);
+    if (_ai_statistics == nullptr) {
+        _ai_statistics = std::make_unique<AIExecutionStatistics>();
+    }
+    _ai_statistics->add(statistics);
+}
+
 void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     // Make the exchange action atomic
     int64_t scan_rows = other.scan_rows.load();
@@ -194,12 +244,21 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     {
         std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
         std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> other_exec_stats_items;
+        std::unique_ptr<AIExecutionStatistics> other_ai_statistics;
         {
             std::lock_guard l(other._lock);
             other_stats_item.swap(other._stats_items);
             other_exec_stats_items.swap(other._exec_stats_items);
+            other_ai_statistics.swap(other._ai_statistics);
         }
         std::lock_guard l(_lock);
+        if (other_ai_statistics != nullptr) {
+            if (_ai_statistics == nullptr) {
+                _ai_statistics = std::move(other_ai_statistics);
+            } else {
+                _ai_statistics->add(*other_ai_statistics);
+            }
+        }
         for (const auto& [table_id, stats_item] : other_stats_item) {
             update_stats_item(table_id, stats_item->scan_rows, stats_item->scan_bytes);
         }
@@ -212,6 +271,31 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
+    if (statistics.has_ai_statistics()) {
+        const auto& ai = statistics.ai_statistics();
+        AIExecutionStatistics incoming;
+        incoming.task_count = ai.task_count();
+        incoming.request_count = ai.request_count();
+        incoming.retry_count = ai.retry_count();
+        incoming.timeout_count = ai.timeout_count();
+        incoming.error_count = ai.error_count();
+        incoming.http_time_ns = ai.http_time_ns();
+        // Accept a reported token value only together with its valid coverage.
+        // Otherwise separate partial messages could fabricate an observed value on merge.
+        if (ai.has_prompt_tokens() && ai.prompt_tokens() >= 0 && ai.prompt_usage_count() > 0) {
+            incoming.prompt_tokens = ai.prompt_tokens();
+            incoming.prompt_usage_count = ai.prompt_usage_count();
+        }
+        if (ai.has_completion_tokens() && ai.completion_tokens() >= 0 && ai.completion_usage_count() > 0) {
+            incoming.completion_tokens = ai.completion_tokens();
+            incoming.completion_usage_count = ai.completion_usage_count();
+        }
+        if (ai.has_total_tokens() && ai.total_tokens() >= 0 && ai.total_usage_count() > 0) {
+            incoming.total_tokens = ai.total_tokens();
+            incoming.total_usage_count = ai.total_usage_count();
+        }
+        add_ai_statistics(incoming);
+    }
     if (statistics.has_scan_rows()) {
         scan_rows += statistics.scan_rows();
     }

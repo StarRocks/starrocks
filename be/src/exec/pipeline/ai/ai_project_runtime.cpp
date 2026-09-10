@@ -579,6 +579,15 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
                             },
                     .memory = _memory,
             };
+            // Query accounting precedes output publication: the source may
+            // become ready (and eventually send EOS) in the downstream callback.
+            callback = [weak_query, callback = std::move(callback)](AITaskResult result,
+                                                                    const AIExecutionStatistics& statistics) mutable {
+                if (std::shared_ptr<QueryContext> query = weak_query.lock(); query != nullptr) {
+                    query->query_runtime_state().add_ai_statistics(statistics);
+                }
+                callback(std::move(result), statistics);
+            };
         };
         _memory.run_in_physical_scope([](void* opaque) { (*static_cast<decltype(build_dispatch_request)*>(opaque))(); },
                                       &build_dispatch_request);

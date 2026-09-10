@@ -32,6 +32,8 @@ import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.proto.AIExecutionStatisticsPB;
+import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
@@ -39,9 +41,12 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TAIExecutionStatistics;
+import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
@@ -58,6 +63,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CoordinatorTest extends PlanTestBase {
@@ -84,6 +94,68 @@ public class CoordinatorTest extends PlanTestBase {
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
         return fragment;
+    }
+
+    @Test
+    public void testAuditStatisticsSnapshotsAreDetached() {
+        Assertions.assertNull(coordinator.getAuditStatistics());
+        coordinator.updateAuditStatistics(aiAuditReport(1));
+        PQueryStatistics first = coordinator.getAuditStatistics();
+        coordinator.updateAuditStatistics(aiAuditReport(2));
+        PQueryStatistics second = coordinator.getAuditStatistics();
+        Assertions.assertEquals(10L, first.aiStatistics.promptTokens);
+        Assertions.assertEquals(1L, first.aiStatistics.promptUsageCount);
+        Assertions.assertEquals(30L, second.aiStatistics.promptTokens);
+        Assertions.assertEquals(3L, second.aiStatistics.promptUsageCount);
+        Assertions.assertNotSame(first, second);
+        Assertions.assertNotSame(first.aiStatistics, second.aiStatistics);
+
+        second.aiStatistics.promptTokens = 999L;
+        second.scanRows = 999L;
+        PQueryStatistics third = coordinator.getAuditStatistics();
+        Assertions.assertEquals(30L, third.aiStatistics.promptTokens);
+        Assertions.assertEquals(3L, third.scanRows);
+    }
+
+    @Test
+    public void testConcurrentAuditSnapshotsKeepUsagePairsConsistent() throws Exception {
+        coordinator.updateAuditStatistics(aiAuditReport(1));
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> writer = workers.submit(() -> {
+                start.await();
+                for (int i = 0; i < 1000; i++) {
+                    coordinator.updateAuditStatistics(aiAuditReport(1));
+                }
+                return null;
+            });
+            Future<?> reader = workers.submit(() -> {
+                start.await();
+                for (int i = 0; i < 1000; i++) {
+                    AIExecutionStatisticsPB ai = coordinator.getAuditStatistics().aiStatistics;
+                    Assertions.assertEquals(ai.promptUsageCount * 10, ai.promptTokens);
+                    Assertions.assertEquals(ai.completionUsageCount * 20, ai.completionTokens);
+                    Assertions.assertEquals(ai.totalUsageCount * 30, ai.totalTokens);
+                }
+                return null;
+            });
+            start.countDown();
+            writer.get(30, TimeUnit.SECONDS);
+            reader.get(30, TimeUnit.SECONDS);
+        } finally {
+            workers.shutdownNow();
+            Assertions.assertTrue(workers.awaitTermination(30, TimeUnit.SECONDS));
+        }
+    }
+
+    private static TReportAuditStatisticsParams aiAuditReport(long count) {
+        TAIExecutionStatistics ai = new TAIExecutionStatistics()
+                .setPrompt_tokens(10 * count).setPrompt_usage_count(count)
+                .setCompletion_tokens(20 * count).setCompletion_usage_count(count)
+                .setTotal_tokens(30 * count).setTotal_usage_count(count);
+        return new TReportAuditStatisticsParams().setAudit_statistics(
+                new TAuditStatistics().setScan_rows(count).setAi_statistics(ai));
     }
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode)

@@ -639,6 +639,56 @@ TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateCpuAndScan
     EXPECT_EQ(11, snapshot_pb.stats_items(0).scan_bytes());
 }
 
+TEST(QueryContextManagerTest, testAIStatisticsFollowExistingDeltaAndSnapshotSemantics) {
+    auto parent = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent->limit(), parent.get());
+    AIExecutionStatistics task;
+    task.task_count = 1;
+    task.request_count = 2;
+    task.total_tokens = 7;
+    task.total_usage_count = 1;
+    ctx.query_runtime_state().add_ai_statistics(task);
+
+    PQueryStatistics upstream;
+    upstream.mutable_ai_statistics()->set_task_count(3);
+    upstream.mutable_ai_statistics()->set_total_tokens(11);
+    upstream.mutable_ai_statistics()->set_total_usage_count(3);
+    ctx.maintained_query_recv()->insert(upstream, 0);
+
+    PQueryStatistics first;
+    ctx.intermediate_query_statistic(0)->to_pb(&first);
+    EXPECT_EQ(4, first.ai_statistics().task_count());
+    EXPECT_EQ(18, first.ai_statistics().total_tokens());
+    PQueryStatistics second;
+    ctx.intermediate_query_statistic(0)->to_pb(&second);
+    EXPECT_FALSE(second.has_ai_statistics());
+
+    // Like CPU and scan statistics, a failure snapshot retains the local total,
+    // not just the delta remaining after the intermediate report.
+    PQueryStatistics snapshot;
+    ctx.snapshot_query_statistic()->to_pb(&snapshot);
+    EXPECT_EQ(1, snapshot.ai_statistics().task_count());
+    EXPECT_EQ(7, snapshot.ai_statistics().total_tokens());
+}
+
+TEST(QueryContextManagerTest, testFinalAIStatisticsMergeLocalAndUpstream) {
+    auto parent = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent->limit(), parent.get());
+    ctx.set_final_sink();
+    AIExecutionStatistics task;
+    task.task_count = 1;
+    ctx.query_runtime_state().add_ai_statistics(task);
+    PQueryStatistics upstream;
+    upstream.mutable_ai_statistics()->set_task_count(3);
+    ctx.maintained_query_recv()->insert(upstream, 0);
+    EXPECT_EQ(nullptr, ctx.intermediate_query_statistic(0));
+    PQueryStatistics result;
+    ctx.final_query_statistic()->to_pb(&result);
+    EXPECT_EQ(4, result.ai_statistics().task_count());
+}
+
 TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
     auto query_ctx = std::make_shared<QueryContext>();
     TUniqueId query_id;
