@@ -22,7 +22,9 @@ jobs:
       github.event.issue.pull_request &&
       github.event.issue.state == 'closed' &&
       github.event.comment.user.login == 'chatgpt-codex-connector[bot]'
-    runs-on: [self-hosted, light]
+    # quick (not light): needs the /var/lib/ci-tool bind-mount for the orchestration
+    # script; light is a deliberately ci-tool-free pool. Seconds-long event-driven job.
+    runs-on: [self-hosted, quick]
     steps:
       - name: open issue on codex post-merge findings
         env:
@@ -34,5 +36,7 @@ jobs:
           PR_AUTHOR: ${{ github.event.issue.user.login }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
-          cd ci-tool && git pull
+          # git pull is best-effort: the bind-mounted copy is already runnable, so a
+          # transient fetch failure must not block the job -- fall back to it and go on.
+          cd ci-tool && (git pull || true)
           python3 bin/post_merge_review.py
