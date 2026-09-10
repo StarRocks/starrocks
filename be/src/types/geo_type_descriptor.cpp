@@ -65,7 +65,7 @@ GeoTypeDescriptor GeoTypeDescriptor::from_thrift(const TGeoTypeDesc& thrift) {
     return result;
 }
 
-GeoTypeDescriptor GeoTypeDescriptor::from_protobuf(const PGeoTypeDesc& protobuf) {
+GeoTypeDescriptor GeoTypeDescriptor::from_protobuf(const GeoTypeDescPB& protobuf) {
     GeoTypeDescriptor result;
     result.logical_type = protobuf.logical_type();
     result.coordinate_system = protobuf.coordinate_system();
@@ -85,8 +85,8 @@ TGeoTypeDesc GeoTypeDescriptor::to_thrift() const {
     return result;
 }
 
-PGeoTypeDesc GeoTypeDescriptor::to_protobuf() const {
-    PGeoTypeDesc result;
+GeoTypeDescPB GeoTypeDescriptor::to_protobuf() const {
+    GeoTypeDescPB result;
     result.set_logical_type(logical_type);
     result.set_coordinate_system(coordinate_system);
     result.set_edge_algorithm(edge_algorithm);
@@ -109,7 +109,7 @@ GeoStorageDescriptor GeoStorageDescriptor::from_thrift(const TGeoStorageDesc& th
     return result;
 }
 
-GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const PGeoStorageDesc& protobuf) {
+GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const GeoStorageDescPB& protobuf) {
     GeoStorageDescriptor result;
     result.encoding = protobuf.encoding();
     result.dimension = protobuf.dimension();
@@ -125,8 +125,8 @@ TGeoStorageDesc GeoStorageDescriptor::to_thrift() const {
     return result;
 }
 
-PGeoStorageDesc GeoStorageDescriptor::to_protobuf() const {
-    PGeoStorageDesc result;
+GeoStorageDescPB GeoStorageDescriptor::to_protobuf() const {
+    GeoStorageDescPB result;
     result.set_encoding(encoding);
     result.set_dimension(dimension);
     result.set_validation_state(validation_state);
@@ -138,7 +138,7 @@ GeoColumnDescriptor GeoColumnDescriptor::from_thrift(const TGeoColumnDesc& thrif
             thrift.__isset.storage ? GeoStorageDescriptor::from_thrift(thrift.storage) : GeoStorageDescriptor{}};
 }
 
-GeoColumnDescriptor GeoColumnDescriptor::from_protobuf(const PGeoColumnDesc& protobuf) {
+GeoColumnDescriptor GeoColumnDescriptor::from_protobuf(const GeoColumnDescPB& protobuf) {
     return {GeoTypeDescriptor::from_protobuf(protobuf.type()), GeoStorageDescriptor::from_protobuf(protobuf.storage())};
 }
 
@@ -149,8 +149,8 @@ TGeoColumnDesc GeoColumnDescriptor::to_thrift() const {
     return result;
 }
 
-PGeoColumnDesc GeoColumnDescriptor::to_protobuf() const {
-    PGeoColumnDesc result;
+GeoColumnDescPB GeoColumnDescriptor::to_protobuf() const {
+    GeoColumnDescPB result;
     *result.mutable_type() = type.to_protobuf();
     *result.mutable_storage() = storage.to_protobuf();
     return result;

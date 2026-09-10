@@ -141,16 +141,16 @@ TEST(GeoTypeDescriptorTest, WireOrdinalsRemainStable) {
     EXPECT_EQ(2, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED);
     EXPECT_EQ(3, TGeoValidationState::SEMANTICALLY_VALIDATED);
     EXPECT_EQ(3, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
-    EXPECT_EQ(1, PGeoTypeDesc::kLogicalTypeFieldNumber);
-    EXPECT_EQ(2, PGeoTypeDesc::kCoordinateSystemFieldNumber);
-    EXPECT_EQ(3, PGeoTypeDesc::kEdgeAlgorithmFieldNumber);
-    EXPECT_EQ(4, PGeoTypeDesc::kCrsFieldNumber);
-    EXPECT_EQ(5, PGeoTypeDesc::kSridFieldNumber);
-    EXPECT_EQ(1, PGeoStorageDesc::kEncodingFieldNumber);
-    EXPECT_EQ(2, PGeoStorageDesc::kDimensionFieldNumber);
-    EXPECT_EQ(3, PGeoStorageDesc::kValidationStateFieldNumber);
-    EXPECT_EQ(1, PGeoColumnDesc::kTypeFieldNumber);
-    EXPECT_EQ(2, PGeoColumnDesc::kStorageFieldNumber);
+    EXPECT_EQ(1, GeoTypeDescPB::kLogicalTypeFieldNumber);
+    EXPECT_EQ(2, GeoTypeDescPB::kCoordinateSystemFieldNumber);
+    EXPECT_EQ(3, GeoTypeDescPB::kEdgeAlgorithmFieldNumber);
+    EXPECT_EQ(4, GeoTypeDescPB::kCrsFieldNumber);
+    EXPECT_EQ(5, GeoTypeDescPB::kSridFieldNumber);
+    EXPECT_EQ(1, GeoStorageDescPB::kEncodingFieldNumber);
+    EXPECT_EQ(2, GeoStorageDescPB::kDimensionFieldNumber);
+    EXPECT_EQ(3, GeoStorageDescPB::kValidationStateFieldNumber);
+    EXPECT_EQ(1, GeoColumnDescPB::kTypeFieldNumber);
+    EXPECT_EQ(2, GeoColumnDescPB::kStorageFieldNumber);
 }
 
 TEST(GeoTypeDescriptorTest, AlgorithmsRemainDistinctForCompatibility) {
@@ -167,11 +167,11 @@ TEST(GeoTypeDescriptorTest, AlgorithmsRemainDistinctForCompatibility) {
 
 TEST(GeoTypeDescriptorTest, MissingFieldsNormalizeWithoutGuessingSemantics) {
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_thrift(TGeoTypeDesc{}));
-    EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_protobuf(PGeoTypeDesc{}));
+    EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_protobuf(GeoTypeDescPB{}));
     EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_thrift(TGeoStorageDesc{}));
-    EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_protobuf(PGeoStorageDesc{}));
+    EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_protobuf(GeoStorageDescPB{}));
     EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_thrift(TGeoColumnDesc{}));
-    EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_protobuf(PGeoColumnDesc{}));
+    EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_protobuf(GeoColumnDescPB{}));
     check_round_trip(GeoColumnDescriptor{});
 
     TGeoTypeDesc type;
@@ -239,17 +239,17 @@ std::string protobuf_enum_wire(int field, int32_t value) {
 
 TEST(GeoTypeDescriptorTest, WireFieldsUseDeclaredEnums) {
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.logical_type), TGeoLogicalType::type>);
-    static_assert(std::is_same_v<decltype(PGeoTypeDesc{}.logical_type()), PGeoLogicalType>);
+    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.logical_type()), PGeoLogicalType>);
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.coordinate_system), TGeoCoordinateSystem::type>);
-    static_assert(std::is_same_v<decltype(PGeoTypeDesc{}.coordinate_system()), PGeoCoordinateSystem>);
+    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.coordinate_system()), PGeoCoordinateSystem>);
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.edge_algorithm), TGeoEdgeAlgorithm::type>);
-    static_assert(std::is_same_v<decltype(PGeoTypeDesc{}.edge_algorithm()), PGeoEdgeAlgorithm>);
+    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.edge_algorithm()), PGeoEdgeAlgorithm>);
     static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.encoding), TGeoEncoding::type>);
-    static_assert(std::is_same_v<decltype(PGeoStorageDesc{}.encoding()), PGeoEncoding>);
+    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.encoding()), PGeoEncoding>);
     static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.dimension), TGeoDimension::type>);
-    static_assert(std::is_same_v<decltype(PGeoStorageDesc{}.dimension()), PGeoDimension>);
+    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.dimension()), PGeoDimension>);
     static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.validation_state), TGeoValidationState::type>);
-    static_assert(std::is_same_v<decltype(PGeoStorageDesc{}.validation_state()), PGeoValidationState>);
+    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.validation_state()), PGeoValidationState>);
 }
 
 constexpr std::array unknown_values = {127, -1, std::numeric_limits<int32_t>::max(),
@@ -287,8 +287,8 @@ TEST(GeoTypeDescriptorTest, UnknownProtobufWireEnumsUseUnknownDefault) {
     for (int32_t value : unknown_values) {
         for (int field = 1; field <= 3; ++field) {
             SCOPED_TRACE(::testing::Message() << field << "/" << value);
-            PGeoTypeDesc type;
-            PGeoStorageDesc storage;
+            GeoTypeDescPB type;
+            GeoStorageDescPB storage;
             ASSERT_TRUE(type.ParseFromString(protobuf_enum_wire(field, value)));
             ASSERT_TRUE(storage.ParseFromString(protobuf_enum_wire(field, value)));
             // Closed-enum parsing leaves the field unset; its declared default is UNKNOWN.
@@ -298,7 +298,7 @@ TEST(GeoTypeDescriptorTest, UnknownProtobufWireEnumsUseUnknownDefault) {
             EXPECT_EQ(1, storage.unknown_fields().field_count());
             EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_protobuf(type));
             EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_protobuf(storage));
-            PGeoColumnDesc column;
+            GeoColumnDescPB column;
             *column.mutable_type() = type;
             *column.mutable_storage() = storage;
             EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_protobuf(column));
@@ -319,8 +319,8 @@ TEST(GeoTypeDescriptorTest, ProtobufKnownEnumsAreNotOverriddenByUnknownFields) {
                 const auto unknown = protobuf_enum_wire(field, value);
                 const auto type_bytes = expected.type.to_protobuf().SerializeAsString();
                 const auto storage_bytes = expected.storage.to_protobuf().SerializeAsString();
-                PGeoTypeDesc type;
-                PGeoStorageDesc storage;
+                GeoTypeDescPB type;
+                GeoStorageDescPB storage;
                 ASSERT_TRUE(type.ParseFromString(known_first ? type_bytes + unknown : unknown + type_bytes));
                 ASSERT_TRUE(storage.ParseFromString(known_first ? storage_bytes + unknown : unknown + storage_bytes));
                 EXPECT_EQ(1, type.unknown_fields().field_count());

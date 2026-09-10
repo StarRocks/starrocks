@@ -35,9 +35,9 @@ struct GeoTypeDescriptor {
     std::optional<int32_t> srid;
 
     static GeoTypeDescriptor from_thrift(const TGeoTypeDesc& thrift);
-    static GeoTypeDescriptor from_protobuf(const PGeoTypeDesc& protobuf);
+    static GeoTypeDescriptor from_protobuf(const GeoTypeDescPB& protobuf);
     TGeoTypeDesc to_thrift() const;
-    PGeoTypeDesc to_protobuf() const;
+    GeoTypeDescPB to_protobuf() const;
 
     // Exact normalized metadata equality, not SQL type compatibility.
     bool operator==(const GeoTypeDescriptor& rhs) const = default;
@@ -49,9 +49,9 @@ struct GeoStorageDescriptor {
     PGeoValidationState validation_state = GEO_VALIDATION_STATE_UNKNOWN;
 
     static GeoStorageDescriptor from_thrift(const TGeoStorageDesc& thrift);
-    static GeoStorageDescriptor from_protobuf(const PGeoStorageDesc& protobuf);
+    static GeoStorageDescriptor from_protobuf(const GeoStorageDescPB& protobuf);
     TGeoStorageDesc to_thrift() const;
-    PGeoStorageDesc to_protobuf() const;
+    GeoStorageDescPB to_protobuf() const;
 
     // Exact normalized metadata equality, not SQL type compatibility.
     bool operator==(const GeoStorageDescriptor& rhs) const = default;
@@ -62,9 +62,9 @@ struct GeoColumnDescriptor {
     GeoStorageDescriptor storage;
 
     static GeoColumnDescriptor from_thrift(const TGeoColumnDesc& thrift);
-    static GeoColumnDescriptor from_protobuf(const PGeoColumnDesc& protobuf);
+    static GeoColumnDescriptor from_protobuf(const GeoColumnDescPB& protobuf);
     TGeoColumnDesc to_thrift() const;
-    PGeoColumnDesc to_protobuf() const;
+    GeoColumnDescPB to_protobuf() const;
 
     bool operator==(const GeoColumnDescriptor& rhs) const = default;
 };

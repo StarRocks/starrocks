@@ -292,7 +292,7 @@ enum PGeoValidationState {
 }
 
 // Standalone descriptors; not attached to PTypeDesc until native type integration.
-message PGeoTypeDesc {
+message GeoTypeDescPB {
     optional PGeoLogicalType logical_type = 1;
     optional PGeoCoordinateSystem coordinate_system = 2;
     optional PGeoEdgeAlgorithm edge_algorithm = 3;
@@ -300,13 +300,13 @@ message PGeoTypeDesc {
     optional int32 srid = 5;
 }
 
-message PGeoStorageDesc {
+message GeoStorageDescPB {
     optional PGeoEncoding encoding = 1;
     optional PGeoDimension dimension = 2;
     optional PGeoValidationState validation_state = 3;
 }
 
-message PGeoColumnDesc {
-    optional PGeoTypeDesc type = 1;
-    optional PGeoStorageDesc storage = 2;
+message GeoColumnDescPB {
+    optional GeoTypeDescPB type = 1;
+    optional GeoStorageDescPB storage = 2;
 }
