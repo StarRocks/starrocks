@@ -95,6 +95,7 @@ public:
 
 private:
     bool _accepted = false;
+    bool _counted = false;
 };
 
 // Drain-visible work in the admission window, or async work not fully represented

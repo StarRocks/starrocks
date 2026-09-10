@@ -65,13 +65,17 @@ RequestAdmissionGuard::RequestAdmissionGuard() {
     std::lock_guard<std::mutex> lock(k_starrocks_admission_mutex);
     _accepted = !k_starrocks_force_reject.load(std::memory_order_seq_cst) && !is_process_crashing() &&
                 !process_quick_exit_in_progress();
-    if (_accepted) {
+    // Cutoff rejects are not admitted work. Count only while should_accept is true so
+    // HTTP BEGIN/stream-load retries after delay/fallback cannot pin drain.
+    // accepted() stays true after cutoff so BEGIN can still 307.
+    if (_accepted && should_accept_new_request()) {
         k_starrocks_shutdown_work.fetch_add(1, std::memory_order_seq_cst);
+        _counted = true;
     }
 }
 
 RequestAdmissionGuard::~RequestAdmissionGuard() {
-    if (_accepted) {
+    if (_counted) {
         k_starrocks_shutdown_work.fetch_sub(1, std::memory_order_seq_cst);
     }
 }

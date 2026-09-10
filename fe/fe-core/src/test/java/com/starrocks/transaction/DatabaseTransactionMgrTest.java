@@ -356,6 +356,28 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testAbortPreparedFalseKeepsPrepared() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long transactionId = masterTransMgr.beginTransaction(
+                GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "test_abort_prepared_false",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND,
+                Config.stream_load_default_timeout_second);
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        assertEquals(TransactionStatus.PREPARED,
+                masterDbTransMgr.getTransactionState(transactionId).getTransactionStatus());
+        masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId,
+                "coordinate BE is down after graceful shutdown restart", false);
+        assertEquals(TransactionStatus.PREPARED,
+                masterDbTransMgr.getTransactionState(transactionId).getTransactionStatus());
+    }
+
+    @Test
     public void getLakeCompactionActiveTxnListTest() throws StarRocksException {
         TransactionState.TxnCoordinator feTransactionSource =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe1");

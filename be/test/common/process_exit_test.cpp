@@ -221,6 +221,31 @@ TEST_F(ProcessExitTest, testRequestAdmissionGuardClosesWithForceReject) {
     EXPECT_FALSE(guard.accepted());
 }
 
+TEST_F(ProcessExitTest, testRequestAdmissionGuardDoesNotCountAfterCutoff) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    EXPECT_FALSE(should_accept_new_request());
+    const size_t before = shutdown_work_inflight();
+    {
+        RequestAdmissionGuard guard;
+        EXPECT_TRUE(guard.accepted());
+        EXPECT_EQ(before, shutdown_work_inflight());
+    }
+    EXPECT_EQ(before, shutdown_work_inflight());
+}
+
+TEST_F(ProcessExitTest, testRequestAdmissionGuardCountsDuringAdmissionWindow) {
+    ASSERT_TRUE(set_process_exit());
+    EXPECT_TRUE(should_accept_new_request());
+    const size_t before = shutdown_work_inflight();
+    {
+        RequestAdmissionGuard guard;
+        EXPECT_TRUE(guard.accepted());
+        EXPECT_EQ(before + 1, shutdown_work_inflight());
+    }
+    EXPECT_EQ(before, shutdown_work_inflight());
+}
+
 TEST_F(ProcessExitTest, testSetProcessExitPublishesStartMsBeforeExit) {
     DeferOp defer([]() { SyncPoint::GetInstance()->DisableProcessing(); });
 

@@ -298,6 +298,8 @@ TEST_F(StreamLoadActionTest, process_exit_abort_stream_load) {
     ASSERT_STREQ("application/json", content_type);
     auto* location = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION);
     ASSERT_EQ(location, nullptr);
+    ASSERT_EQ(nullptr, request.handler_ctx());
+    ASSERT_EQ(0, shutdown_work_inflight());
 
     // restore the flags
     k_starrocks_exit.store(false);

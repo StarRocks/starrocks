@@ -409,11 +409,11 @@ public class HeartbeatMgrTest {
 
         new Verifications() {
             {
-                txnMgr.abortTransaction(5L, 10L, anyString);
+                txnMgr.abortTransaction(5L, 10L, anyString, false);
                 times = 1;
-                txnMgr.abortTransaction(6L, 20L, anyString);
+                txnMgr.abortTransaction(6L, 20L, anyString, false);
                 times = 1;
-                txnMgr.abortTransaction(anyLong, anyLong, anyString);
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
                 times = 2;
             }
         };
@@ -447,7 +447,7 @@ public class HeartbeatMgrTest {
 
         new Verifications() {
             {
-                txnMgr.abortTransaction(5L, 10L, anyString);
+                txnMgr.abortTransaction(5L, 10L, anyString, false);
                 times = 1;
             }
         };
@@ -479,7 +479,7 @@ public class HeartbeatMgrTest {
 
         new Verifications() {
             {
-                txnMgr.abortTransaction(1L, 120L, anyString);
+                txnMgr.abortTransaction(1L, 120L, anyString, false);
                 times = 1;
             }
         };
@@ -512,7 +512,7 @@ public class HeartbeatMgrTest {
 
         new Verifications() {
             {
-                txnMgr.abortTransaction(1L, 50L, anyString);
+                txnMgr.abortTransaction(1L, 50L, anyString, false);
                 times = 1;
             }
         };
@@ -542,7 +542,7 @@ public class HeartbeatMgrTest {
 
         new Verifications() {
             {
-                txnMgr.abortTransaction(5L, 10L, anyString);
+                txnMgr.abortTransaction(5L, 10L, anyString, false);
                 times = 1;
             }
         };
@@ -583,7 +583,7 @@ public class HeartbeatMgrTest {
             {
                 txnMgr.getTransactionIdByCoordinateBe("10.0.0.1", 7L, 50L, Integer.MAX_VALUE);
                 times = 1;
-                txnMgr.abortTransaction(1L, 9L, anyString);
+                txnMgr.abortTransaction(1L, 9L, anyString, false);
                 times = 1;
             }
         };
@@ -604,7 +604,7 @@ public class HeartbeatMgrTest {
             {
                 txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
                 times = 0;
-                txnMgr.abortTransaction(anyLong, anyLong, anyString);
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
                 times = 0;
             }
         };
@@ -635,7 +635,7 @@ public class HeartbeatMgrTest {
                 txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
                 times = 0;
                 // Replay OK after a shutdown must not abort the snapshot.
-                txnMgr.abortTransaction(anyLong, anyLong, anyString);
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
                 times = 0;
             }
         };
@@ -654,7 +654,7 @@ public class HeartbeatMgrTest {
             {
                 txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
                 times = 0;
-                txnMgr.abortTransaction(anyLong, anyLong, anyString);
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
                 times = 0;
             }
         };

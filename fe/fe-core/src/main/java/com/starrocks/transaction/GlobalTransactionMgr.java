@@ -622,6 +622,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         abortTransaction(dbId, transactionId, reason, Collections.emptyList());
     }
 
+    // abortPrepared=false leaves PREPARED txns for a later COMMIT (coordinator BE is gone).
+    public void abortTransaction(long dbId, long transactionId, String reason, boolean abortPrepared)
+            throws StarRocksException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        dbTransactionMgr.abortTransaction(transactionId, abortPrepared, reason, null,
+                Collections.emptyList(), Collections.emptyList());
+    }
+
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
             throws StarRocksException {
         abortTransaction(dbId, transactionId, reason, Collections.emptyList(), failedTablets, null);

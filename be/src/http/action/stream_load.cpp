@@ -233,7 +233,8 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     StreamLoadContext* ctx;
     {
         RequestAdmissionGuard request_admission;
-        if (!request_admission.accepted()) {
+        if (!request_admission.accepted() || !should_accept_new_request()) {
+            LOG(INFO) << "[reject] stream load received after graceful shutdown admission window, uri=" << req->uri();
             StreamLoadContext reply_ctx(_exec_env->load_stream_mgr(), nullptr);
             reply_ctx.status = Status::ServiceUnavailable("Service is shutting down, please retry later!");
             _send_reply(req, reply_ctx.to_json());
@@ -284,17 +285,6 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "streaming load request: " << req->debug_string();
     }
-
-    // The context gauge covers this request through execution.
-    if (!should_accept_new_request()) {
-        LOG(INFO) << "[reject] stream load received after graceful shutdown admission window, uri=" << req->uri()
-                  << ", label=" << ctx->label;
-        ctx->status = Status::ServiceUnavailable("Service is shutting down, please retry later!");
-        auto str = ctx->to_json();
-        _send_reply(req, str);
-        return -1;
-    }
-
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;

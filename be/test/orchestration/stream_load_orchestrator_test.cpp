@@ -50,7 +50,7 @@ TEST_F(StreamLoadOrchestratorTest, execute_plan_fragment_preserves_be_test_sync_
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    ASSERT_OK(stream_load_orchestrator.execute_plan_fragment(&ctx));
+    ASSERT_OK(stream_load_orchestrator.execute_plan_fragment(&ctx, false));
     auto status = ctx.future.get();
     ASSERT_TRUE(status.is_internal_error());
     ASSERT_EQ("TestFail", status.message());
@@ -69,7 +69,7 @@ TEST_F(StreamLoadOrchestratorTest, execute_plan_fragment_rejects_when_force_reje
     StreamLoadOrchestrator stream_load_orchestrator(&exec_env, nullptr);
     StreamLoadContext ctx(nullptr);
 
-    Status status = stream_load_orchestrator.execute_plan_fragment(&ctx);
+    Status status = stream_load_orchestrator.execute_plan_fragment(&ctx, false);
     ASSERT_TRUE(status.is_service_unavailable());
     EXPECT_EQ(0, shutdown_work_inflight());
 }
