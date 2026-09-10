@@ -69,9 +69,9 @@ class TestCombineColumnAltersRewriter:
         assert len(res.ops) == 1
         assert isinstance(res.ops[0], ops.AddColumnOp)
 
-    def test_non_column_ops_are_preserved_in_order(self):
-        # A comment change interleaved with column changes must remain, and the
-        # single combined op takes the position of the first column change.
+    def test_non_column_op_is_preserved_while_columns_coalesce(self):
+        # A non-index op (here a MODIFY on a different column) is kept; the
+        # add/drop on either side of it still coalesce into one op.
         other = ops.AlterColumnOp("t3", "keep", modify_comment="hi")
         mto = ops.ModifyTableOps("t3", ops=[
             ops.AddColumnOp("t3", Column("a", INTEGER)),
@@ -82,6 +82,8 @@ class TestCombineColumnAltersRewriter:
 
         assert len(res.ops) == 2
         assert isinstance(res.ops[0], StarRocksAlterColumnsOp)
+        assert [c.name for c in res.ops[0].adds] == ["a"]
+        assert [c.name for c in res.ops[0].drops] == ["c"]
         assert res.ops[1] is other
 
     def test_only_drops_still_collapse(self):
