@@ -1769,14 +1769,19 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 }
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
                 const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
-                // full_rowset_size is the segment file bytes (column data + embedded indexes).
-                // index_disk_size tracks additional index bytes recorded in RowsetMeta; these may
-                // be separately persisted (e.g. primary-key SSTable indexes) or otherwise accounted
-                // for outside the segment file.
-                // Canonical invariant: data_disk_size = segment_size - index_size,
-                //                      total_disk_size = segment_size (== data + index).
-                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - index_disk_size));
-                rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
+                // full_rowset_size is the segment (.dat) file bytes: column data + embedded indexes.
+                // index_disk_size counts all index bytes, including standalone index files (the
+                // vector index .vi) that live outside the segment files. Subtracting the full
+                // index_disk_size from the segment-file size would remove the standalone bytes that
+                // were never part of full_rowset_size and drive data_disk_size to zero for
+                // vector-index rowsets, so subtract only the embedded portion.
+                const auto standalone_index_size = rowset->rowset_meta()->standalone_index_size();
+                const auto embedded_index_size =
+                        index_disk_size - std::min<int64_t>(standalone_index_size, index_disk_size);
+                // Invariant: data_disk_size = segment_size - embedded_index_size,
+                //            total_disk_size = segment_size + standalone_index_size (== data + index).
+                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - embedded_index_size));
+                rowset->rowset_meta()->set_total_disk_size(full_rowset_size + standalone_index_size);
                 rowset->set_schema(apply_tschema);
                 rowset->rowset_meta()->set_tablet_schema(apply_tschema);
                 (void)rowset->reload();
