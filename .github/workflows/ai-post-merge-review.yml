@@ -23,6 +23,7 @@ jobs:
       github.repository == 'CelerData/celerdata-enterprise' &&
       !contains(github.event.pull_request.title, '[Doc]') &&
       !contains(github.event.pull_request.title, '[UT]') &&
+      !contains(github.event.pull_request.title, '[Tool]') &&
       !contains(github.event.pull_request.labels.*.name, 'sync')
     # quick (not light): the job needs the /var/lib/ci-tool bind-mount to run the
     # orchestration script, which only the ci-tool-equipped pools (quick/normal)
