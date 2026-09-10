@@ -254,7 +254,7 @@ LB は連続して非 200 応答を受信した後にノードを削除します
   ./bin/stop_cn.sh -g --timeout 600
   ```
 
-BE/CN はフラグメントが残っていない場合、即座に終了します。
+デフォルトのハートビート admission ウィンドウでは、フラグメントがなくても BE/CN は delay または fallback の cutoff まで待ちます。cutoff 後は、drain 対象の処理（クエリフラグメント、admission 済みロード、Load Channel）がなくなったときに終了します。drain のハード上限は変わりません。
 
 #### BE/CN 状態の検証
 

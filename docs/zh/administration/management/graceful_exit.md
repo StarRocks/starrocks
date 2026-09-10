@@ -254,7 +254,7 @@ LB 在收到连续的非 200 响应后移除节点。
   ./bin/stop_cn.sh -g --timeout 600
   ```
 
-如果没有 Fragment 剩余，BE/CN 会立即退出。
+默认开启心跳准入窗口时，即使没有 Fragment，BE/CN 仍会等到 delay 或 fallback cutoff。cutoff 之后，仅当没有 drain 可见工作（查询 Fragment、已准入 Load、Load Channel）时才退出。drain 预算仍是硬上限。
 
 #### 验证 BE/CN 状态
 

@@ -254,7 +254,7 @@ LB removes the node after receiving consecutive non-200 responses.
   ./bin/stop_cn.sh -g --timeout 600
   ```
 
-BE/CN exits immediately if no fragments remain.
+With the default heartbeat admission window, an idle BE/CN still waits until the delay or fallback cutoff. After cutoff it exits when no drain-visible work remains (query fragments, admitted loads, and load channels). The drain budget remains a hard limit.
 
 #### Validate BE/CN Status
 
