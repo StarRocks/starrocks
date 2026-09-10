@@ -104,6 +104,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -732,6 +733,68 @@ public class DatabaseTransactionMgrTest {
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"), -1, 3600000L);
         txn.setTransactionStatus(TransactionStatus.PREPARE);
         Deencapsulation.invoke(mgr, "unprotectUpsertTransactionState", txn);
+    }
+
+    @Test
+    public void testWatermarkScanToleratesConcurrentTableAttach() throws Exception {
+        int savedDb = Config.max_running_txn_num_per_db;
+        try {
+            Config.max_running_txn_num_per_db = 1000;
+            DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+            long watchedTable = 950L;
+            long unrelatedTable = 111L; // never attached, so every poll walks the list end to end
+            // A running txn whose table list keeps growing while the watermark predicate scans it. The
+            // statement path appends without the DatabaseTransactionMgr lock, so the read lock held by
+            // isPreviousTransactionsFinished does not cover the appender. Reading the live list here used
+            // to walk it with a fail-fast iterator, which throws ConcurrentModificationException and fails
+            // whichever unrelated caller happened to be polling.
+            addRunningTxn(mgr, 7001L, "p2_watermark_race", TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Lists.newArrayList(watchedTable));
+            TransactionState txnState = mgr.getTransactionState(7001L);
+
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            CountDownLatch start = new CountDownLatch(1);
+            AtomicBoolean stop = new AtomicBoolean(false);
+
+            Thread appender = new Thread(() -> {
+                try {
+                    start.await();
+                    for (long tableId = 2000L; tableId < 8000L && !stop.get(); tableId++) {
+                        txnState.addTableIdIfAbsent(tableId);
+                    }
+                } catch (Throwable t) {
+                    failure.compareAndSet(null, t);
+                }
+            });
+            // Probe a table the transaction never touches. That is the shape that actually reproduces the
+            // bug: the old predicate looped over the transaction's own list looking for a match, so an
+            // absent probe walked every element and gave the appender a full iteration to invalidate. A
+            // probe that matches the first element returns after a single step and almost never races.
+            Thread poller = new Thread(() -> {
+                try {
+                    start.await();
+                    for (int i = 0; i < 6000 && !stop.get(); i++) {
+                        mgr.isPreviousTransactionsFinished(9999L, Lists.newArrayList(unrelatedTable));
+                    }
+                } catch (Throwable t) {
+                    failure.compareAndSet(null, t);
+                }
+            });
+
+            appender.start();
+            poller.start();
+            start.countDown();
+            appender.join(30_000L);
+            poller.join(30_000L);
+            stop.set(true);
+
+            assertNull(failure.get(), "a concurrent table attach must not break the watermark scan");
+            // The txn is still running and still touches the watched table, so the watermark must not have
+            // moved past it. This pins the answer as well as the absence of a crash.
+            assertFalse(mgr.isPreviousTransactionsFinished(9999L, Lists.newArrayList(watchedTable)));
+        } finally {
+            Config.max_running_txn_num_per_db = savedDb;
+        }
     }
 
     @Test

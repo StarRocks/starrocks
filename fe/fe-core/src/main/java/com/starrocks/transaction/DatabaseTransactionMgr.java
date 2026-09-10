@@ -2277,8 +2277,11 @@ public class DatabaseTransactionMgr {
         readLock();
         try {
             for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
-                if (entry.getValue().getDbId() != dbId || !isIntersectionNotEmpty(entry.getValue().getTableIdList(),
-                        tableIdList) || !entry.getValue().isRunning()) {
+                // Ask the transaction itself rather than reading its live table list. This scan runs over
+                // the running set, which holds explicit transactions that have not attached a table yet and
+                // may be appending right now, and the read lock here does not cover that appender.
+                if (entry.getValue().getDbId() != dbId || !entry.getValue().intersectsTableIds(tableIdList)
+                        || !entry.getValue().isRunning()) {
                     continue;
                 }
                 if (excludeTransactionIds.contains(entry.getKey())) {
@@ -2294,25 +2297,6 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return true;
-    }
-
-    /**
-     * check if there exists a intersection between the source tableId list and target tableId list
-     * if one of them is null or empty, that means that we don't know related tables in tableList,
-     * we think the two lists may have intersection for right ordered txns
-     */
-    public boolean isIntersectionNotEmpty(List<Long> sourceTableIdList, List<Long> targetTableIdList) {
-        if (CollectionUtils.isEmpty(sourceTableIdList) || CollectionUtils.isEmpty(targetTableIdList)) {
-            return true;
-        }
-        for (Long srcValue : sourceTableIdList) {
-            for (Long targetValue : targetTableIdList) {
-                if (srcValue.equals(targetValue)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     public List<Long> getTimeoutTxns(long currentMillis) {
