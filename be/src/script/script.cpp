@@ -30,11 +30,7 @@
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-<<<<<<< HEAD
-=======
 #include "runtime/memory/jemalloc_conf_updater.h"
-#include "runtime/prof/heap_prof.h"
->>>>>>> 920430a ([Refactor] Toggle heap profiling through jemalloc_conf instead of beside it (#78873))
 #include "storage/del_vector.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"

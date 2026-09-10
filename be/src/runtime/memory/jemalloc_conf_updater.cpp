@@ -23,17 +23,12 @@
 #include <optional>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/string/trim.h"
-#include "common/config_memory_allocator_fwd.h"
-#include "common/config_update_registry.h"
->>>>>>> 920430a ([Refactor] Toggle heap profiling through jemalloc_conf instead of beside it (#78873))
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/prof/heap_prof.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
+#include "http/action/update_config_action.h"
 #include "jemalloc/jemalloc.h"
 #include "util/trim.h"
 
@@ -264,10 +259,15 @@ StatusOr<std::string> jemalloc_conf_with_prof_active(std::string_view conf, bool
 
 Status set_prof_active_via_config(bool active) {
     ASSIGN_OR_RETURN(std::string new_conf, jemalloc_conf_with_prof_active(config::jemalloc_conf.value(), active));
-    // Going through the registry rather than applying directly keeps one code path: the hook
-    // runs JemallocConfUpdater::update(), which is also what an operator editing
+    // Going through UpdateConfigAction rather than applying directly keeps one code path: the
+    // hook runs JemallocConfUpdater::update(), which is also what an operator editing
     // information_schema.be_configs reaches, and it rolls the config value back on failure.
-    return ConfigUpdateRegistry::instance()->update_config(kJemallocConfName, new_conf);
+    // The instance is owned by the http service, so it is null until that is up.
+    auto* update_config = UpdateConfigAction::instance();
+    if (update_config == nullptr) {
+        return Status::ServiceUnavailable("cannot toggle heap profiling before the http service is initialized");
+    }
+    return update_config->update_config(kJemallocConfName, new_conf);
 }
 
 void JemallocConfUpdater::init(std::string_view config_value) {
