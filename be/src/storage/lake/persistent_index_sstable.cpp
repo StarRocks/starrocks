@@ -79,6 +79,10 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         options.filter_policy = _filter_policy.get();
     }
     options.block_cache = cache;
+    // Verify block checksums when reading the index/meta blocks, so corrupted bytes
+    // (usually from the local cache) fail deterministically as Corruption instead of
+    // being misparsed, and can be healed by the drop-cache-and-retry below.
+    options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<sstable::Table> table;
     auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
@@ -208,6 +212,9 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    // Catch corrupted data blocks as Corruption (instead of silently returning wrong
+    // index values) so the drop-cache-and-retry below can heal a bad local cache.
+    options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<RandomAccessFile> rf;
     if (config::enable_pk_index_parallel_execution) {
         RandomAccessFileOptions opts;
@@ -342,6 +349,9 @@ Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, 
 
     sstable::ReadOptions options;
     options.fill_cache = false;
+    // The seeks below read real data blocks; catch corrupted bytes as Corruption
+    // instead of letting them feed wrong keys into the split samples.
+    options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<sstable::Iterator> iterator(_sst->NewIterator(options));
     for (const auto& separator : separators) {
         iterator->Seek(Slice(separator));

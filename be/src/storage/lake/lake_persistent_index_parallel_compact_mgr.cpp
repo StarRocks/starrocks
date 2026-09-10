@@ -116,6 +116,9 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
     sstable::ReadOptions read_options;
     read_options.fill_cache = false;
+    // Catch corrupted data blocks as Corruption instead of merging garbage into the
+    // compaction output.
+    read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
 
     bool contain_shared_sstables = false;
     // Open each sstable and create iterator
