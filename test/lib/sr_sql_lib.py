@@ -2665,22 +2665,28 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal(expect_status, status, "wait alter table finish error")
         time.sleep(0.5)
 
-    def wait_global_dict_ready(self, column_name, table_name):
+    def wait_global_dict_ready(self, column_name, table_name, timeout=60, interval=0.1):
         """
-        wait global dict ready
+        wait until the global dict for table_name:column_name is collected
+
+        The first EXPLAIN only asks the FE for a dictionary it does not have yet; CacheDictManager
+        loads it asynchronously from the BE, so the plan gains its Decode node a poll later rather
+        than on the first call. Poll rather than sleep between checks: the load finishes long
+        before a whole second has passed.
         """
-        status = ""
-        count = 0
-        while True:
-            if count > 60:
-                tools.assert_true(False, "acquire dictionary timeout for 60s")
-            sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        tools.assert_true(timeout > 0, "wait_global_dict_ready: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "wait_global_dict_ready: interval must be positive, got %s" % interval)
+
+        sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             res = self.execute_sql(sql, True)
             if not res["status"]:
                 tools.assert_true(False, "acquire dictionary error")
             if str(res["result"]).find("Decode") > 0:
                 return ""
-            time.sleep(1)
+            time.sleep(interval)
+        tools.assert_true(False, "acquire dictionary timeout for %ss" % timeout)
     
     def wait_plan_contains(self, query, *expects):
         """
