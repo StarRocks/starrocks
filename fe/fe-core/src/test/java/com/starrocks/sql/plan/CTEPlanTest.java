@@ -1271,6 +1271,24 @@ public class CTEPlanTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testCommonPlanExtractionSkipsAggWithoutIfOverload() throws Exception {
+        // ds_hll_accumulate's VARBINARY state has neither a `_if` variant nor an if(BOOLEAN, VARBINARY, VARBINARY)
+        // builtin, so the fusion rule must leave these pieces unfused.
+        boolean cboExtractCommonPlan = connectContext.getSessionVariable().isCboExtractCommonPlan();
+        connectContext.getSessionVariable().setCboExtractCommonPlan(true);
+        try {
+            String sql = "with a as (select ds_hll_accumulate(v1) as sk from t0 where v2 = 1), " +
+                    "b as (select ds_hll_accumulate(v1) as sk from t0 where v2 = 2) " +
+                    "select a.sk, b.sk from a, b";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "ds_hll_count_distinct_union");
+        } finally {
+            connectContext.getSessionVariable().setCboExtractCommonPlan(cboExtractCommonPlan);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {0})
     public void testCTEMaterializedHintForcesReuse(int forceReuseNodeCount) throws Exception {

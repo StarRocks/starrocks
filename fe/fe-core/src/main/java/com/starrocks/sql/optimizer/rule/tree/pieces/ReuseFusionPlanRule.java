@@ -74,6 +74,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class ReuseFusionPlanRule implements TreeRewriteRule {
@@ -385,10 +386,17 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 originalPiece.pieceIdToHasGroupBy.put(originalPiece.planId, !aggregate.getGroupingKeys().isEmpty());
 
                 // track if this piece already has a safe row-count aggregation (COUNT(*)) after rewrite
-                final ColumnRefOperator[] pieceRowCountRef = {null};
-                aggregate.getAggregations().forEach((ref, call) -> {
-                    CallOperator newCall = addFilterAggCall((CallOperator) converter.convert(call), filter,
-                            aggFilterProject, hasDistinctAgg);
+                ColumnRefOperator pieceRowCountRef = null;
+                for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
+                    ColumnRefOperator ref = entry.getKey();
+                    CallOperator call = entry.getValue();
+                    Optional<CallOperator> filteredCall = addFilterAggCall((CallOperator) converter.convert(call),
+                            filter, aggFilterProject, hasDistinctAgg);
+                    if (filteredCall.isEmpty()) {
+                        // the aggregate cannot carry the piece filter, give up fusion
+                        return Optional.empty();
+                    }
+                    CallOperator newCall = filteredCall.get();
 
                     if (aggToRefs.containsKey(newCall)) {
                         converter.add(ref, aggToRefs.get(newCall));
@@ -399,29 +407,33 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                     }
 
                     // if original is COUNT(*) (non-distinct), reuse its filtered form as row_count_if
-                    if (pieceRowCountRef[0] == null && filter != null) {
+                    if (pieceRowCountRef == null && filter != null) {
                         if (FunctionSet.COUNT.equalsIgnoreCase(call.getFnName())
                                 && call.getChildren().isEmpty()
                                 && !call.isDistinct()) {
-                            pieceRowCountRef[0] = aggToRefs.get(newCall);
+                            pieceRowCountRef = aggToRefs.get(newCall);
                         }
                     }
-                });
+                }
 
                 havingPredicates.add(converter.convert(aggregate.getPredicate()));
 
                 if (filter != null && !aggregate.getGroupingKeys().isEmpty()) {
-                    if (pieceRowCountRef[0] != null) {
-                        originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, pieceRowCountRef[0]);
-                        if (!extraOutputRefs.contains(pieceRowCountRef[0])) {
-                            extraOutputRefs.add(pieceRowCountRef[0]);
+                    if (pieceRowCountRef != null) {
+                        originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, pieceRowCountRef);
+                        if (!extraOutputRefs.contains(pieceRowCountRef)) {
+                            extraOutputRefs.add(pieceRowCountRef);
                         }
                     } else {
                         Function anyFn = ExprUtils.getBuiltinFunction(FunctionSet.ANY_VALUE,
                                 new Type[] {BooleanType.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
                         CallOperator anyTrue = new CallOperator(FunctionSet.ANY_VALUE, BooleanType.BOOLEAN,
                                 List.of(ConstantOperator.createBoolean(true)), anyFn);
-                        CallOperator anyIfCall = addFilterAggCall(anyTrue, filter, aggFilterProject, false);
+                        Optional<CallOperator> anyIf = addFilterAggCall(anyTrue, filter, aggFilterProject, false);
+                        if (anyIf.isEmpty()) {
+                            return Optional.empty();
+                        }
+                        CallOperator anyIfCall = anyIf.get();
                         ColumnRefOperator hitRef;
                         if (aggToRefs.containsKey(anyIfCall)) {
                             hitRef = aggToRefs.get(anyIfCall);
@@ -465,10 +477,13 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             return QueryPieces.of(op, extraOutputRefs, childPieces.get());
         }
 
-        private CallOperator addFilterAggCall(CallOperator call, ScalarOperator filter,
-                                              Map<ScalarOperator, ColumnRefOperator> filterProject, boolean hasDistinct) {
+        // Returns empty when the aggregate cannot be rewritten to carry the piece filter, e.g. there is neither
+        // an `_if` variant nor an `if(BOOLEAN, T, T)` builtin for the argument type T (such as VARBINARY).
+        private Optional<CallOperator> addFilterAggCall(CallOperator call, ScalarOperator filter,
+                                                        Map<ScalarOperator, ColumnRefOperator> filterProject,
+                                                        boolean hasDistinct) {
             if (filter == null) {
-                return call;
+                return Optional.of(call);
             }
 
             Preconditions.checkState(call.getChildren().size() <= 1);
@@ -486,20 +501,24 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 aggFunc = call.getFunction();
             }
 
-            java.util.function.Function<CallOperator, CallOperator> fallbackAggIfBuilder = aggCall -> {
+            Supplier<Optional<CallOperator>> fallbackAggIfBuilder = () -> {
                 Function f = ExprUtils.getBuiltinFunction(FunctionSet.IF,
                         new Type[] {BooleanType.BOOLEAN, child.getType(), child.getType()}, Function.CompareMode.IS_IDENTICAL);
+                if (f == null) {
+                    // no if() overload for this argument type, the filter cannot be folded into the aggregate
+                    return Optional.empty();
+                }
                 CallOperator ifNull = new CallOperator("if", child.getType(),
                         List.of(filter, child, ConstantOperator.createNull(child.getType())), f);
                 if (!filterProject.containsKey(ifNull)) {
                     filterProject.put(ifNull, factory.create(ifNull, child.getType(), true));
                 }
-                return new CallOperator(call.getFnName(), call.getType(), List.of(filterProject.get(ifNull)),
-                        aggFunc, call.isDistinct());
+                return Optional.of(new CallOperator(call.getFnName(), call.getType(), List.of(filterProject.get(ifNull)),
+                        aggFunc, call.isDistinct()));
             };
             // since agg_If doens't support distinct right now
             if (hasDistinct) {
-                return fallbackAggIfBuilder.apply(call);
+                return fallbackAggIfBuilder.get();
             } else {
                 Preconditions.checkState(aggFunc instanceof AggregateFunction);
                 Type[] argTypes = new Type[] {child.getType(), BooleanType.BOOLEAN};
@@ -519,7 +538,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 }
 
                 if (aggStateIf == null) {
-                    return fallbackAggIfBuilder.apply(call);
+                    return fallbackAggIfBuilder.get();
                 }
 
                 if (!filterProject.containsKey(filter)) {
@@ -532,9 +551,9 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
 
                 ScalarOperator childOutput = child.isConstant() ? child : filterProject.get(child);
 
-                return new CallOperator(aggStateIf.functionName(), call.getType(),
+                return Optional.of(new CallOperator(aggStateIf.functionName(), call.getType(),
                         List.of(childOutput, filterProject.get(filter)), aggStateIf,
-                        call.isDistinct());
+                        call.isDistinct()));
             }
         }
 
