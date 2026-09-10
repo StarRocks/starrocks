@@ -458,11 +458,27 @@ std::string ArrayMapExpr::debug_string() const {
 }
 
 int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
-    int num = Expr::get_slot_ids(slot_ids);
+    std::vector<SlotId> collected;
+    Expr::get_slot_ids(&collected);
+    // The columns the extracted common expressions depend on are genuine captures.
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        slot_ids->push_back(slot_id);
+        expr->get_slot_ids(&collected);
+    }
+    int num = 0;
+    for (SlotId id : collected) {
+        // Drop the synthetic slot ids we assigned to the extracted common expressions themselves:
+        // each is produced and consumed inside this array_map's own evaluate_lambda_expr (in its
+        // private tmp_chunk) and never exists in an enclosing chunk. Such a slot can reach here
+        // through the child lambda's captured slots, because extraction rewrote the lambda body to
+        // reference it. Surfacing it to an enclosing lambda makes that lambda treat it as a
+        // captured column and look it up via Chunk::get_column_by_slot_id on the input chunk,
+        // crashing the BE (e.g. nested array_map over a constant array whose inner lambda captures
+        // the outer lambda argument).
+        if (_outer_common_exprs.find(id) != _outer_common_exprs.end()) {
+            continue;
+        }
+        slot_ids->push_back(id);
         num++;
-        num += (expr->get_slot_ids(slot_ids));
     }
     return num;
 }

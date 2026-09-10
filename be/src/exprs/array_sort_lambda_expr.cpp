@@ -567,11 +567,25 @@ std::string ArraySortLambdaExpr::debug_string() const {
 }
 
 int ArraySortLambdaExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
-    int num = Expr::get_slot_ids(slot_ids);
+    std::vector<SlotId> collected;
+    Expr::get_slot_ids(&collected);
+    // The columns the extracted common expressions depend on are genuine captures.
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        slot_ids->push_back(slot_id);
+        expr->get_slot_ids(&collected);
+    }
+    int num = 0;
+    for (SlotId id : collected) {
+        // Drop the synthetic slot ids assigned to the extracted common expressions themselves:
+        // each is produced and consumed inside this expression's own evaluation (in its private
+        // tmp_chunk) and never exists in an enclosing chunk. It can reach here through the child
+        // lambda's captured slots after extraction rewrote the body to reference it; surfacing it
+        // to an enclosing lambda makes it look the slot up via Chunk::get_column_by_slot_id on the
+        // input chunk and crash the BE (nested lambda capturing the outer lambda argument).
+        if (_outer_common_exprs.find(id) != _outer_common_exprs.end()) {
+            continue;
+        }
+        slot_ids->push_back(id);
         num++;
-        num += (expr->get_slot_ids(slot_ids));
     }
     return num;
 }
