@@ -34,7 +34,12 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <string>
+
+#include "base/status.h"
+#include "base/string/string_parser.hpp"
 
 namespace starrocks {
 
@@ -92,5 +97,23 @@ static const std::string HTTP_MERGE_COMMIT_INTERVAL_MS = "merge_commit_interval_
 static const std::string HTTP_MERGE_COMMIT_PARALLEL = "merge_commit_parallel";
 
 static const std::string HTTP_WAREHOUSE = "warehouse";
+
+// Parse an integer that came in as a request header value.
+//
+// std::stoll and friends cannot be used on these: they throw
+// std::invalid_argument when the value is not a number and std::out_of_range
+// when it does not fit the type. Header values are supplied by the client and
+// are handled inside a libevent callback that has no handler above it, so an
+// escaping exception terminates the process instead of failing the one
+// request. StringParser reports both conditions through a return code.
+inline Status parse_int64_load_header(const std::string& name, const std::string& value, int64_t* result) {
+    StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+    *result = StringParser::string_to_int<int64_t>(value.data(), value.length(), &parse_result);
+    if (parse_result != StringParser::PARSE_SUCCESS) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid parameter {}. The value must be an integer, but is {}", name, value));
+    }
+    return Status::OK();
+}
 
 } // namespace starrocks
