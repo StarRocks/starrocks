@@ -1075,13 +1075,20 @@ combine_column_alters = Rewriter()
 
 @combine_column_alters.rewrites(ops.ModifyTableOps)
 def _combine_column_alters(context, revision, op: ops.ModifyTableOps):
-    """Fold contiguous AddColumnOp/DropColumnOp on the same table into one op.
+    """Coalesce a table's AddColumnOp/DropColumnOp into a single combined op.
 
-    Only ``ADD COLUMN`` and ``DROP COLUMN`` are coalesced. Other operations
-    (comment changes, type/nullable modifications, distribution/property
-    alters, etc.) are left untouched and keep their original relative order.
-    When fewer than two column changes are present, the container is returned
-    unchanged so simple migrations are unaffected.
+    Every ``ADD COLUMN`` and ``DROP COLUMN`` for the table is folded into one
+    ``StarRocksAlterColumnsOp`` (a single ``ALTER TABLE``, hence one
+    schema-change job), placed at the position of the first column change. Other
+    operations keep their relative position. With fewer than two column changes
+    there is nothing to combine and the container is returned unchanged.
+
+    No index-drop reordering hazard: the dialect's ``get_indexes`` does not
+    reflect StarRocks bitmap/secondary indexes, so autogenerate never emits a
+    ``DropIndexOp`` for them — removing an indexed column yields only a
+    ``DropColumnOp``. There is therefore no ``DROP INDEX`` that could be
+    reordered relative to a column drop, and StarRocks removes a column's index
+    together with the column anyway.
     """
     adds: List[Column] = []
     drops: List[Column] = []
