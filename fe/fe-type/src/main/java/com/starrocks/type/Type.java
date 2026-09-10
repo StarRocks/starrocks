@@ -325,6 +325,26 @@ public abstract class Type implements Cloneable {
         return false;
     }
 
+    // Returns true if this type is JSON or transitively contains a JSON inside an ARRAY/MAP/STRUCT.
+    // A JSON value has no single serialized form -- velocypack stores object members in insertion
+    // order and keeps the numeric encoding it was given -- so anything that compares JSON by its
+    // bytes rather than by its structure can call two equal values different.
+    public boolean containsJson() {
+        if (isJsonType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsJson();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsJson() || ((MapType) this).getValueType().containsJson();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsJson());
+        }
+        return false;
+    }
+
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
         // Allow VARBINARY as distribution key.

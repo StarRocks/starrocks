@@ -1,0 +1,70 @@
+-- name: test_json_set_operation_opt_in
+-- INTERSECT and EXCEPT deduplicate their output, and they do it by serializing a whole row into one
+-- byte string and comparing those bytes. One JSON value has no single byte form: velocypack stores
+-- object members in the order they were written (only the printer sorts them), and 1 and 1.0 are two
+-- encodings of the same number. Two equal values therefore compare as different and the query
+-- silently returns the wrong rows -- no error, no warning, just a wrong answer.
+--
+-- Off by default now. enable_json_set_operation puts the old behaviour back, byte comparison and all,
+-- for whoever knows their producer writes stable bytes; this test pins both halves, including the
+-- wrong answers the opt-in still gives, because that is what "unchanged" has to mean here.
+create database db_${uuid0};
+use db_${uuid0};
+create table p (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+create table q (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- The array wrapper keeps the column off the flat JSON path: flattening round-trips a value through
+-- typed sub-columns and normalizes the bytes, which would hide the very difference under test.
+insert into p values (1, parse_json('[{"a":1,"b":2}]'));
+insert into q values (1, parse_json('[{"b":2,"a":1}]'));
+-- The two rows hold one value: they print the same and '=' calls them equal.
+select (select j from p) as p_val, (select j from q) as q_val;
+select (select j from p) = (select j from q) as eq;
+
+-- Default: INTERSECT and EXCEPT over JSON are refused, and the message says why and how to override.
+select j from p intersect select j from q;
+select j from p except select j from q;
+-- MINUS is a synonym for EXCEPT and goes through the same relation.
+select j from p minus select j from q;
+-- The same holds for JSON literals, which is the shortest form of the report.
+select parse_json('{"a":1,"b":2}') intersect select parse_json('{"b":2,"a":1}');
+select parse_json('{"a":1,"b":2}') except select parse_json('{"b":2,"a":1}');
+-- A container of JSON is the same case: the check recurses into ARRAY/MAP/STRUCT.
+create table pa (k int, a array<json>) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into pa values (1, [parse_json('{"a":1}')]);
+select a from pa intersect select a from pa;
+
+-- Nothing else moves. A set operation whose output carries no JSON is untouched, and so is UNION ALL,
+-- which never compares its inputs at all.
+select k from p intersect select k from q;
+select k from p except select k from q;
+select k, k + 1 from p intersect select k, k + 1 from q;
+select j from p union all select j from q;
+-- UNION without ALL deduplicates too, but the backend's group-by type check already refuses JSON
+-- there and this variable does not take that over. Its error names a backend id, so the assertion
+-- that analysis still lets it through lives in AnalyzeSetOperationTest rather than here.
+
+-- With the opt-in, analysis is exactly what it was and so are the answers -- including the wrong
+-- ones. INTERSECT finds nothing and EXCEPT keeps the row, for two values the engine calls equal.
+set enable_json_set_operation = true;
+select j from p intersect select j from q;
+select j from p except select j from q;
+select a from pa intersect select a from pa;
+-- 1 versus 1.0 is the other shape of the same problem: one value, two velocypack encodings.
+create table r1 (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+create table r2 (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into r1 values (1, parse_json('[{"a":1}]'));
+insert into r2 values (1, parse_json('[{"a":1.0}]'));
+select (select j from r1) = (select j from r2) as eq;
+select j from r1 intersect select j from r2;
+-- Identical bytes still work, which is the case the opt-in exists for.
+select j from p intersect select j from p;
+
+-- Turning it back off restores the refusal.
+set enable_json_set_operation = false;
+select j from p intersect select j from q;
+drop database db_${uuid0};

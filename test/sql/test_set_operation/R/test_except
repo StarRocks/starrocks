@@ -36,6 +36,9 @@ insert into `t2` select * from t1;
 set pipeline_dop=1;
 -- result:
 -- !result
+set enable_json_set_operation = true;
+-- result:
+-- !result
 select t1.c0, t1.c1, t1.c2,t1.data,t1.id from t1 minus select t2.c0, t2.c1,t2.c2, t2.data,t2.id from t2;
 -- result:
 -- !result

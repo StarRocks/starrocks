@@ -1,0 +1,125 @@
+-- name: test_json_set_operation_opt_in
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table p (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+create table q (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into p values (1, parse_json('[{"a":1,"b":2}]'));
+-- result:
+-- !result
+insert into q values (1, parse_json('[{"b":2,"a":1}]'));
+-- result:
+-- !result
+select (select j from p) as p_val, (select j from q) as q_val;
+-- result:
+[{"a": 1, "b": 2}]	[{"a": 1, "b": 2}]
+-- !result
+select (select j from p) = (select j from q) as eq;
+-- result:
+1
+-- !result
+select j from p intersect select j from q;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: INTERSECT over JSON can return wrong rows: it deduplicates by comparing the serialized bytes of each row, and two equal JSON values can serialize to different bytes. Set enable_json_set_operation = true to run it anyway. Column: 'j' (JSON).")
+-- !result
+select j from p except select j from q;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: EXCEPT over JSON can return wrong rows: it deduplicates by comparing the serialized bytes of each row, and two equal JSON values can serialize to different bytes. Set enable_json_set_operation = true to run it anyway. Column: 'j' (JSON).")
+-- !result
+select j from p minus select j from q;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: EXCEPT over JSON can return wrong rows: it deduplicates by comparing the serialized bytes of each row, and two equal JSON values can serialize to different bytes. Set enable_json_set_operation = true to run it anyway. Column: 'j' (JSON).")
+-- !result
+select parse_json('{"a":1,"b":2}') intersect select parse_json('{"b":2,"a":1}');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: INTERSECT over JSON can return wrong rows: it deduplicates by comparing the serialized bytes of each row, and two equal JSON values can serialize to different bytes. Set enable_json_set_operation = true to run it anyway. Column: \'parse_json(\'{"a":1,"b":2}\')\' (JSON).')
+-- !result
+select parse_json('{"a":1,"b":2}') except select parse_json('{"b":2,"a":1}');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: EXCEPT over JSON can return wrong rows: it deduplicates by comparing the serialized bytes of each row, and two equal JSON values can serialize to different bytes. Set enable_json_set_operation = true to run it anyway. Column: \'parse_json(\'{"a":1,"b":2}\')\' (JSON).')
+-- !result
+create table pa (k int, a array<json>) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into pa values (1, [parse_json('{"a":1}')]);
+-- result:
+-- !result
+select a from pa intersect select a from pa;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: INTERSECT over JSON can return wrong rows: it deduplicates by comparing the serialized bytes of each row, and two equal JSON values can serialize to different bytes. Set enable_json_set_operation = true to run it anyway. Column: 'a' (ARRAY<JSON>).")
+-- !result
+select k from p intersect select k from q;
+-- result:
+1
+-- !result
+select k from p except select k from q;
+-- result:
+-- !result
+select k, k + 1 from p intersect select k, k + 1 from q;
+-- result:
+1	2
+-- !result
+select j from p union all select j from q;
+-- result:
+[{"a": 1, "b": 2}]
+[{"a": 1, "b": 2}]
+-- !result
+set enable_json_set_operation = true;
+-- result:
+-- !result
+select j from p intersect select j from q;
+-- result:
+-- !result
+select j from p except select j from q;
+-- result:
+[{"a": 1, "b": 2}]
+-- !result
+select a from pa intersect select a from pa;
+-- result:
+['{"a": 1}']
+-- !result
+create table r1 (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+create table r2 (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into r1 values (1, parse_json('[{"a":1}]'));
+-- result:
+-- !result
+insert into r2 values (1, parse_json('[{"a":1.0}]'));
+-- result:
+-- !result
+select (select j from r1) = (select j from r2) as eq;
+-- result:
+1
+-- !result
+select j from r1 intersect select j from r2;
+-- result:
+-- !result
+select j from p intersect select j from p;
+-- result:
+[{"a": 1, "b": 2}]
+-- !result
+set enable_json_set_operation = false;
+-- result:
+-- !result
+select j from p intersect select j from q;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: INTERSECT over JSON can return wrong rows: it deduplicates by comparing the serialized bytes of each row, and two equal JSON values can serialize to different bytes. Set enable_json_set_operation = true to run it anyway. Column: 'j' (JSON).")
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

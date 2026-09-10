@@ -23,5 +23,10 @@ distributed by hash(`k`) buckets 1
 properties('replication_num'='1');
 insert into t1 values (1, parse_json('{"a": 1}')), (2, parse_json('{"b": 2}')), (3, parse_json('[1, 2, 3]'));
 insert into t2 values (1, parse_json('{"a": 1}')), (2, parse_json('{"c": 3}')), (3, parse_json('[1, 2, 3]'));
+-- JSON in INTERSECT/EXCEPT is off by default, because the byte comparison these operators use can
+-- call two equal JSON values different. It cannot here: every value below is single-member or an
+-- array, written once and read back, so the bytes are the value. That is the case the opt-in exists
+-- for, and it is the deserialization path -- not the comparison -- that this test covers.
+set enable_json_set_operation = true;
 select k, j from t1 intersect select k, j from t2 order by k;
 select k, j from t1 except select k, j from t2 order by k;

@@ -50,6 +50,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -1900,6 +1901,50 @@ public class QueryAnalyzer {
             return analyzeSetOperation(node, context);
         }
 
+        /**
+         * INTERSECT and EXCEPT deduplicate their output, and they do it by serializing a whole row
+         * into one byte string, hashing that, and comparing the bytes with memequal_padded. That is
+         * sound only for types where one value has exactly one encoding. JSON is not one of them:
+         * velocypack stores object members in the order they were written (only the printer sorts
+         * them) and keeps whichever numeric encoding the value was built with, so two equal values
+         * can serialize to different bytes and the operation silently drops or keeps the wrong rows.
+         * <p>
+         * Everything else in the engine that deduplicates or compares already refuses JSON --
+         * DISTINCT, GROUP BY and ORDER BY through Type.canDistinct() and its siblings, JOIN ON and
+         * UNION without ALL through a backend type check. INTERSECT and EXCEPT consult none of them,
+         * which is why the restriction has to be applied here.
+         * <p>
+         * It is an opt-out rather than a hard rejection because a wrong answer needs the data to
+         * disagree in a way the frontend cannot see: a multi-member object whose producers order the
+         * members differently, or the same number written as 1 in one row and 1.0 in another. A
+         * single producer with a stable key order and stable numeric types gets correct answers
+         * today, and did so through two crash fixes that made this path work at all, so the choice
+         * is left to whoever knows the data. Turning the variable on changes nothing else: the
+         * comparison stays byte-based and no value is normalized.
+         */
+        private void rejectJsonWithoutOptIn(SetOperationRelation node, Scope leftChildScope,
+                                            Type[] outputTypes, int outputSize) {
+            if (!(node instanceof IntersectRelation) && !(node instanceof ExceptRelation)) {
+                return;
+            }
+            if (session != null && session.getSessionVariable().isEnableJsonSetOperation()) {
+                return;
+            }
+            String operation = node instanceof IntersectRelation ? "INTERSECT" : "EXCEPT";
+            for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
+                if (!outputTypes[fieldIdx].containsJson()) {
+                    continue;
+                }
+                String columnName = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx).getName();
+                throw new SemanticException(
+                        "%s over JSON can return wrong rows: it deduplicates by comparing the " +
+                                "serialized bytes of each row, and two equal JSON values can serialize to " +
+                                "different bytes. Set %s = true to run it anyway. Column: '%s' (%s)",
+                        operation, SessionVariable.ENABLE_JSON_SET_OPERATION,
+                        columnName, outputTypes[fieldIdx]);
+            }
+        }
+
         private Scope analyzeSetOperation(SetOperationRelation node, Scope context) {
             List<QueryRelation> setOpRelations = node.getRelations();
 
@@ -1935,6 +1980,8 @@ public class QueryAnalyzer {
                     nullables.set(fieldIdx, nullables.get(fieldIdx) | field.isNullable());
                 }
             }
+
+            rejectJsonWithoutOptIn(node, leftChildScope, outputTypes, outputSize);
 
             ArrayList<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {

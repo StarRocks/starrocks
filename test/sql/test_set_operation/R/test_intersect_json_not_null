@@ -21,6 +21,9 @@ insert into t1 values (1, parse_json('{"a": 1}')), (2, parse_json('{"b": 2}')), 
 insert into t2 values (1, parse_json('{"a": 1}')), (2, parse_json('{"c": 3}')), (3, parse_json('[1, 2, 3]'));
 -- result:
 -- !result
+set enable_json_set_operation = true;
+-- result:
+-- !result
 select k, j from t1 intersect select k, j from t2 order by k;
 -- result:
 1	{"a": 1}

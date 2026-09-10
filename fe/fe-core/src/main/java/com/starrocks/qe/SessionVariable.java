@@ -1297,6 +1297,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
     public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
 
+    public static final String ENABLE_JSON_SET_OPERATION = "enable_json_set_operation";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -3379,6 +3381,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // while losing bucket information. Lowering this threshold can lead to worse plans.
     @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double mcvRowPercentagePropagationThreshold = 0.5;
+
+    // INTERSECT and EXCEPT deduplicate their output by hashing the whole row as one serialized byte
+    // string and comparing those bytes. That is only correct for types where one value has one
+    // encoding, and JSON is not such a type: velocypack stores object members in insertion order and
+    // keeps whichever numeric encoding the value was built with, so {"a":1,"b":2} and {"b":2,"a":1},
+    // or 1 and 1.0, are equal values with different bytes and the operation silently returns the
+    // wrong rows. Off by default, so those queries fail with an explanation instead. Turning it on
+    // restores the previous behaviour unchanged -- nothing is normalized, the comparison stays
+    // byte-based -- which is what a producer with a stable key order and stable numeric types wants.
+    @VarAttr(name = ENABLE_JSON_SET_OPERATION)
+    private boolean enableJsonSetOperation = false;
 
     // To set ANN tuning parameters for user.
     // Since the session variables does not support map variables,
@@ -7063,6 +7076,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public double getMcvRowPercentagePropagationThreshold() {
         return mcvRowPercentagePropagationThreshold;
+    }
+
+    public boolean isEnableJsonSetOperation() {
+        return enableJsonSetOperation;
+    }
+
+    public void setEnableJsonSetOperation(boolean enableJsonSetOperation) {
+        this.enableJsonSetOperation = enableJsonSetOperation;
     }
 
     // Serialize to thrift object

@@ -24,4 +24,9 @@ set @json_val = JSON_OBJECT('k', floor(rand() * 100), 'v', repeat(floor(rand() *
 insert into `t1` (`c0`,`c1`,`c2`,`data`) select @uuid_val, @uuid_val, '2020-01-01 00:00:00', @json_val from table(generate_series(1, 10000, 1));
 insert into `t2` select * from t1;
 set pipeline_dop=1;
+-- JSON in EXCEPT is off by default, because the byte comparison this operator uses can call two
+-- equal JSON values different. It cannot here: t2 is a byte-for-byte copy of t1, which is what makes
+-- the expected result empty. The opt-in is exactly for a producer whose bytes are stable, and what
+-- this test covers is the serialized-size accounting, not the comparison.
+set enable_json_set_operation = true;
 select t1.c0, t1.c1, t1.c2,t1.data,t1.id from t1 minus select t2.c0, t2.c1,t2.c2, t2.data,t2.id from t2;
