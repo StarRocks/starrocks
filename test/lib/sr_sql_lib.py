@@ -2665,22 +2665,26 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal(expect_status, status, "wait alter table finish error")
         time.sleep(0.5)
 
-    def wait_global_dict_ready(self, column_name, table_name):
+    def wait_global_dict_ready(self, column_name, table_name, timeout=60, interval=0.1):
         """
         wait global dict ready
+
+        The first EXPLAIN only asks the FE for a dictionary it does not have yet; CacheDictManager
+        loads it asynchronously from the BE, so the plan gains its Decode node one poll later. That
+        load takes tens of milliseconds for the row counts these cases use, hence the 0.1s interval:
+        polling once a second spent ~0.9s of pure sleep per call, and this helper is called 89 times
+        across the suite (42 of them in test_global_dict/global_dict_with_union alone).
         """
-        status = ""
-        count = 0
-        while True:
-            if count > 60:
-                tools.assert_true(False, "acquire dictionary timeout for 60s")
-            sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
             res = self.execute_sql(sql, True)
             if not res["status"]:
                 tools.assert_true(False, "acquire dictionary error")
             if str(res["result"]).find("Decode") > 0:
                 return ""
-            time.sleep(1)
+            time.sleep(interval)
+        tools.assert_true(False, "acquire dictionary timeout for %ss" % timeout)
     
     def wait_plan_contains(self, query, *expects):
         """
