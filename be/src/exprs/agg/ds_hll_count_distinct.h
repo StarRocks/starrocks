@@ -39,6 +39,9 @@ template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class HllSketchAggregateFunction final
         : public AggregateFunctionBatchHelper<HLLSketchState, HllSketchAggregateFunction<LT, T>> {
 public:
+    // ds_hll_count_distinct returns a cardinality (0, never NULL), even over a nullable input or an empty frame.
+    bool is_result_non_nullable() const override { return true; }
+
     using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {

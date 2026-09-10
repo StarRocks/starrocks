@@ -313,6 +313,12 @@ public:
     // so even for non-nullable aggregate function, we still need to support nullable immediate input.
     virtual bool support_nullable_immediate_input() const { return false; }
 
+    // Whether this aggregate never emits a NULL result, even over a nullable input or an empty window frame
+    // (e.g. count, bitmap_union_count). Declared per-function; the analytic executor uses it to materialize a
+    // non-nullable result column. NOTE: this is NOT the same as the AggNonNullPred wrapper -- sum/avg/max/min
+    // use that wrapper too yet still return NULL over an empty frame -- so each such function opts in itself.
+    virtual bool is_result_non_nullable() const { return false; }
+
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
     // and do a single call to "merge_batch" for devirtualization and inlining.

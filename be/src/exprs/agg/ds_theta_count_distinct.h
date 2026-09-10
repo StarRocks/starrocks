@@ -34,6 +34,9 @@ template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class ThetaSketchAggregateFunction final
         : public AggregateFunctionBatchHelper<ThetaSketchState, ThetaSketchAggregateFunction<LT, T>> {
 public:
+    // ds_theta_count_distinct returns a cardinality (0, never NULL), even over a nullable input or an empty frame.
+    bool is_result_non_nullable() const override { return true; }
+
     using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
