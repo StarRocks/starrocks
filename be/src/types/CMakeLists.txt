@@ -39,6 +39,7 @@ ADD_BE_LIB(Types
     timestamp_value.cpp
     variant.cpp
     variant_value.cpp
+    geo_wkb.cpp
 )
 
 target_link_libraries(Types PRIVATE
