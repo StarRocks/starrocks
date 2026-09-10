@@ -32,6 +32,8 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.arrow.flight.CallHeaders;
@@ -61,6 +63,7 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ReadChannel;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Schema;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -206,6 +209,58 @@ public class ArrowFlightSqlServiceImplTest {
 
         service = new ArrowFlightSqlServiceImpl(sessionManager,
                 Location.forGrpcInsecure("localhost", 1234));
+    }
+
+    @BeforeAll
+    public static void createHeaderDatabases() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        new StarRocksAssert(UtFrameUtils.createDefaultCtx())
+                .withDatabase("flight_header_first")
+                .withTable("CREATE TABLE flight_header_first.header_table (first_column INT) " +
+                        "DUPLICATE KEY(first_column) DISTRIBUTED BY HASH(first_column) BUCKETS 1 " +
+                        "PROPERTIES ('replication_num' = '1')")
+                .withDatabase("flight_header_second")
+                .withTable("CREATE TABLE flight_header_second.header_table (second_column VARCHAR(20)) " +
+                        "DUPLICATE KEY(second_column) DISTRIBUTED BY HASH(second_column) BUCKETS 1 " +
+                        "PROPERTIES ('replication_num' = '1')");
+    }
+
+    private Schema prepareWithDatabaseHeader(ArrowFlightSqlConnectContext context, String database) throws Exception {
+        String query = "SELECT * FROM header_table";
+        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(context);
+        when(mockCallContext.getMiddleware(FlightConstants.HEADER_KEY).headers().get("database"))
+                .thenReturn(database);
+        CapturingResultListener listener = new CapturingResultListener();
+        service.createPreparedStatement(FlightSql.ActionCreatePreparedStatementRequest.newBuilder()
+                .setQuery(query).build(), mockCallContext, listener);
+        FlightSql.ActionCreatePreparedStatementResult result = awaitPreparedStatementResult(listener);
+        String handle = result.getPreparedStatementHandle().toStringUtf8();
+        assertTrue(!handle.isEmpty());
+        assertEquals(query, context.getPreparedStatement(handle));
+        assertTrue(deserializeSchema(result.getParameterSchema()).getFields().isEmpty());
+        return deserializeSchema(result.getDatasetSchema());
+    }
+
+    @Test
+    public void testCreatePreparedStatementUsesDatabaseHeaderWithEmptySessionDatabase() throws Exception {
+        ArrowFlightSqlConnectContext context = new ArrowFlightSqlConnectContext("token123");
+        assertEquals("", context.getDatabase());
+        Schema schema = prepareWithDatabaseHeader(context, "flight_header_first");
+        assertEquals(1, schema.getFields().size());
+        assertEquals("first_column", schema.getFields().get(0).getName());
+        assertTrue(schema.getFields().get(0).getType() instanceof org.apache.arrow.vector.types.pojo.ArrowType.Int);
+        assertEquals("flight_header_first", context.getDatabase());
+    }
+
+    @Test
+    public void testCreatePreparedStatementUsesChangedDatabaseHeader() throws Exception {
+        ArrowFlightSqlConnectContext context = new ArrowFlightSqlConnectContext("token123");
+        context.setDatabase("flight_header_first");
+        Schema schema = prepareWithDatabaseHeader(context, "flight_header_second");
+        assertEquals(1, schema.getFields().size());
+        assertEquals("second_column", schema.getFields().get(0).getName());
+        assertTrue(schema.getFields().get(0).getType() instanceof org.apache.arrow.vector.types.pojo.ArrowType.Utf8);
+        assertEquals("flight_header_second", context.getDatabase());
     }
 
     @Test

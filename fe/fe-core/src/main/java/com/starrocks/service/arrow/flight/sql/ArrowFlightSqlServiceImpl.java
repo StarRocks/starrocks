@@ -198,6 +198,10 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 }
 
                 ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
+                String database = context.getMiddleware(FlightConstants.HEADER_KEY).headers().get("database");
+                if (!StringUtils.isEmpty(database)) {
+                    ctx.setDatabase(database);
+                }
 
                 // Try to plan the query to get the real schema for the prepared statement.
                 // This is important because clients (JDBC, ADBC) use the schema returned here
