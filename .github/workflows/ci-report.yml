@@ -416,16 +416,30 @@ jobs:
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
       SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
+      # Scratch dir, deliberately not the tracked `be/`. See FE_UT_UNPACK_DIR.
+      BE_UT_UNPACK_DIR: be-ut-report
     steps:
+      # CLEAN still preserves .git on purpose: this job no longer checks anything
+      # out, but the workspace is shared per-repo on the self-hosted runner, so
+      # other jobs' checkouts keep reusing the clone. Wiping it here would push a
+      # full clone onto whichever job runs next.
       - name: CLEAN
         run: |
           # Keep .git so actions/checkout reuses the clone and fetches incrementally
           git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
+      # No checkout: this job never reads repo source. Its inputs are the OSS
+      # objects downloaded below (be_ut_coverage.xml / base_version.txt /
+      # diff.txt), /var/lib/ci-tool (ci-tool-metrics, ci-tool) and
+      # /var/local/env (coverchecker) -- the same shape as FE-REPORT, which has
+      # never had a checkout. The only thing the checkout really provided was a
+      # `be/` directory for the download step to cd into; ${BE_UT_UNPACK_DIR}
+      # replaces that, and being untracked it cannot collide with a repo path.
+      #
+      # Unlike StarRocks, where this step cost 158s of full fetch per run, here
+      # it is 3-18s because CLEAN above keeps the clone: this is about dropping
+      # a hidden dependency on the workspace happening to hold a checkout, not
+      # about saving that time.
       - name: Download BE UT XML
         id: download-ut-xml
         run: |
@@ -440,7 +454,7 @@ jobs:
               echo "::error::BE UT failed!"
               exit 1
             fi
-            cd be
+            rm -rf ${BE_UT_UNPACK_DIR} && mkdir ${BE_UT_UNPACK_DIR} && cd ${BE_UT_UNPACK_DIR}
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . -f 1>/dev/null
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/base_version.txt . -f 1>/dev/null
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/diff.txt . -f 1>/dev/null
@@ -520,7 +534,7 @@ jobs:
           && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
           && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         env:
-          be_path: ${{ github.workspace }}/be
+          be_path: ${{ github.workspace }}/${{ env.BE_UT_UNPACK_DIR }}
           merge_outcome: ${{ steps.merge.outcome }}
           total_xml: ${{ steps.merge.outputs.COV_XML }}
         run: |
