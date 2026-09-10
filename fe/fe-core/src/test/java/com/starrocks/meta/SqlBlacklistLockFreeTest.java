@@ -15,6 +15,16 @@
 package com.starrocks.meta;
 
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.SqlBlackListPersistInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> c299298 ([BugFix] Rebuild the SQL blacklist snapshot once when loading the image (#78752))
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -105,11 +115,61 @@ public class SqlBlacklistLockFreeTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSnapshotIsOrderedByIdRegardlessOfInsertionOrder() {
         sqlBlackList.put(7L, Pattern.compile("replayed_c"));
         sqlBlackList.put(2L, Pattern.compile("replayed_a"));
         sqlBlackList.put(5L, Pattern.compile("replayed_b"));
         long appended = sqlBlackList.put(Pattern.compile("from orders"));
+=======
+    public void testLoadRestoresOutOfOrderIdsSorted() throws Exception {
+        SqlBlackList original = new SqlBlackList();
+        original.put(7L, Pattern.compile("rule_replayed_c"));
+        original.put(2L, Pattern.compile("rule_replayed_a"));
+        original.put(5L, Pattern.compile("rule_replayed_b"));
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        original.save(image.getImageWriter());
+
+        SqlBlackList recovered = new SqlBlackList();
+        recovered.load(image.getMetaBlockReader());
+
+        List<BlackListSql> rules = recovered.getBlackLists();
+        Assertions.assertEquals(3, rules.size());
+        Assertions.assertEquals(2L, rules.get(0).id);
+        Assertions.assertEquals(5L, rules.get(1).id);
+        Assertions.assertEquals(7L, rules.get(2).id);
+
+        long next = recovered.put(Pattern.compile("rule_added_after_unordered_load"));
+        Assertions.assertEquals(8L, next);
+        Assertions.assertEquals(4, recovered.getBlackLists().size());
+    }
+
+    @Test
+    public void testLoadPublishesRulesRestoredBeforeToleratedEof() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        SRMetaBlockWriter writer = image.getImageWriter().getBlockWriter(SRMetaBlockID.BLACKLIST_MGR, 3);
+        writer.writeInt(3);
+        writer.writeJson(new SqlBlackListPersistInfo(2L, "rule_before_eof_a"));
+        writer.writeJson(new SqlBlackListPersistInfo(5L, "rule_before_eof_b"));
+        writer.close();
+
+        SqlBlackList recovered = new SqlBlackList();
+        Assertions.assertThrows(SRMetaBlockEOFException.class, () -> recovered.load(image.getMetaBlockReader()));
+
+        List<BlackListSql> rules = recovered.getBlackLists();
+        Assertions.assertEquals(2, rules.size());
+        Assertions.assertEquals(2L, rules.get(0).id);
+        Assertions.assertEquals(5L, rules.get(1).id);
+        Assertions.assertThrows(AnalysisException.class, () -> recovered.verifying("select rule_before_eof_b from t"));
+    }
+
+    @Test
+    public void testLowestMatchingIdIsReported() {
+        long low = sqlBlackList.put(Pattern.compile("from orders"));
+        long high = sqlBlackList.put(Pattern.compile("select"));
+        Assertions.assertTrue(low < high);
+>>>>>>> c299298 ([BugFix] Rebuild the SQL blacklist snapshot once when loading the image (#78752))
 
         List<BlackListSql> rules = sqlBlackList.getBlackLists();
         Assertions.assertEquals(4, rules.size());
