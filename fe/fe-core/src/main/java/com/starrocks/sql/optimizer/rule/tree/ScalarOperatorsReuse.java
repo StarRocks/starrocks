@@ -176,9 +176,10 @@ public class ScalarOperatorsReuse {
 
         @Override
         public ScalarOperator visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
-            ScalarOperator newOperator = new LambdaFunctionOperator(operator.getRefColumns(),
+            LambdaFunctionOperator newOperator = new LambdaFunctionOperator(operator.getRefColumns(),
                     operator.getLambdaExpr().accept(this, null), operator.getType()
             );
+            newOperator.addColumnToExpr(operator.getColumnRefMap());
             return tryRewrite(newOperator);
         }
 
@@ -299,11 +300,39 @@ public class ScalarOperatorsReuse {
         // outerLambdaArguments will contain k and v since there is a map_apply's lambda expr outside.
 
         // this information will help us determine whether an operator can be reused.
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/ScalarOperatorsReuse.java
         public Set<ColumnRefOperator> currentLambdaArguments = Sets.newHashSet();
         public Set<ColumnRefOperator> outerLambdaArguments = Sets.newHashSet();
+=======
+        public Set<ColumnRefOperator> currentLambdaArguments;
+        public Set<ColumnRefOperator> outerLambdaArguments;
+        public Set<ColumnRefOperator> currentLambdaLocalRefs;
+        public Set<ColumnRefOperator> outerLambdaLocalRefs;
+        public ColumnRefSet usedColumns;
+>>>>>>> 7b78c04 ([BugFix] Keep nested lambda hoists inside the scope that defines them (#78645)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/exprreuse/ScalarOperatorsReuse.java
 
         public CommonSubScalarOperatorCollectorContext(boolean isPartOfLambdaExpr) {
             this.isPartOfLambdaExpr = isPartOfLambdaExpr;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/ScalarOperatorsReuse.java
+=======
+            this.currentLambdaArguments = Sets.newHashSet();
+            this.outerLambdaArguments = Sets.newHashSet();
+            this.currentLambdaLocalRefs = Sets.newHashSet();
+            this.outerLambdaLocalRefs = Sets.newHashSet();
+            this.usedColumns = new ColumnRefSet();
+        }
+
+        public CommonOperatorContext(boolean isPartOfLambdaExpr, Set<ColumnRefOperator> currentLambdaArguments,
+                                     Set<ColumnRefOperator> outerLambdaArguments,
+                                     Set<ColumnRefOperator> currentLambdaLocalRefs,
+                                     Set<ColumnRefOperator> outerLambdaLocalRefs) {
+            this.isPartOfLambdaExpr = isPartOfLambdaExpr;
+            this.currentLambdaArguments = currentLambdaArguments;
+            this.outerLambdaArguments = outerLambdaArguments;
+            this.currentLambdaLocalRefs = currentLambdaLocalRefs;
+            this.outerLambdaLocalRefs = outerLambdaLocalRefs;
+            this.usedColumns = new ColumnRefSet();
+>>>>>>> 7b78c04 ([BugFix] Keep nested lambda hoists inside the scope that defines them (#78645)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/exprreuse/ScalarOperatorsReuse.java
         }
     }
 
@@ -318,6 +347,17 @@ public class ScalarOperatorsReuse {
         private final Map<Integer, Set<ScalarOperator>> operatorsByDepth = new HashMap<>();
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
 
+        private static void collectAllRefs(ScalarOperator operator, ColumnRefSet result) {
+            if (operator instanceof ColumnRefOperator) {
+                result.union(((ColumnRefOperator) operator).getId());
+            }
+            if (operator instanceof LambdaFunctionOperator) {
+                ((LambdaFunctionOperator) operator).getColumnRefMap().values()
+                        .forEach(value -> collectAllRefs(value, result));
+            }
+            operator.getChildren().forEach(child -> collectAllRefs(child, result));
+        }
+
         public boolean hasLambdaFunction() {
             return hasLambdaFunction;
         }
@@ -328,6 +368,7 @@ public class ScalarOperatorsReuse {
         private CommonSubScalarOperatorCollector() {
         }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/ScalarOperatorsReuse.java
 
         private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator,
                                                   CommonSubScalarOperatorCollectorContext context) {
@@ -336,6 +377,22 @@ public class ScalarOperatorsReuse {
             boolean isDependentOnOuterLambda = isDependentOnOuterLambdaArguments(operator, context);
             if (!isDependentOnOuterLambda) {
                 boolean isDependentOnCurrentLambdaArguments = isDependentOnCurrentLambdaArguments(operator, context);
+=======
+            boolean isDependentOnOuterLambda = context.usedColumns.containsAny(context.outerLambdaArguments)
+                    || context.usedColumns.containsAny(context.outerLambdaLocalRefs);
+            if (isDependentOnOuterLambda) {
+                return result;
+            }
+
+            boolean isDependentOnCurrentLambdaArguments =
+                    context.usedColumns.containsAny(context.currentLambdaArguments)
+                            || context.usedColumns.containsAny(context.currentLambdaLocalRefs);
+            if (isDuplicated && !isDependentOnCurrentLambdaArguments) {
+                Set<OperatorId> commonGroup =
+                        commonOperatorsByDepth.computeIfAbsent(depth, c -> Sets.newLinkedHashSet());
+                commonGroup.add(id);
+            } else if (!isDependentOnCurrentLambdaArguments) {
+>>>>>>> 7b78c04 ([BugFix] Keep nested lambda hoists inside the scope that defines them (#78645)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/exprreuse/ScalarOperatorsReuse.java
                 // if this operator has appeared before,
                 // ot it is within a lambda function but does not depend on current lambda function's arguments,
                 // we treat it as a common operator.
@@ -393,8 +450,11 @@ public class ScalarOperatorsReuse {
 
             if (scalarOperator instanceof LambdaFunctionOperator) {
                 context.currentLambdaArguments.addAll(((LambdaFunctionOperator) scalarOperator).getRefColumns());
+                context.currentLambdaLocalRefs.addAll(
+                        ((LambdaFunctionOperator) scalarOperator).getColumnRefMap().keySet());
             }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/ScalarOperatorsReuse.java
             return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
                             argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1),
                     scalarOperator, context);
@@ -403,13 +463,64 @@ public class ScalarOperatorsReuse {
         @Override
         public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator,
                                                    CommonSubScalarOperatorCollectorContext context) {
+=======
+            CommonResult result = visitChildren(scalarOperator, context);
+            return collectCommonOperatorsByDepth(result.depth + 1, scalarOperator, result.childrenGroup, context);
+        }
+
+        private CommonResult visitChildren(ScalarOperator scalarOperator, CommonOperatorContext context) {
+            int depth = 0;
+            List<Integer> groups = Lists.newArrayList();
+            if (!scalarOperator.getChildren().isEmpty()) {
+                CommonResult res = scalarOperator.getChild(0).accept(this, context);
+                depth = Math.max(depth, res.depth);
+                groups.addAll(res.childrenGroup);
+            }
+            for (int i = 1; i < scalarOperator.getChildren().size(); i++) {
+                CommonOperatorContext childContext = new CommonOperatorContext(context.isPartOfLambdaExpr,
+                        context.currentLambdaArguments, context.outerLambdaArguments,
+                        context.currentLambdaLocalRefs, context.outerLambdaLocalRefs);
+                CommonResult res = scalarOperator.getChild(i).accept(this, childContext);
+                depth = Math.max(depth, res.depth);
+                groups.addAll(res.childrenGroup);
+                context.usedColumns.union(childContext.usedColumns);
+            }
+
+            return new CommonResult(depth, groups);
+        }
+
+        @Override
+        public CommonResult visitVariableReference(ColumnRefOperator variable, CommonOperatorContext context) {
+            if (variable.getOpType() == OperatorType.LAMBDA_ARGUMENT
+                    || context.currentLambdaLocalRefs.contains(variable)
+                    || context.outerLambdaLocalRefs.contains(variable)) {
+                context.usedColumns.union(variable);
+            }
+            return super.visitVariableReference(variable, context);
+        }
+
+        @Override
+        public CommonResult visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator,
+                                                        CommonOperatorContext context) {
+>>>>>>> 7b78c04 ([BugFix] Keep nested lambda hoists inside the scope that defines them (#78645)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/exprreuse/ScalarOperatorsReuse.java
             // a lambda function like  x->x+1 can't be reused anymore, so directly visit its lambda expression.
             hasLambdaFunction = true;
             CommonSubScalarOperatorCollectorContext newContext = new CommonSubScalarOperatorCollectorContext(true);
             newContext.outerLambdaArguments.addAll(context.outerLambdaArguments);
             newContext.outerLambdaArguments.addAll(context.currentLambdaArguments);
             newContext.currentLambdaArguments.addAll(scalarOperator.getRefColumns());
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/ScalarOperatorsReuse.java
             return visit(scalarOperator.getLambdaExpr(), newContext);
+=======
+            newContext.outerLambdaLocalRefs.addAll(context.outerLambdaLocalRefs);
+            newContext.outerLambdaLocalRefs.addAll(context.currentLambdaLocalRefs);
+            newContext.currentLambdaLocalRefs.addAll(scalarOperator.getColumnRefMap().keySet());
+            CommonResult result = visit(scalarOperator.getLambdaExpr(), newContext);
+            context.usedColumns.union(newContext.usedColumns);
+            scalarOperator.getColumnRefMap().values()
+                    .forEach(value -> collectAllRefs(value, context.usedColumns));
+            return result;
+>>>>>>> 7b78c04 ([BugFix] Keep nested lambda hoists inside the scope that defines them (#78645)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/exprreuse/ScalarOperatorsReuse.java
         }
 
         @Override
