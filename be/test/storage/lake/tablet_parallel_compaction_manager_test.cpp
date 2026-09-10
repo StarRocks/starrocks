@@ -4474,18 +4474,15 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_mixed_large
     auto state = _manager->get_tablet_state(tablet_id, 501);
     ASSERT_NE(nullptr, state);
 
-    // Check that we have both LARGE_ROWSET_PART and NORMAL subtasks
+    // Check that we have LARGE_ROWSET_PART subtasks; small rowsets may or may not form a NORMAL
+    // subtask depending on grouping, so only the former is asserted.
     bool has_large = false;
-    bool has_normal = false;
     for (const auto& [id, info] : state->running_subtasks) {
         if (info.type == SubtaskType::LARGE_ROWSET_PART) {
             has_large = true;
-        } else {
-            has_normal = true;
         }
     }
     EXPECT_TRUE(has_large) << "Should have LARGE_ROWSET_PART subtasks for the large rowset";
-    // Small rowsets may or may not form a NORMAL subtask depending on grouping
 
     block_promise.set_value();
     pool->wait();
