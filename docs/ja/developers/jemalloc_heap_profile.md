@@ -20,7 +20,7 @@ description: "StarRocks BE ノードの Jemalloc ヒーププロファイル有�
 ADMIN EXECUTE ON <be_id> 'System.print(HeapProf.getInstance().enable_prof())'
 ```
 
-有効化するには、BE が `jemalloc_conf` に `prof:true` を指定して起動されている必要があります (デフォルトで指定されています)。そうでない場合、ステートメントは失敗します。現在の設定は `information_schema.be_configs` の `prof_active` でも確認できます。
+有効化するには、BE が `jemalloc_conf` に `prof:true` を指定して起動されている必要があります (デフォルトで指定されています)。そうでない場合、ステートメントは失敗します。現在の設定は `information_schema.be_configs` でも確認できます。`NAME` が `jemalloc_conf` の行を参照し、その `VALUE` に含まれる `prof_active` オプションを確認してください。
 
 `be_id`: BE/CN ノードの ID。SHOW BACKENDS または SHOW COMPUTE NODES を実行して ID を取得できます。
 

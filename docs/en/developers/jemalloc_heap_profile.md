@@ -20,7 +20,7 @@ Syntax:
 ADMIN EXECUTE ON <be_id> 'System.print(HeapProf.getInstance().enable_prof())'
 ```
 
-Enabling requires the BE to have been started with `prof:true` in `jemalloc_conf`, which is the default; otherwise the statement fails. The current setting is also visible as `prof_active` in `information_schema.be_configs`.
+Enabling requires the BE to have been started with `prof:true` in `jemalloc_conf`, which is the default; otherwise the statement fails. The current setting is also visible in `information_schema.be_configs`: query the row whose `NAME` is `jemalloc_conf` and read the `prof_active` option inside its `VALUE`.
 
 `be_id`: The ID of BE/CN node. You can get the ID by running SHOW BACKENDS or SHOW COMPUTE NODES.
 
