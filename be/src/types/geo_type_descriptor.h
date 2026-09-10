@@ -78,11 +78,4 @@ bool is_geo_semantically_compatible(const GeoTypeDescriptor& lhs, const GeoTypeD
 // Encoding and producer-validation state do not determine overload identity.
 bool is_geo_compute_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDescriptor& rhs);
 
-// No payload conversion: both sides must declare WKB. UNKNOWN/MIXED target dimension
-// is unconstrained; otherwise the source must guarantee the same dimension.
-bool is_geo_assignment_compatible(const GeoColumnDescriptor& source, const GeoColumnDescriptor& target);
-
-// UNION ALL may combine dimensions; derive the result dimension separately.
-bool is_geo_union_all_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDescriptor& rhs);
-
 } // namespace starrocks

@@ -167,15 +167,4 @@ bool is_geo_compute_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDe
     return is_geo_semantically_compatible(lhs.type, rhs.type);
 }
 
-bool is_geo_assignment_compatible(const GeoColumnDescriptor& source, const GeoColumnDescriptor& target) {
-    return is_geo_union_all_compatible(source, target) &&
-           (target.storage.dimension == GEO_DIMENSION_UNKNOWN || target.storage.dimension == GEO_DIMENSION_MIXED ||
-            source.storage.dimension == target.storage.dimension);
-}
-
-bool is_geo_union_all_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDescriptor& rhs) {
-    return is_geo_compute_compatible(lhs, rhs) && lhs.storage.encoding == GEO_ENCODING_WKB &&
-           rhs.storage.encoding == GEO_ENCODING_WKB;
-}
-
 } // namespace starrocks

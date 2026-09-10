@@ -161,8 +161,6 @@ TEST(GeoTypeDescriptorTest, AlgorithmsRemainDistinctForCompatibility) {
             source.type.edge_algorithm = static_cast<PGeoEdgeAlgorithm>(left);
             target.type.edge_algorithm = static_cast<PGeoEdgeAlgorithm>(right);
             EXPECT_EQ(left == right, is_geo_compute_compatible(source, target));
-            EXPECT_EQ(left == right, is_geo_assignment_compatible(source, target));
-            EXPECT_EQ(left == right, is_geo_union_all_compatible(source, target));
         }
     }
 }
@@ -355,12 +353,7 @@ TEST(GeoTypeDescriptorTest, ValidationStateAndParsedSridAreNotTypeIdentity) {
         EXPECT_NE(source, target);
         EXPECT_TRUE(is_geo_semantically_compatible(source.type, target.type));
         EXPECT_TRUE(is_geo_compute_compatible(source, target));
-        EXPECT_TRUE(is_geo_assignment_compatible(source, target));
-        EXPECT_TRUE(is_geo_union_all_compatible(source, target));
     }
-    auto target = source;
-    target.storage.validation_state = GEO_VALIDATION_STATE_UNKNOWN;
-    EXPECT_TRUE(is_geo_assignment_compatible(source, target));
 }
 
 TEST(GeoTypeDescriptorTest, SemanticMismatchIsNotImplicitlyConverted) {
@@ -382,8 +375,6 @@ TEST(GeoTypeDescriptorTest, SemanticMismatchIsNotImplicitlyConverted) {
             break; // Not an axis-order-safe CRS84 alias.
         }
         EXPECT_FALSE(is_geo_compute_compatible(source, target));
-        EXPECT_FALSE(is_geo_assignment_compatible(source, target));
-        EXPECT_FALSE(is_geo_union_all_compatible(source, target));
     }
     EXPECT_FALSE(is_geo_compute_compatible({}, {}));
     auto incomplete = source;
@@ -394,40 +385,29 @@ TEST(GeoTypeDescriptorTest, SemanticMismatchIsNotImplicitlyConverted) {
     EXPECT_FALSE(is_geo_compute_compatible(incomplete, incomplete));
 }
 
-TEST(GeoTypeDescriptorTest, EncodingAffectsTransportNotComputeIdentity) {
+TEST(GeoTypeDescriptorTest, EncodingDoesNotAffectSemanticComparison) {
     const auto source = geography();
     auto target = source;
     target.storage.encoding = GEO_ENCODING_UNKNOWN;
+    EXPECT_NE(source, target);
     EXPECT_TRUE(is_geo_compute_compatible(source, target));
-    EXPECT_FALSE(is_geo_assignment_compatible(source, target));
-    EXPECT_FALSE(is_geo_assignment_compatible(target, source));
-    EXPECT_FALSE(is_geo_union_all_compatible(source, target));
     target.storage = GeoStorageDescriptor{};
     EXPECT_TRUE(is_geo_compute_compatible(source, target));
-    EXPECT_FALSE(is_geo_assignment_compatible(source, target));
 }
 
-TEST(GeoTypeDescriptorTest, DimensionGuaranteesAreDirectional) {
+TEST(GeoTypeDescriptorTest, DimensionDoesNotAffectSemanticComparison) {
     for (int source_dim = GEO_DIMENSION_UNKNOWN; source_dim <= GEO_DIMENSION_MIXED; ++source_dim) {
         for (int target_dim = GEO_DIMENSION_UNKNOWN; target_dim <= GEO_DIMENSION_MIXED; ++target_dim) {
             auto source = geography();
             auto target = geography();
             source.storage.dimension = static_cast<PGeoDimension>(source_dim);
             target.storage.dimension = static_cast<PGeoDimension>(target_dim);
-            const bool assignable = target_dim == GEO_DIMENSION_UNKNOWN || target_dim == GEO_DIMENSION_MIXED ||
-                                    source_dim == target_dim;
-            EXPECT_EQ(assignable, is_geo_assignment_compatible(source, target));
-            EXPECT_TRUE(is_geo_union_all_compatible(source, target));
-            EXPECT_TRUE(is_geo_compute_compatible(source, target)); // Row checks are a later compute contract.
+            EXPECT_EQ(source_dim == target_dim, source == target);
+            EXPECT_TRUE(is_geo_semantically_compatible(source.type, target.type));
+            // Semantic comparison neither derives a result dimension nor checks row dimensions.
+            EXPECT_TRUE(is_geo_compute_compatible(source, target));
         }
     }
-    auto source = geography();
-    auto target = geography();
-    source.storage.dimension = GEO_DIMENSION_UNKNOWN;
-    EXPECT_FALSE(is_geo_assignment_compatible(source, target));
-    target.storage.dimension = GEO_DIMENSION_UNKNOWN;
-    EXPECT_TRUE(is_geo_assignment_compatible(source, target));
-    EXPECT_TRUE(is_geo_union_all_compatible(source, target));
 }
 
 } // namespace
