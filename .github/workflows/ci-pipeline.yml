@@ -1480,7 +1480,10 @@ jobs:
       - restart-be-after-admit
       - fe-ut
       - be-ut
-    if: always()
+      - basic-checker
+    # Skip when the gate (RUN CHECKER) did not pass: nothing downstream ran, so there
+    # is no cluster/ECI to clean, and this would otherwise waste a scarce quick runner.
+    if: always() && needs.basic-checker.outputs.PASS == 'true'
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
