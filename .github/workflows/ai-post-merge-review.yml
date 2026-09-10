@@ -32,7 +32,7 @@ jobs:
       !contains(github.event.pull_request.title, '[Doc]') &&
       !contains(github.event.pull_request.title, '[UT]') &&
       !contains(github.event.pull_request.labels.*.name, 'sync')
-    runs-on: [self-hosted, quick]
+    runs-on: [self-hosted, light]
     steps:
       - name: post-merge severe-risk review
         # PR title/author are passed via env (never interpolated into the shell) so an
