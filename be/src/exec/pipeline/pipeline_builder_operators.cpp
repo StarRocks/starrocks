@@ -488,6 +488,9 @@ OpFactories maybe_interpolate_collect_stats(PipelineBuilderContext* context, Run
     for (const auto& pipeline : context->dependent_pipelines()) {
         downstream_source_op->add_group_dependent_pipeline(pipeline);
     }
+    // A node that builds a subtree outside its own push_dependent_pipeline() scope binds itself to
+    // these afterwards -- see PipelineBuilderContext::bind_dependent_pipeline_between().
+    context->record_group_dependent_source(downstream_source_op.get());
 
     return {std::move(downstream_source_op)};
 }

@@ -23,6 +23,7 @@
 #include "exec/pipeline/set/except_context.h"
 #include "exec/pipeline/set/except_output_source_operator.h"
 #include "exec/pipeline/set/except_probe_sink_operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -94,6 +95,30 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
     ASSIGN_OR_RETURN(auto ops_with_except_build_sink, child(0)->decompose_to_pipeline(context));
 
+    // Decompose the probe children before any child is partitioned. Nothing below depends on that
+    // ordering yet -- the partitioning decision that does comes next -- but two things that used to
+    // fall out of the old order have to be made explicit. The pipelines built underneath these
+    // children took their dependency on the build pipeline from the push_dependent_pipeline() scope
+    // they no longer sit inside, so bind_dependent_pipeline_between() hands it to them -- along with
+    // the group dependency a CollectStatsSource interpolated in there would have picked up from the
+    // same scope; and each pipeline was registered into whichever execution group its own child had
+    // left current, so that group is now recorded per child and restored before the child's pipeline
+    // is added.
+    //
+    // The marks close here, where the probe children end, and deliberately not where the bind is
+    // called: partitioning the BUILD child below registers the pipeline that feeds the build
+    // pipeline, and that one must not be made to wait for it.
+    auto* group_after_build_child = context->current_execution_group();
+    const auto probe_children_begin = context->mark();
+    std::vector<OpFactories> probe_child_ops(_children.size());
+    std::vector<ExecutionGroupRawPtr> probe_child_groups(_children.size(), nullptr);
+    for (size_t i = 1; i < _children.size(); i++) {
+        ASSIGN_OR_RETURN(probe_child_ops[i], child(i)->decompose_to_pipeline(context));
+        probe_child_groups[i] = context->current_execution_group();
+    }
+    const auto probe_children_end = context->mark();
+    context->set_current_execution_group(group_after_build_child);
+
     if (_local_partition_by_exprs.empty()) {
         ops_with_except_build_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
                 context, runtime_state(), id(), ops_with_except_build_sink, _child_expr_lists[0]);
@@ -110,10 +135,13 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     context->add_pipeline(ops_with_except_build_sink);
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
+    context->bind_dependent_pipeline_between(probe_children_begin, probe_children_end, context->last_pipeline(),
+                                             !context->current_execution_group()->is_colocate_exec_group());
 
     // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        ASSIGN_OR_RETURN(auto ops_with_except_probe_sink, child(i)->decompose_to_pipeline(context));
+        context->set_current_execution_group(probe_child_groups[i]);
+        auto ops_with_except_probe_sink = std::move(probe_child_ops[i]);
         if (_local_partition_by_exprs.empty()) {
             ops_with_except_probe_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
                     context, runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);
