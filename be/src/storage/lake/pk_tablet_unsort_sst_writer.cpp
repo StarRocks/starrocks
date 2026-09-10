@@ -271,8 +271,15 @@ Status PkTabletUnsortSSTWriter::merge_intermediates_into(sstable::TableBuilder* 
             ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, sst.location));
         }
         std::unique_ptr<sstable::Table> table;
-        RETURN_IF_ERROR(sstable::Table::Open(sstable::Options{}, rf.get(), sst.size, table));
-        auto* iter = table->NewIterator(sstable::ReadOptions{});
+        // Verify block checksums when re-reading the intermediate ssts this load just
+        // wrote: corrupted bytes (usually a bad local cache copy) must fail as
+        // Corruption instead of being silently merged into a wrong dedup result.
+        sstable::Options open_options;
+        open_options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
+        RETURN_IF_ERROR(sstable::Table::Open(open_options, rf.get(), sst.size, table));
+        sstable::ReadOptions read_options;
+        read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+        auto* iter = table->NewIterator(read_options);
         iter_holders.emplace_back(iter);
         child_iters.push_back(iter);
         rfs.push_back(std::move(rf));
