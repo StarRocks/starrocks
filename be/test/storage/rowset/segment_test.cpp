@@ -39,13 +39,6 @@
 #include <functional>
 #include <iostream>
 
-<<<<<<< HEAD
-=======
-#include "base/failpoint/fail_point.h"
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
->>>>>>> a62c789 ([UT] Fix unstable BE UT (#77990))
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
@@ -63,6 +56,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 
 namespace starrocks {
