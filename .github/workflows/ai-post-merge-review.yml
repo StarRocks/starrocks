@@ -1,0 +1,50 @@
+name: AI POST-MERGE REVIEW
+
+# New, additive review chain (does NOT touch the existing pre-merge @codex review).
+# When a PR merges into main, ask codex to re-review the merged diff with the
+# repository's severe-risk profile (REVIEW.md). If codex leaves findings, open a
+# tracking Issue assigned to the PR author so they follow up.
+#
+# The trigger MUST be posted by the CelerData-Reviewer account (codex ignores bots
+# and any non-connected account), so the logic goes through ci_robot's /ai_review
+# endpoint, which owns that token. All orchestration lives in
+# ci-tool/bin/post_merge_review.py; this workflow only checks out ci-tool and runs it.
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  post-merge-review:
+    name: AI Post-Merge Review
+    # Skip by PR type: Doc/UT (title prefix, mirroring check-blacklist.sh's pre-merge
+    # codex gating) and sync PRs (already reviewed upstream on StarRocks; the `sync`
+    # label is their authoritative marker). contains() is case-insensitive.
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'CelerData/celerdata-enterprise' &&
+      !contains(github.event.pull_request.title, '[Doc]') &&
+      !contains(github.event.pull_request.title, '[UT]') &&
+      !contains(github.event.pull_request.labels.*.name, 'sync')
+    runs-on: [self-hosted, quick]
+    steps:
+      - name: post-merge severe-risk review
+        # PR title/author are passed via env (never interpolated into the shell) so an
+        # attacker-controlled title cannot inject commands.
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          CI_ROBOT_URL: ${{ vars.CI_ROBOT_URL }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool && git pull
+          python3 bin/post_merge_review.py
