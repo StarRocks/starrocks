@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.sql.ast.PartitionValue;
@@ -47,6 +48,28 @@ public class RangePartitionInfoTest {
     public void setUp() {
         partitionColumns = new LinkedList<Column>();
         singleRangePartitionDescs = new LinkedList<SingleRangePartitionDesc>();
+    }
+
+    @Test
+    public void testDatetimeMicrosecondRangeSerialization() throws Exception {
+        List<Column> columns = Lists.newArrayList(new Column("dt", Type.DATETIME));
+        PartitionKey minimum = PartitionKey.createInfinityPartitionKey(columns, false);
+        PartitionKey first = PartitionKey.createPartitionKey(
+                Lists.newArrayList(new PartitionValue("2026-09-09 13:50:32.313")), columns);
+        PartitionKey second = PartitionKey.createPartitionKey(
+                Lists.newArrayList(new PartitionValue("2026-09-09 14:30:06.957")), columns);
+        Range<PartitionKey> firstRange = Range.closedOpen(minimum, first);
+        Range<PartitionKey> secondRange = Range.closedOpen(first, second);
+        RangePartitionInfo original = new RangePartitionInfo(columns);
+        original.setRange(1L, false, firstRange);
+        original.setRange(2L, false, secondRange);
+        original.setRange(3L, true, secondRange);
+
+        RangePartitionInfo restored = GsonUtils.GSON.fromJson(
+                GsonUtils.GSON.toJson(original), RangePartitionInfo.class);
+        Assertions.assertEquals(firstRange, restored.getRange(1L));
+        Assertions.assertEquals(secondRange, restored.getRange(2L));
+        Assertions.assertEquals(secondRange, restored.getRange(3L));
     }
 
     @Test
