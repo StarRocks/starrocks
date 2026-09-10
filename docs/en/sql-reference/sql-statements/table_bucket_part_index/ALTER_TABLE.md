@@ -490,6 +490,14 @@ Parameter:
     - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
 
+:::note
+
+MERGE is **not supported** on a range-distributed Primary Key table whose `ORDER BY` differs from its primary key. Such a table routes rows by a range in primary-key space while its segments are laid out in sort-key order, so a merge cannot decide which source tablet still owns a given row of a segment those sources share. Both `ALTER TABLE ... MERGE TABLETS` and the automatic size-based merge are refused with `Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key`.
+
+SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key can still be merged.
+
+:::
+
 For detailed examples, see [Split or merge tablets](#split-or-merge-tablets).
 
 ### Modify columns (add/delete columns, change column order, modify column comment)
