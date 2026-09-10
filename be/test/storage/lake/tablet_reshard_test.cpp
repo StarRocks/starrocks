@@ -86,6 +86,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/seek_range.h"
+#include "storage/sort_key_sampler.h"
 #include "storage/sstable/block.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/format.h"
@@ -117,6 +118,18 @@ class LakeTabletReshardTest : public testing::Test {
 public:
     static TuplePB generate_sort_key(int value) {
         DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
+        VariantTuple tuple;
+        tuple.append(variant);
+        TuplePB tuple_pb;
+        tuple.to_proto(&tuple_pb);
+        return tuple_pb;
+    }
+
+    // Zero-padded so byte order == numeric order, matching write_varchar_key_segment's encoding.
+    static TuplePB generate_varchar_sort_key(int value) {
+        // DatumVariant holds a CopiedDatum, which deep-copies the Slice, so the temporary
+        // std::string fmt::format returns may die at the end of this statement.
+        DatumVariant variant(get_type_info(LogicalType::TYPE_VARCHAR), Datum(Slice(fmt::format("{:06d}", value))));
         VariantTuple tuple;
         tuple.append(variant);
         TuplePB tuple_pb;
@@ -1380,6 +1393,8 @@ protected:
         c0->set_type("INT");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        c0->set_length(4);
+        c0->set_index_length(4);
         auto* c1 = schema->add_column();
         const int32_t c1_uid = 1002;
         c1->set_unique_id(c1_uid);
@@ -1389,6 +1404,36 @@ protected:
         c1->set_is_nullable(false);
         c1->set_aggregation("REPLACE");
         return {c0_uid, c1_uid};
+    }
+
+    // Build a DUP_KEYS tablet schema whose sort key is a single, genuinely truncated VARCHAR
+    // column: `k0` is the key and the sort key, `v0` is a plain data column. index_length(4) is
+    // shorter than the 6-digit key width write_varchar_key_segment writes, so the legacy short key
+    // index this schema produces cannot decode back to the whole sort key
+    // (short_key_index_encodes_full_sort_key rejects it) and sampling must take path B, reading
+    // data pages instead (sort_key_sampler.h).
+    void set_varchar_sort_key_schema(TabletMetadataPB* metadata, int64_t schema_id) {
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_id(schema_id);
+        schema->set_num_short_key_columns(1);
+        schema->set_num_rows_per_row_block(65535);
+        auto* k0 = schema->add_column();
+        k0->set_unique_id(1001);
+        k0->set_name("k0");
+        k0->set_type("VARCHAR");
+        k0->set_is_key(true);
+        k0->set_is_nullable(false);
+        k0->set_length(32);
+        k0->set_index_length(4);
+        auto* v0 = schema->add_column();
+        v0->set_unique_id(1002);
+        v0->set_name("v0");
+        v0->set_type("INT");
+        v0->set_is_key(false);
+        v0->set_is_nullable(false);
+        v0->set_aggregation("REPLACE");
+        schema->add_sort_key_idxes(0);
     }
 
     // Build a single-rowset PK tablet with one two-column segment and NO sstable_meta, so
@@ -1436,6 +1481,8 @@ protected:
         c0->set_type("INT");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        c0->set_length(4);
+        c0->set_index_length(4);
         auto* c1 = schema_pb.add_column();
         c1->set_unique_id(1002);
         c1->set_name("c1");
@@ -1463,6 +1510,63 @@ protected:
             v1[i] = source_value_of(v0[i]);
         }
         col0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        col1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        auto chunk_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto chunk = std::make_shared<Chunk>(Columns{std::move(col0), std::move(col1)}, chunk_schema);
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t segment_file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&segment_file_size, &index_size, &footer_position));
+        return segment_file_size;
+    }
+
+    // Write a real Segment file matching set_varchar_sort_key_schema: k0 = zero-padded [key_start,
+    // key_start+num_rows), v0 = k0's integer value. Returns the segment file size on disk. Zero
+    // padding keeps byte order == numeric order, which is what lets the sampler's monotonicity
+    // validation see a well-formed segment.
+    uint64_t write_varchar_key_segment(int64_t tablet_id, const std::string& segment_name, int num_rows,
+                                       int key_start = 0) {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_id(2101);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_num_rows_per_row_block(65535);
+        auto* k0 = schema_pb.add_column();
+        k0->set_unique_id(1001);
+        k0->set_name("k0");
+        k0->set_type("VARCHAR");
+        k0->set_is_key(true);
+        k0->set_is_nullable(false);
+        k0->set_length(32);
+        k0->set_index_length(4);
+        auto* v0 = schema_pb.add_column();
+        v0->set_unique_id(1002);
+        v0->set_name("v0");
+        v0->set_type("INT");
+        v0->set_is_key(false);
+        v0->set_is_nullable(false);
+        v0->set_aggregation("REPLACE");
+        schema_pb.add_sort_key_idxes(0);
+
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        auto segment_path = _tablet_manager->segment_location(tablet_id, segment_name);
+
+        WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto wfile_or = fs::new_writable_file(fopts, segment_path);
+        CHECK_OK(wfile_or.status());
+
+        SegmentWriterOptions opts;
+        SegmentWriter writer(std::move(wfile_or.value()), 0, tablet_schema, opts);
+        CHECK_OK(writer.init());
+
+        auto col0 = BinaryColumn::create();
+        auto col1 = Int32Column::create();
+        std::vector<int> v1(num_rows);
+        for (int i = 0; i < num_rows; ++i) {
+            const int key = key_start + i;
+            col0->append(Slice(fmt::format("{:06d}", key)));
+            v1[i] = key;
+        }
         col1->append_numbers(v1.data(), v1.size() * sizeof(int));
         auto chunk_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
         auto chunk = std::make_shared<Chunk>(Columns{std::move(col0), std::move(col1)}, chunk_schema);
@@ -2059,6 +2163,30 @@ protected:
     StatusOr<std::vector<std::pair<int32_t, int32_t>>> read_two_column_rows(const TabletMetadataPtr& metadata) {
         ASSIGN_OR_RETURN(auto rows, read_two_column_rows_in_storage_order(metadata));
         std::sort(rows.begin(), rows.end());
+        return rows;
+    }
+
+    // Total row count a real reader returns for |metadata|, column values ignored. Unlike the
+    // rowset stats a split computes for itself (which the boundary algorithm optimizes directly and
+    // would trivially agree with, see kEvennessTolerance's comment in tablet_splitter_test.cpp for
+    // the same point), this is independent ground truth: it opens the child's real segment files
+    // and counts what a query would actually see.
+    StatusOr<int64_t> count_rows(const TabletMetadataPtr& metadata) {
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto reader = std::make_shared<lake::TabletReader>(_tablet_manager.get(), metadata, *schema);
+        RETURN_IF_ERROR(reader->prepare());
+        TabletReaderParams params;
+        RETURN_IF_ERROR(reader->open(params));
+
+        int64_t rows = 0;
+        while (true) {
+            auto chunk = ChunkFactory::new_chunk(*schema, 4096);
+            auto status = reader->get_next(chunk.get());
+            if (status.is_end_of_file()) break;
+            RETURN_IF_ERROR(status);
+            rows += chunk->num_rows();
+        }
         return rows;
     }
 
@@ -5283,6 +5411,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
     EXPECT_TRUE(lake::tablet_reshard_helper::same_rowset_uid(first_rowset, second_rowset));
     EXPECT_EQ(first_rowset.id(), second_rowset.id());
     EXPECT_EQ(first_rowset.version(), second_rowset.version());
+    // Restored: the per-child statistics projection is fed the boundary planner's samples, so a
+    // shared segment's bytes are apportioned by sampled row positions rather than by an even split
+    // of its coarse [min, max]. If this ever reads equal again, that routing has been lost.
     EXPECT_NE(first_rowset.data_size(), second_rowset.data_size())
             << "the split fixture must exercise proportional child-local statistics";
     ASSERT_TRUE(first_rowset.has_range());
@@ -6750,8 +6881,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
     metadata.set_id(tablet_id);
     metadata.set_version(2);
 
-    // Single segment with 2 sort-key samples -> 4 boundary points -> 3
-    // candidate ranges. Requesting 8 splits cannot be satisfied.
+    // A single segment with no backing file on disk, so the sort key sampler cannot open it and
+    // every boundary candidate comes from the coarse [min, max] pair -> 1 candidate range.
+    // Requesting 8 splits cannot be satisfied.
     auto* rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
     {
@@ -6761,9 +6893,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
         sm->set_num_rows(300);
-        sm->set_deprecated_sort_key_sample_row_interval(100);
-        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(100));
-        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(200));
     }
     rowset_meta_pb->set_num_rows(300);
     rowset_meta_pb->set_data_size(1024);
@@ -7515,12 +7644,17 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
 // level-3 == original parent — the property a multi-level reshard must
 // guarantee for downstream consumers (get_tablet_stats, planner, vacuum).
 //
-// Setup uses sampled segments (sort_key_samples populated) so segment-level
-// boundary candidates are dense enough for 3 successive splits to find
-// candidates inside ever-narrowing tablet ranges.
+// Setup writes REAL segments so the sort key sampler can derive boundary candidates from them,
+// dense enough for 3 successive splits to find candidates inside ever-narrowing tablet ranges. A
+// synthetic metadata-only rowset would leave every segment at its coarse [min, max] pair, which
+// cannot be subdivided at all.
 TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_conservation) {
-    auto add_sampled_rowset = [](TabletMetadataPB* md, int64_t rs_id, int min_v, int max_v, int num_rows, int data_size,
-                                 int num_dels, int interval) {
+    auto add_sampled_rowset = [this](TabletMetadataPB* md, int64_t tablet_id, int64_t rs_id, int min_v, int max_v,
+                                     int num_rows, int data_size, int num_dels) {
+        const std::string seg_name = fmt::format("rs_{}_0.dat", rs_id);
+        // Keys [min_v, min_v + num_rows), i.e. exactly the [min_v, max_v] the metadata declares.
+        write_two_column_segment(
+                tablet_id, seg_name, num_rows, [](int i) { return i; }, /*key_start=*/min_v);
         auto* rs = md->add_rowsets();
         rs->set_id(rs_id);
         rs->set_overlapped(true);
@@ -7528,15 +7662,14 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
         rs->set_data_size(data_size);
         rs->set_num_dels(num_dels);
         auto* sm = rs->add_segment_metas();
-        sm->set_filename(fmt::format("rs_{}_0.dat", rs_id));
+        sm->set_filename(seg_name);
+        // Deliberately the declared data_size, not the file's real size: these tests assert
+        // conservation of the numbers the parent metadata records, and keeping them makes the
+        // arithmetic below unchanged by this fixture switching to real segments.
         sm->set_size(data_size);
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
         sm->set_num_rows(num_rows);
-        sm->set_deprecated_sort_key_sample_row_interval(interval);
-        for (int v = min_v + interval; v < max_v; v += interval) {
-            sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(v));
-        }
     };
 
     auto verify_per_rowset_conservation = [](const TabletMetadataPB& parent_md, const std::vector<int64_t>& child_ids,
@@ -7578,16 +7711,21 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
     TabletMetadataPB metadata;
     metadata.set_id(tablet_id);
     metadata.set_version(base_version_l0);
-    set_primary_key_schema(&metadata, 1);
+    // The two-column c0/c1 PK schema write_two_column_segment writes with, so the segments below
+    // open and decode with the tablet's own schema. A valid, non-zero schema id is also required:
+    // build_segments_from_rowsets only opens a rowset's segment files when its schema resolves to a
+    // valid registered id.
+    set_two_column_pk_schema(&metadata, /*schema_id=*/1);
     add_historical_schema(&metadata, 1);
 
-    // 2 rowsets covering [0,1499] with samples every 100 rows. Combined ~2000
-    // rows / 16000 bytes / 42 dels. Sample density gives every ~100 keys a
-    // boundary candidate, plenty to drive 3 levels of splitting.
-    add_sampled_rowset(&metadata, /*rs_id=*/2, /*min=*/0, /*max=*/999, /*num_rows=*/1000,
-                       /*data_size=*/10000, /*num_dels=*/30, /*interval=*/100);
-    add_sampled_rowset(&metadata, /*rs_id=*/3, /*min=*/500, /*max=*/1499, /*num_rows=*/1000,
-                       /*data_size=*/6000, /*num_dels=*/12, /*interval=*/100);
+    // 2 rowsets covering [0,1499]. Combined ~2000 rows / 16000 bytes / 42 dels. At the writer's
+    // BE_TEST block size of 100 rows, each 1000-row segment offers 9 short-key-index entries, so
+    // the sampler places a boundary candidate every ~100 keys -- plenty to drive 3 levels of
+    // splitting.
+    add_sampled_rowset(&metadata, tablet_id, /*rs_id=*/2, /*min=*/0, /*max=*/999, /*num_rows=*/1000,
+                       /*data_size=*/10000, /*num_dels=*/30);
+    add_sampled_rowset(&metadata, tablet_id, /*rs_id=*/3, /*min=*/500, /*max=*/1499, /*num_rows=*/1000,
+                       /*data_size=*/6000, /*num_dels=*/12);
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
@@ -17100,6 +17238,8 @@ TEST_F(LakeTabletReshardTest, test_segment_seek_range_to_rowid_range_real_bounde
     c0->set_type("INT");
     c0->set_is_key(true);
     c0->set_is_nullable(false);
+    c0->set_length(4);
+    c0->set_index_length(4);
     auto* c1 = schema_pb.add_column();
     c1->set_unique_id(1002);
     c1->set_name("c1");
@@ -17661,6 +17801,8 @@ inline void set_pk_int_key_schema(TabletMetadataPB* metadata, int64_t schema_id)
     c0->set_type("INT");
     c0->set_is_key(true);
     c0->set_is_nullable(false);
+    c0->set_length(4);
+    c0->set_index_length(4);
     auto* c1 = schema->add_column();
     c1->set_unique_id(1002);
     c1->set_name("c1");
@@ -19126,103 +19268,7 @@ TEST_F(LakeTabletReshardTest, test_split_publish_stamps_fresh_sstable_with_new_v
     EXPECT_TRUE(saw_sstable) << "split should have produced a flushed PK sstable from the rebuilt index";
 }
 
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_sampling_deduplicates_and_budgets_opens) {
-    const int64_t tablet_id = next_id();
-    prepare_tablet_dirs(tablet_id);
-    const bool old_enable = config::enable_full_sort_key_index;
-    config::enable_full_sort_key_index = true;
-    DeferOp restore_config([&] { config::enable_full_sort_key_index = old_enable; });
-    const std::string filename = "unique-full-key.dat";
-    const auto size = write_two_column_segment(tablet_id, filename, 300, [](int i) { return i; });
-    auto metadata = make_single_segment_pk_tablet(tablet_id, 2, filename, size, 300);
-    auto* rowset = metadata->mutable_rowsets(0);
-    rowset->set_num_dels(0);
-    rowset->mutable_segment_metas(0)->set_segment_idx(0);
-    *rowset->mutable_segment_metas(0)->mutable_sort_key_min() = generate_sort_key(0);
-    *rowset->mutable_segment_metas(0)->mutable_sort_key_max() = generate_sort_key(299);
-    auto* duplicate = metadata->add_rowsets();
-    *duplicate = *rowset;
-    duplicate->set_id(2);
-    duplicate->mutable_segment_metas(0)->set_segment_idx(7);
-    duplicate->mutable_segment_metas(0)->set_shared(true);
-
-    auto* sync = SyncPoint::GetInstance();
-    int opens = 0;
-    sync->SetCallBack("tablet_splitter:segment_open", [&](void*) { ++opens; });
-    sync->EnableProcessing();
-    DeferOp cleanup([&] {
-        sync->DisableProcessing();
-        sync->ClearAllCallBacks();
-    });
-    std::vector<lake::TabletRangeInfo> ranges;
-    auto status = lake::get_tablet_split_ranges(_tablet_manager.get(), metadata, 3, &ranges);
-    EXPECT_OK(status);
-    EXPECT_EQ(3, ranges.size());
-    EXPECT_EQ(1, opens) << "one physical full-key index must be opened only once";
-
-    opens = 0;
-    ranges.clear();
-    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [](void* p) { *static_cast<size_t*>(p) = 2; });
-    status = lake::get_tablet_split_ranges(_tablet_manager.get(), metadata, 3, &ranges);
-    EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;
-    EXPECT_EQ(0, opens) << "the shared budget must be charged before opening the first physical slice";
-}
-
-TEST_F(LakeTabletReshardTest, test_split_boundary_planner_skips_zero_row_segment_without_open) {
-    const int64_t tablet_id = next_id();
-    prepare_tablet_dirs(tablet_id);
-    const std::string empty_name = "sampleless-empty.dat";
-    const std::string live_name = "sampled-live.dat";
-    const auto empty_size = write_two_column_segment(tablet_id, empty_name, 0, [](int key) { return key; });
-    const auto live_size = write_two_column_segment(tablet_id, live_name, 100, [](int key) { return key; });
-
-    auto metadata = std::make_shared<TabletMetadataPB>();
-    metadata->set_id(tablet_id);
-    metadata->set_version(1);
-    metadata->set_next_rowset_id(3);
-    set_two_column_pk_schema(metadata.get(), 4001);
-    metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
-    metadata->mutable_range()->set_lower_bound_included(true);
-    metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
-    metadata->mutable_range()->set_upper_bound_included(false);
-    auto* rowset = metadata->add_rowsets();
-    rowset->set_id(1);
-    rowset->set_num_rows(100);
-    rowset->set_data_size(empty_size + live_size);
-    rowset->set_num_dels(0);
-    lake::tablet_reshard_helper::set_rowset_uid(rowset);
-    auto* empty = rowset->add_segment_metas();
-    empty->set_filename(empty_name);
-    empty->set_segment_idx(0);
-    empty->set_num_rows(0);
-    empty->set_size(empty_size);
-    auto* live = rowset->add_segment_metas();
-    live->set_filename(live_name);
-    live->set_segment_idx(1);
-    live->set_num_rows(100);
-    live->set_size(live_size);
-    live->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    live->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-    live->set_deprecated_sort_key_sample_row_interval(50);
-    live->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(50));
-
-    auto* sync = SyncPoint::GetInstance();
-    int opens = 0;
-    sync->SetCallBack("tablet_splitter:segment_open", [&](void*) { ++opens; });
-    sync->EnableProcessing();
-    DeferOp cleanup([&] {
-        sync->DisableProcessing();
-        sync->ClearAllCallBacks();
-    });
-    std::vector<lake::TabletRangeInfo> ranges;
-    ASSERT_OK(lake::get_tablet_split_ranges(_tablet_manager.get(), metadata, 2, &ranges));
-    EXPECT_EQ(0, opens);
-    ASSERT_EQ(2, ranges.size());
-    ASSERT_TRUE(ranges[0].range.has_upper_bound());
-    EXPECT_EQ(1, ranges[0].range.upper_bound().values_size());
-}
-
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conservation) {
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_conserves_stats_and_tiles_child_ranges) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -19239,25 +19285,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     set_two_column_pk_schema(&metadata, /*schema_id=*/1);
 
     constexpr int kNumRows = 300;
-    const std::string seg_name = "full_key_seg.dat";
+    const std::string seg_name = "split_seg.dat";
 
-    const bool old_enable = config::enable_full_sort_key_index;
-    config::enable_full_sort_key_index = true;
-    DeferOp restore_config([&] { config::enable_full_sort_key_index = old_enable; });
     const uint64_t seg_size = write_two_column_segment(tablet_id, seg_name, kNumRows, [](int i) { return i; });
-
-    // Confirm the written segment genuinely carries the full, untruncated sort-key
-    // index -- not silently a legacy/truncated one.
-    {
-        FileInfo file_info;
-        file_info.path = _tablet_manager->segment_location(tablet_id, seg_name);
-        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
-        auto tablet_schema = TabletSchema::create(metadata.schema());
-        ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, tablet_schema));
-        ASSERT_OK(segment->load_index());
-        ASSERT_TRUE(segment->has_full_sort_key_index_page())
-                << "test setup bug: segment must carry the full sort-key short key index";
-    }
 
     auto* rowset = metadata.add_rowsets();
     rowset->set_id(2);
@@ -19271,8 +19301,10 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     sm->set_num_rows(kNumRows);
     sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
     sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(kNumRows - 1));
-    // Deliberately no deprecated_sort_key_samples: the only source of split-boundary
-    // precision beyond the coarse [min, max] pair is the full-key index loader.
+    // The only source of split-boundary precision beyond the coarse [min, max] pair is the sort
+    // key sampler reading this segment. This fixture's schema (set_two_column_pk_schema) carries
+    // index_length, so it samples the free short key index path (A), not the data pages; see the
+    // sibling multi-rowset case.
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
@@ -19295,11 +19327,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
                                               false, tablet_metadatas, tablet_ranges));
 
-    // The full-key index carries 2 samples (rows 100 and 200 of 300, at the BE_TEST
-    // default num_rows_per_block == 100), giving exactly 3 balanced sub-segments -- a
-    // real 3-way split. tablet_metadatas also carries the old tablet id's own
-    // new-version entry (a tombstone at the old location), so the map holds
-    // new_tablet_ids_size() + 1 entries.
+    // One metadata entry per child, plus the old tablet id's own new-version entry (a
+    // tombstone at the old location), so the map holds new_tablet_ids_size() + 1 entries.
     ASSERT_EQ(4U, tablet_metadatas.size());
 
     int64_t total_num_rows = 0;
@@ -19348,13 +19377,27 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     }
 }
 
-// Mixed-segment split: one rowset carries a legacy segment (a real, truncated-short-key
-// segment whose metadata still records deprecated_sort_key_samples) and a second rowset
-// carries a real full-key-index segment. build_segments_from_rowsets must select the
-// correct per-segment source for each (metadata samples for the legacy one, the short key
-// index loader for the full-key one), and the split must still conserve Σ
-// children.rowset.{num_rows,data_size,num_dels} == parent for both rowsets.
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key_segments) {
+// Multi-rowset split: the tablet carries two rowsets whose segments cover different key ranges.
+// Every rowset's segment must be sampled, and the split must still conserve
+// Σ children.rowset.{num_rows,data_size,num_dels} == parent for both rowsets.
+//
+// This fixture's PK schema (set_two_column_pk_schema / write_two_column_segment) carries
+// index_length, matching every production schema, so both segments sample via the free short key
+// index path (A). See the comment below the sample-count assertion for why this test does NOT
+// also assert the sampled boundary beats the coarse fallback's candidate -- at this fixture's
+// small rowset sizes path A's block-granularity resolution is not enough to guarantee that; see
+// test_pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio for that
+// property at a realistic scale.
+// Same overlapping two-rowset shape as test_pk_tablet_splitting_samples_every_rowset_segment
+// (rowset A nested inside rowset B's key range), but scaled 100x -- kRowsA=15,000/kRowsB=30,000
+// rather than 150/300 -- so each segment spans many more of BE_TEST's 100-row short-key-index
+// blocks. That is the ratio path A actually sees in production: a real segment is many blocks
+// deep, not the 2-3 blocks the small fixture next to this test gives it. At that ratio the
+// greedy boundary-selection algorithm's per-step overshoot (see the sibling test's comment) is a
+// small fraction of the target instead of a large one, so the chosen boundary lands well inside
+// rowset A's range and the two children come out close to even -- proving path A's sampling
+// genuinely improves split quality once it has a realistic amount of index to sample from.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -19366,76 +19409,39 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
     metadata.set_version(base_version);
     set_two_column_pk_schema(&metadata, /*schema_id=*/1);
 
-    constexpr int kLegacyRows = 150;
-    constexpr int kFullKeyRows = 300;
-    const std::string legacy_seg_name = "legacy_seg.dat";
-    const std::string full_key_seg_name = "full_key_seg.dat";
+    constexpr int kRowsA = 15000;
+    constexpr int kRowsB = 30000;
+    const std::string seg_name_a = "seg_a.dat";
+    const std::string seg_name_b = "seg_b.dat";
 
-    const bool old_enable = config::enable_full_sort_key_index;
-    DeferOp restore_config([&] { config::enable_full_sort_key_index = old_enable; });
+    const uint64_t seg_size_a = write_two_column_segment(tablet_id, seg_name_a, kRowsA, [](int i) { return i; });
+    const uint64_t seg_size_b = write_two_column_segment(tablet_id, seg_name_b, kRowsB, [](int i) { return i; });
 
-    config::enable_full_sort_key_index = false;
-    const uint64_t legacy_seg_size =
-            write_two_column_segment(tablet_id, legacy_seg_name, kLegacyRows, [](int i) { return i; });
-
-    config::enable_full_sort_key_index = true;
-    const uint64_t full_key_seg_size =
-            write_two_column_segment(tablet_id, full_key_seg_name, kFullKeyRows, [](int i) { return i; });
-
-    // Confirm each written segment genuinely carries the index format the test assumes --
-    // not silently the other one.
-    auto tablet_schema = TabletSchema::create(metadata.schema());
-    {
-        FileInfo file_info;
-        file_info.path = _tablet_manager->segment_location(tablet_id, legacy_seg_name);
-        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
-        ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, tablet_schema));
-        ASSERT_OK(segment->load_index());
-        ASSERT_FALSE(segment->has_full_sort_key_index_page())
-                << "test setup bug: the legacy segment must NOT carry the full sort-key index";
-    }
-    {
-        FileInfo file_info;
-        file_info.path = _tablet_manager->segment_location(tablet_id, full_key_seg_name);
-        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
-        ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, tablet_schema));
-        ASSERT_OK(segment->load_index());
-        ASSERT_TRUE(segment->has_full_sort_key_index_page())
-                << "test setup bug: this segment must carry the full sort-key index";
-    }
-
-    // Rowset A: the legacy segment. Real key range [0, 149], with
-    // deprecated_sort_key_samples matching its real content.
     auto* rowset_a = metadata.add_rowsets();
     rowset_a->set_id(2);
     rowset_a->set_overlapped(false);
-    rowset_a->set_num_rows(kLegacyRows);
-    rowset_a->set_data_size(legacy_seg_size);
+    rowset_a->set_num_rows(kRowsA);
+    rowset_a->set_data_size(seg_size_a);
     rowset_a->set_num_dels(0);
     auto* sm_a = rowset_a->add_segment_metas();
-    sm_a->set_filename(legacy_seg_name);
-    sm_a->set_size(legacy_seg_size);
-    sm_a->set_num_rows(kLegacyRows);
+    sm_a->set_filename(seg_name_a);
+    sm_a->set_size(seg_size_a);
+    sm_a->set_num_rows(kRowsA);
     sm_a->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(kLegacyRows - 1));
-    sm_a->set_deprecated_sort_key_sample_row_interval(50);
-    sm_a->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(50));
-    sm_a->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(100));
+    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsA - 1));
 
-    // Rowset B: the full-key-index segment. Real key range [0, 299], deliberately no
-    // deprecated_sort_key_samples -- its only source of split precision is the loader.
     auto* rowset_b = metadata.add_rowsets();
     rowset_b->set_id(3);
     rowset_b->set_overlapped(false);
-    rowset_b->set_num_rows(kFullKeyRows);
-    rowset_b->set_data_size(full_key_seg_size);
+    rowset_b->set_num_rows(kRowsB);
+    rowset_b->set_data_size(seg_size_b);
     rowset_b->set_num_dels(0);
     auto* sm_b = rowset_b->add_segment_metas();
-    sm_b->set_filename(full_key_seg_name);
-    sm_b->set_size(full_key_seg_size);
-    sm_b->set_num_rows(kFullKeyRows);
+    sm_b->set_filename(seg_name_b);
+    sm_b->set_size(seg_size_b);
+    sm_b->set_num_rows(kRowsB);
     sm_b->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(kFullKeyRows - 1));
+    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsB - 1));
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
@@ -19453,10 +19459,157 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
 
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
+                                              false, tablet_metadatas, tablet_ranges));
+    ASSERT_EQ(3U, tablet_metadatas.size());
+
+    // Both segments carry index_length, so this must sample via the short key index (path A),
+    // never the data-page path (path B).
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0);
+    EXPECT_EQ(0, sort_key_sampling_data_page_segments_count() - data_page_segments_before)
+            << "a full short key index must be sampled via path A, not path B";
+
+    // Ground truth computed directly from the two known, disjoint-schema segments (never from the
+    // rowset stats the split computed for itself -- see written_rows_in()'s comment in
+    // tablet_splitter_test.cpp for why that comparison would be circular). Both segments hold keys
+    // [0, num_rows), so the row count below a boundary b is min(b, kRowsA) + min(b, kRowsB).
+    auto rows_below = [&](int64_t b) { return std::min<int64_t>(b, kRowsA) + std::min<int64_t>(b, kRowsB); };
+
+    int64_t interior_boundaries = 0;
+    int64_t total = 0;
+    for (int64_t child : {child_id_1, child_id_2}) {
+        const auto& range = tablet_metadatas.at(child)->range();
+        int64_t lower = 0, upper = kRowsB;
+        if (range.has_lower_bound()) {
+            ++interior_boundaries;
+            VariantTuple bound;
+            ASSERT_OK(bound.from_proto(range.lower_bound()));
+            lower = bound[0].value().get_int32();
+            EXPECT_GT(lower, 0) << "boundary must be interior to the key range";
+            EXPECT_LT(lower, kRowsA - 1)
+                    << "at a realistic block ratio the sampled boundary must beat the coarse fallback's only "
+                       "candidate (key "
+                    << (kRowsA - 1) << "), got " << lower;
+        }
+        if (range.has_upper_bound()) {
+            VariantTuple bound;
+            ASSERT_OK(bound.from_proto(range.upper_bound()));
+            upper = bound[0].value().get_int32();
+        }
+        const int64_t rows = rows_below(upper) - rows_below(lower);
+        total += rows;
+        const double ideal = (kRowsA + kRowsB) / 2.0;
+        EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * 0.20)
+                << "child " << child << " holds a disproportionate share of the rows";
+    }
+    EXPECT_EQ(1, interior_boundaries) << "a 2-way split must emit exactly one interior boundary";
+    EXPECT_EQ(kRowsA + kRowsB, total) << "the split must conserve every row across its children";
+}
+
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_samples_every_rowset_segment) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_two_column_pk_schema(&metadata, /*schema_id=*/1);
+
+    constexpr int kRowsA = 150;
+    constexpr int kRowsB = 300;
+    const std::string seg_name_a = "seg_a.dat";
+    const std::string seg_name_b = "seg_b.dat";
+
+    const uint64_t seg_size_a = write_two_column_segment(tablet_id, seg_name_a, kRowsA, [](int i) { return i; });
+    const uint64_t seg_size_b = write_two_column_segment(tablet_id, seg_name_b, kRowsB, [](int i) { return i; });
+
+    // Rowset A: real key range [0, 149]; its only source of split precision beyond the coarse
+    // [min, max] pair is the sort key sampler reading this segment.
+    auto* rowset_a = metadata.add_rowsets();
+    rowset_a->set_id(2);
+    rowset_a->set_overlapped(false);
+    rowset_a->set_num_rows(kRowsA);
+    rowset_a->set_data_size(seg_size_a);
+    rowset_a->set_num_dels(0);
+    auto* sm_a = rowset_a->add_segment_metas();
+    sm_a->set_filename(seg_name_a);
+    sm_a->set_size(seg_size_a);
+    sm_a->set_num_rows(kRowsA);
+    sm_a->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsA - 1));
+
+    // Rowset B: real key range [0, 299], sampled the same way as rowset A.
+    auto* rowset_b = metadata.add_rowsets();
+    rowset_b->set_id(3);
+    rowset_b->set_overlapped(false);
+    rowset_b->set_num_rows(kRowsB);
+    rowset_b->set_data_size(seg_size_b);
+    rowset_b->set_num_dels(0);
+    auto* sm_b = rowset_b->add_segment_metas();
+    sm_b->set_filename(seg_name_b);
+    sm_b->set_size(seg_size_b);
+    sm_b->set_num_rows(kRowsB);
+    sm_b->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsB - 1));
+
+    EXPECT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    const int64_t child_id_1 = next_id();
+    const int64_t child_id_2 = next_id();
+    splitting.add_new_tablet_ids(child_id_1);
+    splitting.add_new_tablet_ids(child_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const int64_t samples_before = sort_key_sampling_samples_count();
     ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
                                               false, tablet_metadatas, tablet_ranges));
     // 2 children + the old tablet id's own new-version tombstone entry.
     ASSERT_EQ(3U, tablet_metadatas.size());
+
+    // The map size and the conservation totals below both hold with ZERO samples -- three coarse
+    // boundary keys already suffice for a 2-way split, and conservation comes from
+    // apply_rowset_anchor -- so neither says anything about sampling. These two do.
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0) << "both segments must be sampled";
+
+    // Rowset A holds keys [0, 149] (150 rows) and rowset B holds [0, 299] (300 rows). This does NOT
+    // also assert the sampled boundary beats the coarse fallback's only interior candidate (key
+    // 149, segment A's max): at BE_TEST's 100-row short-key-index blocks, a 150/300-row rowset
+    // gives path A only 2-3 candidates, and the greedy boundary-selection algorithm in
+    // calculate_range_split_boundaries commits as soon as its running total reaches the target
+    // rather than picking whichever candidate is closest to it -- so it can overshoot onto exactly
+    // this coarse candidate (confirmed: candidates here are 200/84/33/133 rows against a 225
+    // target, and accumulating 200+84=284 triggers the commit at the 84-row candidate's own upper
+    // edge, key 149). That overshoot is bounded by one candidate's row count, which is a large
+    // fraction of the target only because this fixture's rowsets are tiny; at a realistic
+    // block-count-to-segment-size ratio the same algorithm produces an interior, balanced boundary
+    // -- see test_pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio.
+    // What this test still legitimately pins is that BOTH rowset segments get sampled at all
+    // (asserted above) and that a 2-way split emits exactly one boundary.
+    int64_t interior_boundaries = 0;
+    for (int64_t child : {child_id_1, child_id_2}) {
+        const auto& range = tablet_metadatas.at(child)->range();
+        if (!range.has_lower_bound()) continue;
+        ++interior_boundaries;
+        VariantTuple bound;
+        ASSERT_OK(bound.from_proto(range.lower_bound()));
+        ASSERT_EQ(1U, bound.size());
+        const int32_t boundary = bound[0].value().get_int32();
+        EXPECT_GT(boundary, 0) << "boundary must be interior to the key range";
+    }
+    EXPECT_EQ(1, interior_boundaries) << "a 2-way split must emit exactly one interior boundary";
 
     struct RsTotals {
         int64_t num_rows = 0;
@@ -19475,12 +19628,12 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
         }
     }
 
-    EXPECT_EQ(kLegacyRows, totals[2].num_rows);
-    EXPECT_EQ(static_cast<int64_t>(legacy_seg_size), totals[2].data_size);
+    EXPECT_EQ(kRowsA, totals[2].num_rows);
+    EXPECT_EQ(static_cast<int64_t>(seg_size_a), totals[2].data_size);
     EXPECT_EQ(0, totals[2].num_dels);
 
-    EXPECT_EQ(kFullKeyRows, totals[3].num_rows);
-    EXPECT_EQ(static_cast<int64_t>(full_key_seg_size), totals[3].data_size);
+    EXPECT_EQ(kRowsB, totals[3].num_rows);
+    EXPECT_EQ(static_cast<int64_t>(seg_size_b), totals[3].data_size);
     EXPECT_EQ(0, totals[3].num_dels);
 }
 
@@ -20043,8 +20196,9 @@ TEST_F(LakeTabletReshardTest, test_reshard_split_fallback_resets_cdc_carryover_o
     metadata.set_id(tablet_id);
     metadata.set_version(base_version);
 
-    // 2 sort-key samples -> 3 candidate ranges, fewer than the 8 requested, so
-    // split_tablet takes the identical-fallback path.
+    // One segment with no backing file, so only the coarse [min, max] pair is available -> 1
+    // candidate range, fewer than the 8 requested, so split_tablet takes the identical-fallback
+    // path.
     auto* rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
     {
@@ -20054,9 +20208,6 @@ TEST_F(LakeTabletReshardTest, test_reshard_split_fallback_resets_cdc_carryover_o
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
         sm->set_num_rows(300);
-        sm->set_deprecated_sort_key_sample_row_interval(100);
-        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(100));
-        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(200));
     }
     rowset_meta_pb->set_num_rows(300);
     rowset_meta_pb->set_data_size(1024);
@@ -20247,6 +20398,91 @@ TEST_F(LakeTabletReshardTest, publish_resharding_tablet_shared_first_skips_per_t
     EXPECT_EQ(1, count_ending_with(lake::tablet_initial_metadata_filename()));
 }
 
+// A truncated (VARCHAR) sort key exercises path B (sort_key_sampler.h's data-page sampler) end to
+// end: a real split-publish over a real segment, then reading the real children back out with a
+// real reader -- not just the rowset stats the split computed for itself, which the boundary
+// algorithm optimizes directly and would trivially agree with (see kEvennessTolerance's comment in
+// tablet_splitter_test.cpp for the same point).
+TEST_F(LakeTabletReshardTest, split_a_varchar_sort_key_tablet_end_to_end) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_varchar_sort_key_schema(&metadata, /*schema_id=*/1);
+
+    constexpr int kNumRows = 50'000;
+    constexpr int kSplitCount = 4;
+    const std::string seg_name = "varchar_split_seg.dat";
+    const uint64_t seg_size = write_varchar_key_segment(tablet_id, seg_name, kNumRows);
+
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(kNumRows);
+    rowset->set_data_size(seg_size);
+    rowset->set_num_dels(0);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename(seg_name);
+    sm->set_size(seg_size);
+    sm->set_num_rows(kNumRows);
+    sm->mutable_sort_key_min()->CopyFrom(generate_varchar_sort_key(0));
+    sm->mutable_sort_key_max()->CopyFrom(generate_varchar_sort_key(kNumRows - 1));
+
+    EXPECT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    std::vector<int64_t> child_ids;
+    for (int i = 0; i < kSplitCount; ++i) {
+        const int64_t child_id = next_id();
+        child_ids.push_back(child_id);
+        splitting.add_new_tablet_ids(child_id);
+    }
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
+                                              false, tablet_metadatas, tablet_ranges));
+    // kSplitCount children + the old tablet id's own new-version tombstone entry.
+    ASSERT_EQ(static_cast<size_t>(kSplitCount) + 1, tablet_metadatas.size());
+
+    // A VARCHAR sort key is never eligible for the short key index: prove path B (data pages)
+    // actually ran, per sort_key_sampling_data_page_segments_count's own contract in
+    // sort_key_sampler.h, rather than assuming it from the schema alone.
+    EXPECT_GT(sort_key_sampling_data_page_segments_count() - data_page_segments_before, 0)
+            << "a VARCHAR sort key must be sampled via data pages, never the short key index";
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0);
+
+    int64_t total = 0;
+    for (int64_t child_id : child_ids) {
+        ASSERT_TRUE(tablet_metadatas.count(child_id));
+        ASSIGN_OR_ABORT(const int64_t rows, count_rows(tablet_metadatas.at(child_id)));
+        total += rows;
+        const double ideal = kNumRows / static_cast<double>(kSplitCount);
+        EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * 0.10)
+                << "child " << child_id << " holds a disproportionate share of the rows";
+    }
+    EXPECT_EQ(kNumRows, total) << "the split must conserve every row across its children";
+}
+
+// ---------------------------------------------------------------------------
+// Restored from the stable-metadata reshard rework: these cover the reshard retry cache and
+// the boundary planner's zero-row-segment skip, neither of which this change touches. They
+// were lost when this branch was rebased onto that rework and are re-added verbatim.
+// ---------------------------------------------------------------------------
+
 TEST_F(LakeTabletReshardTest, test_split_retry_cache_complete_returns_without_recompute) {
     constexpr int64_t kVersion = 2;
     constexpr int64_t kGtid = 77;
@@ -20282,28 +20518,71 @@ TEST_F(LakeTabletReshardTest, test_split_retry_cache_complete_returns_without_re
     }
 }
 
-TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_requires_absent_extra_children) {
+TEST_F(LakeTabletReshardTest, test_identical_retry_cache_complete_returns_without_recompute) {
     constexpr int64_t kVersion = 2;
-    constexpr int64_t kGtid = 78;
-    auto source = split_source();
-    std::vector<int64_t> children{next_id(), next_id(), next_id()};
-    auto request = make_split_retry_request(source, children, false);
-    TabletRangePB identical_range;
-    *identical_range.mutable_lower_bound() = generate_sort_key(0);
-    *identical_range.mutable_upper_bound() = generate_sort_key(100);
-    auto cached_source = cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid, &identical_range);
-    auto cached_child = cache_reshard_metadata(children[0], children[0], kVersion, kGtid, &identical_range);
-    for (size_t i = 1; i < children.size(); ++i) {
-        ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
-                                   _tablet_manager->tablet_metadata_location(children[i], kVersion)));
+    constexpr int64_t kGtid = 82;
+    const int64_t source = next_id();
+    const int64_t target = next_id();
+    prepare_tablet_dirs(source);
+    prepare_tablet_dirs(target);
+    TabletMetadataPB base;
+    base.set_id(source);
+    base.set_version(1);
+    ASSERT_OK(put_tablet_metadata(base));
+    ReshardingTabletInfoPB request;
+    request.mutable_identical_tablet_info()->set_old_tablet_id(source);
+    request.mutable_identical_tablet_info()->set_new_tablet_id(target);
+    auto cached_source = cache_reshard_metadata(source, source, kVersion, kGtid);
+    auto cached_target = cache_reshard_metadata(target, target, kVersion, kGtid);
+    _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(source, 1));
+
+    int metadata_reads = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void*) { ++metadata_reads; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
+                                              actual_ranges));
+    EXPECT_EQ(0, metadata_reads);
+    ASSERT_EQ(2, actual.size());
+    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source)->SerializeAsString());
+    EXPECT_EQ(cached_target->SerializeAsString(), actual.at(target)->SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_retry_cache_complete_returns_without_recompute) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 81;
+    const int64_t source0 = next_id();
+    const int64_t source1 = next_id();
+    const int64_t target = next_id();
+    for (auto id : {source0, source1, target}) prepare_tablet_dirs(id);
+    auto base0 = std::make_shared<TabletMetadataPB>();
+    base0->set_id(source0);
+    base0->set_version(1);
+    auto base1 = std::make_shared<TabletMetadataPB>();
+    base1->set_id(source1);
+    base1->set_version(1);
+    ASSERT_OK(put_merge_sources(base0, base1));
+    ReshardingTabletInfoPB request;
+    auto* merge = request.mutable_merging_tablet_info();
+    merge->add_old_tablet_ids(source0);
+    merge->add_old_tablet_ids(source1);
+    merge->set_new_tablet_id(target);
+    std::unordered_map<int64_t, TabletMetadataPtr> expected;
+    for (auto id : {source0, source1, target}) {
+        expected.emplace(id, cache_reshard_metadata(id, id, kVersion, kGtid));
     }
 
     int planner_calls = 0;
     auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
-        ++planner_calls;
-        *static_cast<size_t*>(arg) = 0;
-    });
+    sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { ++planner_calls; });
     sync->EnableProcessing();
     DeferOp cleanup([&] {
         sync->DisableProcessing();
@@ -20313,44 +20592,13 @@ TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_requires_absent_e
     txn.set_gtid(kGtid);
     std::unordered_map<int64_t, TabletMetadataPtr> actual;
     std::unordered_map<int64_t, TabletRangePB> actual_ranges;
-    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
-                                              actual, actual_ranges));
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
+                                              actual_ranges));
     EXPECT_EQ(0, planner_calls);
-    ASSERT_EQ(2, actual.size());
-    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source->id())->SerializeAsString());
-    EXPECT_EQ(cached_child->SerializeAsString(), actual.at(children[0])->SerializeAsString());
-}
-
-TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_rejects_mismatched_extra_child) {
-    constexpr int64_t kVersion = 2;
-    constexpr int64_t kGtid = 79;
-    auto source = split_source();
-    std::vector<int64_t> children{next_id(), next_id()};
-    auto request = make_split_retry_request(source, children, false);
-    cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid);
-    cache_reshard_metadata(children[0], children[0], kVersion, kGtid);
-    cache_reshard_metadata(children[1], children[1], kVersion, kGtid + 1);
-
-    int planner_calls = 0;
-    auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
-        ++planner_calls;
-        *static_cast<size_t*>(arg) = 0;
-    });
-    sync->EnableProcessing();
-    DeferOp cleanup([&] {
-        sync->DisableProcessing();
-        sync->ClearAllCallBacks();
-    });
-    TxnInfoPB txn;
-    txn.set_gtid(kGtid);
-    std::unordered_map<int64_t, TabletMetadataPtr> actual;
-    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
-    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
-                                              actual, actual_ranges));
-    EXPECT_EQ(1, planner_calls);
-    EXPECT_EQ(2, actual.size());
-    EXPECT_EQ(0, actual.count(children[1]));
+    ASSERT_EQ(expected.size(), actual.size());
+    for (const auto& [id, metadata] : expected) {
+        EXPECT_EQ(metadata->SerializeAsString(), actual.at(id)->SerializeAsString());
+    }
 }
 
 TEST_F(LakeTabletReshardTest, test_reshard_retry_cache_rejects_wrong_id_version_or_gtid) {
@@ -20420,33 +20668,60 @@ TEST_F(LakeTabletReshardTest, test_reshard_retry_cache_skips_nonpositive_gtid) {
     }
 }
 
-TEST_F(LakeTabletReshardTest, test_merge_retry_cache_complete_returns_without_recompute) {
+TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_rejects_mismatched_extra_child) {
     constexpr int64_t kVersion = 2;
-    constexpr int64_t kGtid = 81;
-    const int64_t source0 = next_id();
-    const int64_t source1 = next_id();
-    const int64_t target = next_id();
-    for (auto id : {source0, source1, target}) prepare_tablet_dirs(id);
-    auto base0 = std::make_shared<TabletMetadataPB>();
-    base0->set_id(source0);
-    base0->set_version(1);
-    auto base1 = std::make_shared<TabletMetadataPB>();
-    base1->set_id(source1);
-    base1->set_version(1);
-    ASSERT_OK(put_merge_sources(base0, base1));
-    ReshardingTabletInfoPB request;
-    auto* merge = request.mutable_merging_tablet_info();
-    merge->add_old_tablet_ids(source0);
-    merge->add_old_tablet_ids(source1);
-    merge->set_new_tablet_id(target);
-    std::unordered_map<int64_t, TabletMetadataPtr> expected;
-    for (auto id : {source0, source1, target}) {
-        expected.emplace(id, cache_reshard_metadata(id, id, kVersion, kGtid));
+    constexpr int64_t kGtid = 79;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, false);
+    cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid);
+    cache_reshard_metadata(children[0], children[0], kVersion, kGtid);
+    cache_reshard_metadata(children[1], children[1], kVersion, kGtid + 1);
+
+    int planner_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
+        ++planner_calls;
+        *static_cast<size_t*>(arg) = 0;
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
+    EXPECT_EQ(1, planner_calls);
+    EXPECT_EQ(2, actual.size());
+    EXPECT_EQ(0, actual.count(children[1]));
+}
+
+TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_requires_absent_extra_children) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 78;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, false);
+    TabletRangePB identical_range;
+    *identical_range.mutable_lower_bound() = generate_sort_key(0);
+    *identical_range.mutable_upper_bound() = generate_sort_key(100);
+    auto cached_source = cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid, &identical_range);
+    auto cached_child = cache_reshard_metadata(children[0], children[0], kVersion, kGtid, &identical_range);
+    for (size_t i = 1; i < children.size(); ++i) {
+        ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
+                                   _tablet_manager->tablet_metadata_location(children[i], kVersion)));
     }
 
     int planner_calls = 0;
     auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { ++planner_calls; });
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
+        ++planner_calls;
+        *static_cast<size_t*>(arg) = 0;
+    });
     sync->EnableProcessing();
     DeferOp cleanup([&] {
         sync->DisableProcessing();
@@ -20456,51 +20731,70 @@ TEST_F(LakeTabletReshardTest, test_merge_retry_cache_complete_returns_without_re
     txn.set_gtid(kGtid);
     std::unordered_map<int64_t, TabletMetadataPtr> actual;
     std::unordered_map<int64_t, TabletRangePB> actual_ranges;
-    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
-                                              actual_ranges));
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
     EXPECT_EQ(0, planner_calls);
-    ASSERT_EQ(expected.size(), actual.size());
-    for (const auto& [id, metadata] : expected) {
-        EXPECT_EQ(metadata->SerializeAsString(), actual.at(id)->SerializeAsString());
-    }
+    ASSERT_EQ(2, actual.size());
+    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source->id())->SerializeAsString());
+    EXPECT_EQ(cached_child->SerializeAsString(), actual.at(children[0])->SerializeAsString());
 }
 
-TEST_F(LakeTabletReshardTest, test_identical_retry_cache_complete_returns_without_recompute) {
-    constexpr int64_t kVersion = 2;
-    constexpr int64_t kGtid = 82;
-    const int64_t source = next_id();
-    const int64_t target = next_id();
-    prepare_tablet_dirs(source);
-    prepare_tablet_dirs(target);
-    TabletMetadataPB base;
-    base.set_id(source);
-    base.set_version(1);
-    ASSERT_OK(put_tablet_metadata(base));
-    ReshardingTabletInfoPB request;
-    request.mutable_identical_tablet_info()->set_old_tablet_id(source);
-    request.mutable_identical_tablet_info()->set_new_tablet_id(target);
-    auto cached_source = cache_reshard_metadata(source, source, kVersion, kGtid);
-    auto cached_target = cache_reshard_metadata(target, target, kVersion, kGtid);
-    _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(source, 1));
+TEST_F(LakeTabletReshardTest, test_split_boundary_planner_skips_zero_row_segment_without_open) {
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const std::string empty_name = "sampleless-empty.dat";
+    const std::string live_name = "sampled-live.dat";
+    const auto empty_size = write_two_column_segment(tablet_id, empty_name, 0, [](int key) { return key; });
+    const auto live_size = write_two_column_segment(tablet_id, live_name, 100, [](int key) { return key; });
 
-    int metadata_reads = 0;
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(3);
+    set_two_column_pk_schema(metadata.get(), 4001);
+    metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+    metadata->mutable_range()->set_lower_bound_included(true);
+    metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+    metadata->mutable_range()->set_upper_bound_included(false);
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(empty_size + live_size);
+    rowset->set_num_dels(0);
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    auto* empty = rowset->add_segment_metas();
+    empty->set_filename(empty_name);
+    empty->set_segment_idx(0);
+    empty->set_num_rows(0);
+    empty->set_size(empty_size);
+    auto* live = rowset->add_segment_metas();
+    live->set_filename(live_name);
+    live->set_segment_idx(1);
+    live->set_num_rows(100);
+    live->set_size(live_size);
+    live->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    live->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    live->set_deprecated_sort_key_sample_row_interval(50);
+    live->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(50));
+
     auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void*) { ++metadata_reads; });
+    int opens = 0;
+    sync->SetCallBack("tablet_splitter:segment_open", [&](void*) { ++opens; });
     sync->EnableProcessing();
     DeferOp cleanup([&] {
         sync->DisableProcessing();
         sync->ClearAllCallBacks();
     });
-    TxnInfoPB txn;
-    txn.set_gtid(kGtid);
-    std::unordered_map<int64_t, TabletMetadataPtr> actual;
-    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
-    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
-                                              actual_ranges));
-    EXPECT_EQ(0, metadata_reads);
-    ASSERT_EQ(2, actual.size());
-    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source)->SerializeAsString());
-    EXPECT_EQ(cached_target->SerializeAsString(), actual.at(target)->SerializeAsString());
+    std::vector<lake::TabletRangeInfo> ranges;
+    ASSERT_OK(lake::get_tablet_split_ranges(_tablet_manager.get(), metadata, 2, &ranges));
+    // ONE open, not zero: sampling is now on demand, so the live segment is opened deliberately --
+    // that is the feature. The number is still what proves the zero-row segment was skipped, since
+    // a broken skip would open both and read 2 here. (This assertion was 0 when a segment carrying
+    // metadata sort-key samples needed no open at all; those samples are no longer written.)
+    EXPECT_EQ(1, opens);
+    ASSERT_EQ(2, ranges.size());
+    ASSERT_TRUE(ranges[0].range.has_upper_bound());
+    EXPECT_EQ(1, ranges[0].range.upper_bound().values_size());
 }
 
 } // namespace starrocks

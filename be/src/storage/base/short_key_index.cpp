@@ -67,25 +67,6 @@ Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Sli
     return Status::OK();
 }
 
-Status ShortKeyIndexBuilder::finalize_full_sort_key(uint32_t num_segment_rows, std::vector<Slice>* body,
-                                                    PageFooterPB* page_footer, uint32_t num_sort_key_columns) {
-    page_footer->set_type(SORT_KEY_PAGE);
-    page_footer->set_uncompressed_size(_key_buf.size() + _offset_buf.size());
-
-    SortKeyFooterPB* footer = page_footer->mutable_sort_key_page_footer();
-    footer->set_num_items(_num_items);
-    footer->set_key_bytes(_key_buf.size());
-    footer->set_offset_bytes(_offset_buf.size());
-    footer->set_segment_id(_segment_id);
-    footer->set_num_rows_per_block(_num_rows_per_block);
-    footer->set_num_segment_rows(num_segment_rows);
-    footer->set_num_sort_key_columns(num_sort_key_columns);
-
-    body->emplace_back(_key_buf);
-    body->emplace_back(_offset_buf);
-    return Status::OK();
-}
-
 Status ShortKeyIndexDecoder::parse_body(const Slice& body, uint32_t num_items, uint32_t key_bytes,
                                         uint32_t offset_bytes) {
     // num_items, key_bytes and offset_bytes come straight from a persisted page footer, so an
@@ -143,17 +124,6 @@ Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& fo
     _num_items = footer.num_items();
     _num_rows_per_block = footer.num_rows_per_block();
     _num_segment_rows = footer.num_segment_rows();
-    _num_sort_key_columns = 0;
-    _parsed = true;
-    return Status::OK();
-}
-
-Status ShortKeyIndexDecoder::parse(const Slice& body, const SortKeyFooterPB& footer) {
-    RETURN_IF_ERROR(parse_body(body, footer.num_items(), footer.key_bytes(), footer.offset_bytes()));
-    _num_items = footer.num_items();
-    _num_rows_per_block = footer.num_rows_per_block();
-    _num_segment_rows = footer.num_segment_rows();
-    _num_sort_key_columns = footer.num_sort_key_columns();
     _parsed = true;
     return Status::OK();
 }
