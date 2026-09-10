@@ -76,6 +76,7 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "runtime/service_contexts.h"
 #include "storage/storage_engine.h"
+#include "storage_primitive/tablet_column.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
 static const uint8_t VALID_SEL_OK = 0x1;
@@ -363,8 +364,58 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
                 _write_quorum_type, _num_repicas);
     }
-    _tablet_sink_sender->set_enable_shard_write(_enable_shard_write);
+    _tablet_sink_sender->set_enable_shard_write(_enable_shard_write, _resolve_shard_write_key_slots());
     return Status::OK();
+}
+
+// The key columns whose repeats must land on ONE node, per index; empty when the table has no such
+// columns and rows may therefore stay where they were produced.
+//
+// DUPLICATE KEY is the empty case: its rowset is the union of its segments, so no two rows resolve
+// against each other and the order the folded segments end up in is not observable. Every other key
+// type does resolve repeats -- an aggregate REPLACE, a primary-key upsert-then-delete -- and would
+// otherwise have that resolution decided by which node happened to write which row. Hashing the key
+// removes the question instead of documenting it as a caveat.
+std::unordered_map<int64_t, std::vector<SlotId>> OlapTableSink::_resolve_shard_write_key_slots() const {
+    std::unordered_map<int64_t, std::vector<SlotId>> key_slots_by_index;
+    if (!_enable_shard_write || _keys_type == TKeysType::DUP_KEYS || _schema == nullptr) {
+        return key_slots_by_index;
+    }
+    for (const OlapTableIndexSchema* index : _schema->indexes()) {
+        if (index == nullptr || index->column_param == nullptr) {
+            continue;
+        }
+        std::vector<SlotId> key_slots;
+        for (const TabletColumn* column : index->column_param->columns) {
+            if (column == nullptr || !column->is_key()) {
+                continue;
+            }
+            for (const SlotDescriptor* slot : index->slots) {
+                if (slot != nullptr && slot->col_name() == column->name()) {
+                    key_slots.emplace_back(slot->id());
+                    break;
+                }
+            }
+        }
+        // A key column the sink does not carry would silently hash a narrower key, sending two rows
+        // that share the real key to different nodes -- the exact failure this routing exists to
+        // prevent. Leave the index on local-first rather than route on a key we cannot see in full.
+        size_t key_column_count = 0;
+        for (const TabletColumn* column : index->column_param->columns) {
+            if (column != nullptr && column->is_key()) {
+                ++key_column_count;
+            }
+        }
+        if (key_slots.size() != key_column_count) {
+            LOG(WARNING) << "shard write: index " << index->index_id << " exposes " << key_slots.size() << " of "
+                         << key_column_count << " key columns to the sink; falling back to local-first routing";
+            continue;
+        }
+        if (!key_slots.empty()) {
+            key_slots_by_index.emplace(index->index_id, std::move(key_slots));
+        }
+    }
+    return key_slots_by_index;
 }
 
 Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBEMap& index_id_to_tablet_be_map) {

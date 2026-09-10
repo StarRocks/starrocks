@@ -201,6 +201,9 @@ private:
     bool _enable_lake_per_partition_coordinator_txn_log = false;
 
     TKeysType::type _keys_type;
+    // Per index, the slots of the key columns for shard-write key-hash routing. Empty for DUPLICATE
+    // KEY, which keeps local-first routing.
+    std::unordered_map<int64_t, std::vector<SlotId>> _resolve_shard_write_key_slots() const;
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;

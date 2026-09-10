@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/global_types.h"
 #include "data_sink/tablet/range_router.h"
 #include "data_sink/tablet/tablet_sink_index_channel.h"
 #include "storage/lake/combined_txn_log_writer.h"
@@ -58,9 +59,15 @@ public:
     IndexIdToTabletBEMap* index_id_to_tablet_be_map() { return &_index_id_to_tablet_be_map; }
 
     // See TOlapTableSink.enable_shard_write: a tablet's node list is a SHARD set (one node per row)
-    // instead of a replica set (same rows to every node), and each row stays on the node its sink
-    // instance runs on.
-    void set_enable_shard_write(bool enable);
+    // instead of a replica set (same rows to every node).
+    //
+    // Which of the list a row goes to depends on whether the table has a key whose repeats must stay
+    // ordered. |key_slots_by_index| is empty for DUPLICATE KEY, where a rowset is simply the union of
+    // its segments: no two rows are in an order relation, so each row stays on the node its sink
+    // instance already runs on and never crosses the network. It is non-empty for PRIMARY / AGGREGATE
+    // / UNIQUE, where rows sharing a key DO resolve against each other; hashing the key sends all of
+    // a key's rows to one node, so the order they are folded in stops being observable.
+    void set_enable_shard_write(bool enable, std::unordered_map<int64_t, std::vector<SlotId>> key_slots_by_index);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
@@ -81,9 +88,14 @@ protected:
     // Shard write only. Fill _row_target_node with the single node each selected row goes to.
     // |channel|'s node-channel mutex must already be held in shared mode: local-first probes the
     // local node channel's backpressure through that map.
-    Status _assign_shard_write_targets(IndexChannel* channel,
+    Status _assign_shard_write_targets(Chunk* chunk, IndexChannel* channel,
                                        const std::unordered_map<int64_t, std::vector<int64_t>>& tablet_to_be,
                                        const std::vector<uint16_t>& selection_idx);
+    // Key-hash routing only. Fill _key_hashes with one CRC32 per row over |channel|'s key columns.
+    // The table's own distribution hash cannot be reused here: a range-distributed table has no
+    // distribution columns at all, so OlapTablePartitionParam leaves those hashes at zero -- and a
+    // range table is precisely the shape this feature exists for.
+    void _compute_key_hashes(Chunk* chunk, const std::vector<SlotId>& key_slots);
     // Whether this node is one of |be_ids| and its channel is usable.
     bool _can_keep_rows_local(IndexChannel* channel, const std::vector<int64_t>& be_ids) const;
     // Move every node channel's txn logs into _txn_log_map, folding the several partial logs a
@@ -139,11 +151,19 @@ protected:
     // once per chunk before the per-node dispatch loop.
     std::vector<int64_t> _row_target_node;
     // Shard write only. Per-tablet round-robin cursor; lives across chunks so the spread stays even
-    // when a chunk carries only a few rows of a tablet.
+    // when a chunk carries only a few rows of a tablet. Unused under key-hash routing, which is
+    // stateless.
     std::unordered_map<int64_t, uint64_t> _shard_write_counters;
+    // Shard write only. Per index, the slots of the columns whose repeats must stay ordered. Empty
+    // (for every index) means local-first routing; non-empty selects key-hash routing.
+    std::unordered_map<int64_t, std::vector<SlotId>> _shard_write_key_slots;
+    // Scratch for _compute_key_hashes, reused across chunks.
+    std::vector<uint32_t> _key_hashes;
     // Shard write only, for the profile: how the rows of this instance were split between its own
-    // node and the rest. A local-first load that reports remote rows was backpressured (or ran on a
-    // node outside the tablet's list); a round-robin load reports roughly (N-1)/N remote.
+    // node and the rest. Read it against the routing in use: under local-first a remote count means
+    // this node is not in the tablet's list (expected once the list is bounded by
+    // lake_local_first_write_max_nodes), while key-hash routing reports roughly (N-1)/N remote by
+    // construction -- the key decides the node, not where the row was produced.
     int64_t _shard_write_local_rows = 0;
     int64_t _shard_write_remote_rows = 0;
     std::set<int64_t> _failed_channels;

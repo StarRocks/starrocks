@@ -93,13 +93,35 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
     return Status::OK();
 }
 
-void TabletSinkSender::set_enable_shard_write(bool enable) {
+void TabletSinkSender::set_enable_shard_write(bool enable,
+                                             std::unordered_map<int64_t, std::vector<SlotId>> key_slots_by_index) {
     _enable_shard_write = enable;
+    _shard_write_key_slots = std::move(key_slots_by_index);
     if (_enable_shard_write) {
         // Resolved once: the backend id comes from the FE heartbeat and does not change while the
         // process runs. Absent (a CN that has not been assigned one yet) leaves every row on the
-        // round-robin fallback, which is always correct, just not local.
+        // round-robin fallback, which is always correct, just not local. Irrelevant under key-hash
+        // routing, which never asks where it is running.
         _local_node_id = get_backend_id().value_or(-1);
+    }
+}
+
+// One CRC32 per row over the key columns, accumulated column by column -- the same shape
+// OlapTablePartitionParam uses for distribution hashing, so two rows agree here exactly when they
+// agree on every key column.
+void TabletSinkSender::_compute_key_hashes(Chunk* chunk, const std::vector<SlotId>& key_slots) {
+    const size_t num_rows = chunk->num_rows();
+    _key_hashes.assign(num_rows, 0);
+    if (num_rows == 0) {
+        return;
+    }
+    for (SlotId slot_id : key_slots) {
+        ColumnPtr column = chunk->get_column_by_slot_id(slot_id);
+        DCHECK(column != nullptr);
+        if (column == nullptr) {
+            continue;
+        }
+        column->crc32_hash(_key_hashes.data(), 0, num_rows);
     }
 }
 
@@ -108,10 +130,35 @@ void TabletSinkSender::set_enable_shard_write(bool enable) {
 // there would step a different number of times on each pass and a row could end up claimed by
 // several nodes (duplication) or by none (loss).
 Status TabletSinkSender::_assign_shard_write_targets(
-        IndexChannel* channel, const std::unordered_map<int64_t, std::vector<int64_t>>& tablet_to_be,
+        Chunk* chunk, IndexChannel* channel, const std::unordered_map<int64_t, std::vector<int64_t>>& tablet_to_be,
         const std::vector<uint16_t>& selection_idx) {
     if (_row_target_node.size() < _tablet_ids.size()) {
         _row_target_node.resize(_tablet_ids.size());
+    }
+    // Key-hash routing for the key types whose repeats resolve against each other; local-first for
+    // DUPLICATE KEY, whose rowset is the union of its segments and therefore has no such pair.
+    auto key_slots_iter = _shard_write_key_slots.find(channel->index_id());
+    const std::vector<SlotId>* key_slots =
+            (key_slots_iter != _shard_write_key_slots.end() && !key_slots_iter->second.empty())
+                    ? &key_slots_iter->second
+                    : nullptr;
+    if (key_slots != nullptr) {
+        _compute_key_hashes(chunk, *key_slots);
+        for (unsigned short selection : selection_idx) {
+            auto iter = tablet_to_be.find(_tablet_ids[selection]);
+            DCHECK(iter != tablet_to_be.end());
+            if (iter == tablet_to_be.end()) {
+                return Status::InternalError(fmt::format("Unknown tablet_id {} in tablet be map", _tablet_ids[selection]));
+            }
+            const std::vector<int64_t>& be_ids = iter->second;
+            DCHECK(!be_ids.empty());
+            // Stateless on purpose: the same key must reach the same node from EVERY sink instance
+            // and every chunk, so the decision may depend on nothing but the key and the node list.
+            const int64_t target = be_ids[_key_hashes[selection] % be_ids.size()];
+            _row_target_node[selection] = target;
+            ++(target == _local_node_id ? _shard_write_local_rows : _shard_write_remote_rows);
+        }
+        return Status::OK();
     }
     // Rows are handed out in runs of `shard_write_rows_per_node`. A run of 1 spreads every row and
     // balances perfectly, but leaves each node a strided 1/N slice of the chunk, so the sender does
@@ -180,7 +227,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
     std::shared_lock<std::shared_mutex> lock(channel->_node_channels_mutex);
     TEST_SYNC_POINT("TabletSinkSender::_send_chunk_by_node::after_lock");
     if (_enable_shard_write) {
-        RETURN_IF_ERROR(_assign_shard_write_targets(channel, tablet_to_be, selection_idx));
+        RETURN_IF_ERROR(_assign_shard_write_targets(chunk, channel, tablet_to_be, selection_idx));
     }
     for (auto& it : channel->_node_channels) {
         NodeChannel* node = it.second.get();
