@@ -1,0 +1,193 @@
+-- name: test_json_is_null_on_not_null_column
+create table t_${uuid0} (k int, j json not null, i int not null, s varchar(20) not null)
+  duplicate key(k) distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+create table t_flat_${uuid0} (k int, j json not null, i int not null, s varchar(20) not null)
+  duplicate key(k) distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_nullable_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t_${uuid0} values
+  (1, parse_json('{"a":null}')->'$.a', 1, 'a'),
+  (2, parse_json('{"a":null}')->'$.a', 2, 'b'),
+  (3, parse_json('{"a":1}')->'$.a', 3, 'c'),
+  (4, parse_json('{"a":"x"}')->'$.a', 4, 'd'),
+  (5, parse_json('{"a":{"b":1}}')->'$.a', 5, 'e'),
+  (6, parse_json('[1,2]'), 6, 'f'),
+  (7, parse_json('"null"'), 7, 'g'),
+  (8, parse_json('{"a":null}')->'$.a', 8, 'h');
+-- result:
+-- !result
+insert into t_flat_${uuid0} select k, j, i, s from t_${uuid0};
+-- result:
+-- !result
+insert into t_nullable_${uuid0} values
+  (1, parse_json('{"a":null}')->'$.a'),
+  (2, parse_json('{"a":1}')->'$.a'),
+  (3, parse_json('{"b":1}')->'$.a'),
+  (4, null);
+-- result:
+-- !result
+select k, j, j is null as is_null, j is not null as is_not_null from t_${uuid0} order by k;
+-- result:
+1	null	1	0
+2	null	1	0
+3	1	0	1
+4	"x"	0	1
+5	{"b": 1}	0	1
+6	[1, 2]	0	1
+7	"null"	0	1
+8	null	1	0
+-- !result
+select k from t_${uuid0} where j is null order by k;
+-- result:
+1
+2
+8
+-- !result
+select k from t_${uuid0} where j is not null order by k;
+-- result:
+3
+4
+5
+6
+7
+-- !result
+select count(*) from t_${uuid0} where j is null;
+-- result:
+3
+-- !result
+select count(*) from t_${uuid0} where j is not null;
+-- result:
+5
+-- !result
+select k from t_${uuid0} where (case when j is null then 1 else 0 end) = 1 order by k;
+-- result:
+1
+2
+8
+-- !result
+select sum(case when j is null then 1 else 0 end) from t_${uuid0};
+-- result:
+3
+-- !result
+select k from t_${uuid0} where not (j is null) order by k;
+-- result:
+3
+4
+5
+6
+7
+-- !result
+select k from t_${uuid0} where j is null or k = 3 order by k;
+-- result:
+1
+2
+3
+8
+-- !result
+select k from t_${uuid0} where j is not null and k <= 4 order by k;
+-- result:
+3
+4
+-- !result
+select k, j is null as is_null, j is not null as is_not_null from t_flat_${uuid0} order by k;
+-- result:
+1	1	0
+2	1	0
+3	0	1
+4	0	1
+5	0	1
+6	0	1
+7	0	1
+8	1	0
+-- !result
+select k from t_flat_${uuid0} where j is null order by k;
+-- result:
+1
+2
+8
+-- !result
+select k from t_flat_${uuid0} where j is not null order by k;
+-- result:
+3
+4
+5
+6
+7
+-- !result
+select k, j, j is null as is_null from t_nullable_${uuid0} order by k;
+-- result:
+1	null	1
+2	1	0
+3	None	1
+4	None	1
+-- !result
+select k from t_nullable_${uuid0} where j is null order by k;
+-- result:
+1
+3
+4
+-- !result
+select k from t_nullable_${uuid0} where j is not null order by k;
+-- result:
+2
+-- !result
+function: assert_explain_contains('select k from t_${uuid0} where i is null', 'EMPTYSET')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select k from t_${uuid0} where s is null', 'EMPTYSET')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select k from t_${uuid0} where i is not null', 'i IS NOT NULL')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select k from t_${uuid0} where s is not null', 's IS NOT NULL')
+-- result:
+None
+-- !result
+select k from t_${uuid0} where i is null order by k;
+-- result:
+-- !result
+select k from t_${uuid0} where s is null order by k;
+-- result:
+-- !result
+select count(*) from t_${uuid0} where i is not null;
+-- result:
+8
+-- !result
+select count(*) from t_${uuid0} where s is not null;
+-- result:
+8
+-- !result
+function: assert_explain_not_contains('select k from t_${uuid0} where j is null', 'EMPTYSET')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select k from t_${uuid0} where j is null', 'j IS NULL')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select k from t_${uuid0} where j is not null', 'j IS NOT NULL')
+-- result:
+None
+-- !result
+drop table t_${uuid0};
+-- result:
+-- !result
+drop table t_flat_${uuid0};
+-- result:
+-- !result
+drop table t_nullable_${uuid0};
+-- result:
+-- !result

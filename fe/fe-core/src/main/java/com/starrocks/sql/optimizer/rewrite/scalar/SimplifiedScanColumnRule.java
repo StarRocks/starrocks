@@ -55,7 +55,12 @@ public class SimplifiedScanColumnRule extends BottomUpScalarOperatorRewriteRule 
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
         ScalarOperator child = predicate.getChild(0);
-        if (child.isColumnRef() && !child.isNullable()) {
+        // A JSON column that is declared NOT NULL can still hold the JSON `null` literal, and
+        // `IS NULL` is documented to return true for it (release notes of 3.1/3.2/3.3, section
+        // "Behavior Changes"). So the SQL-level nullability of the column says nothing about the
+        // outcome of `IS NULL` here: leave the predicate alone and let the BE evaluate it, the way
+        // the projection path already does. Folding stays in place for every other type.
+        if (child.isColumnRef() && !child.isNullable() && !child.getType().isJsonType()) {
             return ConstantOperator.createBoolean(predicate.isNotNull());
         }
 
