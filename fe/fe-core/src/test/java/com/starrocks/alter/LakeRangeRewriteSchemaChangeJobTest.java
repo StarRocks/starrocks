@@ -37,9 +37,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -70,7 +73,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -79,6 +85,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     private static final String DB_NAME = "db_lake_range_rewrite_test";
     private static Database db;
     private OlapTable table;
+    private OlapTable partitionedTable;
 
     @BeforeAll
     public static void setUp() throws Exception {
@@ -131,19 +138,28 @@ public class LakeRangeRewriteSchemaChangeJobTest {
      * Builds a job whose new sort key reorders the base key to (k2, k1) and wires a stub sampler.
      */
     private LakeRangeRewriteSchemaChangeJob newJob(Sampler sampler) {
+        return newJobFor(table, sampler);
+    }
+
+    /**
+     * Builds a job whose new sort key reorders the base key to (k2, k1) and wires a stub sampler, against
+     * the given table. {@link #newJob} is the common case of this against the shared single-partition
+     * {@link #table}.
+     */
+    private LakeRangeRewriteSchemaChangeJob newJobFor(OlapTable targetTable, Sampler sampler) {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
         LakeRangeRewriteSchemaChangeJob job = new LakeRangeRewriteSchemaChangeJob(
-                jobId, db.getId(), table.getId(), table.getName(), 3600_000L);
+                jobId, db.getId(), targetTable.getId(), targetTable.getName(), 3600_000L);
         // New schema = base schema (column set unchanged for a sort-key reorder).
-        List<Column> baseSchema = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId());
+        List<Column> baseSchema = targetTable.getSchemaByIndexMetaId(targetTable.getBaseIndexMetaId());
         job.setNewSchema(new ArrayList<>(baseSchema));
         job.setNewKeysType(KeysType.DUP_KEYS);
         // Reorder the sort key to (k2, k1): indexes into the schema.
         job.setNewSortKeyIdxes(List.of(1, 0));
         job.setNewSortKeyColumns(List.of(baseSchema.get(1), baseSchema.get(0)));
-        job.setShadowIndex(shadowIndexMetaId, table.getBaseIndexMetaId(),
-                SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getName(), (short) 2);
+        job.setShadowIndex(shadowIndexMetaId, targetTable.getBaseIndexMetaId(),
+                SchemaChangeHandler.SHADOW_NAME_PREFIX + targetTable.getName(), (short) 2);
         job.setSampler(sampler);
         return job;
     }
@@ -784,6 +800,37 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         return job;
     }
 
+    /** Two logical partitions, each with exactly one physical partition, driven to RUNNING. */
+    private LakeRangeRewriteSchemaChangeJob twoPartitionJobInRunning() throws Exception {
+        String sql = "create table t_range_parts (k1 int, k2 int, v1 int)\n"
+                + "partition by range(k1) (partition p1 values less than ('100'),\n"
+                + "                        partition p2 values less than ('200'))\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');";
+        CreateTableStmt createStmt =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createStmt);
+        partitionedTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_range_parts");
+        Assertions.assertEquals(2, partitionedTable.getPhysicalPartitions().size(),
+                "the fixture must have two physical partitions");
+        Assertions.assertTrue(partitionedTable.isRangeDistribution(),
+                "the fixture must be range-distributed, otherwise this job never routes here");
+
+        LakeRangeRewriteSchemaChangeJob job = newJobFor(partitionedTable, stubSampler(diverseSample()));
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        new MockUp<LakeRangeRewriteSchemaChangeJob>() {
+            @Mock
+            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
+                return true;
+            }
+        };
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        return job;
+    }
+
     /** A TransactionState reporting the given status, so the resume classifier can be driven. */
     private static void mockTransactionStatus(TransactionStatus status) {
         new MockUp<GlobalTransactionMgr>() {
@@ -800,30 +847,208 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     /**
+     * Drive a partition's consecutive-failure counter directly, so a test can reach the edge of the retry
+     * budget without waiting out the real number of scheduler ticks. The counter is private production
+     * state; reaching it reflectively from this test keeps the production class free of a test-only setter.
+     */
+    @SuppressWarnings("unchecked")
+    private static void setRewriteRetrySpentMs(LakeOnlineRewriteJobBase job, long physicalPartitionId,
+                                               long spentMs) throws Exception {
+        java.lang.reflect.Field field =
+                LakeOnlineRewriteJobBase.class.getDeclaredField("rewriteRetrySpentMs");
+        field.setAccessible(true);
+        ((Map<Long, Long>) field.get(job)).put(physicalPartitionId, spentMs);
+    }
+
+    /** What a partition's retry episode has spent, or null when it has no failure streak. */
+    @SuppressWarnings("unchecked")
+    private static Long rewriteRetrySpentMs(LakeOnlineRewriteJobBase job, long physicalPartitionId)
+            throws Exception {
+        java.lang.reflect.Field field =
+                LakeOnlineRewriteJobBase.class.getDeclaredField("rewriteRetrySpentMs");
+        field.setAccessible(true);
+        return ((Map<Long, Long>) field.get(job)).get(physicalPartitionId);
+    }
+
+    /** Whether the failure-streak map is empty, i.e. the state a replayed job starts from. */
+    @SuppressWarnings("unchecked")
+    private static boolean rewriteFailureMapIsEmpty(LakeOnlineRewriteJobBase job) throws Exception {
+        java.lang.reflect.Field field =
+                LakeOnlineRewriteJobBase.class.getDeclaredField("rewriteRetrySpentMs");
+        field.setAccessible(true);
+        return ((Map<Long, Long>) field.get(job)).isEmpty();
+    }
+
+    /**
      * A VISIBLE TransactionState for a shadow-rewrite txn, so the tightened resume classifier
      * can be driven. The tighter gate only counts a VISIBLE txn as DONE when it is genuinely this job's
      * shadow-rewrite carrier: {@code isShadowRewrite()} with a matching watershed txn id and alter version.
      */
+    private static TransactionState shadowRewriteTransactionState(long watershedTxnId, long alterVersion) {
+        return shadowRewriteTransactionState(watershedTxnId, alterVersion, 0L);
+    }
+
+    private static TransactionState shadowRewriteTransactionState(long watershedTxnId, long alterVersion,
+                                                                    long loadedRows) {
+        TransactionState state = new TransactionState(0L, new ArrayList<>(), 0L, "shadow",
+                null, TransactionState.LoadJobSourceType.SHADOW_REWRITE,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                0L, 60_000L);
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(loadedRows);
+        attachment.setShadowRewriteWatershedTxnId(watershedTxnId);
+        attachment.setShadowRewriteAlterVersion(alterVersion);
+        state.setTxnCommitAttachment(attachment);
+        return state;
+    }
+
     private static void mockShadowRewriteTransaction(long watershedTxnId, long alterVersion) {
         mockShadowRewriteTransaction(watershedTxnId, alterVersion, 0L);
     }
 
     private static void mockShadowRewriteTransaction(long watershedTxnId, long alterVersion, long loadedRows) {
+        TransactionState state = shadowRewriteTransactionState(watershedTxnId, alterVersion, loadedRows);
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {
-                TransactionState state = new TransactionState(dbId, new ArrayList<>(), transactionId, "shadow",
-                        null, TransactionState.LoadJobSourceType.SHADOW_REWRITE,
-                        new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
-                        0L, 60_000L);
-                state.setTransactionStatus(TransactionStatus.VISIBLE);
-                InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(loadedRows);
-                attachment.setShadowRewriteWatershedTxnId(watershedTxnId);
-                attachment.setShadowRewriteAlterVersion(alterVersion);
-                state.setTxnCommitAttachment(attachment);
                 return state;
             }
         };
+    }
+
+    /**
+     * Report a different TransactionState per txn id, so one partition can be a published
+     * shadow-rewrite carrier while another is aborted. The single-status mockTransactionStatus above
+     * cannot express that.
+     */
+    private static void mockTransactionStatusById(Map<Long, TransactionState> byTxnId) {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return byTxnId.get(transactionId);
+            }
+        };
+    }
+
+    /**
+     * The impact claim of the fix: when one partition's rewrite INSERT fails transiently, a partition
+     * that has already published keeps its rewrite - neither re-run nor discarded. Before the fix the
+     * failure cancelled the job, and cancelImpl -> removeShadowIndexOnCancel dropped the shared shadow
+     * index together with every completed partition's tablets.
+     */
+    @Test
+    public void testAPublishedPartitionSurvivesAnotherPartitionsRetry() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = twoPartitionJobInRunning();
+
+        // Take the scheduler's OWN iteration order, so the published partition is the one it reaches
+        // first and the failing partition is genuinely only reached after a DONE skip.
+        List<Long> inSchedulerOrder = new ArrayList<>(job.getPartitionIdsForTest());
+        Assertions.assertEquals(2, inSchedulerOrder.size());
+        long publishedPartitionId = inSchedulerOrder.get(0);
+        long failingPartitionId = inSchedulerOrder.get(1);
+
+        // Snapshot the published partition's shadow IDENTITY before the retry, so we can prove it is the
+        // same index object with the same tablets afterwards - not merely that some shadow still exists.
+        long shadowIndexMetaId = job.getShadowIndexMetaId();
+        // getLatestIndex resolves a meta id; getIndex is physical-index-id keyed and misses a
+        // resharded index (PhysicalPartition.java:595-601).
+        MaterializedIndex publishedShadowBefore =
+                partitionedTable.getPhysicalPartition(publishedPartitionId).getLatestIndex(shadowIndexMetaId);
+        Assertions.assertNotNull(publishedShadowBefore);
+        List<Long> publishedTabletIdsBefore = publishedShadowBefore.getTablets().stream()
+                .map(Tablet::getId).collect(Collectors.toList());
+
+        // The first partition has already published its rewrite; the second one's INSERT keeps failing.
+        long publishedTxnId = 555001L;
+        job.setRewriteTxnIdForTest(publishedPartitionId, publishedTxnId);
+        mockTransactionStatusById(Map.of(publishedTxnId, shadowRewriteTransactionState(
+                job.getTransactionId().get(), job.getWatershedVersion(publishedPartitionId))));
+
+        List<Long> attempted = new ArrayList<>();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            attempted.add(context.getScanVersionOverride().keySet().iterator().next());
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+        job.runRunningJob();
+
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                "a transient failure on one partition must not cancel the job");
+        Assertions.assertEquals(List.of(failingPartitionId, failingPartitionId), attempted,
+                "both attempts must target the failing partition; the published one must be skipped");
+        Assertions.assertEquals(publishedTxnId, job.getRewriteTxnId(publishedPartitionId).longValue(),
+                "the published partition must keep its rewrite txn id");
+        MaterializedIndex publishedShadowAfter =
+                partitionedTable.getPhysicalPartition(publishedPartitionId).getLatestIndex(shadowIndexMetaId);
+        Assertions.assertSame(publishedShadowBefore, publishedShadowAfter,
+                "the published partition's shadow index must be the same object, not a rebuilt one");
+        Assertions.assertEquals(publishedTabletIdsBefore, publishedShadowAfter.getTablets().stream()
+                        .map(Tablet::getId).collect(Collectors.toList()),
+                "the published partition's shadow tablets must be identical after the retry");
+    }
+
+    /**
+     * The retry diagnostic must belong to the partition that is stalled. A sibling partition reaching
+     * DONE must not clear it, or the operator loses the only visible sign that a rewrite is stuck.
+     *
+     * <p>The stalled partition must be genuinely WAITING on tick 2, not re-running: if it re-ran it
+     * would immediately republish the same message and a wrongly-scoped clear would be invisible. So its
+     * failing attempt allocates a real txn id and that txn is then reported COMMITTED, which
+     * classifyRewrite maps to IN_FLIGHT - the one state in which the partition is visited but not
+     * executed.
+     */
+    @Test
+    public void testASiblingPartitionReachingDoneDoesNotClearTheRetryDiagnostic() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = twoPartitionJobInRunning();
+        List<Long> inSchedulerOrder = new ArrayList<>(job.getPartitionIdsForTest());
+        long publishedPartitionId = inSchedulerOrder.get(0);
+        long failingPartitionId = inSchedulerOrder.get(1);
+
+        long publishedTxnId = 555002L;
+        job.setRewriteTxnIdForTest(publishedPartitionId, publishedTxnId);
+
+        AtomicLong failingTxnId = new AtomicLong();
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            attempts.incrementAndGet();
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            failingTxnId.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        // Tick 1: the published partition is skipped as DONE; the failing one runs, fails, and publishes
+        // its diagnostic. Its real txn id is kept (the speculative-id guard only clears an unallocated one).
+        mockTransactionStatusById(Map.of(publishedTxnId, shadowRewriteTransactionState(
+                job.getTransactionId().get(), job.getWatershedVersion(publishedPartitionId))));
+        job.runRunningJob();
+
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        String msgAfterFailure = String.valueOf(infos.get(0).get(10));
+        Assertions.assertTrue(msgAfterFailure.contains(String.valueOf(failingPartitionId)),
+                "the failing partition must publish its own diagnostic, was: " + msgAfterFailure);
+
+        // Tick 2: the published partition is DONE again, and the failing partition's txn is COMMITTED, so
+        // it is visited as IN_FLIGHT and NOT executed. This is the tick on which a globally-scoped clear
+        // would wipe its message with nothing left to restore it.
+        TransactionState committed = new TransactionState();
+        committed.setTransactionStatus(TransactionStatus.COMMITTED);
+        mockTransactionStatusById(Map.of(
+                publishedTxnId, shadowRewriteTransactionState(
+                        job.getTransactionId().get(), job.getWatershedVersion(publishedPartitionId)),
+                failingTxnId.get(), committed));
+        job.runRunningJob();
+
+        Assertions.assertEquals(1, attempts.get(),
+                "the stalled partition must not be re-executed on the waiting tick, or the test cannot "
+                        + "distinguish a surviving diagnostic from a republished one");
+        infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals(msgAfterFailure, String.valueOf(infos.get(0).get(10)),
+                "the stalled partition's diagnostic must survive a sibling partition's DONE");
     }
 
     @Test
@@ -2103,5 +2328,965 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         MaterializedIndex newBaseIndex = table.getPhysicalPartition(physicalPartitionId).getLatestBaseIndex();
         Assertions.assertEquals(1, newBaseIndex.getTablets().size(),
                 "an empty partition flips to a single full-range tablet");
+    }
+
+    // ---- bounded retry of a failed rewrite INSERT (StarRocksTest #12156) ----------------
+
+    /**
+     * A transient compute-node loss fails the rewrite INSERT the way production does: StmtExecutor
+     * swallows the exception and leaves the ConnectContext in ERR. Before the fix this threw
+     * AlterCancelException, which AlterJobV2.run() turns into a cancel that drops the shared shadow
+     * index and every partition already rewritten.
+     */
+    @Test
+    public void testTransientRewriteInsertFailureKeepsTheJobRunningForTheNextTick() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        long shadowIndexMetaId = job.getShadowIndexMetaId();
+
+        job.setRewriteExecutor((context, insertStmt) ->
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                "a transient rewrite INSERT failure must leave the job RUNNING, not cancel it");
+        // getLatestIndex, not getIndex: getIndex is keyed by physical index id and provably misses a
+        // resharded index (PhysicalPartition.java:595-601; the existing suite states it at :522).
+        Assertions.assertNotNull(
+                table.getPhysicalPartition(physicalPartitionId).getLatestIndex(shadowIndexMetaId),
+                "the shadow index must survive a transient rewrite failure");
+    }
+
+    /**
+     * An attempt that failed before it could begin a transaction must not leave its speculative peeked
+     * txn id journaled: peekNextTransactionId() only predicts the next id, so a concurrent load can take
+     * it, and classifyRewrite would then report that stranger's PREPARE/COMMITTED state as IN_FLIGHT -
+     * stalling the job past its retry budget, and making a later cancel abort an unrelated load.
+     */
+    @Test
+    public void testFailureThatBegunNoTransactionClearsTheSpeculativeTxnId() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        // Capture what is actually WRITTEN TO THE JOURNAL, not just the live field: AlterJobV2.run's
+        // persistStateChange snapshots the job via copyForPersist BEFORE logging (AlterJobV2:338-343),
+        // so a later change to the live field cannot repair an already-written entry. Asserting only the
+        // live field would stay green if the persistStateChange in the ERR branch were deleted, leaving
+        // the durable record still naming a transaction that may belong to a concurrent load.
+        List<AlterJobV2> loggedSnapshots = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                loggedSnapshots.add(alterJob);
+            }
+        };
+
+        // The stub leaves insertStmt.getTxnId() at DmlStmt.INVALID_TXN_ID, i.e. no txn was begun.
+        job.setRewriteExecutor((context, insertStmt) ->
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
+
+        job.runRunningJob();
+
+        Assertions.assertNull(job.getRewriteTxnId(physicalPartitionId),
+                "a failed attempt that begun no transaction must not leave its peeked id in memory");
+        Assertions.assertFalse(loggedSnapshots.isEmpty(), "the attempt must have journaled something");
+        AlterJobV2 lastLogged = loggedSnapshots.get(loggedSnapshots.size() - 1);
+        Assertions.assertNull(
+                ((LakeRangeRewriteSchemaChangeJob) lastLogged).getRewriteTxnId(physicalPartitionId),
+                "the LAST journaled snapshot must not name the speculative peeked transaction id");
+    }
+
+    /**
+     * The complement of the test above: when the attempt DID allocate a transaction, that real id must
+     * survive the ERR branch - it is the evidence classifyRewrite needs, and for a COMMITTED txn it is
+     * what makes the job wait for publication instead of rewriting the partition twice.
+     */
+    @Test
+    public void testFailureThatAllocatedATransactionKeepsItsRealTxnId() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        AtomicLong allocated = new AtomicLong();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            allocated.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(allocated.get(), job.getRewriteTxnId(physicalPartitionId).longValue(),
+                "a real allocated transaction id must not be cleared by the speculative-id guard");
+    }
+
+    /**
+     * An attempt that fails after beginning a transaction but before it commits must have that
+     * transaction aborted before the retry yields the tick. Otherwise classifyRewrite keeps reporting it
+     * IN_FLIGHT on every later tick, and the retry budget in retryPartitionRewrite is never consulted
+     * again - the partition stalls until the transaction's own timeout instead of retrying.
+     */
+    @Test
+    public void testRetryAbortsAnUncommittedRewriteTxnBeforeYielding() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        AtomicLong allocated = new AtomicLong();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            allocated.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        List<Long> abortedTxnIds = new ArrayList<>();
+        new MockUp<GlobalTransactionMgr>() {
+            // Models the real manager: the abort moves the transaction to ABORTED, which is what the
+            // production code re-reads afterwards instead of assuming the abort took effect.
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(abortedTxnIds.contains(transactionId)
+                        ? TransactionStatus.ABORTED : TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                abortedTxnIds.add(transactionId);
+            }
+        };
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(List.of(allocated.get()), abortedTxnIds,
+                "a PREPARE rewrite txn must be aborted before the retry yields the tick");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                "the job must stay RUNNING so a later tick can retry the partition");
+    }
+
+    /**
+     * The complement: a COMMITTED rewrite txn must NOT be aborted when its partition is retried. It is
+     * the deliberate publication wait - the lake publisher will still carry it to VISIBLE, at which point
+     * classifyRewrite reports DONE, so there is nothing to abort. Proves the abort call itself is
+     * skipped, not merely that the transaction manager would reject it.
+     */
+    @Test
+    public void testRetryLeavesACommittedRewriteTxnAlone() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        AtomicReference<Boolean> abortCalled = new AtomicReference<>(false);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                abortCalled.set(true);
+            }
+        };
+
+        job.runRunningJob();
+
+        Assertions.assertFalse(abortCalled.get(),
+                "a COMMITTED rewrite txn must not be aborted - it is the publication wait");
+    }
+
+    /**
+     * Each retry of an aborted rewrite must journal a FRESH transaction id - BE forbids reusing an
+     * aborted one. Driven with executors that really allocate ids, because peekNextTransactionId() does
+     * not advance the counter, so a stub that allocates nothing would journal the same predicted id
+     * twice and could never prove this.
+     */
+    @Test
+    public void testEachRetryOfAnAbortedRewriteJournalsAFreshTxnId() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        // Capture the journaled snapshots too, not just the live field: with the allocated id equal to
+        // the peeked one the reconciliation branch writes nothing, so a live-field-only assertion would
+        // still pass if the pre-execution persistStateChange were deleted.
+        List<AlterJobV2> loggedSnapshots = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                loggedSnapshots.add(alterJob);
+            }
+        };
+
+        List<Long> allocatedIds = new ArrayList<>();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            allocatedIds.add(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        // Both attempts' transactions report ABORTED, so the partition stays NEEDS_RUN and is re-run.
+        mockTransactionStatus(TransactionStatus.ABORTED);
+        job.runRunningJob();
+        Long firstJournaled = job.getRewriteTxnId(physicalPartitionId);
+        job.runRunningJob();
+        Long secondJournaled = job.getRewriteTxnId(physicalPartitionId);
+
+        Assertions.assertEquals(2, allocatedIds.size(), "the aborted partition must be re-attempted");
+        Assertions.assertNotEquals(allocatedIds.get(0), allocatedIds.get(1));
+        Assertions.assertEquals(allocatedIds.get(0), firstJournaled);
+        Assertions.assertEquals(allocatedIds.get(1), secondJournaled);
+        Assertions.assertNotEquals(firstJournaled, secondJournaled,
+                "each retry must journal a fresh rewrite transaction id");
+
+        // Each attempt's id must actually have reached the journal, not only the live field.
+        List<Long> snapshotIds = loggedSnapshots.stream()
+                .map(j -> ((LakeRangeRewriteSchemaChangeJob) j).getRewriteTxnId(physicalPartitionId))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Assertions.assertTrue(snapshotIds.containsAll(allocatedIds),
+                "both attempts' transaction ids must appear in the journaled snapshots, saw " + snapshotIds);
+    }
+
+    /**
+     * Budget 0 disables retrying, which is exactly the pre-fix behaviour, and the cancel must carry the
+     * real rewrite error rather than a synthetic one.
+     */
+    @Test
+    public void testRewriteInsertFailureCancelsWithTheRealErrorWhenRetryingIsDisabled() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            Config.lake_online_rewrite_partition_retry_timeout_second = 0;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+            job.setRewriteExecutor((context, insertStmt) ->
+                    context.getState().setError("Query cancelled by crash of backends."));
+
+            AlterCancelException ex =
+                    Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+            Assertions.assertTrue(ex.getMessage().contains("Query cancelled by crash of backends."),
+                    "the cancel must report the last real rewrite error, was: " + ex.getMessage());
+            Assertions.assertTrue(ex.getMessage().contains(String.valueOf(physicalPartitionId)),
+                    "the cancel must name the failing partition, was: " + ex.getMessage());
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * The positive-budget exhaustion branch: once the window has elapsed the job cancels, and it reports
+     * the LAST failure's message, not the first one. Without this test the elapsedMs > budgetMs branch
+     * could be deleted and every other test would still pass.
+     */
+    @Test
+    public void testRetryBudgetExhaustionCancelsWithTheMostRecentError() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            // Pin both: the attempt budget is the window divided by the tick, so a test that reasons
+            // about the threshold must not inherit whatever the harness left the tick at.
+            Config.lake_online_rewrite_partition_retry_timeout_second = 60;
+            Config.alter_scheduler_interval_millisecond = 10000;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            AtomicInteger attempts = new AtomicInteger();
+            job.setRewriteExecutor((context, insertStmt) -> context.getState().setError(
+                    attempts.incrementAndGet() == 1
+                            ? FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
+                            : "Query cancelled by crash of backends."));
+
+            // First failure: inside the window, so the job keeps going.
+            job.runRunningJob();
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+            // Seed the episode as having already spent more than the 60s window, so the next failure
+            // exhausts it, instead of waiting out six real scheduler ticks. Then fail again with a
+            // DIFFERENT error, to pin which one the cancel reports.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 61_000L);
+            AlterCancelException ex =
+                    Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+            Assertions.assertTrue(ex.getMessage().contains("Query cancelled by crash of backends."),
+                    "an exhausted budget must cancel with the most recent rewrite error, was: " + ex.getMessage());
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * The whole point of the fix: a partition whose INSERT failed once is re-attempted on a later tick,
+     * and once its rewrite publishes the job carries on to FINISHED_REWRITING.
+     */
+    @Test
+    public void testRetriedPartitionRewriteIsReattemptedAndThenCompletesTheJob() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            if (attempts.incrementAndGet() == 1) {
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        });
+
+        // Tick 1: the INSERT fails and the job waits.
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertEquals(1, attempts.get());
+
+        // Tick 2: the partition is still NEEDS_RUN (its id was cleared), so it is re-attempted and this
+        // time the INSERT succeeds.
+        job.runRunningJob();
+        Assertions.assertEquals(2, attempts.get(), "the failed partition must be re-attempted");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        // Tick 3: its rewrite txn is now a published shadow-rewrite carrier, so the job finishes rewriting.
+        job.setRewriteTxnIdForTest(physicalPartitionId, 987654L);
+        mockShadowRewriteTransaction(job.getTransactionId().get(),
+                job.getWatershedVersion(physicalPartitionId));
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState(),
+                "a partition that succeeds on retry must carry the job through");
+    }
+
+    /**
+     * The budget is per partition and a successful attempt ends that partition's failure streak, so a
+     * later failure starts a fresh window. Driven with a positive budget and an aged timestamp, so it
+     * fails if the production code stops clearing the streak.
+     */
+    @Test
+    public void testASuccessfulAttemptClearsThePartitionFailureStreak() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            // Pin both: the attempt budget is the window divided by the tick, so a test that reasons
+            // about the threshold must not inherit whatever the harness left the tick at.
+            Config.lake_online_rewrite_partition_retry_timeout_second = 60;
+            Config.alter_scheduler_interval_millisecond = 10000;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            AtomicInteger attempts = new AtomicInteger();
+            // fail, succeed, fail.
+            job.setRewriteExecutor((context, insertStmt) -> {
+                int attempt = attempts.incrementAndGet();
+                if (attempt == 1 || attempt == 3) {
+                    context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+                }
+            });
+
+            job.runRunningJob();                                     // attempt 1: fails, streak starts
+            // Spend the window. If the streak is NOT cleared by the success below, the third attempt's
+            // failure will find an exhausted window and cancel the job.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 61_000L);
+            job.runRunningJob();                                     // attempt 2: succeeds, streak cleared
+            job.runRunningJob();                                     // attempt 3: fails in a FRESH window
+
+            Assertions.assertEquals(3, attempts.get());
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                    "a failure after a successful attempt must start a new budget window");
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * A retry must be visible in SHOW ALTER TABLE COLUMN's Msg column while the job is still RUNNING.
+     * getInfo emits errMsg regardless of job state, and AlterJobV2.checkTableStable already reports a
+     * waiting job the same way.
+     */
+    @Test
+    public void testRetryIsReportedInTheMsgColumn() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        job.setRewriteExecutor((context, insertStmt) ->
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
+        job.runRunningJob();
+
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        String msg = String.valueOf(infos.get(0).get(10));
+        Assertions.assertTrue(msg.contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR),
+                "Msg must explain why the rewrite is stalled, was: " + msg);
+        Assertions.assertTrue(msg.contains(String.valueOf(physicalPartitionId)),
+                "Msg must name the partition being retried, was: " + msg);
+    }
+
+    /**
+     * The retry diagnostic must survive a leader failover, so it has to reach the journal - not just the
+     * live field. errMsg is written after this attempt's own persistStateChange calls, so if the set were
+     * not journaled a replay would restore the preceding snapshot and SHOW ALTER TABLE COLUMN would lose
+     * the reason the partition is stalled. Asserting on the captured snapshots rather than on getInfo is
+     * the whole point: getInfo reads the live field and would pass either way.
+     */
+    @Test
+    public void testRetryDiagnosticIsJournaledAndItsClearIsJournaledToo() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        List<String> loggedMsgs = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                loggedMsgs.add(alterJob.errMsg);
+            }
+        };
+
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            if (attempts.incrementAndGet() == 1) {
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        });
+
+        job.runRunningJob();
+        Assertions.assertTrue(
+                loggedMsgs.stream().anyMatch(m -> m != null
+                        && m.contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)
+                        && m.contains(String.valueOf(physicalPartitionId))),
+                "the retry diagnostic must appear in a journaled snapshot, saw: " + loggedMsgs);
+
+        // The retry succeeds, which clears the diagnostic; that clear must be journaled as well,
+        // otherwise a failover during the publication wait would restore the stale failure message onto
+        // a partition whose rewrite actually succeeded.
+        loggedMsgs.clear();
+        job.runRunningJob();
+        Assertions.assertEquals(2, attempts.get(), "the failed partition must be re-attempted");
+        Assertions.assertTrue(loggedMsgs.stream().anyMatch(""::equals),
+                "the cleared diagnostic must appear in a journaled snapshot, saw: " + loggedMsgs);
+    }
+
+    /**
+     * What makes a failed attempt's partition retryable is its transaction reaching a terminal state, so
+     * that must happen BEFORE the journal write that only records why we are retrying. If the order were
+     * reversed, a leader exiting between the two would replay a job whose transaction is still PREPARE,
+     * and classifyRewrite would report IN_FLIGHT on every later tick instead of re-running the partition.
+     */
+    @Test
+    public void testTheFailedTransactionIsAbortedBeforeTheDiagnosticIsJournaled() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        List<String> order = new ArrayList<>();
+        // classifyRewrite returns NEEDS_RUN without consulting the manager while the journaled id is
+        // still null, so getTransactionState here is reached only from the abort path under test.
+        new MockUp<GlobalTransactionMgr>() {
+            // As above, the abort really moves the transaction to ABORTED.
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(order.contains("abort")
+                        ? TransactionStatus.ABORTED : TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                order.add("abort");
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                if (alterJob.errMsg != null && !alterJob.errMsg.isEmpty()) {
+                    order.add("journal-diagnostic");
+                }
+            }
+        };
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            insertStmt.setTxnId(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId());
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(List.of("abort", "journal-diagnostic"), order,
+                "the failed transaction must be aborted before the retry diagnostic is journaled");
+    }
+
+    /**
+     * The retry budget must not be spent by time the job spends waiting on a DIFFERENT partition. It
+     * counts consecutive failed ATTEMPTS for this partition, so a partition that failed once and was then
+     * not attempted for many ticks still gets its full budget when the job comes back to it. Measuring
+     * elapsed wall time instead would let a sibling partition's publication wait exhaust this partition's
+     * window and cancel the whole job after a single real retry.
+     */
+    @Test
+    public void testWaitingOnAnotherPartitionDoesNotSpendThisPartitionsBudget() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            // Pin both: the attempt budget is the window divided by the tick, so a test that reasons
+            // about the threshold must not inherit whatever the harness left the tick at.
+            Config.lake_online_rewrite_partition_retry_timeout_second = 60;
+            Config.alter_scheduler_interval_millisecond = 10000;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            job.setRewriteExecutor((context, insertStmt) ->
+                    context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
+
+            job.runRunningJob();
+            long afterFirst = rewriteRetrySpentMs(job, physicalPartitionId);
+            Assertions.assertTrue(afterFirst >= 10_000L && afterFirst < 20_000L,
+                    "one failed attempt must charge about one scheduler gap, was: " + afterFirst);
+
+            // Only this partition's own attempts move the meter, so ticks spent elsewhere cannot drain
+            // it however long they take. Under a plain elapsed-time window the assertion above reads a
+            // timestamp instead, which is what pins this behavior.
+            job.runRunningJob();
+            long afterSecond = rewriteRetrySpentMs(job, physicalPartitionId);
+            Assertions.assertTrue(afterSecond >= 20_000L && afterSecond < 30_000L,
+                    "a second attempt must charge a second gap and no more, was: " + afterSecond);
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                    "two attempts must not exhaust a 60s window");
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * An attempt that reported an error but whose transaction COMMITTED is not going to be retried - it is
+     * the publication wait. So it must not advertise "retrying" in Msg for the whole wait, and the wait
+     * must not count against the partition's retry budget.
+     */
+    @Test
+    public void testAnErrorWhoseTransactionCommittedNeitherClaimsARetryNorSpendsTheBudget() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        AtomicLong committedTxnId = new AtomicLong();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                if (transactionId != committedTxnId.get()) {
+                    return null;
+                }
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                Assertions.fail("a COMMITTED rewrite transaction must never be aborted");
+            }
+        };
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            committedTxnId.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "a committed rewrite awaiting publication must not advertise a retry in Msg");
+        Assertions.assertNull(rewriteRetrySpentMs(job, physicalPartitionId),
+                "the publication wait must not count against the partition's retry window");
+    }
+
+    /**
+     * The other way a failed attempt is left non-retryable: its transaction is still in PREPARE but the
+     * abort itself fails. The partition then waits for the transaction's own timeout, because
+     * {@code classifyRewrite} keeps reporting IN_FLIGHT until then - so this must not claim a retry, must
+     * not spend the budget, and must not cancel the job either.
+     */
+    @Test
+    public void testAnAbortFailureLeavesThePartitionWaitingRatherThanRetryingOrCancelling() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        AtomicLong preparedTxnId = new AtomicLong(-1);
+        AtomicInteger abortAttempts = new AtomicInteger();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                if (transactionId != preparedTxnId.get()) {
+                    return null;
+                }
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                abortAttempts.incrementAndGet();
+                throw new IllegalStateException("transaction manager rejected the abort");
+            }
+        };
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            preparedTxnId.set(txnId);
+            insertStmt.setTxnId(txnId);
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(1, abortAttempts.get(),
+                "a PREPARE transaction left by a failed attempt must have been offered for abort");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                "an abort that fails must leave the job running, not cancel it");
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "a partition whose transaction could not be aborted is waiting, not retrying");
+        Assertions.assertNull(rewriteRetrySpentMs(job, physicalPartitionId),
+                "waiting for the transaction timeout must not count against the partition's window");
+    }
+
+    /**
+     * An abort that returns normally without moving the transaction leaves the partition just as
+     * unretryable as one that throws: the next tick still classifies the transaction as in flight and
+     * waits. So the outcome is read back from the transaction rather than inferred from the abort
+     * returning, and this pins that - the stub accepts the abort and reports PREPARE regardless.
+     *
+     * <p>No reachable path does this today: {@code unprotectAbortTransaction} only declines an
+     * already-ABORTED state, or a PREPARED one when the caller passes {@code abortPrepared == false},
+     * and {@code GlobalTransactionMgr} passes {@code true}. The point is that this method no longer
+     * depends on that argument being chosen correctly two classes away.
+     */
+    @Test
+    public void testAnAbortThatDeclinesTheTransitionIsNotTreatedAsRetryable() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        AtomicInteger abortCalls = new AtomicInteger();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.PREPARE);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                abortCalls.incrementAndGet();
+            }
+        };
+
+        job.setRewriteExecutor((context, insertStmt) -> {
+            insertStmt.setTxnId(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId());
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(1, abortCalls.get(), "the abort must have been attempted");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "a transaction still in PREPARE after the abort must not advertise a retry in Msg");
+        Assertions.assertNull(rewriteRetrySpentMs(job, physicalPartitionId),
+                "a partition that is not actually retryable must not spend its retry window");
+    }
+
+    /**
+     * The attempt whose charge crosses the window cancels the job there and then. Deciding on the total
+     * BEFORE charging let that attempt be followed by one more full rewrite INSERT before anything
+     * noticed, and one INSERT may run for half the alter-job timeout, so that extra attempt could defer
+     * compaction well past the configured window.
+     */
+    @Test
+    public void testTheAttemptThatCrossesTheWindowCancelsWithoutStartingAnother() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            Config.lake_online_rewrite_partition_retry_timeout_second = 1;
+            Config.alter_scheduler_interval_millisecond = 0;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            AtomicInteger attempts = new AtomicInteger();
+            job.setRewriteExecutor((context, insertStmt) -> {
+                attempts.incrementAndGet();
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            });
+
+            // 850ms spent of a 1000ms window: this attempt's 200ms crosses it.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 850L);
+            AlterCancelException ex =
+                    Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+
+            Assertions.assertEquals(1, attempts.get(),
+                    "the attempt that crossed the window must not be followed by another INSERT");
+            Assertions.assertTrue(ex.getMessage().contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR),
+                    "the cancel must carry the real rewrite error, was: " + ex.getMessage());
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * The counterweight to cancelling as soon as the charge crosses the window: a partition whose single
+     * attempt costs more than the whole window still gets one retry. Without that, a rewrite that
+     * legitimately runs longer than the window would be cancelled by its first transient failure -
+     * discarding every partition already rewritten, which is the bug this retry exists to fix.
+     *
+     * <p>Driven by a scheduler interval larger than the window rather than by a long sleep, so one
+     * charge exceeds the window with no real waiting.
+     */
+    @Test
+    public void testTheFirstFailureOfAnEpisodeIsRetriedEvenIfItAloneExceedsTheWindow() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            Config.lake_online_rewrite_partition_retry_timeout_second = 1;
+            Config.alter_scheduler_interval_millisecond = 2000;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            AtomicInteger attempts = new AtomicInteger();
+            job.setRewriteExecutor((context, insertStmt) -> {
+                attempts.incrementAndGet();
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            });
+
+            // One charge is 2000ms against a 1000ms window, so only the guarantee can keep this alive.
+            job.runRunningJob();
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                    "the first failure of an episode must be retried even when it alone exceeds the window");
+            Assertions.assertTrue(rewriteRetrySpentMs(job, physicalPartitionId) >= 2000L,
+                    "the over-window charge must still be recorded");
+
+            // The guarantee is for the first failure only; the next one finds the window spent.
+            Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+            Assertions.assertEquals(2, attempts.get(), "exactly one retry may be granted");
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * A failed attempt is charged for how long it actually ran, not just for being an attempt. One rewrite
+     * INSERT can run for a long time before it fails - its insert timeout is half the alter timeout - and
+     * the scheduler sleeps only after a whole cycle, so a window converted into a fixed number of attempts
+     * would let a 600s setting stretch over hours while the vacuum pin is held and compaction deferred.
+     *
+     * <p>Pinned with the scheduler gap set to 0, so the charge under test is the attempt duration alone,
+     * and with the episode seeded just inside a 1s window so one short attempt tips it over. The sleep in
+     * the stub is load-bearing, unlike a sleep that merely lets time pass: the assertion cannot pass
+     * unless the production path measures real elapsed time across the executor call.
+     */
+    @Test
+    public void testAFailedAttemptIsChargedForHowLongItRan() throws Exception {
+        int savedBudget = Config.lake_online_rewrite_partition_retry_timeout_second;
+        int savedTick = Config.alter_scheduler_interval_millisecond;
+        try {
+            Config.lake_online_rewrite_partition_retry_timeout_second = 1;
+            Config.alter_scheduler_interval_millisecond = 0;
+            LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+            long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+            job.setRewriteExecutor((context, insertStmt) -> {
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            });
+
+            // 700ms spent of a 1000ms window: this attempt's 200ms brings it to 900ms, still inside.
+            setRewriteRetrySpentMs(job, physicalPartitionId, 700L);
+            job.runRunningJob();
+            long spentMs = rewriteRetrySpentMs(job, physicalPartitionId);
+            Assertions.assertTrue(spentMs >= 900L,
+                    "the attempt's own duration must be charged against the window, spent: " + spentMs);
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState(),
+                    "an attempt that leaves the episode inside the window is retried");
+
+            // Now over the window, so the next failure cancels rather than granting another long attempt.
+            AlterCancelException ex =
+                    Assertions.assertThrows(AlterCancelException.class, job::runRunningJob);
+            Assertions.assertTrue(ex.getMessage().contains(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR),
+                    "the cancel must carry the real rewrite error, was: " + ex.getMessage());
+        } finally {
+            Config.lake_online_rewrite_partition_retry_timeout_second = savedBudget;
+            Config.alter_scheduler_interval_millisecond = savedTick;
+        }
+    }
+
+    /**
+     * The sibling test above starts from a job with no diagnostic, so it can only show that this branch
+     * publishes none. This one gives the partition a diagnostic FIRST and then drives it into the same
+     * branch, which is the case an operator actually hits: a partition that was retrying stops retrying
+     * because its rewrite committed, and the "retrying" message must not outlive that decision for the
+     * length of the publication wait.
+     */
+    @Test
+    public void testARetryTurningIntoAPublicationWaitRetractsItsDiagnostic() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        List<String> loggedMsgs = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+                loggedMsgs.add(alterJob.errMsg);
+            }
+        };
+
+        AtomicLong committedTxnId = new AtomicLong(-1);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                if (transactionId != committedTxnId.get()) {
+                    return null;
+                }
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+        };
+
+        // Attempt 1 begins no transaction, so it is retryable and publishes the diagnostic. Attempt 2
+        // errors as well, but its transaction reached COMMITTED, so the partition is waiting to publish
+        // rather than retrying - and the message attempt 1 left behind has to be retracted.
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            if (attempts.incrementAndGet() == 2) {
+                long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionIDGenerator().getNextTransactionId();
+                committedTxnId.set(txnId);
+                insertStmt.setTxnId(txnId);
+            }
+            context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+
+        job.runRunningJob();
+        List<List<Comparable>> afterRetry = new ArrayList<>();
+        job.getInfo(afterRetry);
+        String msgAfterRetry = String.valueOf(afterRetry.get(0).get(10));
+        Assertions.assertTrue(msgAfterRetry.contains("retrying")
+                        && msgAfterRetry.contains(String.valueOf(physicalPartitionId)),
+                "attempt 1 must leave THIS partition's retry diagnostic for attempt 2 to retract, saw: "
+                        + msgAfterRetry);
+
+        loggedMsgs.clear();
+        job.runRunningJob();
+
+        Assertions.assertEquals(2, attempts.get(), "the retryable failure must be re-attempted");
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        List<List<Comparable>> afterWait = new ArrayList<>();
+        job.getInfo(afterWait);
+        Assertions.assertEquals("", String.valueOf(afterWait.get(0).get(10)),
+                "a partition waiting to publish must not still advertise a retry in Msg");
+        Assertions.assertTrue(loggedMsgs.stream().anyMatch(""::equals),
+                "the retraction must be journaled too, or a failover restores the stale retry message, "
+                        + "saw: " + loggedMsgs);
+    }
+
+    /**
+     * The retry diagnostic must be cleared once the partition's rewrite is observed published - and that
+     * must not depend on the transient failure map, which is empty after a leader failover replays the
+     * job. Simulated here by clearing the map (as replay leaves it) before the partition reaches DONE.
+     */
+    @Test
+    public void testRetryDiagnosticIsClearedOnObservedProgressEvenAfterReplay() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+
+        job.setRewriteExecutor((context, insertStmt) ->
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR));
+        job.runRunningJob();
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertNotEquals("", String.valueOf(infos.get(0).get(10)),
+                "the retry must have left a diagnostic to clear");
+
+        // A replayed job has the persisted errMsg but an empty transient failure map.
+        job.resetTransientState();
+        Assertions.assertTrue(rewriteFailureMapIsEmpty(job),
+                "resetTransientState must actually clear the transient failure map");
+
+        // The partition's rewrite is now a published shadow-rewrite carrier -> DONE.
+        job.setRewriteTxnIdForTest(physicalPartitionId, 424242L);
+        mockShadowRewriteTransaction(job.getTransactionId().get(),
+                job.getWatershedVersion(physicalPartitionId));
+        job.setRewriteExecutor((context, insertStmt) -> { });
+        job.runRunningJob();
+
+        infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "observed progress must clear the retry diagnostic even when the failure map was reset");
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+    }
+
+    /**
+     * The successful-attempt clear in runPartitionRewrite must be exercised on its own, before the
+     * partition ever reaches DONE - otherwise nothing distinguishes it from the DONE-arm clear. A
+     * fail-then-succeed sequence with the assertion taken right after the second (successful) attempt
+     * isolates it: the partition is not yet DONE on that tick, so only the successful-attempt clear can
+     * have cleared the message.
+     */
+    @Test
+    public void testASuccessfulRetryClearsTheDiagnosticBeforeThePartitionIsPublished() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+
+        AtomicInteger attempts = new AtomicInteger();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            if (attempts.incrementAndGet() == 1) {
+                context.getState().setError(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        });
+
+        // Tick 1: the INSERT fails, so the retry diagnostic is set.
+        job.runRunningJob();
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertNotEquals("", String.valueOf(infos.get(0).get(10)),
+                "the retry must have left a diagnostic to clear");
+
+        // Tick 2: the retried INSERT succeeds. The partition is still NEEDS_RUN (not yet DONE), so the
+        // DONE arm cannot have run this tick - the successful-attempt clear in runPartitionRewrite is
+        // the only thing that could clear the message here.
+        job.runRunningJob();
+        Assertions.assertEquals(2, attempts.get(), "the failed partition must be re-attempted");
+
+        infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertEquals("", String.valueOf(infos.get(0).get(10)),
+                "a successful retry must clear the diagnostic before the partition is observed DONE");
     }
 }
