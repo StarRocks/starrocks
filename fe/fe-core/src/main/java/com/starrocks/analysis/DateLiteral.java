@@ -339,7 +339,7 @@ public class DateLiteral extends LiteralExpr {
     private long makePackedDatetime() {
         long ymd = ((year * 13 + month) << 5) | day;
         long hms = (hour << 12) | (minute << 6) | second;
-        return ((ymd << 17) | hms) << 24 + microsecond;
+        return (((ymd << 17) | hms) << 24) + microsecond;
     }
 
     @Override
