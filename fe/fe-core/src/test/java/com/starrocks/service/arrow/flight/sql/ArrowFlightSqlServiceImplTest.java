@@ -91,6 +91,8 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -608,6 +610,24 @@ public class ArrowFlightSqlServiceImplTest {
 
         Schema parameterSchema = deserializeSchema(preparedStatementResult.getParameterSchema());
         assertTrue(parameterSchema.getFields().isEmpty());
+    }
+
+    @Test
+    public void testCreatePreparedStatementReportsAnalysisErrorWithoutRegisteringHandle() throws Exception {
+        String query = "SELECT missing_column";
+        FlightSql.ActionCreatePreparedStatementRequest request =
+                FlightSql.ActionCreatePreparedStatementRequest.newBuilder().setQuery(query).build();
+        ArrowFlightSqlConnectContext realContext = spy(new ArrowFlightSqlConnectContext("token123"));
+        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(realContext);
+        CapturingResultListener listener = new CapturingResultListener();
+
+        service.createPreparedStatement(request, mockCallContext, listener);
+
+        assertTrue(listener.await());
+        assertTrue(listener.error instanceof FlightRuntimeException);
+        assertNull(listener.result);
+        assertEquals(false, listener.completed);
+        verify(realContext, never()).addPreparedStatement(anyString());
     }
 
     @Test
