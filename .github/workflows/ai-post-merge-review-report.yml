@@ -1,0 +1,38 @@
+name: AI POST-MERGE REVIEW REPORT
+
+# Report half of the post-merge severe-risk review chain. Fires on codex's comments
+# on closed PRs; the script finds the codex review answering our post-merge trigger,
+# takes its findings, and opens a tracking issue assigned to the PR author. Returns
+# in seconds -- no polling. Idempotent (one issue per PR).
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  report:
+    name: AI Post-Merge Review (report)
+    if: >
+      github.repository == 'CelerData/celerdata-enterprise' &&
+      github.event.issue.pull_request &&
+      github.event.issue.state == 'closed' &&
+      github.event.comment.user.login == 'chatgpt-codex-connector[bot]'
+    runs-on: [self-hosted, light]
+    steps:
+      - name: open issue on codex post-merge findings
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+          MODE: report
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          PR_TITLE: ${{ github.event.issue.title }}
+          PR_AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool && git pull
+          python3 bin/post_merge_review.py
