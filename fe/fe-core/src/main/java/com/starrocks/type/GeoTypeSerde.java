@@ -14,12 +14,10 @@
 
 package com.starrocks.type;
 
-import com.starrocks.proto.GeoColumnDescPB;
 import com.starrocks.proto.GeoCoordinateSystemPB;
 import com.starrocks.proto.GeoEdgeAlgorithmPB;
 import com.starrocks.proto.GeoLogicalTypePB;
 import com.starrocks.proto.GeoTypeDescPB;
-import com.starrocks.thrift.TGeoColumnDesc;
 import com.starrocks.thrift.TGeoCoordinateSystem;
 import com.starrocks.thrift.TGeoEdgeAlgorithm;
 import com.starrocks.thrift.TGeoLogicalType;
@@ -30,7 +28,7 @@ final class GeoTypeSerde {
     private GeoTypeSerde() {
     }
 
-    static TGeoColumnDesc toThrift(GeoTypeDescriptor descriptor) {
+    static TGeoTypeDesc toThrift(GeoTypeDescriptor descriptor) {
         TGeoTypeDesc semantic = new TGeoTypeDesc();
         semantic.setLogical_type(TGeoLogicalType.valueOf(descriptor.logicalType().name()));
         semantic.setCoordinate_system(TGeoCoordinateSystem.valueOf(descriptor.coordinateSystem().name()));
@@ -39,10 +37,10 @@ final class GeoTypeSerde {
         if (descriptor.srid() != null) {
             semantic.setSrid(descriptor.srid());
         }
-        return new TGeoColumnDesc().setType(semantic);
+        return semantic;
     }
 
-    static GeoColumnDescPB toProtobuf(GeoTypeDescriptor descriptor) {
+    static GeoTypeDescPB toProtobuf(GeoTypeDescriptor descriptor) {
         GeoTypeDescPB semantic = new GeoTypeDescPB();
         semantic.logicalType = GeoLogicalTypePB.valueOf("GEO_LOGICAL_TYPE_" + descriptor.logicalType().name());
         semantic.coordinateSystem =
@@ -50,13 +48,10 @@ final class GeoTypeSerde {
         semantic.edgeAlgorithm = GeoEdgeAlgorithmPB.valueOf("GEO_EDGE_ALGORITHM_" + descriptor.edgeAlgorithm().name());
         semantic.crs = descriptor.crs();
         semantic.srid = descriptor.srid();
-        GeoColumnDescPB result = new GeoColumnDescPB();
-        result.type = semantic;
-        return result;
+        return semantic;
     }
 
-    static GeoTypeDescriptor fromThrift(TGeoColumnDesc descriptor) {
-        TGeoTypeDesc semantic = descriptor.isSetType() ? descriptor.type : new TGeoTypeDesc();
+    static GeoTypeDescriptor fromThrift(TGeoTypeDesc semantic) {
         return new GeoTypeDescriptor(
                 fromWire(semantic.logical_type, GeoTypeDescriptor.LogicalType.class, ""),
                 fromWire(semantic.coordinate_system, GeoTypeDescriptor.CoordinateSystem.class, ""),
@@ -64,8 +59,7 @@ final class GeoTypeSerde {
                 semantic.crs == null ? "" : semantic.crs, semantic.isSetSrid() ? semantic.srid : null);
     }
 
-    static GeoTypeDescriptor fromProtobuf(GeoColumnDescPB descriptor) {
-        GeoTypeDescPB semantic = descriptor.type == null ? new GeoTypeDescPB() : descriptor.type;
+    static GeoTypeDescriptor fromProtobuf(GeoTypeDescPB semantic) {
         return new GeoTypeDescriptor(
                 fromWire(semantic.logicalType, GeoTypeDescriptor.LogicalType.class, "GEO_LOGICAL_TYPE_"),
                 fromWire(semantic.coordinateSystem, GeoTypeDescriptor.CoordinateSystem.class, "GEO_COORDINATE_SYSTEM_"),
