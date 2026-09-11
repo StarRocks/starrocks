@@ -264,11 +264,14 @@ TEST_P(VariantFunctionsTestQuery, variant_query_with_test_data) {
     cctz::time_zone ctz;
     TimezoneUtils::find_cctz_time_zone("-04:00", ctz);
 
-    Datum datum = result->get(0);
+    // Ask the column whether the row is SQL NULL. A variant row is not expressible as a Datum -
+    // VariantColumn::get() refuses rather than hand out a pointer into the pool it never fills -
+    // and Datum::is_null() could never have answered this for a non-null row anyway: it only ever
+    // saw the empty Datum that NullableColumn::get() returns for a null row.
     if (param_result == "NULL") {
-        ASSERT_TRUE(datum.is_null());
+        ASSERT_TRUE(result->is_null(0));
     } else {
-        ASSERT_TRUE(!datum.is_null());
+        ASSERT_FALSE(result->is_null(0));
         auto json_result = variant_result_to_json(result, 0, ctz);
         ASSERT_TRUE(json_result.ok());
         std::string variant_str = json_result.value();
@@ -408,9 +411,9 @@ TEST_F(VariantFunctionsTest, variant_query_complex_types) {
     ASSERT_TRUE(!!result);
     ASSERT_EQ(1, result->size());
 
-    // Handle potential ConstColumn wrapping
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
+    // Handle potential ConstColumn wrapping. Read the null flag from the column: a variant row is
+    // not expressible as a Datum, and the value itself comes from get_row_value() below.
+    ASSERT_FALSE(result->is_null(0));
     auto json_result = variant_result_to_json(result, 0);
     ASSERT_TRUE(json_result.ok());
     const std::string& variant_str = json_result.value();

@@ -16,10 +16,13 @@
 
 #include <cctz/time_zone.h>
 
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "base/coding.h"
+#include "base/status.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -608,6 +611,68 @@ void VariantColumn::append_default(size_t count) {
     append_nulls(count);
 }
 
+// ObjectColumn implements the members below against the inherited `_pool`, which a VariantColumn
+// never writes to - its rows live in the metadata/remain base payload and the shredded typed
+// columns. Every one of them therefore has to be taken over here, the way JsonColumn took over the
+// same family when flat JSON moved its rows out of the pool. Left inherited they do not merely lose
+// an optimization: `_pool` is empty while size() reports the real row count, so the inherited
+// bodies index out of bounds or write rows that nothing can ever read back.
+
+// ObjectColumn::append_strings appends into `_pool` - rows that size() does not count and no reader
+// can reach. Decode each slice and go through the normal append path instead. Slice layout is
+// VariantRowValue's own: [uint32 total size][metadata][value].
+bool VariantColumn::append_strings(const Slice* data, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        auto row = VariantRowValue::create(data[i]);
+        if (!row.ok()) {
+            LOG(WARNING) << "Failed to create VariantRowValue from Slice: " << row.status().to_string();
+            return false;
+        }
+        append(row.value());
+    }
+    return true;
+}
+
+// A variant row is variable length in two separate BinaryColumns, so there is no in-place update.
+// Rebuild the way BinaryColumnBase::update_rows does when the replacement lengths differ, and let
+// append() reconcile a source whose shredded schema is not ours.
+void VariantColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    const size_t replace_num = src.size();
+    if (replace_num == 0) {
+        return;
+    }
+    const size_t num_rows = size();
+    auto rebuilt = VariantColumn::create();
+    size_t idx_begin = 0;
+    for (size_t i = 0; i < replace_num; i++) {
+        DCHECK_LT(indexes[i], num_rows);
+        if (indexes[i] > idx_begin) {
+            rebuilt->append(*this, idx_begin, indexes[i] - idx_begin);
+        }
+        rebuilt->append(src, i, 1);
+        idx_begin = indexes[i] + 1;
+    }
+    if (num_rows > idx_begin) {
+        rebuilt->append(*this, idx_begin, num_rows - idx_begin);
+    }
+    swap_column(*rebuilt);
+}
+
+void VariantColumn::fill_default(const Filter& filter) {
+    std::vector<uint32_t> indexes;
+    for (size_t i = 0; i < filter.size(); i++) {
+        if (filter[i] == 1) {
+            indexes.push_back(static_cast<uint32_t>(i));
+        }
+    }
+    if (indexes.empty()) {
+        return;
+    }
+    auto default_column = clone_empty();
+    default_column->append_default(indexes.size());
+    update_rows(*default_column, indexes.data());
+}
+
 size_t VariantColumn::size() const {
     return _shredded_num_rows();
 }
@@ -624,6 +689,65 @@ size_t VariantColumn::capacity() const {
         cap += col->capacity();
     }
     return cap;
+}
+
+// ObjectColumn reports `_pool.capacity() * type_size()`, which is always 0 for a variant and hides
+// the reservation reserve() now places on the base payload. Report the storage that actually holds
+// the rows, matching what capacity() and byte_size() already sum over.
+size_t VariantColumn::container_memory_usage() const {
+    size_t usage = 0;
+    if (_metadata_column != nullptr) {
+        usage += _metadata_column->container_memory_usage();
+    }
+    if (_remain_value_column != nullptr) {
+        usage += _remain_value_column->container_memory_usage();
+    }
+    for (const auto& col : _typed_columns) {
+        usage += col->container_memory_usage();
+    }
+    return usage;
+}
+
+// container_memory_usage() and reference_memory_usage() split a column's memory between the buffers
+// it owns and the memory those buffers only point at, and Column::memory_usage() adds the two. The
+// pair has to be taken over together: ObjectColumn's reference half reports byte_size(), which for
+// a variant is the bytes already counted inside the base payload's own containers, so overriding
+// only the container half would report them twice and trip query memory limits early. Split it the
+// way StructColumn does over its row-aligned fields - the base payload is BinaryColumn, whose
+// referenced memory is zero because every byte it holds is in its container.
+size_t VariantColumn::reference_memory_usage() const {
+    return reference_memory_usage(0, size());
+}
+
+size_t VariantColumn::reference_memory_usage(size_t from, size_t sz) const {
+    DCHECK_LE(from + sz, size()) << "Range error";
+    size_t usage = 0;
+    if (_metadata_column != nullptr) {
+        usage += _metadata_column->reference_memory_usage(from, sz);
+    }
+    if (_remain_value_column != nullptr) {
+        usage += _remain_value_column->reference_memory_usage(from, sz);
+    }
+    for (const auto& col : _typed_columns) {
+        usage += col->reference_memory_usage(from, sz);
+    }
+    return usage;
+}
+
+// Datum carries a non-owning `VariantRowValue*`, and a VariantColumn has no VariantRowValue to hand
+// out: a row is metadata and value bytes in two separate BinaryColumns, plus any typed overlay, and
+// only becomes a VariantRowValue when materialized into a buffer the caller owns. ObjectColumn's
+// inherited body returns `&_pool[n]` into the empty pool - a wild pointer that the one consumer of
+// such a Datum, append_datum(), then dereferences.
+//
+// A column-owned scratch buffer cannot rescue it either: ArrayColumn::get() builds a DatumArray by
+// calling get() once per element of the same elements column, so every Datum in an ARRAY<VARIANT>
+// row would alias the one buffer. Refuse instead of corrupting, and read rows with
+// get_row_value()/try_get_row_ref(), which take the buffer from the caller.
+// Deliberately a bare throw rather than the DCHECK-then-throw used elsewhere: the failure is then
+// identical in every build, so a test can pin it and a release build cannot silently corrupt.
+Datum VariantColumn::get(size_t n) const {
+    throw std::runtime_error("VariantColumn::get() is not supported; use get_row_value() or try_get_row_ref()");
 }
 
 size_t VariantColumn::byte_size(size_t from, size_t sz) const {
@@ -839,6 +963,26 @@ void VariantColumn::swap_column(Column& rhs) {
 void VariantColumn::reset_column() {
     BaseClass::reset_column();
     clear_shredded_columns();
+}
+
+// ObjectColumn's version guards `_pool.size()`, which is always 0 here, so the limit never fires.
+// Guard the real row count and let the base payload report its own byte-level limits: a variant
+// column reaches BinaryColumn's byte ceiling long before it reaches MAX_CAPACITY_LIMIT rows.
+Status VariantColumn::capacity_limit_reached() const {
+    if (size() > Column::MAX_CAPACITY_LIMIT) {
+        return Status::CapacityLimitExceed(strings::Substitute("row count of variant column exceed the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+    }
+    if (_metadata_column != nullptr) {
+        RETURN_IF_ERROR(_metadata_column->capacity_limit_reached());
+    }
+    if (_remain_value_column != nullptr) {
+        RETURN_IF_ERROR(_remain_value_column->capacity_limit_reached());
+    }
+    for (const auto& col : _typed_columns) {
+        RETURN_IF_ERROR(col->capacity_limit_reached());
+    }
+    return Status::OK();
 }
 
 void VariantColumn::check_or_die() const {

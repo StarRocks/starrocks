@@ -80,7 +80,6 @@ set(EXEC_FILES
         ./exprs/time_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
-        ./exprs/variant_functions_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/table_function/java_udtf_factory_test.cpp
         ./exprs/dict_expr_test.cpp

@@ -87,6 +87,7 @@ public:
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
     void append_value_multiple_times(const void* value, size_t count) override;
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
     void append(const VariantRowValue* object);
     void append(const VariantRowValue& object);
@@ -96,10 +97,16 @@ public:
     bool append_nulls(size_t count) override;
     void append_default() override;
     void append_default(size_t count) override;
+    void fill_default(const Filter& filter) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     size_t size() const override;
     size_t capacity() const override;
+    size_t container_memory_usage() const override;
+    size_t reference_memory_usage() const override;
+    size_t reference_memory_usage(size_t from, size_t size) const override;
     size_t byte_size(size_t from, size_t size) const override;
+    Datum get(size_t n) const override;
     void reserve(size_t n) override;
     void resize(size_t n) override;
     void assign(size_t n, size_t idx) override;
@@ -109,6 +116,7 @@ public:
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
     void swap_column(Column& rhs) override;
     void reset_column() override;
+    Status capacity_limit_reached() const override;
     void check_or_die() const override;
 
     bool is_variant() const override { return true; }
