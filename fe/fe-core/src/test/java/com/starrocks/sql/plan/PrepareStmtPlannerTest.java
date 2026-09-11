@@ -18,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.PrepareStmtContext;
+import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -471,7 +472,8 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
         Assertions.assertTrue(prepared.context().isCached());
 
         OlapTable table = getOlapTable("pq_stale");
-        table.lastSchemaUpdateTime.set(System.currentTimeMillis() + 3600_000L);
+        // stamp it the way production does: OptimisticVersion compares this field against its own nanoTime clock
+        table.lastSchemaUpdateTime.set(OptimisticVersion.generate());
         long oldLimit = connectContext.getSessionVariable().getSqlSelectLimit();
         connectContext.getSessionVariable().setSqlSelectLimit(100);
         try {
