@@ -84,6 +84,8 @@ public class SecurityIntegrationTest {
 
     @AfterEach
     public void tearDown() throws Exception {
+        Config.authentication_chain = new String[] {"native"};
+        Config.group_provider = new String[0];
     }
 
     /**
@@ -148,6 +150,58 @@ public class SecurityIntegrationTest {
         connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
         AuthenticationHandler.authenticate(
                 connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
+    }
+
+    @Test
+    public void testAuthenticationWithoutNegotiatedAuthPlugin() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateSecurityIntegration("oidc_flight", properties);
+
+        Config.authentication_chain = new String[] {"native", "oidc_flight"};
+
+        // Arrow Flight SQL, the HTTP REST API and the thrift service hand over the bare credential and never
+        // negotiate a MySQL authentication plugin.
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        ConnectContext connectContext = new ConnectContext();
+        Assertions.assertNull(connectContext.getAccessControlContext().getAuthPlugin());
+
+        UserIdentity authenticated = AuthenticationHandler.authenticate(
+                connectContext, "harbor", "127.0.0.1", idToken.getBytes(StandardCharsets.UTF_8));
+
+        Assertions.assertEquals("harbor", authenticated.getUser());
+        Assertions.assertEquals("oidc_flight", connectContext.getSecurityIntegration());
+        Assertions.assertEquals(idToken, connectContext.getAccessControlContext().getAuthToken());
+    }
+
+    @Test
+    public void testOAuth2IsSkippedWithoutNegotiatedAuthPlugin() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_oauth2");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_AUTH_SERVER_URL, "http://localhost:38080/auth");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_TOKEN_SERVER_URL, "http://localhost:38080/token");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_REDIRECT_URL, "http://localhost:8030/callback");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_CLIENT_ID, "starrocks");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_CLIENT_SECRET, "secret");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_JWKS_URL, "jwks.json");
+        properties.put(OAuth2AuthenticationProvider.OAUTH2_PRINCIPAL_FIELD, "preferred_username");
+        AuthenticationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        authMgr.replayCreateSecurityIntegration("oauth2_flight", properties);
+        Assertions.assertFalse(authMgr.getSecurityIntegration("oauth2_flight")
+                .getAuthenticationProvider().supportsUnnegotiatedCredential());
+
+        Config.authentication_chain = new String[] {"native", "oauth2_flight"};
+
+        // OAuth2 reports success without authenticating when its client plugin was not negotiated, and relies on
+        // the MySQL command phase to enforce the real check. It must never be selected for a bare credential.
+        ConnectContext connectContext = new ConnectContext();
+        Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
+                connectContext, "nobody", "127.0.0.1", "any-token".getBytes(StandardCharsets.UTF_8)));
+        Assertions.assertNull(connectContext.getCurrentUserIdentity());
     }
 
     private String getOpenIdConnect(String fileName) throws IOException {
