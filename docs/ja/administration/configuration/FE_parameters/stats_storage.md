@@ -116,6 +116,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：`dict_thrash_guard_window_sec` の時間ウィンドウ内で、グローバル辞書スラッシングガードが列のグローバル辞書の収集を禁止する無効化回数のしきい値です。`0` に設定すると、ガードを有効にしたまま回数チェックを無効にできます（どの列も自動的に禁止されません）。`enable_dict_thrash_guard` が `true` の場合にのみ有効です。
 - 導入時期：v4.2.0
 
+
+### `min_max_stats_collect_interval_sec`
+
+- デフォルト：60
+- タイプ：Int
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：同一列に対する 2 回の min/max 統計収集の最小間隔です。min/max 統計（`min()`/`max()` の定数畳み込みや圧縮 group-by キーの構築に使用）は、各 segment の zone-map メタデータを読む `[_META_]` MetaScan によりオンデマンドで収集されます。スロットリングしないと、頻繁にロードされる列はロードのたびに再スキャンし、グローバル辞書の再収集と同様に segment メタデータキャッシュを競合させます。間隔内では min/max 最適化は再収集ではなくスキップされます——古い値が返されることはないため、最適化のみに影響し、正しさには影響しません。`0` に設定するとスロットリングを無効にします。
+- 導入時期：v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - デフォルト：true

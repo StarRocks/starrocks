@@ -116,6 +116,16 @@ This topic introduces the following types of FE configurations:
 - Description: The number of dictionary invalidations within `dict_thrash_guard_window_sec` at which the global-dictionary thrash guard forbids collecting a column's global dictionary. Set to `0` to disable the count check while keeping the guard enabled (no column is automatically forbidden). This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
 - Introduced in: v4.2.0
 
+
+### `min_max_stats_collect_interval_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Minimum interval between two min/max statistics collections for the same column. Min/max stats (used to constant-fold `min()`/`max()` and to build compressed group-by keys) are collected on demand via a `[_META_]` MetaScan that reads every segment's zone-map metadata; without throttling a frequently loaded column re-scans on every load, contending on the segment metadata cache the same way global-dictionary re-collection does. Within the interval the min/max optimization is skipped rather than re-collected -- a stale value is never served, so this only affects the optimization, never correctness. Set to `0` to disable throttling.
+- Introduced in: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - Default: true
