@@ -1,9 +1,19 @@
 -- name: test_ai_provider
 CREATE AI PROVIDER ai_provider_embedding_test TYPE embedding COMMENT 'test embedding provider' PROPERTIES ("endpoint" = "https://api.openai.com/v1/embeddings", "model" = "text-embedding-3-small", "dimensions" = "1536", "api_key" = "sk-test");
+CREATE AI PROVIDER IF NOT EXISTS ai_provider_embedding_test TYPE embedding PROPERTIES ("endpoint" = "https://api.openai.com/v1/embeddings", "model" = "text-embedding-3-small");
+CREATE AI PROVIDER ai_provider_embedding_test TYPE embedding PROPERTIES ("endpoint" = "https://api.openai.com/v1/embeddings", "model" = "text-embedding-3-small");
+SHOW AI PROVIDERS LIKE 'ai_provider_embedding_test';
 DESC AI PROVIDER ai_provider_embedding_test;
 ALTER AI PROVIDER ai_provider_embedding_test SET ("timeout_ms" = "20000", "api_key" = "sk-new");
+SHOW AI PROVIDERS LIKE 'ai_provider_embedding_test';
 DESC AI PROVIDER ai_provider_embedding_test;
+ALTER AI PROVIDER IF EXISTS ai_provider_not_exist SET ("timeout_ms" = "1");
+ALTER AI PROVIDER ai_provider_not_exist SET ("timeout_ms" = "1");
+DESC AI PROVIDER ai_provider_not_exist;
 DROP AI PROVIDER ai_provider_embedding_test;
+SHOW AI PROVIDERS LIKE 'ai_provider_embedding_test';
+DROP AI PROVIDER IF EXISTS ai_provider_embedding_test;
+DROP AI PROVIDER ai_provider_not_exist;
 CLEANUP {
 DROP AI PROVIDER IF EXISTS ai_provider_embedding_test;
 } END CLEANUP
