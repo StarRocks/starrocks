@@ -76,9 +76,6 @@ struct TypeDescriptor {
     // Encoding, dimension and validation state belong to the column/transport layer.
     std::optional<GeoTypeDescriptor> geo_type;
 
-    static TypeDescriptor create_geo_type(LogicalType type, GeoTypeDescriptor descriptor);
-    bool is_geo_type() const;
-
     TypeDescriptor() = default;
 
     explicit TypeDescriptor(LogicalType type) : type(type) {}
@@ -192,6 +189,8 @@ struct TypeDescriptor {
         return ret;
     }
 
+    static TypeDescriptor create_geo_type(LogicalType type, GeoTypeDescriptor descriptor);
+
     static TypeDescriptor from_logical_type(LogicalType type,
                                             [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
                                             [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
@@ -304,6 +303,8 @@ struct TypeDescriptor {
     inline bool is_decimal_type() const {
         return (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_type());
     }
+
+    bool is_geo_type() const;
 
     inline bool is_unknown_type() const { return type == TYPE_UNKNOWN; }
 
