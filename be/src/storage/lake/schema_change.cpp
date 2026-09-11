@@ -829,9 +829,20 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     // honour new_schema_id -- and would then perform exactly the id-onto-stale-
     // content stamping described above. With the id reachable only through
     // new_schema, its `op.has_new_schema_id()` gate is false, so it skips schema
-    // mutation entirely: the IDG entries still publish, the schema keeps its old
-    // id, and the next write's update_metadata_schema() resyncs it from FE. The
-    // index is delayed, never permanently mis-bound.
+    // mutation entirely: the IDG entries still publish and the schema keeps its
+    // old id -- the permanent mis-binding is off the table.
+    //
+    // What this does NOT buy: that worker also never repoints rowset_to_schema
+    // pins, and a later write does not either (update_metadata_schema() refreshes
+    // metadata->schema(), while archive_current_schema_into_history() pins the
+    // existing rowsets to the OLD schema). A compaction of those pinned rowsets
+    // then resolves an un-flagged schema, writes no inline index, and drops the
+    // sidecar entries with its inputs. On a tablet published by a pre-new_schema
+    // worker the index therefore lasts only until compaction, landing in the
+    // fixed point pinned by
+    // MetaFileTest.test_apply_add_index_old_pin_is_a_compaction_fixed_point. The
+    // complete answer is a capability gate (or a wire format an old applier cannot
+    // partially apply); this placement is the part that keeps it from being worse.
     //
     // apply_add_index composes this with new_indexes above into the final schema,
     // so the compose logic lives in exactly one place.

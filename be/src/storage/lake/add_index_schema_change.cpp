@@ -403,15 +403,29 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     }
     size_t footer_size_hint = 16 * 1024;
     LakeIOOptions read_opts{.fill_data_cache = false};
-    // Open under the authoritative schema, not the tablet metadata schema.
+    // Open under the authoritative schema -- it is the LOGICAL schema of this
+    // alter, and the only one guaranteed to name the indexed column -- but do NOT
+    // seed the shared metacache with the result.
+    //
     // Segment::_create_column_readers() walks the schema it is given rather than
-    // the footer, so a column missing from that schema gets no ColumnReader even
-    // when the segment physically contains it - and with fill_meta_cache this
-    // Segment is what later readers reuse. A subset schema here would leave those
-    // readers unable to see the column at all.
+    // the footer, so a Segment opened here has readers only for the columns this
+    // alter's schema knows about. That is fine for a one-shot index build, and
+    // wrong as a shared object: after a metadata-only DROP COLUMN d, FE's schema
+    // no longer has d, yet the segment physically holds d and rowsets pinned to an
+    // older historical schema still read it. A query landing on a cached Segment
+    // opened without d would find no reader, fall through to the default-value
+    // iterator, and return NULL/default for a column that has real data. The
+    // logical schema of an alter and the physical read schema of a shared Segment
+    // are different things; only the latter may be cached.
+    //
+    // fill_meta_cache=false still returns an already-cached Segment when one
+    // exists. Its schema is whatever a reader opened it with -- the rowset's pin,
+    // which equals the write schema -- so it has a reader for the indexed column
+    // exactly when the segment physically carries it, which is what classification
+    // below needs.
     ASSIGN_OR_RETURN(auto segment,
                      _tablet_mgr->load_segment(seg_fileinfo, seg_idx_in_rowset, &footer_size_hint, read_opts,
-                                               /*fill_meta_cache*/ true, _authoritative_schema));
+                                               /*fill_meta_cache*/ false, _authoritative_schema));
 
     // 1b. Decide, per index, whether this segment can carry it. A column added by
     //     a metadata-only ALTER has no bytes in segments written before the ALTER,

@@ -608,7 +608,9 @@ message TxnLogPB {
         // id onto schema content that lacks the added column -- the permanent
         // mis-binding new_schema exists to prevent. Writers put the id/version
         // inside new_schema instead, so such a worker skips schema mutation
-        // altogether and the schema resyncs from FE on the next write.
+        // altogether. It still merges segment_entries and appends new_indexes,
+        // and never repoints rowset pins, so on that tablet the index survives
+        // only until compaction (see apply_add_index) -- bounded damage, not none.
         optional int64 new_schema_id = 4;
         optional int64 new_schema_version = 5;
         // The authoritative COLUMN DEFINITIONS this alter must publish, taken

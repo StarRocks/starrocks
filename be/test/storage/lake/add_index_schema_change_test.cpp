@@ -46,6 +46,7 @@
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/index_file_writer.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/test_util.h"
@@ -641,7 +642,10 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_happy_path) {
 // the new id onto content that lacks the ALTER-added column -- which
 // update_metadata_schema() then treats as current, freezing the incomplete schema
 // permanently. Leaving the standalone fields unset makes it skip schema mutation
-// instead, so the index is merely delayed until the next resync.
+// instead. That removes the permanent mis-binding; it does not make the index
+// safe on that tablet -- the worker still publishes the IDG entries without
+// repointing rowset pins, so the index lasts only until compaction of those
+// rowsets (MetaFileTest.test_apply_add_index_old_pin_is_a_compaction_fixed_point).
 TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
@@ -1686,6 +1690,75 @@ TEST_F(AddIndexSchemaChangeTest, run_rejects_null_authoritative_schema) {
 
     TxnLogPB_OpAddIndex op;
     EXPECT_FALSE(sc.run(&op).ok());
+}
+
+// The builder opens each segment under the alter's logical schema (FE's), which
+// may lack a column the segment physically holds -- after a metadata-only DROP
+// COLUMN, say. Segment::_create_column_readers() builds readers only for columns in
+// the schema it is given, so such a Segment has no reader for that column. Had the
+// builder seeded the shared metacache with it, a concurrent query still reading
+// the column through an older pinned schema would land on it, find no reader, and
+// read defaults in place of real data. The builder must therefore never publish
+// its Segment to the cache.
+//
+// Modelled here with the "narrower" direction directly: the authoritative schema
+// omits c3 (which every segment physically holds), and c1 is indexed.
+TEST_F(AddIndexSchemaChangeTest, run_does_not_seed_metacache_with_alter_schema) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/6);
+
+    // Authoritative schema for this alter: base minus c3 (as FE's would be after
+    // DROP COLUMN c3). The segment on disk still carries c3.
+    TabletSchemaPB narrower = base_metadata->schema();
+    narrower.clear_column();
+    for (const auto& col : base_metadata->schema().column()) {
+        if (col.unique_id() != _c3_uid) {
+            narrower.add_column()->CopyFrom(col);
+        }
+    }
+    auto authoritative = TabletSchema::create(narrower);
+
+    auto vt = versioned_at(base_tablet_id, version);
+    auto meta = vt.metadata();
+    ASSERT_TRUE(meta != nullptr && meta->rowsets_size() == 1);
+    const auto& segment_meta = meta->rowsets(0).segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, segment_meta.filename())};
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    const std::string cache_key = seg_fi.cache_key();
+    ASSERT_TRUE(_tablet_manager->metacache()->lookup_segment(cache_key) == nullptr) << "precondition: not cached";
+
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size()) << "c1 is present, so its index must be built";
+
+    // The alter's narrower Segment must not have been published to the cache.
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_segment(cache_key) == nullptr)
+            << "builder seeded the shared metacache with a Segment opened under a schema lacking c3; "
+               "a reader of c3 sharing it would get defaults instead of the segment's real values";
+
+    // And the stronger direction: a Segment a reader already cached under a schema
+    // WITH c3 must survive the alter with its c3 reader intact.
+    {
+        size_t footer_hint = 16 * 1024;
+        ASSIGN_OR_ABORT(auto reader_seg, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                       LakeIOOptions{.fill_data_cache = false},
+                                                                       /*fill_meta_cache=*/true, base_schema));
+        ASSERT_TRUE(reader_seg->column_with_uid(_c3_uid) != nullptr) << "precondition: cached with c3";
+    }
+    AddIndexSchemaChange sc2(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
+    TxnLogPB_OpAddIndex op2;
+    ASSERT_OK(sc2.run(&op2));
+    auto cached = _tablet_manager->metacache()->lookup_segment(cache_key);
+    ASSERT_TRUE(cached != nullptr);
+    EXPECT_TRUE(cached->column_with_uid(_c3_uid) != nullptr)
+            << "the alter replaced or narrowed the Segment a reader had cached with c3";
 }
 
 // End-to-end through the handler, in the exact shape the bug reproduced in: the

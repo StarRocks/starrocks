@@ -63,10 +63,15 @@ public:
     // to the alter request when there is one — see resolve_authoritative_schema()
     // in schema_change.cpp. Passing the tablet metadata schema instead is unsafe
     // under fast schema evolution v2, where it can be missing the very column
-    // being indexed, and would additionally seed the segment metacache with a
-    // subset schema (Segment::_create_column_readers walks the schema, not the
-    // footer, so a column absent from it gets no reader for every later reader
-    // that reuses the cached Segment).
+    // being indexed.
+    //
+    // This is the alter's LOGICAL schema. It is never used to seed the shared
+    // segment metacache (build_idg_for_segment opens with fill_meta_cache=false):
+    // Segment::_create_column_readers walks the schema it is given, so a Segment
+    // opened under a schema that lacks a column the segment physically holds --
+    // e.g. FE's schema after a metadata-only DROP COLUMN -- has no reader for it,
+    // and any reader sharing that cached object would get defaults instead of the
+    // real data.
     AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
                          VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build, int64_t alter_version,
                          TabletSchemaPtr authoritative_schema, ThreadPool* lake_schema_change_pool = nullptr);
