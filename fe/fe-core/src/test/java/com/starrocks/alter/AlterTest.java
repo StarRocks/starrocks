@@ -596,7 +596,7 @@ public class AlterTest {
         // alterTable(stmt, true);
 
         // no conflict
-        stmt = "alter table test.tbl1 add column k3 int, add column k4 int";
+        stmt = "alter table test.tbl1 add column k3 int key, add column k4 int key";
         alterTableWithNewParser(stmt, false);
         waitSchemaChangeJobDone(false, tbl);
 

@@ -1425,9 +1425,23 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (null == newColumn.getAggregationType()) {
                 Type type = newColumn.getType();
                 if (!type.canDistributedBy()) {
+                    // Reachable only for the ambiguous case below: an explicit KEY on a non-key-capable
+                    // type is already rejected by ColumnDefAnalyzer. Keep this rejection ahead of the
+                    // ambiguity check so the message never suggests KEY for a type that cannot be a key.
                     throw new DdlException(
                             "column without agg function will be treated as key column for aggregate table, " + type +
                                     " type can not be key column");
+                }
+                if (!newColumn.isKey() && !Config.allow_implicit_key_column_in_agg_add_column) {
+                    // Neither an agg function nor KEY was written. Promoting such a column to a key
+                    // column changes the table's aggregation key and rewrites existing data, so when
+                    // this is switched off, require the user to say which one they meant.
+                    throw new DdlException("Column '" + newColName + "' on aggregate table '" +
+                            olapTable.getName() + "' must specify either an aggregate function, making it a " +
+                            "value column, or the KEY keyword, making it a key column. Adding a key column " +
+                            "changes the table's aggregation key and rewrites existing data. To allow such a " +
+                            "column to be created as a key column instead, set FE config " +
+                            "allow_implicit_key_column_in_agg_add_column to true.");
                 }
                 newColumn.setIsKey(true);
             } else if (newColumn.getAggregationType() == AggregateType.SUM
@@ -5030,6 +5044,10 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private static boolean addTouchesKeyDerivedRangeSortKey(OlapTable table, ColumnDef columnDef) {
         long baseIndexMetaId = table.getBaseIndexMetaId();
+        // Mirrors the implicit-key rule in addColumnInternal's AGG_KEYS branch. That branch now rejects
+        // the no-agg-no-KEY shape unless allow_implicit_key_column_in_agg_add_column is set, and it
+        // throws before this routing decision has any effect, so this predicate stays as-is. Keep the
+        // two in sync if either changes.
         boolean addedIsKey = columnDef.isKey()
                 || (table.getKeysType() == KeysType.AGG_KEYS && columnDef.getAggregateType() == null);
         if (!addedIsKey) {
