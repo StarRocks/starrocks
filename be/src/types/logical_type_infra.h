@@ -216,6 +216,8 @@ auto type_dispatch_column(LogicalType ltype, Functor fun, const Args&... args) {
         _TYPE_DISPATCH_CASE(TYPE_HLL)
         _TYPE_DISPATCH_CASE(TYPE_OBJECT)
         _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
+        _TYPE_DISPATCH_CASE(TYPE_GEOGRAPHY)
+        _TYPE_DISPATCH_CASE(TYPE_GEOMETRY)
     default:
         CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();

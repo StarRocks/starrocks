@@ -15,7 +15,11 @@
 #include "column/column_helper.h"
 
 #include "base/testutil/assert.h"
+#include "column/adaptive_nullable_column.h"
+#include "column/array_column.h"
 #include "column/column_builder.h"
+#include "column/geo_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "gtest/gtest.h"
@@ -353,6 +357,74 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
 
     EXPECT_TRUE(a_col->has_null());
     EXPECT_FALSE(b_col->has_null());
+}
+
+TEST_F(ColumnHelperTest, create_geo_columns) {
+    for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        GeoTypeDescriptor metadata;
+        metadata.logical_type = primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
+        metadata.coordinate_system =
+                primitive == TYPE_GEOGRAPHY ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN;
+        metadata.edge_algorithm =
+                primitive == TYPE_GEOGRAPHY ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR;
+        metadata.crs = "OGC:CRS84";
+        metadata.srid = 4326;
+        auto type = TypeDescriptor::create_geo_type(primitive, metadata);
+        for (bool nullable : {false, true}) {
+            auto column = ColumnHelper::create_column(type, nullable, false, 3);
+            EXPECT_EQ(nullable, column->is_nullable());
+            EXPECT_EQ(3, column->size());
+            const auto* geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(column.get()));
+            ASSERT_NE(nullptr, geo);
+            EXPECT_EQ(metadata, geo->descriptor().type);
+            EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
+            EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
+            EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, geo->descriptor().storage.validation_state);
+            EXPECT_TRUE(geo->get_wkb(0).empty());
+            EXPECT_FALSE(geo->has_wkb_cache());
+            column->append_default();
+            EXPECT_EQ(4, column->size());
+        }
+        auto constant = ColumnHelper::create_column(type, false, true, 4);
+        EXPECT_TRUE(constant->is_constant());
+        EXPECT_EQ(4, constant->size());
+        ASSERT_NE(nullptr, dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(constant.get())));
+        auto null_constant = ColumnHelper::create_column(type, true, true, 4);
+        EXPECT_TRUE(null_constant->only_null());
+        EXPECT_EQ(4, null_constant->size());
+        auto adaptive = ColumnHelper::create_column(type, true, false, 0, true);
+        ASSERT_NE(nullptr, dynamic_cast<AdaptiveNullableColumn*>(adaptive.get()));
+        EXPECT_TRUE(adaptive->append_nulls(2));
+        EXPECT_EQ(2, adaptive->size());
+        EXPECT_TRUE(adaptive->is_null(0));
+        EXPECT_FALSE(type.support_join());
+        EXPECT_FALSE(type.support_groupby());
+        EXPECT_FALSE(type.support_orderby());
+    }
+}
+
+TEST_F(ColumnHelperTest, create_nested_geo_columns) {
+    for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        // Missing semantic metadata remains unknown; column allocation does not infer or validate it.
+        TypeDescriptor geo_type(primitive);
+        auto array = TypeDescriptor::create_array_type(geo_type);
+        auto map = TypeDescriptor::create_map_type(geo_type, array);
+        auto structure = TypeDescriptor::create_struct_type({"geo", "nested"}, {geo_type, map});
+        auto column = ColumnHelper::create_column(structure, false);
+        auto* fields = down_cast<StructColumn*>(column.get());
+        auto* geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(fields->field_column_raw_ptr(0)));
+        ASSERT_NE(nullptr, geo);
+        EXPECT_EQ(GeoTypeDescriptor{}, geo->descriptor().type);
+        auto* map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(fields->field_column_raw_ptr(1)));
+        ASSERT_NE(nullptr,
+                  dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(map_column->keys_column_raw_ptr())));
+        auto* array_column =
+                down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(map_column->values_column_raw_ptr()));
+        ASSERT_NE(nullptr, dynamic_cast<const GeoColumn*>(
+                                   ColumnHelper::get_data_column(array_column->elements_column_raw_ptr())));
+        column->append_default();
+        EXPECT_EQ(1, column->size());
+    }
 }
 
 } // namespace starrocks
