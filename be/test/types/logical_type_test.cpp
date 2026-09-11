@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "types/logical_type_infra.h"
 #include "types/olap_type_infra.h"
 
 namespace starrocks {
@@ -82,6 +83,25 @@ TEST(LogicalTypeInfraTest, FieldTypeDispatchBasic) {
     LogicalType observed = TYPE_UNKNOWN;
     EXPECT_EQ(TYPE_INT, field_type_dispatch_basic(TYPE_INT, DispatchLogicalTypeFunctor(), &observed));
     EXPECT_EQ(TYPE_INT, observed);
+}
+
+TEST(LogicalTypeInfraTest, GeoScalarDispatch) {
+    for (auto type : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        LogicalType observed = TYPE_UNKNOWN;
+        EXPECT_EQ(type, type_dispatch_basic(type, DispatchLogicalTypeFunctor(), &observed));
+        EXPECT_EQ(type, observed);
+        observed = TYPE_UNKNOWN;
+        EXPECT_EQ(type, type_dispatch_basic_and_complex_types(type, DispatchLogicalTypeFunctor(), &observed));
+        EXPECT_EQ(type, observed);
+        observed = TYPE_UNKNOWN;
+        EXPECT_EQ(type, type_dispatch_all(type, DispatchLogicalTypeFunctor(), &observed));
+        EXPECT_EQ(type, observed);
+        observed = TYPE_UNKNOWN;
+        EXPECT_EQ(type, type_dispatch_column(type, DispatchLogicalTypeFunctor(), &observed));
+        EXPECT_EQ(type, observed);
+        EXPECT_FALSE(lt_is_aggregate<TYPE_GEOGRAPHY>);
+        EXPECT_FALSE(lt_is_aggregate<TYPE_GEOMETRY>);
+    }
 }
 
 TEST(LogicalTypeInfraTest, FieldTypeDispatchBloomFilterRejectsTinyInt) {

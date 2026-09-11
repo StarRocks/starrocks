@@ -15,6 +15,7 @@
 #pragma once
 
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
@@ -97,7 +98,11 @@ using MysqlSerializeFn = void (*)(const MysqlColumnViewer&, const TypeDescriptor
 struct MysqlSerializerBuilder {
     template <LogicalType ltype>
     MysqlSerializeFn operator()() const {
-        return &MysqlColumnSerializer::serialize<ltype>;
+        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
+            throw std::runtime_error("Unsupported geo type in mysql serializer");
+        } else {
+            return &MysqlColumnSerializer::serialize<ltype>;
+        }
     }
 };
 

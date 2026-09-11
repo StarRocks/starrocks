@@ -20,7 +20,6 @@
 #include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
-#include "column/geo_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -417,18 +416,11 @@ struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         if constexpr (ltype == TYPE_UNKNOWN || ltype == TYPE_NULL || ltype == TYPE_BINARY || ltype == TYPE_DECIMAL ||
-                      lt_is_collection<ltype>) {
+                      ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY || lt_is_collection<ltype>) {
             LOG(FATAL) << "Unsupported column type" << ltype;
             return nullptr;
         } else if constexpr (lt_is_decimal<ltype>) {
             return RunTimeColumnType<ltype>::create(type_desc.precision, type_desc.scale, size);
-        } else if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
-            // Type metadata does not prescribe a row dimension or imply validated payloads.
-            GeoColumnDescriptor descriptor{type_desc.geo_type.value_or(GeoTypeDescriptor{}),
-                                           {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}};
-            auto column = GeoColumn::create(std::move(descriptor));
-            column->resize(size);
-            return column;
         } else {
             return RunTimeColumnType<ltype>::create(size);
         }

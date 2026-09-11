@@ -296,7 +296,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
 struct MockConstExprBuilder {
     template <LogicalType ltype>
     Expr* operator()(ObjectPool* pool) {
-        if constexpr (lt_is_decimal<ltype>) {
+        if constexpr (lt_is_decimal<ltype> || ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
             CHECK(false) << "not supported";
             return nullptr;
         } else {

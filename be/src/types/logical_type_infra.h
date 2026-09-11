@@ -78,6 +78,8 @@ namespace starrocks {
 
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
     APPLY_FOR_ALL_SCALAR_TYPE(M)               \
+    M(TYPE_GEOGRAPHY)                          \
+    M(TYPE_GEOMETRY)                           \
     M(TYPE_NULL)
 
 #define APPLY_FOR_COMPLEX_THRIFT_TYPE(M) \
@@ -216,8 +218,6 @@ auto type_dispatch_column(LogicalType ltype, Functor fun, const Args&... args) {
         _TYPE_DISPATCH_CASE(TYPE_HLL)
         _TYPE_DISPATCH_CASE(TYPE_OBJECT)
         _TYPE_DISPATCH_CASE(TYPE_PERCENTILE)
-        _TYPE_DISPATCH_CASE(TYPE_GEOGRAPHY)
-        _TYPE_DISPATCH_CASE(TYPE_GEOMETRY)
     default:
         CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();

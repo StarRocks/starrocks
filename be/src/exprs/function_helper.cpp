@@ -32,12 +32,11 @@ struct ColumnBuilder {
     ColumnPtr operator()(const TypeDescriptor& type_desc) {
         if constexpr (lt_is_decimal<Type>) {
             return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
-        } else if constexpr (Type == TYPE_GEOGRAPHY || Type == TYPE_GEOMETRY) {
-            return ColumnHelper::create_column(type_desc, false);
         } else if constexpr (lt_is_collection<Type>) {
             throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
             return nullptr;
-        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
+        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL ||
+                             Type == TYPE_GEOGRAPHY || Type == TYPE_GEOMETRY) {
             throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
             return nullptr;
         } else {

@@ -103,12 +103,15 @@ Status MysqlTableWriter::open(const MysqlConnInfo& conn_info, const std::string&
 
 struct ViewerBuilder {
     template <LogicalType ltype>
-    void operator()(std::vector<MysqlTableWriter::VariantViewer>* _viewers, ColumnPtr* column) {
-        if constexpr (ltype == LogicalType::TYPE_TIME) {
+    Status operator()(std::vector<MysqlTableWriter::VariantViewer>* _viewers, ColumnPtr* column) {
+        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
+            return Status::NotSupported("Unsupported geo type in mysql sink");
+        } else if constexpr (ltype == LogicalType::TYPE_TIME) {
             *column = ColumnHelper::convert_time_column_from_double_to_str(*column);
         } else {
             _viewers->emplace_back(ColumnViewer<ltype>(*column));
         }
+        return Status::OK();
     }
 };
 
@@ -125,7 +128,7 @@ Status MysqlTableWriter::_build_viewers(Columns& columns) {
             return Status::InternalError(fmt::format("unsupported type in mysql sink:{}", type.type));
         }
 
-        type_dispatch_basic(type.type, ViewerBuilder(), &_viewers, &columns[i]);
+        RETURN_IF_ERROR(type_dispatch_basic(type.type, ViewerBuilder(), &_viewers, &columns[i]));
     }
 
     return Status::OK();

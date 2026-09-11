@@ -19,7 +19,6 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/decimalv3_column.h"
-#include "column/geo_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -190,31 +189,22 @@ TEST_F(FunctionHelperTest, testCreateColumnMapUnknownFallbackToNull) {
     ASSERT_EQ(value_data->size(), 0);
 }
 
-TEST_F(FunctionHelperTest, create_geo_columns) {
+TEST_F(FunctionHelperTest, reject_geo_columns) {
     for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         GeoTypeDescriptor metadata;
         metadata.crs = "OGC:CRS84";
         metadata.srid = 4326;
         auto type = TypeDescriptor::create_geo_type(primitive, metadata);
         for (bool nullable : {false, true}) {
-            auto column = FunctionHelper::create_column(type, nullable);
-            EXPECT_EQ(nullable, column->is_nullable());
-            EXPECT_EQ(0, column->size());
-            auto* geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(column.get()));
-            ASSERT_NE(nullptr, geo);
-            EXPECT_EQ(metadata, geo->descriptor().type);
-            EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
+            EXPECT_THROW(FunctionHelper::create_column(type, nullable), std::runtime_error);
         }
-        auto nested = TypeDescriptor::create_struct_type(
-                {"geo"}, {TypeDescriptor::create_map_type(type, TypeDescriptor::create_array_type(type))});
-        auto column = FunctionHelper::create_column(nested, false);
-        auto* structure = down_cast<const StructColumn*>(column.get());
-        auto* map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(0)));
-        ASSERT_NE(nullptr, dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(map->keys_column_raw_ptr())));
-        auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(map->values_column_raw_ptr()));
-        auto* geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(array->elements_column_raw_ptr()));
-        ASSERT_NE(nullptr, geo);
-        EXPECT_EQ(metadata, geo->descriptor().type);
+        auto array = TypeDescriptor::create_array_type(type);
+        auto map_key = TypeDescriptor::create_map_type(type, TypeDescriptor(TYPE_INT));
+        auto map_value = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), array);
+        auto nested = TypeDescriptor::create_struct_type({"geo"}, {map_value});
+        for (const auto& descriptor : {TypeDescriptor(primitive), array, map_key, map_value, nested}) {
+            EXPECT_THROW(FunctionHelper::create_column(descriptor, false), std::runtime_error);
+        }
     }
 }
 
