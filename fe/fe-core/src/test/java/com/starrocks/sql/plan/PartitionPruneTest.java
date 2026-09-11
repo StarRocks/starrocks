@@ -419,6 +419,104 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testGeneratedColumnPruneSkipsNonOrderPreservingCast() throws Exception {
+        // A varchar-to-bigint cast does not preserve the order: '99845' sorts after '998425506019'
+        // as a string while 99845 is far below 998425506019 as a number. Mapping a range predicate
+        // on c1 through that cast would prune the partition holding '99845' and lose the row.
+        // getCallOperator() unwraps the enclosing cast, so the check has to look at the whole
+        // expression, not at the call it digs out.
+        starRocksAssert.withTable("CREATE TABLE t_gen_cast (" +
+                " c1 varchar(64) NOT NULL," +
+                " c2 bigint NULL AS cast(c1 as bigint) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_cast ADD PARTITION p1 VALUES IN ('99845')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_cast ADD PARTITION p2 VALUES IN ('998425506019')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_cast ADD PARTITION p3 VALUES IN ('1234567')");
+
+        starRocksAssert.query("select count(*) from t_gen_cast where c1 > '998425506019' ")
+                .explainContains("partitions=3/3");
+        starRocksAssert.query("select count(*) from t_gen_cast where c1 <= '998425506019' ")
+                .explainContains("partitions=3/3");
+
+        // Equality maps soundly through any deterministic function, order or no order: c1 = '99845'
+        // holds exactly for the rows whose c2 is cast('99845' as bigint). Restricting the cast must
+        // not cost the equality deduction its pruning.
+        starRocksAssert.query("select count(*) from t_gen_cast where c1 = '99845' ")
+                .explainContains("partitions=1/3");
+    }
+
+    @Test
+    public void testGeneratedColumnPruneSkipsCaseWhen() throws Exception {
+        // A guard, not a regression test: nothing here is known to be broken today.
+        //
+        // FunctionCheckerVisitor only intercepts CastOperator. CaseWhenOperator is also a
+        // CallOperator, but ScalarOperatorVisitor routes it to visitCaseWhenOperator, which the
+        // checker does not override, so it falls through to visit() and is accepted as monotonic
+        // even though this CASE inverts the order. What keeps the deduction harmless is further
+        // down: substituting the constant leaves a CASE expression rather than a constant, and the
+        // pruner can only match a constant against the partition value map, so it gives up. Should
+        // that expression ever fold, "c1 > 100" would deduce "c2 >= 1" and keep no partition at all
+        // while every matching row lives in p0. This asserts it stays at 2/2.
+        starRocksAssert.withTable("CREATE TABLE t_gen_case (" +
+                " c1 int NOT NULL," +
+                " c2 tinyint NULL AS (case when c1 > 100 then 0 else 1 end) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_case ADD PARTITION p0 VALUES IN ('0')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_case ADD PARTITION p1 VALUES IN ('1')");
+
+        starRocksAssert.query("select count(*) from t_gen_case where c1 > 100 ")
+                .explainContains("partitions=2/2");
+    }
+
+    @Test
+    public void testRangeExprPruneSkipsNonMonotonicExpr() throws Exception {
+        // The partition expression maps a varchar onto a bigint through substr() and a cast, and neither
+        // step preserves the string order: '99845' sorts after '998425506019' while its partition value
+        // (845) is far below the constant's (8425506019). Mapping a range predicate onto the partition
+        // expression would prune p1 away and the rows in it would go silently missing, so a range
+        // predicate must not prune at all here.
+        starRocksAssert.withTable("CREATE TABLE `t_bill_detail` (\n" +
+                "    `bill_code` varchar(200) NOT NULL DEFAULT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`bill_code`)\n" +
+                "PARTITION BY RANGE(cast(substr(bill_code, 3, 11) as bigint))\n" +
+                "(\n" +
+                "    PARTITION p1 VALUES [(\"0\"), (\"5000000\")),\n" +
+                "    PARTITION p2 VALUES [(\"20000000\"), (\"3021712368984\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        starRocksAssert.query("select count(*) from t_bill_detail where bill_code > '998425506019' ")
+                .explainContains("partitions=2/2");
+        starRocksAssert.query("select count(*) from t_bill_detail where bill_code <= '998425506019' ")
+                .explainContains("partitions=2/2");
+        // equality maps soundly through any function -- a = c implies f(a) = f(c) -- and still prunes
+        starRocksAssert.query("select count(*) from t_bill_detail where bill_code = '9984517' ")
+                .explainContains("partitions=1/2");
+
+        // a monotonic partition expression keeps pruning range predicates
+        starRocksAssert.withTable("CREATE TABLE `t_daily_range` (\n" +
+                "    `dt` datetime NOT NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select count(*) from t_daily_range where dt >= '2025-04-29 00:00:00' ")
+                .explainContains("partitions=1/2");
+    }
+
+    @Test
     public void testMinMaxPrune_Check() throws Exception {
         starRocksAssert.withTable("create table t5_dup " +
                 "(c1 datetime NOT NULL, c2 int) " +
