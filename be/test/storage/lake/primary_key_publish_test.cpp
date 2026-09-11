@@ -74,6 +74,31 @@
 
 namespace starrocks::lake {
 
+// Arms a registered BE failpoint for the lifetime of the guard, then disarms it. Used by the
+// publish_primary_key_tablet() fault-injection tests below.
+class ScopedFailPointArm {
+public:
+    explicit ScopedFailPointArm(const std::string& name) {
+        _fp = failpoint::FailPointRegistry::GetInstance()->get(name);
+        CHECK(_fp != nullptr) << "failpoint is not registered: " << name;
+        set_mode(FailPointTriggerModeType::ENABLE);
+    }
+
+    ~ScopedFailPointArm() { set_mode(FailPointTriggerModeType::DISABLE); }
+
+    ScopedFailPointArm(const ScopedFailPointArm&) = delete;
+    ScopedFailPointArm& operator=(const ScopedFailPointArm&) = delete;
+
+private:
+    void set_mode(FailPointTriggerModeType mode) {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(mode);
+        _fp->setMode(trigger_mode);
+    }
+
+    failpoint::FailPoint* _fp = nullptr;
+};
+
 class LakePrimaryKeyPublishTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     LakePrimaryKeyPublishTest() : TestBase(kTestGroupPath) {
@@ -773,6 +798,232 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(4).num_dels(), 0);
+}
+
+// Fault injection inside publish_primary_key_tablet(). Every point under test sits on a call site
+// that already returns a Status, so arming one must:
+//   (a) actually be reached by an ordinary DML publish -- a point that cannot be hit is worthless
+//       for fault injection, and
+//   (b) fail the publish *recoverably* -- retrying the very same transaction with the point
+//       disarmed (what the FE does) must succeed and leave the tablet with the data a clean
+//       publish would have produced.
+TEST_P(LakePrimaryKeyPublishTest, test_apply_failpoint_publish_fails_then_recovers) {
+    const std::vector<std::string> fp_names{
+            "lake_pk_apply_load_rowset_update_state_failed",
+            "lake_pk_apply_load_segments_failed",
+            "lake_pk_apply_rewrite_segment_failed",
+            "lake_pk_apply_index_upsert_failed",
+            "lake_pk_apply_get_del_vec_failed",
+            "lake_pk_apply_commit_internal_error",
+    };
+
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    auto write_one_txn = [&](const ChunkPtr& chunk, const std::vector<uint32_t>& indexes,
+                             const std::string& merge_condition) {
+        auto txn_id = next_id();
+        // DeltaWriterBuilder is neither copyable nor movable, so it has to be a named local.
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id())
+                .set_slot_descriptors(&_slot_pointers)
+                .set_profile(&_dummy_runtime_profile);
+        if (!merge_condition.empty()) {
+            builder.set_merge_condition(merge_condition);
+        }
+        auto delta_writer_or = builder.build();
+        CHECK(delta_writer_or.ok()) << delta_writer_or.status().to_string();
+        auto delta_writer = std::move(delta_writer_or).value();
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog().status());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    // Seed a rowset first: every later publish then overwrites rows that already live in an older
+    // rowset, which is what forces the get_del_vec branch (an rssid outside the incoming rowset).
+    {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+        auto txn_id = write_one_txn(chunk, indexes, "");
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    for (const auto& fp_name : fp_names) {
+        SCOPED_TRACE(fp_name);
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+        auto txn_id = write_one_txn(chunk, indexes, "");
+
+        {
+            ScopedFailPointArm arm(fp_name);
+            auto st = publish_single_version(tablet_id, version + 1, txn_id).status();
+            ASSERT_FALSE(st.ok()) << fp_name << " is armed but publish still succeeded, i.e. the point is "
+                                  << "not reachable from an ordinary DML publish";
+            EXPECT_NE(std::string::npos, st.to_string().find(fp_name)) << st.to_string();
+        }
+
+        // Same transaction, point disarmed: the retry must go through, exactly as the FE's publish
+        // retry would.
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        EXPECT_EQ(kChunkSize, read_rows(tablet_id, version));
+    }
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(1 + fp_names.size(), static_cast<size_t>(new_tablet_metadata->rowsets_size()));
+}
+
+// Same contract as above for the two branches an all-upsert transaction never reaches: the del-file
+// apply in _do_delete() (load_delete / erase) and the condition-update index merge.
+TEST_P(LakePrimaryKeyPublishTest, test_apply_failpoint_delete_and_condition_paths) {
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    auto write_one_txn = [&](const ChunkPtr& chunk, const std::vector<uint32_t>& indexes,
+                             const std::string& merge_condition) {
+        auto txn_id = next_id();
+        // DeltaWriterBuilder is neither copyable nor movable, so it has to be a named local.
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id())
+                .set_slot_descriptors(&_slot_pointers)
+                .set_profile(&_dummy_runtime_profile);
+        if (!merge_condition.empty()) {
+            builder.set_merge_condition(merge_condition);
+        }
+        auto delta_writer_or = builder.build();
+        CHECK(delta_writer_or.ok()) << delta_writer_or.status().to_string();
+        auto delta_writer = std::move(delta_writer_or).value();
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog().status());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    auto fail_then_recover = [&](const std::string& fp_name, const ChunkPtr& chunk,
+                                 const std::vector<uint32_t>& indexes, const std::string& merge_condition) {
+        SCOPED_TRACE(fp_name);
+        auto txn_id = write_one_txn(chunk, indexes, merge_condition);
+        {
+            ScopedFailPointArm arm(fp_name);
+            auto st = publish_single_version(tablet_id, version + 1, txn_id).status();
+            ASSERT_FALSE(st.ok()) << fp_name << " is armed but publish still succeeded, i.e. the point is "
+                                  << "not reachable from an ordinary DML publish";
+            EXPECT_NE(std::string::npos, st.to_string().find(fp_name)) << st.to_string();
+        }
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    };
+
+    // Seed rows so the deletes below have something to erase.
+    {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+        auto txn_id = write_one_txn(chunk, indexes, "");
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+    }
+
+    // Condition update: has_condition_update makes the apply take the condition-merge branch
+    // instead of the plain _do_update.
+    {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+        fail_then_recover("lake_pk_apply_index_condition_upsert_failed", chunk, indexes, "c1");
+        EXPECT_EQ(kChunkSize, read_rows(tablet_id, version));
+    }
+
+    // Delete-only transactions carry del files, which is the only way into _do_delete().
+    for (const auto& fp_name : {"lake_pk_apply_load_deletes_failed", "lake_pk_apply_index_delete_failed"}) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, true, /*upsert=*/false);
+        fail_then_recover(fp_name, chunk, indexes, "");
+    }
+    // Both delete transactions targeted the same keys, so all seeded rows are gone.
+    EXPECT_EQ(0, read_rows(tablet_id, version));
+}
+
+// `lake_pk_apply_ingest_sst_failed` guards the `op_write.ssts_size() > 0` branch, which an ordinary
+// small write never reaches: op_write SSTs come only from a load that eagerly builds the primary-key
+// index SST, and that needs PK encoding V2 (V1 is unsupported, see pk_index_eager_build_supported)
+// plus enough spilled bytes to cross pk_index_eager_build_threshold_bytes. Set that up explicitly --
+// the recipe is the one test_light_compaction_publish_row_count_from_metadata uses -- assert the
+// precondition actually held, and only then assert the point fires. Same fail-then-recover contract
+// as the two tests above.
+TEST_P(LakePrimaryKeyPublishTest, test_apply_failpoint_ingest_sst) {
+    // write_buffer_size forces multi-segment rowsets; the 1-byte eager threshold makes each build an
+    // index SST.
+    ConfigResetGuard<int64_t> g_write_buffer(&config::write_buffer_size, 512);
+    ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
+
+    auto tablet_id = _tablet_metadata->id();
+    // The fixture's single-INT-key schema is PK encoding V1, for which eager index SST build is
+    // unsupported; V2 is what makes the load emit op_write.ssts at all.
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    // 3 chunks of 80 rows (240 distinct keys), re-upserted by every transaction.
+    auto [chunk0, indexes] = gen_data_and_index(80, /*shift=*/0, /*random_shuffle=*/false, /*upsert=*/true);
+    auto chunk1 = gen_data(80, /*shift=*/1, /*random_shuffle=*/false, /*upsert=*/true);
+    auto chunk2 = gen_data(80, /*shift=*/2, /*random_shuffle=*/false, /*upsert=*/true);
+
+    int64_t version = 1;
+    auto write_one_txn = [&]() {
+        auto txn_id = next_id();
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id())
+                .set_slot_descriptors(&_slot_pointers)
+                .set_profile(&_dummy_runtime_profile);
+        auto dw_or = builder.build();
+        CHECK(dw_or.ok()) << dw_or.status().to_string();
+        auto dw = std::move(dw_or).value();
+        CHECK_OK(dw->open());
+        CHECK_OK(dw->write(*chunk0, indexes.data(), indexes.size()));
+        CHECK_OK(dw->write(*chunk1, indexes.data(), indexes.size()));
+        CHECK_OK(dw->write(*chunk2, indexes.data(), indexes.size()));
+        CHECK_OK(dw->finish_with_txnlog().status());
+        dw->close();
+        return txn_id;
+    };
+
+    // Seed a rowset, and check here that the recipe really does produce op_write SSTs -- without this
+    // the test below would pass vacuously if the point were unreachable.
+    {
+        auto txn_id = write_one_txn();
+        ASSIGN_OR_ABORT(auto wlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_GT(wlog->op_write().ssts_size(), 0) << "precondition not met: the load built no index SST";
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    auto txn_id = write_one_txn();
+    ASSIGN_OR_ABORT(auto wlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_GT(wlog->op_write().ssts_size(), 0);
+    {
+        ScopedFailPointArm arm("lake_pk_apply_ingest_sst_failed");
+        auto st = publish_single_version(tablet_id, version + 1, txn_id).status();
+        ASSERT_FALSE(st.ok()) << "lake_pk_apply_ingest_sst_failed is armed but publish still succeeded";
+        EXPECT_NE(std::string::npos, st.to_string().find("lake_pk_apply_ingest_sst_failed")) << st.to_string();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+    EXPECT_EQ(240, read_rows(tablet_id, version));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {

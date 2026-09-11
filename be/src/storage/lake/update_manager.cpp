@@ -344,6 +344,20 @@ static DelInterleavePlan build_del_interleave_plan(const TxnLogPB_OpWrite& op_wr
 }
 
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
+// Failure injection inside the shared-data primary key apply path. Every point below sits on a call
+// site that already returns a Status, so arming one only makes publish take an error path the product
+// must already handle (publish fails -> FE retries it) -- none of them skips work or fabricates state,
+// which is what separates them from the skip_*/hook_* points above.
+DEFINE_FAIL_POINT(lake_pk_apply_load_rowset_update_state_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_load_deletes_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_index_delete_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_load_segments_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_rewrite_segment_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_index_upsert_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_index_condition_upsert_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_ingest_sst_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_get_del_vec_failed);
+DEFINE_FAIL_POINT(lake_pk_apply_commit_internal_error);
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
@@ -389,6 +403,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             .container = rssid_fileinfo_container,
     };
     state.init(params);
+    FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_load_rowset_update_state_failed,
+                              Status::InternalError("inject lake_pk_apply_load_rowset_update_state_failed"));
     RETURN_IF_ERROR(state.prepare(params));
     // Init delvec state.
     // Map from rssid (rowset id + segment offset) to the list of deleted rowids collected during this publish.
@@ -490,9 +506,15 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                     uint32_t idx = i - batch_start;
                     auto st = state.load_segment(i, params, base_version, true /*resolve conflict*/,
                                                  false /*no need lock*/);
+                    FAIL_POINT_TRIGGER_EXECUTE(lake_pk_apply_load_segments_failed, {
+                        st = Status::InternalError("inject lake_pk_apply_load_segments_failed");
+                    });
                     _update_state_cache.update_object_size(state_entry, state.memory_usage());
                     if (st.ok()) {
                         st = state.rewrite_segment(i, txn_id, params, &per_seg_replace[idx], &per_seg_orphans[idx]);
+                        FAIL_POINT_TRIGGER_EXECUTE(lake_pk_apply_rewrite_segment_failed, {
+                            st = Status::InternalError("inject lake_pk_apply_rewrite_segment_failed");
+                        });
                     }
                     // Released whether or not the above succeeded: the state cache would otherwise hold
                     // this segment's partial state for the rest of the publish.
@@ -521,9 +543,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
             if (!use_parallel_partial_update || batch_end - batch_start <= 1) {
                 // Serial path: load + rewrite inline.
+                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_load_segments_failed,
+                                          Status::InternalError("inject lake_pk_apply_load_segments_failed"));
                 RETURN_IF_ERROR(state.load_segment(local_id, params, base_version, true /*resolve conflict*/,
                                                    false /*no need lock*/));
                 _update_state_cache.update_object_size(state_entry, state.memory_usage());
+                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_rewrite_segment_failed,
+                                          Status::InternalError("inject lake_pk_apply_rewrite_segment_failed"));
                 RETURN_IF_ERROR(state.rewrite_segment(local_id, txn_id, params, &replace_segments, &orphan_files));
                 rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), local_id,
                                                            replace_segments);
@@ -533,9 +559,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
             DCHECK(state.upserts(local_id) != nullptr);
             if (!has_condition_update) {
+                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_index_upsert_failed,
+                                          Status::InternalError("inject lake_pk_apply_index_upsert_failed"));
                 RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
                                            op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
             } else if (op_write.ssts_size() > 0) {
+                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_index_condition_upsert_failed,
+                                          Status::InternalError("inject lake_pk_apply_index_condition_upsert_failed"));
                 RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
                                                                    condition_column, state.upserts(local_id), index,
                                                                    &new_deletes));
@@ -551,6 +581,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 // When SST files are absent, new-row condition values are read from the freshly
                 // ingested segment file on demand. Compare work is parallelized per chunk; the
                 // final index.upsert is applied serially after the barrier.
+                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_index_condition_upsert_failed,
+                                          Status::InternalError("inject lake_pk_apply_index_condition_upsert_failed"));
                 RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
                                                           state.upserts(local_id), index, &new_deletes));
             }
@@ -563,6 +595,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             if (op_write.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
                 DelvecPagePB delvec_page_pb = builder->delvec_page(rowset_id + global_segment_id);
                 delvec_page_pb.set_version(metadata->version());
+                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_ingest_sst_failed,
+                                          Status::InternalError("inject lake_pk_apply_ingest_sst_failed"));
                 RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
                                                  rowset_id + global_segment_id, metadata->version(), delvec_page_pb,
                                                  dv_generated_during_merge_update));
@@ -662,6 +696,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             tsid.tablet_id = tablet->id();
             tsid.segment_id = rssid;
             DelVectorPtr old_del_vec;
+            FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_get_del_vec_failed,
+                                      Status::InternalError("inject lake_pk_apply_get_del_vec_failed"));
             RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false /* file cache */, &old_del_vec));
             new_del_vecs[idx].first = rssid;
             old_del_vec->add_dels_as_new_version(new_delete.second, metadata->version(), &(new_del_vecs[idx].second));
@@ -714,6 +750,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         builder->apply_opwrite(op_write, replace_segments, orphan_files);
     }
 
+    FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_commit_internal_error,
+                              Status::InternalError("inject lake_pk_apply_commit_internal_error"));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
@@ -1185,9 +1223,13 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 Status UpdateManager::_do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
                                  RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_delete_latency_us");
+    FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_load_deletes_failed,
+                              Status::InternalError("inject lake_pk_apply_load_deletes_failed"));
     RETURN_IF_ERROR(state.load_delete(del_id, params));
     DCHECK(state.deletes(del_id) != nullptr);
 
+    FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_index_delete_failed,
+                              Status::InternalError("inject lake_pk_apply_index_delete_failed"));
     const auto& op_write = params.op_write;
     const bool has_prebuilt_del_sst = op_write.del_ssts_size() == op_write.dels_meta_size() &&
                                       op_write.del_sst_ranges_size() == op_write.dels_meta_size() &&
