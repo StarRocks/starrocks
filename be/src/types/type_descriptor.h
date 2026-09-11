@@ -14,15 +14,18 @@
 
 #pragma once
 
+#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
 
+#include "base/statusor.h"
 #include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "thrift/protocol/TDebugProtocol.h"
 #include "types/constexpr.h"
+#include "types/geo_type_descriptor.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -69,6 +72,14 @@ struct TypeDescriptor {
     std::vector<int32_t> field_ids;
     // Only set if type == TYPE_STRUCT. The field physical name of each child.
     std::vector<std::string> field_physical_names;
+
+    // Immutable, shared metadata: ordinary types do not allocate a geo descriptor.
+    std::shared_ptr<const GeoColumnDescriptor> geo;
+
+    static StatusOr<TypeDescriptor> create_geo_type(LogicalType type, GeoColumnDescriptor descriptor);
+    // Construction can validate metadata; execution stays disabled until transport capabilities exist.
+    Status validate_geo_type(bool native_geo_enabled = false) const;
+    bool is_geo_type() const;
 
     TypeDescriptor() = default;
 
@@ -232,6 +243,7 @@ struct TypeDescriptor {
     }
 
     bool is_assignable(const TypeDescriptor& o) const {
+        if (geo || o.geo) return false; // SQL compatibility is not enabled yet.
         if (is_complex_type()) {
             if ((type != o.type) || (children.size() != o.children.size())) {
                 return false;
@@ -262,6 +274,9 @@ struct TypeDescriptor {
         }
         if (is_decimal_type()) {
             return precision == o.precision && scale == o.scale;
+        }
+        if (geo || o.geo) {
+            return geo == o.geo || (geo && o.geo && *geo == *o.geo);
         }
         return true;
     }

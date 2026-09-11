@@ -73,16 +73,19 @@ enum LogicalType {
 
     TYPE_JSON = 54,
     TYPE_VARIANT = 55,
+    TYPE_GEOGRAPHY = 56,
+    TYPE_GEOMETRY = 57,
 
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 56
+    TYPE_MAX_VALUE = 58
 };
 
 // TODO(lism): support varbinary for zone map.
 inline bool is_zone_map_key_type(LogicalType type) {
     return type != TYPE_CHAR && type != TYPE_VARCHAR && type != TYPE_JSON && type != TYPE_VARBINARY &&
-           type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
+           type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE && type != TYPE_GEOGRAPHY &&
+           type != TYPE_GEOMETRY;
 }
 
 // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
@@ -90,7 +93,7 @@ inline bool is_zone_map_key_type(LogicalType type) {
 // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
 inline bool is_support_checksum_type(LogicalType type) {
     return type != TYPE_FLOAT && type != TYPE_DOUBLE && type != TYPE_HLL && type != TYPE_OBJECT &&
-           type != TYPE_PERCENTILE && type != TYPE_JSON;
+           type != TYPE_PERCENTILE && type != TYPE_JSON && type != TYPE_GEOGRAPHY && type != TYPE_GEOMETRY;
 }
 
 template <LogicalType TYPE>

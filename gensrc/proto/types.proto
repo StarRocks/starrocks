@@ -45,6 +45,8 @@ message PScalarType {
     // Only set for DECIMAL
     optional int32 precision = 3;
     optional int32 scale = 4;
+    // Native primitive type is authoritative; never attach this to VARBINARY.
+    optional GeoColumnDescPB geo = 5;
 };
 
 // Represents a field in a STRUCT type.
@@ -291,7 +293,7 @@ enum GeoValidationStatePB {
     GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED = 3;
 }
 
-// Standalone descriptors; not attached to PTypeDesc until native type integration.
+// Semantic and physical metadata for native geo types.
 message GeoTypeDescPB {
     optional GeoLogicalTypePB logical_type = 1;
     optional GeoCoordinateSystemPB coordinate_system = 2;
