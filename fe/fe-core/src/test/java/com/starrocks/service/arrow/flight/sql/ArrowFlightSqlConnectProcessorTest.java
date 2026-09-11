@@ -41,13 +41,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -156,29 +154,34 @@ public class ArrowFlightSqlConnectProcessorTest extends StarRocksTestBase {
     }
 
     @Test
-    public void testPreparedSchemaFailsClosedOnPolicyErrorAndRestoresContext() throws Exception {
+    public void testPreparedSchemaFallsBackOnPolicyErrorAndRestoresContext() throws Exception {
         ConnectContext previous = new ConnectContext();
         try (var scope = previous.bindScope();
                 ArrowFlightSqlServiceImpl service = new ArrowFlightSqlServiceImpl(null, null);
                 var policies = policies()) {
             SemanticException failure = new SemanticException("policy unavailable");
             policies.when(() -> Authorizer.getRowAccessPolicy(any(), eq(TABLE))).thenThrow(failure);
-            InvocationTargetException thrown = assertThrows(InvocationTargetException.class,
-                    () -> schema(service, context()));
-            assertSame(failure, thrown.getCause());
+            assertPlaceholderSchema(schema(service, context()));
+            policies.verify(() -> Authorizer.getRowAccessPolicy(any(), eq(TABLE)));
             assertSame(previous, ConnectContext.get());
         }
     }
 
     @Test
-    public void testPreparedSchemaFailsClosedOnInvalidMask() throws Exception {
+    public void testPreparedSchemaFallsBackOnInvalidMask() throws Exception {
         try (ArrowFlightSqlServiceImpl service = new ArrowFlightSqlServiceImpl(null, null);
                 var policies = policies()) {
             policies.when(() -> Authorizer.getColumnMaskingPolicy(any(), eq(TABLE), any()))
                     .thenAnswer(invocation -> Map.of("k1", SqlParser.parseSqlToExpr("missing_column", 0)));
-            InvocationTargetException thrown = assertThrows(InvocationTargetException.class,
-                    () -> schema(service, context()));
-            assertTrue(thrown.getCause() instanceof SemanticException);
+            assertPlaceholderSchema(schema(service, context()));
+            policies.verify(() -> Authorizer.getColumnMaskingPolicy(any(), eq(TABLE), any()));
         }
+    }
+
+    private static void assertPlaceholderSchema(Schema schema) {
+        assertEquals(1, schema.getFields().size());
+        assertEquals("result", schema.getFields().get(0).getName());
+        assertEquals(new ArrowType.Int(32, true), schema.getFields().get(0).getType());
+        assertTrue(schema.getFields().get(0).isNullable());
     }
 }

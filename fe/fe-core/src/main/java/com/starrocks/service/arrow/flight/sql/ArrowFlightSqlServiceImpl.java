@@ -198,17 +198,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 }
 
                 ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
-                String database = context.getMiddleware(FlightConstants.HEADER_KEY).headers().get("database");
-                if (!StringUtils.isEmpty(database)) {
-                    ctx.setDatabase(database);
-                }
+
+                String preparedStmtId = ctx.addPreparedStatement(request.getQuery());
 
                 // Try to plan the query to get the real schema for the prepared statement.
                 // This is important because clients (JDBC, ADBC) use the schema returned here
                 // to determine column names and types. Without this, a placeholder schema with
                 // a single column named "r" would be returned, which is incorrect.
                 Schema schema = buildSchemaFromQuery(ctx, request.getQuery());
-                String preparedStmtId = ctx.addPreparedStatement(request.getQuery());
 
                 FlightSql.ActionCreatePreparedStatementResult result =
                         FlightSql.ActionCreatePreparedStatementResult.newBuilder()
@@ -918,8 +915,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
      * Analyze the query to obtain the real output schema (column names and types).
      * Only performs semantic analysis (not full planning) to avoid side effects that
      * could interfere with the subsequent query execution in getFlightInfoPreparedStatement.
-     * For non-query statements a placeholder schema is returned. Analysis failures,
-     * including security policy failures, must fail preparation rather than return a schema.
+     * For non-query statements or if analysis fails, a placeholder schema is returned.
      */
     private Schema buildSchemaFromQuery(ArrowFlightSqlConnectContext ctx, String query) {
         try (var scope = ctx.bindScope()) {
@@ -948,6 +944,10 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 arrowFields.add(arrowField);
             }
             return new Schema(arrowFields);
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Failed to analyze query for schema in createPreparedStatement, " +
+                    "falling back to placeholder schema. query={}", query, e);
+            return buildPlaceholderSchema();
         }
     }
 
