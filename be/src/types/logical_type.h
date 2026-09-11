@@ -55,6 +55,8 @@ enum LogicalType {
     // Added by StarRocks
     TYPE_DECIMAL256 = 26,
     TYPE_INT256 = 27,
+    TYPE_GEOGRAPHY = 28,
+    TYPE_GEOMETRY = 29,
     // Reserved some field for commutiy version
 
     TYPE_NULL = 42,
@@ -73,12 +75,10 @@ enum LogicalType {
 
     TYPE_JSON = 54,
     TYPE_VARIANT = 55,
-    TYPE_GEOGRAPHY = 56,
-    TYPE_GEOMETRY = 57,
 
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 58
+    TYPE_MAX_VALUE = 56
 };
 
 // TODO(lism): support varbinary for zone map.
