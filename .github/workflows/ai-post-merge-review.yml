@@ -7,7 +7,7 @@ name: AI POST-MERGE REVIEW
 
 # Put the PR number in the run title so the report sweep can read it straight from the
 # run (display_title) without a head_sha -> PR lookup.
-run-name: AI Post-Merge Review · PR #${{ github.event.pull_request.number }}
+run-name: "AI Post-Merge Review · PR #${{ github.event.pull_request.number }}"
 
 on:
   pull_request_target:
