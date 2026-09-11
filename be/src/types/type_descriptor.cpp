@@ -41,8 +41,8 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         scale = (scalar_type.__isset.scale) ? scalar_type.scale : -1;
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
         datetime_is_ntz = scalar_type.__isset.datetime_is_ntz && scalar_type.datetime_is_ntz;
-        if (scalar_type.__isset.geo && scalar_type.geo.__isset.type) {
-            geo_type = GeoTypeDescriptor::from_thrift(scalar_type.geo.type);
+        if (scalar_type.__isset.geo) {
+            geo_type = GeoTypeDescriptor::from_thrift(scalar_type.geo);
         }
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
@@ -126,9 +126,7 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
             scalar_type.__set_datetime_is_ntz(true);
         }
         if (geo_type) {
-            TGeoColumnDesc geo;
-            geo.__set_type(geo_type->to_thrift());
-            scalar_type.__set_geo(geo);
+            scalar_type.__set_geo(geo_type->to_thrift());
         }
     }
 }
@@ -164,7 +162,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         if (precision != -1) {
             scalar_type->set_precision(precision);
         }
-        if (geo_type) *scalar_type->mutable_geo()->mutable_type() = geo_type->to_protobuf();
+        if (geo_type) *scalar_type->mutable_geo() = geo_type->to_protobuf();
     }
 }
 
@@ -183,8 +181,8 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         len = scalar_type.has_len() ? scalar_type.len() : -1;
         scale = scalar_type.has_scale() ? scalar_type.scale() : -1;
         precision = scalar_type.has_precision() ? scalar_type.precision() : -1;
-        if (scalar_type.has_geo() && scalar_type.geo().has_type()) {
-            geo_type = GeoTypeDescriptor::from_protobuf(scalar_type.geo().type());
+        if (scalar_type.has_geo()) {
+            geo_type = GeoTypeDescriptor::from_protobuf(scalar_type.geo());
         }
 
         if (type == TYPE_CHAR || type == TYPE_VARCHAR || type == TYPE_HLL) {

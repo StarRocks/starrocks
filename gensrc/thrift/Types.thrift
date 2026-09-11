@@ -198,7 +198,7 @@ struct TScalarType {
     // Paimon TIMESTAMP sets it to true so the reader keeps the wall clock unshifted.
     5: optional bool datetime_is_ntz
     // Native primitive type is authoritative; never attach this to VARBINARY.
-    6: optional TGeoColumnDesc geo
+    6: optional TGeoTypeDesc geo
 }
 
 // Represents a field in a STRUCT type.

@@ -128,9 +128,7 @@ TEST(TabletColumnUtilTest, RejectGeoColumnsBeforeWritingStorageType) {
                 semantic.__set_logical_type(primitive == TPrimitiveType::GEOGRAPHY ? TGeoLogicalType::GEOGRAPHY
                                                                                    : TGeoLogicalType::GEOMETRY);
                 semantic.__set_srid(4326);
-                TGeoColumnDesc geo;
-                geo.__set_type(semantic);
-                type_desc.types[0].scalar_type.__set_geo(geo);
+                type_desc.types[0].scalar_type.__set_geo(semantic);
             }
             TColumn column;
             column.__set_type_desc(type_desc);

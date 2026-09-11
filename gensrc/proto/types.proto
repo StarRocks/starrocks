@@ -46,7 +46,7 @@ message PScalarType {
     optional int32 precision = 3;
     optional int32 scale = 4;
     // Native primitive type is authoritative; never attach this to VARBINARY.
-    optional GeoColumnDescPB geo = 5;
+    optional GeoTypeDescPB geo = 5;
 };
 
 // Represents a field in a STRUCT type.
