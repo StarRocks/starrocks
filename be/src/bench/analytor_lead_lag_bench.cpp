@@ -12,23 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Benchmark: peak input-buffer retention of `lead(col, 1) IGNORE NULLS` in the Analytor operator,
-// comparing the legacy whole-partition materializing path against the streaming path
-// (config::pipeline_analytic_enable_ignore_nulls_streaming) which waits for enough future
-// non-nulls then evicts finished prefixes.
+// Benchmark: peak input-buffer retention of `lag(col, 1) IGNORE NULLS` and `lead(col, 1) IGNORE
+// NULLS` in the Analytor operator, comparing the legacy whole-partition materializing path against
+// the streaming eviction path (config::pipeline_analytic_enable_ignore_nulls_streaming). LAG evicts
+// behind a watermark at the most recent non-null; LEAD instead waits until enough future non-nulls
+// are buffered, then evicts finished prefixes.
 //
 // The headline metric is the profile counter `PeakBufferedRows` (high-water-mark of rows retained in
 // Analytor::_input_chunks), reported as a custom benchmark counter. Wall-clock time is incidental.
 //
 // Data patterns (single partition, so the whole input is one partition):
-//   ALL_NULL        - column is entirely NULL.  Streaming cannot resolve row 0 until EOS
-//                     -> peak ≈ full partition (unlike LAG, which can evict).
-//   DENSE           - every row non-null.        Streaming: wait ~offset rows, then evict prefixes
-//                     -> peak ≈ chunk + offset.
-//   SPARSE          - one non-null every G rows. Streaming: must hold the gap until the next
-//                     non-null arrives -> peak ≈ G (times offset).
-//   TAIL_NONNULL    - only the last row is non-null. Streaming waits until that row
-//                     -> peak ≈ full partition, then prefix eviction after it resolves.
+//   ALL_NULL        - column is entirely NULL.  LAG: target never set -> evicts to ~chunk. LEAD
+//                     cannot resolve row 0 until EOS -> peak ~ full partition.
+//   DENSE           - every row non-null.        LAG: target tracks current -> evicts to ~chunk.
+//                     LEAD: wait ~offset rows, then evict prefixes -> peak ~ chunk + offset.
+//   SPARSE          - one non-null every G rows.  Both retain ~G rows while the gap is unresolved.
+//   HEAD_THEN_NULL  - row 0 non-null, rest NULL.  LAG: target PINNED at 0 -> no eviction (the
+//                     documented caveat; only value-caching would fix this one).
+//   TAIL_NONNULL    - only the last row is non-null. LEAD waits until that row -> peak ~ full
+//                     partition, then prefix eviction after it resolves.
 // Legacy (materializing) always retains the whole partition regardless of pattern.
 //
 // NOTE: exercises the real Analytor with a hand-built analytic TPlanNode. Validated by construction;
@@ -38,9 +40,7 @@
 #include <benchmark/benchmark.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -62,22 +62,27 @@
 
 namespace starrocks {
 
-enum Pattern { ALL_NULL = 0, DENSE = 1, SPARSE = 2, TAIL_NONNULL = 3 };
+enum Pattern { ALL_NULL = 0, DENSE = 1, SPARSE = 2, HEAD_THEN_NULL = 3, TAIL_NONNULL = 4 };
+
+// LAG looks backwards and LEAD forwards; otherwise the two plans are identical.
+enum Fn { LAG = 0, LEAD = 1 };
 
 static constexpr int64_t kRows = 1 << 20; // ~1M rows total
 static constexpr int64_t kChunk = 4096;   // rows per chunk fed to the operator
 static constexpr int64_t kSparseGap = 64; // one non-null every kSparseGap rows for SPARSE
 
-static TPlanNode make_lead_plan_node(TupleId input_tuple_id, SlotId value_slot_id, int64_t offset) {
+static TPlanNode make_lead_lag_plan_node(Fn fn, TupleId input_tuple_id, SlotId value_slot_id, int64_t offset) {
     const TTypeDesc int_type = bench::make_scalar_type(TPrimitiveType::INT);
-    TExpr lead = bench::make_builtin_aggregate_expr(
-            "lead", {int_type}, int_type,
+    TExpr agg = bench::make_builtin_aggregate_expr(
+            fn == LAG ? "lag" : "lead", {int_type}, int_type,
             {bench::make_slot_ref_expr(input_tuple_id, value_slot_id, int_type),
              bench::make_bigint_literal_expr(offset), bench::make_null_literal_expr(int_type)},
             true);
-    TAnalyticWindow window = bench::make_rows_window(
-            std::nullopt, bench::make_rows_offset_boundary(TAnalyticWindowBoundaryType::FOLLOWING, offset));
-    return bench::make_analytic_plan_node({lead}, input_tuple_id, window);
+    const auto boundary_type =
+            fn == LAG ? TAnalyticWindowBoundaryType::PRECEDING : TAnalyticWindowBoundaryType::FOLLOWING;
+    TAnalyticWindow window =
+            bench::make_rows_window(std::nullopt, bench::make_rows_offset_boundary(boundary_type, offset));
+    return bench::make_analytic_plan_node({agg}, input_tuple_id, window);
 }
 
 // A nullable INT32 column for global rows [begin, begin+count) under the given pattern.
@@ -98,8 +103,11 @@ static ColumnPtr make_value_chunk_column(Pattern pattern, int64_t begin, int64_t
             is_null = (g % kSparseGap != 0);
             break;
         case TAIL_NONNULL:
-        default:
             is_null = (g != kRows - 1);
+            break;
+        case HEAD_THEN_NULL:
+        default:
+            is_null = (g != 0);
             break;
         }
         data->append(is_null ? 0 : static_cast<int32_t>(g));
@@ -108,22 +116,7 @@ static ColumnPtr make_value_chunk_column(Pattern pattern, int64_t begin, int64_t
     return NullableColumn::create(std::move(data), std::move(nulls));
 }
 
-// Standalone benchmarks skip GlobalEnv, but Analytor::prepare() reads config defaults and
-// CpuInfo must be initialized before any chunk sizing decision.
-static void init_env() {
-    static std::once_flag once;
-    std::call_once(once, [] {
-        // Some config defaults interpolate these; config::init() aborts on the first one it cannot
-        // expand, silently leaving every later field (including pipeline_analytic_*) zero-initialized.
-        setenv("STARROCKS_HOME", "./", 1);
-        setenv("UDF_RUNTIME_DIR", "./udf/", 1);
-        CHECK(config::init(nullptr)) << "failed to load BE config defaults";
-        CpuInfo::init();
-    });
-}
-
-static void BM_LeadIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool streaming) {
-    init_env();
+static void BM_LeadLagIgnoreNulls(benchmark::State& bstate, Fn fn, Pattern pattern, bool streaming) {
     for (auto _ : bstate) {
         bstate.PauseTiming();
         config::pipeline_analytic_enable_ignore_nulls_streaming = streaming;
@@ -138,7 +131,7 @@ static void BM_LeadIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool s
             in_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("v").build());
             in_tuple.build(&dtb);
             TTupleDescriptorBuilder out_tuple;
-            out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("lead_v").build());
+            out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("out_v").build());
             out_tuple.build(&dtb);
         }
         auto* state = pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
@@ -152,7 +145,7 @@ static void BM_LeadIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool s
         const SlotId col_slot_id = desc_tbl->get_tuple_descriptor(in_tuple_id)->slots()[0]->id();
         TupleDescriptor* result_tuple = desc_tbl->get_tuple_descriptor(out_tuple_id);
 
-        TPlanNode tnode = make_lead_plan_node(in_tuple_id, col_slot_id, 1);
+        TPlanNode tnode = make_lead_lag_plan_node(fn, in_tuple_id, col_slot_id, 1);
         RuntimeProfile profile("Analytor");
 
         auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
@@ -192,16 +185,46 @@ static void BM_LeadIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool s
     }
 }
 
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, all_null_legacy, ALL_NULL, false)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, dense_legacy, DENSE, false)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, sparse_legacy, SPARSE, false)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, tail_nonnull_legacy, TAIL_NONNULL, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_all_null_legacy, LAG, ALL_NULL, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_dense_legacy, LAG, DENSE, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_sparse_legacy, LAG, SPARSE, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_head_then_null_legacy, LAG, HEAD_THEN_NULL, false)
+        ->Unit(benchmark::kMillisecond);
 
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, all_null_streaming, ALL_NULL, true)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, dense_streaming, DENSE, true)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, sparse_streaming, SPARSE, true)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, tail_nonnull_streaming, TAIL_NONNULL, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_all_null_streaming, LAG, ALL_NULL, true)
+        ->Unit(benchmark::kMillisecond)
+        ->Iterations(1);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_dense_streaming, LAG, DENSE, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_sparse_streaming, LAG, SPARSE, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lag_head_then_null_streaming, LAG, HEAD_THEN_NULL, true)
+        ->Unit(benchmark::kMillisecond);
+
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_all_null_legacy, LEAD, ALL_NULL, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_dense_legacy, LEAD, DENSE, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_sparse_legacy, LEAD, SPARSE, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_tail_nonnull_legacy, LEAD, TAIL_NONNULL, false)
+        ->Unit(benchmark::kMillisecond);
+
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_all_null_streaming, LEAD, ALL_NULL, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_dense_streaming, LEAD, DENSE, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_sparse_streaming, LEAD, SPARSE, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadLagIgnoreNulls, lead_tail_nonnull_streaming, LEAD, TAIL_NONNULL, true)
+        ->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
 
-BENCHMARK_MAIN();
+int main(int argc, char** argv) {
+    // Standalone benchmarks do not run the BE's GlobalEnv initialization, which normally loads
+    // config defaults. Analytor::open() allocates its aggregate state from a MemPool, and its
+    // processing mode depends on those defaults, so a failure here must not be ignored.
+    // config::init() expands ${STARROCKS_HOME} and ${UDF_RUNTIME_DIR} in the defaults; export both
+    // before running this benchmark.
+    if (!starrocks::config::init(nullptr)) return 1;
+    starrocks::CpuInfo::init();
+
+    ::benchmark::Initialize(&argc, argv);
+    if (::benchmark::ReportUnrecognizedArguments(argc, argv)) return 1;
+    ::benchmark::RunSpecifiedBenchmarks();
+    ::benchmark::Shutdown();
+    return 0;
+}
