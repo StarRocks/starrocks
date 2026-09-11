@@ -1,0 +1,207 @@
+-- name: test_lake_add_index_after_column_partial_update @cloud
+create database lake_idx_after_pu_${uuid0};
+-- result:
+-- !result
+use lake_idx_after_pu_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_pu_then_bitmap (
+    k1 int,
+    v1 int,
+    c2 int,
+    c3 int,
+    c4 int,
+    c5 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_pu_then_bitmap values
+    (1,10,1,1,1,1),(2,20,2,2,2,2),(3,30,3,3,3,3),(4,20,4,4,4,4),(5,20,5,5,5,5);
+-- result:
+-- !result
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+update t_pu_then_bitmap set v1 = 777 where k1 <= 2;
+-- result:
+-- !result
+ALTER TABLE t_pu_then_bitmap ADD INDEX idx_v1(v1) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 777;
+-- result:
+2
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 20;
+-- result:
+2
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 10;
+-- result:
+0
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 30;
+-- result:
+1
+-- !result
+select * from t_pu_then_bitmap order by k1;
+-- result:
+1	777	1	1	1	1
+2	777	2	2	2	2
+3	30	3	3	3	3
+4	20	4	4	4	4
+5	20	5	5	5	5
+-- !result
+update t_pu_then_bitmap set v1 = 888 where k1 = 3;
+-- result:
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 888;
+-- result:
+1
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 30;
+-- result:
+0
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 777;
+-- result:
+2
+-- !result
+select * from t_pu_then_bitmap order by k1;
+-- result:
+1	777	1	1	1	1
+2	777	2	2	2	2
+3	888	3	3	3	3
+4	20	4	4	4	4
+5	20	5	5	5	5
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*) from t_pu_then_bitmap where v1 = 777;
+create table profile_lines_bitmap properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(count(1) > 0)
+    from profile_lines_bitmap
+    where line like '%- BitmapIndexIteratorInit%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines_bitmap
+    where line like '%- BitmapIndexFilterRows%';
+-- result:
+1
+-- !result
+CREATE TABLE t_pu_then_bloom (
+    k1 int,
+    s1 varchar(32),
+    c2 int,
+    c3 int,
+    c4 int,
+    c5 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_pu_then_bloom values
+    (1,'aa',1,1,1,1),(2,'bb',2,2,2,2),(3,'cc',3,3,3,3),(4,'bb',4,4,4,4),(5,'bb',5,5,5,5);
+-- result:
+-- !result
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+update t_pu_then_bloom set s1 = 'zz' where k1 <= 2;
+-- result:
+-- !result
+ALTER TABLE t_pu_then_bloom SET ("bloom_filter_columns" = "s1");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t_pu_then_bloom where s1 = 'zz';
+-- result:
+2
+-- !result
+select count(*) from t_pu_then_bloom where s1 = 'bb';
+-- result:
+2
+-- !result
+select count(*) from t_pu_then_bloom where s1 = 'cc';
+-- result:
+1
+-- !result
+select count(*) from t_pu_then_bloom where s1 = 'aa';
+-- result:
+0
+-- !result
+select * from t_pu_then_bloom order by k1;
+-- result:
+1	zz	1	1	1	1
+2	zz	2	2	2	2
+3	cc	3	3	3	3
+4	bb	4	4	4	4
+5	bb	5	5	5	5
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*) from t_pu_then_bloom where s1 = 'zz';
+create table profile_lines_bloom properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(count(1) > 0)
+    from profile_lines_bloom
+    where line like '%- BloomFilterFilter:%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines_bloom
+    where line like '%- BloomFilterFilter:%';
+-- result:
+1
+-- !result
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+update t_pu_then_bloom set s1 = 'yy' where k1 = 4;
+-- result:
+-- !result
+select count(*) from t_pu_then_bloom where s1 = 'yy';
+-- result:
+1
+-- !result
+select count(*) from t_pu_then_bloom where s1 = 'bb';
+-- result:
+1
+-- !result
+select * from t_pu_then_bloom order by k1;
+-- result:
+1	zz	1	1	1	1
+2	zz	2	2	2	2
+3	cc	3	3	3	3
+4	yy	4	4	4	4
+5	bb	5	5	5	5
+-- !result
+drop database lake_idx_after_pu_${uuid0};
+-- result:
+-- !result
