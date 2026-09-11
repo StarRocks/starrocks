@@ -64,7 +64,6 @@ private:
     // downstream operators keep returned chunks and their columns alive across calls.
     ChunkPtr _read_chunk_template;
     Filter _chunk_filter;
-    Filter _conjunct_filter;
     ArrowConvertContext _convert_context;
 };
 
