@@ -1,13 +1,17 @@
 name: AI POST-MERGE REVIEW REPORT
 
-# Report half of the post-merge severe-risk review chain. Fires on codex's comments
-# on closed PRs; the script finds the codex review answering our post-merge trigger,
-# takes its findings, and opens a tracking issue assigned to the PR author. Returns
-# in seconds -- no polling. Idempotent (one issue per PR).
+# Report half of the post-merge severe-risk review chain. Codex delivers its result
+# as a pull request *review* (the summary + inline findings), so we react to
+# `pull_request_review: submitted` -- NOT issue_comment: on a closed PR codex submits
+# a review but does not reliably leave a top-level issue comment, so an issue_comment
+# trigger would silently miss the findings (observed on #61390). The script then
+# correlates that review to our post-merge REVIEW.md trigger, takes its inline
+# findings, and opens a tracking issue assigned to the PR author. Returns in seconds --
+# no polling. Idempotent (one issue per PR).
 
 on:
-  issue_comment:
-    types: [created]
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: read
@@ -17,11 +21,13 @@ permissions:
 jobs:
   report:
     name: AI Post-Merge Review (report)
+    # Only codex reviews, and only on merged/closed PRs (post-merge). The script's own
+    # correlation (a CelerData-Reviewer REVIEW.md trigger comment before the review)
+    # further guarantees this is our post-merge flow and not a stray pre-merge review.
     if: >
       github.repository == 'CelerData/celerdata-enterprise' &&
-      github.event.issue.pull_request &&
-      github.event.issue.state == 'closed' &&
-      github.event.comment.user.login == 'chatgpt-codex-connector[bot]'
+      github.event.pull_request.state == 'closed' &&
+      github.event.review.user.login == 'chatgpt-codex-connector[bot]'
     # quick (not light): needs the /var/lib/ci-tool bind-mount for the orchestration
     # script; light is a deliberately ci-tool-free pool. Seconds-long event-driven job.
     runs-on: [self-hosted, quick]
@@ -31,9 +37,9 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT }}
           MODE: report
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-          PR_TITLE: ${{ github.event.issue.title }}
-          PR_AUTHOR: ${{ github.event.issue.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
           # git pull is best-effort: the bind-mounted copy is already runnable, so a
