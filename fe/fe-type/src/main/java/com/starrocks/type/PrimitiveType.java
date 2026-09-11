@@ -82,11 +82,7 @@ public enum PrimitiveType {
     VARBINARY("VARBINARY", 16),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
-    UNKNOWN_TYPE("UNKNOWN_TYPE", -1),
-
-    // Reserved native identities; SQL activation requires separate capabilities.
-    GEOGRAPHY("GEOGRAPHY", 16),
-    GEOMETRY("GEOMETRY", 16);
+    UNKNOWN_TYPE("UNKNOWN_TYPE", -1);
 
     private static final int DATE_INDEX_LEN = 3;
     private static final int DATETIME_INDEX_LEN = 8;
@@ -384,9 +380,7 @@ public enum PrimitiveType {
             case CHAR:
             case VARCHAR:
             case VARBINARY:
-            case GEOGRAPHY:
-            case GEOMETRY:
-                // Use 16 as the variable-width slot size estimate.
+                // use 16 as char type estimate size
                 typeSize = 16;
                 break;
             case HLL:

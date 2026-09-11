@@ -73,8 +73,6 @@ public class TypeDeserializer {
             case JSON -> PrimitiveType.JSON;
             case FUNCTION -> PrimitiveType.FUNCTION;
             case VARIANT -> PrimitiveType.VARIANT;
-            case GEOGRAPHY -> PrimitiveType.GEOGRAPHY;
-            case GEOMETRY -> PrimitiveType.GEOMETRY;
             default -> PrimitiveType.INVALID_TYPE;
         };
     }
@@ -134,12 +132,6 @@ public class TypeDeserializer {
     private static Type scalarTypeFromThrift(TTypeNode node) {
         Preconditions.checkState(node.isSetScalar_type());
         TScalarType scalarType = node.getScalar_type();
-        if (scalarType.isSetGeo()) {
-            return ScalarType.createGeoType(fromThrift(scalarType.getType()), GeoTypeSerde.fromThrift(scalarType.geo));
-        }
-        Preconditions.checkArgument(scalarType.getType() != TPrimitiveType.GEOGRAPHY
-                        && scalarType.getType() != TPrimitiveType.GEOMETRY,
-                "Native geo primitives require a geo descriptor");
         
         if (scalarType.getType() == TPrimitiveType.CHAR) {
             Preconditions.checkState(scalarType.isSetLen());
@@ -225,11 +217,6 @@ public class TypeDeserializer {
 
     public static ScalarType createType(PScalarType ptype) {
         TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(ptype.type);
-        if (ptype.geo != null) {
-            return ScalarType.createGeoType(fromThrift(tPrimitiveType), GeoTypeSerde.fromProtobuf(ptype.geo));
-        }
-        Preconditions.checkArgument(tPrimitiveType != TPrimitiveType.GEOGRAPHY && tPrimitiveType != TPrimitiveType.GEOMETRY,
-                "Native geo primitives require a geo descriptor");
 
         switch (tPrimitiveType) {
             case CHAR:
