@@ -609,7 +609,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。
+- 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。作用范围包括 Tablet 元数据文件和事务日志（txn log）文件的本地缓存。读取此类文件时如果遇到数据损坏错误，系统会清除对应的缓存副本，并从远端存储重新读取一次。
 - 引入版本：v3.3
 
 ### lake_enable_horizontal_compaction_fill_data_cache

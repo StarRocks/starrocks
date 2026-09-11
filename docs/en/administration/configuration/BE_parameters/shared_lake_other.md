@@ -612,7 +612,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster.
+- Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster. This covers the local cache of tablet metadata files and transaction log files. When a read of such a file fails with a corruption error, the system drops the cached copy and reads the file again from remote storage once.
 - Introduced in: v3.3
 
 ### lake_enable_horizontal_compaction_fill_data_cache
