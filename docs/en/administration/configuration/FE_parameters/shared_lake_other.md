@@ -531,7 +531,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of compute nodes that may write **one tablet** in parallel once local-first tablet write (`enable_local_first_tablet_write`) is on. Every node in that list opens its own delta writer for the tablet and produces its own segments, so on a very wide warehouse an otherwise ordinary load would be cut into that many small segments. Nodes beyond this bound still run their own sink instance; their rows simply travel over the network to a node inside the list, which is the behaviour that existed before this feature. The bound therefore costs locality but never correctness. Set it to `0` or less for no bound (every alive compute node).
+- Description: The maximum number of compute nodes that may write **one tablet** in parallel once local-first tablet write (`enable_local_first_tablet_write`) is on. Every node in that list opens its own delta writer for the tablet and produces its own segments, so on a very wide warehouse an otherwise ordinary load would be cut into that many small segments. Nodes beyond this bound still run their own sink instance; their rows simply travel over the network to a node inside the list, which is the behaviour that existed before this feature. The bound therefore costs locality but never correctness. Set it to `0` or less for no bound (every alive compute node). This is an upper bound, not the parallelism itself: the number actually used is the smallest of this, the node count derived from the load's estimated size (session variable `lake_local_first_write_bytes_per_node`), and the number of alive compute nodes.
 - Introduced in: v4.2
 
 ### `lake_publish_version_max_threads`

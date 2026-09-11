@@ -19,6 +19,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.reshard.presplit.PreSplitEstimates;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -489,6 +490,10 @@ public class InsertPlanner {
                     Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
                             ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    // Same estimate pre-split sizes its tablet count from, reused to size the local-first
+                    // write set. Reading it here rather than inside the sink keeps the sink free of the
+                    // exec plan; complete() below is what consumes it.
+                    olapTableSink.setEstimatedWriteBytes(PreSplitEstimates.fromExecPlan(execPlan).totalBytes());
                     olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());

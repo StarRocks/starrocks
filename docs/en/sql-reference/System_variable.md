@@ -1956,6 +1956,15 @@ Used to display the time zone of the current system. Cannot be changed.
 * **Scope**: Session
 * **Introduced in**: v4.2
 
+### lake_local_first_write_bytes_per_node (v4.2 and later)
+
+* **Description**: Only applies in shared-data mode, and only when `enable_local_first_tablet_write` is enabled. How many bytes of a load one compute node is given before another node is added to a tablet's write set. The node count is the load's estimated size divided by this value (integer division, so a node joins only once there is a whole share for it), and the parallelism finally used is the smallest of that number, the FE configuration item `lake_local_first_write_max_nodes`, and the number of alive compute nodes. For example, a 10 GB load at the default 2 GB gives 5 nodes, which a 3-node warehouse then clamps to 3. Spreading a load is not free: every node in a tablet's node list writes its own segments and emits its own partial transaction log, and the open/close round trips reach every node in that list whether or not it ends up holding any rows — so a small load spread wide pays an extra segment and an extra log per node for little gain. The size comes from the optimizer's estimate for an `INSERT`, and from the resolved file list for a Broker Load; when neither is available the node count is left to `lake_local_first_write_max_nodes` alone, because an unknown size is not a small size. Set to 0 to disable size-based sizing.
+* **Default**: 2147483648 (2 GB)
+* **Unit**: Bytes
+* **Type**: Long
+* **Scope**: Session
+* **Introduced in**: v4.2
+
 ### time_zone
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.

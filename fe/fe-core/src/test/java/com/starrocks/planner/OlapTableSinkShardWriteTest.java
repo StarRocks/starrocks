@@ -72,4 +72,43 @@ public class OlapTableSinkShardWriteTest {
         Assertions.assertEquals(10L, second.get(0));
         Assertions.assertNotEquals(first.get(1), second.get(1));
     }
+
+    private static final long GB = 1024L * 1024 * 1024;
+
+    @Test
+    public void testNodesFromEstimatedSize() {
+        // The worked example: 10 GB at the 2 GB default is five nodes' worth. The caller then takes the
+        // minimum of this, lake_local_first_write_max_nodes, and the alive node count.
+        Assertions.assertEquals(5, OlapTableSink.nodesForEstimatedSize(10 * GB, 2 * GB));
+        Assertions.assertEquals(1, OlapTableSink.nodesForEstimatedSize(2 * GB, 2 * GB));
+    }
+
+    @Test
+    public void testPartialShareDoesNotBuyANode() {
+        // Integer division: a node joins only once there is a whole share for it. Every node in the list
+        // writes its own segments and emits its own partial txn log, and open/close reach it whether or
+        // not it ends up with rows, so a node given a sliver costs more than it saves.
+        Assertions.assertEquals(4, OlapTableSink.nodesForEstimatedSize(9 * GB, 2 * GB));
+        // Below one full share the load stays on a single node, which is the feature turned off.
+        Assertions.assertEquals(1, OlapTableSink.nodesForEstimatedSize(GB, 2 * GB));
+    }
+
+    @Test
+    public void testUnknownSizeDefersToTheBound() {
+        // An unknown size is not a small size: with no estimate the node count must stay exactly what it
+        // was before this knob existed, so the value returned has to lose every min() it takes part in.
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(-1, 2 * GB));
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(0, 2 * GB));
+        // Same for a session that disables the sizing by zeroing the share.
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(10 * GB, 0));
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(10 * GB, -1));
+    }
+
+    @Test
+    public void testHugeEstimateDoesNotOverflow() {
+        // A byte count divided by a one-byte share exceeds int range; it must saturate, not wrap
+        // negative, which would make min() pick a nonsense parallelism.
+        Assertions.assertEquals(Integer.MAX_VALUE, OlapTableSink.nodesForEstimatedSize(Long.MAX_VALUE, 1));
+    }
+
 }

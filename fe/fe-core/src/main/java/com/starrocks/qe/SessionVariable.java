@@ -269,6 +269,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String ENABLE_LOCAL_FIRST_TABLET_WRITE = "enable_local_first_tablet_write";
 
+    /**
+     * How many bytes of a load one node should be given before another node is added to a tablet's
+     * write set. The node count is the estimated load size divided by this, then capped by
+     * lake_local_first_write_max_nodes and by the number of alive compute nodes.
+     * <p>
+     * Spreading is not free: every node in a tablet's node list writes its own segments and emits its
+     * own partial txn log, and open/close reach every node in that list whether or not it ends up with
+     * any rows. So a small load spread wide pays one extra segment and one extra log per node and gets
+     * little back -- the measured speedup is ~1.35x at 5 GB against ~3x at 20-50 GB.
+     */
+    public static final String LAKE_LOCAL_FIRST_WRITE_BYTES_PER_NODE = "lake_local_first_write_bytes_per_node";
+
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
@@ -1410,6 +1422,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_FIRST_TABLET_WRITE)
     private boolean enableLocalFirstTabletWrite = false;
+
+    @VariableMgr.VarAttr(name = LAKE_LOCAL_FIRST_WRITE_BYTES_PER_NODE)
+    private long lakeLocalFirstWriteBytesPerNode = 2147483648L;
 
     @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
     private long queryMemLimit = 0L;
@@ -4152,6 +4167,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableLocalFirstTabletWrite(boolean enableLocalFirstTabletWrite) {
         this.enableLocalFirstTabletWrite = enableLocalFirstTabletWrite;
+    }
+
+    public long getLakeLocalFirstWriteBytesPerNode() {
+        return lakeLocalFirstWriteBytesPerNode;
+    }
+
+    public void setLakeLocalFirstWriteBytesPerNode(long lakeLocalFirstWriteBytesPerNode) {
+        this.lakeLocalFirstWriteBytesPerNode = lakeLocalFirstWriteBytesPerNode;
     }
 
     public int getQueryTimeoutS() {

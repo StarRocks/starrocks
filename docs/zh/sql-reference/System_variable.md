@@ -1691,6 +1691,15 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 * **粒度**：Session
 * **引入版本**：v4.2
 
+### lake_local_first_write_bytes_per_node (v4.2 及以后)
+
+* **描述**：仅在存算分离模式下生效，且只有在开启 `enable_local_first_tablet_write` 后才起作用。表示在把下一个节点加入某个 tablet 的写入集合之前，先给一个计算节点分配多少字节的导入量。节点数量等于该导入的预估大小除以本变量（整除，因此只有凑满一整份时才会增加一个节点），最终使用的并行度取该数值、FE 配置项 `lake_local_first_write_max_nodes` 以及存活计算节点数量三者中的最小值。例如 10 GB 的导入在默认 2 GB 下得到 5 个节点，在 3 节点的 Warehouse 上再被夹到 3。分散写入并非没有代价：tablet 节点列表中的每一个节点都会写出自己的 segment 并产生自己的部分事务日志，而且无论某个节点最终是否分到数据，open/close 都会发送到列表中的每一个节点——因此把小规模导入摊得过开，只会按节点数多付出 segment 和事务日志，收益却很有限。大小来源：`INSERT` 取优化器的预估值，Broker Load 取已解析的文件列表；两者都拿不到时，节点数量完全交由 `lake_local_first_write_max_nodes` 决定，因为"大小未知"不等于"大小很小"。设置为 0 表示关闭按大小推算。
+* **默认值**：2147483648（2 GB）
+* **单位**：字节
+* **类型**：Long
+* **粒度**：Session
+* **引入版本**：v4.2
+
 ### time_zone
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。

@@ -169,6 +169,11 @@ public class OlapTableSink extends DataSink {
     // null (default) means write all indexes, i.e. today's behavior.
     private Long targetWriteIndexId = null;
 
+    // Estimated bytes this statement writes, set by the planner that has the estimate (the exec plan
+    // for INSERT, the file list for a broker load). Negative means "no usable estimate", which must
+    // leave the node count alone rather than shrink it -- an unknown size is not a small size.
+    private long estimatedWriteBytes = -1;
+
     // Conservative default for RANGE-partitioned tables under stream / routine load.
     // Both planner paths flag streaming ingest via setIsStreamingLoad(true): StreamLoadPlanner
     // (legacy stream load and routine load) and LoadPlanner (transaction stream load and batch
@@ -348,8 +353,45 @@ public class OlapTableSink extends DataSink {
         // feature, so the bound costs locality but never correctness. The bound exists because every node in
         // the list writes its own segments: on a very wide warehouse an otherwise ordinary load would be cut
         // into that many small segments. createLocation clamps the result to the number of alive nodes.
+        //
+        // Three limits meet here and the smallest wins: what the load's own size is worth spreading
+        // over, this bound, and (in createLocation) the alive node count.
         int bound = Config.lake_local_first_write_max_nodes;
-        return bound > 0 ? bound : Integer.MAX_VALUE;
+        int maxNodes = bound > 0 ? bound : Integer.MAX_VALUE;
+        return Math.min(maxNodes, nodesForEstimatedSize(context));
+    }
+
+    // How many nodes this load's estimated size is worth spreading over, at
+    // lake_local_first_write_bytes_per_node each.
+    //
+    // Integer division on purpose: a node is added only once there is a full share of bytes to give
+    // it, because spreading is not free. Every node in a tablet's node list writes its own segments
+    // and emits its own partial txn log, and open/close reach every node in that list whether or not
+    // it ends up holding any rows, so a node that receives a sliver still costs a segment and a log.
+    // The measured speedup bears this out: ~1.35x at 5 GB against ~3x at 20-50 GB.
+    //
+    // Returns Integer.MAX_VALUE -- i.e. defers entirely to the node bound -- whenever there is no
+    // usable estimate or the share is non-positive. A load whose size the optimizer cannot estimate
+    // (no statistics, an external source, a planner that never set a cardinality) must keep behaving
+    // as it did before this knob existed; only a size we actually know may narrow the spread.
+    private int nodesForEstimatedSize(ConnectContext context) {
+        return nodesForEstimatedSize(estimatedWriteBytes,
+                context.getSessionVariable().getLakeLocalFirstWriteBytesPerNode());
+    }
+
+    @VisibleForTesting
+    static int nodesForEstimatedSize(long estimatedWriteBytes, long bytesPerNode) {
+        if (estimatedWriteBytes <= 0 || bytesPerNode <= 0) {
+            return Integer.MAX_VALUE;
+        }
+        long nodes = estimatedWriteBytes / bytesPerNode;
+        return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, nodes));
+    }
+
+    // The estimate is advisory: it only ever narrows the spread, so a wrong one costs locality and
+    // never correctness.
+    public void setEstimatedWriteBytes(long estimatedWriteBytes) {
+        this.estimatedWriteBytes = estimatedWriteBytes;
     }
 
     // Mirror of DeltaWriterImpl::init_write_schema: BE counts the sink's slots, drops a trailing `__op`,
