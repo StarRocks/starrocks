@@ -216,7 +216,7 @@ Status PaimonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) 
     // Unlike other hive-family scanners there is no need to fill not-existed or partition
     // columns here: schema evolution is resolved inside paimon-cpp, and paimon partition
     // columns are materialized by the reader as regular data columns.
-    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_on_conjunct_ctxs_by_slot(chunk, &_conjunct_filter));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(chunk));
     // rows_read is accounted by HdfsScanner::get_next() after do_get_next() returns.
     return Status::OK();
 }
@@ -231,7 +231,6 @@ void PaimonScanner::do_close(RuntimeState*) noexcept {
     _convert_functions.clear();
     _cast_exprs.clear();
     _chunk_filter.clear();
-    _conjunct_filter.clear();
     _paimon_file_system.reset();
     _memory_pool.reset();
     _pool.clear();
