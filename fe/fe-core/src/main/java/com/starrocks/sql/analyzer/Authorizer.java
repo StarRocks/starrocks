@@ -22,6 +22,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -38,6 +39,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 
@@ -57,7 +59,32 @@ public class Authorizer {
     }
 
     public static void check(StatementBase statement, ConnectContext context) {
+        check(statement, context, AIModelBinder.bind(statement, GlobalStateMgr.getCurrentState().getAIModelMgr()));
+    }
+
+    public static void check(StatementBase statement, ConnectContext context, AIModelBindings bindings) {
+        Preconditions.checkNotNull(bindings, "AI model bindings must be provided");
         getInstance().getPrivilegeCheckerVisitor().check(statement, context);
+        for (AIModel model : bindings.modelsRequiringUsage()) {
+            try {
+                checkAIModelAction(context, model, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectType.AI_MODEL.name(), model.getName());
+            }
+        }
+    }
+
+    public static void checkAIModelAction(ConnectContext context, AIModel model, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAIModelAction(context, model, privilegeType);
+    }
+
+    public static void checkAnyActionOnAIModel(ConnectContext context, AIModel model) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAnyActionOnAIModel(context, model);
     }
 
     public static void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)

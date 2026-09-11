@@ -18,12 +18,14 @@
 
 #include "base/statusor.h"
 #include "platform/llm/ai_provider_options.h"
+#include "platform/llm/ai_rate_limiter.h"
 
 namespace starrocks {
 
 class Column;
 struct TypeDescriptor;
 
-StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, const TypeDescriptor& type, size_t row);
+StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, const TypeDescriptor& type, size_t row,
+                                                      AICapability capability = AICapability::CHAT);
 
 } // namespace starrocks

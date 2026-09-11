@@ -54,6 +54,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AIModelBinder;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -76,6 +77,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -275,6 +277,10 @@ public class InsertPlanner {
     }
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
+        return plan(insertStmt, session, AIModelBindings.EMPTY);
+    }
+
+    public ExecPlan plan(InsertStmt insertStmt, ConnectContext session, AIModelBindings aiModelBindings) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
@@ -360,10 +366,10 @@ public class InsertPlanner {
             ExecPlan execPlan =
                     useOptimisticLock ?
                             buildExecPlanWithRetry(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
-                                    queryRelation, targetTable) :
+                                    queryRelation, targetTable, aiModelBindings) :
                             buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
                                     queryRelation,
-                                    targetTable);
+                                    targetTable, aiModelBindings);
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
@@ -565,7 +571,8 @@ public class InsertPlanner {
     private ExecPlan buildExecPlanWithRetry(InsertStmt insertStmt, ConnectContext session,
                                             List<ColumnRefOperator> outputColumns,
                                             LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                            QueryRelation queryRelation, Table targetTable) {
+                                            QueryRelation queryRelation, Table targetTable,
+                                            AIModelBindings aiModelBindings) {
         boolean isSchemaValid = true;
         Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
         Stopwatch watch = Stopwatch.createStarted();
@@ -574,6 +581,7 @@ public class InsertPlanner {
             long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
                 olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, session, plannerMetaLocker);
+                AIModelBinder.validateBindings(insertStmt, aiModelBindings);
             }
 
             // Release the lock during planning, and reacquire the lock before validating
@@ -581,7 +589,7 @@ public class InsertPlanner {
             ExecPlan plan;
             try {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
-                        targetTable);
+                        targetTable, aiModelBindings);
             } finally {
                 try (Timer ignore2 = Tracers.watchScope("Lock")) {
                     StatementPlanner.lock(plannerMetaLocker);
@@ -611,7 +619,7 @@ public class InsertPlanner {
 
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                   QueryRelation queryRelation, Table targetTable) {
+                                   QueryRelation queryRelation, Table targetTable, AIModelBindings aiModelBindings) {
         // Retractable IVM: pre-place the sink __op control column as a fixed trailing output before optimize,
         // so it flows into the sink tuple by position; IvmRewriter binds its value to __ACTION__.
         boolean ivmOpPreplaced = preplaceIvmLoadOpColumn(session, targetTable, outputColumns, columnRefFactory);
@@ -651,7 +659,7 @@ public class InsertPlanner {
         try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
             execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    sinkColNames, TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                    sinkColNames, TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment, false, aiModelBindings);
         }
         return execPlan;
     }

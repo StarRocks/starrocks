@@ -19,13 +19,16 @@ import com.google.common.base.Strings;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.sql.ast.AlterAIModelStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -34,6 +37,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateAIModelStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -44,7 +48,9 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescAIModelStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.DropAIModelStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -85,6 +91,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
+import com.starrocks.sql.ast.ShowAIModelsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SystemVariable;
@@ -1803,6 +1810,54 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     }
 
     // --------------------------------------------Storage volume Statement ----------------------------------------
+
+    @Override
+    public String visitCreateAIModelStatement(CreateAIModelStmt stmt, Void context) {
+        return "CREATE AI MODEL " + (stmt.isSetIfNotExists() ? "IF NOT EXISTS " : "")
+                + quoteAIModelName(stmt.getName())
+                + (stmt.getComment().isEmpty() ? "" : " COMMENT " + visit(new StringLiteral(stmt.getComment())))
+                + " PROPERTIES " + formatAIModelProperties(stmt.getProperties());
+    }
+
+    @Override
+    public String visitAlterAIModelStatement(AlterAIModelStmt stmt, Void context) {
+        return "ALTER AI MODEL " + (stmt.isSetIfExists() ? "IF EXISTS " : "") + quoteAIModelName(stmt.getName())
+                + (stmt.getComment() != null ? " COMMENT = " + visit(new StringLiteral(stmt.getComment()))
+                : " SET " + formatAIModelProperties(stmt.getProperties()));
+    }
+
+    @Override
+    public String visitDropAIModelStatement(DropAIModelStmt stmt, Void context) {
+        return "DROP AI MODEL " + (stmt.isSetIfExists() ? "IF EXISTS " : "") + quoteAIModelName(stmt.getName());
+    }
+
+    @Override
+    public String visitShowAIModelsStatement(ShowAIModelsStmt stmt, Void context) {
+        return "SHOW AI MODELS" + (stmt.getPattern() == null ? "" : " LIKE " + visit(new StringLiteral(stmt.getPattern())));
+    }
+
+    @Override
+    public String visitDescAIModelStatement(DescAIModelStmt stmt, Void context) {
+        return "DESC AI MODEL " + quoteAIModelName(stmt.getName());
+    }
+
+    private String quoteAIModelName(String name) {
+        return "`" + name.replace("`", "``") + "`";
+    }
+
+    private String formatAIModelProperties(Map<String, String> properties) {
+        return properties.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry -> {
+            String value = entry.getValue();
+            if (options.isHideCredential()) {
+                try {
+                    AIModel.validateAlterProperties(Map.of(entry.getKey(), value));
+                } catch (DdlException e) {
+                    value = MASKED_AUTH_TEXT;
+                }
+            }
+            return visit(new StringLiteral(entry.getKey())) + " = " + visit(new StringLiteral(value));
+        }).collect(Collectors.joining(", ", "(", ")"));
+    }
 
     @Override
     public String visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, Void context) {

@@ -16,6 +16,7 @@ package com.starrocks.authorization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
@@ -38,6 +39,40 @@ import java.util.stream.Collectors;
 
 public class NativeAccessController implements AccessController {
     private static final Logger LOG = LogManager.getLogger(NativeAccessController.class);
+
+    @Override
+    public void checkAIModelAction(ConnectContext context, AIModel model, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkAIModelPrivilege(context, model, privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnAIModel(ConnectContext context, AIModel model) throws AccessDeniedException {
+        checkAIModelPrivilege(context, model, PrivilegeType.ANY);
+    }
+
+    private void checkAIModelPrivilege(ConnectContext context, AIModel model, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        if (model == null || model.getId() <= 0) {
+            throw new AccessDeniedException();
+        }
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
+            // The caller already resolved the immutable model. Never resolve its reusable name again here.
+            PEntryObject object = AIModelPEntryObject.forId(model.getId());
+            boolean allowed = privilegeType.equals(PrivilegeType.ANY)
+                    ? manager.provider.searchAnyActionOnObject(ObjectType.AI_MODEL, object, collection)
+                    : manager.provider.check(ObjectType.AI_MODEL, privilegeType, object, collection);
+            if (!allowed) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to check AI model privilege for model id {}", model.getId(), e);
+            throw new AccessDeniedException();
+        }
+    }
 
     @Override
     public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)

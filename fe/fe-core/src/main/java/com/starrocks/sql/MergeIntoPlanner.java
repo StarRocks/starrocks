@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -95,6 +96,10 @@ public class MergeIntoPlanner {
     }
 
     public ExecPlan plan(MergeIntoStmt mergeIntoStmt, ConnectContext session) {
+        return plan(mergeIntoStmt, session, AIModelBindings.EMPTY);
+    }
+
+    public ExecPlan plan(MergeIntoStmt mergeIntoStmt, ConnectContext session, AIModelBindings aiModelBindings) {
         // The BE EnforceUniqueRowLocatorNode is pipeline-engine-only (its non-pipeline entry
         // points return NotSupported), so fail fast with a clear message instead of
         // letting the BE error out at runtime.
@@ -139,13 +144,14 @@ public class MergeIntoPlanner {
                 IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns, colNames);
 
         return createMergePlan(mergeIntoStmt, session, logicalPlan.getRootBuilder().getRoot(),
-                columnRefFactory, outputColumns, colNames, icebergTable, requiredProperty);
+                columnRefFactory, outputColumns, colNames, icebergTable, requiredProperty, aiModelBindings);
     }
 
     private ExecPlan createMergePlan(MergeIntoStmt mergeIntoStmt, ConnectContext session,
                                      OptExpression logicalRoot, ColumnRefFactory columnRefFactory,
                                      List<ColumnRefOperator> outputColumns, List<String> colNames,
-                                     IcebergTable icebergTable, PhysicalPropertySet requiredProperty) {
+                                     IcebergTable icebergTable, PhysicalPropertySet requiredProperty,
+                                     AIModelBindings aiModelBindings) {
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         boolean prevSkewJoinOptimizeV1 = session.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
         boolean prevSkewJoinOptimizeV2 = session.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2();
@@ -166,7 +172,7 @@ public class MergeIntoPlanner {
 
             // Build physical plan
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
-                    outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
+                    outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false, false, aiModelBindings);
 
             // Setup Iceberg sink and configure pipeline. plan() already rejected
             // non-pipeline sessions, so the sink always runs on the pipeline engine.

@@ -79,11 +79,16 @@ public class SqlCredentialRedactor {
             .add(HdfsFsManager.FS_TOS_SECRET_KEY)
             .add(LoadStmt.BOS_SECRET_ACCESSKEY)
             .add("password")
+            .add("api_key")
             .add("passwd")
             .add("pwd")
             .add("property.sasl.password")
             .add("broker.password")
             .build();
+
+    // These properties are normally public URLs, but rejected input may carry credentials in URL components.
+    private static final Set<String> URL_PROPERTY_KEYS = ImmutableSet.of(
+            "endpoint", "ai_default_chat_endpoint", "ai_default_embedding_endpoint");
 
     // Lowercase set for O(1) lookup (case-insensitive matching)
     private static final Set<String> CREDENTIAL_KEYS_LOWERCASE = new HashSet<>();
@@ -108,15 +113,18 @@ public class SqlCredentialRedactor {
     // key'='value
     // key"="value
     // Values can contain spaces and span multiple lines, separated by commas
-    private static final int MAX_KEY_LENGTH =
-            CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1);
-    // NOTE: MAX_KEY_LENGTH is used to avoid matching too many characters of a long string
+    // SQL comments, like whitespace, may separate a property key, '=' and its value.
+    // The block comment atom must not cross its first terminator and swallow a later credential property.
+    private static final String KEY_VALUE_TRIVIA =
+            "(?:[\\s\u3000]|/\\*(?:[^*]|\\*+[^*/])*\\*+/|--[^\\r\\n]*(?:\\r\\n|\\r|\\n|$))*";
+    // Property keys may contain whitespace or backslash escapes that the SQL parser normalizes.
+    // Consume both backslash escapes and SQL doubled quotes so the whole credential value is removed.
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
             "([\"'])" +                                    // quote
-                    "([^\"'=\\s,()]{1," + MAX_KEY_LENGTH + "})" + // key
+                    "((?:[^\"'\\\\=,()]|\\\\.)+)" +             // key
                     "([\"'])" +                                  // quote
-                    "\\s*=\\s*" +                                 // =
-                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\"|([^,()\\n]*))",
+                    KEY_VALUE_TRIVIA + "=" + KEY_VALUE_TRIVIA +
+                    "(?:'((?:''|[^'\\\\]|\\\\.)*)'|\"((?:\"\"|[^\"\\\\]|\\\\.)*)\"|([^,()\\n]*))",
             Pattern.DOTALL | Pattern.MULTILINE
     );
 
@@ -152,8 +160,17 @@ public class SqlCredentialRedactor {
         if (sql == null || sql.isEmpty()) {
             return false;
         }
+        // Escapes can hide a credential marker, e.g. 'end\point'. Let the full matcher normalize it.
+        if (sql.indexOf('\\') >= 0) {
+            return true;
+        }
         String lower = sql.toLowerCase(Locale.ROOT);
         for (String key : CREDENTIAL_KEYS_LOWERCASE) {
+            if (lower.indexOf(key) >= 0) {
+                return true;
+            }
+        }
+        for (String key : URL_PROPERTY_KEYS) {
             if (lower.indexOf(key) >= 0) {
                 return true;
             }
@@ -200,9 +217,13 @@ public class SqlCredentialRedactor {
             String keyPrefix = matcher.group(1) != null ? matcher.group(1) : "";
             String key = matcher.group(2);
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
+            String lowerKey = normalizePropertyKey(key);
+            String value = matcher.group(4) != null ? matcher.group(4)
+                    : matcher.group(5) != null ? matcher.group(5) : matcher.group(6);
 
             // Check if this key should be redacted (case-insensitive)
-            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase(Locale.ROOT))) {
+            if (CREDENTIAL_KEYS_LOWERCASE.contains(lowerKey)
+                    || (URL_PROPERTY_KEYS.contains(lowerKey) && hasSensitiveUrlComponent(value))) {
                 // Append text before the match
                 result.append(sql, lastEnd, matcher.start());
 
@@ -227,6 +248,50 @@ public class SqlCredentialRedactor {
         // Append remaining text
         result.append(sql, lastEnd, sql.length());
         return result.toString();
+    }
+
+    private static String normalizePropertyKey(String key) {
+        if (key.indexOf('\\') < 0) {
+            return key.trim().toLowerCase(Locale.ROOT);
+        }
+        // Match AstBuilder's SQL string decoding followed by visitProperty's trim, without requiring
+        // successful parsing (redaction must also protect rejected SQL). SQL preserves \_ and \%.
+        StringBuilder decoded = new StringBuilder(key.length());
+        for (int i = 0; i < key.length(); i++) {
+            char c = key.charAt(i);
+            if (c == '\\' && i + 1 < key.length()) {
+                c = key.charAt(++i);
+                switch (c) {
+                    case 'n' -> decoded.append('\n');
+                    case 't' -> decoded.append('\t');
+                    case 'r' -> decoded.append('\r');
+                    case 'b' -> decoded.append('\b');
+                    case '0' -> decoded.append('\0');
+                    case 'Z' -> decoded.append('\032');
+                    case '_', '%' -> decoded.append('\\').append(c);
+                    default -> decoded.append(c);
+                }
+            } else {
+                decoded.append(c);
+            }
+        }
+        return decoded.toString().trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean hasSensitiveUrlComponent(String value) {
+        // Do not depend on successful URL or SQL parsing: this also protects rejected statements.
+        if (value.indexOf('?') >= 0 || value.indexOf('#') >= 0) {
+            return true;
+        }
+        int schemeSeparator = value.indexOf("://");
+        int userInfoEnd = value.indexOf('@');
+        if (schemeSeparator < 0 || userInfoEnd < schemeSeparator) {
+            // SQL-escaped slashes or malformed input can hide the authority boundary.
+            return userInfoEnd >= 0;
+        }
+        int authorityStart = schemeSeparator + 3;
+        int authorityEnd = value.indexOf('/', authorityStart);
+        return userInfoEnd >= 0 && (authorityEnd < 0 || userInfoEnd < authorityEnd);
     }
 
     private static String redactIdentifiedWithClause(String sql) {

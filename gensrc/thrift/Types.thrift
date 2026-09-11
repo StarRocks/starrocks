@@ -309,7 +309,10 @@ enum TFunctionBinaryType {
 }
 
 enum TAIModelSource {
-  SYSTEM
+  SYSTEM = 0,
+  // Reserved for the unsupported pre-release resource-backed protocol.
+  RESOURCE = 1,
+  AI_MODEL = 2
 }
 
 // Represents a fully qualified function name.

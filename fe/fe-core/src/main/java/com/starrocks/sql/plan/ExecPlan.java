@@ -33,6 +33,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -45,6 +47,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -91,6 +94,8 @@ public class ExecPlan {
     private Set<Long> duplicatedLakeScanTableIds;
     // Captured lazily only for plans containing an AIProject.
     private SystemChatConfig systemChatConfig;
+    private Map<String, AIModelConfigs.ModelConfig> aiModelConfigs;
+    private final AIModelBindings aiModelBindings;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -100,15 +105,23 @@ public class ExecPlan {
         physicalPlan = null;
         outputColumns = new ArrayList<>();
         isShortCircuit = false;
+        aiModelBindings = AIModelBindings.EMPTY;
     }
 
     public ExecPlan(ConnectContext connectContext, List<String> colNames,
                     OptExpression physicalPlan, List<ColumnRefOperator> outputColumns, boolean isShortCircuit) {
+        this(connectContext, colNames, physicalPlan, outputColumns, isShortCircuit, AIModelBindings.EMPTY);
+    }
+
+    public ExecPlan(ConnectContext connectContext, List<String> colNames,
+                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns, boolean isShortCircuit,
+                    AIModelBindings aiModelBindings) {
         this.connectContext = connectContext;
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
         this.outputColumns = outputColumns;
         this.isShortCircuit = isShortCircuit;
+        this.aiModelBindings = aiModelBindings;
     }
 
     // for broker load plan
@@ -119,10 +132,15 @@ public class ExecPlan {
         this.outputColumns = new ArrayList<>();
         this.fragments.addAll(fragments);
         this.isShortCircuit = false;
+        this.aiModelBindings = AIModelBindings.EMPTY;
     }
 
     public ConnectContext getConnectContext() {
         return connectContext;
+    }
+
+    public AIModelBindings getAIModelBindings() {
+        return aiModelBindings;
     }
 
     public List<ScanNode> getScanNodes() {
@@ -135,6 +153,32 @@ public class ExecPlan {
                     AIModelConfigs.DefaultModelRequirement.OPTIONAL);
         }
         return systemChatConfig;
+    }
+
+    Map<String, AIModelConfigs.ModelConfig> getOrCreateAIModelConfigs(Collection<Expr> expressions) {
+        if (aiModelConfigs == null) {
+            aiModelConfigs = new HashMap<>();
+        }
+        Map<String, AIModelConfigs.ModelConfig> usedConfigs = new HashMap<>();
+        for (Expr expression : expressions) {
+            if (!(expression instanceof FunctionCallExpr call)
+                    || call.getFn() == null || !call.getFn().isAi()) {
+                continue;
+            }
+            String id = call.getAiModelConfigId();
+            AIModelConfigs.ModelConfig config = aiModelConfigs.computeIfAbsent(id, key -> {
+                if (AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(key)) {
+                    return AIModelConfigs.fromSystemChat(getOrCreateSystemChatConfig());
+                }
+                if (AIModelConfigs.SYSTEM_TEXT_EMBEDDING_CONFIG_ID.equals(key)) {
+                    return AIModelConfigs.systemEmbeddingSnapshot(AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+                }
+                String name = AIModelConfigs.aiModelName(call.getChild(AIModelConfigs.getAIModelArgument(call.getFn())));
+                return AIModelConfigs.fromModel(aiModelBindings.getRequiredModel(name));
+            });
+            usedConfigs.put(id, config);
+        }
+        return Map.copyOf(usedConfigs);
     }
 
     // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one

@@ -40,11 +40,13 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.DescAIModelStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAIModelsStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -836,6 +838,26 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("Sources", TypeFactory.createVarcharType(200)))
                 .addColumn(new Column("Status", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Properties", TypeFactory.createVarcharType(250)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitShowAIModelsStatement(ShowAIModelsStmt statement, Void context) {
+        return ShowResultSetMetaData.builder().column("Name", TypeFactory.createVarcharType(64)).build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitDescAIModelStatement(DescAIModelStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .column("Id", BIGINT)
+                .column("Name", TypeFactory.createVarcharType(64))
+                .column("Revision", BIGINT)
+                .column("Capability", TypeFactory.createVarcharType(20))
+                .column("Provider", TypeFactory.createVarcharType(64))
+                .column("Endpoint", TypeFactory.createVarcharType(65535))
+                .column("Model", TypeFactory.createVarcharType(65535))
+                .column("CredentialRef", TypeFactory.createVarcharType(64))
+                .column("Comment", TypeFactory.createVarcharType(65535))
                 .build();
     }
 

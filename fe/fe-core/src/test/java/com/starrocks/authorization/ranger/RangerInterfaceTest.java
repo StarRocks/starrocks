@@ -22,6 +22,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -262,6 +263,51 @@ public class RangerInterfaceTest {
         Assertions.assertThrows(AccessDeniedException.class, () -> rangerStarRocksAccessController.hasPermission(
                 RangerStarRocksResource.builder().setSystem().build(),
                 new UserIdentity("alice", "%"), Set.of(), PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testAIModelPermissionsUseCapturedNameAndDenyMissingPolicy() throws Exception {
+        List<RangerAccessRequest> requests = new ArrayList<>();
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                requests.add(request);
+                RangerAccessResult result = new RangerAccessResult(1, "starrocks", new RangerServiceDef(), request);
+                result.setIsAllowed(!"drop".equals(request.getAccessType()));
+                return result;
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(new UserIdentity("model_user", "%"));
+        AIModel model = AIModel.create(101, "CaseSensitiveModel", Map.of(
+                "capability", "CHAT", "provider", "openai_compatible",
+                "endpoint", "https://models.example.test/v1/chat/completions",
+                "model", "remote-model", "credential_ref", "TEST_MODEL"), "");
+        RangerStarRocksAccessController controller = new RangerStarRocksAccessController();
+        controller.checkAIModelAction(context, model, PrivilegeType.USAGE);
+        controller.checkAIModelAction(context, model, PrivilegeType.ALTER);
+        controller.checkAnyActionOnAIModel(context, model);
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkAIModelAction(context, model, PrivilegeType.DROP));
+        Assertions.assertEquals(List.of("usage", "alter", "_any", "drop"),
+                requests.stream().map(RangerAccessRequest::getAccessType).toList());
+        for (RangerAccessRequest request : requests) {
+            Assertions.assertEquals(Set.of("ai_model"), request.getResource().getKeys());
+            Assertions.assertEquals("CaseSensitiveModel", request.getResource().getValue("ai_model"));
+        }
+        controller.checkSystemAction(context, PrivilegeType.CREATE_AI_MODEL);
+        Assertions.assertEquals("create ai model", requests.get(4).getAccessType());
+        Assertions.assertEquals("*", requests.get(4).getResource().getValue("system"));
+
+        new MockUp<RangerBasePlugin>() {
+            @Mock
+            RangerAccessResult isAccessAllowed(RangerAccessRequest request) {
+                return null;
+            }
+        };
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> controller.checkAIModelAction(context, model, PrivilegeType.USAGE));
+        Assertions.assertThrows(AccessDeniedException.class, () -> controller.checkAnyActionOnAIModel(context, model));
     }
 
     @Test

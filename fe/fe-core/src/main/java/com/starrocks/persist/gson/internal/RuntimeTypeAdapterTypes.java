@@ -48,6 +48,7 @@ import com.starrocks.authentication.OAuth2SecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.authentication.UnixGroupProvider;
+import com.starrocks.authorization.AIModelPEntryObject;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
 import com.starrocks.authorization.FunctionPEntryObject;
@@ -338,6 +339,7 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                         .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
                         .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
+                        .registerSubtype(AIModelPEntryObject.class, "AIModelPEntryObject")
                         .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject")
                         .registerSubtype(PipePEntryObject.class, "PipePEntryObject")
                         .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject");

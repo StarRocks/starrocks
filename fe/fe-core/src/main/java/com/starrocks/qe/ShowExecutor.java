@@ -54,6 +54,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -160,6 +161,7 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.DescAIModelStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
@@ -170,6 +172,7 @@ import com.starrocks.sql.ast.LakeTabletStatus;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.ShowAIModelsStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -3094,6 +3097,44 @@ public class ShowExecutor {
             row.add("3");
             rows.add(row);
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowAIModelsStatement(ShowAIModelsStmt statement, ConnectContext context) {
+            PatternMatcher matcher = statement.getPattern() == null ? null
+                    : PatternMatcher.createMysqlPattern(statement.getPattern(), true);
+            List<List<String>> rows = Lists.newArrayList();
+            for (AIModel model : context.getGlobalStateMgr().getAIModelMgr().listModels()) {
+                if (matcher != null && !matcher.match(model.getName())) {
+                    continue;
+                }
+                try {
+                    Authorizer.checkAnyActionOnAIModel(context, model);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+                rows.add(List.of(model.getName()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
+        public ShowResultSet visitDescAIModelStatement(DescAIModelStmt statement, ConnectContext context) {
+            AIModel model = context.getGlobalStateMgr().getAIModelMgr().getByName(statement.getName());
+            if (model == null) {
+                throw new SemanticException("Unknown AI model: %s", statement.getName());
+            }
+            try {
+                Authorizer.checkAnyActionOnAIModel(context, model);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(), "ANY",
+                        ObjectType.AI_MODEL.name(), model.getName());
+            }
+            List<String> row = List.of(Long.toString(model.getId()), model.getName(),
+                    Long.toString(model.getRevision()), model.getCapability().name(), model.getProvider().getSqlName(),
+                    model.getEndpoint(), model.getRemoteModel(), model.getCredentialRef(), model.getComment());
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), List.of(row));
         }
 
         @Override

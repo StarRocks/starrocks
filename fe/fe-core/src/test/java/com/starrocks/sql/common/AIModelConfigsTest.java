@@ -14,16 +14,24 @@
 
 package com.starrocks.sql.common;
 
+import com.starrocks.catalog.AIModel;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
 import com.starrocks.sql.common.AIModelConfigs.DefaultModelRequirement;
 import com.starrocks.thrift.TAIEndpointConfig;
 import com.starrocks.thrift.TAIModelConfiguration;
+import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -44,6 +52,75 @@ public class AIModelConfigsTest {
         Config.ai_default_chat_endpoint = "";
         Config.ai_default_chat_model = "";
         Config.ai_default_chat_provider = "";
+        Config.ai_default_embedding_endpoint = "";
+        Config.ai_default_embedding_model = "";
+        Config.ai_default_embedding_provider = "";
+    }
+
+    @Test
+    public void testResolvedAIOverloadsIdentifyOnlyExplicitModelArguments() {
+        FunctionSet functions = new FunctionSet();
+        functions.init();
+        Set<Long> explicitModelIds = Set.of(200102L, 200103L, 200111L, 200113L, 200115L, 200117L,
+                200119L, 200121L, 200123L, 200125L, 200127L, 200132L, 200133L);
+        Set<Long> observedExplicitModelIds = functions.getBuiltinFunctions().stream()
+                .filter(Function::isAi)
+                .filter(AIModelConfigs::hasExplicitModel)
+                .map(Function::getFunctionId)
+                .collect(Collectors.toSet());
+        Assertions.assertEquals(explicitModelIds, observedExplicitModelIds,
+                "AI model selectors and default-model arguments must not be classified as explicit provider models");
+        Set<Long> namedModelIds = Set.of(200140L, 200141L, 200142L, 200143L);
+        functions.getBuiltinFunctions().stream().filter(Function::isAi).forEach(function -> {
+            long id = function.getFunctionId();
+            Assertions.assertEquals(explicitModelIds.contains(id) ? 0 : -1, AIModelConfigs.getModelArgument(function));
+            Assertions.assertEquals(namedModelIds.contains(id) ? 0 : -1, AIModelConfigs.getAIModelArgument(function));
+            int aiModelArgument = AIModelConfigs.getAIModelArgument(function);
+            Assertions.assertEquals(function.getAiModelSource() == TAIModelSource.AI_MODEL, aiModelArgument >= 0);
+            if (aiModelArgument >= 0) {
+                Assertions.assertTrue(aiModelArgument < function.getNumArgs());
+                Assertions.assertTrue(function.getArgs()[aiModelArgument].isVarchar());
+            }
+        });
+    }
+
+    @Test
+    public void testUnregisteredFunctionHasNoModelArgumentMetadata() {
+        Function function = new Function(new FunctionName("ai_embed"), new Type[] {VarcharType.VARCHAR},
+                VarcharType.VARCHAR, false);
+        Assertions.assertThrows(IllegalStateException.class, () -> AIModelConfigs.hasExplicitModel(function));
+        Assertions.assertThrows(IllegalStateException.class, () -> AIModelConfigs.isTextEmbedding(function));
+    }
+
+    @Test
+    public void testResolvedAIOverloadsUseGeneratedCapabilities() {
+        FunctionSet functions = new FunctionSet();
+        functions.init();
+        Set<Long> embeddingIds = functions.getBuiltinFunctions().stream()
+                .filter(Function::isAi)
+                .filter(AIModelConfigs::isTextEmbedding)
+                .map(Function::getFunctionId)
+                .collect(Collectors.toSet());
+        Assertions.assertEquals(Set.of(200130L, 200131L, 200132L, 200133L, 200142L, 200143L), embeddingIds);
+    }
+
+    @Test
+    public void testModelConfigurationUsesTheBoundImmutableRevision() throws Exception {
+        Map<String, String> properties = Map.of("capability", "CHAT",
+                "provider", "openai_compatible", "endpoint", "https://before.example.test/v1/chat/completions",
+                "model", "before-model", "credential_ref", "TEST_MODEL");
+        AIModel original = AIModel.create(17, "snapshot_model", properties, "");
+        AIModel changed = original.withAlteredProperties(Map.of("model", "after-model"), null);
+        AIModelConfigs.ModelConfig captured = AIModelConfigs.fromModel(original);
+        Assertions.assertEquals("before-model", captured.model());
+        Assertions.assertEquals("after-model", AIModelConfigs.fromModel(changed).model());
+        Assertions.assertEquals(17, captured.modelId());
+        Assertions.assertEquals(TAIModelSource.AI_MODEL, captured.source());
+        Assertions.assertEquals("TEST_MODEL", captured.toThrift().getChat().getCredential_ref());
+        Assertions.assertEquals(TAIModelSource.AI_MODEL, captured.toThrift().getSource());
+        Assertions.assertEquals(17, captured.toThrift().getModel_id());
+        Assertions.assertFalse(AIModelConfigs.fromSystemChat(AIModelConfigs.systemChatSnapshot(REQUIRED))
+                .toThrift().isSetSource());
     }
 
     @Test
@@ -57,11 +134,11 @@ public class AIModelConfigsTest {
 
     @Test
     public void testThriftConfigurationSchemaIsCredentialFree() {
-        Assertions.assertEquals(Set.of("endpoint", "model", "provider"),
+        Assertions.assertEquals(Set.of("endpoint", "model", "provider", "credential_ref"),
                 Arrays.stream(TAIEndpointConfig._Fields.values())
                         .map(TAIEndpointConfig._Fields::getFieldName)
                         .collect(Collectors.toSet()));
-        Assertions.assertEquals(Set.of("chat"),
+        Assertions.assertEquals(Set.of("chat", "text_embedding", "source", "model_id"),
                 Arrays.stream(TAIModelConfiguration._Fields.values())
                         .map(TAIModelConfiguration._Fields::getFieldName)
                         .collect(Collectors.toSet()));
@@ -73,11 +150,26 @@ public class AIModelConfigsTest {
         fieldNames.map(String::toLowerCase).forEach(fieldName -> {
             Assertions.assertFalse(fieldName.contains("key"), fieldName);
             Assertions.assertFalse(fieldName.contains("secret"), fieldName);
-            Assertions.assertFalse(fieldName.contains("credential"), fieldName);
+            Assertions.assertFalse(fieldName.contains("credential") && !fieldName.equals("credential_ref"), fieldName);
             Assertions.assertFalse(fieldName.contains("token"), fieldName);
             Assertions.assertFalse(fieldName.contains("env"), fieldName);
             Assertions.assertFalse(fieldName.contains("environment"), fieldName);
         });
+    }
+
+    @Test
+    public void testEmbeddingConfigurationNormalizesMissingDefaultAndRemainsIndependent() {
+        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/embeddings";
+        Config.ai_default_embedding_model = null;
+        Config.ai_default_embedding_provider = "openai_compatible";
+        AIModelConfigs.ModelConfig snapshot = AIModelConfigs.systemEmbeddingSnapshot(OPTIONAL);
+        Assertions.assertEquals("", snapshot.model());
+        Assertions.assertNull(snapshot.credentialRef());
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> AIModelConfigs.systemEmbeddingSnapshot(REQUIRED));
+        Config.ai_default_embedding_endpoint = "";
+        Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateSystemEmbedding(snapshot, OPTIONAL));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> AIModelConfigs.systemEmbeddingSnapshot(OPTIONAL));
+        Assertions.assertDoesNotThrow(() -> AIModelConfigs.systemChatSnapshot(REQUIRED));
     }
 
     @Test
@@ -135,6 +227,27 @@ public class AIModelConfigsTest {
                 () -> AIModelConfigs.validateSystemChat(REQUIRED));
         Assertions.assertTrue(exception.getMessage().contains("ai_default_chat_endpoint"));
         Assertions.assertFalse(exception.getMessage().contains(Config.ai_default_chat_endpoint));
+    }
+
+    @Test
+    public void testSystemEndpointsRejectQueryParametersWithoutLeakingValues() {
+        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions?api_key=secret-sentinel";
+        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/embeddings?key=secret-sentinel";
+        Config.ai_default_embedding_model = "embedding-model";
+        Config.ai_default_embedding_provider = "openai_compatible";
+        Assertions.assertAll(
+                () -> {
+                    StarRocksPlannerException failure = Assertions.assertThrows(StarRocksPlannerException.class,
+                            () -> AIModelConfigs.systemChatSnapshot(REQUIRED));
+                    Assertions.assertFalse(failure.getMessage().contains("secret-sentinel"));
+                    Assertions.assertTrue(failure.getMessage().contains("query"));
+                },
+                () -> {
+                    StarRocksPlannerException failure = Assertions.assertThrows(StarRocksPlannerException.class,
+                            () -> AIModelConfigs.systemEmbeddingSnapshot(REQUIRED));
+                    Assertions.assertFalse(failure.getMessage().contains("secret-sentinel"));
+                    Assertions.assertTrue(failure.getMessage().contains("query"));
+                });
     }
 
     @Test

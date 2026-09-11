@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.ArrayExpr;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.StructField;
@@ -48,34 +50,84 @@ import java.util.HashSet;
 import java.util.Set;
 
 final class AIFunctionAnalyzer {
-    private static final Set<String> AI_RESERVED_OPTION_KEYS = Set.of("model", "messages", "stream");
+    private static final Set<String> CHAT_RESERVED_OPTION_KEYS = Set.of("model", "messages", "stream");
+    private static final Set<String> EMBEDDING_RESERVED_OPTION_KEYS = Set.of("model", "input", "encoding_format");
 
     private AIFunctionAnalyzer() {
     }
 
     static void analyze(FunctionCallExpr node) {
-        if (!FunctionSet.AI_COMPLETE.equals(node.getFunctionName())) {
+        if (!VectorizedBuiltinFunctions.AI_FUNCTION_NAMES.contains(node.getFunctionName())) {
             throw new SemanticException("Unsupported AI function '" + node.getFunctionName() + "'", node.getPos());
         }
 
         int argumentCount = node.getChildren().size();
         boolean hasOptionMap = argumentCount > 1 && node.getChild(argumentCount - 1).getType().isMapType();
-        boolean hasExplicitModel = argumentCount - (hasOptionMap ? 1 : 0) == 2;
+        int modelArgument = AIModelConfigs.getModelArgument(node.getFn());
+        boolean embedding = AIModelConfigs.isTextEmbedding(node.getFn());
+        boolean namedModel = node.getFn().getAiModelSource() == TAIModelSource.AI_MODEL;
 
         try {
-            AIModelConfigs.validateSystemChat(hasExplicitModel
-                    ? AIModelConfigs.DefaultModelRequirement.OPTIONAL
-                    : AIModelConfigs.DefaultModelRequirement.REQUIRED);
+            AIModelConfigs.DefaultModelRequirement requirement = modelArgument >= 0
+                    ? AIModelConfigs.DefaultModelRequirement.OPTIONAL : AIModelConfigs.DefaultModelRequirement.REQUIRED;
+            if (namedModel) {
+                // Metadata is bound once after analysis, and shared by authorization and physical planning.
+                AIModelConfigs.aiModelName(node.getChild(AIModelConfigs.getAIModelArgument(node.getFn())));
+            } else if (embedding) {
+                AIModelConfigs.systemEmbeddingSnapshot(requirement);
+            } else {
+                AIModelConfigs.validateSystemChat(requirement);
+            }
         } catch (StarRocksPlannerException e) {
             throw new SemanticException(e.getMessage(), node.getPos());
         }
 
-        if (hasExplicitModel) {
-            validateExplicitModel(node.getChild(0), node);
+        if (modelArgument >= 0) {
+            validateExplicitModel(node.getChild(modelArgument), node);
+        }
+        // Function analysis precedes argument coercion, including VARCHAR/JSON to ARRAY casts.
+        for (int i = 0; i < argumentCount; i++) {
+            if (node.getFn().getArgs()[i].isArrayType()) {
+                validateHelperArray(node.getChild(i), node.getFn().getArgs()[i], node);
+            }
         }
         if (hasOptionMap) {
             validateAIOptionMap(node.getChild(argumentCount - 1), node);
         }
+    }
+
+    private static void validateHelperArray(Expr expression, Type formalType, FunctionCallExpr node) {
+        if (!expression.isConstant()) {
+            throw new SemanticException(node.getFunctionName() + " requires a constant ARRAY", node.getPos());
+        }
+        Expr folded = foldAnalyzedAIConstant(foldAIConstantAsType(expression, formalType));
+        if (folded instanceof NullLiteral) {
+            throw invalidHelperArray(node);
+        }
+        // The constant folder can retain ARRAY casts. They preserve the cardinality of an empty literal.
+        Expr arrayLiteral = folded;
+        while (arrayLiteral instanceof CastExpr && arrayLiteral.getType().isArrayType()
+                && arrayLiteral.getChild(0).getType().isArrayType()) {
+            arrayLiteral = arrayLiteral.getChild(0);
+        }
+        if (arrayLiteral instanceof ArrayExpr array && array.getChildren().isEmpty()) {
+            throw invalidHelperArray(node);
+        }
+        // Use the same constant folder as other option validation. Unfoldable constants are checked by BE.
+        if (!(folded instanceof ArrayExpr array)) {
+            return;
+        }
+        for (Expr child : array.getChildren()) {
+            Expr item = foldAIConstant(child);
+            if (item instanceof NullLiteral || item instanceof StringLiteral literal && literal.getValue().isBlank()) {
+                throw invalidHelperArray(node);
+            }
+        }
+    }
+
+    private static SemanticException invalidHelperArray(FunctionCallExpr node) {
+        return new SemanticException(node.getFunctionName()
+                + " requires a nonempty ARRAY with non-null, nonblank elements", node.getPos());
     }
 
     private static void validateExplicitModel(Expr model, FunctionCallExpr node) {
@@ -85,13 +137,13 @@ final class AIFunctionAnalyzer {
         Expr folded = foldAIConstant(model);
         folded = unwrapCasts(folded);
         if (folded instanceof StringLiteral && ((StringLiteral) folded).getValue().trim().isEmpty()) {
-            throw new SemanticException("ai_complete explicit model must not be empty", node.getPos());
+            throw new SemanticException(node.getFunctionName() + " explicit model must not be empty", node.getPos());
         }
     }
 
     private static void validateAIOptionMap(Expr optionMap, FunctionCallExpr node) {
         if (!optionMap.isConstant()) {
-            throw new SemanticException("ai_complete requires a constant option MAP", node.getPos());
+            throw new SemanticException(node.getFunctionName() + " requires a constant option MAP", node.getPos());
         }
         Expr userOptionMap = optionMap;
         while (userOptionMap instanceof CastExpr && ((CastExpr) userOptionMap).isImplicit()) {
@@ -106,14 +158,14 @@ final class AIFunctionAnalyzer {
                     !hasExplicitCast(userOptionMap), node)) {
                 return;
             }
-            throw new SemanticException("ai_complete option MAP must have VARCHAR keys", node.getPos());
+            throw new SemanticException(node.getFunctionName() + " option MAP must have VARCHAR keys", node.getPos());
         }
 
         Expr originalValue = unwrapCasts(userOptionMap);
         Expr folded = originalValue instanceof MapExpr || originalValue instanceof NullLiteral
                 ? originalValue : unwrapCasts(foldAIConstant(userOptionMap));
         if (folded instanceof NullLiteral) {
-            validateJSONCompatibleType(optionMapType.getValueType(), "option MAP");
+            validateJSONCompatibleType(optionMapType.getValueType(), "option MAP", node);
             return;
         }
         if (!(folded instanceof MapExpr)) {
@@ -121,7 +173,7 @@ final class AIFunctionAnalyzer {
                     !hasExplicitCast(userOptionMap), node)) {
                 return;
             }
-            validateJSONCompatibleType(optionMapType.getValueType(), "option MAP");
+            validateJSONCompatibleType(optionMapType.getValueType(), "option MAP", node);
             // BE revalidates value-dependent key and finite-number constraints before serializing the request.
             // FE still enforces constant input and the complete recursive type contract, and performs stronger
             // checks whenever constant folding exposes a literal MapExpr.
@@ -130,7 +182,7 @@ final class AIFunctionAnalyzer {
 
         MapExpr map = (MapExpr) folded;
         if (map.getChildren().isEmpty()) {
-            validateJSONCompatibleType(optionMapType.getValueType(), "option MAP");
+            validateJSONCompatibleType(optionMapType.getValueType(), "option MAP", node);
             return;
         }
         validateMapLiteral(map, optionMapType, true, userOptionMap instanceof MapExpr, node);
@@ -139,8 +191,8 @@ final class AIFunctionAnalyzer {
     private static void validateMapLiteral(MapExpr map, MapType mapType, boolean topLevel,
                                            boolean allowUntypedPlaceholders, FunctionCallExpr node) {
         if (!mapType.getKeyType().isVarchar()) {
-            String message = topLevel ? "ai_complete option MAP must have VARCHAR keys"
-                    : "ai_complete nested MAP keys must be VARCHAR";
+            String message = topLevel ? node.getFunctionName() + " option MAP must have VARCHAR keys"
+                    : node.getFunctionName() + " nested MAP keys must be VARCHAR";
             throw new SemanticException(message, node.getPos());
         }
 
@@ -148,11 +200,11 @@ final class AIFunctionAnalyzer {
         for (int i = 0; i < map.getChildren().size(); i += 2) {
             Expr keyExpression = unwrapCasts(foldAIConstantAsType(map.getChild(i), mapType.getKeyType()));
             if (keyExpression instanceof NullLiteral) {
-                throw new SemanticException("ai_complete option MAP contains a NULL option key", node.getPos());
+                throw new SemanticException(node.getFunctionName() + " option MAP contains a NULL option key", node.getPos());
             }
             if (!(keyExpression instanceof StringLiteral)) {
                 if (!keyExpression.isConstant() || !keyExpression.getType().isVarchar()) {
-                    throw new SemanticException("ai_complete option MAP keys must be constant VARCHAR expressions",
+                    throw new SemanticException(node.getFunctionName() + " option MAP keys must be constant VARCHAR expressions",
                             node.getPos());
                 }
                 validateOptionValueExpression(map.getChild(i + 1), mapType.getValueType(),
@@ -162,14 +214,16 @@ final class AIFunctionAnalyzer {
 
             String key = ((StringLiteral) keyExpression).getValue();
             if (key.isEmpty()) {
-                throw new SemanticException("ai_complete option MAP contains an empty option key", node.getPos());
+                throw new SemanticException(node.getFunctionName() + " option MAP contains an empty option key", node.getPos());
             }
             if (!keys.add(key)) {
-                throw new SemanticException("ai_complete option MAP contains duplicate option key '" + key + "'",
+                throw new SemanticException(node.getFunctionName() + " option MAP contains duplicate option key '" + key + "'",
                         node.getPos());
             }
-            if (topLevel && AI_RESERVED_OPTION_KEYS.contains(key)) {
-                throw new SemanticException("ai_complete option MAP contains reserved option key '" + key + "'",
+            Set<String> reservedKeys = AIModelConfigs.isTextEmbedding(node.getFn())
+                    ? EMBEDDING_RESERVED_OPTION_KEYS : CHAT_RESERVED_OPTION_KEYS;
+            if (topLevel && reservedKeys.contains(key)) {
+                throw new SemanticException(node.getFunctionName() + " option MAP contains reserved option key '" + key + "'",
                         node.getPos());
             }
 
@@ -190,12 +244,12 @@ final class AIFunctionAnalyzer {
             return;
         }
         if (value instanceof NullLiteral) {
-            validateJSONCompatibleType(effectiveType, "option MAP");
+            validateJSONCompatibleType(effectiveType, "option MAP", node);
             return;
         }
         if (value instanceof MapExpr) {
             if (value.getChildren().isEmpty()) {
-                validateJSONCompatibleType(effectiveType, "option MAP");
+                validateJSONCompatibleType(effectiveType, "option MAP", node);
                 return;
             }
             if (effectiveType.isMapType()) {
@@ -207,7 +261,7 @@ final class AIFunctionAnalyzer {
         if (value instanceof ArrayExpr && effectiveType.isArrayType()) {
             Type itemType = ((ArrayType) effectiveType).getItemType();
             if (value.getChildren().isEmpty()) {
-                validateJSONCompatibleType(effectiveType, "option MAP");
+                validateJSONCompatibleType(effectiveType, "option MAP", node);
                 return;
             }
             for (Expr child : value.getChildren()) {
@@ -244,7 +298,7 @@ final class AIFunctionAnalyzer {
                 return;
             }
         }
-        validateJSONCompatibleType(effectiveType, "option MAP");
+        validateJSONCompatibleType(effectiveType, "option MAP", node);
         if (effectiveType.isFloatingPointType()) {
             validateFiniteAIConstant(expression, effectiveType, node);
         }
@@ -286,12 +340,12 @@ final class AIFunctionAnalyzer {
         return current;
     }
 
-    private static void validateJSONCompatibleType(Type type, String scope) {
+    private static void validateJSONCompatibleType(Type type, String scope, FunctionCallExpr node) {
         if (type.isNull() || type.isBoolean() || type.isNumericType() || type.isStringType() || type.isJsonType()) {
             return;
         }
         if (type.isArrayType()) {
-            validateJSONCompatibleType(((ArrayType) type).getItemType(), scope);
+            validateJSONCompatibleType(((ArrayType) type).getItemType(), scope, node);
             return;
         }
         if (type.isMapType()) {
@@ -300,18 +354,18 @@ final class AIFunctionAnalyzer {
                 return;
             }
             if (!mapType.getKeyType().isVarchar()) {
-                throw new SemanticException("ai_complete nested MAP keys must be VARCHAR");
+                throw new SemanticException(node.getFunctionName() + " nested MAP keys must be VARCHAR");
             }
-            validateJSONCompatibleType(mapType.getValueType(), scope);
+            validateJSONCompatibleType(mapType.getValueType(), scope, node);
             return;
         }
         if (type.isStructType()) {
             for (StructField field : ((StructType) type).getFields()) {
-                validateJSONCompatibleType(field.getType(), scope);
+                validateJSONCompatibleType(field.getType(), scope, node);
             }
             return;
         }
-        throw new SemanticException("ai_complete " + scope + " values must be JSON-compatible, but found "
+        throw new SemanticException(node.getFunctionName() + " " + scope + " values must be JSON-compatible, but found "
                 + type.toSql());
     }
 
@@ -401,7 +455,7 @@ final class AIFunctionAnalyzer {
     }
 
     private static void throwNonFiniteAIOption(FunctionCallExpr node) {
-        throw new SemanticException("ai_complete option MAP numeric values must be finite", node.getPos());
+        throw new SemanticException(node.getFunctionName() + " option MAP numeric values must be finite", node.getPos());
     }
 
     private static Expr unwrapCasts(Expr expression) {

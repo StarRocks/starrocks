@@ -81,5 +81,9 @@ public class RangerResourceTest {
         starRocksResource = RangerStarRocksResource.builder().setStorageVolume("sv1").build();
         Assertions.assertEquals("[storage_volume]", starRocksResource.getKeys().toString());
         Assertions.assertEquals("sv1", starRocksResource.getValue("storage_volume"));
+
+        starRocksResource = RangerStarRocksResource.builder().setAIModel("CaseSensitiveModel").build();
+        Assertions.assertEquals("[ai_model]", starRocksResource.getKeys().toString());
+        Assertions.assertEquals("CaseSensitiveModel", starRocksResource.getValue("ai_model"));
     }
 }

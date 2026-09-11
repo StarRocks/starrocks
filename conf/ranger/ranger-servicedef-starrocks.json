@@ -350,7 +350,34 @@
         "repository",
         "create resource group",
         "create global function",
-        "create storage volume"
+        "create storage volume",
+        "create ai model"
+      ]
+    },
+    {
+      "itemId": 14,
+      "name": "ai_model",
+      "type": "string",
+      "level": 10,
+      "parent": "",
+      "mandatory": true,
+      "lookupSupported": true,
+      "recursiveSupported": false,
+      "excludesSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": false
+      },
+      "validationRegEx": "",
+      "validationMessage": "",
+      "uiHint": "",
+      "label": "StarRocks AI Model",
+      "description": "StarRocks AI Model",
+      "accessTypeRestrictions": [
+        "usage",
+        "alter",
+        "drop"
       ]
     }
   ],
@@ -489,6 +516,11 @@
       "itemId": 27,
       "name": "create storage volume",
       "label": "CREATE STORAGE VOLUME"
+    },
+    {
+      "itemId": 29,
+      "name": "create ai model",
+      "label": "CREATE AI MODEL"
     }
   ],
   "configs": [

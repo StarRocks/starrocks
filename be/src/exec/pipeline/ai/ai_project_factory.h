@@ -16,12 +16,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/statusor.h"
 #include "common/global_types.h"
+#include "gen_cpp/Types_types.h"
+#include "platform/llm/ai_rate_limiter.h"
 
 namespace starrocks {
 
@@ -33,6 +36,21 @@ namespace pipeline {
 class AISinkOperatorFactory;
 class AISourceOperatorFactory;
 class PipelineBuilderContext;
+
+// Credential-free query-plan snapshot. The dispatcher binds credentials only
+// after validating this route against an operator-provisioned BE endpoint.
+// Map keys are opaque correlation keys; source and model_id carry the identity.
+struct AIProjectModelConfig {
+    std::string endpoint;
+    std::string model;
+    std::string credential_ref;
+    AICapability capability = AICapability::CHAT;
+    TAIModelSource::type source = TAIModelSource::SYSTEM;
+    // SYSTEM has no metadata object ID.
+    int64_t model_id = 0;
+};
+
+using AIProjectModelConfigs = std::map<std::string, AIProjectModelConfig, std::less<>>;
 
 enum class AIProjectOutputKind : uint8_t {
     PASSTHROUGH,
@@ -59,7 +77,7 @@ class AIProjectProjectionSpec {
 public:
     AIProjectProjectionSpec() = default;
     AIProjectProjectionSpec(RuntimeState* state, std::vector<AIProjectOutputSpec> outputs,
-                            std::vector<AIProjectCommonSpec> common_outputs, std::string default_model);
+                            std::vector<AIProjectCommonSpec> common_outputs, AIProjectModelConfigs model_configs);
     ~AIProjectProjectionSpec();
 
     AIProjectProjectionSpec(const AIProjectProjectionSpec&) = delete;
@@ -75,14 +93,14 @@ public:
     bool valid() const noexcept { return !_closed; }
     const std::vector<AIProjectOutputSpec>& outputs() const noexcept { return _outputs; }
     const std::vector<AIProjectCommonSpec>& common_outputs() const noexcept { return _common_outputs; }
-    const std::string& default_model() const noexcept { return _default_model; }
+    const AIProjectModelConfigs& model_configs() const noexcept { return _model_configs; }
     RuntimeState* runtime_state() const noexcept { return _state; }
 
 private:
     RuntimeState* _state = nullptr;
     std::vector<AIProjectOutputSpec> _outputs;
     std::vector<AIProjectCommonSpec> _common_outputs;
-    std::string _default_model;
+    AIProjectModelConfigs _model_configs;
     bool _closed = false;
 };
 
@@ -96,8 +114,7 @@ struct AIProjectOperatorFactories {
 class AIProjectFactory {
 public:
     static StatusOr<AIProjectOperatorFactories> create(PipelineBuilderContext* context, int32_t plan_node_id,
-                                                       size_t upstream_dop, std::string endpoint,
-                                                       AIProjectProjectionSpec projection_spec);
+                                                       size_t upstream_dop, AIProjectProjectionSpec projection_spec);
 };
 
 } // namespace pipeline

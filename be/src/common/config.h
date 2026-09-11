@@ -2466,6 +2466,7 @@ CONF_mInt32(ai_function_max_retries, "3");
 CONF_mInt32(ai_function_max_retries_on_throttle, "5");
 CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
+CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
 
 // Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.

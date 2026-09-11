@@ -162,6 +162,26 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitCreateAIModelStatement(CreateAIModelStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterAIModelStatement(AlterAIModelStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropAIModelStatement(DropAIModelStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowAIModelsStatement(ShowAIModelsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitDescAIModelStatement(DescAIModelStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }

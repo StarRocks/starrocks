@@ -17,8 +17,169 @@ package com.starrocks.common.util;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 public class SqlCredentialRedactorTest {
+
+    @Test
+    public void testRedactRejectedAIModelApiKey() {
+        String sql = "CREATE AI MODEL model PROPERTIES ('API_KEY'='secret-ai-key')";
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
+        Assertions.assertFalse(SqlCredentialRedactor.redact(sql).contains("secret-ai-key"));
+        Assertions.assertFalse(new PrintableMap<>(java.util.Map.of("api_key", "secret-ai-key"),
+                "=", true, false, true).toString().contains("secret-ai-key"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET (' api_key '='do-not-expose')",
+            "ALTER AI MODEL m SET ('\\api_key'='do-not-expose')",
+            "ALTER AI MODEL m SET (\"API_KE\\Y\"=\"do-not-expose\")",
+            "ALTER AI MODEL m SET ('\\tapi_key\\n'='do-not-expose')",
+            "ALTER AI MODEL m SET ('\\rapi_key\\b'='do-not-expose')",
+            "ALTER AI MODEL m SET ('\\0api_key\\Z'='do-not-expose')",
+            "ALTER AI MODEL m SET (' endpoint '='https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('end\\point'='https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET (\" end\\point \"=\"https://models.example.test/v1?token=do-not-expose\")",
+            "ALTER AI MODEL m SET (' end\\point '='https://models.example.test/v1#do-not-expose'",
+            "ADMIN SET FRONTEND CONFIG (' ai_default_chat_end\\point '='https://host/v1?token=do-not-expose')",
+            "CREATE EXTERNAL CATALOG c PROPERTIES (' aws.s3.secret_key '='do-not-expose')"
+    })
+    public void testRedactNormalizedPropertyKeys(String sql) {
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("do-not-expose"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET (' end\\point '='https://models.example.test/v1')",
+            "ALTER AI MODEL m SET ('api\\_key'='public-value')",
+            "ALTER AI MODEL m SET ('api\\%key'='public-value')",
+            "CREATE EXTERNAL CATALOG c PROPERTIES (' public_label '='public-value')"
+    })
+    public void testPreserveNonSensitiveNormalizedPropertyKeys(String sql) {
+        Assertions.assertEquals(sql, SqlCredentialRedactor.redact(sql));
+    }
+
+    @Test
+    @Timeout(5)
+    public void testLongPropertyKeys() {
+        String sql = "ALTER AI MODEL m SET ('" + " ".repeat(100_000) + "api_key '='do-not-expose')";
+        Assertions.assertFalse(SqlCredentialRedactor.redact(sql).contains("do-not-expose"));
+        // Include a credential marker so this also exercises the regex, not just the fast path.
+        String nonSensitiveSql = "SELECT 'password', '" + "x".repeat(100_000) + "' = 'public-value'";
+        Assertions.assertEquals(nonSensitiveSql, SqlCredentialRedactor.redact(nonSensitiveSql));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "CREATE AI MODEL m PROPERTIES ('endpoint'='https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1?token=do-not-expose')",
+            "ALTER AI MODEL m SET ('ENDPOINT'='https://models.example.test/v1#do-not-expose')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_chat_endpoint'='https://user:do-not-expose@models.example.test/v1')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_chat_endpoint'='https://models.example.test/v1?token=do-not-expose')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_chat_endpoint'='https://models.example.test/v1#do-not-expose')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_embedding_endpoint'='https://user:do-not-expose@models.example.test/v1')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_embedding_endpoint'='https://models.example.test/v1?token=do-not-expose')",
+            "ADMIN SET FRONTEND CONFIG ('AI_DEFAULT_EMBEDDING_ENDPOINT'='https://models.example.test/v1#do-not-expose')"
+    })
+    public void testRedactSensitiveEndpointProperties(String sql) {
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("do-not-expose"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET ('endpoint'='https://user:do-not-expose@models.example.test/v1'",
+            "ALTER AI MODEL m SET (\"endpoint\"=\"https://models.example.test/v1?token=do-not-expose\"",
+            "ALTER AI MODEL m SET ('endpoint'='https://[invalid/v1#do-not-expose')",
+            "ALTER AI MODEL m SET ('endpoint'='https:\\/\\/user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint'='https:\\/\\/user:do-not-expose@models.example.test/v1/https://other/')",
+            "ALTER AI MODEL m SET ('endpoint'='//user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint'='invalid/value/do-not-expose@models.example.test')"
+    })
+    public void testRedactEndpointWithoutSuccessfulSqlOrUrlParsing(String sql) {
+        Assertions.assertFalse(SqlCredentialRedactor.redact(sql).contains("do-not-expose"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET ('endpoint'='https://user:part''do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET (\"endpoint\"=\"https://user:part\"\"do-not-expose@models.example.test/v1\")",
+            "ALTER AI MODEL m SET ('api_key'='part''do-not-expose')",
+            "ALTER AI MODEL m SET (\"API_KEY\"=\"part\"\"do-not-expose\")"
+    })
+    public void testRedactWholeCredentialValueWithDoubledQuotes(String sql) {
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("do-not-expose"));
+        Assertions.assertFalse(redacted.contains("part"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET ('endpoint' /* note */ = 'https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint' = /* note */ 'https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint' -- note\n = 'https://models.example.test/v1?key=do-not-expose')",
+            "ALTER AI MODEL m SET ('endpoint' = -- note\r\n 'https://models.example.test/v1#do-not-expose')",
+            "ALTER AI MODEL m SET ('api_key' /* note */ = 'do-not-expose')",
+            "ALTER AI MODEL m SET ('api_key' = /* note */ 'do-not-expose')",
+            "ALTER AI MODEL m SET ('api_key' -- note\n = 'do-not-expose')",
+            "ALTER AI MODEL m SET ('API_KEY' = -- note\r\n 'do-not-expose')",
+            "ALTER AI MODEL m SET ('endpoint'\u3000=\u3000'https://user:do-not-expose@models.example.test/v1')",
+            "ALTER AI MODEL m SET ('api_key'\u3000=\u3000'do-not-expose')",
+            "ALTER AI MODEL m SET ('api_key' /**/ = /**/ 'do-not-expose')",
+            "ALTER AI MODEL m SET ('endpoint' /****/ = /* ** note ** */ 'https://user:do-not-expose@host/v1')"
+    })
+    public void testRedactCredentialsWithSqlTriviaSeparators(String sql) {
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("do-not-expose"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testBlockCommentStopsAtFirstTerminator() {
+        String sql = "SELECT 'label' /* first */ AS x FROM FILES("
+                + "'aws.s3.secret_key' /* second */ = 'do-not-expose')";
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("do-not-expose"));
+        Assertions.assertTrue(redacted.contains("'label' /* first */ AS x FROM FILES("));
+        Assertions.assertTrue(redacted.contains("'aws.s3.secret_key' = ***"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET ('endpoint' /* note */ = 'https://models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint' = -- note\n 'https://models.example.test/v1')",
+            "CREATE EXTERNAL CATALOG c PROPERTIES ('public_label' /* note */ = -- note\n 'public-value')",
+            "ALTER AI MODEL m SET ('endpoint'\u3000=\u3000'https://models.example.test/v1')",
+            "ALTER AI MODEL m SET ('endpoint' /**/ = /* ** note ** */ 'https://models.example.test/v1')"
+    })
+    public void testPreserveNonSensitivePropertyWithSqlTriviaSeparators(String sql) {
+        Assertions.assertEquals(sql, SqlCredentialRedactor.redact(sql));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1/chat/completions')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_chat_endpoint'='https://models.example.test:8443/v1')",
+            "ADMIN SET FRONTEND CONFIG ('ai_default_embedding_endpoint'='https://models.example.test/v1/embeddings')",
+            "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1/user@tenant')",
+            "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1/user%40tenant')",
+            "ALTER AI MODEL m SET ('endpoint'='https://models.example.test/v1/user''s')",
+            "CREATE EXTERNAL CATALOG c PROPERTIES (\"public_label\"=\"part\"\"public\")",
+            "SELECT 'https://user:public@models.example.test/v1?query=value#fragment'",
+            "CREATE EXTERNAL CATALOG c PROPERTIES ('path'='https://models.example.test/v1?query=value#fragment')",
+            "SELECT endpoint FROM ordinary_table"
+    })
+    public void testPreserveSafeEndpointAndUnrelatedSql(String sql) {
+        Assertions.assertEquals(sql, SqlCredentialRedactor.redact(sql));
+    }
 
     @Test
     public void testRedactAwsCredentials() {

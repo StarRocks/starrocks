@@ -89,7 +89,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：SYSTEM `ai_complete` 呼び出しが使用する完全な HTTPS POST URL。URL にはホストが必要で、ユーザー情報、フラグメント、制御文字を含めることはできません。ポートを明示しない場合は HTTPS のデフォルトポートが使用され、明示する場合は 1 から 65535 の範囲で指定する必要があります。値が空の場合、endpoint を設定するまで SYSTEM `ai_complete` の解析は失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。API key は FE 構成項目ではありません。各 BE が `AI_FUNCTION_MODEL_API_KEY` をローカルで読み取り、FE はクエリプランでキーを送信しません。AI クエリを実行するすべての BE で `AI_FUNCTION_MODEL_ENDPOINT` をこの URL と完全に同一の値に設定し、BE のローカル認証情報を管理者が承認した endpoint にバインドする必要があります。そのため FE endpoint を変更した場合は、この環境変数も更新し、新しい AI クエリを実行する前に対象 BE を再起動する必要があります。
+- 説明：SYSTEM `ai_complete` 呼び出しが使用する完全な HTTPS POST URL。URL にはホストが必要で、ユーザー情報、クエリ文字列、フラグメント、制御文字を含めることはできません。ポートを明示しない場合は HTTPS のデフォルトポートが使用され、明示する場合は 1 から 65535 の範囲で指定する必要があります。値が空の場合、endpoint を設定するまで SYSTEM `ai_complete` の解析は失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。API key は FE 構成項目ではありません。各 BE が `AI_FUNCTION_MODEL_API_KEY` をローカルで読み取り、FE はクエリプランでキーを送信しません。AI クエリを実行するすべての BE で `AI_FUNCTION_MODEL_ENDPOINT` をこの URL と完全に同一の値に設定し、BE のローカル認証情報を管理者が承認した endpoint にバインドする必要があります。そのため FE endpoint を変更した場合は、この環境変数も更新し、新しい AI クエリを実行する前に対象 BE を再起動する必要があります。
 - 導入時期：-
 
 ### `ai_default_chat_model`
@@ -109,6 +109,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 有効な値：`openai_compatible`
 - 変更可能：Yes
 - 説明：SYSTEM `ai_complete` が使用する provider プロトコル。値は正確に `openai_compatible` でなければならず、空の値や制御文字を含む追加文字がある場合は解析に失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 導入時期：-
+
+### `ai_default_embedding_endpoint`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：SYSTEM `ai_embed` 用の完全な HTTPS POST URL。チャットエンドポイントとは独立して設定する必要があります。ホストが必須で、ユーザー情報、クエリ文字列、フラグメント、制御文字は禁止です。明示するポートは 1 から 65535 です。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。実行する各 BE は `AI_FUNCTION_EMBEDDING_ENDPOINT` を完全に同一の URL に設定し、`AI_FUNCTION_EMBEDDING_API_KEY` をローカルで用意します。どちらかの BE 環境変数を変更した後は対象 BE の再起動が必要です。認証情報は FE 設定ではなく、プランには含まれません。[ai_embed](../../../sql-reference/sql-functions/scalar-functions/ai_embed.md) を参照してください。
+- 導入時期：-
+
+### `ai_default_embedding_model`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：モデルを明示しない SYSTEM `ai_embed` 呼び出しのデフォルトモデル。その場合は空白でない値が必須で、C0 制御文字と DEL は禁止です。すべての埋め込み呼び出しでモデルを明示する場合は空のままにできます。チャットのデフォルトモデルにはフォールバックしません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
+- 導入時期：-
+
+### `ai_default_embedding_provider`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 有効な値：`openai_compatible`
+- 変更可能：Yes
+- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。正確に `openai_compatible` を指定する必要があります。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
 - 導入時期：-
 
 ### `brpc_send_plan_fragment_timeout_ms`

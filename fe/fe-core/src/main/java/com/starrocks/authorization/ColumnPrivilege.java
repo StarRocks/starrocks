@@ -233,7 +233,7 @@ public class ColumnPrivilege {
         if (view.isSecurity()) {
             QueryStatement queryStatement = view.getQueryStatement();
             Analyzer.analyze(queryStatement, context);
-            Authorizer.check(queryStatement, context);
+            checkViewQueryPrivileges(context, queryStatement);
         }
 
         // Finally check SELECT privilege on the view object itself. Only failures here
@@ -246,6 +246,12 @@ public class ColumnPrivilege {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
         }
+    }
+
+    private static void checkViewQueryPrivileges(ConnectContext context, QueryStatement queryStatement) {
+        // The outer Authorizer bound every model through all view levels. This recursion checks only
+        // existing statement/table/column privileges; rebinding here could authorize a different model identity.
+        Authorizer.getInstance().getPrivilegeCheckerVisitor().check(queryStatement, context);
     }
 
     public static class ScanColumnCollector extends OptExpressionVisitor<Void, Void> {

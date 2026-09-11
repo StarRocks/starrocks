@@ -21,6 +21,7 @@ import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
@@ -249,6 +250,9 @@ public class EditLogDeserializer {
             .put(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, SetDefaultStorageVolumeLog.class)
             .put(OperationType.OP_DROP_STORAGE_VOLUME, DropStorageVolumeLog.class)
             .put(OperationType.OP_CREATE_STORAGE_VOLUME, StorageVolume.class)
+            .put(OperationType.OP_CREATE_AI_MODEL, AIModel.class)
+            .put(OperationType.OP_ALTER_AI_MODEL, AIModel.class)
+            .put(OperationType.OP_DROP_AI_MODEL, DropAIModelLog.class)
             .put(OperationType.OP_UPDATE_STORAGE_VOLUME, StorageVolume.class)
             .put(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, TableStorageInfos.class)
             .put(OperationType.OP_PIPE, PipeOpEntry.class)

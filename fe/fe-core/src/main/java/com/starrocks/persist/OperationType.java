@@ -701,6 +701,11 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
 
+    // AI model identity and revision must not be lost on replay failure.
+    public static final short OP_CREATE_AI_MODEL = 13559;
+    public static final short OP_ALTER_AI_MODEL = 13560;
+    public static final short OP_DROP_AI_MODEL = 13561;
+
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

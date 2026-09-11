@@ -1609,10 +1609,16 @@ struct TAIEndpointConfig {
   1: optional string endpoint
   2: optional string model
   3: optional string provider
+  4: optional string credential_ref
 }
 
 struct TAIModelConfiguration {
   1: optional TAIEndpointConfig chat
+  2: optional TAIEndpointConfig text_embedding
+  // Missing source is accepted only for legacy SYSTEM configurations.
+  3: optional Types.TAIModelSource source
+  // Stable FE object identity, required only for AI_MODEL configurations.
+  4: optional i64 model_id
 }
 
 struct TAIProjectNode {

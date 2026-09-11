@@ -314,6 +314,13 @@ statement
     | setUserPropertyStatement
     | refreshConnectionsStatement
 
+    // AI Model Statement
+    | createAIModelStatement
+    | alterAIModelStatement
+    | dropAIModelStatement
+    | showAIModelsStatement
+    | descAIModelStatement
+
     // Storage Volume Statement
     | createStorageVolumeStatement
     | alterStorageVolumeStatement
@@ -881,6 +888,28 @@ showCatalogsStatement
 
 alterCatalogStatement
     : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
+    ;
+
+// ---------------------------------------- AI Model Statement --------------------------------------------------------
+
+createAIModelStatement
+    : CREATE AI MODEL (IF NOT EXISTS)? identifierOrString comment? properties
+    ;
+
+alterAIModelStatement
+    : ALTER AI MODEL (IF EXISTS)? identifierOrString (SET propertyList | COMMENT '=' string)
+    ;
+
+dropAIModelStatement
+    : DROP AI MODEL (IF EXISTS)? identifierOrString
+    ;
+
+showAIModelsStatement
+    : SHOW AI MODELS (LIKE pattern=string)?
+    ;
+
+descAIModelStatement
+    : (DESC | DESCRIBE) AI MODEL identifierOrString
     ;
 
 // ---------------------------------------- Storage Volume Statement ---------------------------------------------------
@@ -1994,19 +2023,19 @@ privilegeType
     | ALTER | APPLY | BLACKLIST
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
-        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | CNGROUP | PIPE )
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | CNGROUP | PIPE | AI MODEL )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE | SECURITY
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
 privObjectType
     : CATALOG | DATABASE | MATERIALIZED VIEW | RESOURCE | RESOURCE GROUP | STORAGE VOLUME | SYSTEM | TABLE | VIEW | WAREHOUSE
-    | PIPE
+    | PIPE | AI MODEL
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES | AI MODELS
     ;
 
 // ------------------------------------------- Security Integration Statement ----------------------------------------------------
@@ -3362,7 +3391,7 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
-    | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE | AI
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS | BOTH
     | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
@@ -3379,6 +3408,7 @@ nonReserved
     | JOB
     | LABEL | LAST | LEADER | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
     | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | METADATA | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | MODEL | MODELS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

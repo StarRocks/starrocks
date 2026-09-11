@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.AIModel;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.PrepareStmtContext;
+import com.starrocks.server.AIModelMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -32,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -40,6 +44,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PrepareStmtPlannerTest extends PlanTestBase {
@@ -76,6 +81,41 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                 () -> Assertions.assertTrue(prepared.context().isCached()),
                 () -> Assertions.assertSame(first.getPhysicalPlan(), second.getPhysicalPlan()),
                 () -> Assertions.assertEquals(2, scanPredicateValue(second)));
+    }
+
+    @Test
+    public void testNamedModelPreparedStatementTakesFreshSnapshotAfterAlter() throws Exception {
+        AIModelMgr manager = GlobalStateMgr.getCurrentState().getAIModelMgr();
+        AIModel model = manager.createModel("prepared_ai_model", Map.of(
+                "capability", "CHAT", "provider", "openai_compatible",
+                "endpoint", "https://models.example.test/v1/chat/completions",
+                "model", "first-model", "credential_ref", "TEST_MODEL"), "", false);
+        PreparedQuery prepared = prepare(
+                "select ai_custom_query('prepared_ai_model', ?) from tprimary where pk = ?");
+        try {
+            ExecPlan first = execute(prepared, new StringLiteral("first prompt"), bigint(1));
+            AIModel altered = manager.alterModel(model, Map.of("model", "second-model"), null);
+            ExecPlan second = execute(prepared, new StringLiteral("second prompt"), bigint(2));
+            Assertions.assertFalse(prepared.context().isCached());
+            Assertions.assertNotSame(first.getPhysicalPlan(), second.getPhysicalPlan());
+            Assertions.assertSame(model, first.getAIModelBindings().getRequiredModel(model.getName()));
+            Assertions.assertSame(altered, second.getAIModelBindings().getRequiredModel(model.getName()));
+            Assertions.assertNotEquals(first.getAIModelBindings().configurationId(model.getName()),
+                    second.getAIModelBindings().configurationId(model.getName()));
+            Assertions.assertEquals("first-model", preparedRemoteModel(first));
+            Assertions.assertEquals("second-model", preparedRemoteModel(second));
+        } finally {
+            connectContext.removePreparedStmt(prepared.name());
+            manager.dropModel(manager.getByName(model.getName()));
+        }
+    }
+
+    private static String preparedRemoteModel(ExecPlan plan) {
+        String configurationId = plan.getAIModelBindings().configurationId("prepared_ai_model");
+        return plan.getFragments().stream().flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
+                .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
+                .map(node -> node.getAi_project_node().getAi_model_configs().get(configurationId)
+                        .getChat().getModel()).findFirst().orElseThrow();
     }
 
     @Test

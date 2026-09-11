@@ -196,38 +196,49 @@ RetryAfterParseResult parse_retry_after(std::optional<std::string_view> value, i
 
 } // namespace
 
-AITaskSuccess::AITaskSuccess(std::string content, AIMemoryContext memory, size_t reserved_bytes) noexcept
-        : _content(std::move(content)), _memory(std::move(memory)), _reserved_bytes(reserved_bytes) {}
+AITaskSuccess::AITaskSuccess(AIProviderValue result, AIMemoryContext memory, size_t reserved_bytes) noexcept
+        : _result(std::move(result)), _memory(std::move(memory)), _reserved_bytes(reserved_bytes) {}
 
 AITaskSuccess::~AITaskSuccess() noexcept {
     _release();
 }
 
 AITaskSuccess::AITaskSuccess(AITaskSuccess&& other) noexcept
-        : _content(std::move(other._content)),
+        : _result(std::move(other._result)),
           _memory(std::move(other._memory)),
           _reserved_bytes(std::exchange(other._reserved_bytes, 0)) {}
 
 AITaskSuccess& AITaskSuccess::operator=(AITaskSuccess&& other) noexcept {
     if (this != &other) {
         _release();
-        _content = std::move(other._content);
+        _result = std::move(other._result);
         _memory = std::move(other._memory);
         _reserved_bytes = std::exchange(other._reserved_bytes, 0);
     }
     return *this;
 }
 
-StatusOr<AITaskSuccess> AITaskSuccess::create(std::string content, AIMemoryContext memory) {
-    const size_t bytes = content.size();
+StatusOr<AITaskSuccess> AITaskSuccess::create(AIProviderValue result, AIMemoryContext memory) {
+    const size_t bytes = std::visit(
+            [](const auto& value) -> size_t {
+                using Value = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Value, std::vector<float>>) {
+                    return value.capacity() * sizeof(float);
+                } else {
+                    return value.size();
+                }
+            },
+            result);
     if (bytes == 0 || !memory) {
-        return AITaskSuccess(std::move(content), {}, 0);
+        return AITaskSuccess(std::move(result), {}, 0);
     }
 
     if (!memory.reserve(bytes)) {
+        run_in_physical_scope(
+                memory, [&] { std::visit([](auto& value) { std::decay_t<decltype(value)>().swap(value); }, result); });
         return Status::MemoryLimitExceeded("AI parsed result memory limit exceeded");
     }
-    return AITaskSuccess(std::move(content), std::move(memory), bytes);
+    return AITaskSuccess(std::move(result), std::move(memory), bytes);
 }
 
 void AITaskSuccess::_release() noexcept {
@@ -236,7 +247,7 @@ void AITaskSuccess::_release() noexcept {
     // Free the physical buffer before returning its accounting so a release hook can safely admit replacement work.
     try {
         run_in_physical_scope(memory, [&] {
-            std::string().swap(_content);
+            std::visit([](auto& value) { std::decay_t<decltype(value)>().swap(value); }, _result);
             _memory = {};
         });
     } catch (...) {
@@ -1239,8 +1250,9 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
     };
     if ((response.status_code >= 200 && response.status_code < 300) || response.status_code == 400) {
         try {
-            run_in_physical_scope(_memory,
-                                  [&] { provider_result = _core->provider->parse_response(response.body.data()); });
+            run_in_physical_scope(_memory, [&] {
+                provider_result = _core->provider->parse_response(response.body.data(), _rate_limit_key.capability());
+            });
         } catch (...) {
             clear_provider_result();
             const AILifecycleObservation after_parse = _observe_lifecycle();
@@ -1279,7 +1291,7 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
         bool local_resource_failure = false;
         try {
             run_in_physical_scope(_memory, [&] {
-                StatusOr<AITaskSuccess> created = AITaskSuccess::create(std::move(success->content), _memory);
+                StatusOr<AITaskSuccess> created = AITaskSuccess::create(std::move(success->value), _memory);
                 if (created.ok()) {
                     task_success.emplace(std::move(created).value());
                 } else {
@@ -1362,8 +1374,9 @@ StatusOr<AITaskHandle> AITaskDispatcher::submit(AIDispatchRequest&& request, AIT
                 return;
             }
 
-            AIRateLimitKey rate_limit_key = AIRateLimitKey::create(std::string(request.chat_request.endpoint),
-                                                                   request.chat_request.api_key, AICapability::CHAT);
+            AIRateLimitKey rate_limit_key =
+                    AIRateLimitKey::create(std::string(request.chat_request.endpoint), request.chat_request.api_key,
+                                           request.chat_request.capability);
             state = ai_allocate_shared<AITaskState>(request.memory, _core, request, std::move(request_template).value(),
                                                     std::move(rate_limit_key), std::move(callback));
             submit_result = SubmitResult::CREATED;

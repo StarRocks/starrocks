@@ -22,6 +22,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -30,6 +32,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -52,6 +57,134 @@ public class AIFunctionAnalyzerTest {
         Config.ai_default_chat_endpoint = "";
         Config.ai_default_chat_model = "";
         Config.ai_default_chat_provider = "";
+        Config.ai_default_embedding_endpoint = "";
+        Config.ai_default_embedding_model = "";
+        Config.ai_default_embedding_provider = "";
+    }
+
+    @Test
+    public void testEmbeddingSignaturesAndOptions() {
+        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/embeddings";
+        Config.ai_default_embedding_model = "embedding-model";
+        Config.ai_default_embedding_provider = "openai_compatible";
+        for (String args : new String[] {"'text'", "'text', map{'dimensions': 3}", "'model', 'text'",
+                "'model', 'text', map{'dimensions': 3}"}) {
+            QueryStatement statement = (QueryStatement) analyzeSuccess("select ai_embed(" + args + ")");
+            Assertions.assertEquals(new ArrayType(FloatType.FLOAT),
+                    ((SelectRelation) statement.getQueryRelation()).getOutputExpression().get(0).getType());
+        }
+        analyzeSuccess("select ai_embed(ta, 'text') from tall");
+        analyzeSuccess("select ai_embed('text', map{'nested': map{'input': [1, 2]}})");
+        analyzeSuccess("select ai_embed('text', cast(null as map<varchar,json>))");
+        for (String key : new String[] {"model", "input", "encoding_format"}) {
+            analyzeFail("select ai_embed('text', map{'" + key + "': 'bad'})", "reserved option key");
+        }
+        analyzeFail("select ai_embed('text', map{'date': current_date()})", "JSON-compatible");
+        analyzeFail("select ai_embed('text', map{'value': ta}) from tall", "constant option MAP");
+        analyzeFail("select ai_embed(to_bitmap(1))", "No matching function");
+        analyzeFail("select ai_embed('text', map{'value': to_bitmap(1)})", "JSON-compatible");
+        Config.ai_default_embedding_model = "";
+        analyzeSuccess("select ai_embed(ta, 'text') from tall");
+        analyzeFail("select ai_embed('text')", "ai_default_embedding_model");
+    }
+
+    @Test
+    public void testEmbeddingRequiresIndependentEndpoint() {
+        analyzeFail("select ai_embed('prompt')", "ai_default_embedding_endpoint");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ai_custom_query", "ai_custom_embedding"})
+    public void testAIModelSelectorRequiresConstant(String function) {
+        analyzeFail("select " + function + "(ta, 'prompt') from tall", "constant AI model name");
+        analyzeFail("select " + function + "(NULL, 'prompt')", "constant AI model name");
+        for (String model : new String[] {"cast(NULL as varchar)", "''", "'  '", "concat(' ', ' ')"}) {
+            analyzeFail("select " + function + "(" + model + ", 'prompt')", "nonblank constant AI model name");
+        }
+        // Existence and capability are checked by the statement binder, not per function during analysis.
+        for (String model : new String[] {"'model_bound_after_analysis'", "concat('model_', 'after_analysis')"}) {
+            analyzeSuccess("select " + function + "(" + model + ", 'prompt')");
+            analyzeSuccess("select " + function + "(" + model + ", 'prompt', map{})");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ai_custom_query", "ai_custom_embedding"})
+    public void testAIModelFunctionsRejectMissingArguments(String function) {
+        Assertions.assertAll(
+                () -> analyzeFail("select " + function + "()", "No matching function"),
+                () -> analyzeFail("select " + function + "('model')", "No matching function"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NULL", "cast(NULL as array<varchar>)", "[]", "['a', NULL]", "['  ']", "cast([] as array<varchar>)",
+            "cast(['a', NULL] as array<varchar>)", "cast(['  '] as array<varchar>)"})
+    public void testHelperArraysRejectInvalidConstantContents(String array) {
+        for (String function : new String[] {"ai_classify", "ai_extract", "ai_redact"}) {
+            Assertions.assertAll(
+                    () -> analyzeFail("select " + function + "('p', " + array + ")", "nonempty ARRAY"),
+                    () -> analyzeFail("select " + function + "('model', 'p', " + array + ")", "nonempty ARRAY"));
+        }
+    }
+
+    @Test
+    public void testHelperArraysMustBeConstant() {
+        analyzeFail("select ai_classify('p', [ta]) from tall", "constant ARRAY");
+        analyzeFail("select ai_extract('p', [ta]) from tall", "constant ARRAY");
+        analyzeFail("select ai_redact('p', [ta]) from tall", "constant ARRAY");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "ai_classify, ta, tall",
+            "ai_classify, v_json, tjson",
+            "ai_extract, ta, tall",
+            "ai_extract, v_json, tjson",
+            "ai_redact, ta, tall",
+            "ai_redact, v_json, tjson"
+    })
+    public void testHelperArrayArgumentsRequireConstantsBeforeImplicitCasts(
+            String function, String column, String table) {
+        Assertions.assertAll(
+                () -> analyzeFail("select " + function + "('p', " + column + ") from " + table, "constant ARRAY"),
+                () -> analyzeFail("select " + function + "('model', 'p', " + column + ") from " + table,
+                        "constant ARRAY"));
+    }
+
+    @Test
+    public void testHelperArrayArgumentsAcceptConstantCastsAndExpressions() {
+        for (String function : new String[] {"ai_classify", "ai_extract", "ai_redact"}) {
+            for (String argument : new String[] {"['a']", "cast(['a'] as array<varchar>)",
+                    "'[\"a\"]'", "parse_json('[\"a\"]')",
+                    "array_concat(['a'], ['b'])"}) {
+                analyzeSuccess("select " + function + "('p', " + argument + ")");
+                analyzeSuccess("select " + function + "('model', 'p', " + argument + ")");
+            }
+        }
+    }
+
+    @Test
+    public void testTextHelperSignatures() {
+        String[] names = {"ai_sentiment", "ai_classify", "ai_extract", "ai_fix_grammar", "ai_redact",
+                "ai_translate", "ai_similarity", "ai_summarize", "ai_filter"};
+        String[] args = {"'p'", "'p', ['a']", "'p', ['a']", "'p'", "'p', ['a']",
+                "'p', 'en', 'zh'", "'p', 'q'", "'p'", "'p', 'condition'"};
+        for (int i = 0; i < names.length; i++) {
+            assertFunctionId("select " + names[i] + "(" + args[i] + ")", 200110 + i * 2);
+            assertFunctionId("select " + names[i] + "(ta, " + args[i] + ") from tall", 200111 + i * 2);
+        }
+        Config.ai_default_chat_model = "";
+        for (int i = 0; i < names.length; i++) {
+            analyzeSuccess("select " + names[i] + "(ta, " + args[i] + ") from tall");
+            analyzeFail("select " + names[i] + "(" + args[i] + ")", "ai_default_chat_model");
+        }
+    }
+
+    private static void assertFunctionId(String sql, long id) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation()).getOutputExpression().get(0);
+        Assertions.assertEquals(id, call.getFn().getFunctionId());
+        Assertions.assertTrue(call.getFn().isAi());
     }
 
     @Test

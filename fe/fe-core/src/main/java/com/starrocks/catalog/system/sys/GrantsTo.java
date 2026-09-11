@@ -15,6 +15,7 @@ package com.starrocks.catalog.system.sys;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AIModelPEntryObject;
 import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.CatalogPEntryObject;
@@ -31,6 +32,7 @@ import com.starrocks.authorization.StorageVolumePEntryObject;
 import com.starrocks.authorization.TablePEntryObject;
 import com.starrocks.authorization.UserPEntryObject;
 import com.starrocks.authorization.WarehousePEntryObject;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
@@ -383,6 +385,18 @@ public class GrantsTo {
                     }
                 } else if (ObjectType.SYSTEM.equals(privEntry.getKey())) {
                     objects.add(Lists.newArrayList(null, null, null));
+                } else if (ObjectType.AI_MODEL.equals(privEntry.getKey())) {
+                    AIModelPEntryObject modelObject = (AIModelPEntryObject) privilegeEntry.getObject();
+                    if (modelObject.isFuzzyMatching()) {
+                        for (AIModel model : GlobalStateMgr.getCurrentState().getAIModelMgr().listModels()) {
+                            objects.add(Lists.newArrayList(null, null, model.getName()));
+                        }
+                    } else {
+                        AIModel model = GlobalStateMgr.getCurrentState().getAIModelMgr().getById(modelObject.getId());
+                        if (model != null) {
+                            objects.add(Lists.newArrayList(null, null, model.getName()));
+                        }
+                    }
                 } else if (ObjectType.STORAGE_VOLUME.equals(privEntry.getKey())) {
                     StorageVolumePEntryObject storageVolumePEntryObject =
                             (StorageVolumePEntryObject) privilegeEntry.getObject();

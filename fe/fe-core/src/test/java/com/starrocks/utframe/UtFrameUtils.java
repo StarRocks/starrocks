@@ -106,6 +106,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AIModelBinder;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -126,6 +127,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.UserVariableHint;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -1387,6 +1389,9 @@ public class UtFrameUtils {
             throws Exception {
         String q = initMockEnv(connectContext, dumpInfo);
         try {
+            // Dumps do not capture AI model metadata. Never resolve an uncaptured dependency from live state.
+            StatementBase statement = parseStmtWithNewParser(q, connectContext);
+            AIModelBinder.validateBindings(statement, AIModelBindings.EMPTY);
             return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
         } finally {
             tearMockEnv();

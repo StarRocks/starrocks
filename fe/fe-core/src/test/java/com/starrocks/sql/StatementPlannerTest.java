@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
@@ -501,7 +502,7 @@ class StatementPlannerTest extends PlanTestBase {
             // Mock PlanFragmentBuilder.createPhysicalPlan to throw exception
             RuntimeException testException = new RuntimeException("Test exception during ExecPlanBuild");
             mockedPlanFragmentBuilder.when(() -> PlanFragmentBuilder.createPhysicalPlan(
-                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean()))
+                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean(), eq(AIModelBindings.EMPTY)))
                     .thenThrow(testException);
 
             // Mock OptimisticVersion.validateTableUpdate to return true (schema is valid)
@@ -549,7 +550,7 @@ class StatementPlannerTest extends PlanTestBase {
             ExecPlan mockPlan = Mockito.mock(ExecPlan.class);
             AtomicInteger callCount = new AtomicInteger(0);
             mockedPlanFragmentBuilder.when(() -> PlanFragmentBuilder.createPhysicalPlan(
-                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean()))
+                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean(), eq(AIModelBindings.EMPTY)))
                     .thenAnswer(invocation -> {
                         int count = callCount.incrementAndGet();
                         if (count == 1) {
@@ -584,7 +585,7 @@ class StatementPlannerTest extends PlanTestBase {
             // Verify that PlanFragmentBuilder.createPhysicalPlan was called twice
             // (once throwing exception, once succeeding)
             mockedPlanFragmentBuilder.verify(() -> PlanFragmentBuilder.createPhysicalPlan(
-                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean()),
+                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean(), eq(AIModelBindings.EMPTY)),
                     times(2));
 
             // Verify that OptimisticVersion.validateTableUpdate was called

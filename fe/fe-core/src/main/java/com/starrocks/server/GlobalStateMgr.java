@@ -488,6 +488,7 @@ public class GlobalStateMgr {
 
     private LocalMetastore localMetastore;
     private final GlobalFunctionMgr globalFunctionMgr;
+    private final AIModelMgr aiModelMgr;
 
     private final StateChangeExecution execution;
 
@@ -781,6 +782,7 @@ public class GlobalStateMgr {
         this.stat = new TabletSchedulerStat();
 
         this.globalFunctionMgr = new GlobalFunctionMgr();
+        this.aiModelMgr = new AIModelMgr();
         this.tabletScheduler = new TabletScheduler(stat);
         this.tabletChecker = new TabletChecker(tabletScheduler, stat);
 
@@ -1004,6 +1006,10 @@ public class GlobalStateMgr {
 
     public GlobalFunctionMgr getGlobalFunctionMgr() {
         return globalFunctionMgr;
+    }
+
+    public AIModelMgr getAIModelMgr() {
+        return aiModelMgr;
     }
 
     public GlobalTransactionMgr getGlobalTransactionMgr() {
@@ -2166,6 +2172,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
                 .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
                 .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                .put(SRMetaBlockID.AI_MODEL_MGR, aiModelMgr::load)
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                 .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
@@ -2402,6 +2409,7 @@ public class GlobalStateMgr {
                 streamLoadMgr.save(imageWriter);
                 materializedViewMgr.save(imageWriter);
                 globalFunctionMgr.save(imageWriter);
+                aiModelMgr.save(imageWriter);
                 storageVolumeMgr.save(imageWriter);
                 dictionaryMgr.save(imageWriter);
                 replicationMgr.save(imageWriter);

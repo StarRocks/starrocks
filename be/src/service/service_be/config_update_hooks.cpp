@@ -138,6 +138,10 @@ void register_ai_config_update_hooks(ExecEnv* exec_env) {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_rate_limit_qps_chat(config::ai_function_rate_limit_qps_chat);
     });
+    registry->register_callback("ai_function_rate_limit_qps_embedding", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_rate_limit_qps_embedding(config::ai_function_rate_limit_qps_embedding);
+    });
     registry->register_callback("ai_function_max_inflight", [exec_env]() -> Status {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_max_inflight(config::ai_function_max_inflight);

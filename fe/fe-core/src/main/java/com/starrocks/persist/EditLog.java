@@ -44,6 +44,7 @@ import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
@@ -1172,6 +1173,18 @@ public class EditLog {
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
                     SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.data();
                     globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
+                    break;
+                }
+                case OperationType.OP_CREATE_AI_MODEL: {
+                    globalStateMgr.getAIModelMgr().replayCreateModel((AIModel) journal.data());
+                    break;
+                }
+                case OperationType.OP_ALTER_AI_MODEL: {
+                    globalStateMgr.getAIModelMgr().replayAlterModel((AIModel) journal.data());
+                    break;
+                }
+                case OperationType.OP_DROP_AI_MODEL: {
+                    globalStateMgr.getAIModelMgr().replayDropModel((DropAIModelLog) journal.data());
                     break;
                 }
                 case OperationType.OP_CREATE_STORAGE_VOLUME: {
@@ -2357,6 +2370,18 @@ public class EditLog {
 
     public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, log, walApplier);
+    }
+
+    public void logCreateAIModel(AIModel model, WALApplier applier) {
+        logJsonObject(OperationType.OP_CREATE_AI_MODEL, model, applier);
+    }
+
+    public void logAlterAIModel(AIModel model, WALApplier applier) {
+        logJsonObject(OperationType.OP_ALTER_AI_MODEL, model, applier);
+    }
+
+    public void logDropAIModel(DropAIModelLog log, WALApplier applier) {
+        logJsonObject(OperationType.OP_DROP_AI_MODEL, log, applier);
     }
 
     public void logCreateStorageVolume(StorageVolume storageVolume, WALApplier walApplier) {

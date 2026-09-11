@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.AIModelBindings;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -79,6 +80,10 @@ import java.util.Optional;
 public class UpdatePlanner {
 
     public ExecPlan plan(UpdateStmt updateStmt, ConnectContext session) {
+        return plan(updateStmt, session, AIModelBindings.EMPTY);
+    }
+
+    public ExecPlan plan(UpdateStmt updateStmt, ConnectContext session, AIModelBindings aiModelBindings) {
         QueryRelation query = updateStmt.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -101,7 +106,7 @@ public class UpdatePlanner {
         }
 
         return createUpdatePlan(updateStmt, session, optExprBuilder.getRoot(), columnRefFactory,
-                outputColumns, colNames, targetTable, requiredProperty);
+                outputColumns, colNames, targetTable, requiredProperty, aiModelBindings);
     }
 
     /**
@@ -110,7 +115,8 @@ public class UpdatePlanner {
     private ExecPlan createUpdatePlan(UpdateStmt updateStmt, ConnectContext session,
                                       OptExpression logicalRoot, ColumnRefFactory columnRefFactory,
                                       List<ColumnRefOperator> outputColumns, List<String> colNames,
-                                      Table targetTable, PhysicalPropertySet requiredProperty) {
+                                      Table targetTable, PhysicalPropertySet requiredProperty,
+                                      AIModelBindings aiModelBindings) {
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
@@ -132,7 +138,7 @@ public class UpdatePlanner {
 
             // Build physical plan
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
-                    outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
+                    outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false, false, aiModelBindings);
 
             // Setup sink and configure pipeline based on table type
             if (targetTable instanceof IcebergTable icebergTable) {

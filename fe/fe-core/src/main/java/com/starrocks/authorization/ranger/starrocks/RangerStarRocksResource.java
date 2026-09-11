@@ -49,6 +49,8 @@ public class RangerStarRocksResource extends RangerAccessResourceImpl {
                 return "resource_group";
             } else if (objectType.equals(ObjectType.STORAGE_VOLUME)) {
                 return "storage_volume";
+            } else if (objectType.equals(ObjectType.AI_MODEL)) {
+                return "ai_model";
             } else if (objectType.equals(ObjectType.PIPE)) {
                 return "pipe";
             } else {

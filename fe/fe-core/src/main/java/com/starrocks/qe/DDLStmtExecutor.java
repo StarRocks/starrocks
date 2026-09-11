@@ -19,9 +19,14 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.AIModel;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
@@ -42,8 +47,10 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.AIModelMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
@@ -56,6 +63,7 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
+import com.starrocks.sql.ast.AlterAIModelStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -87,6 +95,7 @@ import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
+import com.starrocks.sql.ast.CreateAIModelStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
@@ -109,6 +118,7 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
+import com.starrocks.sql.ast.DropAIModelStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
@@ -1199,6 +1209,60 @@ public class DDLStmtExecutor {
                     throw new SemanticException("Unsupported alter task action: " + alterTaskStmt.getAction());
             }
             return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateAIModelStatement(CreateAIModelStmt stmt, ConnectContext context) {
+            try {
+                Authorizer.checkSystemAction(context, PrivilegeType.CREATE_AI_MODEL);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.CREATE_AI_MODEL.name(), ObjectType.SYSTEM.name(), null);
+            }
+            ErrorReport.wrapWithRuntimeException(() -> context.getGlobalStateMgr().getAIModelMgr()
+                    .createModel(stmt.getName(), stmt.getProperties(), stmt.getComment(), stmt.isSetIfNotExists()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterAIModelStatement(AlterAIModelStmt stmt, ConnectContext context) {
+            AIModelMgr mgr = context.getGlobalStateMgr().getAIModelMgr();
+            AIModel target = mgr.getByName(stmt.getName());
+            if (target == null) {
+                if (stmt.isSetIfExists()) {
+                    return null;
+                }
+                throw new SemanticException("Unknown AI model: %s", stmt.getName());
+            }
+            authorizeAIModel(context, target, PrivilegeType.ALTER);
+            ErrorReport.wrapWithRuntimeException(() -> mgr.alterModel(target, stmt.getProperties(), stmt.getComment()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropAIModelStatement(DropAIModelStmt stmt, ConnectContext context) {
+            AIModelMgr mgr = context.getGlobalStateMgr().getAIModelMgr();
+            AIModel target = mgr.getByName(stmt.getName());
+            if (target == null) {
+                if (stmt.isSetIfExists()) {
+                    return null;
+                }
+                throw new SemanticException("Unknown AI model: %s", stmt.getName());
+            }
+            authorizeAIModel(context, target, PrivilegeType.DROP);
+            ErrorReport.wrapWithRuntimeException(() -> mgr.dropModel(target));
+            return null;
+        }
+
+        private void authorizeAIModel(ConnectContext context, AIModel target, PrivilegeType action) {
+            try {
+                Authorizer.checkAIModelAction(context, target, action);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(), action.name(),
+                        ObjectType.AI_MODEL.name(), target.getName());
+            }
         }
 
         @Override
