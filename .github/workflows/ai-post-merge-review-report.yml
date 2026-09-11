@@ -1,17 +1,33 @@
 name: AI POST-MERGE REVIEW REPORT
 
-# Report half of the post-merge severe-risk review chain. Codex delivers its result
-# as a pull request *review* (the summary + inline findings), so we react to
-# `pull_request_review: submitted` -- NOT issue_comment: on a closed PR codex submits
-# a review but does not reliably leave a top-level issue comment, so an issue_comment
-# trigger would silently miss the findings (observed on #61390). The script then
-# correlates that review to our post-merge REVIEW.md trigger, takes its inline
-# findings, and opens a tracking issue assigned to the PR author. Returns in seconds --
-# no polling. Idempotent (one issue per PR).
+# Report half of the post-merge severe-risk review chain, running as a scheduled sweep.
+#
+# Why a schedule and not an event: codex delivers its post-merge result as a pull
+# request *review* (+ inline pull_request_review_comment), and pull_request-family
+# events do NOT trigger Actions on closed/merged PRs (verified by a controlled probe:
+# a review on a merged PR creates no run, while reviews on open PRs do). issue_comment
+# would fire on closed PRs, but codex posts no top-level issue comment post-merge. So
+# no Actions event fires on codex's post-merge output. schedule fires regardless of PR
+# state, so the report runs as a sweep.
+#
+# The sweep is targeted, not a blind scan: it reads our own execution records -- the
+# runs of the trigger workflow ai-post-merge-review.yml (only that workflow's runs, in
+# the last SWEEP_LOOKBACK_H hours) -- and resolves each successful run's head_sha to its
+# PR, then opens a tracking issue for any with codex findings. The script is idempotent
+# (one codex-severe-review issue per PR, checked in-memory first) and self-correlating.
+# codex returns within ~10 min, so a small window (6h) always contains its review by the
+# time the sweep runs; the window only needs to outlast codex's turnaround plus a few
+# cron ticks.
 
 on:
-  pull_request_review:
-    types: [submitted]
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: "Hours back to scan trigger-workflow runs for"
+        required: false
+        default: "6"
 
 permissions:
   contents: read
@@ -20,26 +36,18 @@ permissions:
 
 jobs:
   report:
-    name: AI Post-Merge Review (report)
-    # Only codex reviews, and only on merged/closed PRs (post-merge). The script's own
-    # correlation (a CelerData-Reviewer REVIEW.md trigger comment before the review)
-    # further guarantees this is our post-merge flow and not a stray pre-merge review.
-    if: >
-      github.repository == 'CelerData/celerdata-enterprise' &&
-      github.event.pull_request.state == 'closed' &&
-      github.event.review.user.login == 'chatgpt-codex-connector[bot]'
+    name: AI Post-Merge Review (sweep)
+    if: github.repository == 'CelerData/celerdata-enterprise'
     # quick (not light): needs the /var/lib/ci-tool bind-mount for the orchestration
-    # script; light is a deliberately ci-tool-free pool. Seconds-long event-driven job.
+    # script; light is a deliberately ci-tool-free pool. Seconds-long job.
     runs-on: [self-hosted, quick]
     steps:
-      - name: open issue on codex post-merge findings
+      - name: sweep triggered PRs for codex post-merge findings
         env:
           GH_TOKEN: ${{ secrets.PAT }}
-          MODE: report
+          MODE: sweep
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          SWEEP_LOOKBACK_H: ${{ github.event.inputs.lookback_hours || '6' }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
           # git pull is best-effort: the bind-mounted copy is already runnable, so a

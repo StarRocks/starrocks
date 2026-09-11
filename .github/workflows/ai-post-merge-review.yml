@@ -3,7 +3,11 @@ name: AI POST-MERGE REVIEW
 # Trigger half of the post-merge severe-risk review chain. On merge to main, ask
 # codex (via ci_robot, as CelerData-Reviewer) to re-review the diff with REVIEW.md.
 # Returns in seconds -- no polling. The report half (ai-post-merge-review-report.yml)
-# reacts to codex's review and opens the tracking issue.
+# sweeps these runs on a schedule and opens the tracking issue.
+
+# Put the PR number in the run title so the report sweep can read it straight from the
+# run (display_title) without a head_sha -> PR lookup.
+run-name: AI Post-Merge Review · PR #${{ github.event.pull_request.number }}
 
 on:
   pull_request_target:
