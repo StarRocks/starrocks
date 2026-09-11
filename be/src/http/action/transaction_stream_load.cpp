@@ -505,8 +505,7 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     }
     if (!http_req->header(HTTP_LOAD_DOP).empty()) {
         int64_t parallel_request_num = 0;
-        RETURN_IF_ERROR(
-                parse_int64_load_header(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num));
+        RETURN_IF_ERROR(parse_int64_load_header(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num));
         request.__set_load_dop(parallel_request_num);
     }
     if (ctx->timeout_second != -1) {

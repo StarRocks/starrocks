@@ -633,8 +633,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     }
     if (!http_req->header(HTTP_LOAD_DOP).empty()) {
         int64_t parallel_request_num = 0;
-        RETURN_IF_ERROR(
-                parse_int64_load_header(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num));
+        RETURN_IF_ERROR(parse_int64_load_header(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num));
         request.__set_load_dop(parallel_request_num);
     }
     if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
