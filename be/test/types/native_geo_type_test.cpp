@@ -122,5 +122,30 @@ TEST(NativeGeoTypeTest, FrontendWireFixture) {
     EXPECT_EQ(wire, encoded.SerializeAsString());
 }
 
+TEST(NativeGeoTypeTest, DiagnosticTypeNames) {
+    for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        const char* expected = primitive == TYPE_GEOGRAPHY ? "GEOGRAPHY" : "GEOMETRY";
+        EXPECT_STREQ(expected, logical_type_to_string(primitive));
+        EXPECT_EQ(expected, type_to_string(primitive));
+        EXPECT_EQ(expected, type_to_string_v2(primitive));
+    }
+    EXPECT_STREQ("VARIANT", logical_type_to_string(TYPE_VARIANT));
+    EXPECT_EQ("VARIANT", type_to_string(TYPE_VARIANT));
+    EXPECT_EQ("VARIANT", type_to_string_v2(TYPE_VARIANT));
+    EXPECT_EQ(TPrimitiveType::VARIANT, to_thrift(TYPE_VARIANT));
+    EXPECT_EQ(TYPE_VARIANT, thrift_to_type(TPrimitiveType::VARIANT));
+}
+
+TEST(NativeGeoTypeTest, ExcludedFromZoneMapAndChecksum) {
+    for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        EXPECT_FALSE(is_zone_map_key_type(primitive));
+        EXPECT_FALSE(is_support_checksum_type(primitive));
+    }
+    EXPECT_TRUE(is_zone_map_key_type(TYPE_INT));
+    EXPECT_TRUE(is_support_checksum_type(TYPE_INT));
+    EXPECT_FALSE(is_zone_map_key_type(TYPE_JSON));
+    EXPECT_FALSE(is_support_checksum_type(TYPE_JSON));
+}
+
 } // namespace
 } // namespace starrocks
