@@ -1,4 +1,4 @@
--- name: test_ai_provider @sequential
+-- name: test_ai_provider
 CREATE AI PROVIDER ai_provider_embedding_test TYPE embedding COMMENT 'test embedding provider' PROPERTIES ("endpoint" = "https://api.openai.com/v1/embeddings", "model" = "text-embedding-3-small", "dimensions" = "1536", "api_key" = "sk-test");
 DESC AI PROVIDER ai_provider_embedding_test;
 ALTER AI PROVIDER ai_provider_embedding_test SET ("timeout_ms" = "20000", "api_key" = "sk-new");
