@@ -67,6 +67,7 @@ set(COLUMN_TEST_FILES
     variant_builder_test.cpp
     variant_encoder_test.cpp
     buffer_test.cpp
+    geo_column_test.cpp
 )
 
 if (USE_AVX2)
