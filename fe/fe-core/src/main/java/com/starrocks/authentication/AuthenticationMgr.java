@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -59,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -78,6 +80,24 @@ public class AuthenticationMgr {
 
     @SerializedName("gp")
     protected Map<String, GroupProvider> nameToGroupProviderMap = new ConcurrentHashMap<>();
+
+    /**
+     * Serializes group provider DDL (CREATE / DROP / ALTER) on the leader. ALTER reads the current
+     * properties, merges the delta and writes one journal record; without this, two concurrent ALTERs
+     * would each merge onto the same snapshot, so one delta would be lost in this FE's memory while the
+     * journal - and therefore every follower, and this FE itself after a restart - still carries both.
+     * The same window lets an ALTER put a provider back after a concurrent DROP removed it.
+     *
+     * Held for the read-merge and again for the swap, but deliberately NOT across
+     * prepareForActivation(): that blocks on LDAP I/O for as long as ldap_conn_timeout allows, and a DDL
+     * running on the leader's handler thread cannot be cancelled (StmtExecutor.cancel() only reaches a
+     * Coordinator), so an ALTER against an unreachable directory would otherwise park every other group
+     * provider statement behind it. What the lock guarantees instead is checked explicitly: the swap only
+     * happens if the provider is still the instance the merge was based on, and ALTER redoes the merge if
+     * it is not. Also deliberately not the class-wide {@code lock}, which guards user metadata on the
+     * login path. Journal replay does not take it - it is single threaded and never runs next to local DDL.
+     */
+    private final Object groupProviderDdlLock = new Object();
 
     @SerializedName("sim")
     protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
@@ -654,7 +674,12 @@ public class AuthenticationMgr {
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
 
         this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
-        this.nameToGroupProviderMap = ret.nameToGroupProviderMap;
+        // Copy rather than adopt: Gson builds the field from its declared type (Map), so an image
+        // that carries a "gp" entry - and saveV2 always writes one, even when empty - hands back a
+        // LinkedTreeMap, not the ConcurrentHashMap the field was initialized with. Readers of this
+        // map (getGroupProvider, getAllGroupProviders, and the login path through them) are
+        // deliberately lock-free, which only holds for a genuinely concurrent map.
+        this.nameToGroupProviderMap = new ConcurrentHashMap<>(ret.nameToGroupProviderMap);
 
         for (Map.Entry<String, GroupProvider> entry : nameToGroupProviderMap.entrySet()) {
             try {
@@ -776,7 +801,8 @@ public class AuthenticationMgr {
                 // update map
                 nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
             });
-            LOG.info("finished to alter security integration '{}' with updated properties {}", name, alterProps);
+            LOG.info("finished to alter security integration '{}' with updated properties {}", name,
+                    maskedProps(alterProps));
         }
     }
 
@@ -814,7 +840,7 @@ public class AuthenticationMgr {
             // update map
             nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
             LOG.info("finished to replay alter security integration '{}' with updated properties {}",
-                    name, alterProps);
+                    name, maskedProps(alterProps));
         }
     }
 
@@ -825,22 +851,51 @@ public class AuthenticationMgr {
     // ---------------------------------------- Group Provider Statement --------------------------------------
 
     public void createGroupProviderStatement(CreateGroupProviderStmt stmt, ConnectContext context) throws DdlException {
-        // Check if group provider already exists
-        if (this.nameToGroupProviderMap.containsKey(stmt.getName())) {
-            if (stmt.isIfNotExists()) {
-                // If IF NOT EXISTS is specified, silently return without error
-                return;
-            } else {
-                throw new DdlException("Group provider '" + stmt.getName() + "' already exists");
-            }
+        String name = stmt.getName();
+        // Reported before any I/O, so a duplicate name does not first wait out a directory round trip.
+        if (groupProviderAlreadyExists(name, stmt.isIfNotExists())) {
+            return;
         }
 
-        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
+        // init() runs outside the DDL lock: FileGroupProvider.init() reads group_file_url, which for an
+        // http(s) value is URL.openStream() with no timeout at all, and the LDAP one starts a schedule.
+        // Holding the lock across that would park every other group provider statement behind it -
+        // including the DROP an operator would reach for to get out of it. The name is re-checked below,
+        // so a concurrent statement that took it in the meantime is still reported instead of overwritten.
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(name, stmt.getPropertyMap());
         groupProvider.init();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateGroupProvider(
-                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()),
-                wal -> nameToGroupProviderMap.put(stmt.getName(), groupProvider));
+        AtomicBoolean published = new AtomicBoolean(false);
+        try {
+            synchronized (groupProviderDdlLock) {
+                if (groupProviderAlreadyExists(name, stmt.isIfNotExists())) {
+                    return;
+                }
+
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateGroupProvider(
+                        new GroupProviderLog(name, stmt.getPropertyMap()),
+                        wal -> {
+                            nameToGroupProviderMap.put(name, groupProvider);
+                            published.set(true);
+                        });
+            }
+        } finally {
+            if (!published.get()) {
+                // Never made it into the map: tear down whatever init() started instead of leaking it.
+                groupProvider.destroy();
+            }
+        }
+    }
+
+    /** True when the name is taken and IF NOT EXISTS makes that acceptable; throws when it is not. */
+    private boolean groupProviderAlreadyExists(String name, boolean ifNotExists) throws DdlException {
+        if (!nameToGroupProviderMap.containsKey(name)) {
+            return false;
+        }
+        if (ifNotExists) {
+            return true;
+        }
+        throw new DdlException("Group provider '" + name + "' already exists");
     }
 
     public void replayCreateGroupProvider(String name, Map<String, String> properties) {
@@ -854,26 +909,191 @@ public class AuthenticationMgr {
     }
 
     public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) throws DdlException {
-        GroupProvider groupProvider = this.nameToGroupProviderMap.get(stmt.getName());
-        if (groupProvider == null) {
-            if (stmt.isIfExists()) {
-                // If IF EXISTS is specified, silently return without error
-                return;
-            } else {
-                throw new DdlException("Group provider '" + stmt.getName() + "' does not exist");
+        synchronized (groupProviderDdlLock) {
+            GroupProvider groupProvider = this.nameToGroupProviderMap.get(stmt.getName());
+            if (groupProvider == null) {
+                if (stmt.isIfExists()) {
+                    // If IF EXISTS is specified, silently return without error
+                    return;
+                } else {
+                    throw new DdlException("Group provider '" + stmt.getName() + "' does not exist");
+                }
             }
+
+            // Destroy only after the journal write, from inside the applier - the ordering ALTER uses two
+            // methods below. Destroying first meant that a failed write left the provider in the map with
+            // its refresh schedule already cancelled: a zombie serving a cache that can never refresh again
+            // until the FE restarts.
+            GlobalStateMgr.getCurrentState().getEditLog().logDropGroupProvider(
+                    new GroupProviderLog(stmt.getName(), null),
+                    wal -> {
+                        GroupProvider removed = nameToGroupProviderMap.remove(stmt.getName());
+                        if (removed != null) {
+                            removed.destroy();
+                        }
+                    });
         }
-
-        groupProvider.destroy();
-
-        GlobalStateMgr.getCurrentState().getEditLog().logDropGroupProvider(
-                new GroupProviderLog(stmt.getName(), null),
-                wal -> nameToGroupProviderMap.remove(stmt.getName()));
     }
 
     public void replayDropGroupProvider(String name) {
         GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
+        if (groupProvider == null) {
+            // Not necessarily a bug on this node: replayCreateGroupProvider drops a provider whose init()
+            // failed locally (a FileGroupProvider whose group_file_url does not exist here, say), so the
+            // name may legitimately be absent. An NPE here would kill the replayer thread and take the FE
+            // down over a provider that is already gone.
+            LOG.info("group provider '{}' is not present on this node, nothing to drop on replay", name);
+            return;
+        }
         groupProvider.destroy();
+    }
+
+    /**
+     * Number of times ALTER redoes merge + validation when another statement changed the provider while
+     * this one was talking to the directory. Two is already unusual (group provider DDL is rare and
+     * operator-driven); the bound only exists so a pathological retry storm ends with an error the user
+     * can act on instead of a statement that never returns.
+     */
+    private static final int ALTER_GROUP_PROVIDER_MAX_ATTEMPTS = 3;
+
+    public void alterGroupProvider(String name, Map<String, String> alterProps) throws DdlException {
+        for (int attempt = 1; ; attempt++) {
+            // Phase 1, under the lock: read the current properties and build the new provider from them.
+            GroupProvider existing;
+            Map<String, String> mergedProps;
+            GroupProvider newProvider;
+            synchronized (groupProviderDdlLock) {
+                existing = nameToGroupProviderMap.get(name);
+                if (existing == null) {
+                    throw new DdlException("Group Provider '" + name + "' not found");
+                }
+
+                Map<String, String> delta;
+                try {
+                    // Rejects a property this provider type would never read, and normalizes the case of
+                    // one that it does. Both matter for the same reason: getters read the map with an
+                    // exact get(), so an unnoticed spelling difference would leave the old value in place
+                    // while the statement reported success.
+                    delta = existing.canonicalizeAlterProperties(alterProps);
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage(), e);
+                }
+
+                // COW: merge the delta onto a copy of the existing properties; the old provider is untouched.
+                mergedProps = Maps.newHashMap(existing.getProperties());
+                mergedProps.putAll(delta);
+
+                newProvider = GroupProviderFactory.createGroupProvider(name, mergedProps);
+                try {
+                    newProvider.checkProperty();
+                } catch (SemanticException e) {
+                    // checkProperty() reports bad input by throwing an unchecked SemanticException, which
+                    // would travel past DDLStmtExecutor's StarRocksException handling and surface as
+                    // "Maybe our bug or wrong input parameters" with a full stack trace. CREATE reports the
+                    // same mistake cleanly because its analyzer pre-validates; convert here so ALTER does too.
+                    throw new DdlException(e.getMessage(), e);
+                }
+            }
+
+            // Phase 2, outside the lock: synchronously validate the new configuration against the directory
+            // and warm up its cache. This blocks on network I/O for as long as ldap_conn_timeout allows, so
+            // holding the lock here would make an ALTER against an unreachable host park every other group
+            // provider statement - including the DROP an operator would reach for to get out of it.
+            // On failure this throws and nothing has been touched: the old provider keeps serving.
+            newProvider.prepareForActivation();
+
+            // Phase 3, under the lock again: the merge above is only valid if nothing else changed the
+            // provider in the meantime, so re-check the base we merged onto before making it official.
+            synchronized (groupProviderDdlLock) {
+                if (nameToGroupProviderMap.get(name) != existing) {
+                    // Another ALTER (or a DROP followed by a CREATE) landed while we were validating. Our
+                    // merged map is built on properties that are no longer current, so publishing it would
+                    // silently drop that statement's delta. Nothing has been started yet - destroy() only
+                    // has to tolerate a provider that never ran init().
+                    newProvider.destroy();
+                    if (attempt >= ALTER_GROUP_PROVIDER_MAX_ATTEMPTS) {
+                        throw new DdlException("Group Provider '" + name + "' is being modified concurrently, "
+                                + "gave up after " + attempt + " attempts; please retry");
+                    }
+                    LOG.info("group provider '{}' changed while ALTER was validating, retrying (attempt {})",
+                            name, attempt);
+                    // Redo phase 1 on the properties that are current now; this leaves the synchronized
+                    // block, so the statement that overtook us is not blocked while we retry.
+                    continue;
+                }
+
+                // Start the new provider's runtime (e.g. the LDAP refresh schedule). It is not in the map yet, so
+                // getGroup() will not see it until the swap below; the old provider keeps serving in the meantime.
+                newProvider.init();
+
+                // The record carries the *merged* map, not the delta. A delta would be replayed by merging
+                // onto each node's own copy, so one node whose replay failed once would keep merging every
+                // later delta onto a stale base and diverge silently - and for a per-node property such as
+                // FileGroupProvider's group_file_url, replay really can fail on one node only. Persisting the
+                // whole map makes replay idempotent and independent of local state.
+                AtomicBoolean swapped = new AtomicBoolean(false);
+                try {
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterGroupProvider(
+                            new GroupProviderLog(name, mergedProps),
+                            wal -> {
+                                GroupProvider old = nameToGroupProviderMap.put(name, newProvider);
+                                // Latched here, after the swap: logEditGated rethrows whatever the applier
+                                // throws, so a failure in old.destroy() below must not make the `finally`
+                                // tear down the provider that is already serving every login.
+                                swapped.set(true);
+                                if (old != null) {
+                                    old.destroy();
+                                }
+                            });
+                } finally {
+                    if (!swapped.get()) {
+                        // The swap never happened, so the new provider is not in the map. Tear down the
+                        // runtime it just started and keep the old provider in place.
+                        newProvider.destroy();
+                    }
+                }
+                LOG.info("finished to alter group provider '{}' with delta {}", name, maskedProps(alterProps));
+                return;
+            }
+        }
+    }
+
+    /**
+     * @param properties the provider's <b>complete</b> property map, as journaled by
+     *                   {@link #alterGroupProvider}. Replay deliberately does not merge onto this
+     *                   node's own copy: a node whose earlier replay failed would then keep merging
+     *                   later records onto a stale base and end up with a configuration that is
+     *                   wrong rather than merely outdated, with nothing to heal it.
+     */
+    public void replayAlterGroupProvider(String name, Map<String, String> properties) {
+        GroupProvider newProvider = GroupProviderFactory.createGroupProvider(name, Maps.newHashMap(properties));
+        GroupProvider previous = nameToGroupProviderMap.get(name);
+        if (previous != null) {
+            // Replay must not block on network I/O, so unlike the leader this node cannot warm the new
+            // instance up before publishing it. Without this the follower would answer every lookup with
+            // an empty group set until its first background refresh completes - and indefinitely if it
+            // cannot reach the directory - which is exactly the outage ALTER exists to avoid.
+            newProvider.inheritCacheFrom(previous);
+        }
+        try {
+            newProvider.init();
+        } catch (DdlException e) {
+            LOG.error("Failed to replay alter group provider '{}', keeping the old provider", name, e);
+            return;
+        }
+        GroupProvider old = nameToGroupProviderMap.put(name, newProvider);
+        if (old != null) {
+            old.destroy();
+        }
+        LOG.info("finished to replay alter group provider '{}' with properties {}", name, maskedProps(properties));
+    }
+
+    /**
+     * Wraps a property map for logging so that credentials (LDAP bind password, trust store password, ...)
+     * are printed as *** instead of ending up in fe.log in plain text.
+     */
+    private static PrintableMap<String, String> maskedProps(Map<String, String> properties) {
+        return new PrintableMap<>(properties, "=", true, false, true);
     }
 
     public List<GroupProvider> getAllGroupProviders() {

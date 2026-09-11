@@ -173,6 +173,7 @@ import com.starrocks.sql.ast.context.DropContextCollectionStmt;
 import com.starrocks.sql.ast.context.DropRetrievalProfileStmt;
 import com.starrocks.sql.ast.context.DropWorkspaceStmt;
 import com.starrocks.sql.ast.context.WorkspaceUpsertStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -955,6 +956,12 @@ public class Analyzer {
 
         @Override
         public Void visitDropGroupProviderStatement(DropGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, ConnectContext context) {
             GroupProviderStatementAnalyzer.analyze(statement, context);
             return null;
         }

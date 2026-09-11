@@ -1350,6 +1350,12 @@ public class EditLog {
                             .replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
+                case OperationType.OP_ALTER_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayAlterGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
+                    break;
+                }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
                     BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
@@ -2468,5 +2474,9 @@ public class EditLog {
 
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
+    }
+
+    public void logAlterGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_GROUP_PROVIDER, groupProviderLog, walApplier);
     }
 }

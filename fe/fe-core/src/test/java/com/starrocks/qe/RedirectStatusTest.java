@@ -248,6 +248,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1907,6 +1908,12 @@ public class RedirectStatusTest {
     @Test
     public void testCreateGroupProviderStmtCoverage() {
         CreateGroupProviderStmt stmt = new CreateGroupProviderStmt(null, null, null);
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testAlterGroupProviderStmtCoverage() {
+        AlterGroupProviderStmt stmt = new AlterGroupProviderStmt(null, null, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

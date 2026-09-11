@@ -127,6 +127,121 @@ public class AuthenticationMgrEditLogTest {
     }
 
     @Test
+    public void testAlterGroupProviderStatementNormalCase() throws Exception {
+        // 1. Create a provider on master and consume its journal entry
+        Map<String, String> properties = createUnixGroupProviderProperties();
+        // ALTER only accepts a property the type defines or one the provider already has, and a unix
+        // provider defines none - so the property this delta updates has to come from the CREATE.
+        properties.put("added", "initial");
+        CreateGroupProviderStmt createStmt = new CreateGroupProviderStmt(
+                TEST_PROVIDER_NAME, properties, false, NodePosition.ZERO);
+        authenticationMgr.createGroupProviderStatement(createStmt, ctx);
+        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_GROUP_PROVIDER);
+
+        // 2. Alter the provider on master with a delta
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("added", "value");
+        authenticationMgr.alterGroupProvider(TEST_PROVIDER_NAME, alterProps);
+
+        GroupProvider masterProvider = authenticationMgr.getGroupProvider(TEST_PROVIDER_NAME);
+        Assertions.assertEquals("value", masterProvider.getProperties().get("added"));
+        Assertions.assertEquals("unix", masterProvider.getType());
+
+        // 3. Follower: create the same provider, then replay the alter journal
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+        followerAuthMgr.replayCreateGroupProvider(TEST_PROVIDER_NAME, properties);
+
+        GroupProviderLog replayLog = (GroupProviderLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_GROUP_PROVIDER);
+        followerAuthMgr.replayAlterGroupProvider(replayLog.getName(), replayLog.getPropertyMap());
+
+        // 4. Follower state is consistent with master after the alter
+        GroupProvider followerProvider = followerAuthMgr.getGroupProvider(TEST_PROVIDER_NAME);
+        Assertions.assertNotNull(followerProvider);
+        Assertions.assertEquals("value", followerProvider.getProperties().get("added"));
+        Assertions.assertEquals(masterProvider.getProperties(), followerProvider.getProperties());
+    }
+
+    /**
+     * Test case: the journal entry an ALTER writes, replayed through EditLog.loadJournal
+     * Test point: the tests above call replayAlterGroupProvider() themselves, because
+     *             PseudoJournalReplayer.replayNextJournal() only deserializes the entry and hands the payload
+     *             back. That leaves the wiring untested - the op code, the replay method it dispatches to and
+     *             the order of the arguments it passes. replayJournalToEnd() runs the real
+     *             EditLog.loadJournal() switch, so a record written as OP_ALTER_GROUP_PROVIDER has to come
+     *             back out as an ALTER of the same provider with the same properties.
+     */
+    @Test
+    public void testAlterGroupProviderJournalReplaysThroughLoadJournal() throws Exception {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+
+        Map<String, String> properties = createUnixGroupProviderProperties();
+        properties.put("dispatched", "before");
+        authenticationMgr.createGroupProviderStatement(new CreateGroupProviderStmt(
+                TEST_PROVIDER_NAME, properties, false, NodePosition.ZERO), ctx);
+
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("dispatched", "after");
+        authenticationMgr.alterGroupProvider(TEST_PROVIDER_NAME, alterProps);
+
+        // Replays the CREATE and the ALTER through the real dispatch. Both land on this same
+        // GlobalStateMgr, which is what a follower's replayer thread does to its own state.
+        UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
+
+        GroupProvider replayed = authenticationMgr.getGroupProvider(TEST_PROVIDER_NAME);
+        Assertions.assertNotNull(replayed, "The replayed journal must leave the provider in place");
+        Assertions.assertEquals("unix", replayed.getType(), "Type survives the replay");
+        Assertions.assertEquals("after", replayed.getProperties().get("dispatched"),
+                "OP_ALTER_GROUP_PROVIDER must dispatch to replayAlterGroupProvider with the journaled properties");
+    }
+
+    @Test
+    public void testAlterGroupProviderStatementReplayTwoDeltas() throws Exception {
+        // 1. CREATE on master, then two ALTERs that touch a different property each
+        Map<String, String> properties = createUnixGroupProviderProperties();
+        properties.put("shared", "v0");
+        properties.put("first", "f0");
+        properties.put("second", "s0");
+        CreateGroupProviderStmt createStmt = new CreateGroupProviderStmt(
+                TEST_PROVIDER_NAME, properties, false, NodePosition.ZERO);
+        authenticationMgr.createGroupProviderStatement(createStmt, ctx);
+
+        Map<String, String> firstDelta = new HashMap<>();
+        firstDelta.put("first", "1");
+        firstDelta.put("shared", "v1");
+        authenticationMgr.alterGroupProvider(TEST_PROVIDER_NAME, firstDelta);
+
+        Map<String, String> secondDelta = new HashMap<>();
+        secondDelta.put("second", "2");
+        secondDelta.put("shared", "v2");
+        authenticationMgr.alterGroupProvider(TEST_PROVIDER_NAME, secondDelta);
+
+        GroupProvider masterProvider = authenticationMgr.getGroupProvider(TEST_PROVIDER_NAME);
+
+        // 2. Follower replays the three journal entries in order. replayNextJournal() asserts the op code of
+        //    each entry, so this also pins down that ALTER writes OP_ALTER_GROUP_PROVIDER and nothing else.
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+        GroupProviderLog createLog = (GroupProviderLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CREATE_GROUP_PROVIDER);
+        followerAuthMgr.replayCreateGroupProvider(createLog.getName(), createLog.getPropertyMap());
+
+        for (int i = 0; i < 2; i++) {
+            GroupProviderLog alterLog = (GroupProviderLog) UtFrameUtils.PseudoJournalReplayer
+                    .replayNextJournal(OperationType.OP_ALTER_GROUP_PROVIDER);
+            followerAuthMgr.replayAlterGroupProvider(alterLog.getName(), alterLog.getPropertyMap());
+        }
+
+        // 3. The deltas accumulate: the property only the first ALTER touched survives, and the property both
+        //    ALTERs touched ends up with the second value on both sides.
+        GroupProvider followerProvider = followerAuthMgr.getGroupProvider(TEST_PROVIDER_NAME);
+        Assertions.assertNotNull(followerProvider);
+        Assertions.assertEquals("1", followerProvider.getProperties().get("first"));
+        Assertions.assertEquals("2", followerProvider.getProperties().get("second"));
+        Assertions.assertEquals("v2", followerProvider.getProperties().get("shared"));
+        Assertions.assertEquals(masterProvider.getProperties(), followerProvider.getProperties());
+    }
+
+    @Test
     public void testCreateGroupProviderStatementEditLogException() throws Exception {
         // 1. Prepare test data
         Map<String, String> properties = createUnixGroupProviderProperties();

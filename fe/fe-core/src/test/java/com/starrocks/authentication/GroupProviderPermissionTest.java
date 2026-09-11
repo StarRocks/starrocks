@@ -19,6 +19,7 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,6 +30,7 @@ import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -257,6 +259,33 @@ public class GroupProviderPermissionTest {
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
         }, "User with SECURITY privilege should pass permission check for CREATE GROUP PROVIDER");
+    }
+
+    /**
+     * Test case: Non-admin user attempting to ALTER GROUP PROVIDER
+     * Test point: ALTER GROUP PROVIDER requires the SECURITY privilege. Exercises
+     *             AuthorizerStmtVisitor.visitAlterGroupProviderStatement through Authorizer.check:
+     *             a non-admin user is denied, root is allowed.
+     */
+    @Test
+    public void testAlterGroupProviderPermissionDenied() throws Exception {
+        String sql = "ALTER GROUP PROVIDER unix_group_provider SET (\"some_property\" = \"value\")";
+
+        // Parse should succeed regardless of user context
+        AlterGroupProviderStmt stmt =
+                (AlterGroupProviderStmt) SqlParser.parseSingleStatement(sql, userCtx.getSessionVariable().getSqlMode());
+        Assertions.assertNotNull(stmt, "Statement should parse successfully");
+        Assertions.assertEquals("unix_group_provider", stmt.getName(), "Provider name should match");
+
+        // Non-admin user should be denied (this runs visitAlterGroupProviderStatement, which
+        // wraps the AccessDeniedException into an ErrorReportException via reportAccessDenied)
+        Assertions.assertThrows(ErrorReportException.class,
+                () -> Authorizer.check(stmt, userCtx),
+                "Non-admin user should not have SECURITY privilege for ALTER GROUP PROVIDER");
+
+        // Root user should be allowed
+        Assertions.assertDoesNotThrow(() -> Authorizer.check(stmt, rootCtx),
+                "Root user should be allowed to ALTER GROUP PROVIDER");
     }
 
     /**
