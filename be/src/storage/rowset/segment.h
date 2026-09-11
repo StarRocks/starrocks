@@ -399,6 +399,10 @@ private:
     PageHandle _full_sk_index_handle;
     std::unique_ptr<ShortKeyIndexDecoder> _full_sk_index_decoder;
 
+    // Published size of the loaded short/full key indexes. Memory samplers must not inspect
+    // their handles or decoders while another reader is still loading them.
+    std::atomic<size_t> _loaded_key_index_mem_usage{0};
+
     std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
     std::atomic_int _batch_on_flags_counter{0};

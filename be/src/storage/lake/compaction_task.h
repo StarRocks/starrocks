@@ -89,7 +89,9 @@ protected:
     // budget yields a one-row chunk and the task crawls) while pinning memory the metadata-cache LRU
     // cannot reclaim. When holding would shrink the chunk that far, this releases the held sets and
     // clears `_hold_input_segments`, so the shared metadata cache carries cross-pass reuse again --
-    // the behaviour from before hold_segments existed -- and returns the un-held chunk size.
+    // the behaviour from before hold_segments existed. Segments retained by the flat-JSON memo
+    // remain charged after this fallback and on subsequent passes; only released bytes become
+    // available to the read buffers.
     int32_t chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
                                           int64_t total_mem_footprint, size_t source_num);
 

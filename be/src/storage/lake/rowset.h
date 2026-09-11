@@ -252,21 +252,11 @@ public:
     // segments() keep their own references, so this is safe while a read is in flight.
     void release_held_segments();
 
-    // Whether holding has been given up for this rowset. Set by release_held_segments() and never
-    // cleared: the decision is taken per task but the Rowset is SHARED by every range-split subtask,
-    // so without it a sibling whose own _hold_input_segments is still set would re-elect itself,
-    // re-parse the whole input set and re-pin the memory the fallback just shed -- and would run with
-    // holding on while the one that fell back runs with cache filling on, breaking the "exactly one
-    // reuse mechanism" invariant both compaction tasks rely on.
-    // Bytes this rowset currently pins through the held set, as measured when it was published.
-    // Stays non-zero after release_held_segments() when the get_segments_checked() memo still holds
-    // the same segments, because they are then still resident -- which is what the chunk sizing must
-    // be charged for.
-    int64_t held_segments_bytes() const {
-        std::lock_guard<std::mutex> l(_held_segments_mutex);
-        return _held_segments_bytes;
-    }
+    // Refresh the resident segment size and its gauge before sizing a column group. This includes
+    // lazily loaded indexes and any segments kept by the JSON memo after holding is disabled.
+    int64_t held_segments_bytes() const;
 
+    // Shared by every range-split subtask; once disabled, neither segments nor delvecs may be held again.
     bool hold_disabled() const {
         std::lock_guard<std::mutex> l(_held_segments_mutex);
         return _hold_disabled;
@@ -348,6 +338,9 @@ private:
     StatusOr<std::vector<ChunkIteratorPtr>> do_read(const Schema& schema, const RowsetReadOptions& options,
                                                     const ReadContext& context);
 
+    // Requires _held_segments_mutex. Updates the gauge by the difference from its last sample.
+    int64_t refresh_held_segments_bytes_locked() const;
+
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     const RowsetMetadataPB* _metadata;
@@ -370,11 +363,9 @@ private:
     // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
     // Rowset instance, which for compaction is the whole task.
     std::vector<SegmentPtr> _held_segments;
-    // What the held set was measured at when it was published, and therefore exactly what this
-    // Rowset contributed to the lake_compaction_held_segment_bytes gauge -- the same amount must be
-    // taken back when the set goes away, so it is remembered rather than re-measured (a segment's
-    // mem_usage() grows as later column-group passes load more column indexes).
-    int64_t _held_segments_bytes = 0;
+    // Last sampled resident size, also this Rowset's contribution to the gauge. Refreshed as later
+    // column groups load indexes; the destructor removes this same contribution.
+    mutable int64_t _held_segments_bytes = 0;
     // Single-flight election for the held-segment load: true while one caller is loading outside
     // the lock. Range-split subtasks that miss together must not each load the full input set;
     // waiters block on _held_segments_cv, and a failed (or unheld) load clears the flag before

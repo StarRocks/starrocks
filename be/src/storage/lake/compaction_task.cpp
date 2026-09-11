@@ -44,22 +44,27 @@ int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_byte
                                                       int64_t total_mem_footprint, size_t source_num) {
     const int64_t mem_limit = config::compaction_memory_limit_per_worker;
     const int32_t config_chunk_size = config::lake_compaction_chunk_size;
-    // What the sizing would be if the held set cost nothing: also the fallback answer, and the
-    // baseline the shrink below is judged against. A non-positive limit means "no memory cap".
+    // Baseline for judging how much holding shrinks the read chunk. A non-positive limit means
+    // "no memory cap", even when segment metadata remains resident.
     const int32_t unheld_chunk_size = CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
                                                                            total_mem_footprint, source_num);
-    if (!_hold_input_segments || mem_limit <= 0) {
+    if (mem_limit <= 0) {
         return unheld_chunk_size;
     }
 
-    const int64_t remaining = mem_limit - held_segments_bytes;
-    // get_read_chunk_size() ignores a non-positive limit and returns the configured chunk size, so a
-    // held set at or over budget must not be handed to it -- that would read "no memory cap" from
-    // the very case with none left.
-    const int32_t held_chunk_size =
-            remaining > 0 ? CompactionUtils::get_read_chunk_size(remaining, config_chunk_size, total_num_rows,
-                                                                 total_mem_footprint, source_num)
-                          : 0;
+    const auto chunk_size_for_resident_segments = [&](int64_t resident_bytes) -> int32_t {
+        const int64_t remaining = mem_limit - resident_bytes;
+        // A memo can retain segments even after holding is disabled. An exhausted budget must
+        // produce the smallest read chunk, not the unlimited sizing a non-positive limit selects.
+        return remaining > 0 ? CompactionUtils::get_read_chunk_size(remaining, config_chunk_size, total_num_rows,
+                                                                    total_mem_footprint, source_num)
+                             : 1;
+    };
+    if (!_hold_input_segments) {
+        return chunk_size_for_resident_segments(held_segments_bytes);
+    }
+
+    const int32_t held_chunk_size = chunk_size_for_resident_segments(held_segments_bytes);
     // Holding buys one segment load for the whole task; it is not worth an order-of-magnitude
     // smaller read chunk (that many more iterations, and at the floor a single row per read).
     if (held_chunk_size >= std::max<int32_t>(2, unheld_chunk_size / kMaxHeldChunkShrink)) {
@@ -74,7 +79,13 @@ int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_byte
         rowset->release_held_segments();
     }
     _hold_input_segments = false;
-    return unheld_chunk_size;
+    // get_segments_checked() may still own the same segments for flat-JSON inspection. Only the
+    // bytes actually released are available to the read buffers, both now and on later passes.
+    int64_t retained_segments_bytes = 0;
+    for (const auto& rowset : _input_rowsets) {
+        retained_segments_bytes += rowset->held_segments_bytes();
+    }
+    return chunk_size_for_resident_segments(retained_segments_bytes);
 }
 
 Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {

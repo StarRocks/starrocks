@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <future>
 #include <new>
 #include <optional>
 #include <thread>
@@ -34,6 +35,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -48,6 +50,8 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/storage_metrics.h"
@@ -365,6 +369,168 @@ TEST_F(LakeRowsetTest, test_held_segment_bytes_metric_balances) {
     EXPECT_EQ(before, gauge->value());
 }
 
+// Loading key and multi-page ordinal indexes changes the Segment's resident footprint after it was
+// first held. Refresh both the sizing charge and the gauge, including when only the JSON memo owns
+// the set after fallback, and settle the refreshed amount on release or destruction.
+TEST_F(LakeRowsetTest, test_held_segment_bytes_tracks_loaded_column_indexes) {
+    const int32_t saved_page_size = config::data_page_size;
+    config::data_page_size = 64;
+    DeferOp restore([&]() { config::data_page_size = saved_page_size; });
+
+    std::vector<int> keys(2000);
+    for (size_t i = 0; i < keys.size(); ++i) {
+        keys[i] = static_cast<int>(i);
+    }
+    add_rowset_with_segment_keys({keys}, {false});
+    _tablet_mgr->metacache()->prune();
+
+    auto* gauge = &StorageMetrics::instance()->lake_compaction_held_segment_bytes;
+    const int64_t before = gauge->value();
+    const LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    for (bool keep_json_memo : {false, true}) {
+        {
+            auto rowset =
+                    std::make_shared<Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+            ASSIGN_OR_ABORT(auto held, rowset->segments(lake_io_opts));
+            ASSERT_EQ(1, held.size());
+            const int64_t before_key_bytes = rowset->held_segments_bytes();
+            ASSERT_GT(before_key_bytes, 0);
+            EXPECT_EQ(before + before_key_bytes, gauge->value());
+
+            if (keep_json_memo) {
+                ASSIGN_OR_ABORT(auto memo, rowset->get_segments_checked());
+                ASSERT_EQ(held[0], memo[0]);
+                rowset->release_held_segments();
+                EXPECT_EQ(before_key_bytes, rowset->held_segments_bytes());
+            }
+
+            ASSERT_OK(held[0]->load_index(lake_io_opts));
+            const int64_t initial_bytes = static_cast<int64_t>(held[0]->mem_usage());
+            ASSERT_GT(initial_bytes, before_key_bytes);
+            EXPECT_EQ(initial_bytes, rowset->held_segments_bytes());
+            EXPECT_EQ(before + initial_bytes, gauge->value());
+
+            auto* reader = const_cast<ColumnReader*>(held[0]->column_with_uid(_tablet_schema->column(0).unique_id()));
+            ASSERT_NE(nullptr, reader);
+            ASSERT_EQ(0, reader->num_data_pages());
+            ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(held[0]->file_name()));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(held[0]->file_info()));
+            OlapReaderStatistics stats;
+            IndexReadOptions index_opts;
+            index_opts.read_file = read_file->stream().get();
+            index_opts.stats = &stats;
+            index_opts.use_page_cache = false;
+            ASSERT_OK(reader->load_ordinal_index(index_opts));
+            ASSERT_GT(reader->num_data_pages(), 1);
+
+            const int64_t current_bytes = static_cast<int64_t>(held[0]->mem_usage());
+            ASSERT_GT(current_bytes, initial_bytes);
+            EXPECT_EQ(current_bytes, rowset->held_segments_bytes());
+            EXPECT_EQ(before + current_bytes, gauge->value());
+
+            rowset->release_held_segments();
+            EXPECT_EQ(keep_json_memo ? current_bytes : 0, rowset->held_segments_bytes());
+            EXPECT_EQ(before + (keep_json_memo ? current_bytes : 0), gauge->value());
+        }
+        EXPECT_EQ(before, gauge->value());
+    }
+}
+
+// A range sibling may choose fallback while the elected loader is outside the Rowset mutex doing
+// IO. The caller still needs the loaded segments, but publication must not make them task-held again.
+TEST_F(LakeRowsetTest, test_hold_segments_does_not_publish_after_fallback_during_load) {
+    create_rowsets_for_testing();
+    _tablet_mgr->metacache()->prune();
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    auto* gauge = &StorageMetrics::instance()->lake_compaction_held_segment_bytes;
+    const int64_t before = gauge->value();
+
+    std::promise<void> load_entered;
+    std::promise<void> resume_load;
+    auto load_entered_future = load_entered.get_future();
+    auto resume_load_future = resume_load.get_future();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::segments::load_for_hold", [&](void*) {
+        load_entered.set_value();
+        resume_load_future.wait();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::segments::load_for_hold");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    const LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    auto loader = std::async(std::launch::async, [&]() { return rowset->segments(lake_io_opts); });
+    load_entered_future.wait();
+    rowset->release_held_segments();
+    resume_load.set_value();
+    auto result = loader.get();
+
+    ASSERT_OK(result.status());
+    ASSERT_EQ(3, result->size());
+    for (size_t i = 0; i < result->size(); ++i) {
+        ASSERT_NE(nullptr, (*result)[i]);
+        EXPECT_EQ(i, (*result)[i]->id());
+    }
+    EXPECT_TRUE(rowset->hold_disabled());
+    EXPECT_TRUE(rowset->_held_segments.empty());
+    EXPECT_EQ(0, rowset->held_segments_bytes());
+    EXPECT_EQ(before, gauge->value());
+}
+
+// The eligibility check and election must observe fallback under the same mutex. In the memo case,
+// republishing also used to add a second gauge charge while overwriting the first recorded amount,
+// leaving a permanent residual after destruction.
+TEST_F(LakeRowsetTest, test_hold_segments_does_not_repin_after_fallback_before_election) {
+    create_rowsets_for_testing();
+    auto* gauge = &StorageMetrics::instance()->lake_compaction_held_segment_bytes;
+    const int64_t before = gauge->value();
+    const LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+
+    for (bool keep_json_memo : {false, true}) {
+        _tablet_mgr->metacache()->prune();
+        {
+            auto rowset =
+                    std::make_shared<Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+            ASSIGN_OR_ABORT(auto initial, rowset->segments(lake_io_opts));
+            const int64_t held_bytes = rowset->held_segments_bytes();
+            ASSERT_GT(held_bytes, 0);
+            if (keep_json_memo) {
+                ASSIGN_OR_ABORT(auto memo, rowset->get_segments_checked());
+                ASSERT_EQ(initial, memo);
+            }
+
+            std::promise<void> before_election;
+            std::promise<void> resume_election;
+            auto before_election_future = before_election.get_future();
+            auto resume_election_future = resume_election.get_future();
+            SyncPoint::GetInstance()->SetCallBack("Rowset::segments::before_hold_election", [&](void*) {
+                before_election.set_value();
+                resume_election_future.wait();
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp clear_sync_point([]() {
+                SyncPoint::GetInstance()->ClearCallBack("Rowset::segments::before_hold_election");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
+            auto sibling = std::async(std::launch::async, [&]() { return rowset->segments(lake_io_opts); });
+            before_election_future.wait();
+            rowset->release_held_segments();
+            resume_election.set_value();
+            auto result = sibling.get();
+
+            ASSERT_OK(result.status());
+            EXPECT_EQ(initial.size(), result->size());
+            EXPECT_TRUE(rowset->hold_disabled());
+            EXPECT_TRUE(rowset->_held_segments.empty());
+            EXPECT_EQ(keep_json_memo ? held_bytes : 0, rowset->held_segments_bytes());
+            EXPECT_EQ(before + (keep_json_memo ? held_bytes : 0), gauge->value());
+        }
+        EXPECT_EQ(before, gauge->value());
+    }
+}
+
 // The single-flight election must survive an exception unwinding out of the load: the allocator
 // hook returns nullptr on a mem-tracker overrun, so operator new throws std::bad_alloc, and nothing
 // on the compaction path catches it. A hand-written flag clear would be skipped by the unwind,
@@ -662,7 +828,7 @@ TEST_F(LakeRowsetTest, test_get_read_iterator_num_from_metadata) {
 // The held input set stays resident for the whole task, so it is charged against the same
 // compaction_memory_limit_per_worker the read chunks are sized from -- but only up to a point: past
 // the point where holding would shrink the read chunk by more than kMaxHeldChunkShrink, the task
-// stops holding and sizes from the full budget instead. Driven with synthetic sizing inputs so the
+// stops holding and sizes from the budget left after releasing segments. Driven with synthetic inputs so the
 // arithmetic (including the non-positive remainder, which get_read_chunk_size would read as "no
 // memory cap") is pinned independently of what the test segments happen to measure.
 TEST_F(LakeRowsetTest, test_chunk_size_charges_held_segments) {
@@ -694,9 +860,13 @@ TEST_F(LakeRowsetTest, test_chunk_size_charges_held_segments) {
               task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
     EXPECT_TRUE(task._hold_input_segments);
 
-    // Not holding: the held measurement must not touch the sizing at all.
+    // A memo can retain segments after holding is disabled; these bytes still reduce the budget.
     task._hold_input_segments = false;
-    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+    EXPECT_EQ(CompactionUtils::get_read_chunk_size(kLimit - half, kCfgChunk, kRows, kFootprint, kSources),
+              task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(0, kRows, kFootprint, kSources));
+    EXPECT_EQ(1, task.chunk_size_with_held_segments(kLimit, kRows, kFootprint, kSources));
+    EXPECT_EQ(1, task.chunk_size_with_held_segments(kLimit + 1, kRows, kFootprint, kSources));
 
     // Nearly the whole budget held: the read chunk would shrink by more than kMaxHeldChunkShrink,
     // so the task stops holding and sizes from the full budget instead.
@@ -715,6 +885,9 @@ TEST_F(LakeRowsetTest, test_chunk_size_charges_held_segments) {
     task._hold_input_segments = true;
     EXPECT_EQ(kCfgChunk, task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
     EXPECT_TRUE(task._hold_input_segments);
+    config::compaction_memory_limit_per_worker = 0;
+    task._hold_input_segments = false;
+    EXPECT_EQ(kCfgChunk, task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
 }
 
 // When the input set does not fit the per-worker budget, holding it is worse than not holding:
@@ -779,6 +952,49 @@ TEST_F(LakeRowsetTest, test_chunk_size_falls_back_when_held_segments_do_not_fit)
     for (const auto& seg : sibling_segments) {
         EXPECT_TRUE(_tablet_mgr->metacache()->lookup_segment(seg->file_name()) != nullptr);
     }
+}
+
+// Flat-JSON inspection memoizes the held segments before later column groups may trigger a
+// fallback. Releasing the holder leaves that memo alive, so every later chunk must still reserve
+// its bytes even though _hold_input_segments is now false.
+TEST_F(LakeRowsetTest, test_chunk_size_charges_memo_after_fallback) {
+    create_rowsets_for_testing();
+
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    {
+        LakeIOOptions opts{.fill_metadata_cache = false, .hold_segments = true};
+        ASSIGN_OR_ABORT(auto segments, rs->segments(opts));
+        ASSIGN_OR_ABORT(auto memo, rs->get_segments_checked());
+        ASSERT_EQ(segments, memo);
+    }
+    const int64_t held_bytes = rs->held_segments_bytes();
+    ASSERT_GT(held_bytes, 4);
+
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+    task._hold_input_segments = true;
+    config::compaction_memory_limit_per_worker = held_bytes + 1;
+
+    // One byte left yields a one-row chunk and triggers fallback. The memo keeps the input set.
+    EXPECT_EQ(1, task.chunk_size_with_held_segments(held_bytes, 1000, 1000, 1));
+    EXPECT_FALSE(task._hold_input_segments);
+    EXPECT_TRUE(rs->_held_segments.empty());
+    EXPECT_FALSE(rs->_segments.empty());
+    EXPECT_EQ(held_bytes, rs->held_segments_bytes());
+    EXPECT_EQ(1, task.chunk_size_with_held_segments(rs->held_segments_bytes(), 1000, 1000, 1));
+
+    // The disabled-holding path sizes from the actual remainder, including an exhausted budget.
+    config::compaction_memory_limit_per_worker = held_bytes + 1000;
+    EXPECT_EQ(CompactionUtils::get_read_chunk_size(1000, config::lake_compaction_chunk_size, 1000, 1000, 1),
+              task.chunk_size_with_held_segments(rs->held_segments_bytes(), 1000, 1000, 1));
+    config::compaction_memory_limit_per_worker = held_bytes;
+    EXPECT_EQ(1, task.chunk_size_with_held_segments(rs->held_segments_bytes(), 1000, 1000, 1));
+    config::compaction_memory_limit_per_worker = held_bytes - 1;
+    EXPECT_EQ(1, task.chunk_size_with_held_segments(rs->held_segments_bytes(), 1000, 1000, 1));
 }
 
 TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
@@ -1043,6 +1259,66 @@ static size_t count_rows_from_iters(const std::vector<ChunkIteratorPtr>& iters, 
 }
 
 } // namespace
+
+TEST_F(LakeRowsetTest, test_read_does_not_recreate_delvec_holder_after_fallback) {
+    create_rowsets_for_testing();
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.is_primary_keys = true;
+    rs_opts.version = _tablet_metadata->version();
+    rs_opts.lake_io_opts = {.fill_data_cache = true, .fill_metadata_cache = false, .hold_segments = true};
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+
+    int reads = 0;
+    std::weak_ptr<CompactionDelvecHolder> original_holder;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* opts = static_cast<SegmentReadOptions*>(arg);
+        auto* loader = static_cast<LakeDelvecLoader*>(opts->delvec_loader.get());
+        ASSERT_NE(nullptr, loader);
+        if (reads++ == 0) {
+            ASSERT_NE(nullptr, loader->_holder);
+            original_holder = loader->_holder;
+            EXPECT_FALSE(loader->_fill_cache);
+        } else {
+            EXPECT_EQ(nullptr, loader->_holder);
+            // Returning to normal reads must also restore the configured delvec cache behavior.
+            EXPECT_TRUE(loader->_fill_cache);
+            EXPECT_TRUE(opts->lake_io_opts.fill_metadata_cache);
+        }
+    });
+    DeferOp clear_sync([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto first_iters, rowset->read(input_schema, rs_opts));
+    DeferOp close_first([&]() {
+        for (auto& it : first_iters) it->close();
+    });
+    ASSERT_FALSE(original_holder.expired());
+
+    // Another range subtask falls back while the first subtask's reader is still alive.
+    rowset->release_held_segments();
+    ASSERT_TRUE(rowset->hold_disabled());
+    ASSERT_EQ(nullptr, rowset->_held_delvecs);
+    ASSERT_FALSE(original_holder.expired());
+
+    // The next sibling column group still carries its original task-local hold_segments=true.
+    ASSIGN_OR_ABORT(auto next_iters, rowset->read(input_schema, rs_opts));
+    DeferOp close_next([&]() {
+        for (auto& it : next_iters) it->close();
+    });
+    EXPECT_EQ(2, reads);
+    EXPECT_EQ(nullptr, rowset->_held_delvecs);
+    EXPECT_FALSE(original_holder.expired());
+    EXPECT_EQ(3 * (22 + 12), count_rows_from_iters(first_iters));
+    EXPECT_EQ(3 * (22 + 12), count_rows_from_iters(next_iters));
+}
 
 TEST_F(LakeRowsetTest, test_tablet_range_pruning_only_for_shared_segments) {
     create_rowsets_for_testing();

@@ -315,7 +315,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     if (options.lake_io_opts.hold_segments) {
         if (can_hold_segments() && !hold_disabled()) {
             ASSIGN_OR_RETURN(auto held, segments(options.lake_io_opts));
-            if (held.size() == static_cast<size_t>(num_segments())) {
+            // A sibling can disable holding between the check above and segments(). The downgraded
+            // load is not necessarily metadata-ordered, so it cannot be used as a prepared set.
+            if (held.size() == static_cast<size_t>(num_segments()) && !hold_disabled()) {
                 return do_read(schema, options, ReadContext{.prepared_segments = &held});
             }
         }
@@ -397,17 +399,21 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
         std::shared_ptr<CompactionDelvecHolder> delvec_holder;
         if (segment_options->lake_io_opts.hold_segments) {
             std::lock_guard<std::mutex> l(_held_segments_mutex);
-            if (_held_delvecs == nullptr) {
-                _held_delvecs = std::make_shared<CompactionDelvecHolder>();
+            if (_hold_disabled) {
+                segment_options->lake_io_opts.hold_segments = false;
+                segment_options->lake_io_opts.fill_metadata_cache = true;
+            } else {
+                if (_held_delvecs == nullptr) {
+                    _held_delvecs = std::make_shared<CompactionDelvecHolder>();
+                }
+                delvec_holder = _held_delvecs;
             }
-            delvec_holder = _held_delvecs;
         }
         // With the task-scoped holder in place, cross-pass reuse no longer needs the shared
         // caches, and the task's inputs are deleted right after compaction -- filling would only
         // push soon-dead delvec and metadata entries into a node-wide cache, same reasoning as
         // fill_metadata_cache for the segment objects.
-        const bool delvec_fill_cache =
-                segment_options->lake_io_opts.fill_data_cache && !segment_options->lake_io_opts.hold_segments;
+        const bool delvec_fill_cache = segment_options->lake_io_opts.fill_data_cache && delvec_holder == nullptr;
         // Hand the loader the metadata this Rowset was built from: every delvec load at the read
         // version would otherwise call get_tablet_metadata once per segment, and with fill_cache off
         // (the hold_segments leg) a cold or crowded metacache turns that into one remote read of the
@@ -852,6 +858,7 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
         if (!_held_segments.empty()) {
             _segments = _held_segments;
             _segments_loaded = true;
+            refresh_held_segments_bytes_locked();
             return _segments;
         }
     }
@@ -862,6 +869,7 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
     if (!_segments_loaded) {
         _segments = std::move(segs);
         _segments_loaded = true;
+        refresh_held_segments_bytes_locked();
     }
     return _segments;
 }
@@ -873,10 +881,36 @@ std::vector<SegmentSharedPtr> Rowset::get_segments() {
     return res.ok() ? std::move(res).value() : std::vector<SegmentSharedPtr>{};
 }
 
+int64_t Rowset::held_segments_bytes() const {
+    std::lock_guard<std::mutex> l(_held_segments_mutex);
+    return refresh_held_segments_bytes_locked();
+}
+
+int64_t Rowset::refresh_held_segments_bytes_locked() const {
+    int64_t bytes = 0;
+    for (const auto& segment : _held_segments) {
+        if (segment != nullptr) {
+            bytes += static_cast<int64_t>(segment->mem_usage());
+        }
+    }
+    // The JSON memo normally aliases the held vector. If it was loaded independently, count its
+    // distinct objects too. Avoid allocations while measuring a task that may be over budget.
+    if ((_hold_disabled || !_held_segments.empty()) && _segments != _held_segments) {
+        for (const auto& segment : _segments) {
+            if (segment != nullptr &&
+                std::find(_held_segments.begin(), _held_segments.end(), segment) == _held_segments.end()) {
+                bytes += static_cast<int64_t>(segment->mem_usage());
+            }
+        }
+    }
+    StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(bytes - _held_segments_bytes);
+    _held_segments_bytes = bytes;
+    return bytes;
+}
+
 void Rowset::release_held_segments() {
     std::vector<SegmentPtr> released;
     std::shared_ptr<CompactionDelvecHolder> released_delvecs;
-    int64_t released_bytes = 0;
     {
         std::lock_guard<std::mutex> l(_held_segments_mutex);
         // Sticky, and set even when there is nothing to release: the Rowset is shared by every
@@ -897,10 +931,8 @@ void Rowset::release_held_segments() {
         // stay: zeroing it here would report a gauge of 0 for memory pinned until the Rowset dies,
         // and would let every later pass size its read chunks from the full budget. ~Rowset() settles
         // it instead.
-        if (_segments.empty()) {
-            released_bytes = _held_segments_bytes;
-            _held_segments_bytes = 0;
-        }
+        refresh_held_segments_bytes_locked();
+        _held_segments_cv.notify_all();
     }
     // Dropped, not donated to the shared metadata cache. Handing the whole input set over in one
     // burst is worse than the pre-hold behaviour this restores: on the shape that makes a task fall
@@ -910,9 +942,6 @@ void Rowset::release_held_segments() {
     // fill_metadata_cache = true and repopulates the cache one segment at a time as it loads them,
     // which is exactly what happened before hold_segments existed.
     released.clear();
-    if (released_bytes != 0) {
-        StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(-released_bytes);
-    }
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
@@ -928,7 +957,7 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     // do whenever hold_segments is set -- would leave those reads with neither a held set nor a
     // cache, reloading and reparsing every segment on every column-group pass. Keep the pre-hold
     // behavior for them.
-    if (effective_opts.hold_segments && (!can_hold_segments() || hold_disabled())) {
+    if (effective_opts.hold_segments && !can_hold_segments()) {
         effective_opts.hold_segments = false;
         effective_opts.fill_metadata_cache = true;
     }
@@ -956,8 +985,14 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
         // compaction task nor the scheduler catches it. A hand-written clear would be skipped by the
         // unwind, leaving the flag set with nobody to notify, and every sibling subtask blocked on
         // the condition variable for good.
+        TEST_SYNC_POINT_CALLBACK("Rowset::segments::before_hold_election", nullptr);
         std::unique_lock<std::mutex> lk(_held_segments_mutex);
         while (true) {
+            if (_hold_disabled) {
+                effective_opts.hold_segments = false;
+                effective_opts.fill_metadata_cache = true;
+                break;
+            }
             if (!_held_segments.empty()) {
                 return _held_segments;
             }
@@ -1009,25 +1044,19 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
         }
         ordered[pos] = segments[i];
     }
-    // Measure once, at publication: this is both what the chunk sizing is charged and what the
-    // gauge below is told, and the same amount is taken back when the set goes away.
-    int64_t held_bytes = 0;
-    for (const auto& seg : ordered) {
-        if (seg != nullptr) {
-            held_bytes += static_cast<int64_t>(seg->mem_usage());
-        }
-    }
-    // Only the elected loader reaches this publication, so the held set is written exactly once;
-    // waiters woken by the notify read it under the same lock.
     std::lock_guard<std::mutex> l(_held_segments_mutex);
+    // Loading runs outside the lock. A fallback during IO must also prevent publication, while
+    // the caller can still finish using the already loaded, metadata-ordered vector.
+    if (_hold_disabled) {
+        return ordered;
+    }
     _held_segments = std::move(ordered);
-    _held_segments_bytes = held_bytes;
+    refresh_held_segments_bytes_locked();
     // Pinned by a running task and invisible to the metadata cache's LRU, so it needs its own gauge
     // for an operator to see this memory class at all. Inside the critical section on purpose: it is
     // one atomic add, and publishing and returning must stay indivisible -- a range-split sibling
     // that woke on the notify can release the set in between, and this caller would then return an
     // empty vector and size its read chunks as if this rowset were not there.
-    StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(held_bytes);
     return _held_segments;
 }
 
