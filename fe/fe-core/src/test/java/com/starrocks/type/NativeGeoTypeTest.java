@@ -15,8 +15,16 @@
 package com.starrocks.type;
 
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
+import com.starrocks.proto.GeoDimensionPB;
+import com.starrocks.proto.GeoEncodingPB;
+import com.starrocks.proto.GeoStorageDescPB;
+import com.starrocks.proto.GeoValidationStatePB;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.thrift.TGeoDimension;
 import com.starrocks.thrift.TGeoEdgeAlgorithm;
+import com.starrocks.thrift.TGeoEncoding;
+import com.starrocks.thrift.TGeoStorageDesc;
+import com.starrocks.thrift.TGeoValidationState;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TTypeDesc;
 import org.apache.thrift.TDeserializer;
@@ -29,19 +37,19 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class NativeGeoTypeTest {
-    static GeoColumnDescriptor descriptor(PrimitiveType primitive) {
+    static GeoTypeDescriptor descriptor(PrimitiveType primitive) {
         boolean geography = primitive == PrimitiveType.GEOGRAPHY;
-        return new GeoColumnDescriptor(
-                geography ? GeoColumnDescriptor.LogicalType.GEOGRAPHY : GeoColumnDescriptor.LogicalType.GEOMETRY,
-                geography ? GeoColumnDescriptor.CoordinateSystem.SPHERICAL : GeoColumnDescriptor.CoordinateSystem.CARTESIAN,
-                geography ? GeoColumnDescriptor.EdgeAlgorithm.SPHERICAL : GeoColumnDescriptor.EdgeAlgorithm.PLANAR,
-                "OGC:CRS84", 4326, GeoColumnDescriptor.Encoding.WKB, GeoColumnDescriptor.Dimension.XY,
-                GeoColumnDescriptor.ValidationState.UNVALIDATED);
+        return new GeoTypeDescriptor(
+                geography ? GeoTypeDescriptor.LogicalType.GEOGRAPHY : GeoTypeDescriptor.LogicalType.GEOMETRY,
+                geography ? GeoTypeDescriptor.CoordinateSystem.SPHERICAL : GeoTypeDescriptor.CoordinateSystem.CARTESIAN,
+                geography ? GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL : GeoTypeDescriptor.EdgeAlgorithm.PLANAR,
+                "OGC:CRS84", 4326);
     }
 
     @Test
@@ -49,12 +57,14 @@ public class NativeGeoTypeTest {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
             ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
             TTypeDesc thrift = TypeSerializer.toThrift(type);
+            assertFalse(thrift.types.get(0).scalar_type.geo.isSetStorage());
             assertEquals(primitive, TypeDeserializer.fromThrift(thrift.types.get(0).scalar_type.type));
             TTypeDesc decoded = new TTypeDesc();
             new TDeserializer().deserialize(decoded, new TSerializer().serialize(thrift));
             assertEquals(type, TypeDeserializer.fromThrift(decoded));
             var codec = ProtobufProxy.create(PTypeDesc.class);
             PTypeDesc protobuf = codec.decode(codec.encode(TypeSerializer.toProtobuf(type)));
+            assertNull(protobuf.types.get(0).scalarType.geo.storage);
             assertEquals(type, TypeDeserializer.fromProtobuf(protobuf));
             assertFalse(type.isSupported());
             assertSame(type.getGeoDescriptor(), type.clone().getGeoDescriptor());
@@ -111,13 +121,100 @@ public class NativeGeoTypeTest {
     }
 
     @Test
-    public void testBackendWireFixture() throws Exception {
-        // Shared with native_geo_type_test.cpp: not just a same-language round trip.
+    public void testLegacyColumnWireFixture() throws Exception {
+        // The original shared fixture includes storage metadata, which is not part of type identity.
         String wire = "0a2608001222081e2a1e0a1408011001180122094f47433a435253383428e6211206080110011801";
         var codec = ProtobufProxy.create(PTypeDesc.class);
         ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
         assertEquals(type, TypeDeserializer.fromProtobuf(codec.decode(HexFormat.of().parseHex(wire))));
-        assertEquals(wire, HexFormat.of().formatHex(codec.encode(TypeSerializer.toProtobuf(type))));
+        assertNull(TypeSerializer.toProtobuf(type).types.get(0).scalarType.geo.storage);
+    }
+
+    @Test
+    public void testBackendSemanticOnlyWireFixtures() throws Exception {
+        // Produced by BE TypeDescriptor::to_thrift/to_protobuf at #78999 commit 6e6079181e,
+        // then serialized with Thrift TBinaryProtocol and protobuf SerializeAsString respectively.
+        String[] protobufWires = {
+                "0a2908001225081e10ffffffffffffffffff012a160a1408011001180122094f47433a435253383428e621",
+                "0a2908001225081f10ffffffffffffffffff012a160a1408021002180622094f47433a435253383428e621"
+        };
+        String[] thriftWires = {
+                "0f00010c00000001080001000000000c00020800010000001e080002ffffffff0c00060c000108000100000001"
+                        + "08000200000001080003000000010b0004000000094f47433a4352533834080005000010e60000000000",
+                "0f00010c00000001080001000000000c00020800010000001f080002ffffffff0c00060c000108000100000002"
+                        + "08000200000002080003000000060b0004000000094f47433a4352533834080005000010e60000000000"
+        };
+        PrimitiveType[] primitives = {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY};
+        var codec = ProtobufProxy.create(PTypeDesc.class);
+        for (int i = 0; i < primitives.length; i++) {
+            ScalarType expected = ScalarType.createGeoType(primitives[i], descriptor(primitives[i]));
+            PTypeDesc proto = codec.decode(HexFormat.of().parseHex(protobufWires[i]));
+            TTypeDesc thrift = new TTypeDesc();
+            new TDeserializer().deserialize(thrift, HexFormat.of().parseHex(thriftWires[i]));
+            assertNull(proto.types.get(0).scalarType.geo.storage);
+            assertFalse(thrift.types.get(0).scalar_type.geo.isSetStorage());
+            assertEquals(expected, TypeDeserializer.fromProtobuf(proto));
+            assertEquals(expected, TypeDeserializer.fromThrift(thrift));
+            // BE writes the unused scalar length (-1); FE omits it. Compare semantic wire content.
+            proto.types.get(0).scalarType.len = null;
+            thrift.types.get(0).scalar_type.unsetLen();
+            assertEquals(HexFormat.of().formatHex(codec.encode(proto)),
+                    HexFormat.of().formatHex(codec.encode(TypeSerializer.toProtobuf(expected))));
+            assertEquals(thrift, TypeSerializer.toThrift(expected));
+        }
+    }
+
+    @Test
+    public void testRejectMissingSemanticMetadata() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            TTypeDesc thrift = TypeSerializer.toThrift(type);
+            PTypeDesc proto = TypeSerializer.toProtobuf(type);
+            thrift.types.get(0).scalar_type.geo.unsetType();
+            proto.types.get(0).scalarType.geo.type = null;
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromProtobuf(proto));
+        }
+    }
+
+    @Test
+    public void testRepresentationDoesNotAffectTypeIdentity() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType expected = ScalarType.createGeoType(primitive, descriptor(primitive));
+            TTypeDesc thrift = TypeSerializer.toThrift(expected);
+            PTypeDesc proto = TypeSerializer.toProtobuf(expected);
+            for (TGeoEncoding encoding : TGeoEncoding.values()) {
+                thrift.types.get(0).scalar_type.geo.setStorage(new TGeoStorageDesc()
+                        .setEncoding(encoding).setDimension(TGeoDimension.XYZM)
+                        .setValidation_state(TGeoValidationState.SEMANTICALLY_VALIDATED));
+                GeoStorageDescPB storage = new GeoStorageDescPB();
+                storage.encoding = GeoEncodingPB.valueOf("GEO_ENCODING_" + encoding.name());
+                storage.dimension = GeoDimensionPB.GEO_DIMENSION_XYZM;
+                storage.validationState = GeoValidationStatePB.GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED;
+                proto.types.get(0).scalarType.geo.storage = storage;
+                Type fromThrift = TypeDeserializer.fromThrift(thrift);
+                Type fromProto = TypeDeserializer.fromProtobuf(proto);
+                assertEquals(expected, fromThrift);
+                assertEquals(expected, fromProto);
+                assertEquals(expected.hashCode(), fromThrift.hashCode());
+                assertEquals(expected.hashCode(), fromProto.hashCode());
+                assertFalse(TypeSerializer.toThrift(fromThrift).types.get(0).scalar_type.geo.isSetStorage());
+                assertNull(TypeSerializer.toProtobuf(fromProto).types.get(0).scalarType.geo.storage);
+            }
+        }
+    }
+
+    @Test
+    public void testCompatibilityMatrixAfterGeoReordering() {
+        assertEquals(PrimitiveType.UNKNOWN_TYPE, PrimitiveType.values()[PrimitiveType.values().length - 1]);
+        assertTrue(PrimitiveType.GEOGRAPHY.ordinal() < PrimitiveType.UNKNOWN_TYPE.ordinal());
+        assertTrue(PrimitiveType.GEOMETRY.ordinal() < PrimitiveType.UNKNOWN_TYPE.ordinal());
+        assertEquals(PrimitiveType.BIGINT,
+                TypeCompatibilityMatrix.getCompatibleType(PrimitiveType.INT, PrimitiveType.BIGINT));
+        assertEquals(PrimitiveType.INVALID_TYPE,
+                TypeCompatibilityMatrix.getCompatibleType(PrimitiveType.INT, PrimitiveType.UNKNOWN_TYPE));
+        assertEquals(PrimitiveType.UNKNOWN_TYPE,
+                TypeCompatibilityMatrix.getCompatibleType(PrimitiveType.UNKNOWN_TYPE, PrimitiveType.UNKNOWN_TYPE));
     }
 
     @Test

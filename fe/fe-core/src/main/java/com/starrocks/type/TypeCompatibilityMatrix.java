@@ -30,7 +30,8 @@ public class TypeCompatibilityMatrix {
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128, PrimitiveType.DECIMAL256,
             PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION,
-            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT);
+            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT,
+            PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY);
 
     private static final PrimitiveType[][] COMPATIBILITY_MATRIX =
             new PrimitiveType[PrimitiveType.values().length][PrimitiveType.values().length];
@@ -384,8 +385,8 @@ public class TypeCompatibilityMatrix {
         }
 
         // Check all the necessary entries that should be filled.
-        for (int i = 0; i < PrimitiveType.values().length - 2; ++i) {
-            for (int j = i; j < PrimitiveType.values().length - 2; ++j) {
+        for (int i = 0; i < PrimitiveType.values().length; ++i) {
+            for (int j = i; j < PrimitiveType.values().length; ++j) {
                 PrimitiveType t1 = PrimitiveType.values()[i];
                 PrimitiveType t2 = PrimitiveType.values()[j];
                 if (SKIP_COMPARE_TYPES.contains(t1) || SKIP_COMPARE_TYPES.contains(t2)) {

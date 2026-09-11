@@ -77,7 +77,7 @@ public class ScalarType extends Type implements Cloneable {
     // type identity; it only tells the BE reader to keep the naive wall clock unshifted.
     private boolean datetimeIsNtz = false;
 
-    private GeoColumnDescriptor geo;
+    private GeoTypeDescriptor geo;
 
     public ScalarType(PrimitiveType type) {
         this.type = type;
@@ -444,14 +444,14 @@ public class ScalarType extends Type implements Cloneable {
         return stringBuilder.toString();
     }
 
-    public static ScalarType createGeoType(PrimitiveType primitive, GeoColumnDescriptor descriptor) {
+    public static ScalarType createGeoType(PrimitiveType primitive, GeoTypeDescriptor descriptor) {
         Objects.requireNonNull(descriptor).validate(primitive);
         ScalarType result = new ScalarType(primitive);
         result.geo = descriptor;
         return result;
     }
 
-    public GeoColumnDescriptor getGeoDescriptor() {
+    public GeoTypeDescriptor getGeoDescriptor() {
         return geo;
     }
 }

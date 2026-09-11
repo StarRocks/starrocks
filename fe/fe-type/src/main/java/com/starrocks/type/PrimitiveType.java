@@ -81,12 +81,12 @@ public enum PrimitiveType {
     BINARY("BINARY", -1),
     VARBINARY("VARBINARY", 16),
 
-    // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
-    UNKNOWN_TYPE("UNKNOWN_TYPE", -1),
-
     // Reserved native identities; SQL activation requires separate capabilities.
     GEOGRAPHY("GEOGRAPHY", 16),
-    GEOMETRY("GEOMETRY", 16);
+    GEOMETRY("GEOMETRY", 16),
+
+    // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
+    UNKNOWN_TYPE("UNKNOWN_TYPE", -1);
 
     private static final int DATE_INDEX_LEN = 3;
     private static final int DATETIME_INDEX_LEN = 8;

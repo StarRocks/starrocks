@@ -16,10 +16,9 @@ package com.starrocks.type;
 
 import java.util.Objects;
 
-/** Immutable metadata, independent of generated transport classes. */
-public record GeoColumnDescriptor(LogicalType logicalType, CoordinateSystem coordinateSystem,
-                                  EdgeAlgorithm edgeAlgorithm, String crs, Integer srid,
-                                  Encoding encoding, Dimension dimension, ValidationState validationState) {
+/** Immutable semantic type metadata; column representation belongs to the column/transport layer. */
+public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordinateSystem,
+                                EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
     public enum LogicalType {
         UNKNOWN, GEOGRAPHY, GEOMETRY
     }
@@ -32,26 +31,11 @@ public record GeoColumnDescriptor(LogicalType logicalType, CoordinateSystem coor
         UNKNOWN, SPHERICAL, VINCENTY, THOMAS, ANDOYER, KARNEY, PLANAR
     }
 
-    public enum Encoding {
-        UNKNOWN, WKB
-    }
-
-    public enum Dimension {
-        UNKNOWN, XY, XYZ, XYM, XYZM, MIXED
-    }
-
-    public enum ValidationState {
-        UNKNOWN, UNVALIDATED, STRUCTURALLY_VALIDATED, SEMANTICALLY_VALIDATED
-    }
-
-    public GeoColumnDescriptor {
+    public GeoTypeDescriptor {
         Objects.requireNonNull(logicalType);
         Objects.requireNonNull(coordinateSystem);
         Objects.requireNonNull(edgeAlgorithm);
         Objects.requireNonNull(crs);
-        Objects.requireNonNull(encoding);
-        Objects.requireNonNull(dimension);
-        Objects.requireNonNull(validationState);
     }
 
     public void validate(PrimitiveType primitive) {
@@ -62,9 +46,6 @@ public record GeoColumnDescriptor(LogicalType logicalType, CoordinateSystem coor
                 || coordinateSystem != (geography ? CoordinateSystem.SPHERICAL : CoordinateSystem.CARTESIAN)
                 || (geography ? !sphericalEdge : edgeAlgorithm != EdgeAlgorithm.PLANAR)) {
             throw new IllegalArgumentException("Native geo primitive conflicts with its semantic descriptor");
-        }
-        if (encoding != Encoding.WKB) {
-            throw new IllegalArgumentException("Native geo types require WKB encoding");
         }
     }
 }
