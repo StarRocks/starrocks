@@ -1350,9 +1350,23 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (null == newColumn.getAggregationType()) {
                 Type type = newColumn.getType();
                 if (!type.canDistributedBy()) {
+                    // Reachable only for the ambiguous case below: an explicit KEY on a non-key-capable
+                    // type is already rejected by ColumnDefAnalyzer. Keep this rejection ahead of the
+                    // ambiguity check so the message never suggests KEY for a type that cannot be a key.
                     throw new DdlException(
                             "column without agg function will be treated as key column for aggregate table, " + type +
                                     " type can not be key column");
+                }
+                if (!newColumn.isKey() && !Config.allow_implicit_key_column_in_agg_add_column) {
+                    // Neither an agg function nor KEY was written. Promoting such a column to a key
+                    // column changes the table's aggregation key and rewrites existing data, so when
+                    // this is switched off, require the user to say which one they meant.
+                    throw new DdlException("Column '" + newColName + "' on aggregate table '" +
+                            olapTable.getName() + "' must specify either an aggregate function, making it a " +
+                            "value column, or the KEY keyword, making it a key column. Adding a key column " +
+                            "changes the table's aggregation key and rewrites existing data. To allow such a " +
+                            "column to be created as a key column instead, set FE config " +
+                            "allow_implicit_key_column_in_agg_add_column to true.");
                 }
                 newColumn.setIsKey(true);
             } else if (newColumn.getAggregationType() == AggregateType.SUM
@@ -3797,6 +3811,526 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Whether the given alter clause is an eligible range-distribution key change that must be
+     * routed to {@link LakeRangeRewriteSchemaChangeJob} rather than rejected.
+     *
+     * <p>Eligible iff ALL of:
+     * <ul>
+     *   <li>the table is a shared-data (cloud-native) OLAP table — the rewrite job is lake-only, so a
+     *       non-lake range table must never reach it. Materialized views are excluded (this gates on
+     *       {@code isCloudNativeTable()}, not {@code isCloudNativeTableOrMaterializedView()}): a
+     *       key/sort-key {@code ALTER TABLE} on an MV is already rejected by
+     *       {@code AlterTableStatementAnalyzer}, and the rewrite's internal INSERT would be rejected
+     *       by {@code InsertAnalyzer} on a non-system MV target;</li>
+     *   <li>the table uses range distribution;</li>
+     *   <li>the clause is either a sort-key reorder ({@code ALTER TABLE ... ORDER BY (...)}, which
+     *       always shifts the range sort key), a {@link ModifyColumnClause} that flips a column's
+     *       keyness AND that flip shifts the range sort key, a {@link DropColumnClause} whose
+     *       column is in the range sort key, or an {@link AddColumnClause}/{@link AddColumnsClause}
+     *       that adds a key column joining a key-derived range sort key.</li>
+     * </ul>
+     *
+     * <p>A drop or add that shifts the range sort key is now routed here; keysType filtering
+     * (PK/UNIQUE/AGG-REPLACE key drops, PK key adds) is left to the existing universal guards, which
+     * run regardless of routing.
+     */
+    public static boolean needsRangeRewriteSchemaChange(OlapTable table, AlterClause clause) {
+        if (!table.isCloudNativeTable() || !table.isRangeDistribution()) {
+            return false;
+        }
+        // Range-colocate and AUTO_INCREMENT-key tables stay rejected (returning false here keeps the
+        // existing range-distribution rejection on both the reorder and keyness-flip paths). A colocate
+        // table's tablets must stay range-aligned with its ColocateRangeMgr expected ranges; the rewrite
+        // samples a fresh K-tablet layout independently, which would desync colocate scan/join routing
+        // after the flip. AUTO_INCREMENT columns are likewise out of scope for the re-route.
+        if (table.hasColocateGroup()
+                || table.hasAutoIncrementColumn()) {
+            return false;
+        }
+        // Tables with user rollup / synchronous-MV indexes beyond the base index are not eligible:
+        // createRangeRewriteJob / buildRangeRewriteJob rebuild ONLY the base index (baseIndexMetaId),
+        // so rollup indexes would be left with stale key/sort-key metadata after the rewrite.
+        if (table.getIndexMetaIdToMeta().size() > 1) {
+            return false;
+        }
+        // NOTE: PRIMARY_KEYS range-distribution tables are intentionally NOT excluded. The rewrite is
+        // designed to support them -- the op_write->op_schema_change@W conversion plus version-ordered
+        // vlog replay gives PK/UNIQUE/AGG-REPLACE newer-wins (see the P1b design's "PK flip at
+        // base_version = W" correctness obligation). A PK key column cannot be demoted
+        // (resolveModifyColumnKeyness keeps it a key), but a value column CAN be promoted to one, so
+        // the MODIFY COLUMN path can route a PK table too -- modifyColumnShiftsRangeSortKey turns that
+        // down for an index whose ORDER BY differs from its primary key, which is the only PK shape
+        // the rewrite cannot sample boundaries for.
+        if (clause instanceof ReorderColumnsClause) {
+            // A sort-key reorder (ALTER TABLE ... ORDER BY with fewer columns than the base schema)
+            // always shifts the range sort key. A full-schema reorder is handled on a different path
+            // and is not a range-rewrite.
+            if (((ReorderColumnsClause) clause).getColumnsByPos().size() == table.getBaseSchema().size()) {
+                return false;
+            }
+            // ... with one exception. A primary-key table routes by its primary key, never by its
+            // ORDER BY -- see MetaUtils#getRangeDistributionColumns. The rewrite samples the new
+            // boundaries over the NEW sort key, so a reorder that leaves the sort key differing from
+            // the primary key would store ranges in sort-key space while every writer and pruner
+            // resolves them in primary-key space, misrouting writes and pruning away live rows.
+            // Fall through to the range-distribution rejection below instead. Reaching that shape means
+            // creating the table that way, where CreateTableAnalyzer settles the sort key against a
+            // freshly sampled layout; ALTER would instead reinterpret ranges already on disk.
+            return !reorderSeparatesSortKeyFromPrimaryKey(table, (ReorderColumnsClause) clause);
+        }
+        if (clause instanceof ModifyColumnClause) {
+            ModifyColumnClause modifyClause = (ModifyColumnClause) clause;
+            return modifyColumnShiftsRangeSortKey(table, modifyClause)
+                    || modifyColumnWidensRangeSortKeyIntType(table, modifyClause);
+        }
+        if (clause instanceof DropColumnClause) {
+            String dropCol = ((DropColumnClause) clause).getColName();
+            long baseIndexMetaId = table.getBaseIndexMetaId();
+            return MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
+                    .anyMatch(c -> c.getName().equalsIgnoreCase(dropCol));
+        }
+        if (clause instanceof AddColumnClause) {
+            return addTouchesKeyDerivedRangeSortKey(table, ((AddColumnClause) clause).getColumnDef());
+        }
+        if (clause instanceof AddColumnsClause) {
+            return ((AddColumnsClause) clause).getColumnDefs().stream()
+                    .anyMatch(columnDef -> addTouchesKeyDerivedRangeSortKey(table, columnDef));
+        }
+        return false;
+    }
+
+    /**
+     * Whether this is a range-distributed primary-key table whose ORDER BY key differs from its primary
+     * key. Both the range and the primary-key tests live inside {@link MetaUtils#hasSeparateSortKey},
+     * so a HASH-distributed primary-key table with a separate ORDER BY -- long supported, unaffected by
+     * any of this -- cannot be caught by re-deriving the condition slightly differently here.
+     */
+    private static boolean isSeparateSortKeyRangePrimaryKey(OlapTable olapTable) {
+        return MetaUtils.hasSeparateSortKey(olapTable, olapTable.getBaseIndexMetaId());
+    }
+
+    /**
+     * Whether this reorder would leave a primary-key table's sort key different from its primary key.
+     *
+     * <p>Non-primary-key tables always answer false: their tablet boundaries follow the sort key, so a
+     * reorder is exactly what the rewrite is for. Only a primary-key table has two distinct key spaces
+     * to disagree about.
+     */
+    private static boolean reorderSeparatesSortKeyFromPrimaryKey(OlapTable table, ReorderColumnsClause clause) {
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        List<Column> baseSchema = table.getBaseSchema();
+        List<Integer> primaryKeyIdxes = new ArrayList<>();
+        for (int i = 0; i < baseSchema.size(); ++i) {
+            if (baseSchema.get(i).isKey()) {
+                primaryKeyIdxes.add(i);
+            }
+        }
+        // Mirrors MetaUtils#usesPrimaryKeyForRange, which compares the stored sort-key indexes against
+        // the key columns in schema order. An unresolvable name is left out and so reads as different,
+        // which keeps the rejecting answer -- processModifySortKeyColumn reports the bad name itself.
+        List<Integer> newSortKeyIdxes = new ArrayList<>();
+        for (String columnName : clause.getColumnsByPos()) {
+            for (int i = 0; i < baseSchema.size(); ++i) {
+                if (baseSchema.get(i).getName().equalsIgnoreCase(columnName)) {
+                    newSortKeyIdxes.add(i);
+                    break;
+                }
+            }
+        }
+        return !primaryKeyIdxes.equals(newSortKeyIdxes);
+    }
+
+    /**
+     * Whether adding {@code columnDef} would join a key-derived range sort key: the added column
+     * resolves to a KEY column (explicit {@code KEY}, or on AGG a no-aggregate column auto-promoted to
+     * key -- mirrors {@link #resolveModifyColumnKeyness}), AND the base index's range sort key is
+     * key-derived, i.e. {@link MetaUtils#getRangeDistributionColumns} equals the base key-column set.
+     * This excludes a DUP table with a divergent explicit {@code ORDER BY}: the added key column does
+     * not touch that sort key, so the add stays on its current (rejected) path.
+     */
+    private static boolean addTouchesKeyDerivedRangeSortKey(OlapTable table, ColumnDef columnDef) {
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        // Mirrors the implicit-key rule in addColumnInternal's AGG_KEYS branch. That branch now rejects
+        // the no-agg-no-KEY shape unless allow_implicit_key_column_in_agg_add_column is set, and it
+        // throws before this routing decision has any effect, so this predicate stays as-is. Keep the
+        // two in sync if either changes.
+        boolean addedIsKey = columnDef.isKey()
+                || (table.getKeysType() == KeysType.AGG_KEYS && columnDef.getAggregateType() == null);
+        if (!addedIsKey) {
+            return false;
+        }
+        List<String> sortKeyNames = MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
+                .map(Column::getName).collect(Collectors.toList());
+        List<String> keyColumnNames = table.getSchemaByIndexMetaId(baseIndexMetaId).stream()
+                .filter(Column::isKey).map(Column::getName).collect(Collectors.toList());
+        return sortKeyNames.equals(keyColumnNames);
+    }
+
+    /**
+     * Whether a MODIFY COLUMN flips the named column's keyness AND that flip shifts the range sort
+     * key of the base index. The "after" sort key is computed on a candidate base schema in which the
+     * modified column's key bit is flipped, then compared with the current sort key (mirroring how
+     * {@link MetaUtils#getRangeDistributionColumns(OlapTable, long)} resolves the sort key from the
+     * index's {@code sortKeyIdxes}, or from the key columns when no explicit sort key is set).
+     *
+     * <p>Always false for an index whose ORDER BY differs from its primary key -- see the guard below.
+     */
+    private static boolean modifyColumnShiftsRangeSortKey(OlapTable table, ModifyColumnClause clause) {
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        if (indexMeta == null) {
+            return false;
+        }
+        String columnName = clause.getColumnDef().getName();
+        Column oriColumn = null;
+        for (Column column : indexMeta.getSchema()) {
+            if (column.getName().equalsIgnoreCase(columnName)) {
+                oriColumn = column;
+                break;
+            }
+        }
+        if (oriColumn == null) {
+            return false;
+        }
+        boolean newIsKey = resolveModifyColumnKeyness(table, clause.getColumnDef(), oriColumn);
+        if (oriColumn.isKey() == newIsKey) {
+            return false;
+        }
+        if (!isPureKeynessFlip(oriColumn, clause.getColumnDef(), table)) {
+            // Only a *pure* keyness flip is routed to the range rewrite. If the MODIFY COLUMN also
+            // changes the type/length, nullability, default value, aggregation, generated expression,
+            // etc., it is not a pure flip: returning false here lets it fall through to finalAnalyze,
+            // where the generic compatibility checks (e.g. "Cannot shorten string length") reject or
+            // handle it exactly as they would without this routing. This keeps the routing from
+            // bypassing those validations when a keyness flip is bundled with another change.
+            return false;
+        }
+        if (MetaUtils.hasSeparateSortKey(table, baseIndexMetaId)) {
+            // This index routes by its primary key while its ORDER BY says something else, so a
+            // key-derived "after" sort key is not what routing would use, and the two sides below
+            // would be comparing ORDER BY names against primary-key names -- never equal, i.e. every
+            // pure keyness flip would look like a shift. Routing one here would be worse than the
+            // false positive: createRangeRewriteJob(List<Column>) passes sortKeyIdxes = null on the
+            // documented assumption that no explicit sort key pins the column positions, so the
+            // rewrite would silently drop the table's ORDER BY. Say no, and the caller's explicit
+            // "MODIFY COLUMN that changes keyness is not supported" reject stands -- the same answer
+            // reorderSeparatesSortKeyFromPrimaryKey gives for the reorder path, for the same reason.
+            return false;
+        }
+        // Past that guard the two resolvers agree, so this reads the same key space as the candidate.
+        List<String> currentSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+                .map(Column::getName).collect(Collectors.toList());
+        Map<String, Boolean> keynessOverride = Map.of(columnName, newIsKey);
+        List<String> candidateSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId,
+                        keynessOverride).stream()
+                .map(Column::getName).collect(Collectors.toList());
+        return !currentSortKeyNames.equals(candidateSortKeyNames);
+    }
+
+    /**
+     * Whether a MODIFY COLUMN widens an integer column that is in the base index's range sort key, with
+     * everything else about the column unchanged -- an order-preserving type widen that keeps every key
+     * value logically identical. Such a change is routed to {@link LakeRangeRewriteSchemaChangeJob},
+     * which rewrites the data into the wider type (the on-disk short-key index / segment metadata / range
+     * boundaries are re-derived at the wide type, so there is no mixed-width state to reconcile).
+     *
+     * <p>Eligible iff ALL of: the clause has no position move ({@code getColPos() == null}) and no rollup
+     * target -- the rewrite builder preserves the existing positional {@code sortKeyIdxes}, so a move
+     * would mis-map the sort key, and a {@link Column} comparison cannot observe position; the table is
+     * not PRIMARY_KEYS; the modified column is in the range sort key; and the resolved modified column
+     * differs from the original ONLY in the type ({@link Column#differsOnlyInType}, so keyness /
+     * nullability / default / aggregation / generated status are all unchanged, and generated columns are
+     * excluded on both sides), where the type change is an in-scope integer widen
+     * ({@link #isInScopeIntegerWiden}). A bundled nullability relaxation or default change, a generated
+     * column, or a position move therefore is NOT a pure widen and keeps its current (reject) behavior --
+     * finalAnalyze does not reject those on its own.
+     */
+    private static boolean modifyColumnWidensRangeSortKeyIntType(OlapTable table, ModifyColumnClause clause) {
+        // A position move, rollup target, or column properties are real changes beyond a pure type widen;
+        // the rewrite builder consumes only the resolved schema + preserved sort key, so reject them here
+        // (a Column comparison cannot observe them). Mirrors the guards in isCommentOnlyModification.
+        if (clause.getColPos() != null || clause.getRollupName() != null
+                || (clause.getProperties() != null && !clause.getProperties().isEmpty())) {
+            return false;
+        }
+        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        if (indexMeta == null) {
+            return false;
+        }
+        String columnName = clause.getColumnDef().getName();
+        Column oriColumn = null;
+        for (Column column : indexMeta.getSchema()) {
+            if (column.getName().equalsIgnoreCase(columnName)) {
+                oriColumn = column;
+                break;
+            }
+        }
+        if (oriColumn == null) {
+            return false;
+        }
+        boolean inRangeSortKey = MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
+                .anyMatch(c -> c.getName().equalsIgnoreCase(columnName));
+        if (!inRangeSortKey) {
+            return false;
+        }
+        Column modColumn = buildColumnInternal(clause.getColumnDef(), table);
+        if (oriColumn.isGeneratedColumn() || modColumn.isGeneratedColumn()) {
+            return false;
+        }
+        // Resolve the modified column's keyness exactly as processModifyColumn does before comparing:
+        // AGG_KEYS promotes a no-aggregation column to KEY, so `MODIFY COLUMN k BIGINT` (no KEY spelled)
+        // on an AGG table is still a pure key-type widen. Without this, the raw ColumnDef keyness would
+        // make differsOnlyInType spuriously reject it.
+        modColumn.setIsKey(resolveModifyColumnKeyness(table, clause.getColumnDef(), oriColumn));
+        return oriColumn.differsOnlyInType(modColumn)
+                && isInScopeIntegerWiden(oriColumn.getPrimitiveType(), modColumn.getPrimitiveType());
+    }
+
+    /**
+     * Whether {@code mod} is a strictly wider integer type than {@code ori}, within the in-scope integer
+     * family TINYINT &lt; SMALLINT &lt; INT &lt; BIGINT. LARGEINT is intentionally excluded (it crosses the
+     * FE {@code IntVariant} -&gt; {@code LargeIntVariant} boundary), as are all non-integer types.
+     */
+    private static boolean isInScopeIntegerWiden(PrimitiveType ori, PrimitiveType mod) {
+        int a = integerWidenRank(ori);
+        int b = integerWidenRank(mod);
+        return a > 0 && b > 0 && b > a;
+    }
+
+    private static int integerWidenRank(PrimitiveType type) {
+        if (type == null) {
+            return -1;
+        }
+        switch (type) {
+            case TINYINT:
+                return 1;
+            case SMALLINT:
+                return 2;
+            case INT:
+                return 3;
+            case BIGINT:
+                return 4;
+            default:
+                return -1;
+        }
+    }
+
+    /**
+     * Build a {@link LakeRangeRewriteSchemaChangeJob} for an in-scope integer widen of a range sort-key
+     * column (see {@link #modifyColumnWidensRangeSortKeyIntType}). Unlike the keyness-flip builder
+     * {@link #createRangeRewriteJob(Database, OlapTable, List)}, this does NOT strip the shadow name
+     * prefix (the widened column stays {@code __starrocks_shadow_}-prefixed so InsertPlanner materializes
+     * it as {@code CAST(origin AS widetype)}) and does NOT re-derive the sort key from key columns:
+     * a widen changes no key membership/order, so the table's EXISTING base-index sort key
+     * ({@code sortKeyIdxes}/{@code sortKeyUniqueIds}) is preserved verbatim (unique-ids/positions survive
+     * a MODIFY), including a divergent explicit {@code ORDER BY}. The short-key count is recomputed for
+     * the widened schema (a wider trailing key can shrink the short-key budget).
+     */
+    private AlterJobV2 createRangeRewriteJobForKeyWiden(Database db, OlapTable olapTable, List<Column> newSchema)
+            throws StarRocksException {
+        Preconditions.checkState(newSchema != null, "range-rewrite widen: missing new schema for base index");
+        long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Integer> sortKeyIdxes = indexMeta.getSortKeyIdxes();
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        short shortKeyColumnCount = (sortKeyIdxes != null)
+                ? GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes)
+                : GlobalStateMgr.calcShortKeyColumnCount(newSchema, null);
+        return buildRangeRewriteJob(db, olapTable, baseIndexMetaId, newSchema, olapTable.getKeysType(),
+                sortKeyIdxes, sortKeyUniqueIds, shortKeyColumnCount);
+    }
+
+    /**
+     * Whether {@code schema} still satisfies the key-set invariants that {@link #finalAnalyze} enforces:
+     * at least one key column, and every value column positioned after every key column (the key columns
+     * form a contiguous prefix). A routed keyness flip bypasses finalAnalyze, so the routing re-checks
+     * these here and declines to route a flip that would violate them -- the last/only key demoted to a
+     * value, or a value column promoted ahead of a key. Such a flip then falls through to finalAnalyze,
+     * which rejects it synchronously with the precise error rather than letting the rewrite job fail later.
+     */
+    private static boolean rangeRewriteKeySchemaIsValid(List<Column> schema) {
+        if (schema == null) {
+            return false;
+        }
+        boolean meetValue = false;
+        boolean hasKey = false;
+        for (Column column : schema) {
+            if (column.isKey() && meetValue) {
+                return false; // a value column precedes a key column
+            }
+            if (column.isKey()) {
+                hasKey = true;
+            } else {
+                meetValue = true;
+            }
+        }
+        return hasKey;
+    }
+
+    /**
+     * Whether a MODIFY COLUMN is a *pure* keyness flip: the column it would produce differs from the
+     * existing column in {@link Column#isKey()} only (type, length/precision/scale, nullability,
+     * default value, aggregation, generated expression, etc. all unchanged). Only such flips are
+     * routed to the range rewrite; a keyness flip bundled with any other change must fall through to
+     * finalAnalyze so its generic compatibility checks still run.
+     *
+     * <p>Consequence: an AGG value&harr;key flip inherently changes the column's aggregation state (a
+     * value column carries an aggregation function, a key does not), so it is not a pure keyness flip
+     * and is correctly not routed -- it falls through to the existing rejection. Pure keyness flips
+     * are mainly DUP (and any case where only the key bit toggles).
+     */
+    private static boolean isPureKeynessFlip(Column oriColumn, ColumnDef columnDef, OlapTable table) {
+        Column modColumn = buildColumnInternal(columnDef, table);
+        return oriColumn.differsOnlyInKeyness(modColumn);
+    }
+
+    /**
+     * Resolve the post-modify keyness of a column, mirroring the keys-type-driven key adjustments in
+     * {@link #processModifyColumn} (AGG promotes a no-aggregate column to KEY; PK keeps an existing
+     * key column a key; DUP/UNIQUE take the keyness from the clause).
+     */
+    private static boolean resolveModifyColumnKeyness(OlapTable table, ColumnDef columnDef, Column oriColumn) {
+        KeysType keysType = table.getKeysType();
+        if (keysType == KeysType.AGG_KEYS) {
+            // In aggregate-key tables a column with no aggregation method is a key column.
+            return columnDef.getAggregateType() == null || columnDef.isKey();
+        }
+        if (keysType == KeysType.PRIMARY_KEYS && oriColumn.isKey()) {
+            // Backward compatibility: a PK key column stays a key column when not respecified.
+            return true;
+        }
+        return columnDef.isKey();
+    }
+
+    /**
+     * Whether {@code resolved} -- the {@link SchemaChangeData} produced by {@link #finalAnalyze} --
+     * describes a metadata-only trailing key-column add on a shared-data range-distribution table: the
+     * new column's value is a constant/NULL sentinel appended after every existing range sort-key
+     * column, so existing tablet range boundaries stay valid without a data rewrite. Self-contained:
+     * computed entirely from the resolved schema, independent of {@link #needsRangeRewriteSchemaChange}
+     * (which routes a broader set of key changes to the K-tablet rewrite job).
+     *
+     * <p>Eligible iff ALL of:
+     * <ul>
+     *   <li>the table is a shared-data (cloud-native) range-distribution table;</li>
+     *   <li>the table has exactly one index meta (no rollup / synchronous MV);</li>
+     *   <li>the table is not a colocate table, has no AUTO_INCREMENT column, and has no temp
+     *       partitions;</li>
+     *   <li>the table's keysType is DUP_KEYS, AGG_KEYS, or UNIQUE_KEYS (not PRIMARY_KEYS);</li>
+     *   <li>the base index's resolved schema adds one or more brand-new key columns (unique ids not
+     *       present in the current live schema -- excludes promoting an existing value column to key),
+     *       each whose default is constant or NULL (not auto-increment, not generated, not a variable
+     *       expression default such as {@code uuid()});</li>
+     *   <li>the base index's resolved schema's key columns form a contiguous leading prefix;</li>
+     *   <li>the resolved (candidate) effective sort key -- resolved with {@link
+     *       MetaUtils#resolveEffectiveSortKeyColumns} -- equals the current effective sort key plus
+     *       those new columns trailing at the end, in add order.</li>
+     * </ul>
+     */
+    @VisibleForTesting
+    static boolean isMetadataOnlyTrailingKeyAdd(SchemaChangeData resolved) {
+        OlapTable table = resolved.getTable();
+        if (!table.isCloudNativeTable() || !table.isRangeDistribution()) {
+            return false;
+        }
+        if (table.getIndexMetaIdToMeta().size() != 1) {
+            return false;
+        }
+        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())
+                || table.hasAutoIncrementColumn() || table.existTempPartitions()) {
+            return false;
+        }
+        KeysType keysType = table.getKeysType();
+        if (keysType != KeysType.DUP_KEYS && keysType != KeysType.AGG_KEYS && keysType != KeysType.UNIQUE_KEYS) {
+            return false;
+        }
+
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> newSchema = resolved.getNewIndexMetaIdToSchema().get(baseIndexMetaId);
+        if (newSchema == null) {
+            return false;
+        }
+        // Key columns must form a contiguous leading prefix; a metadata-only classification must not
+        // bypass this invariant.
+        boolean sawValue = false;
+        for (Column column : newSchema) {
+            if (column.isKey()) {
+                if (sawValue) {
+                    return false;
+                }
+            } else {
+                sawValue = true;
+            }
+        }
+
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        Set<Integer> oldUniqueIds = new HashSet<>();
+        for (Column column : oldSchema) {
+            oldUniqueIds.add(column.getUniqueId());
+        }
+        // Collect the brand-new columns (unique id not in the live schema), in schema order.
+        List<Column> newColumns = new ArrayList<>();
+        for (Column column : newSchema) {
+            if (!oldUniqueIds.contains(column.getUniqueId())) {
+                newColumns.add(column);
+            }
+        }
+        // The metadata-only route adds one or more columns, and EVERY added column must be a trailing
+        // sort key with a constant/NULL default. A batch that co-adds a value column (needs
+        // materialization) or a key column with an auto-increment / generated / variable default must
+        // fall through to the data-rewrite path, which materializes them; classifying it as
+        // metadata-only would install the new schema without materializing those values for existing
+        // rows. Requiring newSchema.size() == oldSchema.size() + newColumns.size() also rejects any
+        // concurrent column drop.
+        if (newColumns.isEmpty() || newSchema.size() != oldSchema.size() + newColumns.size()) {
+            return false;
+        }
+        for (Column column : newColumns) {
+            if (!column.isKey() || column.isAutoIncrement() || column.isGeneratedColumn()
+                    || column.getDefaultValueType() == Column.DefaultValueType.VARY) {
+                return false;
+            }
+        }
+
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(oldSchema,
+                oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+        List<Column> newSortKey = MetaUtils.resolveEffectiveSortKeyColumns(newSchema,
+                resolved.getSortKeyUniqueIds(), resolved.getSortKeyIdxes());
+        // The new sort key must be the old sort key with exactly the new columns appended as a trailing
+        // block, in add order.
+        if (newSortKey.size() != oldSortKey.size() + newColumns.size()) {
+            return false;
+        }
+        // Keep the metadata-only route within the arity the BE range channel supports (kMaxRangeSortKeyArity
+        // = 128 in be/src/storage/lake/tablet_range_helper.cpp); a larger sort key must fall through to the
+        // K-tablet rewrite instead of being rejected at BE apply.
+        if (newSortKey.size() > 128) {
+            return false;
+        }
+        for (int i = 0; i < oldSortKey.size(); i++) {
+            if (oldSortKey.get(i).getUniqueId() != newSortKey.get(i).getUniqueId()) {
+                return false;
+            }
+        }
+        for (int j = 0; j < newColumns.size(); j++) {
+            if (newSortKey.get(oldSortKey.size() + j).getUniqueId() != newColumns.get(j).getUniqueId()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+>>>>>>> d1a26d4 ([BugFix] Reject ambiguous ADD COLUMN on aggregate tables (#78359))
      * Reject the operation if the named column belongs to the range-
      * distribution sort-key column set of the given index.
      *

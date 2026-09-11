@@ -201,12 +201,32 @@ public class RangeDistributionGuardTest {
                 "AGGREGATE KEY(k1)\n" +
                 "order by(k1)\n" +
                 "properties('replication_num' = '1');");
+<<<<<<< HEAD
         // No KEY keyword and no aggregate -> AGG promotion turns this into a key.
         Throwable exception = assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
                         "alter table t_guard_addagg add column c_promoted int default '0'"));
         assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
+=======
+        // No KEY keyword and no aggregate -> AGG promotion turns this into a key. Pin the config on,
+        // so this keeps exercising the routing predicate whichever default the branch ships.
+        boolean savedAllowImplicitKey = Config.allow_implicit_key_column_in_agg_add_column;
+        Config.allow_implicit_key_column_in_agg_add_column = true;
+        try {
+            com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                    UtFrameUtils.parseStmtWithNewParser(
+                            "alter table t_guard_addagg add column c_promoted int default '0'", connectContext);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "t_guard_addagg");
+            AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                    .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+            assertMetadataOnlyJob(job);
+        } finally {
+            Config.allow_implicit_key_column_in_agg_add_column = savedAllowImplicitKey;
+        }
+>>>>>>> d1a26d4 ([BugFix] Reject ambiguous ADD COLUMN on aggregate tables (#78359))
     }
 
     @Test

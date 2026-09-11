@@ -109,6 +109,15 @@ This topic introduces the following types of FE configurations:
 
 ## Storage
 
+### `allow_implicit_key_column_in_agg_add_column`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether `ALTER TABLE ... ADD COLUMN` on an Aggregate table may create a key column when the new column specifies neither an aggregate function nor the `KEY` keyword. Such a statement is ambiguous, and creating a key column changes the table's aggregation key and rewrites existing data. When set to `true`, the column is created as a key column, which is the behavior in earlier versions. Set to `false` to reject the statement instead, so that the error names both options. This item is mutable but is not persisted across a restart unless it is set with `WITH PERSISTENT`.
+- Introduced in: v4.2.0
+
 ### `alter_table_timeout_second`
 
 - Default: 86400

@@ -508,7 +508,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意：
 
 1. 如果向聚合表中添加值列，需要指定agg_type。
-2. 如果向非聚合表（如明细表）中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表（如明细表）中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列会被创建为键列，这会改变表的聚合键并重写已有数据。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `false`，则会拒绝此类语句，并提示需要指定其中一种写法。
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以重新创建 Rollup。）
 
 #### 向指定索引添加多个列
@@ -539,7 +539,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 如果向聚合表中添加值列，需要指定`agg_type`。
 
-2. 如果向非聚合表中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列会被创建为键列。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `false`，则会拒绝此类语句。
 
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以创建另一个 Rollup。）
 
@@ -1077,7 +1077,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 
