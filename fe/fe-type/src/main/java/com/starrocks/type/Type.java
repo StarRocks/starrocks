@@ -281,7 +281,7 @@ public abstract class Type implements Cloneable {
             return ((ArrayType) this).getItemType().canPartitionBy();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isVariantType();
+                !isMapType() && !isVariantType() && !isGeoType();
     }
 
     public boolean canDistinct() {
@@ -302,7 +302,7 @@ public abstract class Type implements Cloneable {
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
         return !isOnlyMetricType() && !isJsonType() && !isStructType() && !isFunctionType()
-                && !isBinaryType() && !isVariantType();
+                && !isBinaryType() && !isVariantType() && !isGeoType();
     }
 
     // Returns true if this type is VARIANT or transitively contains a VARIANT inside an

@@ -15,11 +15,16 @@
 package com.starrocks.type;
 
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.proto.GeoDimensionPB;
 import com.starrocks.proto.GeoEncodingPB;
 import com.starrocks.proto.GeoStorageDescPB;
 import com.starrocks.proto.GeoValidationStatePB;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.statistic.base.ColumnClassifier;
+import com.starrocks.statistic.base.ComplexTypeColumnStats;
+import com.starrocks.statistic.base.PrimitiveTypeColumnStats;
 import com.starrocks.thrift.TGeoDimension;
 import com.starrocks.thrift.TGeoEdgeAlgorithm;
 import com.starrocks.thrift.TGeoEncoding;
@@ -275,5 +280,90 @@ public class NativeGeoTypeTest {
         assertFalse(type.canDistinct(), type.toSql());
         assertFalse(type.canDistributedBy(), type.toSql());
         assertFalse(type.canBeMVKey(), type.toSql());
+    }
+
+    @Test
+    public void testGeoPartitionBy() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            for (Type scalar : List.of(new ScalarType(primitive), geo,
+                    TypeDeserializer.fromThrift(TypeSerializer.toThrift(geo)),
+                    TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
+                for (Type type : List.of(scalar, new ArrayType(scalar), new ArrayType(new ArrayType(scalar)),
+                        new MapType(IntegerType.INT, scalar), new StructType(List.of(scalar)))) {
+                    assertFalse(type.canPartitionBy(), type.toSql());
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testGeoStatistics() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            for (Type type : List.of(new ScalarType(primitive), geo,
+                    TypeDeserializer.fromThrift(TypeSerializer.toThrift(geo)),
+                    TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
+                assertFalse(type.canStatistic(), type.toSql());
+                Table table = new Table(1, "geo_stats", Table.TableType.OLAP,
+                        List.of(new Column("g", type), new Column("i", IntegerType.INT)));
+                for (boolean manual : new boolean[] {false, true}) {
+                    ColumnClassifier classifier = ColumnClassifier.of(
+                            List.of("g", "i"), List.of(type, IntegerType.INT), table, manual);
+                    assertEquals(1, classifier.getColumnStats().size());
+                    assertTrue(classifier.getColumnStats().get(0) instanceof PrimitiveTypeColumnStats);
+                    assertEquals(1, classifier.getUnSupportCollectColumns().size());
+                    var unsupported = classifier.getUnSupportCollectColumns().get(0);
+                    assertTrue(unsupported instanceof ComplexTypeColumnStats);
+                    assertEquals("''", unsupported.getMax());
+                    assertEquals("''", unsupported.getMin());
+                    assertEquals("00", unsupported.getNDV());
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testGeoPseudoTypeMatching() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            for (Type type : List.of(new ScalarType(primitive), geo,
+                    TypeDeserializer.fromThrift(TypeSerializer.toThrift(geo)),
+                    TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
+                assertTrue(type.matchesType(AnyElementType.ANY_ELEMENT));
+                assertTrue(AnyElementType.ANY_ELEMENT.matchesType(type));
+                assertFalse(type.matchesType(AnyArrayType.ANY_ARRAY));
+                assertFalse(type.matchesType(AnyMapType.ANY_MAP));
+                assertFalse(type.matchesType(AnyStructType.ANY_STRUCT));
+                assertFalse(type.matchesType(IntegerType.INT));
+                assertFalse(type.matchesType(VarbinaryType.VARBINARY));
+                assertEquals(geo.equals(type), geo.matchesType(type));
+            }
+            GeoTypeDescriptor metadata = descriptor(primitive);
+            ScalarType differentSrid = ScalarType.createGeoType(primitive, new GeoTypeDescriptor(
+                    metadata.logicalType(), metadata.coordinateSystem(), metadata.edgeAlgorithm(), metadata.crs(), 3857));
+            assertFalse(geo.matchesType(differentSrid));
+            assertFalse(differentSrid.matchesType(geo));
+        }
+        assertFalse(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY))
+                .matchesType(ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor(PrimitiveType.GEOMETRY))));
+    }
+
+    @Test
+    public void testOrdinaryPartitionStatisticsAndPseudoTypes() {
+        for (Type type : List.of(IntegerType.INT, VarcharType.VARCHAR, DateType.DATE,
+                new ArrayType(IntegerType.INT), new ArrayType(new ArrayType(IntegerType.INT)))) {
+            assertTrue(type.canPartitionBy());
+            assertTrue(type.canStatistic());
+            assertTrue(type.matchesType(AnyElementType.ANY_ELEMENT));
+        }
+        Type map = new MapType(IntegerType.INT, VarcharType.VARCHAR);
+        assertFalse(map.canPartitionBy());
+        assertTrue(map.canStatistic());
+        for (Type type : List.of(JsonType.JSON, VarbinaryType.VARBINARY,
+                new StructType(List.of(IntegerType.INT)))) {
+            assertFalse(type.canPartitionBy());
+            assertFalse(type.canStatistic());
+        }
     }
 }

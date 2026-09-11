@@ -323,11 +323,11 @@ public class ScalarType extends Type implements Cloneable {
      */
     @Override
     public boolean matchesType(Type t) {
-        if (isGeoType()) {
-            return equals(t);
-        }
         if (t.isPseudoType()) {
             return t.matchesType(this);
+        }
+        if (isGeoType()) {
+            return equals(t);
         }
         if (isDecimalV2() && t.isDecimalV2()) {
             return true;
