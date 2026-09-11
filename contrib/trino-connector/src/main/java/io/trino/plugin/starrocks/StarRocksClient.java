@@ -72,6 +72,7 @@ import io.trino.spi.connector.JoinStatistics;
 import io.trino.spi.connector.JoinType;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.TableNotFoundException;
+import io.trino.spi.expression.ConnectorExpression;
 import io.trino.spi.security.ConnectorIdentity;
 import io.trino.spi.statistics.ColumnStatistics;
 import io.trino.spi.statistics.Estimate;
@@ -220,6 +221,14 @@ public class StarRocksClient
 
         this.connectorExpressionRewriter = JdbcConnectorExpressionRewriterBuilder.newBuilder()
                 .addStandardRules(this::quoted)
+                // REAL predicate pushdown is disabled in toColumnMapping because comparisons may be inexact.
+                .withTypeClass("numeric_type", ImmutableSet.of("tinyint", "smallint", "integer", "bigint", "decimal", "double"))
+                .map("$equal(left: numeric_type, right: numeric_type)").to("left = right")
+                .map("$not_equal(left: numeric_type, right: numeric_type)").to("left <> right")
+                .map("$less_than(left: numeric_type, right: numeric_type)").to("left < right")
+                .map("$less_than_or_equal(left: numeric_type, right: numeric_type)").to("left <= right")
+                .map("$greater_than(left: numeric_type, right: numeric_type)").to("left > right")
+                .map("$greater_than_or_equal(left: numeric_type, right: numeric_type)").to("left >= right")
                 .build();
 
         JdbcTypeHandle bigintTypeHandle = new JdbcTypeHandle(Types.BIGINT, Optional.of("bigint"), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
@@ -248,6 +257,12 @@ public class StarRocksClient
     public Optional<JdbcExpression> implementAggregation(ConnectorSession session, AggregateFunction aggregate, Map<String, ColumnHandle> assignments)
     {
         return aggregateFunctionRewriter.rewrite(session, aggregate, assignments);
+    }
+
+    @Override
+    public Optional<ParameterizedExpression> convertPredicate(ConnectorSession session, ConnectorExpression expression, Map<String, ColumnHandle> assignments)
+    {
+        return connectorExpressionRewriter.rewrite(session, expression, assignments);
     }
 
     @Override
