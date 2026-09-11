@@ -107,8 +107,12 @@ set(EXPR_TEST_FILES
     table_function/multi_unnest_core_test.cpp
     udf/python/env_test.cpp
     unary_function_test.cpp
+<<<<<<< HEAD
     unnest_core_test.cpp
     unnest_variant_test.cpp
+=======
+    variant_functions_test.cpp
+>>>>>>> 52b11fd7593... [BugFix] Take over the ObjectColumn members VariantColumn's shredded storage invalidates (#62584)
     vectorized_literal_test.cpp
 )
 if (STARROCKS_JIT_ENABLE)
