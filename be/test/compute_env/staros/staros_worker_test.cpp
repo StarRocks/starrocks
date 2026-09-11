@@ -34,6 +34,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "common/config_metrics_fwd.h"
@@ -465,7 +466,7 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     });
 
     auto worker = std::make_shared<StarOSWorker>();
-    auto starlet = std::make_unique<staros::starlet::Starlet>(worker);
+    auto starlet = std::make_shared<staros::starlet::Starlet>(worker);
     auto* starlet_ptr = starlet.get();
     (void)swap_starlet_for_test(std::move(starlet));
     staros::starlet::StarletConfig config;
@@ -574,6 +575,62 @@ TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup
     EXPECT_EQ(9L << 20, FLAGS_fslib_gs_max_single_part_size);
     EXPECT_EQ(10L << 20, FLAGS_fslib_azure_storage_max_single_part_size);
     EXPECT_EQ(11L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
+}
+
+// `shutdown_staros_worker()` releases the starlet runtime while an in-flight load may still be
+// walking a StarOS-backed path. Every call that reaches starlet after that must report a status
+// instead of dereferencing the released runtime. See issue #78883.
+TEST_F(StarOSWorkerTest, starlet_calls_fail_after_runtime_release) {
+    auto orig_starlet = swap_starlet_for_test(nullptr);
+    DeferOp restore_starlet([&orig_starlet] { (void)swap_starlet_for_test(std::move(orig_starlet)); });
+    ASSERT_EQ(nullptr, get_starlet());
+
+    EXPECT_FALSE(StarOSWorker::batch_update_shard_replica_info({1, 2, 3}).ok());
+
+    StarOSWorker worker;
+
+    // A cache miss falls back to the remote fetch, which waits for starlet readiness. With no
+    // starlet there is nothing to wait for, so the call must give up right away rather than burn
+    // the full 5s readiness timeout.
+    MonotonicStopWatch watch;
+    watch.start();
+    EXPECT_FALSE(worker.retrieve_shard_info(987654321).ok());
+    EXPECT_LT(watch.elapsed_time(), 3L * 1000 * 1000 * 1000);
+
+    // No replica address can be resolved without starlet; the options come back untouched, which
+    // makes the writer fall back to a non-replicated write instead of crashing.
+    std::vector<staros::ReplicaInfoLite> replicas(1);
+    auto options = worker.get_replication_options(10086, replicas);
+    EXPECT_EQ(0u, options.shard_id);
+    EXPECT_TRUE(options.replicas.empty());
+}
+
+// `shutdown_staros_worker()` drops the process-wide starlet reference while an in-flight operation
+// may still be using it. The reference that operation already holds must keep the runtime alive: a
+// raw pointer would dangle across the blocking starmgr RPC behind `get_shard_info()`, and the
+// use-after-free lands in the same `Starlet::_mutex` that a point-in-time null check cannot
+// protect. See issue #78883.
+TEST_F(StarOSWorkerTest, retained_starlet_outlives_shutdown_release) {
+    auto worker = std::make_shared<StarOSWorker>();
+    auto orig_starlet = swap_starlet_for_test(std::make_shared<staros::starlet::Starlet>(worker));
+    DeferOp restore_starlet([&orig_starlet] { (void)swap_starlet_for_test(std::move(orig_starlet)); });
+
+    // An in-flight operation resolves the runtime before shutdown retires it.
+    auto held = get_starlet();
+    ASSERT_NE(nullptr, held);
+
+    {
+        // Stands in for shutdown: stop the runtime and drop the process-wide reference. `held` is
+        // the only remaining owner, so the object must survive this scope.
+        auto retired = swap_starlet_for_test(nullptr);
+        ASSERT_EQ(held.get(), retired.get());
+        retired->stop();
+    }
+    ASSERT_EQ(nullptr, get_starlet());
+
+    // Touches Starlet::_mutex, the member a use-after-free would have corrupted. Under ASAN this
+    // is what fails if the retained reference stops keeping the runtime alive.
+    EXPECT_FALSE(held->is_ready());
 }
 
 } // namespace starrocks

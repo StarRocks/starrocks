@@ -186,13 +186,22 @@ staros::starlet::fslib::ReplicationOptions StarOSWorker::get_replication_options
         int64_t shard_id, const std::vector<staros::ReplicaInfoLite>& replicas) {
     staros::starlet::fslib::ReplicationOptions replication_options;
     if (!replicas.empty()) {
+        // `shutdown_staros_worker()` releases the starlet runtime while in-flight work may still
+        // be running, so a caller that already holds the worker can reach here after that. The
+        // strong reference keeps the runtime alive across the lookups below; a null means it is
+        // already gone, so fall back to options without replicas.
+        auto starlet = get_starlet();
+        if (starlet == nullptr) {
+            LOG_EVERY_N(INFO, 1000) << "skip replication options of shard " << shard_id << ", starlet is not available";
+            return replication_options;
+        }
         replication_options.service_id = service_id();
         replication_options.shard_id = shard_id;
         for (auto& replica : replicas) {
             if (replica.worker_id() == worker_id()) {
                 continue;
             }
-            auto replication_info = get_starlet()->get_worker_replication_info(replica.worker_id());
+            auto replication_info = starlet->get_worker_replication_info(replica.worker_id());
             if (replication_info.ok()) {
                 replication_options.replication_type = (*replication_info).replication_type;
                 replication_options.replicas.push_back((*replication_info).ip_port);
@@ -264,10 +273,21 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
-    auto cond = []() { return get_starlet()->is_ready(); };
+    // A null starlet means the runtime was already released by `shutdown_staros_worker()`. Treat
+    // that as "stop waiting" so a late call fails immediately instead of burning the full timeout.
+    auto cond = []() {
+        auto starlet = get_starlet();
+        return starlet == nullptr || starlet->is_ready();
+    };
     auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
     if (!ret) {
         return absl::UnavailableError("starlet is still not ready!");
+    }
+    // Hold the runtime for the rest of the call: shutdown can release the global at any point, and
+    // `get_shard_info()` below blocks on a starmgr RPC that outlives any point-in-time check.
+    auto starlet = get_starlet();
+    if (starlet == nullptr) {
+        return absl::UnavailableError("starlet is not available");
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
@@ -275,7 +295,7 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     // FE-side task/node selection is scheduling work on a BE whose local cache does not have
     // the shard (the FE did not push it in time, or the placement was wrong).
     StarOSWorkerMetrics::instance()->staros_shard_info_fallback_total.increment(1);
-    auto info_or = get_starlet()->get_shard_info(id);
+    auto info_or = starlet->get_shard_info(id);
     if (!info_or.ok()) {
         StarOSWorkerMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
     }
@@ -483,7 +503,11 @@ absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::Fi
 }
 
 absl::Status StarOSWorker::batch_update_shard_replica_info(const std::vector<ShardId>& shard_ids) {
-    return get_starlet()->batch_update_shard_replica_info(shard_ids);
+    auto starlet = get_starlet();
+    if (starlet == nullptr) {
+        return absl::UnavailableError("starlet is not available");
+    }
+    return starlet->batch_update_shard_replica_info(shard_ids);
 }
 
 Status StarOSWorker::need_warmup_shard(ShardId id) const {

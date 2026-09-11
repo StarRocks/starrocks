@@ -77,7 +77,7 @@ public:
         staros::WorkerGroupProperty property;
         property.set_warmup_level(staros::WarmupLevel::WARMUP_ALL);
         _worker->set_worker_group_property(property);
-        (void)swap_starlet_for_test(std::make_unique<staros::starlet::Starlet>(_worker));
+        (void)swap_starlet_for_test(std::make_shared<staros::starlet::Starlet>(_worker));
     }
 
     void TearDown() override {
