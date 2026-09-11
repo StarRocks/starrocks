@@ -2210,6 +2210,67 @@ INSTANTIATE_TEST_SUITE_P(
                                  R"({"a": 1})",
                                  "Root array selector on object (should ignore)"}));
 
+TEST_F(JsonFunctionsTest, json_set_array_path_keys) {
+    struct TestCase {
+        std::string input;
+        std::vector<std::string> paths;
+        std::string expected;
+    };
+    const std::vector<TestCase> cases = {
+            {"[1,2,3]", {"$.arr[0]"}, "[1,2,3]"},
+            {"[1,2,3]", {"$.other[0]"}, "[1,2,3]"},
+            {"[1,2,3]", {"$.arr[9]"}, "[1,2,3]"},
+            {"[]", {"$.arr[0]"}, "[]"},
+            {R"({"outer":[1,2,3],"keep":9})", {"$.outer.arr[0]"}, R"({"outer":[1,2,3],"keep":9})"},
+            {"[[1,2],[3,4]]", {"$[0].arr[0]"}, "[[1,2],[3,4]]"},
+            {R"({"outer":[[1,2],[3,4]]})", {"$.outer[0].arr[0]"}, R"({"outer":[[1,2],[3,4]]})"},
+            {"[1,2,3]", {"$[0]"}, "[777,2,3]"},
+            {"[1,2,3]", {"$[9]"}, "[1,2,3,777]"},
+            {"[]", {"$[0]"}, "[777]"},
+            {R"({"arr":[1,2,3]})", {"$.arr[0]"}, R"({"arr":[777,2,3]})"},
+            {"[[1,2],[3,4]]", {"$[0][1]"}, "[[1,777],[3,4]]"},
+            {R"({"arr":[[1,2],[3,4]]})", {"$.arr[0][1]"}, R"({"arr":[[1,777],[3,4]]})"},
+            {"[1,2,3]", {"$.arr[0]", "$[1]"}, "[1,777,3]"},
+            {"[1,2,3]", {"$[1]", "$.arr[0]"}, "[1,777,3]"},
+    };
+    for (const auto& test : cases) {
+        for (bool constant : {false, true}) {
+            SCOPED_TRACE(test.input + " " + test.paths.front() + (constant ? " constant" : " column"));
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            auto input = JsonValue::parse(test.input);
+            ASSERT_TRUE(input.ok());
+            auto input_column = JsonColumn::create();
+            input_column->append(&input.value());
+            Columns columns{input_column};
+            for (const auto& path : test.paths) {
+                auto path_value = JsonValue::from_string(path);
+                auto path_column = JsonColumn::create();
+                path_column->append(&path_value);
+                columns.emplace_back(path_column);
+                auto new_value = JsonValue::from_int(777);
+                auto value_column = JsonColumn::create();
+                value_column->append(&new_value);
+                columns.emplace_back(value_column);
+            }
+            if (constant) {
+                for (auto& column : columns) {
+                    column = ConstColumn::create(column, 3);
+                }
+            }
+            auto result = JsonFunctions::json_set(ctx.get(), columns);
+            ASSERT_TRUE(result.ok()) << result.status();
+            ASSERT_EQ(constant ? 3 : 1, result.value()->size());
+            auto expected = JsonValue::parse(test.expected);
+            ASSERT_TRUE(expected.ok());
+            for (size_t row = 0; row < result.value()->size(); ++row) {
+                auto actual = result.value()->get(row);
+                ASSERT_FALSE(actual.is_null());
+                EXPECT_EQ(0, JsonValue::compare(expected->to_vslice(), actual.get_json()->to_vslice()));
+            }
+        }
+    }
+}
+
 struct JsonPrettyTestParam {
     std::string input_json;
     std::string expected_output;

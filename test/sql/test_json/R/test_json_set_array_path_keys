@@ -1,0 +1,124 @@
+-- name: test_json_set_array_path_keys
+CREATE DATABASE test_json_set_array_keys_${uuid0};
+-- result:
+-- !result
+USE test_json_set_array_keys_${uuid0};
+-- result:
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$.arr[0]', 777);
+-- result:
+[1, 2, 3]
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$.other[0]', 777);
+-- result:
+[1, 2, 3]
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$.arr[9]', 777);
+-- result:
+[1, 2, 3]
+-- !result
+SELECT json_set(parse_json('[]'), '$.arr[0]', 777);
+-- result:
+[]
+-- !result
+SELECT json_set(parse_json('{"outer":[1,2,3],"keep":9}'), '$.outer.arr[0]', 777);
+-- result:
+{"keep": 9, "outer": [1, 2, 3]}
+-- !result
+SELECT json_set(parse_json('[[1,2],[3,4]]'), '$[0].arr[0]', 777);
+-- result:
+[[1, 2], [3, 4]]
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$[0]', 777);
+-- result:
+[777, 2, 3]
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$[9]', 777);
+-- result:
+[1, 2, 3, 777]
+-- !result
+SELECT json_set(parse_json('[]'), '$[0]', 777);
+-- result:
+[777]
+-- !result
+SELECT json_set(parse_json('{"arr":[1,2,3]}'), '$.arr[0]', 777);
+-- result:
+{"arr": [777, 2, 3]}
+-- !result
+SELECT json_set(parse_json('[[1,2],[3,4]]'), '$[0][1]', 777);
+-- result:
+[[1, 777], [3, 4]]
+-- !result
+SELECT json_set(parse_json('{"arr":[[1,2],[3,4]]}'), '$.arr[0][1]', 777);
+-- result:
+{"arr": [[1, 777], [3, 4]]}
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$.arr[0]', 777, '$[1]', 888);
+-- result:
+[1, 888, 3]
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$[1]', 888, '$.arr[0]', 777);
+-- result:
+[1, 888, 3]
+-- !result
+SELECT json_set(parse_json('{}'), '$.arr', parse_json('[1,2]'), '$.arr[0]', 777);
+-- result:
+{"arr": [777, 2]}
+-- !result
+SELECT json_set(parse_json('[1,2,3]'), '$', parse_json('{"arr":[1,2]}'), '$.arr[0]', 777);
+-- result:
+{"arr": [777, 2]}
+-- !result
+SELECT json_set(NULL, '$.arr[0]', 777), json_set(parse_json('[1,2,3]'), NULL, 777), json_set(parse_json('[1,2,3]'), '$.arr[0]', NULL);
+-- result:
+None	None	None
+-- !result
+CREATE TABLE cases (id INT, j JSON, p VARCHAR(100), v INT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1", "flat_json.enable"="false");
+-- result:
+-- !result
+INSERT INTO cases VALUES
+(1, parse_json('[1,2,3]'), '$.arr[0]', 777),
+(2, parse_json('[1,2,3]'), '$.arr[9]', 777),
+(3, parse_json('[]'), '$.arr[0]', 777),
+(4, parse_json('{"outer":[1,2,3],"keep":9}'), '$.outer.arr[0]', 777),
+(5, parse_json('[[1,2],[3,4]]'), '$[0].arr[0]', 777),
+(6, parse_json('[1,2,3]'), '$[0]', 777),
+(7, parse_json('[1,2,3]'), '$[9]', 777),
+(8, parse_json('[]'), '$[0]', 777),
+(9, parse_json('{"arr":[1,2,3]}'), '$.arr[0]', 777),
+(10, parse_json('[[1,2],[3,4]]'), '$[0][1]', 777),
+(11, parse_json('{"arr":[[1,2],[3,4]]}'), '$.arr[0][1]', 777),
+(12, NULL, '$.arr[0]', 777),
+(13, parse_json('[1,2,3]'), NULL, 777),
+(14, parse_json('[1,2,3]'), '$.arr[0]', NULL);
+-- result:
+-- !result
+[ORDER] SELECT id, json_set(j, p, v) FROM cases ORDER BY id;
+-- result:
+1	[1, 2, 3]
+2	[1, 2, 3]
+3	[]
+4	{"keep": 9, "outer": [1, 2, 3]}
+5	[[1, 2], [3, 4]]
+6	[777, 2, 3]
+7	[1, 2, 3, 777]
+8	[777]
+9	{"arr": [777, 2, 3]}
+10	[[1, 777], [3, 4]]
+11	{"arr": [[1, 777], [3, 4]]}
+12	None
+13	None
+14	None
+-- !result
+[ORDER] SELECT id, json_set(j, '$.arr[0]', 777) FROM cases WHERE id IN (1,3,9,12) ORDER BY id;
+-- result:
+1	[1, 2, 3]
+3	[]
+9	{"arr": [777, 2, 3]}
+12	None
+-- !result
+DROP DATABASE test_json_set_array_keys_${uuid0};
+-- result:
+-- !result

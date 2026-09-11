@@ -1,0 +1,48 @@
+-- name: test_json_set_array_path_keys
+CREATE DATABASE test_json_set_array_keys_${uuid0};
+USE test_json_set_array_keys_${uuid0};
+
+-- A field followed by an index must not skip the field on an array value.
+SELECT json_set(parse_json('[1,2,3]'), '$.arr[0]', 777);
+SELECT json_set(parse_json('[1,2,3]'), '$.other[0]', 777);
+SELECT json_set(parse_json('[1,2,3]'), '$.arr[9]', 777);
+SELECT json_set(parse_json('[]'), '$.arr[0]', 777);
+SELECT json_set(parse_json('{"outer":[1,2,3],"keep":9}'), '$.outer.arr[0]', 777);
+SELECT json_set(parse_json('[[1,2],[3,4]]'), '$[0].arr[0]', 777);
+
+-- Root and multidimensional selectors still update/append legitimate locations.
+SELECT json_set(parse_json('[1,2,3]'), '$[0]', 777);
+SELECT json_set(parse_json('[1,2,3]'), '$[9]', 777);
+SELECT json_set(parse_json('[]'), '$[0]', 777);
+SELECT json_set(parse_json('{"arr":[1,2,3]}'), '$.arr[0]', 777);
+SELECT json_set(parse_json('[[1,2],[3,4]]'), '$[0][1]', 777);
+SELECT json_set(parse_json('{"arr":[[1,2],[3,4]]}'), '$.arr[0][1]', 777);
+
+-- An ignored path does not prevent subsequent updates or undo previous ones.
+SELECT json_set(parse_json('[1,2,3]'), '$.arr[0]', 777, '$[1]', 888);
+SELECT json_set(parse_json('[1,2,3]'), '$[1]', 888, '$.arr[0]', 777);
+SELECT json_set(parse_json('{}'), '$.arr', parse_json('[1,2]'), '$.arr[0]', 777);
+SELECT json_set(parse_json('[1,2,3]'), '$', parse_json('{"arr":[1,2]}'), '$.arr[0]', 777);
+SELECT json_set(NULL, '$.arr[0]', 777), json_set(parse_json('[1,2,3]'), NULL, 777), json_set(parse_json('[1,2,3]'), '$.arr[0]', NULL);
+
+CREATE TABLE cases (id INT, j JSON, p VARCHAR(100), v INT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1", "flat_json.enable"="false");
+INSERT INTO cases VALUES
+(1, parse_json('[1,2,3]'), '$.arr[0]', 777),
+(2, parse_json('[1,2,3]'), '$.arr[9]', 777),
+(3, parse_json('[]'), '$.arr[0]', 777),
+(4, parse_json('{"outer":[1,2,3],"keep":9}'), '$.outer.arr[0]', 777),
+(5, parse_json('[[1,2],[3,4]]'), '$[0].arr[0]', 777),
+(6, parse_json('[1,2,3]'), '$[0]', 777),
+(7, parse_json('[1,2,3]'), '$[9]', 777),
+(8, parse_json('[]'), '$[0]', 777),
+(9, parse_json('{"arr":[1,2,3]}'), '$.arr[0]', 777),
+(10, parse_json('[[1,2],[3,4]]'), '$[0][1]', 777),
+(11, parse_json('{"arr":[[1,2],[3,4]]}'), '$.arr[0][1]', 777),
+(12, NULL, '$.arr[0]', 777),
+(13, parse_json('[1,2,3]'), NULL, 777),
+(14, parse_json('[1,2,3]'), '$.arr[0]', NULL);
+[ORDER] SELECT id, json_set(j, p, v) FROM cases ORDER BY id;
+[ORDER] SELECT id, json_set(j, '$.arr[0]', 777) FROM cases WHERE id IN (1,3,9,12) ORDER BY id;
+DROP DATABASE test_json_set_array_keys_${uuid0};

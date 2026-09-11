@@ -1519,6 +1519,14 @@ static bool _json_set_recursive(arangodb::velocypack::Builder& builder, arangodb
         return true;
 
     } else if (slice.isArray()) {
+        // A field selector cannot be applied to an array. In particular, do not
+        // treat $.arr[0] as $[0] when the current value has no object field arr.
+        // The parser keeps "$" on the first root-array selector ($[0]); later
+        // selectors in a multidimensional array path have an empty key.
+        if (!piece.key.empty() && !(depth == 1 && piece.key == "$")) {
+            builder.add(slice);
+            return true;
+        }
         vpack::ArrayBuilder ab(&builder);
         int target_idx = -1;
 
