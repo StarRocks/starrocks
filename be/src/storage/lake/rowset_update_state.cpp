@@ -16,6 +16,7 @@
 
 #include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
@@ -160,6 +161,21 @@ struct RowidSortEntry {
     RowidSortEntry(uint32_t rowid, uint32_t idx) : rowid(rowid), idx(idx) {}
     bool operator<(const RowidSortEntry& rhs) const { return rowid < rhs.rowid; }
 };
+
+// True when an iterator emitted fewer rows than the segment holds: it was narrowed to this tablet's
+// slice, and reported no mask because every row it did emit is this tablet's. |mask| then receives the
+// all-owned mask over that slice, which is EMPTY when the slice itself is empty -- the tablet owns none
+// of the source's rows and the rewrite must keep none of them. That is why the answer is a bool rather
+// than the mask's emptiness: "own nothing" and "no narrowing at all" are different instructions, and
+// the first is the common case, a shared segment none of whose rows fall in this tablet's range.
+bool RowsetUpdateState::narrowed_emit_owns_only(size_t emitted_rows, size_t source_rows, Filter* mask) {
+    mask->clear();
+    if (emitted_rows >= source_rows) {
+        return false;
+    }
+    mask->assign(emitted_rows, 1);
+    return true;
+}
 
 void RowsetUpdateState::mask_unowned_rowids(const Filter& owned, std::vector<uint64_t>* rss_rowids) {
     if (owned.empty()) {
@@ -670,10 +686,48 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     // narrowed to this tablet's, so the columns resolved above cover only those. Hand the mask to the
     // rewrite and let it drop the rest: the output is then an ordinary private segment with no
     // foreign rows, which is what keeps them from having to be masked in a delete vector, withheld
-    // by a range at read time, or unshared by a later compaction. Empty mask -- every publish but a
-    // split child's cross publish -- keeps the copy-and-append fast path.
-    const Filter& owned = _upserts[segment_id] != nullptr ? _upserts[segment_id]->standalone_owned() : kNoRowSelector;
-    const bool filter_unowned_rows = !owned.empty();
+    // by a range at read time, or unshared by a later compaction.
+    const Filter& reported_owned =
+            _upserts[segment_id] != nullptr ? _upserts[segment_id]->standalone_owned() : kNoRowSelector;
+
+    // An empty mask does NOT mean the iterator emitted the whole segment. A tablet that can turn its
+    // range into a rowid window -- a primary-key tablet whose sort key IS its primary key -- gets a
+    // NARROWED iterator over a shared post-split segment instead of a mask: it emits only this
+    // tablet's slice and reports no mask, because every row it did emit is this tablet's. The
+    // copy-and-append rewrite cannot represent that. It copies every row of the source's written
+    // columns while appending only the emitted rows' resolved ones, so the two halves disagree on row
+    // count and the publish fails identically on every retry:
+    //
+    //   num rows written 0 is not equal to segment num rows 300
+    //
+    // Give such a segment an all-owned mask so it takes the owned-only rewrite, which writes exactly
+    // the emitted rows and stamps the output's own row count.
+    Filter narrowed_owned;
+    bool narrowed_emit = false;
+    if (reported_owned.empty() && _upserts[segment_id] != nullptr && params.metadata->has_range()) {
+        const auto& src_seg_meta = params.op_write.rowset().segment_metas(segment_id);
+        size_t source_rows = src_seg_meta.num_rows();
+        if (!src_seg_meta.has_num_rows()) {
+            // A txn log written by an older BE carries only the deprecated per-segment arrays, whose
+            // synthesized segment_metas have no row count. Read it off the file rather than skip the
+            // check, or a narrowed publish stalls forever on the mismatch above.
+            size_t footer_size_hint = 16 * 1024;
+            LakeIOOptions lake_io_opts{.fill_data_cache = false, .buffer_size = -1};
+            ASSIGN_OR_RETURN(auto segment, params.tablet->tablet_mgr()->load_segment(
+                                                   src, segment_id, &footer_size_hint, lake_io_opts,
+                                                   false /*fill_meta_cache*/, params.tablet_schema));
+            source_rows = segment->num_rows();
+            TEST_SYNC_POINT_CALLBACK("RowsetUpdateState::rewrite_segment:source_rows_from_file", &source_rows);
+        }
+        // One byte per emitted row, so a wide segment's mask is worth the repository's
+        // allocation-to-Status bridge: a publish worker must get MemoryLimitExceeded back, not an
+        // exception unwinding out of it.
+        TRY_CATCH_BAD_ALLOC(narrowed_emit =
+                                    narrowed_emit_owns_only(_upserts[segment_id]->standalone_pk_column()->size(),
+                                                            source_rows, &narrowed_owned));
+    }
+    const Filter& owned = narrowed_emit ? narrowed_owned : reported_owned;
+    const bool filter_unowned_rows = narrowed_emit || !reported_owned.empty();
 
     auto flat_json_config = publish_flat_json_config(params);
     int64_t t_rewrite_start = MonotonicMillis();
@@ -686,7 +740,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
                 _auto_increment_partial_update_states[segment_id], unmodified_column_ids,
                 has_partial_update_state(params) ? rewrite_write_columns : nullptr, params.tablet,
                 std::move(vector_index_opts), &file_info.vector_index_ids, owned,
-                _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0));
+                _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0,
+                filter_unowned_rows));
         file_info.path = dest_path;
         stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
@@ -752,7 +807,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         // one numbering space, which is what every consumer downstream already expects. Adjusting a
         // base instead cannot work: the output is in OWNED order while the emit order still counts
         // the rows that were dropped.
-        RETURN_IF_ERROR(_upserts[segment_id]->collapse_to_owned_rows());
+        RETURN_IF_ERROR(_upserts[segment_id]->collapse_to_owned_rows(owned));
     }
     int64_t t_rewrite_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(

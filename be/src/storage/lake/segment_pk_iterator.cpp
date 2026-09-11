@@ -131,11 +131,13 @@ void SegmentPKIterator::next() {
     }
 }
 
-Status SegmentPKIterator::collapse_to_owned_rows() {
-    if (_owned.empty()) {
-        // No selector, so there is nothing to collapse and nothing was filtered out either.
-        return Status::OK();
-    }
+Status SegmentPKIterator::collapse_to_owned_rows(const Filter& owned) {
+    // Deliberately keyed on the caller's mask, not on _owned. A narrowed emit reports an empty _owned
+    // -- it emitted only this tablet's rows, so there was nothing to mask -- while the rewrite still
+    // filtered by a synthesized mask over exactly those rows. Returning early on an empty _owned would
+    // leave _physical_rowid_base at the emit's start even though the output is numbered from zero.
+    // An empty |owned| is the zero-row narrowing: the emit is empty too, so the checks below still
+    // line up and the base correctly collapses to zero.
     // Only the non-lazy single-chunk shape can be collapsed: the mask and the encoded column have to
     // describe the same rows, which they do only while the whole segment is materialized. A rewrite
     // always runs in that mode -- should_enable_lazy_load() disables lazy load whenever a partial
@@ -143,11 +145,11 @@ Status SegmentPKIterator::collapse_to_owned_rows() {
     if (_lazy_load || _standalone_pk_column == nullptr || _pk_column_chunk == nullptr) {
         return Status::InternalError("cannot collapse a lazily loaded primary key column to its owned rows");
     }
-    if (_pk_column_chunk->num_rows() != _owned.size() || _standalone_pk_column->size() != _owned.size()) {
+    if (_pk_column_chunk->num_rows() != owned.size() || _standalone_pk_column->size() != owned.size()) {
         return Status::InternalError("the ownership mask does not describe the loaded chunk");
     }
-    const size_t kept = _pk_column_chunk->filter(_owned);
-    (void)_standalone_pk_column->filter(_owned);
+    const size_t kept = _pk_column_chunk->filter(owned);
+    (void)_standalone_pk_column->filter(owned);
     RETURN_ERROR_IF_FALSE(_standalone_pk_column->size() == kept, "chunk and encoded column disagree after filtering");
     _owned.clear();
     _physical_rowid_base = 0;

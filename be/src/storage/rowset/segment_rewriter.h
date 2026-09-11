@@ -107,8 +107,12 @@ public:
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                          std::vector<uint32_t>& column_ids, MutableColumns* columns,
                                          SegmentFileMark segment_file_mark = {});
-    // A non-empty |owned| filters this rewrite the same way, so |dest| then comes back with its own
-    // row count and sort-key fields as well (see rewrite_partial_update_owned_only).
+    // |filter_unowned| makes this rewrite keep only the rows |owned| marks, the same way
+    // rewrite_partial_update_owned_only does, and |dest| then comes back with its own row count and
+    // sort-key fields. It is a separate argument rather than |owned| being non-empty because the two
+    // differ exactly where it matters: a publish iterator narrowed to this tablet's slice reports NO
+    // mask (every row it emitted is this tablet's), and when that slice is empty the mask is empty
+    // while the rewrite must still drop every source row.
     //
     // See rewrite_partial_update for |flat_json_config|.
     static Status rewrite_auto_increment_lake(
@@ -118,7 +122,7 @@ public:
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
             const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {},
             std::vector<int64_t>* out_vector_index_ids = nullptr, const Filter& owned = Filter{},
-            uint32_t emitted_rowid_base = 0);
+            uint32_t emitted_rowid_base = 0, bool filter_unowned = false);
 };
 
 } // namespace starrocks

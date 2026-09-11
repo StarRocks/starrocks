@@ -182,6 +182,11 @@ public:
     // remapped -- and rewrite_segment needs one entry per row regardless. This only makes the ANSWER
     // harmless; a caller that would act on "no old row" (insert the row, let it win a comparison,
     // allocate an id for it) must still skip the row itself.
+    // Visible for testing: the row-count test that tells a narrowed emit from a whole-segment one.
+    // An empty ownership mask does not prove the publish iterator emitted the whole segment, and a
+    // narrowed emit of ZERO rows still needs the owned-only rewrite -- hence the bool.
+    static bool narrowed_emit_owns_only(size_t emitted_rows, size_t source_rows, Filter* mask);
+
     static void mask_unowned_rowids(const Filter& owned, std::vector<uint64_t>* rss_rowids);
 
     const MutableColumnPtr& auto_increment_deletes(uint32_t segment_id) const;

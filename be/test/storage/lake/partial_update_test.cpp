@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <map>
 #include <random>
 #include <set>
@@ -47,6 +48,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -2695,6 +2697,126 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
         EXPECT_EQ(key * 5, it->second.first) << "key " << key;
         EXPECT_EQ(key * 4, it->second.second) << "key " << key;
     }
+}
+
+// The narrowed-emit check needs the SOURCE segment's row count, and it reads it off the txn log. A txn
+// log written by an older BE carries only the deprecated per-segment arrays, whose synthesized
+// segment_metas have no num_rows at all -- num_rows() then answers 0, the emit no longer looks short of
+// its source, the rewrite goes back to copy-and-append, and the publish stalls forever on
+// "num rows written 0 is not equal to segment num rows N". Same staging as the test above with the
+// count stripped.
+//
+// The range owns NONE of the written keys, which is the only staging that reaches the check at all: a
+// selector exists for every cross publish of a shared segment (CrossPublishRowSelector::
+// create_if_needed) and SegmentPKIterator::_load builds a mask from it for every non-empty chunk, so
+// an emit that returns rows always reports a mask and takes the ordinary masked path. Only the
+// zero-row emit -- this child owns nothing of the segment -- clears the mask, and that is the case
+// the narrowed branch exists for and the one that stalls production.
+TEST_P(LakePartialUpdateTest, test_cross_publish_narrowed_emit_reads_a_missing_row_count_off_the_file) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "column mode resolves the unmodified columns through DCGs, not this lookup";
+    }
+    const int n = kChunkSize;
+
+    // Every key this test writes is 0..n-1, so a range starting at n owns none of them and the
+    // narrowed read emits nothing.
+    make_range_distributed(_tablet_metadata.get(), n, 2 * n);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
+    auto chunk1 = generate_data(n, 0, true, 5);  // partial rows: c0 and c1 = key * 5 only
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // v2: a local full write puts every key -- this child's and its siblings' -- in the index. Not
+    // shared, so it is neither selected at publish nor clipped at read.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // v3: cross publish the partial update. What convert_txn_log_for_splitting leaves behind is the
+    // parent's segments on every child, so each has to select its own rows out of them.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+            // What an older BE's txn log looks like once its deprecated per-segment arrays are
+            // synthesized into segment_metas: a segment with no row count of its own.
+            segment_meta.clear_num_rows();
+        }
+        ASSERT_FALSE(rowset->segment_metas(0).has_num_rows());
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+
+    // Not inferred from the outcome: the publish would also succeed if the count had been there all
+    // along, so the fallback is what has to be observed. This is the only thing that distinguishes
+    // this test from the one above.
+    std::vector<size_t> rows_read_off_the_file;
+    SyncPoint::GetInstance()->SetCallBack("RowsetUpdateState::rewrite_segment:source_rows_from_file", [&](void* arg) {
+        rows_read_off_the_file.push_back(*static_cast<size_t*>(arg));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("RowsetUpdateState::rewrite_segment:source_rows_from_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+    ASSERT_FALSE(rows_read_off_the_file.empty())
+            << "the fallback must have read the source row count off the segment file";
+    for (size_t rows : rows_read_off_the_file) {
+        EXPECT_EQ(static_cast<size_t>(n), rows) << "the file holds every source row, siblings included";
+    }
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    // This child owned none of the update's rows, so none of its old rows were displaced -- a non-zero
+    // count here would mean the selector never engaged and the update was applied wholesale.
+    EXPECT_EQ(0, metadata->rowsets(0).num_dels());
+    // And the baseline rowset still serves every key at the value the full write left, which is what
+    // the publish never reaches if the row count comes back 0 and stalls it.
+    ASSERT_EQ(n, check(3, [](int c0, int c1, int c2) { return c1 == c0 * 3 && c2 == c0 * 4; }));
 }
 
 // Force row-mode partial updates to rewrite their segment in c1 order.
@@ -6673,6 +6795,43 @@ TEST_F(LakeColumnModeFlatJsonConfigTest, column_update_follows_globals_when_tabl
     for (const auto& [where, is_flat] : forms) {
         EXPECT_TRUE(is_flat) << where << " should still follow config::enable_json_flat";
     }
+}
+
+// A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
+// ownership mask -- every row it emitted is this tablet's -- so an empty mask cannot be read as "the
+// iterator emitted the whole segment". Reading it that way sends the segment down the copy-and-append
+// rewrite, which copies all of the source's written-column rows while appending only the emitted rows'
+// resolved ones; the halves then disagree ("num rows written 0 is not equal to segment num rows 300")
+// and the publish fails identically on every retry.
+TEST(RowsetUpdateStateNarrowedEmitTest, an_emit_short_of_the_segment_owns_only_what_it_emitted) {
+    Filter mask;
+    // Narrowed: the iterator emitted 120 of the segment's 300 rows.
+    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/120, /*source_rows=*/300, &mask));
+    ASSERT_EQ(120u, mask.size()) << "the mask must span exactly the rows the iterator emitted";
+    EXPECT_EQ(120, std::count(mask.begin(), mask.end(), 1)) << "every emitted row is owned";
+}
+
+// The case that actually stalls production, and the reason this answers with a bool instead of through
+// the mask's emptiness: a shared segment none of whose rows fall in this tablet's range makes the
+// iterator emit NOTHING. "Own nothing" still means filter -- keep none of the source's rows and write
+// an empty segment -- which is a different instruction from "was not narrowed at all".
+TEST(RowsetUpdateStateNarrowedEmitTest, an_empty_narrowed_emit_still_owns_only_its_nothing) {
+    Filter mask;
+    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty()) << "owning no row is an empty mask, not the absence of one";
+}
+
+TEST(RowsetUpdateStateNarrowedEmitTest, a_whole_segment_emit_keeps_the_copy_and_append_rewrite) {
+    Filter mask;
+    // Not narrowed: the copy-and-append rewrite is correct as is, and must not be given a mask.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/300, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty());
+    // An empty segment has nothing to narrow.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/0, &mask));
+    EXPECT_TRUE(mask.empty());
+    // An emit longer than its source is not a narrowing; leave it to the assertions downstream.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/301, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty());
 }
 
 } // namespace starrocks::lake
