@@ -412,6 +412,50 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactGroupProviderAndSecurityIntegrationCredentials() {
+        // ALTER GROUP PROVIDER is the statement used to rotate an LDAP bind password, so the plain-text
+        // password must not survive into the audit log.
+        String alterSql = "ALTER GROUP PROVIDER ldap_gp SET (\"ldap_bind_root_pwd\" = \"rotated_secret\")";
+        String alterRedacted = SqlCredentialRedactor.redact(alterSql);
+        Assertions.assertFalse(alterRedacted.contains("rotated_secret"), "Bind password should be redacted");
+        Assertions.assertTrue(alterRedacted.contains("***"), "Should contain redacted marker");
+
+        String createSql = "CREATE GROUP PROVIDER ldap_gp PROPERTIES (\n" +
+                "        \"type\" = \"ldap\",\n" +
+                "        \"ldap_conn_url\" = \"ldaps://ldap.example.com:636\",\n" +
+                "        \"ldap_bind_root_dn\" = \"cn=admin,dc=example,dc=com\",\n" +
+                "        \"ldap_bind_root_pwd\" = \"bind_secret\",\n" +
+                "        \"ldap_ssl_conn_trust_store_pwd\" = \"store_secret\",\n" +
+                "        \"ldap_bind_base_dn\" = \"dc=example,dc=com\"\n" +
+                ")";
+        String createRedacted = SqlCredentialRedactor.redact(createSql);
+        Assertions.assertFalse(createRedacted.contains("bind_secret"), "Bind password should be redacted");
+        Assertions.assertFalse(createRedacted.contains("store_secret"), "Trust store password should be redacted");
+        Assertions.assertTrue(createRedacted.contains("ldaps://ldap.example.com:636"),
+                "Non-sensitive values should remain");
+        Assertions.assertTrue(createRedacted.contains("cn=admin,dc=example,dc=com"),
+                "Non-sensitive values should remain");
+
+        // Security integrations carry their own key names - not the group provider's. Asserting on
+        // ldap_bind_root_pwd here would pass even with security-integration coverage entirely absent,
+        // because that key is the group provider's and is already covered above.
+        String siSql = "CREATE SECURITY INTEGRATION ldap_si PROPERTIES("
+                + "\"type\" = \"authentication_ldap_simple\","
+                + "\"authentication_ldap_simple_bind_root_pwd\" = \"si_secret\","
+                + "\"authentication_ldap_simple_ssl_conn_trust_store_pwd\" = \"si_store_secret\")";
+        String siRedacted = SqlCredentialRedactor.redact(siSql);
+        Assertions.assertFalse(siRedacted.contains("si_secret"),
+                "Bind password should be redacted for security integrations too");
+        Assertions.assertFalse(siRedacted.contains("si_store_secret"),
+                "Trust store password should be redacted for security integrations too");
+
+        String oauthSql = "CREATE SECURITY INTEGRATION oauth_si PROPERTIES("
+                + "\"type\" = \"authentication_oauth2\", \"client_secret\" = \"oauth_secret\")";
+        Assertions.assertFalse(SqlCredentialRedactor.redact(oauthSql).contains("oauth_secret"),
+                "OAuth2 client_secret should be redacted");
+    }
+
+    @Test
     public void testRedactSetPasswordClause() {
         String plainSql = "SET PASSWORD = 'secret'";
         Assertions.assertEquals("SET PASSWORD = '***'", SqlCredentialRedactor.redact(plainSql));

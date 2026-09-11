@@ -1,0 +1,61 @@
+-- name: test_alter_group_provider
+-- ALTER GROUP PROVIDER, from the client's point of view: what the statement prints and how it fails.
+-- Nothing here needs a reachable directory: a unix provider touches no external service, and the ldap
+-- provider is only created (CREATE does not validate) to check that credentials come back masked.
+
+-- Q-1: create -> alter one property -> read it back. The property that was not listed keeps its value.
+CREATE GROUP PROVIDER gp_unix_${uuid0} PROPERTIES ("type" = "unix", "keep" = "original", "change" = "before");
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("change" = "after");
+SHOW CREATE GROUP PROVIDER gp_unix_${uuid0};
+
+-- Q-2: altering the same property again is fine (delta semantics, not a one-shot)
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("change" = "after2");
+SHOW CREATE GROUP PROVIDER gp_unix_${uuid0};
+
+-- Q-3: the type property is immutable
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("type" = "file");
+
+-- Q-4: altering a provider that does not exist
+ALTER GROUP PROVIDER gp_missing_${uuid0} SET ("change" = "x");
+
+-- Q-5: an empty SET list is reported as such, not as a syntax error pointing at a parenthesis
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ();
+
+-- Q-6: the immutable property is rejected however it is spelled
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("TYPE" = "file");
+
+-- Q-7: a property that neither the type defines nor the provider already has is refused, instead of
+-- being stored next to the one the user meant to change while the statement reports success.
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("no_such_property" = "x");
+
+-- the instance ALTER swapped in is still a normal manageable object
+DROP GROUP PROVIDER gp_unix_${uuid0};
+
+-- Q-8: credentials are never echoed back. The URL points at a closed port on purpose - CREATE does not
+-- talk to the directory, so this stays hermetic.
+CREATE GROUP PROVIDER gp_ldap_${uuid0} PROPERTIES (
+    "type" = "ldap",
+    "ldap_conn_url" = "ldap://127.0.0.1:1",
+    "ldap_bind_root_dn" = "cn=admin,dc=example,dc=com",
+    "ldap_bind_root_pwd" = "sql_test_bind_secret",
+    "ldap_ssl_conn_trust_store_pwd" = "sql_test_store_secret",
+    "ldap_bind_base_dn" = "dc=example,dc=com",
+    "ldap_group_dn" = "cn=group1,dc=example,dc=com",
+    "ldap_conn_timeout" = "100",
+    "ldap_cache_refresh_interval" = "3600"
+);
+SHOW CREATE GROUP PROVIDER gp_ldap_${uuid0};
+
+-- Q-9: ALTER validates the new configuration synchronously, so a provider whose directory cannot be
+-- reached fails the statement instead of silently serving no groups.
+ALTER GROUP PROVIDER gp_ldap_${uuid0} SET ("ldap_bind_root_pwd" = "sql_test_rotated_secret");
+SHOW CREATE GROUP PROVIDER gp_ldap_${uuid0};
+DROP GROUP PROVIDER gp_ldap_${uuid0};
+
+-- Group providers are cluster-wide objects, not scoped to the test database, so the framework's
+-- per-case database drop does not reclaim them. The DROPs above are assertions and run only if every
+-- statement before them passed; this block runs even when the case fails midway.
+CLEANUP {
+    DROP GROUP PROVIDER IF EXISTS gp_unix_${uuid0};
+    DROP GROUP PROVIDER IF EXISTS gp_ldap_${uuid0};
+} END CLEANUP
