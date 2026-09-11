@@ -39,6 +39,9 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
     }
 
     public void validate(PrimitiveType primitive) {
+        if (crs.isEmpty()) {
+            throw new IllegalArgumentException("Native geo types require a non-empty CRS");
+        }
         boolean geography = primitive == PrimitiveType.GEOGRAPHY;
         boolean sphericalEdge = edgeAlgorithm != EdgeAlgorithm.UNKNOWN && edgeAlgorithm != EdgeAlgorithm.PLANAR;
         if ((primitive != PrimitiveType.GEOGRAPHY && primitive != PrimitiveType.GEOMETRY)
