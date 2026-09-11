@@ -1,0 +1,38 @@
+-- name: test_json_variant_cast_row_null @no_arrow_flight_sql
+create database test_json_variant_cast_row_null_${uuid0};
+use test_json_variant_cast_row_null_${uuid0};
+create table t (
+    id int,
+    j json not null,
+    jn json null
+) duplicate key(id) distributed by hash(id) buckets 1
+properties("replication_num"="1", "flat_json.enable"="false");
+insert into t values
+    (1, parse_json('{"a":1}'), parse_json('{"a":1}')),
+    (2, parse_json('[1,2]'), parse_json('[1,2]')),
+    (3, parse_json('{"v":7}')->'$.v', parse_json('{"v":7}')->'$.v'),
+    (4, parse_json('[]'), parse_json('[]')),
+    (5, parse_json('{}'), parse_json('{}')),
+    (6, parse_json('{"b":7}'), parse_json('{"b":7}')),
+    (7, parse_json('{"a":null}'), parse_json('{"a":null}')),
+    (8, parse_json('[null]'), parse_json('[null]')),
+    (9, parse_json('{"v":null}')->'$.v', parse_json('{"v":null}')->'$.v');
+[ORDER]select id, cast(j as array<int>), cast(jn as array<int>) from t order by id;
+[ORDER]select id, cast(j as struct<a int>), cast(jn as struct<a int>) from t order by id;
+select count(cast(j as array<int>)), count(cast(jn as array<int>)),
+       count(cast(j as struct<a int>)), count(cast(jn as struct<a int>)) from t;
+[ORDER]select id, array_length(cast(j as array<int>)),
+       cast(j as array<int>) is null, cast(j as struct<a int>) is null from t order by id;
+select cast(parse_json('{"a":1}') as array<int>),
+       cast(parse_json('{"v":7}')->'$.v' as struct<a int>),
+       cast(parse_json('[]') as array<int>),
+       cast(parse_json('{}') as struct<a int>),
+       cast(null as array<int>), cast(null as struct<a int>);
+[ORDER]select id, cast(v as struct<a int>), cast(vn as struct<a int>),
+       cast(v as array<int>), cast(vn as array<int>)
+from (select id, cast(j as variant) v, cast(jn as variant) vn from t) vt order by id;
+select count(cast(v as struct<a int>)), count(cast(vn as struct<a int>))
+from (select cast(j as variant) v, cast(jn as variant) vn from t) vt;
+select cast(cast(7 as variant) as struct<a int>),
+       cast(cast(parse_json('{}') as variant) as struct<a int>);
+drop database test_json_variant_cast_row_null_${uuid0};

@@ -302,9 +302,8 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
 
     // 3. Assemble elements into array column
     ColumnPtr res = ArrayColumn::create(elements, std::move(offsets));
-    if (column->is_nullable()) {
-        res = NullableColumn::create(res, std::move(null_column));
-    }
+    // Non-array JSON values generate NULL rows even when the input is non-nullable.
+    res = NullableColumn::create(res, std::move(null_column));
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {

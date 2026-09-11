@@ -120,9 +120,8 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
 
     MutableColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(res->unfold_const_children(_type));
-    if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
-    }
+    // The cast can generate NULL rows independently of the input's nullability.
+    res = NullableColumn::create(std::move(res), std::move(null_column));
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
@@ -209,9 +208,8 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
     // 4. Build struct column.
     MutableColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(res->unfold_const_children(_type));
-    if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
-    }
+    // Non-object variant values generate NULL rows even when the input is non-nullable.
+    res = NullableColumn::create(std::move(res), std::move(null_column));
     if (column->is_constant()) {
         res = ConstColumn::create(std::move(res), column->size());
     }

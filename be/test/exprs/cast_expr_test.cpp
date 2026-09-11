@@ -2342,8 +2342,8 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ("[1,2,3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
     EXPECT_EQ("[1,2,3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "[]"));
-    EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, ""));
-    EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "a"));
+    EXPECT_EQ("NULL", cast_json_to_array(cast_expr, TYPE_INT, ""));
+    EXPECT_EQ("NULL", cast_json_to_array(cast_expr, TYPE_INT, "a"));
     EXPECT_EQ("[NULL,NULL]", cast_json_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
 
     EXPECT_EQ("[1.1,2.2,3.3]", cast_json_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
@@ -2355,7 +2355,7 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
 
     EXPECT_EQ(R"([{"a": 1},{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"([{"a": 1}, {"a": 2}])"));
     EXPECT_EQ(R"([null,{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"( [null, {"a": 2}] )"));
-    EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
+    EXPECT_EQ("NULL", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
 static ColumnPtr cast_json_to_array_ptr(TExprNode& cast_expr, LogicalType element_type, const ColumnPtr& src) {
@@ -2506,8 +2506,8 @@ TEST_F(VectorizedCastExprTest, json_to_struct) {
               cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[1,   2,  3]"));
     EXPECT_EQ("{col1:NULL,col2:NULL,col3:NULL}",
               cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT, TYPE_INT}, {"col1", "col2", "col3"}, "[]"));
-    EXPECT_EQ("{col1:NULL}", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, ""));
-    EXPECT_EQ("{col1:NULL}", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, "a"));
+    EXPECT_EQ("NULL", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, ""));
+    EXPECT_EQ("NULL", cast_json_to_struct(cast_expr, {TYPE_INT}, {"col1"}, "a"));
     EXPECT_EQ("{col1:NULL,col2:NULL}",
               cast_json_to_struct(cast_expr, {TYPE_INT, TYPE_INT}, {"col1", "col2"}, R"(["a","b"])"));
 
@@ -2648,6 +2648,97 @@ static VariantRowValue make_variant_row_from_json(const std::string& json_text) 
     auto encoded = VariantEncoder::encode_json_to_variant(json.value());
     CHECK(encoded.ok()) << encoded.status().to_string();
     return encoded.value();
+}
+
+// A cast may produce a SQL NULL even when its input has no SQL NULL bitmap.
+// Exercise the same values with all input wrappers; collection contents must not
+// decide whether the row-level bitmap is retained.
+TEST_F(VectorizedCastExprTest, complex_cast_preserves_generated_row_nulls) {
+    const std::vector<JsonValue> values = {JsonValue::parse(R"({"a":1})").value(),
+                                           JsonValue::parse("[1,2]").value(),
+                                           JsonValue::from_int(7),
+                                           JsonValue::parse("[]").value(),
+                                           JsonValue::parse("{}").value(),
+                                           JsonValue::parse(R"({"b":7})").value(),
+                                           JsonValue::parse(R"({"a":null})").value(),
+                                           JsonValue::parse("[null]").value(),
+                                           JsonValue::from_null(),
+                                           JsonValue::from_bool(true),
+                                           JsonValue::from_string("text")};
+    const std::vector<std::string> array_expected = {"NULL", "[1,2]",  "NULL", "[]",   "NULL", "NULL",
+                                                     "NULL", "[NULL]", "NULL", "NULL", "NULL"};
+    const std::vector<std::string> json_struct_expected = {"{a:1}",    "{a:1}",    "NULL",     "{a:NULL}",
+                                                           "{a:NULL}", "{a:NULL}", "{a:NULL}", "{a:NULL}",
+                                                           "NULL",     "NULL",     "NULL"};
+    const std::vector<std::string> variant_struct_expected = {
+            "{a:1}", "NULL", "NULL", "NULL", "{a:NULL}", "{a:NULL}", "{a:NULL}", "NULL", "NULL", "NULL", "NULL"};
+
+    for (bool variant : {false, true}) {
+        for (bool array : {false, true}) {
+            const auto& expected = array ? array_expected : (variant ? variant_struct_expected : json_struct_expected);
+            for (bool nullable : {false, true}) {
+                for (bool constant : {false, true}) {
+                    SCOPED_TRACE(::testing::Message() << "variant=" << variant << ", array=" << array
+                                                      << ", nullable=" << nullable << ", constant=" << constant);
+                    const size_t batches = constant ? values.size() : 1;
+                    for (size_t batch = 0; batch < batches; ++batch) {
+                        MutableColumnPtr data = variant ? MutableColumnPtr(VariantColumn::create())
+                                                        : MutableColumnPtr(JsonColumn::create());
+                        const size_t rows = constant ? 1 : values.size();
+                        for (size_t row = 0; row < rows; ++row) {
+                            const auto& value = values[constant ? batch : row];
+                            if (variant) {
+                                auto encoded = VariantEncoder::encode_json_to_variant(value);
+                                ASSERT_TRUE(encoded.ok());
+                                down_cast<VariantColumn*>(data.get())->append(encoded.value());
+                            } else {
+                                down_cast<JsonColumn*>(data.get())->append(value);
+                            }
+                        }
+                        if (nullable) {
+                            data = NullableColumn::create(std::move(data), NullColumn::create(rows, DATUM_NOT_NULL));
+                            if (!constant) {
+                                data->append_nulls(1);
+                            }
+                        }
+                        ColumnPtr input = std::move(data);
+                        if (constant) {
+                            input = ConstColumn::create(std::move(input), 3);
+                        }
+
+                        TExprNode node;
+                        node.__set_node_type(TExprNodeType::CAST_EXPR);
+                        node.__set_opcode(TExprOpcode::CAST);
+                        node.__set_num_children(1);
+                        node.__set_child_type(variant ? TPrimitiveType::VARIANT : TPrimitiveType::JSON);
+                        node.__set_type(array ? gen_array_type_desc(TPrimitiveType::INT)
+                                              : gen_struct_type_desc({TPrimitiveType::INT}, {"a"}));
+                        ObjectPool pool;
+                        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, node));
+                        ASSERT_NE(nullptr, expr);
+                        MockExpr child(TypeDescriptor(variant ? TYPE_VARIANT : TYPE_JSON), input);
+                        expr->add_child(&child);
+                        auto result = expr->evaluate_checked(nullptr, nullptr);
+                        ASSERT_TRUE(result.ok()) << result.status();
+                        ASSERT_EQ(input->size(), result.value()->size());
+                        ASSERT_EQ(constant, result.value()->is_constant());
+                        const Column* output = result.value().get();
+                        if (constant) {
+                            output = down_cast<const ConstColumn*>(output)->data_column().get();
+                        }
+                        for (size_t row = 0; row < rows; ++row) {
+                            const auto& want = expected[constant ? batch : row];
+                            EXPECT_EQ(want, output->debug_item(row));
+                            EXPECT_EQ(want == "NULL", output->is_null(row));
+                        }
+                        if (nullable && !constant) {
+                            EXPECT_TRUE(output->is_null(rows));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 static StatusOr<std::string> variant_json_at(const ColumnPtr& result, size_t row_num) {
