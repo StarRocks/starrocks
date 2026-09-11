@@ -4860,12 +4860,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (alterJob.getDbId() != dbId || alterJob.getTableId() != tableId) {
                 continue;
             }
-            OlapTableHistorySchema historySchema = null;
-            if (alterJob instanceof SchemaChangeJobV2) {
-                historySchema = ((SchemaChangeJobV2) alterJob).getHistorySchema().orElse(null);
-            } else if (alterJob instanceof LakeTableAsyncFastSchemaChangeJob) {
-                historySchema = ((LakeTableAsyncFastSchemaChangeJob) alterJob).getHistorySchema().orElse(null);
-            }
+            OlapTableHistorySchema historySchema = alterJob.getHistorySchema().orElse(null);
             if (historySchema != null) {
                 Optional<SchemaInfo> schemaInfo = historySchema.getSchemaBySchemaId(schemaId);
                 if (schemaInfo.isPresent()) {

@@ -193,6 +193,40 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
+    /**
+     * Whether an explicit transaction older than {@code endTransactionId} is still running and is not yet
+     * visible to {@link #isPreviousTransactionsFinished}.
+     *
+     * <p>That method scans only {@code DatabaseTransactionMgr.idToRunningTransactionState}. A multi-statement
+     * Stream Load is absent from it for the duration of its first sub-task: {@code TransactionStmtExecutor
+     * .loadData(long, long, ...)} upserts the transaction into the DatabaseTransactionMgr only after the
+     * sub-task has produced its item, whereas {@code OlapTableSink.getTOlapTableSink} plans that sub-task's
+     * sink — binding it to a schema id — before it. (The DML flavour of {@code loadData} upserts before the
+     * load, so it has no such window.) A caller that releases state guarded by a transaction watermark would
+     * therefore drop it while a load is already bound.
+     *
+     * <p>Deliberately not scoped to a table: inside the window the transaction has neither a dbId nor a table
+     * list ({@code addTableIdList} / {@code addModifiedTableId} both run after the upsert), so scoping by
+     * either would reintroduce the race it exists to close. Transactions already carrying a dbId are covered
+     * by the DatabaseTransactionMgr scan, so only {@code dbId == 0} — never assigned — and this database
+     * are considered.
+     */
+    public boolean hasRunningExplicitTransactionBefore(long endTransactionId, long dbId) {
+        for (ExplicitTxnState explicitTxnState : explicitTxnStateMap.values()) {
+            TransactionState txnState = explicitTxnState.getTransactionState();
+            if (txnState == null || !txnState.isRunning()) {
+                continue;
+            }
+            if (txnState.getTransactionId() > endTransactionId) {
+                continue;
+            }
+            if (txnState.getDbId() == 0 || txnState.getDbId() == dbId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public ExplicitTxnState getExplicitTxnState(long txnId) {
         return explicitTxnStateMap.get(txnId);
     }
