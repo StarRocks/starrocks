@@ -1,4 +1,4 @@
--- name: test_sys_users
+-- name: test_sys_users @sequential
 CREATE PASSWORD POLICY pp1 comment "pp1 comment"
 properties (
     "PASSWORD_MIN_LENGTH" = "8",
