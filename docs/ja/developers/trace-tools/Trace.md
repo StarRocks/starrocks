@@ -19,32 +19,27 @@ displayed_sidebar: docs
 
 SR でトレースを有効にする手順:
 
-1.  [Jaeger](https://www.jaegertracing.io/docs/1.76/getting-started/) をインストール
-    上記のガイドは docker を使用しています。簡単にするために、[バイナリパッケージ](https://github.com/jaegertracing/jaeger/releases)をダウンロードしてローカルで実行することもできます。
+1.  [Jaeger](https://www.jaegertracing.io/docs/1.76/getting-started/) をインストールします。次のコマンドは、Jaeger UI、FE が使用する OTLP/gRPC レシーバー、および BE が使用する Jaeger Thrift/UDP レシーバーを公開します。
 
-```
-    decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ll
-    total 215836
-    drwxr-xr-x  2 decster decster     4096 02-05 05:01:30 ./
-    drwxrwxr-x 28 decster decster     4096 05-18 18:24:07 ../
-    -rwxr-xr-x  1 decster decster 19323884 02-05 05:01:31 example-hotrod*
-    -rwxr-xr-x  1 decster decster 23430444 02-05 05:01:29 jaeger-agent*
-    -rwxr-xr-x  1 decster decster 51694774 02-05 05:01:29 jaeger-all-in-one*
-    -rwxr-xr-x  1 decster decster 41273869 02-05 05:01:30 jaeger-collector*
-    -rwxr-xr-x  1 decster decster 37576660 02-05 05:01:30 jaeger-ingester*
-    -rwxr-xr-x  1 decster decster 47698843 02-05 05:01:30 jaeger-query*
-
-    decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ./jaeger-all-in-one 
+```bash
+docker run --rm --name jaeger \
+    -p 16686:16686 \
+    -p 4317:4317 \
+    -p 6831:6831/udp \
+    jaegertracing/all-in-one:1.76.0
 ```
 
-2.  FE\&FE を設定してトレースを有効にします。
-    現在、opentelemetry の java & cpp sdk は異なるプロトコルを使用しており、java は grpc proto を使用し、cpp は thrift\&UDP を使用しているため、エンドポイントポートが異なります。
+2.  FE と BE を設定してトレースを有効にします。
+    FE の Java SDK は OTLP over gRPC を使用し、BE の C++ SDK は Jaeger Thrift over UDP を使用するため、エンドポイントポートは異なります。
 
 ```
     fe.conf
 
-    # jaeger_tracing を有効にするには、jaeger_grpc_endpoint を設定します
-    # jaeger_grpc_endpoint = http://localhost:14250
+    # FE のトレースを Jaeger の OTLP/gRPC レシーバーへ送信します
+    # otlp_exporter_grpc_endpoint = http://localhost:4317
+
+    # jaeger_grpc_endpoint は従来のエイリアスとして引き続き使用できますが、
+    # ポート 14250 ではなく、ポート 4317 の OTLP/gRPC レシーバーを指定してください。
 
 
     be.conf
