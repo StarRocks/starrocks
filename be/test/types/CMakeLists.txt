@@ -32,6 +32,7 @@ set(TYPES_TEST_FILES
     timestamp_value_test.cpp
     type_info_test.cpp
     variant_value_test.cpp
+    geo_wkb_test.cpp
 )
 
 set(TYPES_TEST_LINK_LIBS
