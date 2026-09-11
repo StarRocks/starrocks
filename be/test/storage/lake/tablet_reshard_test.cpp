@@ -20230,4 +20230,106 @@ TEST_F(LakeTabletReshardTest, test_identical_retry_cache_complete_returns_withou
     EXPECT_EQ(cached_target->SerializeAsString(), actual.at(target)->SerializeAsString());
 }
 
+// SPLIT publishes a read-only parent alias alongside its children. For a range-distributed PK tablet whose
+// ORDER BY differs from the primary key, the child ranges live in PK space and cannot be decoded as ranges
+// over the two-column physical sort key. The alias must therefore keep the shared segment whole and combine
+// the child delete vectors without attempting to synthesize a sort-key rowid gap.
+TEST_F(LakeTabletReshardTest, test_primary_key_range_split_parent_alias_unions_shared_delvecs) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "pk_range_alias_shared.dat";
+    auto make_child = [&](int64_t tablet_id, bool is_left) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(2);
+        set_two_column_pk_schema(metadata.get(), /*schema_id=*/9001);
+        // ORDER BY (c1, c0), while the range is encoded over PRIMARY KEY (c0).
+        metadata->mutable_schema()->add_sort_key_idxes(1);
+        metadata->mutable_schema()->add_sort_key_idxes(0);
+
+        auto* tablet_range = metadata->mutable_range();
+        if (is_left) {
+            *tablet_range->mutable_upper_bound() = generate_sort_key(100);
+            tablet_range->set_upper_bound_included(false);
+        } else {
+            *tablet_range->mutable_lower_bound() = generate_sort_key(100);
+            tablet_range->set_lower_bound_included(true);
+        }
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_name);
+        segment->set_size(100);
+        segment->set_num_rows(10);
+        segment->set_shared(true);
+        stamp_physical_identity_uid(rowset, segment_name);
+
+        auto* rowset_range = rowset->mutable_range();
+        if (is_left) {
+            // Leave a leading contributor gap so the old code attempts to decode this one-value PK
+            // range as the two-value sort key and reproduces issue #12198 exactly.
+            *rowset_range->mutable_lower_bound() = generate_sort_key(90);
+            rowset_range->set_lower_bound_included(true);
+            *rowset_range->mutable_upper_bound() = generate_sort_key(100);
+            rowset_range->set_upper_bound_included(false);
+        } else {
+            *rowset_range->mutable_lower_bound() = generate_sort_key(100);
+            rowset_range->set_lower_bound_included(true);
+        }
+        return metadata;
+    };
+
+    auto meta_a = make_child(child_a, /*is_left=*/true);
+    auto meta_b = make_child(child_b, /*is_left=*/false);
+    write_two_column_segment(
+            alias_tablet, segment_name, /*num_rows=*/10, [](int key) { return key * 2; },
+            /*key_start=*/90);
+
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {3, 9};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "pk_range_alias_a.delvec", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_by_b[] = {5};
+    delvec_b.init(/*version=*/10, deleted_by_b, std::size(deleted_by_b));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "pk_range_alias_b.delvec", delvec_b.save());
+
+    MergingTabletInfoPB merging;
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(alias_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(next_id());
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    ASSIGN_OR_ABORT(auto alias,
+                    lake::merge_tablet(_tablet_manager.get(), {meta_a, meta_b}, merging, kNewVersion, txn_info,
+                                       /*skip_sstable_merge=*/true));
+
+    ASSERT_EQ(1, alias->rowsets_size());
+    ASSERT_EQ(1, alias->rowsets(0).segment_metas_size());
+    EXPECT_EQ(segment_name, alias->rowsets(0).segment_metas(0).filename());
+    EXPECT_TRUE(alias->sstable_meta().sstables().empty());
+
+    DelVector merged;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, alias->rowsets(0).id(), false, io_options, &merged));
+    ASSERT_NE(nullptr, merged.roaring());
+    EXPECT_EQ(3, merged.cardinality());
+    EXPECT_TRUE(merged.roaring()->contains(3));
+    EXPECT_TRUE(merged.roaring()->contains(5));
+    EXPECT_TRUE(merged.roaring()->contains(9));
+}
+
 } // namespace starrocks

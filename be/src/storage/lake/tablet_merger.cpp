@@ -3592,6 +3592,13 @@ bool uses_cloud_native_pk_index(const TabletMetadataPB& metadata) {
            metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
 }
 
+// Range-distributed primary-key tablets with a separate ORDER BY persist their tablet ranges in
+// primary-key space. Those ranges cannot be converted into rowid windows over sort-key-ordered segments.
+bool routes_by_primary_key_range(const TabletMetadataPB& metadata) {
+    return metadata.has_range() && is_primary_key(metadata) && metadata.has_schema() &&
+           TabletSchema::create(metadata.schema())->has_separate_sort_key();
+}
+
 } // namespace
 
 DEFINE_FAIL_POINT(tablet_merge_after_rssid_reassign);
@@ -3602,6 +3609,16 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     if (old_tablet_metadatas.empty()) {
         return Status::InvalidArgument("No old tablet metadata to merge");
     }
+
+    // SPLIT keeps a read-only parent alias. For an ORDER BY != PRIMARY KEY layout that alias must retain
+    // the parent's whole shared segments and union the children's delete vectors: the pre-split parent did
+    // not filter those segments by the new child ranges. In particular, do not feed the PK-space range to
+    // the sort-key-based gap synthesizer below.
+    const bool primary_key_range_alias =
+            skip_sstable_merge &&
+            std::any_of(old_tablet_metadatas.begin(), old_tablet_metadatas.end(), [](const auto& metadata) {
+                return metadata != nullptr && routes_by_primary_key_range(*metadata);
+            });
 
     std::vector<TabletMergeContext> merge_contexts;
     merge_contexts.reserve(old_tablet_metadatas.size());
@@ -3680,7 +3697,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // (merge_delvecs), so the two paths cannot diverge. For non-PK tables the
     // specs stay empty, which keeps DCG coverage strict.
     std::vector<CanonicalGapSpec> gap_specs;
-    if (is_primary_key(*new_tablet_metadata)) {
+    if (is_primary_key(*new_tablet_metadata) && !primary_key_range_alias) {
         ASSIGN_OR_RETURN(gap_specs,
                          compute_synthesized_gap_specs(tablet_manager, *new_tablet_metadata, canonical_contribs));
         if (!gap_specs.empty()) {
