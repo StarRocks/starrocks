@@ -14,12 +14,11 @@
 
 #pragma once
 
-#include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
 
-#include "base/statusor.h"
 #include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
@@ -73,12 +72,11 @@ struct TypeDescriptor {
     // Only set if type == TYPE_STRUCT. The field physical name of each child.
     std::vector<std::string> field_physical_names;
 
-    // Immutable, shared metadata: ordinary types do not allocate a geo descriptor.
-    std::shared_ptr<const GeoColumnDescriptor> geo;
+    // Semantic metadata only, also used by GeoColumnDescriptor::type.
+    // Encoding, dimension and validation state belong to the column/transport layer.
+    std::optional<GeoTypeDescriptor> geo_type;
 
-    static StatusOr<TypeDescriptor> create_geo_type(LogicalType type, GeoColumnDescriptor descriptor);
-    // Construction can validate metadata; execution stays disabled until transport capabilities exist.
-    Status validate_geo_type(bool native_geo_enabled = false) const;
+    static TypeDescriptor create_geo_type(LogicalType type, GeoTypeDescriptor descriptor);
     bool is_geo_type() const;
 
     TypeDescriptor() = default;
@@ -243,7 +241,7 @@ struct TypeDescriptor {
     }
 
     bool is_assignable(const TypeDescriptor& o) const {
-        if (geo || o.geo) return false; // SQL compatibility is not enabled yet.
+        if (is_geo_type() || o.is_geo_type()) return false; // SQL compatibility is not enabled yet.
         if (is_complex_type()) {
             if ((type != o.type) || (children.size() != o.children.size())) {
                 return false;
@@ -275,10 +273,7 @@ struct TypeDescriptor {
         if (is_decimal_type()) {
             return precision == o.precision && scale == o.scale;
         }
-        if (geo || o.geo) {
-            return geo == o.geo || (geo && o.geo && *geo == *o.geo);
-        }
-        return true;
+        return geo_type == o.geo_type;
     }
 
     bool operator!=(const TypeDescriptor& other) const { return !(*this == other); }

@@ -37,18 +37,16 @@ GeoColumnDescriptor descriptor(LogicalType primitive) {
 
 TEST(NativeGeoTypeTest, PrimitiveAndMetadataRoundTrip) {
     for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
-        auto created = TypeDescriptor::create_geo_type(primitive, descriptor(primitive));
-        ASSERT_TRUE(created.ok()) << created.status();
-        const auto& type = *created;
+        auto type = TypeDescriptor::create_geo_type(primitive, descriptor(primitive).type);
         auto thrift = type.to_thrift();
         EXPECT_EQ(primitive, thrift_to_type(thrift.types[0].scalar_type.type));
+        EXPECT_FALSE(thrift.types[0].scalar_type.geo.__isset.storage);
         EXPECT_EQ(type, TypeDescriptor::from_thrift(thrift));
         auto protobuf = type.to_protobuf();
+        EXPECT_FALSE(protobuf.types(0).scalar_type().geo().has_storage());
         PTypeDesc decoded;
         ASSERT_TRUE(decoded.ParseFromString(protobuf.SerializeAsString()));
         EXPECT_EQ(type, TypeDescriptor::from_protobuf(decoded));
-        EXPECT_TRUE(type.validate_geo_type(true).ok());
-        EXPECT_TRUE(type.validate_geo_type().is_not_supported());
         EXPECT_FALSE(type.support_join());
         EXPECT_FALSE(type.support_groupby());
         EXPECT_FALSE(type.support_orderby());
@@ -56,70 +54,83 @@ TEST(NativeGeoTypeTest, PrimitiveAndMetadataRoundTrip) {
         auto array = TypeDescriptor::create_array_type(type);
         EXPECT_EQ(array, TypeDescriptor::from_thrift(array.to_thrift()));
         EXPECT_EQ(array, TypeDescriptor::from_protobuf(array.to_protobuf()));
-        EXPECT_TRUE(array.validate_geo_type().is_not_supported());
     }
 }
 
-TEST(NativeGeoTypeTest, RejectInconsistentAuthority) {
-    auto geo = descriptor(TYPE_GEOGRAPHY);
-    EXPECT_FALSE(TypeDescriptor::create_geo_type(TYPE_VARBINARY, geo).ok());
-    EXPECT_FALSE(TypeDescriptor::create_geo_type(TYPE_GEOMETRY, geo).ok());
-    geo.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
-    EXPECT_FALSE(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, geo).ok());
-    geo = descriptor(TYPE_GEOGRAPHY);
-    geo.type.edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
-    EXPECT_FALSE(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, geo).ok());
-    geo = descriptor(TYPE_GEOMETRY);
-    geo.type.edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
-    EXPECT_FALSE(TypeDescriptor::create_geo_type(TYPE_GEOMETRY, geo).ok());
-    geo = descriptor(TYPE_GEOGRAPHY);
-    geo.storage.encoding = GEO_ENCODING_UNKNOWN;
-    EXPECT_FALSE(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, geo).ok());
+TEST(NativeGeoTypeTest, OptionalSemanticMetadata) {
+    for (auto primitive : {TYPE_INT, TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        TypeDescriptor type(primitive);
+        EXPECT_FALSE(type.geo_type.has_value());
+        EXPECT_FALSE(type.to_thrift().types[0].scalar_type.__isset.geo);
+        EXPECT_FALSE(type.to_protobuf().types(0).scalar_type().has_geo());
+        EXPECT_EQ(type, TypeDescriptor::from_thrift(type.to_thrift()));
+        EXPECT_EQ(type, TypeDescriptor::from_protobuf(type.to_protobuf()));
+        if (type.is_geo_type()) EXPECT_FALSE(type.is_assignable(type));
+    }
+    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, {});
+    EXPECT_TRUE(TypeDescriptor::from_thrift(type.to_thrift()).geo_type.has_value());
+    EXPECT_TRUE(TypeDescriptor::from_protobuf(type.to_protobuf()).geo_type.has_value());
+    EXPECT_NE(TypeDescriptor(TYPE_GEOGRAPHY), type);
 }
 
-TEST(NativeGeoTypeTest, WireMismatchCheckedByCaller) {
-    auto created = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY));
-    ASSERT_TRUE(created.ok());
-    auto thrift = created->to_thrift();
-    thrift.types[0].scalar_type.type = TPrimitiveType::VARBINARY;
-    EXPECT_FALSE(TypeDescriptor::from_thrift(thrift).validate_geo_type(true).ok());
-    auto proto = created->to_protobuf();
-    proto.mutable_types(0)->mutable_scalar_type()->set_type(TPrimitiveType::GEOMETRY);
-    EXPECT_FALSE(TypeDescriptor::from_protobuf(proto).validate_geo_type(true).ok());
-    proto.mutable_types(0)->mutable_scalar_type()->clear_geo();
-    EXPECT_FALSE(TypeDescriptor::from_protobuf(proto).validate_geo_type(true).ok());
+TEST(NativeGeoTypeTest, ConversionDoesNotValidateSemantics) {
+    // FE validates the type; consumers decide which edge algorithms they support.
+    auto semantic = descriptor(TYPE_GEOGRAPHY).type;
+    semantic.edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
+    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic);
+    EXPECT_EQ(type, TypeDescriptor::from_thrift(type.to_thrift()));
+    EXPECT_EQ(type, TypeDescriptor::from_protobuf(type.to_protobuf()));
 }
 
-TEST(NativeGeoTypeTest, DescriptorIdentityAndSharing) {
-    auto created = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY));
-    ASSERT_TRUE(created.ok());
-    auto copy = *created;
-    EXPECT_EQ(copy.geo.get(), created->geo.get());
-    auto changed = descriptor(TYPE_GEOGRAPHY);
-    changed.storage.dimension = GEO_DIMENSION_XYZ;
-    auto other = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, changed);
-    ASSERT_TRUE(other.ok());
-    EXPECT_NE(copy, *other);
-    TypeDescriptor ordinary(TYPE_INT);
-    EXPECT_EQ(nullptr, ordinary.geo);
-    EXPECT_TRUE(ordinary.validate_geo_type().ok());
-    EXPECT_EQ(ordinary, TypeDescriptor::from_thrift(ordinary.to_thrift()));
+TEST(NativeGeoTypeTest, SemanticMetadataHasValueSemantics) {
+    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY).type);
+    auto copy = type;
+    EXPECT_EQ(copy, type);
+    copy.geo_type->crs = "urn:ogc:def:crs:OGC::CRS84";
+    EXPECT_EQ("OGC:CRS84", type.geo_type->crs);
+    EXPECT_NE(copy, type);
+    copy = type;
+    copy.geo_type->srid.reset();
+    EXPECT_NE(copy, type);
+    EXPECT_EQ(4326, type.geo_type->srid);
+}
+
+TEST(NativeGeoTypeTest, ColumnRepresentationIsSeparateFromType) {
+    auto column = descriptor(TYPE_GEOGRAPHY);
+    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, column.type);
+    // A column reuses the semantic value, and transports its representation separately.
+    column.type = *type.geo_type;
+    column.storage.dimension = GEO_DIMENSION_XYZ;
+    column.storage.validation_state = GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED;
+    EXPECT_EQ(column, GeoColumnDescriptor::from_thrift(column.to_thrift()));
+    EXPECT_EQ(column, GeoColumnDescriptor::from_protobuf(column.to_protobuf()));
+    auto thrift = type.to_thrift();
+    thrift.types[0].scalar_type.__set_geo(column.to_thrift());
+    EXPECT_EQ(type, TypeDescriptor::from_thrift(thrift));
+    auto proto = type.to_protobuf();
+    *proto.mutable_types(0)->mutable_scalar_type()->mutable_geo() = column.to_protobuf();
+    EXPECT_EQ(type, TypeDescriptor::from_protobuf(proto));
+
+    thrift.types[0].scalar_type.geo.__isset.type = false;
+    proto.mutable_types(0)->mutable_scalar_type()->mutable_geo()->clear_type();
+    EXPECT_FALSE(TypeDescriptor::from_thrift(thrift).geo_type.has_value());
+    EXPECT_FALSE(TypeDescriptor::from_protobuf(proto).geo_type.has_value());
 }
 
 TEST(NativeGeoTypeTest, FrontendWireFixture) {
-    // Shared with NativeGeoTypeTest.java: independent Java and C++ codecs agree.
+    // Existing FE fixture carries a full column descriptor; only its semantic part belongs here.
     const std::string_view wire(
             "\x0a\x26\x08\x00\x12\x22\x08\x1e\x2a\x1e\x0a\x14\x08\x01\x10\x01\x18\x01\x22\x09\x4f\x47\x43\x3a\x43\x52"
             "\x53\x38\x34\x28\xe6\x21\x12\x06\x08\x01\x10\x01\x18\x01",
             40);
     PTypeDesc proto;
     ASSERT_TRUE(proto.ParseFromArray(wire.data(), wire.size()));
-    auto expected = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY));
-    ASSERT_TRUE(expected.ok());
-    EXPECT_EQ(*expected, TypeDescriptor::from_protobuf(proto));
-    auto encoded = expected->to_protobuf();
+    auto expected = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY).type);
+    EXPECT_EQ(expected, TypeDescriptor::from_protobuf(proto));
+    auto encoded = expected.to_protobuf();
     encoded.mutable_types(0)->mutable_scalar_type()->clear_len(); // FE omits unused scalar length.
-    EXPECT_EQ(wire, encoded.SerializeAsString());
+    proto.mutable_types(0)->mutable_scalar_type()->mutable_geo()->clear_storage();
+    EXPECT_EQ(proto.SerializeAsString(), encoded.SerializeAsString());
 }
 
 TEST(NativeGeoTypeTest, DiagnosticTypeNames) {

@@ -41,8 +41,8 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         scale = (scalar_type.__isset.scale) ? scalar_type.scale : -1;
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
         datetime_is_ntz = scalar_type.__isset.datetime_is_ntz && scalar_type.datetime_is_ntz;
-        if (scalar_type.__isset.geo) {
-            geo = std::make_shared<const GeoColumnDescriptor>(GeoColumnDescriptor::from_thrift(scalar_type.geo));
+        if (scalar_type.__isset.geo && scalar_type.geo.__isset.type) {
+            geo_type = GeoTypeDescriptor::from_thrift(scalar_type.geo.type);
         }
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
@@ -125,7 +125,11 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         if (datetime_is_ntz) {
             scalar_type.__set_datetime_is_ntz(true);
         }
-        if (geo) scalar_type.__set_geo(geo->to_thrift());
+        if (geo_type) {
+            TGeoColumnDesc geo;
+            geo.__set_type(geo_type->to_thrift());
+            scalar_type.__set_geo(geo);
+        }
     }
 }
 
@@ -160,7 +164,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         if (precision != -1) {
             scalar_type->set_precision(precision);
         }
-        if (geo) *scalar_type->mutable_geo() = geo->to_protobuf();
+        if (geo_type) *scalar_type->mutable_geo()->mutable_type() = geo_type->to_protobuf();
     }
 }
 
@@ -179,8 +183,8 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         len = scalar_type.has_len() ? scalar_type.len() : -1;
         scale = scalar_type.has_scale() ? scalar_type.scale() : -1;
         precision = scalar_type.has_precision() ? scalar_type.precision() : -1;
-        if (scalar_type.has_geo()) {
-            geo = std::make_shared<const GeoColumnDescriptor>(GeoColumnDescriptor::from_protobuf(scalar_type.geo()));
+        if (scalar_type.has_geo() && scalar_type.geo().has_type()) {
+            geo_type = GeoTypeDescriptor::from_protobuf(scalar_type.geo().type());
         }
 
         if (type == TYPE_CHAR || type == TYPE_VARCHAR || type == TYPE_HLL) {
@@ -472,40 +476,10 @@ bool TypeDescriptor::is_geo_type() const {
     return type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY;
 }
 
-StatusOr<TypeDescriptor> TypeDescriptor::create_geo_type(LogicalType type, GeoColumnDescriptor descriptor) {
+TypeDescriptor TypeDescriptor::create_geo_type(LogicalType type, GeoTypeDescriptor descriptor) {
     TypeDescriptor result(type);
-    result.geo = std::make_shared<const GeoColumnDescriptor>(std::move(descriptor));
-    RETURN_IF_ERROR(result.validate_geo_type(true));
+    result.geo_type = std::move(descriptor);
     return result;
-}
-
-Status TypeDescriptor::validate_geo_type(bool native_geo_enabled) const {
-    if (is_geo_type() != (geo != nullptr)) {
-        return Status::InvalidArgument(
-                "Native geo primitives require a geo descriptor; other types must not carry one");
-    }
-    if (geo) {
-        const auto& semantic = geo->type;
-        const bool geography = type == TYPE_GEOGRAPHY;
-        const bool spherical_edge = semantic.edge_algorithm >= GEO_EDGE_ALGORITHM_SPHERICAL &&
-                                    semantic.edge_algorithm <= GEO_EDGE_ALGORITHM_KARNEY;
-        if (semantic.logical_type != (geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY) ||
-            semantic.coordinate_system !=
-                    (geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN) ||
-            (geography ? !spherical_edge : semantic.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR)) {
-            return Status::InvalidArgument("Native geo primitive conflicts with its semantic descriptor");
-        }
-        if (geo->storage.encoding != GEO_ENCODING_WKB) {
-            return Status::NotSupported("Native geo types require WKB encoding");
-        }
-        if (!native_geo_enabled) {
-            return Status::NotSupported("Native geo type transport is not enabled");
-        }
-    }
-    for (const auto& child : children) {
-        RETURN_IF_ERROR(child.validate_geo_type(native_geo_enabled));
-    }
-    return Status::OK();
 }
 
 } // namespace starrocks

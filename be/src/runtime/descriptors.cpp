@@ -399,7 +399,6 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
 
     for (const auto& tdesc : thrift_tbl.slotDescriptors) {
         SlotDescriptor* slot_d = ALLOC_DESC(SlotDescriptor, tdesc, mr);
-        RETURN_IF_ERROR(slot_d->type().validate_geo_type());
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
         // link to parent
         auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
