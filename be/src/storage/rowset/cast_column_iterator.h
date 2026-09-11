@@ -95,7 +95,7 @@ private:
     // Chunk for holding data read from the source column iterator
     Chunk _source_chunk;
     // Whether the source column's zone map can be parsed as the target type without changing the
-    // value or the ordering. Computed once from the two types by the constructor.
+    // value, ordering, or null statistics. Computed once from the two types by the constructor.
     bool _zone_map_forwardable{false};
 };
 

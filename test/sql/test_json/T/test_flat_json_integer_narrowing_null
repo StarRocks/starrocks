@@ -1,0 +1,81 @@
+-- name: test_flat_json_integer_narrowing_null
+create database test_db_${uuid0};
+use test_db_${uuid0};
+create table flat_on (id int, j json) duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num"="1", "flat_json.enable"="true");
+create table flat_off (id int, j json) duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num"="1", "flat_json.enable"="false");
+-- Independent inputs: never populate the control by reading the flattened table.
+insert into flat_on values
+(1, '{"u":1}'), (2, '{"u":2}'), (3, '{"u":3}'), (4, '{"u":4}'), (5, '{"u":5}'),
+(6, '{"u":18446744073709551610}'), (7, '{"u":18446744073709551611}'),
+(8, '{"u":18446744073709551612}'), (9, '{"u":18446744073709551613}'),
+(10, '{"u":18446744073709551614}');
+insert into flat_off values
+(1, '{"u":1}'), (2, '{"u":2}'), (3, '{"u":3}'), (4, '{"u":4}'), (5, '{"u":5}'),
+(6, '{"u":18446744073709551610}'), (7, '{"u":18446744073709551611}'),
+(8, '{"u":18446744073709551612}'), (9, '{"u":18446744073709551613}'),
+(10, '{"u":18446744073709551614}');
+select flat_json_meta(j) from flat_on [_META_];
+select flat_json_meta(j) from flat_off [_META_];
+set cbo_prune_json_subfield = true;
+set cbo_json_v2_rewrite = true;
+select id, get_json_int(j, '$.u'), get_json_int(j, '$.u') is null from flat_on order by id;
+select id from flat_on where get_json_int(j, '$.u') is null order by id;
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+select sum(case when get_json_int(j, '$.u') is null then 1 else 0 end) from flat_on;
+select id from flat_on where cast(j->'$.u' as bigint) is null order by id;
+select id from flat_on where get_json_int(j, '$.u') is not null order by id;
+select id from flat_on where get_json_int(j, '$.u') is null or get_json_int(j, '$.u') = 3 order by id;
+-- Other FE switch combinations must agree; toggling v2 must not toggle the answer.
+set cbo_prune_json_subfield = false;
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+set cbo_json_v2_rewrite = false;
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+set cbo_prune_json_subfield = true;
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+set cbo_json_v2_rewrite = true;
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+select id, get_json_int(j, '$.u'), get_json_int(j, '$.u') is null from flat_off order by id;
+select id from flat_off where get_json_int(j, '$.u') is null order by id;
+select count(*) from flat_off where get_json_int(j, '$.u') is null;
+set cbo_json_v2_rewrite = false;
+select count(*) from flat_off where get_json_int(j, '$.u') is null;
+-- Include BIGINT endpoints and source NULLs in a separate segment. There are 40 small integers,
+-- 5 overflows, 2 endpoints, two missing fields, and an SQL NULL document. A JSON-null-valued
+-- field would make the inferred sub-column JSON rather than LARGEINT, bypassing this cast.
+create table bounds_on like flat_on;
+create table bounds_off like flat_off;
+insert into bounds_on
+select n, case when n = 50 then null else parse_json(case
+when n >= 48 then '{}'
+when n = 47 then '{"u":-9223372036854775808}' when n = 46 then '{"u":9223372036854775807}'
+when n >= 41 then '{"u":18446744073709551614}'
+else concat('{"u":', n, '}') end) end
+from table(generate_series(1, 50)) g(n);
+insert into bounds_off
+select n, case when n = 50 then null else parse_json(case
+when n >= 48 then '{}'
+when n = 47 then '{"u":-9223372036854775808}' when n = 46 then '{"u":9223372036854775807}'
+when n >= 41 then '{"u":18446744073709551614}'
+else concat('{"u":', n, '}') end) end
+from table(generate_series(1, 50)) g(n);
+select flat_json_meta(j) from bounds_on [_META_];
+select flat_json_meta(j) from bounds_off [_META_];
+set cbo_json_v2_rewrite = true;
+select id, get_json_int(j, '$.u') from bounds_on where id >= 41 order by id;
+select id from bounds_on where get_json_int(j, '$.u') is null order by id;
+select count(*) from bounds_on where get_json_int(j, '$.u') is not null;
+select id from bounds_on where cast(j->'$.u' as bigint) is null order by id;
+set cbo_json_v2_rewrite = false;
+select id from bounds_on where get_json_int(j, '$.u') is null order by id;
+set cbo_json_v2_rewrite = true;
+select id, get_json_int(j, '$.u') from bounds_off where id >= 41 order by id;
+select id from bounds_off where get_json_int(j, '$.u') is null order by id;
+select count(*) from bounds_off where get_json_int(j, '$.u') is not null;
+set cbo_json_v2_rewrite = false;
+select id from bounds_off where get_json_int(j, '$.u') is null order by id;
+set cbo_json_v2_rewrite = true;
+drop database test_db_${uuid0};

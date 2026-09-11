@@ -1,0 +1,298 @@
+-- name: test_flat_json_integer_narrowing_null
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table flat_on (id int, j json) duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num"="1", "flat_json.enable"="true");
+-- result:
+-- !result
+create table flat_off (id int, j json) duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num"="1", "flat_json.enable"="false");
+-- result:
+-- !result
+insert into flat_on values
+(1, '{"u":1}'), (2, '{"u":2}'), (3, '{"u":3}'), (4, '{"u":4}'), (5, '{"u":5}'),
+(6, '{"u":18446744073709551610}'), (7, '{"u":18446744073709551611}'),
+(8, '{"u":18446744073709551612}'), (9, '{"u":18446744073709551613}'),
+(10, '{"u":18446744073709551614}');
+-- result:
+-- !result
+insert into flat_off values
+(1, '{"u":1}'), (2, '{"u":2}'), (3, '{"u":3}'), (4, '{"u":4}'), (5, '{"u":5}'),
+(6, '{"u":18446744073709551610}'), (7, '{"u":18446744073709551611}'),
+(8, '{"u":18446744073709551612}'), (9, '{"u":18446744073709551613}'),
+(10, '{"u":18446744073709551614}');
+-- result:
+-- !result
+select flat_json_meta(j) from flat_on [_META_];
+-- result:
+["nulls(TINYINT), u(LARGEINT)"]
+-- !result
+select flat_json_meta(j) from flat_off [_META_];
+-- result:
+[]
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select id, get_json_int(j, '$.u'), get_json_int(j, '$.u') is null from flat_on order by id;
+-- result:
+1	1	0
+2	2	0
+3	3	0
+4	4	0
+5	5	0
+6	None	1
+7	None	1
+8	None	1
+9	None	1
+10	None	1
+-- !result
+select id from flat_on where get_json_int(j, '$.u') is null order by id;
+-- result:
+6
+7
+8
+9
+10
+-- !result
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+-- result:
+5
+-- !result
+select sum(case when get_json_int(j, '$.u') is null then 1 else 0 end) from flat_on;
+-- result:
+5
+-- !result
+select id from flat_on where cast(j->'$.u' as bigint) is null order by id;
+-- result:
+6
+7
+8
+9
+10
+-- !result
+select id from flat_on where get_json_int(j, '$.u') is not null order by id;
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select id from flat_on where get_json_int(j, '$.u') is null or get_json_int(j, '$.u') = 3 order by id;
+-- result:
+3
+6
+7
+8
+9
+10
+-- !result
+set cbo_prune_json_subfield = false;
+-- result:
+-- !result
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+-- result:
+5
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+-- result:
+5
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+-- result:
+5
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select count(*) from flat_on where get_json_int(j, '$.u') is null;
+-- result:
+5
+-- !result
+select id, get_json_int(j, '$.u'), get_json_int(j, '$.u') is null from flat_off order by id;
+-- result:
+1	1	0
+2	2	0
+3	3	0
+4	4	0
+5	5	0
+6	None	1
+7	None	1
+8	None	1
+9	None	1
+10	None	1
+-- !result
+select id from flat_off where get_json_int(j, '$.u') is null order by id;
+-- result:
+6
+7
+8
+9
+10
+-- !result
+select count(*) from flat_off where get_json_int(j, '$.u') is null;
+-- result:
+5
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select count(*) from flat_off where get_json_int(j, '$.u') is null;
+-- result:
+5
+-- !result
+create table bounds_on like flat_on;
+-- result:
+-- !result
+create table bounds_off like flat_off;
+-- result:
+-- !result
+insert into bounds_on
+select n, case when n = 50 then null else parse_json(case
+when n >= 48 then '{}'
+when n = 47 then '{"u":-9223372036854775808}' when n = 46 then '{"u":9223372036854775807}'
+when n >= 41 then '{"u":18446744073709551614}'
+else concat('{"u":', n, '}') end) end
+from table(generate_series(1, 50)) g(n);
+-- result:
+-- !result
+insert into bounds_off
+select n, case when n = 50 then null else parse_json(case
+when n >= 48 then '{}'
+when n = 47 then '{"u":-9223372036854775808}' when n = 46 then '{"u":9223372036854775807}'
+when n >= 41 then '{"u":18446744073709551614}'
+else concat('{"u":', n, '}') end) end
+from table(generate_series(1, 50)) g(n);
+-- result:
+-- !result
+select flat_json_meta(j) from bounds_on [_META_];
+-- result:
+["nulls(TINYINT), u(LARGEINT), remain(JSON)"]
+-- !result
+select flat_json_meta(j) from bounds_off [_META_];
+-- result:
+[]
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select id, get_json_int(j, '$.u') from bounds_on where id >= 41 order by id;
+-- result:
+41	None
+42	None
+43	None
+44	None
+45	None
+46	9223372036854775807
+47	-9223372036854775808
+48	None
+49	None
+50	None
+-- !result
+select id from bounds_on where get_json_int(j, '$.u') is null order by id;
+-- result:
+41
+42
+43
+44
+45
+48
+49
+50
+-- !result
+select count(*) from bounds_on where get_json_int(j, '$.u') is not null;
+-- result:
+42
+-- !result
+select id from bounds_on where cast(j->'$.u' as bigint) is null order by id;
+-- result:
+41
+42
+43
+44
+45
+48
+49
+50
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select id from bounds_on where get_json_int(j, '$.u') is null order by id;
+-- result:
+41
+42
+43
+44
+45
+48
+49
+50
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select id, get_json_int(j, '$.u') from bounds_off where id >= 41 order by id;
+-- result:
+41	None
+42	None
+43	None
+44	None
+45	None
+46	9223372036854775807
+47	-9223372036854775808
+48	None
+49	None
+50	None
+-- !result
+select id from bounds_off where get_json_int(j, '$.u') is null order by id;
+-- result:
+41
+42
+43
+44
+45
+48
+49
+50
+-- !result
+select count(*) from bounds_off where get_json_int(j, '$.u') is not null;
+-- result:
+42
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select id from bounds_off where get_json_int(j, '$.u') is null order by id;
+-- result:
+41
+42
+43
+44
+45
+48
+49
+50
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result

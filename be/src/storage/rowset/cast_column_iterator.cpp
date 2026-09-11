@@ -28,12 +28,16 @@ namespace {
 // A zone map keeps the source column's min/max in the form that column writes them, and
 // ColumnReader::_get_zone_map_parse_type() reads them back as the predicate's type. Forwarding a zone
 // map across a cast is therefore only sound when that reinterpretation preserves both the value and
-// the ordering.
-bool zone_map_survives_cast(LogicalType source_type, LogicalType target_type) {
+// the ordering, and the cast cannot introduce NULLs absent from the source's null statistics.
+bool zone_map_survives_cast(const TypeDescriptor& source, const TypeDescriptor& target) {
+    const auto source_type = source.type;
+    const auto target_type = target.type;
     // Integer widening, the shape a fast schema evolution leaves behind: min/max are decimal literals
-    // that every integer type reads alike, ordered numerically on both sides.
+    // that wider integer types read alike, ordered numerically on both sides. All types accepted by
+    // is_integer_type() are signed. Narrowing may overflow to NULL, so even an IS NULL predicate
+    // cannot reuse a source zone map that says there are no NULLs.
     if (is_integer_type(source_type) && is_integer_type(target_type)) {
-        return true;
+        return source.get_slot_size() <= target.get_slot_size();
     }
     // A CHAR or VARCHAR length change, the second shape. CHAR and VARCHAR share the byte-wise
     // ordering, and _get_zone_map_parse_type() already forces the CHAR parse that strips the padding a
@@ -68,7 +72,7 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
           _obj_pool(new ObjectPool()),
 
           _source_chunk(),
-          _zone_map_forwardable(zone_map_survives_cast(source_type.type, target_type.type)) {
+          _zone_map_forwardable(zone_map_survives_cast(source_type, target_type)) {
     auto slot_id = SlotId{0};
     auto column = ColumnHelper::create_column(source_type, nullable_source);
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);

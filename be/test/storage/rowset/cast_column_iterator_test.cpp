@@ -16,11 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "fs/fs_memory.h"
@@ -199,6 +202,7 @@ protected:
     }
 
     void write_column_with_zone_map(const TabletColumn& column, const Column& src) {
+        _meta.Clear();
         _fname = std::string(kTestDir) + "/" + generate_uuid_string() + ".data";
         _segment = std::make_shared<Segment>(_fs, FileInfo{_fname}, 1, _dummy_segment_schema, nullptr);
         // ColumnReader::num_rows() reads through to the segment, and this one has no footer to read it
@@ -214,7 +218,7 @@ protected:
         writer_opts.meta->set_length(is_string_type(column.type()) ? column.length() : 0);
         writer_opts.meta->set_encoding(DEFAULT_ENCODING);
         writer_opts.meta->set_compression(LZ4_FRAME);
-        writer_opts.meta->set_is_nullable(false);
+        writer_opts.meta->set_is_nullable(src.is_nullable());
         writer_opts.data_page_size = kDataPageSize;
         writer_opts.need_zone_map = true;
 
@@ -234,7 +238,7 @@ protected:
     SparseRange<> zone_map_ranges(const TypeDescriptor& source_type, const TypeDescriptor& target_type,
                                   const ColumnPredicate* predicate) {
         ASSIGN_OR_ABORT(auto source_iter, _reader->new_iterator());
-        CastColumnIterator cast_iter(std::move(source_iter), source_type, target_type, false);
+        CastColumnIterator cast_iter(std::move(source_iter), source_type, target_type, _meta.is_nullable());
         ColumnIteratorOptions iter_opts;
         iter_opts.stats = &_stats;
         iter_opts.read_file = _read_file.get();
@@ -351,6 +355,78 @@ TEST_F(CastColumnIteratorZoneMapTest, zone_map_still_prunes_across_integer_widen
 
     EXPECT_TRUE(covers(ranges, 8));
     EXPECT_LT(ranges.span_size(), kNumRows / 8);
+}
+
+// Every signed integer pair: same-type reads and widening may prune a non-null page for IS NULL;
+// narrowing must keep it even when this particular page happens not to contain an overflowing value.
+TEST_F(CastColumnIteratorZoneMapTest, integer_zone_map_forwarding_requires_same_type_or_widening) {
+    const LogicalType types[] = {TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT};
+    for (size_t source = 0; source < std::size(types); ++source) {
+        auto source_type = TypeDescriptor::from_logical_type(types[source]);
+        auto values = ColumnHelper::create_column(source_type, false);
+        DefaultValueColumnIterator defaults(true, "1", false, get_type_info(types[source]), 0, kNumRows);
+        ASSERT_OK(defaults.init(ColumnIteratorOptions{}));
+        size_t n = kNumRows;
+        ASSERT_OK(defaults.next_batch(&n, values.get()));
+        ASSERT_EQ(kNumRows, n);
+        write_column_with_zone_map(TabletColumn(STORAGE_AGGREGATE_NONE, types[source], false), *values);
+
+        for (size_t target = 0; target < std::size(types); ++target) {
+            SCOPED_TRACE(::testing::Message() << "source=" << types[source] << " target=" << types[target]);
+            std::unique_ptr<ColumnPredicate> pred(new_column_null_predicate(get_type_info(types[target]), 0, true));
+            auto ranges = zone_map_ranges(source_type, TypeDescriptor::from_logical_type(types[target]), pred.get());
+            EXPECT_EQ(source <= target ? 0 : kNumRows, ranges.span_size());
+        }
+    }
+}
+
+// Reproduce the flat JSON LARGEINT -> BIGINT read with real page zone maps, with and without a
+// pre-existing SQL NULL. An overflowing page has no source NULLs, but all its converted rows are NULL.
+TEST_F(CastColumnIteratorZoneMapTest, largeint_narrowing_keeps_pages_that_produce_nulls) {
+    auto source_type = TypeDescriptor::from_logical_type(TYPE_LARGEINT);
+    auto target_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    for (bool nullable : {false, true}) {
+        SCOPED_TRACE(::testing::Message() << "nullable=" << nullable);
+        auto values = ColumnHelper::create_column(source_type, nullable);
+        for (int i = 0; i < kNumRows; ++i) {
+            if (nullable && i == 0) {
+                values->append_nulls(1);
+            } else {
+                int128_t value = i;
+                if (i == 1) {
+                    value = std::numeric_limits<int64_t>::min();
+                } else if (i == 2) {
+                    value = std::numeric_limits<int64_t>::max();
+                } else if (i >= 3 * kNumRows / 4) {
+                    value = int128_t(std::numeric_limits<int64_t>::min()) - i;
+                } else if (i >= kNumRows / 2) {
+                    value = int128_t(std::numeric_limits<int64_t>::max()) + i;
+                }
+                values->append_datum(Datum(value));
+            }
+        }
+        write_column_with_zone_map(TabletColumn(STORAGE_AGGREGATE_NONE, TYPE_LARGEINT, nullable), *values);
+        std::unique_ptr<ColumnPredicate> pred(new_column_null_predicate(get_type_info(TYPE_BIGINT), 0, true));
+        auto ranges = zone_map_ranges(source_type, target_type, pred.get());
+        EXPECT_EQ(kNumRows, ranges.span_size());
+        EXPECT_TRUE(covers(ranges, kNumRows - 1));
+
+        ASSIGN_OR_ABORT(auto source_iter, _reader->new_iterator());
+        CastColumnIterator cast_iter(std::move(source_iter), source_type, target_type, nullable);
+        ColumnIteratorOptions opts;
+        opts.stats = &_stats;
+        opts.read_file = _read_file.get();
+        ASSERT_OK(cast_iter.init(opts));
+        ASSERT_OK(cast_iter.seek_to_first());
+        auto converted = ColumnHelper::create_column(target_type, true);
+        ASSERT_OK(cast_iter.next_batch(SparseRange<>(0, kNumRows), converted.get()));
+        ASSERT_EQ(kNumRows, converted->size());
+        EXPECT_EQ(std::numeric_limits<int64_t>::min(), converted->get(1).get_int64());
+        EXPECT_EQ(std::numeric_limits<int64_t>::max(), converted->get(2).get_int64());
+        for (int i = 0; i < kNumRows; ++i) {
+            EXPECT_EQ(i >= kNumRows / 2 || (nullable && i == 0), converted->is_null(i));
+        }
+    }
 }
 
 // The other pruning that has to survive: a CHAR whose length changed, which reaches the reader as a
