@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
@@ -376,6 +377,21 @@ public class ColumnFilterConverter {
             ScalarOperator translate = SqlToScalarOperatorTranslator.translate(predicateExpr);
             CallOperator callOperator = AnalyzerUtils.getCallOperator(translate);
             if (callOperator == null) {
+                return predicate;
+            }
+            // The rewrite keeps the comparison operator and only maps the constant through the
+            // partition expression, so it holds only where that expression preserves order. For a
+            // non-monotonic one -- substr(), a varchar-to-integer cast -- a row whose source value
+            // satisfies the original predicate can carry a partition value that does not satisfy the
+            // rewritten one, and its partition is pruned away, so the row goes silently missing.
+            // Equality is exempt: a = c implies f(a) = f(c) for any f. This is the same condition
+            // ListPartitionPruner.deduceExtraConjuncts applies to the LIST-partition rewrite.
+            BinaryType binaryType = ((BinaryPredicateOperator) predicate).getBinaryType();
+            // Check the whole rewritten expression, not the CallOperator getCallOperator() digs out
+            // of it: that helper strips the enclosing cast, and a cast is exactly what can break the
+            // order -- cast(bill as bigint) maps '99845' to 99845, which sorts the other way round.
+            if (!binaryType.isEqual()
+                    && !OperatorFunctionChecker.onlyContainMonotonicFunctions(translate).first) {
                 return predicate;
             }
             ScalarOperator evaluation = ScalarOperatorEvaluator.INSTANCE.evaluation(callOperator);
