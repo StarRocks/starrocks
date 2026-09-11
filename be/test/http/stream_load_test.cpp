@@ -859,4 +859,96 @@ TEST_F(StreamLoadActionTest, skip_header_does_not_fit_in_int64) {
     ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "skip_header"));
 }
 
+// Every numeric load header now goes through the same parser, so one table
+// covers them all: a value that is not a number, a value with trailing garbage
+// that std::sto* used to accept and silently truncate, a value too large for
+// int64_t, and a value outside the range the field itself allows.
+TEST_F(StreamLoadActionTest, numeric_headers_rejected) {
+    struct TestCase {
+        std::string header;
+        std::string value;
+        std::string expected_message;
+    };
+    TestCase test_cases[] = {
+            {HttpHeaders::CONTENT_LENGTH, "-1", "must not be negative"},
+            {HTTP_SKIP_HEADER, "not-a-number", "skip_header"},
+            {HTTP_SKIP_HEADER, "1abc", "skip_header"},
+            {HTTP_SKIP_HEADER, "-1", "skip_header must be equal or greater than 0"},
+            {HTTP_LOAD_MEM_LIMIT, "not-a-number", "load_mem_limit"},
+            {HTTP_LOAD_MEM_LIMIT, "99999999999999999999", "load_mem_limit"},
+            {HTTP_LOAD_MEM_LIMIT, "-1", "load_mem_limit must be equal or greater than 0"},
+            {HTTP_LOAD_DOP, "not-a-number", "load_dop"},
+            {HTTP_LOAD_DOP, "99999999999999999999", "load_dop"},
+            {HTTP_LOG_REJECTED_RECORD_NUM, "not-a-number", "log_rejected_record_num"},
+            {HTTP_LOG_REJECTED_RECORD_NUM, "99999999999999999999", "log_rejected_record_num"},
+            {HTTP_LOG_REJECTED_RECORD_NUM, "-2", "log_rejected_record_num must be equal or greater than -1"},
+            {HTTP_EXEC_MEM_LIMIT, "not-a-number", "exec_mem_limit"},
+            {HTTP_EXEC_MEM_LIMIT, "99999999999999999999", "exec_mem_limit"},
+            {HTTP_EXEC_MEM_LIMIT, "0", "exec_mem_limit must be greater than 0"},
+    };
+
+    for (const auto& tc : test_cases) {
+        k_response_str = "";
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+
+        HttpRequest request(_evhttp_req);
+        request._params.emplace(HTTP_DB_KEY, "db");
+        request._params.emplace(HTTP_TABLE_KEY, "tbl");
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        if (tc.header != HttpHeaders::CONTENT_LENGTH) {
+            request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        }
+        request._headers.emplace(tc.header, tc.value);
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString()) << tc.header << ": " << tc.value;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_message.c_str()))
+                << tc.header << ": " << tc.value << " -> " << doc["Message"].GetString();
+    }
+}
+
+// The same headers with values the parser accepts must still reach the plan
+// request unchanged.
+TEST_F(StreamLoadActionTest, numeric_headers_accepted) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    TStreamLoadPutRequest captured;
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadAction::_process_put::rpc_timeout",
+                                          [&](void* arg) { captured = *static_cast<TStreamLoadPutRequest*>(arg); });
+
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "6");
+    request._headers.emplace(HTTP_SKIP_HEADER, "2");
+    request._headers.emplace(HTTP_LOAD_MEM_LIMIT, "1048576");
+    request._headers.emplace(HTTP_LOAD_DOP, "4");
+    request._headers.emplace(HTTP_LOG_REJECTED_RECORD_NUM, "-1");
+    request._headers.emplace(HTTP_EXEC_MEM_LIMIT, "2097152");
+    request.set_handler(&action);
+    ASSERT_EQ(0, action.on_header(&request));
+
+    EXPECT_EQ(2, captured.skipHeader);
+    EXPECT_EQ(1048576, captured.loadMemLimit);
+    EXPECT_EQ(4, captured.load_dop);
+    EXPECT_EQ(-1, captured.log_rejected_record_num);
+
+    auto* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    EXPECT_EQ(6, ctx->body_bytes);
+    EXPECT_EQ(2097152, ctx->put_result.params.query_options.mem_limit);
+}
+
 } // namespace starrocks
