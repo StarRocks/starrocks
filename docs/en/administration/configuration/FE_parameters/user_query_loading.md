@@ -1161,8 +1161,8 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 4 * 3600
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
+- Is mutable: Yes
+- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. The effective minimum is 60 seconds; lower values do not make cleanup run more frequently.
 - Introduced in: -
 
 ### `label_keep_max_num`

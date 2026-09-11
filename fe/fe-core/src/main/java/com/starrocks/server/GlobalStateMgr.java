@@ -2480,12 +2480,7 @@ public class GlobalStateMgr {
     }
 
     public void createLabelCleaner() {
-        labelCleaner = new FrontendDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
-            @Override
-            protected void runAfterCatalogReady() {
-                clearExpiredJobs();
-            }
-        };
+        labelCleaner = new LoadLabelCleaner(this::clearExpiredJobs);
     }
 
     public void createTaskCleaner() {
