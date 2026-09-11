@@ -31,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.ExportJob;
@@ -267,6 +268,10 @@ public class EditLogDeserializer {
             .put(OperationType.OP_ALTER_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_DROP_WAREHOUSE, DropWarehouseLog.class)
             .put(OperationType.OP_WAREHOUSE_INTERNAL_OP, WarehouseInternalOpLog.class)
+            .put(OperationType.OP_CREATE_AI_PROVIDER, AIProvider.class)
+            .put(OperationType.OP_ALTER_AI_PROVIDER, AIProvider.class)
+            .put(OperationType.OP_DROP_AI_PROVIDER, DropAIProviderLog.class)
+            .put(OperationType.OP_SET_DEFAULT_AI_PROVIDER, SetDefaultAIProviderLog.class)
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
             .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
             .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
