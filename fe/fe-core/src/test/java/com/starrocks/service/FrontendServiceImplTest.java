@@ -38,6 +38,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
@@ -54,6 +55,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -1379,6 +1381,37 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals(2, testDefaultValue.size());
         Assertions.assertEquals("CURRENT_TIMESTAMP", testDefaultValue.get(0).getColumnDesc().getColumnDefault());
         Assertions.assertEquals("2", testDefaultValue.get(1).getColumnDesc().getColumnDefault());
+    }
+
+    @Test
+    public void testDescribeTableSkipsTableWhoseMetadataFailsToLoad() throws Exception {
+        // BE scans information_schema.columns for a schema with one describeTable RPC per table.
+        // When a connector cannot load one table (e.g. a Glue entry without a StorageDescriptor
+        // makes HiveMetadata.getTable throw StarRocksConnectorException), the RPC must answer
+        // with an empty column list instead of propagating: the thrift server would turn the
+        // exception into an application error that aborts the scan of every other table.
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                throw new StarRocksConnectorException("Table StorageDescriptor is null for table " + tblName);
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        request.setDb("test");
+        request.setTable_name("broken_glue_entry");
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+
+        TDescribeTableResult response = impl.describeTable(request);
+        Assertions.assertNotNull(response.getColumns());
+        Assertions.assertTrue(response.getColumns().isEmpty(),
+                "a table whose metadata cannot be loaded must yield no columns instead of failing the RPC: "
+                        + response.getColumns());
     }
 
     @Test
