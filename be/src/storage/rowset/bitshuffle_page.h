@@ -369,6 +369,19 @@ public:
 
     uint32_t count() const override { return _num_elements; }
 
+    StatusOr<PageValueView> contiguous_values() const override {
+        // The body is laid out at the page's own element width, so a page narrower than the type holds no
+        // array of this column's values. init() only lets the two differ for TYPE_UNSIGNED_INT today,
+        // but the view is refused on the widths alone, not on the type.
+        if (_size_of_element != SIZE_OF_TYPE) {
+            return Status::NotSupported("bitshuffle page stores a narrower element than the type");
+        }
+        // decode_page() un-shuffles the body before the page cache sees it, so past the header this
+        // already is a flat array. _num_elements, not the padded count: the padding tail is not data.
+        return PageValueView{reinterpret_cast<const uint8_t*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]), _num_elements,
+                             SIZE_OF_TYPE};
+    }
+
     uint32_t current_index() const override { return _cur_index; }
 
     EncodingTypePB encoding_type() const override { return BIT_SHUFFLE; }

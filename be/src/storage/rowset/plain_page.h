@@ -250,6 +250,12 @@ public:
         return Status::OK();
     }
 
+    StatusOr<PageValueView> contiguous_values() const override {
+        // A plain page is a 4-byte count followed by the values, so it already is that array.
+        return PageValueView{reinterpret_cast<const uint8_t*>(&_data[PLAIN_PAGE_HEADER_SIZE]), _num_elems,
+                             SIZE_OF_TYPE};
+    }
+
     uint32_t count() const override {
         DCHECK(_parsed);
         return _num_elems;

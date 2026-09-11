@@ -37,6 +37,7 @@
 #include "cache/mem_cache/page_handle_fwd.h"
 #include "column/nullable_column.h"
 #include "common/status.h" // for Status
+#include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage_primitive/range.h"
 
@@ -46,6 +47,13 @@ class Column;
 } // namespace starrocks
 
 namespace starrocks {
+
+// Non-owning view over one page's values; see PageDecoder::contiguous_values().
+struct PageValueView {
+    const uint8_t* data = nullptr;
+    size_t num_values = 0;
+    size_t value_width = 0;
+};
 
 // PageDecoder is used to decode page.
 class PageDecoder {
@@ -90,6 +98,14 @@ public:
 
     virtual Status next_batch(const SparseRange<>& range, Column* column) {
         return Status::NotSupported("PageDecoder Not Support");
+    }
+
+    // This page's values as one contiguous fixed-width array, for callers reading single values by
+    // ordinal without a next_batch(n=1) each. Only encodings already laid out that way implement it;
+    // the rest return NotSupported, so a caller keeps its own scalar path. The pointer belongs to the
+    // page: valid until the owning ParsedPage is replaced, and never to be stored past that.
+    virtual StatusOr<PageValueView> contiguous_values() const {
+        return Status::NotSupported("page encoding has no contiguous value layout");
     }
 
     // given a set of ranges in page, apply compound and predicates on it, and only return filtered data

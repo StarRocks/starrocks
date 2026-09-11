@@ -86,6 +86,11 @@ public:
 
     Status next_batch(size_t* n, Column* column);
 
+    // The page this iterator is seeked to, as a flat array plus its first ordinal, so a caller can
+    // read single values without a next_batch(n=1) each. NotSupported unless the encoding is laid out
+    // that way. `*data` is valid only until the next operation on this iterator.
+    Status current_page_view(const uint8_t** data, ordinal_t* first_ordinal, size_t* num_values) const;
+
 private:
     IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts);
 

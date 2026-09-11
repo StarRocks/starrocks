@@ -32,7 +32,6 @@
 #include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/bitmap_index_writer.h"
-#include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
@@ -50,8 +49,11 @@ Status write_u32_indexed_column(WritableFile* wfile, IndexedColumnMetaPB* meta,
     IndexedColumnWriterOptions options;
     options.write_ordinal_index = true; // random access by ordinal (term ordinal / rowid)
     options.write_value_index = false;
-    // INT's default encoding is BIT_SHUFFLE (ordinal-readable, unlike VARCHAR's DICT default).
-    options.encoding = EncodingInfo::get_default_encoding(typeinfo->type(), false);
+    // Named, not defaulted: an IndexedColumn has no dictionary page, so DICT_ENCODING -- what
+    // get_default_encoding() returns for INT once dictionary_encoding_ratio_for_non_string_column is
+    // set -- cannot be read back here. Bit-shuffle is INT's default anyway, so naming it changes no
+    // layout, and it gives doc_len the flat array its page-view lookup reads from.
+    options.encoding = BIT_SHUFFLE;
     options.compression = CompressionTypePB::ZSTD; // small Zipfian integers; read rarely (Phase-1)
     IndexedColumnWriter writer(options, typeinfo, wfile);
     RETURN_IF_ERROR(writer.init());

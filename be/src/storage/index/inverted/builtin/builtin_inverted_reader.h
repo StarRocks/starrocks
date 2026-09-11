@@ -22,6 +22,7 @@
 #include "base/string/slice.h"
 #include "column/column.h"
 #include "common/statusor.h"
+#include "gutil/compiler_util.h"
 #include "storage/index/inverted/inverted_index_common.h"
 #include "storage/index/inverted/inverted_reader.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -115,7 +116,7 @@ private:
 class FreqsIterator {
 public:
     FreqsIterator(const BlockPostingReader* posting_loader, std::unique_ptr<IndexedColumnIterator> df_iter,
-                  std::unique_ptr<IndexedColumnIterator> doc_len_iter, uint64_t sum_len);
+                  std::unique_ptr<IndexedColumnIterator> doc_len_iter, uint64_t sum_len, int64_t doc_len_values);
     ~FreqsIterator();
 
     FreqsIterator(const FreqsIterator&) = delete;
@@ -125,16 +126,47 @@ public:
     Status new_posting_cursor(const IndexReadOptions& opts, std::unique_ptr<BlockPostingIterator>* out);
     // Document frequency of the term at dict ordinal `term_ordinal` (reuses the df iterator).
     StatusOr<uint32_t> doc_freq(uint32_t term_ordinal);
-    // Document length (token count) of row `rid` (reuses the doc_len iterator).
-    StatusOr<uint32_t> doc_len(rowid_t rid);
+    // Document length (token count) of row `rid`. Scorers walk docids ascending, so a lookup almost
+    // always lands in the page already seeked; a crossing costs one seek per 262,144 rows.
+    StatusOr<uint32_t> doc_len(rowid_t rid) {
+        // One compare and one load, validating nothing: _page is installed only after the view was
+        // checked, and reset on every path that invalidates it.
+        if (LIKELY(_page.contains(rid))) {
+            return _page.at(rid);
+        }
+        return _doc_len_slow(rid);
+    }
     // Sum of doc_len over all rows in this segment (for tablet-level avgdl).
     uint64_t sum_len() const { return _sum_len; }
 
 private:
+    // Install the view for the page holding `rid` and read it; point-reads instead when this column
+    // offers no view.
+    StatusOr<uint32_t> _doc_len_slow(rowid_t rid);
+
     const BlockPostingReader* _posting_loader;
     std::unique_ptr<IndexedColumnIterator> _df_iter;
     std::unique_ptr<IndexedColumnIterator> _doc_len_iter;
     uint64_t _sum_len;
+    // Segment row count. Rejects an out-of-range rowid before any view is consulted: seeking to exactly
+    // num_values legally succeeds and leaves the loaded page in place.
+    int64_t _doc_len_values = 0;
+    // The doc_len page the fast path reads, borrowed from _doc_len_iter. The three fields only mean
+    // anything together -- a base with another page's bounds indexes wrong memory silently -- so they
+    // are set and reset as a unit.
+    struct PageExtent {
+        const uint32_t* base = nullptr;
+        rowid_t first = 0;
+        uint32_t count = 0;
+
+        // Unsigned wrap rejects rid < first with the same comparison; count is 0 until installed.
+        bool contains(rowid_t rid) const { return rid - first < count; }
+        uint32_t at(rowid_t rid) const { return base[rid - first]; }
+        void reset() { *this = PageExtent{}; }
+    };
+    PageExtent _page;
+    // Latched when this column offers no view, so later lookups skip a probe that will fail again.
+    bool _page_view_unsupported = false;
     // Reused single-row TYPE_INT buffer for doc_freq()/doc_len() point reads (both are u32 columns),
     // so a scan does not allocate a fresh column per lookup. Cleared before each read.
     MutableColumnPtr _u32_scratch;

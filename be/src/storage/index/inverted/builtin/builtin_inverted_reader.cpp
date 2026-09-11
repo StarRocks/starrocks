@@ -178,7 +178,8 @@ StatusOr<std::unique_ptr<FreqsIterator>> BuiltinInvertedReader::new_freqs_iterat
     std::unique_ptr<IndexedColumnIterator> doc_len_iter;
     RETURN_IF_ERROR(_doc_freq_reader->new_iterator(opts, &df_iter));
     RETURN_IF_ERROR(_doc_len_reader->new_iterator(opts, &doc_len_iter));
-    return std::make_unique<FreqsIterator>(_posting.get(), std::move(df_iter), std::move(doc_len_iter), _sum_len);
+    return std::make_unique<FreqsIterator>(_posting.get(), std::move(df_iter), std::move(doc_len_iter), _sum_len,
+                                           _doc_len_reader->num_values());
 }
 
 Status BuiltinInvertedReader::lookup_term_ordinals(const IndexReadOptions& opts, const std::vector<Slice>& terms,
@@ -207,11 +208,13 @@ Status BuiltinInvertedReader::lookup_term_ordinals(const IndexReadOptions& opts,
 }
 
 FreqsIterator::FreqsIterator(const BlockPostingReader* posting_loader, std::unique_ptr<IndexedColumnIterator> df_iter,
-                             std::unique_ptr<IndexedColumnIterator> doc_len_iter, uint64_t sum_len)
+                             std::unique_ptr<IndexedColumnIterator> doc_len_iter, uint64_t sum_len,
+                             int64_t doc_len_values)
         : _posting_loader(posting_loader),
           _df_iter(std::move(df_iter)),
           _doc_len_iter(std::move(doc_len_iter)),
-          _sum_len(sum_len) {}
+          _sum_len(sum_len),
+          _doc_len_values(doc_len_values) {}
 
 FreqsIterator::~FreqsIterator() = default;
 
@@ -223,7 +226,42 @@ StatusOr<uint32_t> FreqsIterator::doc_freq(uint32_t term_ordinal) {
     return read_u32_at(_df_iter.get(), term_ordinal, _u32_scratch);
 }
 
-StatusOr<uint32_t> FreqsIterator::doc_len(rowid_t rid) {
+StatusOr<uint32_t> FreqsIterator::_doc_len_slow(rowid_t rid) {
+    // Before any view is consulted: seek_to_ordinal(num_values) succeeds without loading a page, which
+    // would leave the previous page's view in place.
+    if (UNLIKELY(rid >= _doc_len_values)) {
+        return Status::InvalidArgument(
+                fmt::format("builtin GIN: doc_len rowid {} out of range {}", rid, _doc_len_values));
+    }
+    if (!_page_view_unsupported) {
+        RETURN_IF_ERROR(_doc_len_iter->seek_to_ordinal(rid));
+        const uint8_t* data = nullptr;
+        ordinal_t first = 0;
+        size_t count = 0;
+        Status st = _doc_len_iter->current_page_view(&data, &first, &count);
+        if (st.is_not_supported()) {
+            // This column's pages offer no view. Decide once, drop anything an earlier page left, and
+            // let the point read below serve the rest of the scan: this is an optimization, so the most
+            // it may cost is the optimization itself.
+            _page_view_unsupported = true;
+            _page.reset();
+        } else {
+            RETURN_IF_ERROR(st);
+            const PageExtent extent{reinterpret_cast<const uint32_t*>(data), static_cast<rowid_t>(first),
+                                    static_cast<uint32_t>(count)};
+            // Verify the seek landed on the page holding `rid` rather than trust it: once per crossing,
+            // guarding a raw index into borrowed memory. Checked before installing, so _page is never
+            // transiently wrong.
+            if (UNLIKELY(!extent.contains(rid))) {
+                _page.reset();
+                return Status::InternalError(
+                        fmt::format("builtin GIN: doc_len rowid {} outside the seeked page [{}, {})", rid, extent.first,
+                                    extent.first + extent.count));
+            }
+            _page = extent;
+            return _page.at(rid);
+        }
+    }
     return read_u32_at(_doc_len_iter.get(), rid, _u32_scratch);
 }
 

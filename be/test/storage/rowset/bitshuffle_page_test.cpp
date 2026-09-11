@@ -39,6 +39,7 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
@@ -653,6 +654,88 @@ TEST_F(BitShufflePageTest, TestReadByRowids) {
     ASSERT_EQ(0, column->get(0).get_int32());
     ASSERT_EQ(50, column->get(1).get_int32());
     ASSERT_EQ(99, column->get(2).get_int32());
+}
+
+// A bit-shuffle page body is un-shuffled by StoragePageDecoder::decode_page, before it ever reaches a
+// decoder, so past the header it already is a flat fixed-width array. contiguous_values() hands that
+// array out, which is what lets a caller read single values by ordinal without a next_batch(n=1) each.
+// reserve_head is covered because it shifts the buffer the decoder is handed.
+TEST_F(BitShufflePageTest, contiguous_values_matches_at_index) {
+    constexpr size_t kCount = 400;
+    std::vector<int32_t> src(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        src[i] = static_cast<int32_t>(i * 7 + 1);
+    }
+    for (int reserve_head : {0, 4}) {
+        SCOPED_TRACE(reserve_head);
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BitshufflePageBuilder<TYPE_INT> builder(options);
+        builder.reserve_head(reserve_head);
+        ASSERT_EQ(kCount, builder.add(reinterpret_cast<const uint8_t*>(src.data()), kCount));
+        OwnedSlice owned = builder.finish()->build();
+
+        Slice encoded = owned.slice();
+        encoded.remove_prefix(reserve_head);
+        PageFooterPB footer;
+        footer.set_type(DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        std::unique_ptr<std::vector<uint8_t>> page;
+        ASSERT_TRUE(StoragePageDecoder::decode_page(&footer, 0, BIT_SHUFFLE, &page, &encoded).ok());
+
+        BitShufflePageDecoder<TYPE_INT> decoder(encoded);
+        ASSERT_TRUE(decoder.init().ok());
+
+        ASSIGN_OR_ABORT(auto view, decoder.contiguous_values());
+        EXPECT_EQ(sizeof(int32_t), view.value_width);
+        EXPECT_EQ(kCount, view.num_values); // _num_elements, not the padded count
+        ASSERT_NE(nullptr, view.data);
+        const auto* values = reinterpret_cast<const int32_t*>(view.data);
+        for (size_t i = 0; i < kCount; ++i) {
+            int32_t expected = 0;
+            decoder.at_index(i, &expected); // the scalar reference the view has to agree with
+            EXPECT_EQ(expected, values[i]) << "index " << i;
+            EXPECT_EQ(src[i], values[i]) << "index " << i;
+        }
+    }
+}
+
+// init() lets a TYPE_UNSIGNED_INT page declare an element narrower than the type, and then the body is
+// laid out at that stride. Advertising SIZE_OF_TYPE for such a page would have callers index four-byte
+// slots over a one-byte array, reading wrong values and running past the body, so the view is refused.
+// The page is built by hand because the builder always writes SIZE_OF_TYPE; init() only parses.
+TEST_F(BitShufflePageTest, contiguous_values_refuses_a_narrow_element) {
+    constexpr uint32_t kCount = 24;
+    constexpr uint32_t kPadded = 24; // already a multiple of 8
+    constexpr uint32_t kNarrowWidth = 1;
+
+    std::string page(BITSHUFFLE_PAGE_HEADER_SIZE + kPadded * kNarrowWidth, '\0');
+    auto* header = reinterpret_cast<uint8_t*>(page.data());
+    encode_fixed32_le(header, kCount);
+    encode_fixed32_le(header + 4, static_cast<uint32_t>(page.size()));
+    encode_fixed32_le(header + 8, kPadded);
+    encode_fixed32_le(header + 12, kNarrowWidth);
+    for (uint32_t i = 0; i < kPadded; ++i) {
+        page[BITSHUFFLE_PAGE_HEADER_SIZE + i] = static_cast<char>(i + 1);
+    }
+
+    BitShufflePageDecoder<TYPE_UNSIGNED_INT> decoder{Slice(page)};
+    ASSERT_TRUE(decoder.init().ok()) << "the narrow-element page must parse, or the test proves nothing";
+    EXPECT_EQ(kCount, decoder.count());
+    EXPECT_TRUE(decoder.contiguous_values().status().is_not_supported());
+
+    // The same page shape at the full width is accepted, so the refusal is about the width alone.
+    std::string wide(BITSHUFFLE_PAGE_HEADER_SIZE + kPadded * sizeof(uint32_t), '\0');
+    auto* wide_header = reinterpret_cast<uint8_t*>(wide.data());
+    encode_fixed32_le(wide_header, kCount);
+    encode_fixed32_le(wide_header + 4, static_cast<uint32_t>(wide.size()));
+    encode_fixed32_le(wide_header + 8, kPadded);
+    encode_fixed32_le(wide_header + 12, static_cast<uint32_t>(sizeof(uint32_t)));
+    BitShufflePageDecoder<TYPE_UNSIGNED_INT> wide_decoder{Slice(wide)};
+    ASSERT_TRUE(wide_decoder.init().ok());
+    ASSIGN_OR_ABORT(auto view, wide_decoder.contiguous_values());
+    EXPECT_EQ(sizeof(uint32_t), view.value_width);
+    EXPECT_EQ(kCount, view.num_values);
 }
 
 } // namespace starrocks

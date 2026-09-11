@@ -166,6 +166,23 @@ Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
     return Status::OK();
 }
 
+Status IndexedColumnIterator::current_page_view(const uint8_t** data, ordinal_t* first_ordinal,
+                                                size_t* num_values) const {
+    if (_data_page == nullptr) {
+        return Status::InternalError("IndexedColumnIterator::current_page_view before a successful seek");
+    }
+    ASSIGN_OR_RETURN(auto view, _data_page->data_decoder()->contiguous_values());
+    // Must cover every row the page claims, at the column's own width; a mismatch means the layout is
+    // not what this API promises, so refuse rather than index memory whose shape we guessed.
+    if (view.value_width != _reader->type_info()->size() || view.num_values < _data_page->num_rows()) {
+        return Status::NotSupported("page value view does not match the column layout");
+    }
+    *data = view.data;
+    *first_ordinal = _data_page->first_ordinal();
+    *num_values = _data_page->num_rows();
+    return Status::OK();
+}
+
 Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_match) {
     if (!_reader->support_value_seek()) {
         return Status::NotSupported("no value index");
