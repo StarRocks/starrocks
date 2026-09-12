@@ -212,6 +212,54 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
+    public void testDropTableWithPurge(@Mocked RESTSessionCatalog restCatalog) {
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+
+        new Expectations() {
+            {
+                restCatalog.purgeTable((SessionContext) any, (TableIdentifier) any);
+                result = true;
+                times = 1;
+
+                restCatalog.dropTable((SessionContext) any, (TableIdentifier) any);
+                times = 0;
+            }
+        };
+        assertTrue(icebergRESTCatalog.dropTable(connectContext, "db", "tb1", true));
+    }
+
+    @Test
+    public void testDropTableWithoutPurge(@Mocked RESTSessionCatalog restCatalog) {
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+
+        new Expectations() {
+            {
+                restCatalog.dropTable((SessionContext) any, (TableIdentifier) any);
+                result = true;
+                times = 1;
+
+                restCatalog.purgeTable((SessionContext) any, (TableIdentifier) any);
+                times = 0;
+            }
+        };
+        assertTrue(icebergRESTCatalog.dropTable(connectContext, "db", "tb1", false));
+    }
+
+    @Test
+    public void testDropTableWithPurgeException(@Mocked RESTSessionCatalog restCatalog) {
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+
+        new Expectations() {
+            {
+                restCatalog.purgeTable((SessionContext) any, (TableIdentifier) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to drop table using REST Catalog",
+                () -> icebergRESTCatalog.dropTable(connectContext, "db", "tb1", true));
+    }
+
+    @Test
     public void testDropView(@Mocked RESTSessionCatalog restCatalog) {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
         new MockUp<IcebergMetadata>() {
