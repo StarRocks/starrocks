@@ -996,8 +996,29 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return tableIdList;
     }
 
-    public void addTableIdList(Long tableId) {
+    public synchronized void addTableIdList(Long tableId) {
         this.tableIdList.add(tableId);
+    }
+
+    // Append tableId unless it is already present, as one indivisible step.
+    //
+    // The table list is a plain ArrayList that is appended to from the statement execution path without
+    // holding any DatabaseTransactionMgr lock, so a check-then-append written at the call site races with
+    // itself and, worse, leaves readers looking at a list that is being resized underneath them. A reader
+    // can observe the new size against the old backing array and index past its end. This method and
+    // containsTableId share the transaction's monitor so mutation and inspection cannot interleave.
+    public synchronized void addTableIdIfAbsent(long tableId) {
+        if (!tableIdList.contains(tableId)) {
+            // Delegate rather than appending inline. The monitor is reentrant, so this stays one atomic
+            // step, and every append still funnels through the single addTableIdList entry point.
+            addTableIdList(tableId);
+        }
+    }
+
+    // Membership test that is safe against a concurrent append. Prefer this over getTableIdList().contains
+    // anywhere the transaction may still be attaching tables.
+    public synchronized boolean containsTableId(long tableId) {
+        return tableIdList.contains(tableId);
     }
 
     public Map<Long, TableCommitInfo> getIdToTableCommitInfos() {
