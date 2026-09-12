@@ -317,8 +317,18 @@ public abstract class BaseAction implements IAction {
 
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
+        return checkPassword(authInfo, new ConnectContext());
+    }
+
+    /**
+     * Authenticate into the caller's context, so authorization can read the groups and role ids that
+     * authentication resolved. A security integration user is ephemeral and carries no stored roles, so a caller
+     * that rebuilds the context from the returned identity alone loses every group derived privilege.
+     */
+    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo, ConnectContext context)
+            throws AccessDeniedException {
         try {
-            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
+            return AuthenticationHandler.authenticate(context, authInfo.fullUserName,
                     authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);

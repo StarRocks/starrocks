@@ -52,4 +52,15 @@ public interface AuthenticationProvider {
     default void checkLoginSuccess(int connectionId, AccessControlContext authContext) throws AuthenticationException {
         // do nothing
     }
+
+    /**
+     * Whether this provider can authenticate a credential that reached the FE without the MySQL
+     * authentication plugin negotiation, that is, when {@link AccessControlContext#getAuthPlugin()} is unset.
+     * Endpoints such as Arrow Flight SQL, the HTTP REST API and the thrift service carry the credential as an
+     * opaque string and never negotiate a plugin name, so the authentication chain cannot match a provider by
+     * plugin name for them.
+     */
+    default boolean supportsUnnegotiatedCredential() {
+        return false;
+    }
 }

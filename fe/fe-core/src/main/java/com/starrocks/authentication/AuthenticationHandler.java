@@ -23,6 +23,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -138,14 +139,13 @@ public class AuthenticationHandler {
                 continue;
             }
 
-            if (!Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
-                    .equalsIgnoreCase(authContext.getAuthPlugin())) {
-                continue;
-            }
-
             AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
             if (provider == null) {
                 LOG.warn("authentication provider is null for security integration: {}", authMechanism);
+                continue;
+            }
+
+            if (!matchesCredential(authContext, securityIntegration, provider)) {
                 continue;
             }
 
@@ -172,6 +172,26 @@ public class AuthenticationHandler {
         }
 
         return authenticationResult;
+    }
+
+    /**
+     * Decide whether a security integration should be tried for the credential at hand.
+     * <p>
+     * A MySQL client negotiates an authentication plugin, so the integration whose type maps to that plugin is the
+     * only one worth trying. Every other endpoint (Arrow Flight SQL, the HTTP REST API, the thrift service) passes
+     * an opaque credential and leaves the plugin unset, so the integration is selected by asking the provider
+     * whether it can consume such a credential at all.
+     */
+    private static boolean matchesCredential(AccessControlContext authContext,
+                                             SecurityIntegration securityIntegration,
+                                             AuthenticationProvider provider) {
+        String clientAuthPlugin = authContext.getAuthPlugin();
+        if (StringUtils.isEmpty(clientAuthPlugin)) {
+            return provider.supportsUnnegotiatedCredential();
+        }
+
+        return Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
+                .equalsIgnoreCase(clientAuthPlugin);
     }
 
     private static void setAuthenticationResultToContext(ConnectContext context,

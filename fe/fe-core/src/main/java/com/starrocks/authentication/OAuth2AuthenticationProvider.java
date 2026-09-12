@@ -79,6 +79,16 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
         }
     }
 
+    /**
+     * OAuth2 deliberately reports success when the client did not negotiate the OAuth2 plugin, and defers the real
+     * check to {@link #checkLoginSuccess}, which only the MySQL protocol invokes. Accepting an unnegotiated
+     * credential would therefore let any caller through on the other endpoints.
+     */
+    @Override
+    public boolean supportsUnnegotiatedCredential() {
+        return false;
+    }
+
     @Override
     public byte[] authMoreDataPacket(AccessControlContext authContext, String user, String host) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();

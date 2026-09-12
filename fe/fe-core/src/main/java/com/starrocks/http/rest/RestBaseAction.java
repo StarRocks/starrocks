@@ -195,12 +195,16 @@ public class RestBaseAction extends BaseAction {
             UserIdentity currentUser;
             Set<Long> currentRoleIds;
             Set<String> currentGroups;
+            String currentAuthToken;
             try {
                 AuthenticationHandler.authenticate(authCtx, authInfo.fullUserName,
                         authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
                 currentUser = authCtx.getCurrentUserIdentity();
                 currentRoleIds = authCtx.getCurrentRoleIds();
                 currentGroups = authCtx.getGroups();
+                // a JWT security integration stores the verified token here, and IcebergRESTCatalog reads it
+                // off the request context to authenticate the catalog call as this user
+                currentAuthToken = authCtx.getAuthToken();
             } catch (AuthenticationException e) {
                 throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
             }
@@ -210,10 +214,12 @@ public class RestBaseAction extends BaseAction {
             Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
             String prevUserName = ctx.getQualifiedUser();
             Set<String> prevGroups = ctx.getGroups();
+            String prevAuthToken = ctx.getAuthToken();
 
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setCurrentRoleIds(currentRoleIds);
             ctx.setGroups(currentGroups);
+            ctx.setAuthToken(currentAuthToken);
             ctx.setQualifiedUser(authInfo.fullUserName);
 
             if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
@@ -224,6 +230,7 @@ public class RestBaseAction extends BaseAction {
                     ctx.setCurrentUserIdentity(prevUserIdentity);
                     ctx.setCurrentRoleIds(prevRoleIds);
                     ctx.setGroups(prevGroups);
+                    ctx.setAuthToken(prevAuthToken);
                     ctx.setQualifiedUser(prevUserName);
                     throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
                 }
