@@ -20,6 +20,7 @@ import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -76,6 +77,30 @@ public class CredentialUtilTest {
 
         key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 AwsProperties.REST_SECRET_ACCESS_KEY;
+        properties.put(key, "7758258");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("77******58", properties.get(key));
+
+        key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                AwsProperties.REST_SESSION_TOKEN;
+        properties.put(key, "7758258");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("77******58", properties.get(key));
+
+        key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                S3FileIOProperties.ACCESS_KEY_ID;
+        properties.put(key, "7758258");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("77******58", properties.get(key));
+
+        key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                S3FileIOProperties.SECRET_ACCESS_KEY;
+        properties.put(key, "7758258");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("77******58", properties.get(key));
+
+        key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                S3FileIOProperties.SESSION_TOKEN;
         properties.put(key, "7758258");
         CredentialUtil.maskCredential(properties);
         Assertions.assertEquals("77******58", properties.get(key));
