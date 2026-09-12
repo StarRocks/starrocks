@@ -102,8 +102,9 @@ public class TypeDefAnalyzer {
                 }
                 break;
             }
-            case VARBINARY: {
-                String name = "VARBINARY";
+            case VARBINARY:
+            case GEOMETRY: {
+                String name = type.name();
                 int maxLen = TypeFactory.getOlapMaxVarcharLength();
                 int len = scalarType.getLength();
                 // len is decided by child, when it is -1.

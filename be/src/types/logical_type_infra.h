@@ -62,6 +62,7 @@ namespace starrocks {
     M(TYPE_TIME)                     \
     M(TYPE_JSON)                     \
     M(TYPE_VARBINARY)                \
+    M(TYPE_GEOMETRY)                 \
     M(TYPE_VARIANT)                  \
     M(TYPE_BOOLEAN)
 
@@ -112,6 +113,7 @@ namespace starrocks {
     M(FUNCTION)                         \
     M(BINARY)                           \
     M(VARBINARY)                        \
+    M(GEOMETRY)                         \
     M(JSON)                             \
     M(VARIANT)
 

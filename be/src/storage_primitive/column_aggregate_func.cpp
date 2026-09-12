@@ -389,6 +389,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_CHAR, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_VARCHAR, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_VARBINARY, BinaryColumn, SliceState)
+            CASE_REPLACE(TYPE_GEOMETRY, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_BOOLEAN, BooleanColumn, uint8_t)
             CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ColumnRefState)
             CASE_REPLACE(TYPE_MAP, MapColumn, ColumnRefState)

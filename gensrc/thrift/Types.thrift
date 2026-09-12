@@ -105,7 +105,9 @@ enum TPrimitiveType {
   VARBINARY,
   DECIMAL256,
   INT256,
-  VARIANT
+  VARIANT,
+  // OGC geometry serialized as WKB.
+  GEOMETRY
 }
 
 enum TTypeNodeType {

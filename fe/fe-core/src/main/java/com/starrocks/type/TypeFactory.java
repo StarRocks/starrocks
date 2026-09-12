@@ -95,6 +95,10 @@ public class TypeFactory {
         return type;
     }
 
+    public static ScalarType createGeometry(int len) {
+        return new GeometryType(len);
+    }
+
     /**
      * Create a unified decimal type with default precision and scale.
      * Unified decimal is used for parser, which creating default decimal from name.
@@ -321,6 +325,7 @@ public class TypeFactory {
                     .add(CharType.CHAR)
                     .add(VarcharType.VARCHAR)
                     .add(VarbinaryType.VARBINARY)
+                    .add(GeometryType.GEOMETRY)
                     // Date types
                     .add(DateType.DATE)
                     .add(DateType.DATETIME)

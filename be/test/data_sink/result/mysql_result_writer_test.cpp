@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -142,6 +143,53 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
     uint8_t second_row_null_map = get_null_byte(rows[1]);
     EXPECT_EQ(0, second_row_null_map & nullable_bit);
     EXPECT_EQ(0, second_row_null_map & struct_bit);
+
+    for (auto* ctx : expr_ctxs) {
+        ctx->close(&dummy_state);
+    }
+}
+
+TEST_F(MysqlResultWriterTest, should_encode_nested_geometry_as_binary) {
+    auto geometry_data = BinaryColumn::create();
+    const std::string wkb("\x01\x00\xff", 3);
+    geometry_data->append(Slice(wkb));
+
+    auto element_nulls = NullColumn::create();
+    element_nulls->append(0);
+    auto elements = NullableColumn::create(geometry_data, element_nulls);
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    auto array_col = ArrayColumn::create(elements, offsets);
+
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_GEOMETRY));
+    auto expr_ctxs = make_expr_ctxs({{array_type, array_col}});
+
+    Chunk chunk;
+    auto dummy_col = Int32Column::create();
+    dummy_col->append(0);
+    chunk.append_column(dummy_col, 0);
+
+    TUniqueId query_id;
+    query_id.hi = 0;
+    query_id.lo = 0;
+    BufferControlBlock sinker(query_id, 1024);
+    ASSERT_TRUE(sinker.init().ok());
+
+    RuntimeProfile profile("mysql_result_writer_test");
+    MysqlResultWriter writer(&sinker, expr_ctxs, false, &profile);
+    RuntimeState dummy_state;
+    ASSERT_TRUE(writer.init(&dummy_state).ok());
+    for (auto* ctx : expr_ctxs) {
+        ASSERT_TRUE(ctx->prepare(&dummy_state).ok());
+        ASSERT_TRUE(ctx->open(&dummy_state).ok());
+    }
+
+    auto result_or = writer.process_chunk(&chunk);
+    ASSERT_TRUE(result_or.ok());
+    const auto& rows = result_or.value()[0]->result_batch.rows;
+    ASSERT_EQ(1, rows.size());
+    EXPECT_EQ(std::string("\x0a[\"0100ff\"]", 11), rows[0]);
 
     for (auto* ctx : expr_ctxs) {
         ctx->close(&dummy_state);

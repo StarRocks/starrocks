@@ -303,7 +303,7 @@ DEF_PRED_GUARD(ConvBinaryGuard, is_conv_binary, LogicalType, LT, ArrowTypeId, AT
 IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_HLL, TYPE_CHAR, TYPE_DATE, TYPE_DATETIME, TYPE_LARGEINT)
 IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_DECIMAL256)
 IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_JSON)
-IS_CONV_BINARY_R(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+IS_CONV_BINARY_R(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_GEOMETRY, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
 
 template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
 struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
@@ -314,7 +314,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
 
     static inline auto convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
                                      [[maybe_unused]] int scale) {
-        if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
+        if constexpr (lt_is_string<LT> || lt_is_binary<LT> || lt_is_geometry<LT>) {
             return std::string_view(datum);
         } else if constexpr (lt_is_decimalv2<LT> || lt_is_date_or_datetime<LT>) {
             return datum.to_string();
@@ -353,7 +353,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
-            if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
+            if constexpr (lt_is_string<LT> || lt_is_binary<LT> || lt_is_geometry<LT>) {
                 const auto data = data_column->immutable_data();
                 for (auto i = start_idx; i < end_idx; ++i) {
                     if (nullable_column->is_null(i)) {
@@ -386,7 +386,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
         } else {
             const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
             const auto data = data_column->immutable_data();
-            if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
+            if constexpr (lt_is_string<LT> || lt_is_binary<LT> || lt_is_geometry<LT>) {
                 for (auto i = start_idx; i < end_idx; ++i) {
                     ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
                 }
@@ -698,7 +698,8 @@ static const std::unordered_map<int32_t, StarRocksToArrowConvertFunc> global_sta
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_CHAR, TYPE_HLL),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_LARGEINT, TYPE_DATE, TYPE_DATETIME),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_JSON),
-        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_GEOMETRY, TYPE_HLL, TYPE_OBJECT,
+                                        TYPE_PERCENTILE),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::LIST, TYPE_ARRAY),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRUCT, TYPE_STRUCT),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::MAP, TYPE_MAP)};

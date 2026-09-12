@@ -180,10 +180,18 @@ TEST(TabletColumnTest, ChecksumSupportRecursesIntoSubcolumns) {
 
     EXPECT_TRUE(TabletColumn(supported_array).is_support_checksum());
 
-    auto unsupported_struct = make_column_pb(31, "payload", TYPE_STRUCT, STORAGE_AGGREGATE_NONE, true, 1);
-    *unsupported_struct.add_children_columns() = make_column_pb(32, "id", TYPE_INT);
+    auto geometry = make_column_pb(31, "shape", TYPE_GEOMETRY, STORAGE_AGGREGATE_NONE, true, 16);
+    EXPECT_TRUE(TabletColumn(geometry).is_support_checksum());
+
+    auto geometry_array = make_column_pb(32, "shapes", TYPE_ARRAY, STORAGE_AGGREGATE_NONE, true, 24);
+    *geometry_array.add_children_columns() =
+            make_column_pb(-1, "element", TYPE_GEOMETRY, STORAGE_AGGREGATE_NONE, true, 16);
+    EXPECT_TRUE(TabletColumn(geometry_array).is_support_checksum());
+
+    auto unsupported_struct = make_column_pb(33, "payload", TYPE_STRUCT, STORAGE_AGGREGATE_NONE, true, 1);
+    *unsupported_struct.add_children_columns() = make_column_pb(34, "id", TYPE_INT);
     *unsupported_struct.add_children_columns() =
-            make_column_pb(33, "body", TYPE_JSON, STORAGE_AGGREGATE_NONE, true, 16);
+            make_column_pb(35, "body", TYPE_JSON, STORAGE_AGGREGATE_NONE, true, 16);
 
     EXPECT_FALSE(TabletColumn(unsupported_struct).is_support_checksum());
 }

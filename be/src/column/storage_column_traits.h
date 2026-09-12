@@ -184,6 +184,12 @@ struct StorageColumnTraits<TYPE_VARBINARY> {
     using LargeColumnType = LargeBinaryColumn;
 };
 
+template <>
+struct StorageColumnTraits<TYPE_GEOMETRY> {
+    using ColumnType = BinaryColumn;
+    using LargeColumnType = LargeBinaryColumn;
+};
+
 template <LogicalType Type>
 using StorageColumnType = typename StorageColumnTraits<Type>::ColumnType;
 

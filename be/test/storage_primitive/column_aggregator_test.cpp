@@ -593,6 +593,18 @@ TEST(ColumnAggregator, testNullIntReplace) {
     EXPECT_EQ(true, agg1->is_null(5));
 }
 
+TEST(ColumnAggregator, testGeometryReplaceFactory) {
+    for (auto method : {StorageAggregateType::STORAGE_AGGREGATE_REPLACE,
+                        StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL}) {
+        FieldPtr field = std::make_shared<Field>(1, "shape", LogicalType::TYPE_GEOMETRY, false);
+        field->set_aggregate_method(method);
+
+        auto result = ColumnAggregatorFactory::create_value_column_aggregator(field);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_NE(nullptr, result.value());
+    }
+}
+
 TEST(ColumnAggregator, testArrayReplace) {
     auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_VARCHAR));
     FieldPtr field = std::make_shared<Field>(1, "test_array", array_type_info,

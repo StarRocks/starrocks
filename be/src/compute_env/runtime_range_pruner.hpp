@@ -90,7 +90,7 @@ struct RuntimeColumnPredicateBuilder {
                                                              ObjectPool* pool) {
         // Unsupported probe expression types fall back to the original runtime filter.
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
-                      lt_is_float<ltype> || lt_is_binary<ltype>) {
+                      ltype == TYPE_GEOMETRY || lt_is_float<ltype> || lt_is_binary<ltype>) {
             return std::vector<const ColumnPredicate*>{};
         } else {
             std::vector<const ColumnPredicate*> preds;

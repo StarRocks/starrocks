@@ -24,6 +24,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
+import com.starrocks.type.GeometryType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -82,6 +83,8 @@ public class TypeParser {
             return HLLType.HLL;
         } else if (context.BINARY() != null || context.VARBINARY() != null) {
             return TypeFactory.createVarbinary(length);
+        } else if (context.GEOMETRY() != null) {
+            return GeometryType.GEOMETRY;
         } else {
             String typeStr = context.getChild(0).getText();
             return getTypeByName(typeStr);
@@ -205,6 +208,7 @@ public class TypeParser {
 
             // Binary types
             case "VARBINARY" -> VarbinaryType.VARBINARY;
+            case "GEOMETRY" -> GeometryType.GEOMETRY;
 
             // Special types
             case "HLL" -> HLLType.HLL;

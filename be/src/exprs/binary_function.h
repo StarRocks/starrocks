@@ -56,8 +56,8 @@ public:
         result->resize_uninitialized(v1->size());
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
-                      lt_is_object_family<RType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_geometry<LType> ||
+                      lt_is_object_family<LType> || lt_is_object_family<RType>) {
             const auto r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
             const auto r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
             for (int i = 0; i < s; ++i) {
@@ -88,8 +88,8 @@ public:
         auto* data3 = result->get_data().data();
 
         const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
-                      lt_is_object_family<RType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_geometry<LType> ||
+                      lt_is_object_family<LType> || lt_is_object_family<RType>) {
             const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
@@ -119,8 +119,8 @@ public:
         auto* data3 = r3.data();
 
         auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
-                      lt_is_object_family<RType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_geometry<LType> ||
+                      lt_is_object_family<LType> || lt_is_object_family<RType>) {
             const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);

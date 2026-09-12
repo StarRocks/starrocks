@@ -133,6 +133,8 @@ std::string SchemaColumnsScanner::to_mysql_data_type_string(TColumnDesc& desc) {
         return "binary";
     case TPrimitiveType::VARBINARY:
         return "varbinary";
+    case TPrimitiveType::GEOMETRY:
+        return "geometry";
     default:
         return "unknown";
     }
@@ -209,6 +211,8 @@ std::string SchemaColumnsScanner::type_to_string(TColumnDesc& desc) {
         return "binary";
     case TPrimitiveType::VARBINARY:
         return "varbinary";
+    case TPrimitiveType::GEOMETRY:
+        return "geometry";
     default:
         return "unknown";
     }

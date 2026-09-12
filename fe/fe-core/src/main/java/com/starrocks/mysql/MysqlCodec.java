@@ -267,6 +267,8 @@ public class MysqlCodec {
                 return MysqlColType.MYSQL_TYPE_VAR_STRING;
             case VARBINARY:
                 return MysqlColType.MYSQL_TYPE_BLOB;
+            case GEOMETRY:
+                return MysqlColType.MYSQL_TYPE_GEOMETRY;
             default:
                 return MysqlColType.MYSQL_TYPE_STRING;
         }
@@ -332,6 +334,7 @@ public class MysqlCodec {
             case HLL:
             case BITMAP:
             case VARBINARY:
+            case GEOMETRY:
                 ScalarType charType = ((ScalarType) type);
                 int charLength = charType.getLength();
                 if (charLength == -1) {

@@ -97,6 +97,19 @@ TEST_F(VectorizedConditionExprTest, ifNullLArray) {
     }
 }
 
+TEST_F(VectorizedConditionExprTest, nonComparingConditionalsSupportGeometry) {
+    expr_node.type = TypeDescriptor(TYPE_GEOMETRY).to_thrift();
+
+    std::unique_ptr<Expr> if_expr(VectorizedConditionExprFactory::create_if_expr(expr_node));
+    std::unique_ptr<Expr> if_null_expr(VectorizedConditionExprFactory::create_if_null_expr(expr_node));
+    std::unique_ptr<Expr> coalesce_expr(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+
+    ASSERT_NE(nullptr, if_expr);
+    ASSERT_NE(nullptr, if_null_expr);
+    ASSERT_NE(nullptr, coalesce_expr);
+    ASSERT_EQ(nullptr, VectorizedConditionExprFactory::create_null_if_expr(expr_node));
+}
+
 TEST_F(VectorizedConditionExprTest, ifNullLNotNull) {
     for (const auto& desc : tttype_desc) {
         expr_node.type = desc;

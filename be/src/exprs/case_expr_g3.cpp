@@ -22,6 +22,7 @@ Expr* case_from_thrift_group3(const starrocks::TExprNode& node, LogicalType resu
     switch (resultType) {
         CASE_RESULT_TYPE(TYPE_JSON)
         CASE_RESULT_TYPE(TYPE_VARBINARY)
+        CASE_RESULT_TYPE(TYPE_GEOMETRY)
         CASE_RESULT_TYPE(TYPE_VARIANT)
         CASE_RESULT_TYPE(TYPE_STRUCT)
         CASE_RESULT_TYPE(TYPE_MAP)

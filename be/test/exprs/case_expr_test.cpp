@@ -1080,6 +1080,16 @@ TEST_F(VectorizedCaseExprTest, searchedCaseReturnsVariant) {
     assert_case_variant_result(no_else_result, {std::nullopt, "41", std::nullopt});
 }
 
+TEST_F(VectorizedCaseExprTest, searchedCaseSupportsGeometryResult) {
+    expr_node.case_expr.has_case_expr = false;
+    expr_node.case_expr.has_else_expr = true;
+    expr_node.child_type = TPrimitiveType::BOOLEAN;
+    expr_node.type = TypeDescriptor(TYPE_GEOMETRY).to_thrift();
+
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_GEOMETRY, TYPE_BOOLEAN));
+    ASSERT_NE(nullptr, expr);
+}
+
 TEST_F(VectorizedCaseExprTest, simpleCaseReturnsVariant) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;

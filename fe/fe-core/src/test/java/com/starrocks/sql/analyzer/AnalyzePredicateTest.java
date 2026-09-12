@@ -40,6 +40,81 @@ public class AnalyzePredicateTest {
         analyzeSuccess("select * from tarray where v3 in ([1,2,3], [4,5,6])");
     }
 
+    @Test
+    public void testGeometryPredicate() {
+        String point = "ST_GeomFromText('POINT (0 0)')";
+        String otherPoint = "ST_GeomFromText('POINT (1 1)')";
+        String error = "GEOMETRY type does not support predicate operations";
+
+        analyzeSuccess("select " + point + " is null");
+        analyzeFail("select " + point + " = " + otherPoint, error);
+        analyzeFail("select " + point + " between " + point + " and " + otherPoint, error);
+        analyzeFail("select " + point + " in (" + otherPoint + ")", error);
+        analyzeFail("select [" + point + "] = [" + otherPoint + "]", error);
+        analyzeFail("select [[" + point + "]] in ([[" + otherPoint + "]])", error);
+        analyzeSuccess("select [" + point + "] is null");
+    }
+
+    @Test
+    public void testGeometryNonComparingConditionals() {
+        String point = "ST_GeomFromText('POINT (0 0)')";
+        String otherPoint = "ST_GeomFromText('POINT (1 1)')";
+
+        analyzeSuccess("select if(true, " + point + ", " + otherPoint + ")");
+        analyzeSuccess("select ifnull(" + point + ", " + otherPoint + ")");
+        analyzeSuccess("select coalesce(" + point + ", " + otherPoint + ")");
+        analyzeFail("select nullif(" + point + ", " + otherPoint + ")");
+    }
+
+    @Test
+    public void testGeometryCaseMatching() {
+        String point = "ST_GeomFromText('POINT (0 0)')";
+        String otherPoint = "ST_GeomFromText('POINT (1 1)')";
+        String error = "GEOMETRY type does not support CASE matching";
+
+        analyzeFail("select case " + point + " when " + otherPoint + " then 1 else 0 end", error);
+        analyzeFail("select case [" + point + "] when [" + otherPoint + "] then 1 else 0 end", error);
+        analyzeSuccess("select case when true then " + point + " else " + otherPoint + " end");
+    }
+
+    @Test
+    public void testGeometryDistinctAggregate() {
+        String geometry = "ST_GeomFromText(ta)";
+        String error = "DISTINCT aggregate functions do not support GEOMETRY arguments";
+
+        analyzeSuccess("select count(" + geometry + ") from tall");
+        analyzeFail("select count(distinct " + geometry + ") from tall", error);
+        analyzeFail("select count(distinct [" + geometry + "]) from tall", error);
+    }
+
+    @Test
+    public void testGeometryComparisonArrayFunctions() {
+        String point = "ST_GeomFromText('POINT (0 0)')";
+        String otherPoint = "ST_GeomFromText('POINT (1 1)')";
+        String array = "[" + point + "]";
+        String otherArray = "[" + otherPoint + "]";
+        String error = "GEOMETRY type does not support comparison function";
+
+        analyzeFail("select array_contains(" + array + ", " + otherPoint + ")", error);
+        analyzeFail("select array_position(" + array + ", " + otherPoint + ")", error);
+        analyzeFail("select array_remove(" + array + ", " + otherPoint + ")", error);
+        analyzeFail("select array_distinct(" + array + ")", error);
+        analyzeFail("select array_intersect(" + array + ", " + otherArray + ")", error);
+        analyzeFail("select arrays_overlap(" + array + ", " + otherArray + ")", error);
+        analyzeFail("select array_contains_all(" + array + ", " + otherArray + ")", error);
+        analyzeFail("select array_contains_seq(" + array + ", " + otherArray + ")", error);
+        analyzeFail("select array_distinct([[" + point + "]])", error);
+        analyzeFail("select nullif(" + array + ", " + otherArray + ")", error);
+        analyzeFail("select array_top_n(" + array + ", 1)", error);
+        analyzeFail("select encode_sort_key(" + point + ")", error);
+        analyzeFail("select array_sortby([1], " + array + ")", error);
+
+        analyzeSuccess("select array_length(" + array + ")");
+        analyzeSuccess("select array_append(" + array + ", " + otherPoint + ")");
+        analyzeSuccess("select array_slice(" + array + ", 1, 1)");
+        analyzeSuccess("select array_concat(" + array + ", " + otherArray + ")");
+        analyzeSuccess("select array_sortby(" + array + ", [1])");
+    }
 
     @Test
     public void testInPredicate() {

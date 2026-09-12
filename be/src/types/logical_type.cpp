@@ -62,6 +62,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "JSON") return TYPE_JSON;
     if (upper_type_str == "BINARY") return TYPE_BINARY;
     if (upper_type_str == "VARBINARY") return TYPE_VARBINARY;
+    if (upper_type_str == "GEOMETRY") return TYPE_GEOMETRY;
     if (upper_type_str == "ANY_ARRAY") return TYPE_ARRAY;
     if (upper_type_str == "ANY_STRUCT") return TYPE_STRUCT;
     if (upper_type_str == "ANY_MAP") return TYPE_MAP;
@@ -154,6 +155,8 @@ const char* logical_type_to_string(LogicalType type) {
         return "MAX_VALUE";
     case TYPE_VARBINARY:
         return "VARBINARY";
+    case TYPE_GEOMETRY:
+        return "GEOMETRY";
     case TYPE_VARIANT:
         return "VARIANT";
     }
@@ -287,6 +290,7 @@ public:
         _data[TYPE_DECIMAL128] = TYPE_DECIMAL128;
         _data[TYPE_JSON] = TYPE_JSON;
         _data[TYPE_VARBINARY] = TYPE_VARBINARY;
+        _data[TYPE_GEOMETRY] = TYPE_GEOMETRY;
         _data[TYPE_DECIMAL256] = TYPE_DECIMAL256;
         _data[TYPE_INT256] = TYPE_INT256;
         _data[TYPE_VARIANT] = TYPE_VARIANT;

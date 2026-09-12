@@ -473,7 +473,7 @@ public class TypeManager {
             PrimitiveType primitive = ((ScalarType) from).getPrimitiveType();
             return primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
                     primitive != PrimitiveType.PERCENTILE && primitive != PrimitiveType.FUNCTION &&
-                    primitive != PrimitiveType.VARBINARY;
+                    primitive != PrimitiveType.VARBINARY && primitive != PrimitiveType.GEOMETRY;
         }
         if (from.isArrayType()) {
             ArrayType arrayType = (ArrayType) from;

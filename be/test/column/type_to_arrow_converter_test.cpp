@@ -76,6 +76,11 @@ TEST(TypeToArrowConverterTest, MapsFlightSqlSpecialTypes) {
     EXPECT_EQ("hll_col", field->name());
     EXPECT_TRUE(field->nullable());
     EXPECT_EQ(arrow::Type::BINARY, field->type()->id());
+
+    ASSERT_OK(convert_to_arrow_field_for_flight_sql(TypeDescriptor(TYPE_GEOMETRY), "geom_col", false, &field, 1));
+    EXPECT_EQ("geom_col", field->name());
+    EXPECT_FALSE(field->nullable());
+    EXPECT_EQ(arrow::Type::BINARY, field->type()->id());
 }
 
 TEST(TypeToArrowConverterTest, RejectsInvalidStructShape) {
