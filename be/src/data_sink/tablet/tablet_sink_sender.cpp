@@ -14,16 +14,22 @@
 
 #include "data_sink/tablet/tablet_sink_sender.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "common/config_ingest_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
+#include "fmt/format.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/combined_txn_log_writer.h"
+#include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/shard_write_txn_log.h"
 
 namespace starrocks {
 
@@ -87,6 +93,128 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
     return Status::OK();
 }
 
+void TabletSinkSender::set_enable_shard_write(bool enable,
+                                              std::unordered_map<int64_t, std::vector<SlotId>> key_slots_by_index) {
+    _enable_shard_write = enable;
+    _shard_write_key_slots = std::move(key_slots_by_index);
+    if (_enable_shard_write) {
+        // Resolved once: the backend id comes from the FE heartbeat and does not change while the
+        // process runs. Absent (a CN that has not been assigned one yet) leaves every row on the
+        // round-robin fallback, which is always correct, just not local. Irrelevant under key-hash
+        // routing, which never asks where it is running.
+        _local_node_id = get_backend_id().value_or(-1);
+    }
+}
+
+// One CRC32 per row over the key columns, accumulated column by column -- the same shape
+// OlapTablePartitionParam uses for distribution hashing, so two rows agree here exactly when they
+// agree on every key column.
+void TabletSinkSender::_compute_key_hashes(Chunk* chunk, const std::vector<SlotId>& key_slots) {
+    const size_t num_rows = chunk->num_rows();
+    _key_hashes.assign(num_rows, 0);
+    if (num_rows == 0) {
+        return;
+    }
+    for (SlotId slot_id : key_slots) {
+        ColumnPtr column = chunk->get_column_by_slot_id(slot_id);
+        DCHECK(column != nullptr);
+        if (column == nullptr) {
+            continue;
+        }
+        column->crc32_hash(_key_hashes.data(), 0, num_rows);
+    }
+}
+
+// Decide the ONE node each selected row goes to. This cannot be folded into the per-node dispatch
+// loop in _send_chunk_by_node: that loop visits the same row once per node, so a cursor advanced
+// there would step a different number of times on each pass and a row could end up claimed by
+// several nodes (duplication) or by none (loss).
+Status TabletSinkSender::_assign_shard_write_targets(
+        Chunk* chunk, IndexChannel* channel, const std::unordered_map<int64_t, std::vector<int64_t>>& tablet_to_be,
+        const std::vector<uint16_t>& selection_idx) {
+    if (_row_target_node.size() < _tablet_ids.size()) {
+        _row_target_node.resize(_tablet_ids.size());
+    }
+    // Key-hash routing for the key types whose repeats resolve against each other; local-first for
+    // DUPLICATE KEY, whose rowset is the union of its segments and therefore has no such pair.
+    auto key_slots_iter = _shard_write_key_slots.find(channel->index_id());
+    const std::vector<SlotId>* key_slots =
+            (key_slots_iter != _shard_write_key_slots.end() && !key_slots_iter->second.empty())
+                    ? &key_slots_iter->second
+                    : nullptr;
+    if (key_slots != nullptr) {
+        _compute_key_hashes(chunk, *key_slots);
+        for (unsigned short selection : selection_idx) {
+            auto iter = tablet_to_be.find(_tablet_ids[selection]);
+            DCHECK(iter != tablet_to_be.end());
+            if (iter == tablet_to_be.end()) {
+                return Status::InternalError(
+                        fmt::format("Unknown tablet_id {} in tablet be map", _tablet_ids[selection]));
+            }
+            const std::vector<int64_t>& be_ids = iter->second;
+            DCHECK(!be_ids.empty());
+            // Stateless on purpose: the same key must reach the same node from EVERY sink instance
+            // and every chunk, so the decision may depend on nothing but the key and the node list.
+            const int64_t target = be_ids[_key_hashes[selection] % be_ids.size()];
+            _row_target_node[selection] = target;
+            ++(target == _local_node_id ? _shard_write_local_rows : _shard_write_remote_rows);
+        }
+        return Status::OK();
+    }
+    // Rows are handed out in runs of `shard_write_rows_per_node`. A run of 1 spreads every row and
+    // balances perfectly, but leaves each node a strided 1/N slice of the chunk, so the sender does
+    // N small per-column appends where it used to do one large one. A run at or above the chunk size
+    // routes a whole chunk's rows for a tablet to one node instead.
+    const uint64_t stride = std::max(1, config::shard_write_rows_per_node);
+    int64_t last_tablet_id = -1;
+    const std::vector<int64_t>* last_be_ids = nullptr;
+    uint64_t* last_counter = nullptr;
+    // Decided once per (chunk, tablet), not per row: whether this node writes this tablet does not
+    // change within a chunk.
+    bool keep_local = false;
+    for (unsigned short selection : selection_idx) {
+        const int64_t tablet_id = _tablet_ids[selection];
+        if (tablet_id != last_tablet_id) {
+            auto iter = tablet_to_be.find(tablet_id);
+            DCHECK(iter != tablet_to_be.end());
+            if (iter == tablet_to_be.end()) {
+                return Status::InternalError(fmt::format("Unknown tablet_id {} in tablet be map", tablet_id));
+            }
+            last_tablet_id = tablet_id;
+            last_be_ids = &iter->second;
+            last_counter = &_shard_write_counters[tablet_id];
+            keep_local = _can_keep_rows_local(channel, *last_be_ids);
+        }
+        DCHECK(!last_be_ids->empty());
+        // Local when this node is one of the tablet's writers; otherwise round-robin over the list.
+        // The fallback is a ROUTINE path, not a defensive one: FE bounds the list at
+        // lake_local_first_write_max_nodes, so on a warehouse wider than that bound every sink instance
+        // outside the list sends its rows instead of keeping them -- which is what this feature's
+        // predecessor did for every row. Roughly (1 - bound / alive_nodes) of the rows travel.
+        const int64_t target =
+                keep_local ? _local_node_id : (*last_be_ids)[((*last_counter)++ / stride) % last_be_ids->size()];
+        _row_target_node[selection] = target;
+        ++(target == _local_node_id ? _shard_write_local_rows : _shard_write_remote_rows);
+    }
+    return Status::OK();
+}
+
+// This instance knows its own node, that node is one of the tablet's writers, and its channel is
+// open and not failed.
+bool TabletSinkSender::_can_keep_rows_local(IndexChannel* channel, const std::vector<int64_t>& be_ids) const {
+    if (_local_node_id < 0) {
+        return false;
+    }
+    if (std::find(be_ids.begin(), be_ids.end(), _local_node_id) == be_ids.end()) {
+        return false;
+    }
+    auto iter = channel->_node_channels.find(_local_node_id);
+    if (iter == channel->_node_channels.end() || iter->second == nullptr) {
+        return false;
+    }
+    return !channel->is_failed_channel(iter->second.get());
+}
+
 Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel,
                                              const std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
@@ -95,8 +223,13 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
     auto& tablet_to_be = _index_id_to_tablet_be_map.find(channel->index_id())->second;
     // Acquire shared lock to protect against concurrent modification of _node_channels
     // during incremental partition opens (see IndexChannel::init with is_incremental=true).
+    // Held across the shard-write routing decision too: local-first probes the local node channel
+    // through this same map.
     std::shared_lock<std::shared_mutex> lock(channel->_node_channels_mutex);
     TEST_SYNC_POINT("TabletSinkSender::_send_chunk_by_node::after_lock");
+    if (_enable_shard_write) {
+        RETURN_IF_ERROR(_assign_shard_write_targets(chunk, channel, tablet_to_be, selection_idx));
+    }
     for (auto& it : channel->_node_channels) {
         NodeChannel* node = it.second.get();
         if (channel->is_failed_channel(node)) {
@@ -107,7 +240,15 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
 
-        if (_enable_replicated_storage) {
+        if (_enable_shard_write) {
+            // The node list of a tablet is a SHARD set, not a replica set: every row goes to exactly
+            // one of them, so each node receives a disjoint part of the tablet.
+            for (unsigned short selection : selection_idx) {
+                if (_row_target_node[selection] == be_id) {
+                    _node_select_idx.emplace_back(selection);
+                }
+            }
+        } else if (_enable_replicated_storage) {
             for (unsigned short selection : selection_idx) {
                 DCHECK(tablet_to_be.find(_tablet_ids[selection]) != tablet_to_be.end());
                 std::vector<int64_t>& be_ids = tablet_to_be.find(_tablet_ids[selection])->second;
@@ -297,6 +438,17 @@ bool TabletSinkSender::is_close_done() {
 Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
                                     bool write_txn_log) {
     Status status = std::move(close_status);
+    if (_enable_shard_write && ts_profile != nullptr && ts_profile->runtime_profile != nullptr) {
+        // How this instance's rows were split. A non-zero remote count is EXPECTED whenever the
+        // warehouse is wider than lake_local_first_write_max_nodes: this instance's node is then not in
+        // the tablet's list and its rows travel. Judge it against that bound, not against zero -- the
+        // share that travels is about (1 - bound / alive_nodes), and only a remote count above that
+        // points at something being wrong.
+        COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteLocalRows", TUnit::UNIT),
+                       _shard_write_local_rows);
+        COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteRemoteRows", TUnit::UNIT),
+                       _shard_write_remote_rows);
+    }
     // BE id -> add_batch method counter
     std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
     int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
@@ -326,17 +478,10 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
             }
         }
         if (status.ok() && write_txn_log) {
-            auto merge_txn_log = [this](NodeChannel* channel) {
-                for (auto& log : channel->txn_logs()) {
-                    _txn_log_map[log.partition_id()].add_txn_logs()->Swap(&log);
-                }
-            };
-
-            for (auto& index_channel : _channels) {
-                index_channel->for_each_node_channel(merge_txn_log);
+            status.update(_collect_txn_logs());
+            if (status.ok()) {
+                status.update(_write_combined_txn_log());
             }
-
-            status.update(_write_combined_txn_log());
         }
     } else {
         for_each_index_channel(
@@ -425,6 +570,56 @@ ExpectedTabletsByPartition TabletSinkSender::_expected_tablets_by_partition() co
         }
     }
     return expected;
+}
+
+Status TabletSinkSender::_collect_txn_logs() {
+    if (!_enable_shard_write) {
+        for (auto& index_channel : _channels) {
+            index_channel->for_each_node_channel([this](NodeChannel* channel) {
+                for (auto& log : channel->txn_logs()) {
+                    _txn_log_map[log.partition_id()].add_txn_logs()->Swap(&log);
+                }
+            });
+        }
+        return Status::OK();
+    }
+
+    // Shard write: several nodes wrote the same tablet, so each of them handed back a PARTIAL txn log
+    // for it. Fold them into a single log per tablet here, before the combined log is written out, so
+    // the {txn_id}.logs file publish reads still holds exactly one log per tablet.
+    //
+    // Walk the node channels in node-id order: the fold is a concatenation, and a stable input order
+    // keeps the resulting segment layout reproducible across retries of the same load.
+    std::map<int64_t, std::map<int64_t, TxnLogPB*>> tablet_log_by_partition;
+    size_t merged_logs = 0;
+    for (auto& index_channel : _channels) {
+        std::map<int64_t, NodeChannel*> ordered_nodes;
+        index_channel->for_each_node_channel(
+                [&ordered_nodes](NodeChannel* channel) { ordered_nodes.emplace(channel->node_id(), channel); });
+        for (auto& [node_id, channel] : ordered_nodes) {
+            for (auto& log : channel->txn_logs()) {
+                auto& tablet_logs = tablet_log_by_partition[log.partition_id()];
+                auto it = tablet_logs.find(log.tablet_id());
+                if (it == tablet_logs.end()) {
+                    auto* slot = _txn_log_map[log.partition_id()].add_txn_logs();
+                    slot->Swap(&log);
+                    // The structured arrays are the only ones merge_shard_write_txn_log maintains;
+                    // after-load makes them canonical and drops the deprecated parallel arrays that
+                    // the producing CN dual-wrote. put_combined_txn_log rebuilds those on save.
+                    lake::normalize_txn_log_after_load(slot);
+                    tablet_logs.emplace(slot->tablet_id(), slot);
+                    continue;
+                }
+                lake::normalize_txn_log_after_load(&log);
+                RETURN_IF_ERROR(lake::merge_shard_write_txn_log(it->second, &log));
+                ++merged_logs;
+            }
+        }
+    }
+    if (merged_logs > 0) {
+        VLOG(2) << "shard write: folded " << merged_logs << " extra txn logs, txn_id=" << _txn_id;
+    }
+    return Status::OK();
 }
 
 Status TabletSinkSender::_write_combined_txn_log() {

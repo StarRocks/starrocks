@@ -190,11 +190,20 @@ private:
     int _num_senders = -1;
     bool _is_lake_table = false;
     bool _write_txn_log = false;
+    // Shared-data only: a tablet's location carries several compute nodes that each write PART of
+    // its rows (see TOlapTableSink.enable_shard_write), instead of one node per tablet.
+    bool _enable_shard_write = false;
+    // Widest tablet under shard write: how many CNs the most-spread tablet is written by. Reported in
+    // the sink profile so a load can be told apart from one where the feature silently did not apply.
+    size_t _shard_write_node_num = 1;
     bool _enable_data_file_bundling = false;
     bool _is_multi_statements_txn = false;
     bool _enable_lake_per_partition_coordinator_txn_log = false;
 
     TKeysType::type _keys_type;
+    // Per index, the slots of the key columns for shard-write key-hash routing. Empty for DUPLICATE
+    // KEY, which keeps local-first routing.
+    std::unordered_map<int64_t, std::vector<SlotId>> _resolve_shard_write_key_slots() const;
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;

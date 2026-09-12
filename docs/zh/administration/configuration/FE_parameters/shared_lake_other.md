@@ -526,6 +526,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 触发存算分离集群中数据摄取减速的 Compaction Score 阈值。此配置仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。
 - 引入版本: v3.2.0
 
+### `lake_local_first_write_max_nodes`
+
+- 默认值: 6
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，开启本地优先写入（`enable_local_first_tablet_write`）后，允许并行写入**同一个 tablet** 的最大计算节点数。位于该列表中的每个节点都会为该 tablet 建立自己的 delta writer 并产出自己的 segment，因此在节点数很多的 Warehouse 中，一次普通规模的导入会被切成同样多的小 segment。超出该上限的节点仍会运行自己的 sink 实例，只是它们的数据会走网络发往列表内的节点——也就是本功能出现之前的行为，因此该上限只影响局部性，不影响正确性。设置为小于等于 `0` 表示不设上限（使用全部存活计算节点）。该值是上限而非实际并行度：最终使用的并行度取三者中的最小值——本配置项、根据导入预估大小推算出的节点数（会话变量 `lake_local_first_write_bytes_per_node`）、以及存活计算节点数量。
+- 引入版本: v4.2
+
 ### `lake_publish_version_max_threads`
 
 - 默认值: 512

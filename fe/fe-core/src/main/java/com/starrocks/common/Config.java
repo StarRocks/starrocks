@@ -1373,6 +1373,13 @@ public class Config extends ConfigBase {
             "Only explicitly failed tasks are retried (not timeouts). Set 0 to disable retry.")
     public static int lake_create_tablet_max_retries = 1;
 
+    @ConfField(mutable = true, comment = "Upper bound on how many compute nodes may write ONE tablet in parallel " +
+            "under local-first tablet write. Every node that ends up in a tablet's location opens its own delta " +
+            "writer and produces its own segments, so a very wide warehouse would split one load into many small " +
+            "segments. Nodes beyond this bound still run their sink instance -- their rows go over the network " +
+            "instead of staying local, which is the pre-existing behaviour. <= 0 means no bound (every alive node).")
+    public static int lake_local_first_write_max_nodes = 6;
+
     /**
      * The thrift server max worker threads
      */

@@ -528,6 +528,7 @@ public class LoadPlanner {
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
+                ((OlapTableSink) dataSink).setEstimatedWriteBytes(totalSourceFileBytes());
                 ((OlapTableSink) dataSink).complete(mergeConditionStr);
             }
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -717,4 +718,31 @@ public class LoadPlanner {
     public Map<String, String> getSessionVariables() {
         return sessionVariables;
     }
+
+    // Bytes of source this load will read, summed from the file list the job already resolved.
+    //
+    // Unlike the INSERT path this is measured, not estimated -- but it is measured on the SOURCE, so a
+    // compressed or columnar input understates what actually gets written. That direction is the safe
+    // one here: it can only narrow the write set, never widen it past the node bound.
+    //
+    // Returns -1 when there is no file list (a streaming ingest reaches this planner too), which the
+    // sink reads as "no estimate" and leaves the node count to the bound alone.
+    private long totalSourceFileBytes() {
+        if (fileStatusesList == null) {
+            return -1;
+        }
+        long total = 0;
+        for (List<TBrokerFileStatus> group : fileStatusesList) {
+            if (group == null) {
+                continue;
+            }
+            for (TBrokerFileStatus file : group) {
+                if (file != null && file.size > 0) {
+                    total += file.size;
+                }
+            }
+        }
+        return total > 0 ? total : -1;
+    }
+
 }
