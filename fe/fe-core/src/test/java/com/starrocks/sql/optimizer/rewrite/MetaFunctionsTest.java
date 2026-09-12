@@ -267,6 +267,38 @@ public class MetaFunctionsTest extends MVTestBase {
     }
 
     @Test
+    public void inspectMVRefreshInfoHandlesViewBaseTable() throws Exception {
+        // An MV built on a logical VIEW is supported, but VIEW has no ConnectorPartitionTraits entry.
+        // The inspection must degrade gracefully for that base object instead of throwing.
+        starRocksAssert.withView("create view view_for_traits as select k1, v1 from test.tbl1");
+        starRocksAssert.withMaterializedView("create materialized view mv_on_view distributed by random " +
+                "as select k1, sum(v1) from test.view_for_traits group by k1");
+        ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(
+                ConstantOperator.createVarchar("test.mv_on_view"));
+        Assertions.assertNotNull(result);
+        String json = result.getVarchar();
+        Assertions.assertTrue(json.contains("mvToRefreshPartitions"));
+        // The view base is reported as having no partition concept instead of aborting the inspection...
+        Assertions.assertTrue(json.contains("unsupportedTableType"));
+        // ...and the olap base behind the view still gets its real partition info reported.
+        Assertions.assertTrue(json.contains("tbl1"));
+        Assertions.assertTrue(json.contains("p1"));
+        Assertions.assertTrue(json.contains("p2"));
+        starRocksAssert.dropMaterializedView("mv_on_view");
+        starRocksAssert.dropView("view_for_traits");
+    }
+
+    @Test
+    public void inspectTablePartitionInfoThrowsSemanticExceptionForView() throws Exception {
+        // Reaching ConnectorPartitionTraits.build() with a VIEW used to surface a bare NullPointerException.
+        starRocksAssert.withView("create view view_no_partition as select k1, v1 from test.tbl1");
+        assertThrows(SemanticException.class,
+                () -> MetaFunctions.inspectTablePartitionInfo(
+                        ConstantOperator.createVarchar("test.view_no_partition")));
+        starRocksAssert.dropView("view_no_partition");
+    }
+
+    @Test
     public void inspectMVRefreshInfoHandlesEmptyBaseTables() throws Exception {
         starRocksAssert.withMaterializedView("create materialized view mv_empty distributed by random " +
                 "   as select k1 from test.tbl1 group by k1");

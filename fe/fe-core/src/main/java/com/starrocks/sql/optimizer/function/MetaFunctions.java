@@ -261,6 +261,19 @@ public class MetaFunctions {
             Map<String, String> tablePartitionInfos = Maps.newHashMap();
             for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                 Table baseTable = MvUtils.getTableChecked(baseTableInfo);
+                // A base without a ConnectorPartitionTraits entry has no partition concept to inspect; the
+                // common case is a VIEW, which MvRefreshArbiter.getMvBaseTableUpdateInfo() already skips on
+                // the refresh path. Record its type and move on, so one such base no longer aborts the whole
+                // inspection via ConnectorPartitionTraits.build()'s null-check.
+                // NOTE: unlike getTablePartitionInfo() below, this guard must NOT exempt OlapTable. Both
+                // branches here need traits -- getUpdatedPartitionNamesOfOlapTable() builds them as well
+                // (MaterializedView#getUpdatedPartitionNamesOfOlapTable) -- so an OlapTable with an
+                // unregistered type (OLAP_EXTERNAL) would still trip the null-check.
+                if (!ConnectorPartitionTraits.isSupported(baseTable.getType())) {
+                    tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
+                    tablePartitionInfos.put(baseTable.getName(), unsupportedPartitionTraitsInfo(baseTable));
+                    continue;
+                }
                 Set<String> toUpdatePartitions = null;
                 if (baseTable instanceof OlapTable) {
                     toUpdatePartitions = mv.getUpdatedPartitionNamesOfOlapTable((OlapTable) baseTable, false);
@@ -323,7 +336,21 @@ public class MetaFunctions {
         }
     }
 
+    /**
+     * Describe a base object that cannot carry partition information, instead of failing the whole inspection.
+     */
+    private static String unsupportedPartitionTraitsInfo(Table table) {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("unsupportedTableType", String.valueOf(table.getType()));
+        return obj.toString();
+    }
+
     private static String getTablePartitionInfo(Table table) {
+        // Fail with an actionable message rather than letting ConnectorPartitionTraits.build() below trip its
+        // null-check, which reaches inspect_table_partition_info() callers as a bare NullPointerException.
+        if (!(table instanceof OlapTable) && !ConnectorPartitionTraits.isSupported(table.getType())) {
+            throw new SemanticException("table type does not support partition info: " + table.getType());
+        }
         JsonObject obj = new JsonObject();
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
