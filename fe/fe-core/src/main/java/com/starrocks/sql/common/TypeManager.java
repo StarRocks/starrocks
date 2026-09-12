@@ -656,6 +656,11 @@ public class TypeManager {
             return t1;
         }
 
+        // Unequal geo types have no implicit common type; preserve the identity/null shortcuts above.
+        if (t1.isGeoType() || t2.isGeoType()) {
+            return InvalidType.INVALID;
+        }
+
         boolean t1IsHLL = t1.getType() == PrimitiveType.HLL;
         boolean t2IsHLL = t2.getType() == PrimitiveType.HLL;
         if (t1IsHLL || t2IsHLL) {
