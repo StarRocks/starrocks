@@ -1504,7 +1504,17 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
         try {
             UserRef user = statement.getToUser();
-            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            UserIdentity target = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            // A target with no account gets an ephemeral identity, which only `IMPERSONATE ON ALL USERS`
+            // can cover: a grant naming a user cannot legitimately exist for a name that has none, so a
+            // leftover one from a dropped namesake must not resurrect here.
+            // Read from the registry rather than from the statement on purpose - the admission decision
+            // has not been made yet, so this check is identical for members and non-members of the
+            // allowed groups and cannot be used to probe either.
+            UserIdentity userIdentity =
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(target)
+                            ? target
+                            : UserIdentity.createEphemeralUserIdent(user.getUser(), user.getHost());
             Authorizer.checkUserAction(context, userIdentity, PrivilegeType.IMPERSONATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(

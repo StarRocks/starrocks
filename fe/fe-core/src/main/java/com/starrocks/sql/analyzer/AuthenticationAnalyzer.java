@@ -151,8 +151,19 @@ public class AuthenticationAnalyzer {
             if (stmt.isAllowRevert()) {
                 throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
             }
-            analyzeUser(stmt.getToUser());
-            checkUserExist(stmt.getToUser(), true);
+            UserRef toUser = stmt.getToUser();
+            analyzeUser(toUser);
+
+            // Whether an unregistered target may be impersonated is decided in ExecuteAsExecutor, after
+            // the IMPERSONATE check and immediately before the session is switched - not here. Analysis
+            // runs before authorization (StatementPlanner: analyzeStatement, then Authorizer.check), so
+            // answering "does this name exist / is this person in an allowed group?" at this point would
+            // answer it for a caller who has not been shown to hold any privilege at all.
+            String[] allowedGroups = Config.execute_as_external_user_allowed_groups;
+            if (allowedGroups == null || allowedGroups.length == 0) {
+                // Feature off: reject an unknown target exactly where and how it did before.
+                checkUserExist(toUser, true);
+            }
             return null;
         }
     }

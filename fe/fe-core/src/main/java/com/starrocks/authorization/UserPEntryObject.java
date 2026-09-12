@@ -38,7 +38,11 @@ public class UserPEntryObject implements PEntryObject {
             return new UserPEntryObject(null);
         }
 
-        if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(user)) {
+        // An ephemeral identity is by definition absent from AuthenticationMgr, so the existence check
+        // would reject the very users it is meant to describe. It only reaches here from the IMPERSONATE
+        // check of `EXECUTE AS` on an external target: GRANT builds its objects from a non-ephemeral
+        // UserIdentity and has already run checkUserExist(), so this does not weaken the grant path.
+        if (!user.isEphemeral() && !GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(user)) {
             throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
@@ -59,6 +63,17 @@ public class UserPEntryObject implements PEntryObject {
         UserPEntryObject other = (UserPEntryObject) obj;
         if (other.userIdentity == null) {
             return true; // this object is all
+        }
+        if (userIdentity == null) {
+            return false; // this(ALL), other(userx) -> false, as documented above
+        }
+        // UserIdentity.equals() ignores the ephemeral flag, so without this an ephemeral identity - a name
+        // with no account at all - would match a grant naming that same name. Such a grant can only be a
+        // leftover from a dropped namesake, and impersonating a name with no account must require
+        // `ON ALL USERS`. Compared in both directions because PrivilegeCollectionV2.searchObject() also
+        // calls objectMatch() with the arguments swapped.
+        if (userIdentity.isEphemeral() != other.userIdentity.isEphemeral()) {
+            return false;
         }
         return userIdentity.equals(other.userIdentity);
     }
