@@ -16,8 +16,6 @@
 
 #include <memory>
 
-#include "column/chunk.h"
-#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
@@ -32,11 +30,9 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec_primitive/pipeline/operator.h"
-#include "exec_primitive/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
@@ -119,20 +115,6 @@ void CrossJoinNode::close(RuntimeState* state) {
 
     ExprExecutor::close(_join_conjuncts, state);
     ExecNode::close(state);
-}
-
-StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
-        ObjectPool* pool, const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs, Chunk* chunk,
-        const std::vector<ExprContext*>& ctxs) {
-    std::list<ExprContext*> filters;
-
-    for (auto rf_desc : rf_descs) {
-        DCHECK_LT(rf_desc->build_expr_order(), ctxs.size());
-        ASSIGN_OR_RETURN(auto expr, RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(
-                                            pool, ctxs[rf_desc->build_expr_order()], chunk))
-        filters.push_back(expr);
-    }
-    return filters;
 }
 
 template <class BuildFactory, class ProbeFactory>
