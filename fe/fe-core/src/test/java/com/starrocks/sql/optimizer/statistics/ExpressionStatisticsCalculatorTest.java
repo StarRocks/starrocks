@@ -405,6 +405,15 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 10, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertFalse(columnStatistic.isUnknown());
+        // test dsqrt function
+        callOperator = new CallOperator(FunctionSet.DSQRT, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), 10, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertFalse(columnStatistic.isUnknown());
         // test square function
         callOperator = new CallOperator(FunctionSet.SQUARE, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -544,6 +553,53 @@ public class ExpressionStatisticsCalculatorTest {
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(uint32Cardinality, columnStatistic.getDistinctValuesCount(), 0.001);
 
+    }
+
+    @Test
+    public void testSqrtFunctionCall() {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, FloatType.DOUBLE, "id", true);
+
+        // Non-negative input: sqrt maps [min, max] to [sqrt(min), sqrt(max)].
+        Statistics positiveStats = Statistics.builder()
+                .addColumnStatistic(columnRefOperator,
+                        ColumnStatistic.builder().setMinValue(4).setMaxValue(100)
+                                .setDistinctValuesCount(50).setNullsFraction(0).setAverageRowSize(8).build())
+                .setOutputRowCount(50)
+                .build();
+        CallOperator callOperator = new CallOperator(FunctionSet.SQRT, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, positiveStats);
+        Assertions.assertEquals(2, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(10, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(50, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertFalse(columnStatistic.isUnknown());
+
+        callOperator = new CallOperator(FunctionSet.DSQRT, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, positiveStats);
+        Assertions.assertEquals(2, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(10, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertFalse(columnStatistic.isUnknown());
+
+        // Any range with a negative min includes runtime NULLs; NDV/nulls cannot be
+        // derived from min/max alone, so stats stay unknown.
+        Statistics mixedStats = Statistics.builder()
+                .addColumnStatistic(columnRefOperator,
+                        ColumnStatistic.builder().setMinValue(-16).setMaxValue(25)
+                                .setDistinctValuesCount(20).setNullsFraction(0).setAverageRowSize(8).build())
+                .setOutputRowCount(20)
+                .build();
+        callOperator = new CallOperator(FunctionSet.SQRT, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, mixedStats);
+        Assertions.assertTrue(columnStatistic.isUnknown());
+
+        Statistics negativeStats = Statistics.builder()
+                .addColumnStatistic(columnRefOperator,
+                        ColumnStatistic.builder().setMinValue(-16).setMaxValue(-4)
+                                .setDistinctValuesCount(10).setNullsFraction(0).setAverageRowSize(8).build())
+                .setOutputRowCount(10)
+                .build();
+        callOperator = new CallOperator(FunctionSet.SQRT, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, negativeStats);
+        Assertions.assertTrue(columnStatistic.isUnknown());
     }
 
     @Test
