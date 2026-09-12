@@ -784,10 +784,11 @@ public class ExpressionStatisticCalculator {
                     maxValue = 1;
                     break;
                 case FunctionSet.SQRT:
-                    minValue = 0;
-                    if (maxValue < 0) {
+                case FunctionSet.DSQRT:
+                    if (minValue < 0) {
                         return ColumnStatistic.unknown();
                     }
+                    minValue = Math.sqrt(minValue);
                     maxValue = Math.sqrt(maxValue);
                     break;
                 case FunctionSet.SQUARE:
