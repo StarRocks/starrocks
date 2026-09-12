@@ -455,5 +455,52 @@ public class JsonPathRewriteTest extends PlanTestBase {
         }
     }
 
+    /**
+     * One scan reading a single path with two different types must fall back instead of planning at all.
+     *
+     * <p>getOrCreateColumn() throws on the second type, and transform()'s catch-all swallows that -- but the
+     * rewrite is not side-effect-free: ScalarOperatorRewriter mutates the scalar tree in place through
+     * setChild(), so the read that was rewritten first keeps pointing at the synthesized extended column
+     * while the scan's colRefToColumnMetaMap is never updated (that assignment lives past the throw). The
+     * statistics calculator then meets a column ref the scan does not know about and the query dies with
+     * "only found column statistics: {2: j}, but missing statistic of col: 7: j.v".
+     *
+     * <p>The wrapper around the get_json_* call matters: it is the parent's setChild() that makes the
+     * half-finished rewrite outlive the exception. A bare subfield under an aggregate stays above the scan
+     * and never shares a pathMap, which is why those shapes plan fine.
+     */
+    @Test
+    public void testSingleScanSamePathDifferentTypesFallBack() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable(
+                "create table json_mixed_type (k int, j json) properties('replication_num'='1')");
+        try {
+            // int + double on '$.v', each wrapped in a scalar function.
+            String plan = getVerboseExplain(
+                    "select sum(coalesce(get_json_int(j, '$.v'), 0)), "
+                            + "sum(coalesce(get_json_double(j, '$.v'), 0)) from json_mixed_type");
+            assertNotContains(plan, "ExtendedColumnAccessPath");
+            assertContains(plan, "get_json_int");
+
+            // The same collision reached through length(), which is how it first showed up in production.
+            String stringPlan = getVerboseExplain(
+                    "select sum(length(get_json_string(j, '$.v'))), "
+                            + "sum(coalesce(get_json_int(j, '$.v'), 0)) from json_mixed_type");
+            assertNotContains(stringPlan, "ExtendedColumnAccessPath");
+
+            // Control: two different paths in the same shape are still pushed down.
+            String okPlan = getVerboseExplain(
+                    "select sum(coalesce(get_json_int(j, '$.v'), 0)), "
+                            + "sum(coalesce(get_json_double(j, '$.w'), 0)) from json_mixed_type");
+            assertContains(okPlan, "ExtendedColumnAccessPath");
+        } finally {
+            starRocksAssert.dropTable("json_mixed_type");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
 }
 
