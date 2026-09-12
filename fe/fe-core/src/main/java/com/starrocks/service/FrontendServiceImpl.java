@@ -949,28 +949,44 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(context, catalogName, params.db);
-
-        if (db != null) {
-            Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
-            if (table == null) {
+        Database db;
+        Table table;
+        try {
+            db = metadataMgr.getDb(context, catalogName, params.db);
+            if (db == null) {
                 return result;
             }
-            try {
-                Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
-            } catch (AccessDeniedException e) {
-                return result;
-            }
-            // Only the target table's schema is read, so an intensive
-            // IS-on-db + READ-on-table lock is sufficient; it lets concurrent
-            // DDL/ALTER on other tables in the same db proceed.
-            Locker locker = new Locker();
-            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-            try {
-                setColumnDesc(columns, table, limit, false, params.db, params.table_name);
-            } finally {
-                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-            }
+            table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
+        } catch (Exception e) {
+            // BE scans information_schema.columns for a schema with one describeTable RPC per
+            // table. If loading one table's metadata throws (e.g. a Glue entry without a
+            // StorageDescriptor, which the Hive connector rejects), letting the exception escape
+            // becomes a thrift application error on the BE side and aborts the scan for every
+            // other table in the schema. Skip just this table, the same way
+            // InformationSchemaDataSource.generateTablesInfoResponse already does for
+            // information_schema.tables. DESC on the table itself still reports the error.
+            LOG.warn("describeTable: skip {}.{}.{}, failed to load table metadata: {}",
+                    catalogName, params.db, params.table_name, e.getMessage());
+            LOG.debug("describeTable: table metadata load failure", e);
+            return result;
+        }
+        if (table == null) {
+            return result;
+        }
+        try {
+            Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
+        } catch (AccessDeniedException e) {
+            return result;
+        }
+        // Only the target table's schema is read, so an intensive
+        // IS-on-db + READ-on-table lock is sufficient; it lets concurrent
+        // DDL/ALTER on other tables in the same db proceed.
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        try {
+            setColumnDesc(columns, table, limit, false, params.db, params.table_name);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
         return result;
     }
