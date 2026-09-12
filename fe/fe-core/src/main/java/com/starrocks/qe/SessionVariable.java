@@ -1070,6 +1070,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
+    public static final String ENABLE_AI_TOPN_PUSHDOWN = "enable_ai_topn_pushdown";
+    public static final String AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT = "ai_topn_pushdown_max_global_limit";
+
     public static final String CBO_PUSHDOWN_DISTINCT_LIMIT = "cbo_push_down_distinct_limit";
 
     public static final String ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT = "enable_aggregation_pipeline_share_limit";
@@ -2303,6 +2306,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+    @VarAttr(name = ENABLE_AI_TOPN_PUSHDOWN)
+    private boolean enableAiTopnPushdown = true;
+
+    // Larger limits use per-instance candidates; zero selects the local path for all eligible limits.
+    @VarAttr(name = AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)
+    private long aiTopnPushdownMaxGlobalLimit = 1000;
+
     @VarAttr(name = CBO_PUSHDOWN_DISTINCT_LIMIT)
     private long cboPushDownDistinctLimit = 4096;
 
@@ -2631,6 +2641,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
+    }
+
+    public boolean isEnableAiTopnPushdown() {
+        return enableAiTopnPushdown;
+    }
+
+    public void setEnableAiTopnPushdown(boolean enableAiTopnPushdown) {
+        this.enableAiTopnPushdown = enableAiTopnPushdown;
+    }
+
+    public long getAiTopnPushdownMaxGlobalLimit() {
+        return aiTopnPushdownMaxGlobalLimit;
+    }
+
+    public void setAiTopnPushdownMaxGlobalLimit(long aiTopnPushdownMaxGlobalLimit) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        if (aiTopnPushdownMaxGlobalLimit < 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT, aiTopnPushdownMaxGlobalLimit, "a non-negative integer");
+        }
+        this.aiTopnPushdownMaxGlobalLimit = aiTopnPushdownMaxGlobalLimit;
     }
 
     public long cboPushDownDistinctLimit() {

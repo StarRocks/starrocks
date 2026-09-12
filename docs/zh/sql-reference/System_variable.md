@@ -186,6 +186,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 如果要在当前会话中激活一个角色，可以使用 [SET ROLE](sql-statements/account-management/SET_ROLE.md)。
 
+### ai_topn_pushdown_max_global_limit
+
+* **描述**：当 `enable_ai_topn_pushdown` 为 `true` 时，选择 AI 投影下方的候选 TopN 策略。对于满足条件且为正数的 SQL `LIMIT N`，`N` 小于或等于此阈值时，全局候选行数最多为 `N`；超过阈值时，每个 Fragment Instance 的本地候选行数最多为 `N`，而不是每个 BE 或 Pipeline Driver 最多为 `N`。`0` 表示仅使用本地候选裁剪，不会禁用此优化。两种策略均保留 AI 投影上方原有的 TopN。
+* **默认值**：1000
+* **数据类型**：long
+* **取值范围**：[0, 9223372036854775807]
+* **作用域**：Session、Global
+
+候选上限适用于被改写的 AI 投影，而不是查询中的全部 AI 工作量。可以通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置此变量，无需重启。此变量独立于 `cbo_push_down_topn_limit`，不影响不含 AI 投影的普通查询。默认值是初始策略选择，不是经过基准测试得出的最优值。此阈值不是 HTTP 请求数、Token 或内存上限，也不保证节省开销或降低延迟。适用条件、并行度取舍及示例请参见[减少 AI 输入行数](sql-functions/scalar-functions/ai_complete.md#减少-ai-输入行数)。
+
 ### ann_params
 
 * **描述**：指定近似最近邻（ANN）向量索引检索的查询参数。取值是键和值均为字符串的 JSON 对象字符串。HNSW 支持 `efsearch`；IVFPQ 支持 `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht` 和 `range_search_confidence`。可以在会话或单条语句中设置，例如 `SET ann_params = '{"efsearch":"256"}'` 或 `SET_VAR (ann_params='{"efsearch":"256"}')`。
@@ -520,6 +530,16 @@ FROM test;
 * 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
 * 默认值：false
 * 引入版本：v2.5
+
+### enable_ai_topn_pushdown
+
+* **描述**：是否在满足条件的 AI 投影下方启用候选 TopN 下推。`false` 跳过此候选改写，不影响不含 AI 投影的查询的常规 TopN 优化。启用后，由 `ai_topn_pushdown_max_global_limit` 选择全局或每个 Fragment Instance 的候选裁剪；该阈值为 `0` 时仅使用本地裁剪，并非禁用。
+* **默认值**：true
+* **数据类型**：Boolean
+* **有效值**：`true`、`false`
+* **作用域**：Session、Global
+
+可以通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置此变量，无需重启。示例请参见 [AI TopN 下推](sql-functions/scalar-functions/ai_complete.md#ai-topn-下推)。
 
 ### enable_bucket_aware_execution_on_lake
 

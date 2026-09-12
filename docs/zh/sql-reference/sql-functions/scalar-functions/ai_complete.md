@@ -48,7 +48,40 @@ ai_complete(<model>, <prompt>, <options>)
 
 此函数具有非确定性。即使参数相同，提供商状态、模型行为和运行时条件的变化也可能导致返回文本或失败方式不同。
 
+### 减少 AI 输入行数
+
+对于 `LIMIT` 为正数且不带 `OFFSET` 的 `ORDER BY ... LIMIT` 查询，如果所有排序列都从输入经 AI 投影及可选的普通 Project 原样透传，StarRocks 可以先选出排名靠前的行，再计算 `ai_complete`。默认启用 [`enable_ai_topn_pushdown`](../../System_variable.md#enable_ai_topn_pushdown)，由 [`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) 为 SQL `LIMIT N` 选择候选策略：
+
+- `N` 小于或等于阈值（默认 `1000`）：通过常规 `FINAL` 候选 TopN，将被改写的 AI 投影的输入行数限制为全局最多 `N` 行。
+- `N` 大于阈值：通过常规 `PARTIAL` 候选 TopN，将该 AI 投影的输入行数限制为每个 Fragment Instance 最多 `N` 行，而不是每个 BE 或 Pipeline Driver 最多 `N` 行。此 TopN 不是 per-pipeline TopN。
+
+两种策略均保留 AI 投影上方原有的 TopN，以保证请求的输出顺序和行数限制。可以通过 `EXPLAIN` 检查 AI 投影下方的候选 TopN 及其上方原有的 TopN。
+
+此上限适用于被改写的 AI 投影，而不是查询中的全部 AI 工作量。对于嵌套 AI 调用，本地候选 TopN 可能位于两层 AI 投影之间，因此内层 AI 调用仍可能处理原始输入行。
+
+如果排序或过滤依赖 AI 调用结果，此优化不会将 TopN 下推到相应 AI 调用之前，也不会跨越 AI 投影或其直接输入上已有的行数限制，或不安全的投影或谓词屏障。不适用于分区 TopN 或使用 `RANK`、`DENSE_RANK` 的 TopN 操作。两种策略均须满足这些适用条件。
+
+全局策略可能以 AI 执行实例间的 MPP 并行度换取更少的 AI 输入行。本地策略不会在 AI 执行前新增全局 Gather，但常规本地合并可能降低 Fragment Instance 内 AI Pipeline 的并行度；AI 请求仍为异步执行。已经汇聚的输入不一定会变为分布式执行。两种策略都不保证减少 AI 输入行数、降低提供商费用或缩短延迟。这些行数上限不是 HTTP 请求数、Token 或内存上限：多个独立 AI 调用和重试仍可能为每行产生多次请求。
+
+已执行 AI 调用的错误策略不变。被裁剪的输入行不会执行 AI 调用，因此不会观察到这些调用原本可能产生的错误。
+
 ## 配置
+
+### AI TopN 下推
+
+[`enable_ai_topn_pushdown`](../../System_variable.md#enable_ai_topn_pushdown) 是 Boolean 类型的会话变量，默认值为 `true`；设置为 `false` 时跳过候选改写。[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) 是 `long` 类型的会话变量，默认值为 `1000`，取值范围为 `[0, 9223372036854775807]`。将阈值设为 `0` 时，满足条件的查询仅使用本地候选裁剪，不会禁用下推。默认值是初始策略选择，不是经过基准测试得出的最优值。
+
+两个变量均支持通过 `SET` 设置当前会话、通过 `SET GLOBAL` 设置后续新建会话的默认值，或通过语句级 `SET_VAR` Hint 设置，无需重启。它们独立于 `cbo_push_down_topn_limit`，不影响不含 AI 投影的普通查询。
+
+```sql
+-- 禁用 AI 投影下方的候选 TopN 下推。
+SET enable_ai_topn_pushdown = false;
+-- 启用混合裁剪：LIMIT <= 1000 时使用全局策略，更大时使用本地策略。
+SET enable_ai_topn_pushdown = true;
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- 保持下推开启，仅使用本地候选裁剪。
+SET ai_topn_pushdown_max_global_limit = 0;
+```
 
 ### FE SYSTEM 模型配置
 

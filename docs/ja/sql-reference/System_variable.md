@@ -189,6 +189,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### ai_topn_pushdown_max_global_limit
+
+* **説明**: `enable_ai_topn_pushdown` が `true` の場合に、AI projection の下の候補 TopN 戦略を選択します。適用条件を満たす正の SQL `LIMIT N` について、`N` がこのしきい値以下の場合、グローバルな候補行数は最大 `N` 行です。しきい値を超える場合、ローカルな候補行数はフラグメントインスタンスごとに最大 `N` 行であり、BE ごとやパイプラインドライバーごとの上限ではありません。`0` はローカルのみの候補プルーニングを選択し、この最適化を無効にはしません。どちらの戦略でも AI projection の上の元の TopN は維持されます。
+* **デフォルト**: 1000
+* **データ型**: long
+* **範囲**: [0, 9223372036854775807]
+* **スコープ**: Session、Global
+
+候補の上限はリライト対象の AI projection に適用され、クエリ内のすべての AI 処理量を制限するものではありません。`SET`、`SET GLOBAL`、またはステートメント単位の `SET_VAR` ヒントで設定でき、再起動は不要です。`cbo_push_down_topn_limit` とは独立しており、AI projection を含まない通常のクエリには影響しません。デフォルト値は初期ポリシーの選択であり、ベンチマークから求めた最適値ではありません。このしきい値は HTTP リクエスト数、トークン数、メモリの上限ではなく、処理量の削減やレイテンシの短縮を保証しません。適用条件、並列度のトレードオフ、例については、[AI 入力行数の削減](sql-functions/scalar-functions/ai_complete.md#ai-入力行数の削減)を参照してください。
+
 ### ann_params
 
 * **説明**: 近似最近傍（ANN）ベクターインデックス検索のクエリパラメータを指定します。値は、キーと値がともに文字列である JSON オブジェクト文字列です。HNSW は `efsearch`、IVFPQ は `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht`、`range_search_confidence` をサポートします。セッションまたは単一ステートメントに設定できます。例：`SET ann_params = '{"efsearch":"256"}'` または `SET_VAR (ann_params='{"efsearch":"256"}')`。
@@ -521,6 +531,16 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: データロードの適応並行性を有効にするかどうかを指定します。この機能を有効にすると、システムは INSERT INTO および Broker Load ジョブのロード並行性を自動的に設定し、`pipeline_dop` のメカニズムと同等になります。新しくデプロイされた v2.5 StarRocks クラスタでは、デフォルトで `true` に設定されています。v2.4 からアップグレードされた v2.5 クラスタでは、デフォルトで `false` に設定されています。
 * **デフォルト**: false
 * **導入バージョン**: v2.5
+
+### enable_ai_topn_pushdown
+
+* **説明**: 適用条件を満たす AI projection の下で候補 TopN プッシュダウンを有効にするかどうかを指定します。`false` はこの候補リライトをスキップし、AI projection を含まないクエリの通常の TopN 最適化には影響しません。有効な場合、`ai_topn_pushdown_max_global_limit` がグローバルまたはフラグメントインスタンスごとの候補プルーニングを選択します。このしきい値の `0` はローカルのみのプルーニングを意味し、無効化ではありません。
+* **デフォルト**: true
+* **データ型**: Boolean
+* **有効な値**: `true`、`false`
+* **スコープ**: Session、Global
+
+`SET`、`SET GLOBAL`、またはステートメント単位の `SET_VAR` ヒントで設定でき、再起動は不要です。例については、[AI TopN プッシュダウン](sql-functions/scalar-functions/ai_complete.md#ai-topn-プッシュダウン)を参照してください。
 
 ### enable_bucket_aware_execution_on_lake
 
