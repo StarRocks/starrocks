@@ -58,7 +58,7 @@ stop_fe.sh -g
 
 #### タイムアウト制御
 
-クエリが長時間実行される場合、FE は**60秒**（`--timeout` オプションで設定可能）後に強制終了します。
+ドレインが時間内に完了しない場合、FE 内部のハードタイムアウトは `max_graceful_exit_time_second`（デフォルト 120 秒）で、期限後にグレースフルエグジットスレッドが終了します。`stop_fe.sh --timeout` は別の外部 SIGKILL のフォールバックであり、デフォルトはありません（スクリプトはプロセス終了まで待機します）。
 
 ### BE/CN Graceful Exit メカニズム
 
@@ -100,15 +100,35 @@ v3.4 以降、FE はハートビートの失敗に基づいて BE/CN を `DEAD` 
 
 #### `stop_fe.sh -g --timeout`
 
-- 説明：FE が強制終了されるまでの最大待機時間。
-- デフォルト：60（秒）
-- 適用方法：スクリプトコマンドで指定します。例：`--timeout 120`。
+- 説明：外部 SIGKILL のフォールバック。指定秒数後も FE プロセスが生存している場合、`stop_fe.sh` は `SIGKILL` を送ります。これは FE 内部のハードタイムアウト（`max_graceful_exit_time_second`）ではありません。
+- デフォルト：なし。スクリプトはプロセス終了まで待機します。
+- 適用方法：スクリプトコマンドで指定します。FE がドレイン中に殺されないよう、`max_graceful_exit_time_second`（デフォルト 120）以上を推奨します。内部タイムアウトのデフォルトでは `--timeout 120` を指定します。
 
 #### *最小 LB 検出時間*
 
 - 説明：LB は劣化した健康状態を検出するのに少なくとも 15 秒を必要とします。
 - デフォルト：15（秒）
 - 適用方法：固定値
+
+#### `graceful_exit_http_accept_window_ms`
+
+- 説明：`SIGUSR1` 後の HTTP 受け入れウィンドウ（ミリ秒）。3 つの HTTP 入口の新規リクエストのみを制御します：ExecuteSqlAction（HTTP SQL）、LoadAction（stream load）、TransactionLoadAction（transaction stream load）。HealthCheck は T0 で 500 を返し、HTTP Load Balancer が切り離せるようにします。ウィンドウ中は上記 3 入口がリクエストを受け入れ、アイドル HTTP keep-alive は維持します。終了後は新規リクエストが 503 と Connection: close を返し、その後アイドル HTTP keep-alive を閉じます。HTTP Load Balancer のプローブ間隔・unhealthy 閾値・切り離し遅延と余裕を覆い、`max_graceful_exit_time_second` より小さくする必要があります。
+- デフォルト：60000
+- 適用方法：`fe.conf` 設定ファイルで変更するか、動的に更新します。
+
+#### `min_graceful_exit_time_second`
+
+- 説明：グレースフルエグジット（SIGUSR1）がマークされた後、FE が生き続ける最小時間で、シグナルから計測されます。探知失敗は最初に発生します。HealthAction は 500 を返し（HTTP プローブ、ロード経路）、`stopAccept()` は MySQL ポートを閉じます（TCP プローブ、クエリ経路）。FE はロードバランサーがプローブ間隔内でこれらの失敗を認識してルーティングを停止する前に終了してはなりません。この待機はロードバランサーの切り離しレイテンシー（約 15 秒）より短くならないようにする必要があります。実際には `graceful_exit_http_accept_window_ms` がこの値より大きいため、この最小値は通常、新規受け入れウィンドウが経過した時点で満たされています。`max_graceful_exit_time_second` より小さくする必要があります。
+- デフォルト：15
+- 適用方法：`fe.conf` 設定ファイルで変更するか、動的に更新します。
+- タイミング関係：`max_graceful_exit_time_second` より小さくする必要があります。
+
+#### `max_graceful_exit_time_second`
+
+- 説明：グレースフルエグジット全体のハードタイムアウトで、シグナル（SIGUSR1）から計測されます。`graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second` より大きい値にする必要があります。グレースフルエグジットスレッドのハードタイムアウト join(max) はシグナル送信時から計測され、FE は新規受け入れウィンドウの経過とウィンドウ後のドレイン完了前に終了できないため、max はウィンドウ全体と最小ドレインをカバーする必要があります。max < window + min の場合、スレッドはドレイン完了前に強制終了され、グレースフルエグジットが機能しません。ウィンドウと max は一緒に設定してください。
+- デフォルト：120
+- 適用方法：`fe.conf` 設定ファイルで変更するか、動的に更新します。
+- タイミング関係：`graceful_exit_http_accept_window_ms` + `min_graceful_exit_time_second` より大きい値にする必要があります。これらのパラメータはまとめて設定してください。
 
 ### BE/CN 設定
 
@@ -187,17 +207,17 @@ Graceful Exit は以下を保証します：
 ### FE Graceful Exit の実行
 
 ```bash
-./bin/stop_fe.sh -g --timeout 60
+./bin/stop_fe.sh -g --timeout 120
 ```
 
 パラメータ：
 
-- `--timeout`: FE ノードが強制終了されるまでの最大待機時間。
+- `--timeout`：オプションの外部 SIGKILL フォールバック。デフォルトなし：未指定時はスクリプトが FE プロセス終了まで待機します。FE 内部のハードタイムアウトは `max_graceful_exit_time_second`（デフォルト 120 秒）です。`--timeout` を設定する場合は、ドレイン中に SIGKILL しないよう `max_graceful_exit_time_second` 以上にしてください。
 
 動作：
 
 - システムは最初に `SIGUSR1` シグナルを送信します。
-- タイムアウト後、`SIGKILL` にフォールバックします。
+- `--timeout` が設定され、その秒数後もプロセスが生存している場合、スクリプトは `SIGKILL` を送ります。
 
 #### FE 状態の検証
 

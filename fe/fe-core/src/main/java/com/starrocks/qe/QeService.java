@@ -59,6 +59,10 @@ public class QeService {
         LOG.info("QE service start.");
     }
 
+    public void stopAccept() {
+        mysqlServer.stop();
+    }
+
     public boolean tryStart() {
         if (mysqlServer.start()) {
             LOG.info("QE service started.");

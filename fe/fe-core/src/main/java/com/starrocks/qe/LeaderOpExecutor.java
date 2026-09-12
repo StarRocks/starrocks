@@ -138,7 +138,9 @@ public class LeaderOpExecutor {
         }
         try {
             forward();
-            if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+            // HTTP SQL on a follower may still run during the HTTP accept window; wait for journal
+            // replay so a query right after forwarded DDL sees metadata. Skip once HTTP rejecting.
+            if (GracefulExitFlag.shouldAcceptNewHttpRequest() && !GlobalStateMgr.getCurrentState().isLeader()) {
                 long deadline = System.currentTimeMillis() + waitTimeoutMs;
                 LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
                 ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
