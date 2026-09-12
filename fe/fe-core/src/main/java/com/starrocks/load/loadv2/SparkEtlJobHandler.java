@@ -124,6 +124,7 @@ public class SparkEtlJobHandler {
         String jobStageHdfsPath = resource.getWorkingDir();
         // spark launcher log path
         String logFilePath = Config.spark_launcher_log_dir + "/" + String.format(LAUNCHER_LOG, loadJobId, loadLabel);
+        handle.setLogPath(logFilePath);
 
         // update archive and stage configs here
         Map<String, String> sparkConfigs = resource.getSparkConfigs();
@@ -175,7 +176,6 @@ public class SparkEtlJobHandler {
             if (!FeConstants.runningUnitTest) {
                 SparkLauncherMonitor.LogMonitor logMonitor = SparkLauncherMonitor.createLogMonitor(handle);
                 logMonitor.setSubmitTimeoutMs(sparkLoadSubmitTimeout);
-                logMonitor.setRedirectLogPath(logFilePath);
                 logMonitor.start();
                 try {
                     logMonitor.join();
@@ -256,27 +256,55 @@ public class SparkEtlJobHandler {
             LOG.info(yarnStatusCmd);
             String[] envp = {"LC_ALL=" + Config.locale, "JAVA_HOME=" + System.getProperty("java.home")};
             CommandResult result = Util.executeCommand(yarnStatusCmd, envp, EXEC_CMD_TIMEOUT_MS);
+            boolean isYarnExpire = false;
             if (result.getReturnCode() != 0) {
                 String stderr = result.getStderr();
+                String stdout = result.getStdout();
                 // case application not exists
-                if (stderr != null && stderr.contains("doesn't exist in RM")) {
+                if (stderr != null && stdout.contains("doesn't exist in RM")) {
                     LOG.warn("spark application not found. spark app id: {}, load job id: {}, stderr: {}",
                             appId, loadJobId, stderr);
-                    status.setState(TEtlState.CANCELLED);
-                    status.setFailMsg("spark application not found");
-                    return status;
+                    // retry from spark log to check if spark application exist
+                    SparkClientLogParser clientLogParser;
+                    try {
+                        clientLogParser = SparkClientLogParser.createLogParser(handle);
+                        clientLogParser.readLog();
+                    } catch (Exception e) {
+                        throw new LoadException("read spark client log fail. error: " + e.getMessage());
+                    }
+                    if (clientLogParser.checkSparkAbnormal()) {
+                        status.setState(TEtlState.CANCELLED);
+                        status.setFailMsg("spark application not found");
+                        return status;
+                    } else {
+                        isYarnExpire = true;
+                    }
                 }
-
-                LOG.warn("yarn application status failed. spark app id: {}, load job id: {}, timeout: {}" +
-                                ", return code: {}, stderr: {}, stdout: {}",
-                        appId, loadJobId, EXEC_CMD_TIMEOUT_MS, result.getReturnCode(), stderr, result.getStdout());
-                throw new LoadException("yarn application status failed. error: " + stderr);
+                if (!isYarnExpire) {
+                    LOG.warn("yarn application status failed. spark app id: {}, load job id: {}, timeout: {}" +
+                                    ", return code: {}, stderr: {}, stdout: {}",
+                            appId, loadJobId, EXEC_CMD_TIMEOUT_MS, result.getReturnCode(), stderr, stdout);
+                    throw new LoadException("yarn application status failed. error: " + stderr);
+                }
             }
-            ApplicationReport report = new YarnApplicationReport(result.getStdout()).getReport();
-            LOG.info("yarn application -status {}. load job id: {}, output: {}, report: {}",
-                    appId, loadJobId, result.getStdout(), report);
-            YarnApplicationState state = report.getYarnApplicationState();
-            FinalApplicationStatus faStatus = report.getFinalApplicationStatus();
+            YarnApplicationState state;
+            FinalApplicationStatus faStatus;
+            String trackingUrl;
+            // yarn is normal,so use yarn client to get application statue
+            if (!isYarnExpire) {
+                ApplicationReport report = new YarnApplicationReport(result.getStdout()).getReport();
+                LOG.info("yarn application -status {}. load job id: {}, output: {}, report: {}",
+                        appId, loadJobId, result.getStdout(), report);
+                state = report.getYarnApplicationState();
+                faStatus = report.getFinalApplicationStatus();
+                status.setProgress((int) (report.getProgress() * 100));
+                trackingUrl = report.getTrackingUrl();
+            } else {
+                // yarn is expire for this application, so we need to use spark log to get the status
+                state = YarnApplicationState.valueOf(handle.getState().toString());
+                faStatus = handle.getFinalStatus();
+                trackingUrl = handle.getUrl();
+            }
             status.setState(fromYarnState(state, faStatus));
             if (status.getState() == TEtlState.CANCELLED) {
                 if (state == YarnApplicationState.FINISHED) {
@@ -285,8 +313,7 @@ public class SparkEtlJobHandler {
                     status.setFailMsg("yarn app state: " + state.toString());
                 }
             }
-            status.setTrackingUrl(handle.getUrl() != null ? handle.getUrl() : report.getTrackingUrl());
-            status.setProgress((int) (report.getProgress() * 100));
+            status.setTrackingUrl(handle.getUrl() != null ? handle.getUrl() : trackingUrl);
         } else {
             // state from handle
             if (handle == null) {
