@@ -35,12 +35,16 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
     case TTypeNodeType::SCALAR: {
         DCHECK(node.__isset.scalar_type);
         ++(*idx);
-        const TScalarType scalar_type = node.scalar_type;
+        const TScalarType& scalar_type = node.scalar_type;
         type = thrift_to_type(scalar_type.type);
         len = (scalar_type.__isset.len) ? scalar_type.len : -1;
         scale = (scalar_type.__isset.scale) ? scalar_type.scale : -1;
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
         datetime_is_ntz = scalar_type.__isset.datetime_is_ntz && scalar_type.datetime_is_ntz;
+        if (scalar_type.__isset.geo) {
+            DCHECK(is_geo_type());
+            geo_type = GeoTypeDescriptor::from_thrift(scalar_type.geo);
+        }
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
             type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
@@ -122,6 +126,9 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         if (datetime_is_ntz) {
             scalar_type.__set_datetime_is_ntz(true);
         }
+        if (geo_type) {
+            scalar_type.__set_geo(geo_type->to_thrift());
+        }
     }
 }
 
@@ -156,6 +163,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         if (precision != -1) {
             scalar_type->set_precision(precision);
         }
+        if (geo_type) *scalar_type->mutable_geo() = geo_type->to_protobuf();
     }
 }
 
@@ -174,6 +182,10 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         len = scalar_type.has_len() ? scalar_type.len() : -1;
         scale = scalar_type.has_scale() ? scalar_type.scale() : -1;
         precision = scalar_type.has_precision() ? scalar_type.precision() : -1;
+        if (scalar_type.has_geo()) {
+            DCHECK(is_geo_type());
+            geo_type = GeoTypeDescriptor::from_protobuf(scalar_type.geo());
+        }
 
         if (type == TYPE_CHAR || type == TYPE_VARCHAR || type == TYPE_HLL) {
             DCHECK(scalar_type.has_len());
@@ -251,6 +263,7 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
+    if (is_geo_type()) return false;
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
         return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
@@ -259,6 +272,7 @@ bool TypeDescriptor::support_join() const {
 }
 
 bool TypeDescriptor::support_orderby() const {
+    if (is_geo_type()) return false;
     if (type == TYPE_ARRAY) {
         return children[0].support_orderby();
     }
@@ -272,6 +286,7 @@ bool TypeDescriptor::support_orderby() const {
 }
 
 bool TypeDescriptor::support_groupby() const {
+    if (is_geo_type()) return false;
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
         return std::all_of(children.begin(), children.end(),
                            [](const TypeDescriptor& t) { return t.support_groupby(); });
@@ -313,6 +328,8 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_JSON:
     case TYPE_VARIANT:
     case TYPE_VARBINARY:
+    case TYPE_GEOGRAPHY:
+    case TYPE_GEOMETRY:
         return sizeof(Slice);
 
     case TYPE_NULL:
@@ -453,6 +470,16 @@ TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
         DCHECK_LE(precision, decimal_precision_limit<int128_t>);
         return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
     }
+}
+
+bool TypeDescriptor::is_geo_type() const {
+    return type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY;
+}
+
+TypeDescriptor TypeDescriptor::create_geo_type(LogicalType type, GeoTypeDescriptor descriptor) {
+    TypeDescriptor result(type);
+    result.geo_type = std::move(descriptor);
+    return result;
 }
 
 } // namespace starrocks

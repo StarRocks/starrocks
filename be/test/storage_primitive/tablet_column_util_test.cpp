@@ -117,4 +117,69 @@ TEST(TabletColumnUtilTest, ConvertArrayTColumnToColumnPbBuildsChildColumn) {
     EXPECT_TRUE(column_pb.children_columns(0).is_nullable());
 }
 
+TEST(TabletColumnUtilTest, RejectGeoColumnsBeforeWritingStorageType) {
+    for (auto primitive : {TPrimitiveType::GEOGRAPHY, TPrimitiveType::GEOMETRY}) {
+        SCOPED_TRACE(primitive);
+        for (bool with_metadata : {false, true}) {
+            SCOPED_TRACE(with_metadata);
+            auto type_desc = create_scalar_type_desc(primitive);
+            if (with_metadata) {
+                TGeoTypeDesc semantic;
+                semantic.__set_logical_type(primitive == TPrimitiveType::GEOGRAPHY ? TGeoLogicalType::GEOGRAPHY
+                                                                                   : TGeoLogicalType::GEOMETRY);
+                semantic.__set_srid(4326);
+                type_desc.types[0].scalar_type.__set_geo(semantic);
+            }
+            TColumn column;
+            column.__set_type_desc(type_desc);
+            ColumnPB column_pb;
+            auto status = t_column_to_pb_column(1, column, &column_pb);
+            EXPECT_TRUE(status.is_not_supported()) << status;
+            EXPECT_FALSE(column_pb.has_type());
+            EXPECT_FALSE(column_pb.has_length());
+        }
+    }
+}
+
+TEST(TabletColumnUtilTest, RejectNestedGeoColumnsWithoutChangingOrdinaryTypes) {
+    TTypeNode array_type;
+    array_type.__set_type(TTypeNodeType::ARRAY);
+    TTypeNode map_type;
+    map_type.__set_type(TTypeNodeType::MAP);
+    TTypeNode struct_type;
+    struct_type.__set_type(TTypeNodeType::STRUCT);
+    TStructField first_field;
+    first_field.__set_name("first");
+    TStructField second_field;
+    second_field.__set_name("second");
+    struct_type.__set_struct_fields({first_field, second_field});
+    const auto int_type = create_scalar_type_node(TPrimitiveType::INT);
+
+    for (auto primitive : {TPrimitiveType::INT, TPrimitiveType::GEOGRAPHY, TPrimitiveType::GEOMETRY}) {
+        SCOPED_TRACE(primitive);
+        const auto leaf = create_scalar_type_node(primitive);
+        const std::vector<std::vector<TTypeNode>> cases = {
+                {array_type, leaf},
+                {map_type, leaf, int_type},
+                {map_type, int_type, leaf},
+                {struct_type, int_type, leaf},
+                {struct_type, int_type, array_type, map_type, int_type, leaf},
+        };
+        for (size_t i = 0; i < cases.size(); ++i) {
+            SCOPED_TRACE(i);
+            TTypeDesc type_desc;
+            type_desc.__set_types(cases[i]);
+            TColumn column;
+            column.__set_type_desc(type_desc);
+            ColumnPB column_pb;
+            auto status = t_column_to_pb_column(1, column, &column_pb);
+            if (primitive == TPrimitiveType::INT) {
+                EXPECT_TRUE(status.ok()) << status;
+            } else {
+                EXPECT_TRUE(status.is_not_supported()) << status;
+            }
+        }
+    }
+}
+
 } // namespace starrocks

@@ -33,6 +33,7 @@ set(TYPES_TEST_FILES
     type_info_test.cpp
     variant_value_test.cpp
     geo_wkb_test.cpp
+    native_geo_type_test.cpp
 )
 
 set(TYPES_TEST_LINK_LIBS

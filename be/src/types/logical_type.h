@@ -55,6 +55,8 @@ enum LogicalType {
     // Added by StarRocks
     TYPE_DECIMAL256 = 26,
     TYPE_INT256 = 27,
+    TYPE_GEOGRAPHY = 28,
+    TYPE_GEOMETRY = 29,
     // Reserved some field for commutiy version
 
     TYPE_NULL = 42,
@@ -82,7 +84,8 @@ enum LogicalType {
 // TODO(lism): support varbinary for zone map.
 inline bool is_zone_map_key_type(LogicalType type) {
     return type != TYPE_CHAR && type != TYPE_VARCHAR && type != TYPE_JSON && type != TYPE_VARBINARY &&
-           type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
+           type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE && type != TYPE_GEOGRAPHY &&
+           type != TYPE_GEOMETRY;
 }
 
 // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
@@ -90,7 +93,7 @@ inline bool is_zone_map_key_type(LogicalType type) {
 // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
 inline bool is_support_checksum_type(LogicalType type) {
     return type != TYPE_FLOAT && type != TYPE_DOUBLE && type != TYPE_HLL && type != TYPE_OBJECT &&
-           type != TYPE_PERCENTILE && type != TYPE_JSON;
+           type != TYPE_PERCENTILE && type != TYPE_JSON && type != TYPE_GEOGRAPHY && type != TYPE_GEOMETRY;
 }
 
 template <LogicalType TYPE>
