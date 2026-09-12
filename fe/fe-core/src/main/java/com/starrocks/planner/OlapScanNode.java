@@ -1642,8 +1642,12 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             case DUP_KEYS:
             case AGG_KEYS: {
                 List<Column> columns = olapTable.getSchemaByIndexMetaId(index.indexMetaId);
+                // The generated partition column carries REPLACE on aggregate tables, but its value is
+                // functionally determined by the key columns, so every row of an aggregate group holds
+                // the same value and merging a cached snapshot with delta rowsets stays correct.
                 return columns.stream().noneMatch(
-                        c -> c.isAggregated() && c.getAggregationType().isReplaceFamily());
+                        c -> c.isAggregated() && c.getAggregationType().isReplaceFamily()
+                                && !c.isGeneratedPartitionColumn());
             }
         }
         return false;

@@ -990,7 +990,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             if (column.isGeneratedColumn()) {
                 List<SlotRef> slots = column.getGeneratedColumnRef(table.getIdToColumn());
                 for (SlotRef slot : slots) {
-                    if (slot.getColumnName().equals(clause.getColName())) {
+                    // the expression carries the column name as the user spelled it, which may differ
+                    // in case from the declared column
+                    if (slot.getColumnName().equalsIgnoreCase(clause.getColName())) {
                         throw new SemanticException("Column: " + clause.getColName() + " can not be dropped" +
                                 ", because expression of Generated Column: " +
                                 column.getName() + " will refer to it");
