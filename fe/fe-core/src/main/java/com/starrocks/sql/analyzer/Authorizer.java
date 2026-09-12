@@ -147,13 +147,13 @@ public class Authorizer {
 
     public static void checkViewAction(ConnectContext context, TableName tableName,
                                        PrivilegeType privilegeType) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+        getInstance().getAccessControlOrDefault(tableName.getCatalog())
                 .checkViewAction(context, tableName, privilegeType);
     }
 
     public static void checkAnyActionOnView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+        getInstance().getAccessControlOrDefault(tableName.getCatalog())
                 .checkAnyActionOnView(context, tableName);
     }
 
