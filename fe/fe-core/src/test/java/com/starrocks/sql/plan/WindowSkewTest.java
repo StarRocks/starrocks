@@ -266,6 +266,39 @@ class WindowSkewTest extends PlanTestBase {
     }
 
     @Test
+    void testWindowBothSkewNullWins() throws Exception {
+        Histogram histogram = new Histogram(
+                /* buckets */ List.of(),
+                /* mcv */ Map.of("1", 300L));
+
+        refreshAndSetColumnStatForP(
+                ColumnStatistic.builder().setNullsFraction(0.4).setHistogram(histogram).build());
+
+        String plan = getCostPlan(BASIC_WINDOW_SQL);
+
+        assertContains(plan, "UNION");
+        // NULL split branch
+        assertNullSplit(plan);
+        // Did NOT split on MCV
+        assertNotContains(plan, "Predicates: [1: p, INT, true] = 1");
+    }
+
+    @Test
+    void testWindowBothSkewMcvWins() throws Exception {
+        Histogram histogram = new Histogram(
+                /* buckets */ List.of(),
+                /* mcv */ Map.of("1", 500L));
+
+        refreshAndSetColumnStatForP(
+                ColumnStatistic.builder().setNullsFraction(0.3).setHistogram(histogram).build());
+
+        String plan = getCostPlan(BASIC_WINDOW_SQL);
+
+        assertContains(plan, "UNION");
+        assertContains(plan, "Predicates: [1: p, INT, true] = 1");
+    }
+
+    @Test
     void testOtherAnalyticalFunctionsWithSkew() throws Exception {
         setColumnStatForP(0.5);
 
