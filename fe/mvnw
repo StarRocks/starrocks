@@ -1,0 +1,58 @@
+#!/bin/sh
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.
+
+# Maven Wrapper for StarRocks FE
+# Downloads Maven 3.9.6 automatically on first run
+
+PRG="$0"
+while [ -h "$PRG" ]; do
+  ls=$(ls -ld "$PRG")
+  link=$(expr "$ls" : '.*-> \(.*\)$')
+  if expr "$link" : '/.*' > /dev/null; then
+    PRG="$link"
+  else
+    PRG=$(dirname "$PRG")/"$link"
+  fi
+done
+
+SAVED="$(pwd)"
+cd "$(dirname "$PRG")/" >/dev/null
+APP_HOME="$(pwd -P)"
+cd "$SAVED" >/dev/null
+
+# Use system mvn if available
+if command -v mvn >/dev/null 2>&1; then
+  exec mvn "$@"
+fi
+
+# Fallback
+DEFAULT_MVN_OPTS="${MAVEN_OPTS:--Xmx2048m}"
+MAVEN_OPTS="$DEFAULT_MVN_OPTS $MAVEN_OPTS"
+export MAVEN_OPTS
+
+WRAPPER_LAUNCHER="$APP_HOME/.mvn/wrapper/maven-wrapper.jar"
+WRAPPER_PROPERTIES="$APP_HOME/.mvn/wrapper/maven-wrapper.properties"
+
+# Download wrapper jar if needed
+if [ ! -f "$WRAPPER_LAUNCHER" ]; then
+  echo "Downloading Maven Wrapper..."
+  wrapperUrl=$(grep 'wrapperUrl=' "$WRAPPER_PROPERTIES" | cut -d= -f2-)
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -o "$WRAPPER_LAUNCHER" "$wrapperUrl" || true
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$WRAPPER_LAUNCHER" "$wrapperUrl" || true
+  fi
+fi
+
+if [ -f "$WRAPPER_LAUNCHER" ]; then
+  exec "$JAVACMD" \
+    $MAVEN_OPTS \
+    -classpath "$WRAPPER_LAUNCHER" \
+    "-Dmaven.multiModuleProjectDirectory=$APP_HOME" \
+    org.apache.maven.wrapper.MavenWrapperMain \
+    "$@"
+else
+  echo "ERROR: Maven not found. Install Maven with: brew install maven" >&2
+  exit 1
+fi
