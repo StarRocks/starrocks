@@ -13,17 +13,34 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Optional
+import time
+from typing import Any, Optional, Tuple
 
+from alembic.ddl import base as alembic_base
 from alembic.ddl.mysql import MySQLImpl
-from sqlalchemy import Column, MetaData, Table
+from sqlalchemy import Column, MetaData, Table, text
 
 from starrocks import datatype
 from starrocks.alembic import compare
 from starrocks.datatype import BIGINT, VARCHAR
+from starrocks.sql.ddl import AlterTableColumns
 
 
 logger = logging.getLogger(__name__)
+
+# DDL constructs that submit an asynchronous StarRocks column schema-change job.
+# StarRocks allows only one in-flight schema-change job per table, so when the
+# wait feature is enabled we poll for a terminal state after each of these.
+_SCHEMA_CHANGE_CONSTRUCTS = (
+    AlterTableColumns,
+    alembic_base.AddColumn,
+    alembic_base.DropColumn,
+    alembic_base.AlterColumn,  # covers Column{Nullable,Type,Default,Comment} + MySQL modify/change
+)
+
+# Terminal states reported by ``SHOW ALTER TABLE COLUMN``.
+_SCHEMA_CHANGE_FINISHED = "FINISHED"
+_SCHEMA_CHANGE_CANCELLED = "CANCELLED"
 
 
 class StarRocksImpl(MySQLImpl):
@@ -52,6 +69,97 @@ class StarRocksImpl(MySQLImpl):
             **version_table_kwargs,
             **kw,
         )
+
+    def _exec(self, construct, *args, **kw):
+        """Execute DDL, then optionally block until a column schema change finishes.
+
+        StarRocks runs column schema changes asynchronously and rejects a new
+        job while a prior one on the same table is still running. When the user
+        opts in via ``context.configure(starrocks_wait_for_schema_change=True)``,
+        we poll ``SHOW ALTER TABLE COLUMN`` after each column-altering statement
+        until it reaches a terminal state, keeping the migration in lock-step
+        with the cluster.
+        """
+        result = super()._exec(construct, *args, **kw)
+
+        target = self._schema_change_target(construct)
+        if target is not None and self._wait_for_schema_change_enabled():
+            self._wait_for_schema_change(*target)
+
+        return result
+
+    def _wait_for_schema_change_enabled(self) -> bool:
+        """Whether to block on column schema changes (opt-in, online mode only)."""
+        if self.as_sql or self.connection is None:
+            # Offline (--sql) mode has no live connection to poll.
+            return False
+        opts = self.context_opts or {}
+        return bool(opts.get("starrocks_wait_for_schema_change", False))
+
+    @staticmethod
+    def _schema_change_target(construct: Any) -> Optional[Tuple[str, Optional[str]]]:
+        """Return (table_name, schema) if the construct triggers a column schema change."""
+        if isinstance(construct, _SCHEMA_CHANGE_CONSTRUCTS):
+            return getattr(construct, "table_name", None), getattr(construct, "schema", None)
+        return None
+
+    def _wait_for_schema_change(self, table_name: str, schema: Optional[str]) -> None:
+        """Poll ``SHOW ALTER TABLE COLUMN`` until the latest job reaches a terminal state.
+
+        Raises:
+            RuntimeError: if the schema change is CANCELLED or the timeout elapses.
+        """
+        opts = self.context_opts or {}
+        poll_interval = float(opts.get("starrocks_schema_change_poll_interval", 2.0))
+        # None / 0 means wait indefinitely.
+        timeout = opts.get("starrocks_schema_change_timeout", None)
+
+        # Order by JobId (a monotonic, unique FE counter), NOT CreateTime:
+        # CreateTime has second granularity, so several jobs submitted back-to-back
+        # on the same table share a timestamp and CreateTime-ordering returns an
+        # arbitrary (observed: the oldest) tied job. In a single-writer migration
+        # the highest JobId is the statement we just submitted.
+        from_clause = f"FROM `{schema}` " if schema else ""
+        query = text(
+            f"SHOW ALTER TABLE COLUMN {from_clause}"
+            "WHERE TableName = :table_name ORDER BY JobId DESC LIMIT 1"
+        )
+
+        deadline = None if not timeout else time.monotonic() + float(timeout)
+        while True:
+            row = self.connection.execute(
+                query, {"table_name": table_name}
+            ).mappings().first()
+
+            # Defensive: no job row at all for this table (never had a column
+            # change), or a result set without a State column on some version.
+            # Note: fast-schema-evolution add/drop DOES create a row here, but it
+            # comes back already FINISHED, so it exits via the FINISHED branch.
+            state = (row.get("State") if row else None)
+            if state is None:
+                return
+
+            state = str(state).upper()
+            if state == _SCHEMA_CHANGE_FINISHED:
+                logger.debug("Schema change for %s finished.", table_name)
+                return
+            if state == _SCHEMA_CHANGE_CANCELLED:
+                msg = row.get("Msg") if row else ""
+                raise RuntimeError(
+                    f"StarRocks schema change for table '{table_name}' was CANCELLED: {msg}"
+                )
+
+            if deadline is not None and time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"Timed out after {timeout}s waiting for the schema change on "
+                    f"table '{table_name}' to finish (last state: {state})."
+                )
+
+            logger.info(
+                "Waiting for StarRocks schema change on table '%s' (state: %s)...",
+                table_name, state,
+            )
+            time.sleep(poll_interval)
 
     def compare_type(self, inspector_column: Column[Any], metadata_column: Column[Any]) -> bool:
         """

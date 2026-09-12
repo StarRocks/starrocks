@@ -32,6 +32,7 @@ from starrocks.alembic.ops import (
     CreateViewOp,
     DropMaterializedViewOp,
     DropViewOp,
+    StarRocksAlterColumnsOp,
 )
 from starrocks.sql.ddl import (
     AlterMaterializedView,
@@ -167,4 +168,41 @@ def alter_table_properties(operations, op: AlterTablePropertiesOp):
     from starrocks.sql.ddl import AlterTableProperties
     operations.execute(
         AlterTableProperties(op.table_name, op.properties, schema=op.schema)
+    )
+
+
+@Operations.implementation_for(StarRocksAlterColumnsOp)
+def starrocks_alter_columns(operations, op: StarRocksAlterColumnsOp):
+    """Execute a combined ALTER TABLE ADD/DROP COLUMN statement.
+
+    Emits a single ``ALTER TABLE ... ADD COLUMN ..., DROP COLUMN ...`` so
+    StarRocks submits all column changes as one schema-change job instead of
+    one job per column (which would fail while a prior job is still running).
+    """
+    from sqlalchemy.sql.schema import Column as _Column
+
+    from starrocks.sql.ddl import AlterTableColumns
+    logger.debug(
+        "implementation starrocks_alter_columns: %s (adds=%s, drops=%s)",
+        op.table_name, [c.name for c in op.adds], [c.name for c in op.drops],
+    )
+
+    # Bind the added columns to a lightweight table so the compiler can render
+    # their full specification (type, nullability, default, comment), mirroring
+    # how Operations.add_column attaches its column via schema_obj.table(...).
+    bound_adds = []
+    for column in op.adds:
+        if column.table is not None:
+            column = column._copy() if hasattr(column, "_copy") else _Column(column.name, column.type)
+        bound_adds.append(column)
+    if bound_adds:
+        operations.schema_obj.table(op.table_name, *bound_adds, schema=op.schema)
+
+    operations.execute(
+        AlterTableColumns(
+            op.table_name,
+            adds=bound_adds,
+            drops=[c.name for c in op.drops],
+            schema=op.schema,
+        )
     )

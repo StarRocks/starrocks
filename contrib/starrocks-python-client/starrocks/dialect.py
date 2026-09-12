@@ -96,6 +96,7 @@ from .engine.interfaces import ReflectedMVState, ReflectedState, ReflectedViewSt
 from .reflection import StarRocksInspector, StarRocksTableDefinitionParser
 from .sql.ddl import (
     AlterMaterializedView,
+    AlterTableColumns,
     AlterTableDistribution,
     AlterTableEngine,
     AlterTableKey,
@@ -1158,6 +1159,35 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         """
         table_name = format_table_name(self, alter.table_name, alter.schema)
         return f"ALTER TABLE {table_name} PARTITION BY {alter.partition_by}"
+
+    def visit_alter_table_columns(self, alter: AlterTableColumns, **kw: Any) -> str:
+        """Compile a combined ALTER TABLE ADD/DROP COLUMN DDL for StarRocks.
+
+        Renders every column change as a clause of a single ALTER TABLE
+        statement so StarRocks submits them as one schema-change job:
+
+            ALTER TABLE t ADD COLUMN a INT, DROP COLUMN c, ADD COLUMN b INT
+        """
+        table_name = format_table_name(self, alter.table_name, alter.schema)
+
+        clauses: List[str] = []
+        for column in alter.adds:
+            clauses.append(f"ADD COLUMN {self.get_column_specification(column, **kw)}")
+        for column_name in alter.drops:
+            clauses.append(f"DROP COLUMN {self.preparer.quote(column_name)}")
+
+        if not clauses:
+            raise exc.CompileError(
+                f"ALTER TABLE {table_name} has no column changes to apply."
+            )
+
+        # notice users about such a time consuming operation
+        from_db_clause = f"FROM {alter.schema} " if alter.schema else ""
+        show_clause = f"SHOW ALTER TABLE COLUMN {from_db_clause}WHERE TableName='{alter.table_name}'"
+        logger.info(f"You probably should use ({show_clause}) to check the execution status "
+                    f"of the column schema change before doing another ALTER TABLE statement.")
+
+        return f"ALTER TABLE {table_name} " + ", ".join(clauses)
 
     def visit_alter_table_distribution(self, alter: AlterTableDistribution, **kw: Any) -> str:
         """Compile ALTER TABLE DISTRIBUTED BY DDL for StarRocks."""
