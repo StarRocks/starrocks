@@ -26,12 +26,25 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.HashMap;
 import java.util.Map;
 
 public class CredentialUtil {
     public static final Logger LOG = LogManager.getLogger(CredentialUtil.class);
 
     private static final String MASK_CLOUD_CREDENTIAL_WORDS = "******";
+
+    /**
+     * Returns a copy of {@code properties} with credentials masked, leaving the argument
+     * untouched. Prefer this over {@link #maskCredential} when the properties are only being
+     * rendered — for logging or display — since {@link #maskCredential} mutates in place and
+     * would otherwise corrupt live configuration.
+     */
+    public static Map<String, String> maskedCopy(Map<String, String> properties) {
+        Map<String, String> masked = new HashMap<>(properties);
+        maskCredential(masked);
+        return masked;
+    }
 
     public static void maskCredential(Map<String, String> properties) {
         // Mask for aws's credential

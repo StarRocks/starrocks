@@ -180,4 +180,20 @@ public class CredentialUtilTest {
         Assertions.assertEquals("", path.getContainer());
         Assertions.assertEquals("", path.getStorageAccount());
     }
+
+    @Test
+    public void testMaskedCopyDoesNotMutateSource() {
+        String key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                OAuth2SecurityConfig.OAUTH2_TOKEN;
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "iceberg");
+        properties.put(key, "supersecrettoken");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        Assertions.assertEquals("su******en", masked.get(key));
+        Assertions.assertEquals("iceberg", masked.get("type"));
+        // the source map may be live configuration, so it must be left untouched
+        Assertions.assertEquals("supersecrettoken", properties.get(key));
+    }
 }
