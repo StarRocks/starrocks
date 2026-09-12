@@ -634,7 +634,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 执行 SPLIT 或 MERGE 操作后，Tablet 的目标大小。
+- 描述: 执行 SPLIT 或 MERGE 操作后 Tablet 的目标大小。设置为 `0` 时，将禁用基于大小的 Tablet 自动分裂和合并。存算分离集群在该值为 `0` 时执行在线 Range Rewrite，会以各个最新基表索引当前的 Tablet 数量作为请求数量，并在新的排序键空间中重新计算边界，而不会复用原有边界。如果采样无法生成足够多的不同边界，实际 Tablet 数量可能更少。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_max_split_count`
