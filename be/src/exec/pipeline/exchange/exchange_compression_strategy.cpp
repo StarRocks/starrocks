@@ -28,8 +28,9 @@ void ExchangeCompressionStrategy::feedback(uint64_t uncompressed_bytes, uint64_t
     if (uncompressed_bytes == 0 || compressed_bytes == 0 || compression_time_ns == 0) {
         return;
     }
-    double compress_speed = uncompressed_bytes / compression_time_ns * (1e9 / 1024 / 1024); // MB/s
-    double compress_ratio = uncompressed_bytes / compressed_bytes;
+    double compress_speed = static_cast<double>(uncompressed_bytes) / static_cast<double>(compression_time_ns) *
+                            (1e9 / 1024 / 1024); // MB/s
+    double compress_ratio = static_cast<double>(uncompressed_bytes) / static_cast<double>(compressed_bytes);
     double reward_ratio = (compress_ratio / config::lz4_expected_compression_ratio) *
                           (compress_speed / config::lz4_expected_compression_speed_mbps);
     if (reward_ratio > 1.0) {
