@@ -79,7 +79,7 @@ StatusOr<ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* st
     // correctly process the state of hash table(_is_ht_eos)
     ChunkPtr chunk = std::make_shared<Chunk>();
     RETURN_IF_ERROR(_output_chunk_from_hash_map(&chunk, state));
-    eval_runtime_bloom_filters(chunk.get());
+    RETURN_IF_ERROR(eval_runtime_bloom_filters(chunk.get()));
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }

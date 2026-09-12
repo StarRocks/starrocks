@@ -50,7 +50,7 @@ StatusOr<ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeSt
     _aggregator->convert_hash_set_to_chunk(chunk_size, &chunk);
 
     const int64_t old_size = chunk->num_rows();
-    eval_runtime_bloom_filters(chunk.get());
+    RETURN_IF_ERROR(eval_runtime_bloom_filters(chunk.get()));
 
     // For having
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), chunk.get()));

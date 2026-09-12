@@ -208,14 +208,14 @@ protected:
         return _scan_status;
     }
 
-    void evaluate_topn_runtime_filters(Chunk* chunk) {
+    Status evaluate_topn_runtime_filters(Chunk* chunk) {
         if (chunk == nullptr || chunk->is_empty() || !_topn_filter_back_pressure) {
-            return;
+            return Status::OK();
         }
         if (auto* topn_runtime_filters = get_factory()->get_runtime_bloom_filters()) {
             auto input_num_rows = chunk->num_rows();
             _init_topn_runtime_filter_counters();
-            topn_runtime_filters->evaluate(chunk, _topn_filter_eval_context);
+            RETURN_IF_ERROR(topn_runtime_filters->evaluate(chunk, _topn_filter_eval_context));
             _topn_filter_back_pressure->inc_num_rows(chunk->num_rows());
             if (_topn_filter_eval_context.selectivity.empty()) {
                 _topn_filter_back_pressure->update_selectivity(1.0);
@@ -226,6 +226,7 @@ protected:
                 }
             }
         }
+        return Status::OK();
     }
 
     void _init_topn_runtime_filter_counters() {
@@ -244,9 +245,9 @@ protected:
         }
     }
 
-    void eval_runtime_bloom_filters(Chunk* chunk) override {
+    Status eval_runtime_bloom_filters(Chunk* chunk) override {
         if (chunk == nullptr || chunk->is_empty()) {
-            return;
+            return Status::OK();
         }
 
         if (auto* bloom_filters = get_factory()->get_runtime_bloom_filters()) {
@@ -254,9 +255,10 @@ protected:
             if (_topn_filter_back_pressure) {
                 _bloom_filter_eval_context.mode = RuntimeMembershipFilterEvalContext::Mode::M_WITHOUT_TOPN;
             }
-            bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
+            RETURN_IF_ERROR(bloom_filters->evaluate(chunk, _bloom_filter_eval_context));
         }
         ChunkPredicateEvaluator::eval_filter_null_values(chunk, get_factory()->get_filter_null_value_columns());
+        return Status::OK();
     }
 
 protected:

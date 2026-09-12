@@ -30,12 +30,15 @@
 #include "column/nullable_column.h"
 #include "column/sorting/sort_permute.h"
 #include "common/config_exec_fwd.h"
+#include "common/runtime_profile.h"
 #include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/merge_path.h"
 #include "compute_env/sorting/sort_cursor.h"
 #include "compute_env/sorting/sorted_chunks_merger.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
 
@@ -110,7 +113,9 @@ TEST_F(SortingCoreTest, simple_cursor_materializes_sort_columns) {
     SimpleChunkSortCursor cursor(std::move(provider), &_sort_exprs);
     ASSERT_TRUE(cursor.is_data_ready());
 
-    auto [chunk, sort_columns] = cursor.try_get_next();
+    auto next_or = cursor.try_get_next();
+    ASSERT_OK(next_or.status());
+    auto [chunk, sort_columns] = std::move(next_or).value();
     ASSERT_NE(nullptr, chunk);
     ASSERT_EQ(3, chunk->num_rows());
     ASSERT_EQ(1, sort_columns.size());
@@ -275,4 +280,152 @@ TEST_F(SpilledArrayNestedNullSortTest, desc_null_first) {
 }
 
 } // namespace
+// An order-by expression that fails on a poisoned value, to exercise a failure that happens at an
+// inner cascade level only.
+class PoisonSortExpr final : public Expr {
+public:
+    PoisonSortExpr(const TypeDescriptor& type, int32_t poison) : Expr(type, false), _poison(poison) {}
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new PoisonSortExpr(*this)); }
+
+    bool is_constant() const override { return false; }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        ColumnPtr column = ptr->get_column_by_index(0);
+        const auto* data = ColumnHelper::cast_to_raw<TYPE_INT>(column.get());
+        for (size_t i = 0; i < data->size(); i++) {
+            if (data->get_data()[i] == _poison) {
+                return Status::InternalError("poisoned order-by value");
+            }
+        }
+        return column;
+    }
+
+private:
+    int32_t _poison;
+};
+
+// Only the root cursor of a cascade reports through a StatusOr; every inner level goes through a
+// ChunkProvider whose bool return cannot carry a Status. A sort expression that fails below the root
+// must therefore not be mistaken for an exhausted input, which would report a partial merge as a
+// successful one.
+TEST_F(SortingCoreTest, merge_sorted_stream_inner_level_error) {
+    // 4 runs build two inner mergers plus a root, so the failing run sits below the root.
+    constexpr int num_runs = 4;
+    constexpr int32_t kPoison = 12345;
+    constexpr int kPoisonedRun = 0;
+
+    Chunk::SlotHashMap map;
+    map[0] = 0;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    SortDescs sort_desc(std::vector<int>{1}, std::vector<int>{-1});
+
+    PoisonSortExpr poison_expr(type_desc, kPoison);
+    std::vector<ExprContext*> sort_exprs{new ExprContext(&poison_expr)};
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+    DeferOp defer([&]() {
+        ExprExecutor::close(sort_exprs, _runtime_state.get());
+        for (auto* ctx : sort_exprs) delete ctx;
+    });
+
+    std::vector<int> emitted(num_runs, 0);
+    std::vector<ChunkProvider> chunk_providers;
+    for (int run = 0; run < num_runs; run++) {
+        chunk_providers.emplace_back([&, run](ChunkUniquePtr* output, bool* eos) -> bool {
+            if (output == nullptr || eos == nullptr) {
+                return true;
+            }
+            if (emitted[run]++ > 0) {
+                *output = nullptr;
+                *eos = true;
+                return false;
+            }
+            Columns columns;
+            if (run == kPoisonedRun) {
+                MutableColumnPtr column = ColumnHelper::create_column(type_desc, false);
+                column->append_datum(Datum(kPoison));
+                columns.push_back(std::move(column));
+            } else {
+                MutableColumnPtr column = ColumnHelper::create_column(type_desc, false);
+                for (int i = 0; i < 10; i++) {
+                    column->append_datum(Datum(run * 100 + i));
+                }
+                columns.push_back(std::move(column));
+            }
+            *output = std::make_unique<Chunk>(std::move(columns), map);
+            return true;
+        });
+    }
+
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> input_cursors;
+    for (int run = 0; run < num_runs; run++) {
+        input_cursors.emplace_back(std::make_unique<SimpleChunkSortCursor>(chunk_providers[run], &sort_exprs));
+    }
+
+    size_t consumed = 0;
+    Status st = merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
+        consumed += chunk->num_rows();
+        return Status::OK();
+    });
+    ASSERT_FALSE(st.ok()) << "a failing order-by expression below the root was reported as a successful merge after "
+                          << consumed << " rows";
+    ASSERT_TRUE(st.is_internal_error()) << st;
+}
+
+// The parallel merge path evaluates the order-by expressions on worker threads inside
+// try_get_next(), which cannot return a Status, so the failure is latched on the merger. Every
+// caller has to look at that latch -- pull_chunk() to fail the query, and has_output() to keep the
+// driver from parking on a merger that will never produce another chunk.
+TEST_F(SortingCoreTest, merge_path_latches_order_by_failure) {
+    constexpr int32_t kPoison = 12345;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    SortDescs sort_desc(std::vector<int>{1}, std::vector<int>{-1});
+
+    PoisonSortExpr poison_expr(type_desc, kPoison);
+    std::vector<ExprContext*> sort_exprs{new ExprContext(&poison_expr)};
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+    DeferOp defer([&]() {
+        ExprExecutor::close(sort_exprs, _runtime_state.get());
+        for (auto* ctx : sort_exprs) delete ctx;
+    });
+
+    bool emitted = false;
+    std::vector<merge_path::MergePathChunkProvider> chunk_providers;
+    chunk_providers.emplace_back([&](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) -> bool {
+        if (only_check_if_has_data) {
+            return true;
+        }
+        if (emitted) {
+            *eos = true;
+            return false;
+        }
+        emitted = true;
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        column->append_datum(Datum(kPoison));
+        Chunk::SlotHashMap map;
+        map[0] = 0;
+        *chunk = std::make_shared<Chunk>(Columns{std::move(column)}, map);
+        *eos = false;
+        return true;
+    });
+
+    merge_path::MergePathCascadeMerger merger(config::vector_chunk_size, 1, sort_exprs, sort_desc, RecordDescriptor(),
+                                              TTopNType::ROW_NUMBER, 0, -1, std::move(chunk_providers),
+                                              TLateMaterializeMode::NEVER);
+    RuntimeProfile profile("merge_path_order_by_failure");
+    merger.bind_profile(0, &profile);
+
+    for (int i = 0; i < 256 && !merger.is_finished(); i++) {
+        (void)merger.try_get_next(0);
+        if (!merger.status().ok()) {
+            break;
+        }
+    }
+
+    ASSERT_FALSE(merger.status().ok()) << "a failing order-by expression on a merge worker was not latched";
+    ASSERT_TRUE(merger.status().is_internal_error()) << merger.status();
+}
+
 } // namespace starrocks

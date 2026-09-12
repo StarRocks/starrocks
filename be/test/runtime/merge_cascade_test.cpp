@@ -103,15 +103,21 @@ TEST(MergeCascadeTest, merge_cursor_test) {
         ASSERT_TRUE(out_cursor->is_data_ready());
 
         // call get next 1
-        auto merge_res = out_cursor->try_get_next();
+        auto merge_res_or = out_cursor->try_get_next();
+        ASSERT_OK(merge_res_or.status());
+        auto merge_res = std::move(merge_res_or).value();
         // call get next 2
-        merge_res = out_cursor->try_get_next();
+        merge_res_or = out_cursor->try_get_next();
+        ASSERT_OK(merge_res_or.status());
+        merge_res = std::move(merge_res_or).value();
 
         // left channel is is not eos
         ASSERT_TRUE(merge_res.first == nullptr);
 
         l_shutdown = true;
-        merge_res = out_cursor->try_get_next();
+        merge_res_or = out_cursor->try_get_next();
+        ASSERT_OK(merge_res_or.status());
+        merge_res = std::move(merge_res_or).value();
 
         ASSERT_FALSE(merge_res.first->is_empty());
     }
@@ -153,12 +159,16 @@ TEST(MergeCascadeTest, merge_cursor_test) {
         ASSERT_TRUE(out_cursor->is_data_ready());
 
         // call get next 1
-        auto merge_res = out_cursor->try_get_next();
+        auto merge_res_or = out_cursor->try_get_next();
+        ASSERT_OK(merge_res_or.status());
+        auto merge_res = std::move(merge_res_or).value();
         ASSERT_TRUE(!merge_res.first->is_empty());
         ASSERT_EQ(chunk_size, merge_res.first->num_rows());
 
         // call get next 2
-        merge_res = out_cursor->try_get_next();
+        merge_res_or = out_cursor->try_get_next();
+        ASSERT_OK(merge_res_or.status());
+        merge_res = std::move(merge_res_or).value();
         ASSERT_TRUE(merge_res.first == nullptr);
 
         ASSERT_TRUE(l_chunk_channel.empty() && r_chunk_channel.empty());
@@ -166,7 +176,9 @@ TEST(MergeCascadeTest, merge_cursor_test) {
 
         // notify one channel, but the other channel is not ready
         l_chunk_channel.emplace(l->clone_unique());
-        merge_res = out_cursor->try_get_next();
+        merge_res_or = out_cursor->try_get_next();
+        ASSERT_OK(merge_res_or.status());
+        merge_res = std::move(merge_res_or).value();
         ASSERT_TRUE(merge_res.first != nullptr);
     }
 }

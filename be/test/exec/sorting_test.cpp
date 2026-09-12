@@ -679,7 +679,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
         auto left_chunk = std::make_shared<Chunk>(ColumnHelper::to_columns(std::move(left_segment_columns[seg])), map);
         size_t start_index = left_segment_paddings[seg].first;
         size_t end_index = left_chunk->num_rows() - left_segment_paddings[seg].second;
-        SortedRun left_run(std::move(left_chunk), &sort_exprs);
+        ASSIGN_OR_ABORT(SortedRun left_run, SortedRun::create(std::move(left_chunk), &sort_exprs));
         left_run.set_range(start_index, end_index);
         left_cnt += left_run.num_rows();
         left_runs.chunks.emplace_back(std::move(left_run));
@@ -711,7 +711,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
                 std::make_shared<Chunk>(ColumnHelper::to_columns(std::move(right_segment_columns[seg])), map);
         size_t start_index = right_segment_paddings[seg].first;
         size_t end_index = right_chunk->num_rows() - right_segment_paddings[seg].second;
-        SortedRun right_run(std::move(right_chunk), &sort_exprs);
+        ASSIGN_OR_ABORT(SortedRun right_run, SortedRun::create(std::move(right_chunk), &sort_exprs));
         right_run.set_range(start_index, end_index);
         right_cnt += right_run.num_rows();
         right_runs.chunks.emplace_back(std::move(right_run));

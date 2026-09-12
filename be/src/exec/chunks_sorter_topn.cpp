@@ -287,7 +287,8 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
     segments.reserve(raw_chunks_size);
     for (const auto& cnk : raw_chunks) {
         // Merge segments into segments for the convenience of merging sorted result.
-        segments.emplace_back(_sort_exprs, cnk);
+        segments.emplace_back();
+        RETURN_IF_ERROR(segments.back().init(_sort_exprs, cnk));
     }
     _raw_chunks.clear();
 

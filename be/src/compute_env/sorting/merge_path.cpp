@@ -568,8 +568,13 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 
         Columns orderby;
         for (auto* expr : _merger->sort_exprs()) {
-            auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
-            orderby.push_back(std::move(column));
+            auto column_or = expr->evaluate(chunk.get());
+            if (!column_or.ok()) {
+                // Runs on a parallel worker that cannot return a Status; latch it for try_get_next's caller.
+                _merger->set_eval_status(column_or.status());
+                return;
+            }
+            orderby.push_back(std::move(column_or).value());
         }
 
         auto add_to_output_segments = [this, &output_size](ChunkPtr& standard_chunk, Columns& standard_orderby) {
@@ -716,6 +721,20 @@ bool MergePathCascadeMerger::is_pending(const int32_t parallel_idx) {
 bool MergePathCascadeMerger::is_finished() {
     // Since FINISHED is the final stage, so no lock needed here.
     return _stage == detail::Stage::FINISHED;
+}
+
+Status MergePathCascadeMerger::status() {
+    std::lock_guard<std::recursive_mutex> l(_status_m);
+    return _eval_status;
+}
+
+void MergePathCascadeMerger::set_eval_status(const Status& status) {
+    {
+        std::lock_guard<std::recursive_mutex> l(_status_m);
+        _eval_status.update(status);
+    }
+    // Published after the status itself, so a reader that sees the flag also sees the status.
+    _has_eval_error.store(true, std::memory_order_release);
 }
 
 ChunkPtr MergePathCascadeMerger::try_get_next(const int32_t parallel_idx) {
