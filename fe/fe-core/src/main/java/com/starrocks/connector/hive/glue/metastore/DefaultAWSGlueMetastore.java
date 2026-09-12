@@ -482,6 +482,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         List<CompletableFuture<GetColumnStatisticsForTableResponse>> futures = columnChunks.stream().
                 map(columnChunk -> supplyAsync(() -> {
                     GetColumnStatisticsForTableRequest.Builder request = GetColumnStatisticsForTableRequest.builder()
+                            .catalogId(catalogId)
                             .databaseName(dbName)
                             .tableName(tableName)
                             .columnNames(columnChunk);
@@ -521,6 +522,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
             futureForPartition.put(partitionName, columnChunks.stream().map(columnChunk -> supplyAsync(() -> {
                 GetColumnStatisticsForPartitionRequest.Builder request =
                         GetColumnStatisticsForPartitionRequest.builder()
+                                .catalogId(catalogId)
                                 .databaseName(dbName)
                                 .tableName(tableName)
                                 .columnNames(columnChunk)
