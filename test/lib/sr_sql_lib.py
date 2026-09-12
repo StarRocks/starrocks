@@ -2309,15 +2309,22 @@ class StarrocksSQLApiLib(object):
             if orig_value is not None:
                 self.execute_sql(f"set enable_materialized_view_rewrite = {orig_value};", True)
 
-    def print_hit_materialized_view(self, query, *expects) -> str:
+    def print_hit_materialized_view(self, query, *expects, timeout=10, interval=0.2) -> str:
         """
         assert every name in ``expects`` appears in the plan for query
 
         Callers pass more than one marker to assert a shape, not a choice: ("mv1", "UNION") means
         the MV was used *and* the rewrite was a union. Returning on the first marker to appear left
         the rest of them unchecked.
+
+        With ``expects`` there is a condition to poll on, so the explain runs immediately and
+        repeats until every marker appears. Without it the return value is free-form output that
+        lands in an R file, and there is nothing to wait for except stability, so the original
+        one-second settle wait is kept.
         """
-        time.sleep(1)
+        tools.assert_true(timeout > 0, "print_hit_materialized_view: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "print_hit_materialized_view: interval must be positive, got %s" % interval)
+
         def check_mv():
             sql = "explain %s" % (query)
             res = self.retry_execute_sql(sql, True)
@@ -2330,40 +2337,41 @@ class StarrocksSQLApiLib(object):
                     if plan.find(expect) <= 0:
                         return False
                 return True
-            else:
-                mvs = []
-                for line in plan.split('\n'):
-                    if 'MaterializedView: true' in line:
-                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
-                        if mv_name:
-                            mvs.append(mv_name)
-                mvs.sort()
-                print("Hit materialized views:", ", ".join(mvs))
-                return mvs
+            mvs = []
+            for line in plan.split('\n'):
+                if 'MaterializedView: true' in line:
+                    mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
+                    if mv_name:
+                        mvs.append(mv_name)
+            mvs.sort()
+            print("Hit materialized views:", ", ".join(mvs))
+            return mvs
 
-        # Retry the check several times before declaring failure. MV partition
-        # staleness state propagates asynchronously after base-table writes, so
-        # the optimizer may not pick the expected rewrite (e.g. UNION) on the
-        # first explain call right after an INSERT.
-        max_retries = 5
-        for attempt in range(max_retries):
-            result = self._with_materialized_view_rewrite(check_mv)
-            if not isinstance(result, bool) or result:
-                return result
-            if attempt < max_retries - 1:
-                time.sleep(2)
-        return False
+        if not expects:
+            time.sleep(1)
+            return self._with_materialized_view_rewrite(check_mv)
 
-    def print_hit_materialized_views(self, query, *expects) -> str:
+        deadline = time.monotonic() + timeout
+        while True:
+            if self._with_materialized_view_rewrite(check_mv):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(interval)
+
+    def print_hit_materialized_views(self, query, *expects, timeout=10, interval=0.2) -> str:
         """
         print all mv_names hit in query.
 
-        If ``expects`` is provided, retry the explain a few times until every
-        expected mv name appears in the rewrite. MV partition-version state
-        propagates asynchronously after a refresh/insert, so the optimizer may
-        skip an eligible MV on the very first explain call.
+        If ``expects`` is provided, poll the explain until every expected mv name appears in the
+        rewrite. MV partition-version state propagates asynchronously after a refresh/insert, so
+        the optimizer may skip an eligible MV on the very first explain call. Without ``expects``
+        the return value is free-form output that lands in an R file, and there is nothing to wait
+        for except stability, so the original one-second settle wait is kept.
         """
-        time.sleep(1)
+        tools.assert_true(timeout > 0, "print_hit_materialized_views: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "print_hit_materialized_views: interval must be positive, got %s" % interval)
+
         def extract_mvs():
             sql = "explain %s" % (query)
             res = self.retry_execute_sql(sql, True)
@@ -2390,18 +2398,18 @@ class StarrocksSQLApiLib(object):
             return ",".join(ans)
 
         if not expects:
+            time.sleep(1)
             return self._with_materialized_view_rewrite(extract_mvs)
 
-        max_retries = 5
-        last_result = ""
-        for attempt in range(max_retries):
+        deadline = time.monotonic() + timeout
+        while True:
             last_result = self._with_materialized_view_rewrite(extract_mvs)
             hit_set = set(last_result.split(",")) if last_result else set()
             if all(e in hit_set for e in expects):
                 return last_result
-            if attempt < max_retries - 1:
-                time.sleep(2)
-        return last_result
+            if time.monotonic() >= deadline:
+                return last_result
+            time.sleep(interval)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
