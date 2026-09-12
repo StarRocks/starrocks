@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 
 #include "column/binary_column.h"
 #include "types/geo_type_descriptor.h"
@@ -30,11 +31,21 @@ namespace starrocks {
 // not an OGC EMPTY geometry. Payload ingestion preserves bytes without eager parsing.
 class GeoColumn final : public CowFactory<Column, GeoColumn> {
 public:
+    using ValueType = Slice;
+    // Generic templates require an indexable, contiguous view type. No such view is
+    // exposed until scalar GEO operations are supported; use get_wkb() for transport.
+    using ImmContainer = std::span<const Slice>;
+
+    // Untyped physical placeholders, not an inferred CRS or a native SQL value.
+    explicit GeoColumn(size_t size = 0);
     explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
     DISALLOW_COPY(GeoColumn);
 
     const GeoColumnDescriptor& descriptor() const { return _descriptor; }
     Slice get_wkb(size_t row) const { return _data->get_slice(row); }
+    ImmContainer immutable_data() const;
+    static ValueType min_value();
+    static ValueType max_value();
     void append_wkb(Slice wkb);
     // Batch ingestion from external buffers (must not alias this column).
     void append_wkb_batch(const Slice* values, size_t count);
@@ -85,10 +96,10 @@ public:
     StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
     StatusOr<MutableColumnPtr> downgrade() override { return MutableColumnPtr{}; }
 
-    // No binary visitor fallback. Serde/public rendering are Contract 2.3;
+    // No binary visitor fallback. Serde/public rendering require a separate contract;
     // equality, ordering and geo keys remain unsupported.
-    Status accept(ColumnVisitor* visitor) const override { return Status::NotSupported("GeoColumn visitor"); }
-    Status accept_mutable(ColumnVisitorMutable* visitor) override { return Status::NotSupported("GeoColumn visitor"); }
+    Status accept(ColumnVisitor* visitor) const override;
+    Status accept_mutable(ColumnVisitorMutable* visitor) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int hint) const override;
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t row, bool binary = false) const override;

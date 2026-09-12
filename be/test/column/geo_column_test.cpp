@@ -18,6 +18,9 @@
 
 #include <stdexcept>
 
+#include "column/array_column.h"
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 
@@ -266,13 +269,76 @@ TEST(GeoColumnTest, UnsupportedPathsDoNotFallBackToBinary) {
     column->append_wkb(Slice(point()));
     ColumnVisitor visitor;
     ColumnVisitorMutable mutable_visitor;
-    EXPECT_TRUE(column->accept(&visitor).is_not_supported());
-    EXPECT_TRUE(column->accept_mutable(&mutable_visitor).is_not_supported());
+    EXPECT_THROW(column->accept(&visitor), std::runtime_error);
+    EXPECT_THROW(column->accept_mutable(&mutable_visitor), std::runtime_error);
+    EXPECT_THROW(column->immutable_data(), std::runtime_error);
+    EXPECT_THROW(column->debug_item(0), std::runtime_error);
+    EXPECT_THROW(RunTimeTypeLimits<TYPE_GEOGRAPHY>::min_value(), std::runtime_error);
+    EXPECT_THROW(RunTimeTypeLimits<TYPE_GEOGRAPHY>::max_value(), std::runtime_error);
+    EXPECT_THROW(RunTimeTypeLimits<TYPE_GEOMETRY>::min_value(), std::runtime_error);
+    EXPECT_THROW(RunTimeTypeLimits<TYPE_GEOMETRY>::max_value(), std::runtime_error);
     EXPECT_THROW(column->compare_at(0, 0, *column, 1), std::runtime_error);
     EXPECT_THROW(column->serialize_size(0), std::runtime_error);
     EXPECT_THROW(column->deserialize_and_append(nullptr), std::runtime_error);
     EXPECT_THROW(column->put_mysql_row_buffer(nullptr, 0), std::runtime_error);
     EXPECT_FALSE(column->append_strings(nullptr, 0));
+}
+
+TEST(GeoColumnTest, GenericCreationCannotRelabelTypedPayload) {
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        const auto desc =
+                descriptor(primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY);
+        auto source = GeoColumn::create(desc);
+        source->append_wkb(Slice(point()));
+        auto destination = ColumnHelper::create_column(TypeDescriptor::create_geo_type(primitive, desc.type), false);
+        EXPECT_THROW(destination->append(*source, 0, 1), std::invalid_argument);
+        EXPECT_EQ(0, destination->size());
+        auto copied = source->clone();
+        EXPECT_EQ(desc, down_cast<const GeoColumn*>(copied.get())->descriptor());
+        EXPECT_EQ(point(), down_cast<const GeoColumn*>(copied.get())->get_wkb(0).to_string());
+    }
+}
+
+template <LogicalType Type>
+void check_unsupported_scalar_viewers() {
+    ColumnPtr plain = GeoColumn::create(1);
+    ColumnPtr constant = ConstColumn::create(GeoColumn::create(1), 3);
+    ColumnPtr nullable = NullableColumn::create(GeoColumn::create(1), NullColumn::create(1, 0));
+    ColumnPtr nulls = ColumnHelper::create_const_null_column(3);
+    for (const auto& column : {plain, constant, nullable, nulls}) {
+        EXPECT_THROW((ColumnViewer<Type>(column)), std::runtime_error);
+    }
+}
+
+TEST(GeoColumnTest, GenericScalarViewersFailInsideGeoColumn) {
+    check_unsupported_scalar_viewers<TYPE_GEOGRAPHY>();
+    check_unsupported_scalar_viewers<TYPE_GEOMETRY>();
+}
+
+TEST(GeoColumnTest, HashVisitorsCannotIgnoreUnsupportedGeo) {
+    auto column = GeoColumn::create(descriptor());
+    column->append_wkb(Slice(point()));
+    uint32_t seed = 17;
+    uint8_t selection = 1;
+    uint16_t index = 0;
+    EXPECT_THROW(column->fnv_hash(&seed, 0, 1), std::runtime_error);
+    EXPECT_THROW(column->fnv_hash_with_selection(&seed, &selection, 0, 1), std::runtime_error);
+    EXPECT_THROW(column->fnv_hash_selective(&seed, &index, 1), std::runtime_error);
+    EXPECT_THROW(column->crc32_hash(&seed, 0, 1), std::runtime_error);
+    EXPECT_THROW(column->crc32_hash_with_selection(&seed, &selection, 0, 1), std::runtime_error);
+    EXPECT_THROW(column->crc32_hash_selective(&seed, &index, 1), std::runtime_error);
+    EXPECT_THROW(column->murmur_hash3_x86_32(&seed, 0, 1), std::runtime_error);
+    EXPECT_THROW(column->xxh3_hash(&seed, 0, 1), std::runtime_error);
+    EXPECT_THROW(column->xxh3_hash_with_selection(&seed, &selection, 0, 1), std::runtime_error);
+    EXPECT_THROW(column->xxh3_hash_selective(&seed, &index, 1), std::runtime_error);
+    EXPECT_EQ(17, seed);
+    auto elements = NullableColumn::create(std::move(column), NullColumn::create(1, 0));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
+    EXPECT_THROW(array->fnv_hash(&seed, 0, 1), std::runtime_error);
+    EXPECT_THROW(array->crc32_hash(&seed, 0, 1), std::runtime_error);
 }
 
 } // namespace
