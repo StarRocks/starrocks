@@ -1132,6 +1132,111 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testInsertIcebergStaticPartitionColumnInMiddle() throws Exception {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.LongType.get()),
+                Types.NestedField.optional(2, "dt", Types.DateType.get()),
+                Types.NestedField.optional(3, "v", Types.LongType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("dt").build();
+        Column id = new Column("id", IntegerType.BIGINT);
+        Column dt = new Column("dt", DateType.DATE);
+        Column v = new Column("v", IntegerType.BIGINT);
+
+        String plan = getIcebergStaticPartitionInsertExecPlan("iceberg_catalog_static_mid", "t_mid", 12345601L,
+                schema, spec, Lists.newArrayList(id, dt, v), Lists.newArrayList(dt), Lists.newArrayList(1),
+                "partition(dt='2026-07-02') values (101, 1001)");
+        // The partition constant must land in the dt slot (middle of the schema), not be appended last.
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: column_0 | 3: expr | 2: column_1\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345601\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                "  |  <slot 2> : 2: column_1\n" +
+                "  |  <slot 3> : '2026-07-02'\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         101 | 1001\n";
+        Assertions.assertEquals(expected, plan);
+    }
+
+    @Test
+    public void testInsertIcebergStaticPartitionColumnInMiddleWithSelect() throws Exception {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.LongType.get()),
+                Types.NestedField.optional(2, "dt", Types.DateType.get()),
+                Types.NestedField.optional(3, "v", Types.LongType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("dt").build();
+        Column id = new Column("id", IntegerType.BIGINT);
+        Column dt = new Column("dt", DateType.DATE);
+        Column v = new Column("v", IntegerType.BIGINT);
+
+        String plan = getIcebergStaticPartitionInsertExecPlan("iceberg_catalog_static_mid_sel", "t_mid_sel",
+                12345602L, schema, spec, Lists.newArrayList(id, dt, v), Lists.newArrayList(dt),
+                Lists.newArrayList(1), "partition(dt='2026-07-02') select 101, 1001");
+        // The partition constant must land in the dt slot (middle of the schema), not be appended last.
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:5: id | 4: expr | 6: v\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345602\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : '2026-07-02'\n" +
+                "  |  <slot 5> : 101\n" +
+                "  |  <slot 6> : 1001\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assertions.assertEquals(expected, plan);
+    }
+
+    @Test
+    public void testInsertIcebergStaticPartitionColumnAtLast() throws Exception {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.LongType.get()),
+                Types.NestedField.optional(2, "v", Types.LongType.get()),
+                Types.NestedField.optional(3, "dt", Types.DateType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("dt").build();
+        Column id = new Column("id", IntegerType.BIGINT);
+        Column v = new Column("v", IntegerType.BIGINT);
+        Column dt = new Column("dt", DateType.DATE);
+
+        String plan = getIcebergStaticPartitionInsertExecPlan("iceberg_catalog_static_last", "t_last",
+                12345603L, schema, spec, Lists.newArrayList(id, v, dt), Lists.newArrayList(dt),
+                Lists.newArrayList(2), "partition(dt='2026-07-02') values (101, 1001)");
+        // Regression case: partition column at the last position keeps the constant appended last.
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: column_0 | 2: column_1 | 3: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345603\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                "  |  <slot 2> : 2: column_1\n" +
+                "  |  <slot 3> : '2026-07-02'\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         101 | 1001\n";
+        Assertions.assertEquals(expected, plan);
+    }
+
+    @Test
     public void testInsertIcebergWithGlobalShuffle() throws Exception {
         Schema icebergSchema = new Schema(
                 Types.NestedField.required(1, "k1", Types.IntegerType.get()),
@@ -1600,6 +1705,105 @@ public class InsertPlanTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setEnableMaterializedViewRewrite(enableMaterializedViewRewrite);
         }
+    }
+
+    private String getIcebergStaticPartitionInsertExecPlan(String catalogName, String tableName, long tableId,
+                                                           Schema icebergSchema, PartitionSpec partitionSpec,
+                                                           List<Column> fullSchema, List<Column> partitionColumns,
+                                                           List<Integer> partitionColumnIndexes, String insertSuffix)
+            throws Exception {
+        String createIcebergCatalogStmt = String.format(
+                "create external catalog %s properties (\"type\"=\"iceberg\", " +
+                        "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")",
+                catalogName);
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName(catalogName);
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName(tableName);
+        builder.setSrTableName(tableName);
+        builder.setFullSchema(fullSchema);
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = tableId;
+                minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = false;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = partitionColumns;
+                minTimes = 0;
+
+                icebergTable.partitionColumnIndexes();
+                result = partitionColumnIndexes;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
+                minTimes = 0;
+
+                nativeTable.spec();
+                result = partitionSpec;
+                minTimes = 0;
+
+                nativeTable.schema();
+                result = icebergSchema;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, catalogName, "iceberg_db");
+                result = new Database(tableId, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, catalogName, "iceberg_db", tableName);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String currentCatalogName, String dbName) {
+                return new Database(tableId, "iceberg_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName currentTableName) {
+                return icebergTable;
+            }
+        };
+
+        return getInsertExecPlan(String.format(
+                "explain insert into %s.iceberg_db.%s %s", catalogName, tableName, insertSuffix));
     }
 
     private void assertHashPartitionedByExpression(String actualRes, String expectedExpr) {
