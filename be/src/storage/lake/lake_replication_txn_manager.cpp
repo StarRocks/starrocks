@@ -53,11 +53,6 @@
 
 namespace starrocks::lake {
 namespace {
-// Backlog guard for shared REPLICATE_SNAPSHOT thread pool.
-// Parallel copy is disabled when queue depth exceeds num_threads * this factor
-// to avoid adding more pressure to an already saturated pool.
-constexpr int kParallelCopyMaxQueuePerThread = 8;
-
 std::unordered_set<std::string> collect_shared_file_names(const TabletMetadataPB& metadata) {
     std::unordered_set<std::string> files;
     for (const auto& rowset : metadata.rowsets()) {
@@ -480,12 +475,21 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     ThreadPool* repl_pool = replicate_file_thread_pool;
     bool use_parallel = should_use_parallel_copy(filename_map.size(), repl_pool);
+    bool use_file_copy_pool = repl_pool != nullptr && repl_pool->max_threads() > 0 &&
+                              config::lake_replication_parallel_copy_min_file_count > 0;
+    size_t worker_count = 1;
+    if (use_parallel) {
+        worker_count = std::min<size_t>(filename_map.size(),
+                                        std::max(1, config::lake_replication_max_parallel_files_per_tablet));
+    }
     std::mutex mu;
     std::mutex* shared_mutex = nullptr;
     FileConverterCreatorFunc active_file_converters = file_converters;
     if (use_parallel) {
         LOG(INFO) << "Start parallel file copy, file_count: " << filename_map.size() << ", txn_id: " << txn_id
-                  << ", tablet_id: " << target_tablet_id << ", pool num_threads: " << repl_pool->num_threads()
+                  << ", tablet_id: " << target_tablet_id << ", worker_count: " << worker_count
+                  << ", pool max_threads: " << repl_pool->max_threads()
+                  << ", pool num_threads: " << repl_pool->num_threads()
                   << ", pool active_threads: " << repl_pool->active_threads()
                   << ", pool queued_tasks: " << repl_pool->num_queued_tasks();
         shared_mutex = &mu;
@@ -640,26 +644,16 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         });
     }
     // step 4: execute tasks and collect copy metrics.
-    // Follow the ThreadPoolToken(CONCURRENT) + wait() pattern used in txn_manager.cpp.
-    if (use_parallel) {
-        auto token = repl_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-        std::vector<Status> task_results(tasks.size());
-        for (size_t i = 0; i < tasks.size(); i++) {
-            auto st =
-                    token->submit_func([&task_results, i, task = std::move(tasks[i])]() { task_results[i] = task(); });
-            if (!st.ok()) {
-                task_results[i] = std::move(st);
-            }
-        }
-        token->wait();
-        for (const auto& r : task_results) {
-            if (!r.ok()) {
-                LOG(WARNING) << "Parallel file copy failed, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
-                             << ", pool num_threads: " << repl_pool->num_threads()
-                             << ", pool active_threads: " << repl_pool->active_threads()
-                             << ", pool queued_tasks: " << repl_pool->num_queued_tasks() << ", error: " << r;
-                return r;
-            }
+    if (use_file_copy_pool) {
+        auto st = execute_file_copy_tasks(std::move(tasks), repl_pool, worker_count);
+        if (!st.ok()) {
+            LOG(WARNING) << "File copy through dedicated pool failed, txn_id: " << txn_id
+                         << ", tablet_id: " << target_tablet_id << ", worker_count: " << worker_count
+                         << ", pool max_threads: " << repl_pool->max_threads()
+                         << ", pool num_threads: " << repl_pool->num_threads()
+                         << ", pool active_threads: " << repl_pool->active_threads()
+                         << ", pool queued_tasks: " << repl_pool->num_queued_tasks() << ", error: " << st;
+            return st;
         }
     } else {
         for (const auto& task : tasks) {
@@ -673,8 +667,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     }
     LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
               << ", cost: " << total_time_sec << "s, rate: " << copy_rate
-              << "MB/s, parallel: " << (use_parallel ? "true" : "false") << ", txn_id: " << txn_id
-              << ", tablet_id: " << target_tablet_id;
+              << "MB/s, file_copy_pool: " << (use_file_copy_pool ? "true" : "false")
+              << ", parallel: " << (use_parallel ? "true" : "false") << ", worker_count: " << worker_count
+              << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
     // step 5: update metadata and write txn log.
     // Update segment sizes in tablet_metadata if there are any changes
@@ -713,14 +708,52 @@ bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, cons
     if (min_file_count == 0) {
         return false;
     }
+    if (config::lake_replication_max_parallel_files_per_tablet <= 1) {
+        return false;
+    }
     if (file_count < static_cast<size_t>(min_file_count)) {
         return false;
     }
-    const int num_threads = thread_pool->num_threads();
-    if (num_threads <= 0) {
+    if (thread_pool->max_threads() <= 0) {
         return false;
     }
-    return thread_pool->num_queued_tasks() <= num_threads * kParallelCopyMaxQueuePerThread;
+    return true;
+}
+
+Status LakeReplicationTxnManager::execute_file_copy_tasks(std::vector<ReplicationTask> tasks, ThreadPool* thread_pool,
+                                                          size_t max_workers) {
+    if (tasks.empty()) {
+        return Status::OK();
+    }
+    if (thread_pool == nullptr || thread_pool->max_threads() <= 0) {
+        return Status::InvalidArgument("Lake replication file copy thread pool is unavailable");
+    }
+
+    const size_t worker_count = std::min(tasks.size(), std::max<size_t>(1, max_workers));
+    auto token = thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::atomic<size_t> next_task{0};
+    std::vector<Status> task_results(tasks.size());
+    Status submit_status;
+    for (size_t i = 0; i < worker_count; ++i) {
+        auto st = token->submit_func([&]() {
+            while (true) {
+                size_t task_index = next_task.fetch_add(1, std::memory_order_relaxed);
+                if (task_index >= tasks.size()) {
+                    return;
+                }
+                task_results[task_index] = tasks[task_index]();
+            }
+        });
+        if (!st.ok() && submit_status.ok()) {
+            submit_status = std::move(st);
+        }
+    }
+    token->wait();
+    RETURN_IF_ERROR(submit_status);
+    for (const auto& result : task_results) {
+        RETURN_IF_ERROR(result);
+    }
+    return Status::OK();
 }
 
 StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
