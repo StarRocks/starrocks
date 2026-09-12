@@ -142,8 +142,6 @@ public class IcebergHiveCatalog implements IcebergCatalog {
                     LOG.error("Invalid location URI: {}", value, e);
                     throw new StarRocksConnectorException("Invalid location URI: %s. msg: %s", value, e.getMessage());
                 }
-            } else {
-                throw new IllegalArgumentException("Unrecognized property: " + key);
             }
         }
 
