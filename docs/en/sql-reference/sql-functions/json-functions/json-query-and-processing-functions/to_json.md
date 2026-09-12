@@ -5,7 +5,7 @@ description: "Converts a Map or Struct value into a JSON string."
 
 # to_json
 
-Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
+Converts an Array, Map, or Struct value into a JSON value. If the input value is NULL, NULL is returned.
 
 :::tip
 All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
@@ -25,7 +25,7 @@ to_json(any_value)
 
 ## Parameters
 
-`any_value`: the Map or Struct expression you want to convert. If the input value is invalid, an error is returned. The value in each key-value pair of the Map or Struct value is nullable. See the last example.
+`any_value`: the Array, Map, or Struct expression you want to convert. If the input value is invalid, an error is returned. Array elements and the value in each key-value pair of a Map or Struct value can be nullable.
 
 ## Return value
 
@@ -34,6 +34,13 @@ Returns a JSON value.
 ## Examples
 
 ```Haskell
+select to_json([1, NULL, 3]);
++-----------------------+
+| to_json([1,NULL,3])   |
++-----------------------+
+| [1, null, 3]          |
++-----------------------+
+
 select to_json(map{1:'a',2:'b'});
 +---------------------------+
 | to_json(map{1:'a',2:'b'}) |
@@ -65,6 +72,7 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 
 ## See also
 
+- [Array data type](../../../data-types/semi_structured/Array.md)
 - [Map data type](../../../data-types/semi_structured/Map.md)
 - [Struct data type](../../../data-types/semi_structured/STRUCT.md)
 - [Map functions](../../README.md#map-functions)

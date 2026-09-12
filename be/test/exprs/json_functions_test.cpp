@@ -25,6 +25,7 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "butil/time.h"
+#include "column/array_column.h"
 #include "column/column.h"
 #include "column/const_column.h"
 #include "column/flat_json/json_flattener.h"
@@ -1688,6 +1689,70 @@ TEST_F(JsonFunctionsTest, struct_to_json) {
     Datum json2 = ptr->get(1);
     ASSERT_FALSE(json2.is_null());
     ASSERT_EQ(R"({"id": 2, "name": "menlo"})", json2.get_json()->to_string_uncheck());
+}
+
+TEST_F(JsonFunctionsTest, array_to_json) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto array_column = ArrayColumn::create(std::move(elements), UInt32Column::create());
+    array_column->append_datum(DatumArray{Datum(int32_t(1)), Datum(), Datum(int32_t(3))});
+    array_column->append_datum(DatumArray{});
+
+    Columns input_columns{array_column};
+    auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+    ASSERT_TRUE(maybe_res.ok());
+    ColumnPtr result = maybe_res.value();
+
+    ASSERT_EQ(2, result->size());
+    ASSERT_EQ(R"([1, null, 3])", result->get(0).get_json()->to_string_uncheck());
+    ASSERT_EQ(R"([])", result->get(1).get_json()->to_string_uncheck());
+}
+
+TEST_F(JsonFunctionsTest, const_nested_array_to_json) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto inner_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto outer_elements = NullableColumn::create(ArrayColumn::create(std::move(inner_elements), UInt32Column::create()),
+                                                 NullColumn::create());
+    auto outer_arrays = ArrayColumn::create(std::move(outer_elements), UInt32Column::create());
+    outer_arrays->append_datum(DatumArray{Datum(DatumArray{Datum(int32_t(1)), Datum(), Datum(int32_t(3))}), Datum(),
+                                          Datum(DatumArray{Datum(int32_t(4)), Datum(int32_t(5))})});
+
+    Columns input_columns{ConstColumn::create(std::move(outer_arrays), 3)};
+    auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+    ASSERT_TRUE(maybe_res.ok());
+    ColumnPtr result = maybe_res.value();
+
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_EQ(3, result->size());
+    ASSERT_EQ(R"([[1, null, 3], null, [4, 5]])", result->get(0).get_json()->to_string_uncheck());
+    ASSERT_EQ(R"([[1, null, 3], null, [4, 5]])", result->get(1).get_json()->to_string_uncheck());
+    ASSERT_EQ(R"([[1, null, 3], null, [4, 5]])", result->get(2).get_json()->to_string_uncheck());
+}
+
+TEST_F(JsonFunctionsTest, const_multi_dimensional_array_to_json) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto inner_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto middle_elements = NullableColumn::create(
+            ArrayColumn::create(std::move(inner_elements), UInt32Column::create()), NullColumn::create());
+    auto outer_elements = NullableColumn::create(
+            ArrayColumn::create(std::move(middle_elements), UInt32Column::create()), NullColumn::create());
+    auto arrays = ArrayColumn::create(std::move(outer_elements), UInt32Column::create());
+    arrays->append_datum(DatumArray{Datum(DatumArray{Datum(DatumArray{Datum(int32_t(1)), Datum(int32_t(2))}),
+                                                     Datum(DatumArray{Datum(int32_t(3))})}),
+                                    Datum(DatumArray{Datum(DatumArray{})})});
+
+    Columns input_columns{ConstColumn::create(std::move(arrays), 2)};
+    auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+    ASSERT_TRUE(maybe_res.ok());
+    ColumnPtr result = maybe_res.value();
+
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_EQ(2, result->size());
+    ASSERT_EQ(R"([[[1, 2], [3]], [[]]])", result->get(0).get_json()->to_string_uncheck());
+    ASSERT_EQ(R"([[[1, 2], [3]], [[]]])", result->get(1).get_json()->to_string_uncheck());
 }
 
 TEST_F(JsonFunctionsTest, map_to_json) {
