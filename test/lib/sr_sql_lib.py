@@ -2311,7 +2311,11 @@ class StarrocksSQLApiLib(object):
 
     def print_hit_materialized_view(self, query, *expects) -> str:
         """
-        assert mv_name is hit in query
+        assert every name in ``expects`` appears in the plan for query
+
+        Callers pass more than one marker to assert a shape, not a choice: ("mv1", "UNION") means
+        the MV was used *and* the rewrite was a union. Returning on the first marker to appear left
+        the rest of them unchecked.
         """
         time.sleep(1)
         def check_mv():
@@ -2321,11 +2325,11 @@ class StarrocksSQLApiLib(object):
                 print(res)
                 return False
             plan = str(res["result"])
-            if expects is not None or len(expects) > 0:
+            if expects:
                 for expect in expects:
-                    if plan.find(expect) > 0:
-                        return True
-                return False
+                    if plan.find(expect) <= 0:
+                        return False
+                return True
             else:
                 mvs = []
                 for line in plan.split('\n'):
