@@ -8,9 +8,10 @@
 -- the inner array_map could not find x.
 -- Keeping the two abs(x) separated by y matters: it leaves no x-only subexpression for the FE to
 -- hoist any further, which is what makes the hoist stay in the inner lambda.
--- Do not add a constant-array form (array_map(x -> array_map(y -> ..., [1,2]), [1,2])): it folds
--- into a PHYSICAL_VALUES plan where the FE still hoists the reference out of the scope that defines
--- it, so it fails plan validation until #78645 lands.
+-- The constant-array form needs the FE-side fix from #78645 as well: without it the FE hoists the
+-- reference out of the scope that defines it and InputDependenciesChecker rejects the plan before
+-- the BE sees it. It earns its place because folding into a PHYSICAL_VALUES plan makes it take the
+-- all-const branch of ArrayMapExpr::evaluate_lambda_expr, which the table-backed case never does.
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -24,5 +25,8 @@ SELECT k, array_map(x -> array_map(y -> abs(x) + y + abs(x), arr), arr) AS r FRO
 -- control: an equivalent single-occurrence form leaves the hoist in the lambda that binds x, so it
 -- was already correct; both forms must agree
 SELECT k, array_map(x -> array_map(y -> abs(x) * 2 + y, arr), arr) AS r FROM nlc ORDER BY k;
+
+-- constant-array form, taking the all-const evaluation branch (see header)
+SELECT array_map(x -> array_map(y -> abs(x) + y + abs(x), [1,2]), [1,2]);
 
 drop database db_${uuid0};
