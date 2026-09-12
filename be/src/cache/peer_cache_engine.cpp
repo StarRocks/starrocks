@@ -39,6 +39,13 @@ Status PeerCacheEngine::read(const std::string& key, size_t off, size_t size, IO
 
     std::shared_ptr<PInternalService_RecoverableStub> stub =
             _stub_cache->get_stub(options->remote_host, options->remote_port);
+    // The stub can be null when the peer host is temporarily unresolvable (e.g. a peer node is
+    // restarting during a rolling upgrade and its hostname no longer resolves). Returning an error
+    // here lets the caller fall back to remote storage instead of dereferencing a null stub.
+    if (stub == nullptr) {
+        return Status::InternalError("failed to get brpc stub for peer cache node " + options->remote_host + ":" +
+                                     std::to_string(options->remote_port));
+    }
     PFetchDataCacheRequest request;
     PFetchDataCacheResponse response;
     request.set_request_id(butil::monotonic_time_ns());
