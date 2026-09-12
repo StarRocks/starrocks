@@ -1158,4 +1158,132 @@ TEST_F(BlockCompressionTest, dict_page_cannot_be_decoded_without_its_dictionary)
     ASSERT_EQ(32, refused) << "a dictionary-compressed page decoded without the dictionary";
 }
 
+TEST_F(BlockCompressionTest, gzip_decompression_empty_and_small) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::GZIP, &codec).ok());
+    ASSERT_NE(nullptr, codec);
+
+    // 1. Empty slice
+    Slice empty_in;
+    std::string empty_out;
+    Slice empty_out_slice(empty_out);
+    ASSERT_TRUE(codec->decompress(empty_in, &empty_out_slice).ok());
+    ASSERT_EQ(0, empty_out_slice.size);
+
+    // 2. Small string roundtrip
+    std::string small_orig = "hello world gzip block compression";
+    std::string compressed;
+    compressed.resize(codec->max_compressed_len(small_orig.size()));
+    Slice compressed_slice(compressed);
+    ASSERT_TRUE(codec->compress(small_orig, &compressed_slice).ok());
+    compressed.resize(compressed_slice.size);
+
+    std::string decompressed;
+    decompressed.resize(small_orig.size());
+    Slice decomp_slice(decompressed);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &decomp_slice).ok());
+    ASSERT_EQ(small_orig, decompressed);
+}
+
+TEST_F(BlockCompressionTest, gzip_decompression_large_payload) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::GZIP, &codec).ok());
+    ASSERT_NE(nullptr, codec);
+
+    // Multi-megabyte repetitive and non-repetitive payload
+    std::string orig;
+    orig.reserve(2 * 1024 * 1024);
+    for (int i = 0; i < 50000; ++i) {
+        orig += "StarRocks GZIP decompression libdeflate accelerated payload record #" + std::to_string(i) + "\n";
+    }
+
+    std::string compressed;
+    compressed.resize(codec->max_compressed_len(orig.size()));
+    Slice compressed_slice(compressed);
+    ASSERT_TRUE(codec->compress(orig, &compressed_slice).ok());
+    compressed.resize(compressed_slice.size);
+
+    std::string decompressed;
+    decompressed.resize(orig.size());
+    Slice decomp_slice(decompressed);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &decomp_slice).ok());
+    ASSERT_EQ(orig, decompressed);
+}
+
+TEST_F(BlockCompressionTest, gzip_decompression_corrupted_payload_returns_error) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::GZIP, &codec).ok());
+    ASSERT_NE(nullptr, codec);
+
+    std::string orig = "Data that will be corrupted after compression";
+    std::string compressed;
+    compressed.resize(codec->max_compressed_len(orig.size()));
+    Slice compressed_slice(compressed);
+    ASSERT_TRUE(codec->compress(orig, &compressed_slice).ok());
+    compressed.resize(compressed_slice.size);
+
+    // Corrupt payload bytes in the middle of the gzip stream
+    if (compressed.size() > 10) {
+        compressed[compressed.size() / 2] ^= 0xFF;
+    }
+
+    std::string decompressed;
+    decompressed.resize(orig.size());
+    Slice decomp_slice(decompressed);
+    Status st = codec->decompress(Slice(compressed), &decomp_slice);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_invalid_argument()) << "Expected InvalidArgument, got: " << st.to_string();
+}
+
+TEST_F(BlockCompressionTest, benchmark_gzip_decompression_throughput) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::GZIP, &codec).ok());
+    ASSERT_NE(nullptr, codec);
+
+    // Create 64 KB block of realistic semi-compressible text
+    std::string sample;
+    sample.reserve(64 * 1024);
+    for (int i = 0; sample.size() < 64 * 1024; ++i) {
+        sample += "StarRocks column record index=" + std::to_string(i) +
+                  " timestamp=" + std::to_string(1700000000 + i) + " value=" + std::to_string(i * 1.5) +
+                  " tag=analytics_ingestion_metric\n";
+    }
+    sample.resize(64 * 1024);
+
+    std::string compressed;
+    compressed.resize(codec->max_compressed_len(sample.size()));
+    Slice comp_slice(compressed);
+    ASSERT_TRUE(codec->compress(sample, &comp_slice).ok());
+    compressed.resize(comp_slice.size);
+
+    std::string decompressed;
+    decompressed.resize(sample.size());
+    Slice decomp_slice(decompressed);
+
+    // Warm-up
+    for (int i = 0; i < 50; ++i) {
+        decomp_slice.size = decompressed.size();
+        ASSERT_TRUE(codec->decompress(Slice(compressed), &decomp_slice).ok());
+    }
+
+    // Benchmark 2000 iterations (approx 128 MB decompressed data)
+    const int iterations = 2000;
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < iterations; ++i) {
+        decomp_slice.size = decompressed.size();
+        ASSERT_TRUE(codec->decompress(Slice(compressed), &decomp_slice).ok());
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    double elapsed_sec = std::chrono::duration<double>(end - start).count();
+    double total_mb = (sample.size() * iterations) / (1024.0 * 1024.0);
+    double throughput_mb_s = total_mb / elapsed_sec;
+
+    std::cout << "========================================================\n"
+              << "[BENCHMARK RESULTS] GZIP Decompression Throughput\n"
+              << "Block Size: " << sample.size() / 1024 << " KB | Compressed: " << compressed.size() << " bytes\n"
+              << "Total Decompressed: " << total_mb << " MB in " << elapsed_sec << " s\n"
+              << "Decompression Throughput: " << throughput_mb_s << " MB/s\n"
+              << "========================================================\n";
+}
+
 } // namespace starrocks

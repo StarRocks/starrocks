@@ -116,10 +116,11 @@ starrocks_set_default_packages() {
         pprof
         benchgen
         paimon_cpp
+        libdeflate
     )
 
     if [[ "${machine_type}" != "aarch64" ]]; then
-        STARROCKS_THIRDPARTY_ALL_PACKAGES+=(breakpad libdeflate)
+        STARROCKS_THIRDPARTY_ALL_PACKAGES+=(breakpad)
     fi
 
     if [[ "$(uname -s)" == "Darwin" ]]; then
