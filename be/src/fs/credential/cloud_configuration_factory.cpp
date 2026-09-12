@@ -35,6 +35,10 @@ const AWSCloudConfiguration CloudConfigurationFactory::create_aws(const TCloudCo
     aws_cloud_configuration.enable_path_style_access =
             get_or_default(properties, AWS_S3_ENABLE_PATH_STYLE_ACCESS, false);
     aws_cloud_configuration.enable_ssl = get_or_default(properties, AWS_S3_ENABLE_SSL, true);
+    // SSE-C material, applied per request by S3InputStream.
+    aws_cloud_configuration.sse_type = get_or_default(properties, AWS_S3_SSE_TYPE, std::string());
+    aws_cloud_configuration.sse_key = get_or_default(properties, AWS_S3_SSE_KEY, std::string());
+    aws_cloud_configuration.sse_key_md5 = get_or_default(properties, AWS_S3_SSE_KEY_MD5, std::string());
 
     // Set aws cloud credential next
     aws_cloud_credential.use_aws_sdk_default_behavior =

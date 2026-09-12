@@ -602,6 +602,21 @@ AWS S3 的 `StorageCredentialParams`：
 - 必需：否
 - 描述：您的 IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
 
+###### aws.s3.sse.type
+
+- 必需：否
+- 描述：Iceberg 表对象所使用的 S3 服务端加密（Server-Side Encryption）类型。有效值：`none`（默认）和 `sse-c`（使用客户自备密钥的服务端加密，SSE-C）。当表的数据文件和元数据文件使用 SSE-C 加密时，请将其设置为 `sse-c`。自 v4.1 起支持。
+
+###### aws.s3.sse.customer_key
+
+- 必需：否
+- 描述：用于加密对象的 base64 编码的 256 位 AES 密钥。当 `aws.s3.sse.type` 为 `sse-c` 时必需。该密钥必须与写入对象时使用的密钥一致，否则读取将失败。该值在 `SHOW CREATE CATALOG` 中会被脱敏。
+
+###### aws.s3.sse.customer_key_md5
+
+- 必需：否
+- 描述：客户密钥的 base64 编码的 MD5 摘要。可选；当省略时，StarRocks 会根据 `aws.s3.sse.customer_key` 自动计算。
+
 有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 </TabItem>

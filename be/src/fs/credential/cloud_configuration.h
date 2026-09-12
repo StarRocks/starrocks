@@ -82,13 +82,21 @@ public:
 
 class AWSCloudConfiguration final : public CloudConfiguration {
 public:
+    // NOTE: the SSE-C fields are intentionally excluded from operator==. SSE-C is applied per
+    // GetObject/HeadObject request (see S3InputStream), so the underlying S3 client is identical
+    // regardless of the customer key. Including them would needlessly fragment the client cache.
     bool operator==(const AWSCloudConfiguration& rhs) const {
         return enable_path_style_access == rhs.enable_path_style_access && enable_ssl == rhs.enable_ssl &&
                aws_cloud_credential == rhs.aws_cloud_credential;
     }
+    bool sse_c_enabled() const { return sse_type == "sse-c"; }
     AWSCloudCredential aws_cloud_credential;
     bool enable_path_style_access = false;
     bool enable_ssl = true;
+    // SSE-C (Server-Side Encryption with Customer-provided key). Empty/"none" when disabled.
+    std::string sse_type;
+    std::string sse_key;     // base64-encoded 256-bit key
+    std::string sse_key_md5; // base64-encoded MD5 of the raw key
 };
 
 class AliyunCloudConfiguration final : public CloudConfiguration {

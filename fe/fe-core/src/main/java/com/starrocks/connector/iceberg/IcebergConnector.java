@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -29,14 +30,18 @@ import com.starrocks.connector.iceberg.jdbc.IcebergJdbcCatalog;
 import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
 import com.starrocks.connector.iceberg.procedure.RegisterTableProcedure;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.connector.share.credential.AwsSseCUtil;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -98,21 +103,41 @@ public class IcebergConnector implements Connector {
                     String.valueOf(Config.iceberg_worker_num_threads));
         }
 
+        Map<String, String> catalogProperties = withIcebergSseProperties(properties);
+
         switch (nativeCatalogType) {
             case HIVE_CATALOG:
-                return new IcebergHiveCatalog(catalogName, conf, properties);
+                return new IcebergHiveCatalog(catalogName, conf, catalogProperties);
             case GLUE_CATALOG:
-                return new IcebergGlueCatalog(catalogName, conf, properties);
+                return new IcebergGlueCatalog(catalogName, conf, catalogProperties);
             case REST_CATALOG:
-                return new IcebergRESTCatalog(catalogName, conf, properties);
+                return new IcebergRESTCatalog(catalogName, conf, catalogProperties);
             case HADOOP_CATALOG:
-                return new IcebergHadoopCatalog(catalogName, conf, properties);
+                return new IcebergHadoopCatalog(catalogName, conf, catalogProperties);
             case JDBC_CATALOG:
-                return new IcebergJdbcCatalog(catalogName, conf, properties);
+                return new IcebergJdbcCatalog(catalogName, conf, catalogProperties);
             default:
                 throw new StarRocksConnectorException("Property %s is missing or not supported now.",
                         ICEBERG_CATALOG_TYPE);
         }
+    }
+
+    // Translate the StarRocks aws.s3.sse.* properties into the Iceberg S3FileIO s3.sse.* properties so that
+    // S3FileIO adds the SSE-C headers to every metadata GetObject/HeadObject. The customer key is only added
+    // to the map handed to the native catalog, never to the catalog's stored properties, so it is not exposed
+    // by SHOW CREATE CATALOG. Returns the original map untouched when SSE-C is not requested.
+    @VisibleForTesting
+    static Map<String, String> withIcebergSseProperties(Map<String, String> catalogProperties) {
+        if (!AwsSseCUtil.isSseCEnabled(catalogProperties)) {
+            return catalogProperties;
+        }
+        String keyMd5 = catalogProperties.getOrDefault(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5,
+                AwsSseCUtil.validateAndGetKeyMd5(catalogProperties));
+        Map<String, String> augmented = new HashMap<>(catalogProperties);
+        augmented.put(S3FileIOProperties.SSE_TYPE, S3FileIOProperties.SSE_TYPE_CUSTOM);
+        augmented.put(S3FileIOProperties.SSE_KEY, catalogProperties.get(CloudConfigurationConstants.AWS_S3_SSE_KEY));
+        augmented.put(S3FileIOProperties.SSE_MD5, keyMd5);
+        return augmented;
     }
 
     @Override
