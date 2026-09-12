@@ -1,0 +1,66 @@
+name: SYNC PIPELINE (MR)
+
+# Event-driven forward sync: StarRocks/starrocks -> the MR downstream fork, in
+# parallel to ci-sync.yml. This is a SEPARATE workflow and does NOT modify
+# ci-sync.yml or the shared run-repo-sync.sh, so the existing sync path is untouched.
+#
+# Scope (simplified):
+#   - main <-> main ONLY. Release-branch backports are the downstream's own job (it
+#     runs its own merge-pipeline reconcile). No branch sync.
+#   - UPSTREAM-NATIVE changes only: a PR that itself arrived via sync (label `sync`)
+#     is skipped, so re-synced flow is not forwarded and there is no cross-repo loop.
+#
+# Config (set in repo Settings, NOT hard-coded here):
+#   - vars.MR_SYNC_REPO   : owner/repo of the downstream fork to sync into
+#   - secrets.MR_SYNC_PAT : PAT (repo + workflow scope) allowed to run workflows there
+#
+# Prereq: the downstream provides repo-sync.yml (executor, SOURCE_REPO-parameterized)
+# + its own sync CI + auto-merge; its sync runner has the StarRocks/starrocks source
+# mirror. Anti-loop reuses the `sync` label convention.
+
+on:
+  pull_request_target:
+    branches:
+      - main            # main-only: release branches are handled by each repo's backport
+    types:
+      - closed
+  workflow_dispatch:
+    inputs:
+      PR_ID:
+        description: 'source PR id on StarRocks/starrocks (manual re-sync)'
+        required: true
+        type: string
+
+jobs:
+  sync-mr:
+    runs-on: [self-hosted, sync]
+    if: >
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event.pull_request.merged == true && github.repository == 'StarRocks/starrocks')
+    env:
+      PR_NUMBER: ${{ github.event.inputs.PR_ID || github.event.number }}
+      GH_TOKEN: ${{ secrets.MR_SYNC_PAT }}
+    steps:
+      - name: resolve commit + anti-loop guard
+        id: info
+        run: |
+          set -x
+          pr_info=$(gh pr view ${PR_NUMBER} -R StarRocks/starrocks --json mergeCommit,labels)
+          labels=$(echo "$pr_info" | jq -r '.labels[].name')
+          # upstream-native only: skip anything that came IN via sync
+          if [[ "${labels}" =~ sync ]]; then
+            echo "is_sync=true" >> $GITHUB_OUTPUT
+          else
+            commit_sha=$(echo "$pr_info" | jq -r '.mergeCommit.oid')
+            echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: dispatch downstream repo-sync (main only)
+        if: steps.info.outputs.is_sync != 'true'
+        run: |
+          gh workflow run repo-sync.yml \
+            -R ${{ vars.MR_SYNC_REPO }} \
+            -f PR_ID=${PR_NUMBER} \
+            -f COMMIT_ID=${{ steps.info.outputs.commit_sha }} \
+            -f BRANCH=main \
+            -f SOURCE_REPO=StarRocks/starrocks
