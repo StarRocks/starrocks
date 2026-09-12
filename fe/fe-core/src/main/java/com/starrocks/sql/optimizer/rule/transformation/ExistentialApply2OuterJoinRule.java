@@ -78,8 +78,8 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
     private List<OptExpression> transformCorrelation(OptExpression input, LogicalApplyOperator apply,
                                                      ExistsPredicateOperator epo, OptimizerContext context) {
         boolean hasEqPredicate = Utils.extractConjuncts(apply.getCorrelationConjuncts()).stream()
-                .anyMatch(d -> OperatorType.BINARY.equals(d.getOpType()) && BinaryType.EQ
-                        .equals(((BinaryPredicateOperator) d).getBinaryType()));
+                .anyMatch(d -> OperatorType.BINARY.equals(d.getOpType()) &&
+                        ((BinaryPredicateOperator) d).getBinaryType().isEquivalence());
 
         if (hasEqPredicate) {
             return transformCorrelationWithEQ(input, apply, epo, context);
