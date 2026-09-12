@@ -883,6 +883,10 @@ public class TaskManager implements MemoryTrackable {
 
     public void replayAlterTask(AlterTaskInfo alterTaskInfo) {
         Task currentTask = getTask(alterTaskInfo.getName());
+        if (currentTask == null) {
+            LOG.warn("replay alter task failed: task {} not found", alterTaskInfo.getName());
+            return;
+        }
         // Handle task type change (existing logic)
         if (alterTaskInfo.getType() != null) {
             changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
