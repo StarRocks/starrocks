@@ -1291,6 +1291,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: StarRocks 集群中每个数据库允许运行的最大加载事务数。默认值为 `1000`。从 v3.1 开始，默认值从 `100` 更改为 `1000`。当数据库的实际运行加载事务数超过此参数的值时，新的加载请求将不会被处理。同步加载作业的新请求将被拒绝，异步加载作业的新请求将排队。不建议您增加此参数的值，因为这会增加系统负载。
 - 引入版本: -
 
+### `max_running_txn_num_per_table`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 数据库中每个表允许运行的最大加载事务数。`0`（默认值）禁用该表级限制，此时仅 `max_running_txn_num_per_db` 生效，行为与引入该参数之前完全一致。当设置为大于 `0` 的值时，它将在 `max_running_txn_num_per_db` 之外额外生效，且其值应不大于 `max_running_txn_num_per_db`。该参数用于隔离阻塞的表：当某个表的加载事务停止完成时（例如发生 publish 阻塞），它们不再占用整个数据库的运行事务额度，也不会阻塞同一数据库中其他表的加载。Routine Load 和存算分离场景下的 Compaction 事务不受此限制，与 `max_running_txn_num_per_db` 一致。该限制在加载事务开始时进行检查。显式多语句事务（`BEGIN ... INSERT ... COMMIT`）在开始时尚未声明目标表，因此其自身的准入仅受 `max_running_txn_num_per_db` 约束。存算分离场景下的 Compaction 事务虽不受此表级检查限制，但仍会占用 `max_running_txn_num_per_db` 的额度。
+- 引入版本: -
+
 ### `max_stream_load_timeout_second`
 
 - 默认值: 259200

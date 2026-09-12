@@ -1439,13 +1439,13 @@ public class ExplicitTxnTest {
             dbTxnMgr.activateTransactionTable(txnId, table1.getId());
             new MockUp<TransactionState>() {
                 @Mock
-                public List<Long> getTableIdList(Invocation invocation) {
+                public boolean intersectsTableIds(Invocation invocation, List<Long> candidateTableIds) {
                     TransactionState invokedState = invocation.getInvokedInstance();
                     if (invokedState == state && blockWatermark.compareAndSet(true, false)) {
                         watermarkEntered.countDown();
                         awaitLatch(releaseWatermark, "watermark was not released");
                     }
-                    return invocation.proceed();
+                    return invocation.proceed(candidateTableIds);
                 }
             };
 
