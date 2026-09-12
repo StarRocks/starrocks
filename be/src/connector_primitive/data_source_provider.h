@@ -22,6 +22,7 @@
 #include "common/statusor.h"
 #include "connector_primitive/data_source.h"
 #include "exec_primitive/pipeline/scan/morsel_queue_builder.h"
+#include "gen_cpp/CloudConfiguration_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state_fwd.h"
@@ -71,6 +72,10 @@ public:
     virtual bool always_shared_scan() const { return true; }
 
     virtual void prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {}
+
+    // Deliver a re-vended cloud credential mid-query. No-op by default; providers that open
+    // files with vended credentials override it.
+    virtual void set_refreshed_cloud_configuration(const TCloudConfiguration& cloud_configuration) {}
 
     virtual void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
         *min_value = MIN_DATA_SOURCE_MEM_BYTES;
