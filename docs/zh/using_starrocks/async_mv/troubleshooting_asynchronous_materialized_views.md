@@ -317,6 +317,16 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 ALTER MATERIALIZED VIEW mv1 ACTIVE;
 ```
 
+对于由数据导入触发刷新的物化视图（`REFRESH ASYNC` 且未指定 interval），如果物化视图因不会自动恢复的原因处于 Inactive 状态，StarRocks 不再在每次基表写入后重新提交自动刷新，以免不断产生失败的 TaskRun。不会自动恢复的原因包括：
+
+- 手动将物化视图设置为 Inactive（`ALTER MATERIALIZED VIEW ... INACTIVE`）
+- 物化视图处于备份中
+- 基表已被 Optimize
+- 连续刷新失败
+- 基表发生非追加写入，导致增量刷新中断
+
+手动执行 `REFRESH MATERIALIZED VIEW` 以及按 interval 调度的刷新不受影响。因其他暂时性原因 Inactive 的物化视图，在基表写入后仍会重试刷新。
+
 如果设置没有生效，您需要删除该物化视图并重新创建。
 
 ### 物化视图刷新任务占用过多资源
