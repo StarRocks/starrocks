@@ -73,7 +73,7 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
                                     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);     \
         break;                                                                                                \
     }
-                APPLY_FOR_ALL_SCALAR_TYPE(M)
+                APPLY_FOR_SCALAR_KEY_TYPE(M)
 #undef M
             default:
                 break;

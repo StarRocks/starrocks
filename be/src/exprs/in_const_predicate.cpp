@@ -62,7 +62,7 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
         auto* ctx = _pool->add(new ExprContext(in_pred));                                                            \
         return ctx;                                                                                                  \
     }
-        APPLY_FOR_ALL_SCALAR_TYPE(M)
+        APPLY_FOR_SCALAR_KEY_TYPE(M)
 #undef M
     default:
         _st = Status::NotSupported(strings::Substitute("Can not create in-const-predicate on type $0", probe_type));
@@ -98,7 +98,7 @@ void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size
         }                                                                      \
         break;                                                                 \
     }
-            APPLY_FOR_ALL_SCALAR_TYPE(M)
+            APPLY_FOR_SCALAR_KEY_TYPE(M)
 #undef M
         default:;
         }
@@ -133,7 +133,7 @@ void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size
         }                                                                                            \
         break;                                                                                       \
     }
-            APPLY_FOR_ALL_SCALAR_TYPE(M)
+            APPLY_FOR_SCALAR_KEY_TYPE(M)
 #undef M
         default:;
         }

@@ -63,8 +63,13 @@ RuntimeFilter* RuntimeFilterFactory::create_bloom_filter(ObjectPool* pool, Logic
 }
 
 RuntimeFilter* RuntimeFilterFactory::create_in_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
-    return scalar_type_dispatch(
-            type, [pool]<LogicalType ltype>() -> RuntimeFilter* { return InRuntimeFilter<ltype>::create(pool); });
+    return scalar_type_dispatch(type, [pool]<LogicalType ltype>() -> RuntimeFilter* {
+        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
+            return nullptr;
+        } else {
+            return InRuntimeFilter<ltype>::create(pool);
+        }
+    });
 }
 
 RuntimeFilter* RuntimeFilterFactory::create_bitset_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {

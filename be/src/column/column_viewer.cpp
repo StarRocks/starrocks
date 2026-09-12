@@ -70,9 +70,7 @@ ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
 
 #define M(TYPE) template class ColumnViewer<TYPE>;
 
-// Geo columns require explicit metadata and do not support the generic scalar viewer.
-APPLY_FOR_ALL_SCALAR_TYPE(M);
-M(TYPE_NULL);
+APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M);
 #undef M
 
 template class ColumnViewer<TYPE_HLL>;

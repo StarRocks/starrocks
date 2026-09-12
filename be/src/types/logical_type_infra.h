@@ -52,7 +52,8 @@ namespace starrocks {
     M(TYPE_JSON)                     \
     M(TYPE_VARIANT)
 
-#define APPLY_FOR_ALL_SCALAR_TYPE(M) \
+// Existing key/filter dispatch set. Geo equality, ordering and hashing are not supported.
+#define APPLY_FOR_SCALAR_KEY_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)     \
     M(TYPE_DECIMALV2)                \
     M(TYPE_VARCHAR)                  \
@@ -64,6 +65,11 @@ namespace starrocks {
     M(TYPE_VARBINARY)                \
     M(TYPE_VARIANT)                  \
     M(TYPE_BOOLEAN)
+
+#define APPLY_FOR_ALL_SCALAR_TYPE(M) \
+    APPLY_FOR_SCALAR_KEY_TYPE(M)     \
+    M(TYPE_GEOGRAPHY)                \
+    M(TYPE_GEOMETRY)
 
 #define APPLY_FOR_COMPLEX_TYPE(M) \
     M(TYPE_STRUCT)                \
@@ -78,8 +84,6 @@ namespace starrocks {
 
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
     APPLY_FOR_ALL_SCALAR_TYPE(M)               \
-    M(TYPE_GEOGRAPHY)                          \
-    M(TYPE_GEOMETRY)                           \
     M(TYPE_NULL)
 
 #define APPLY_FOR_COMPLEX_THRIFT_TYPE(M) \
@@ -228,7 +232,7 @@ auto type_dispatch_column(LogicalType ltype, Functor fun, const Args&... args) {
 template <class Functor, class... Args>
 auto type_dispatch_sortable(LogicalType ltype, Functor fun, Args... args) {
     switch (ltype) {
-        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_SCALAR_KEY_TYPE(_TYPE_DISPATCH_CASE)
     default:
         CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();
@@ -238,7 +242,7 @@ auto type_dispatch_sortable(LogicalType ltype, Functor fun, Args... args) {
 template <class Ret, class Functor, class... Args>
 Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, const Args&... args) {
     switch (ltype) {
-        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_SCALAR_KEY_TYPE(_TYPE_DISPATCH_CASE)
     default:
         if (assert) {
             CHECK(false) << "Unknown type: " << ltype;
@@ -296,7 +300,7 @@ auto scalar_type_dispatch(LogicalType ltype, Functor fun, Args... args) {
 template <class Functor, class Ret, class... Args>
 auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, const Args&... args) {
     switch (ltype) {
-        APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
+        APPLY_FOR_SCALAR_KEY_TYPE(_TYPE_DISPATCH_CASE)
     default:
         return default_value;
     }

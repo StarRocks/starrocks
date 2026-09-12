@@ -110,8 +110,10 @@ bool AggInRuntimeFilterMerger::merge(size_t seq, RuntimeFilterBuildDescriptor* d
     if (--_merged == 0) {
         size_t total_size = 0;
         scalar_type_dispatch(desc->build_expr_type(), [this, &total_size]<LogicalType Type>() {
-            for (size_t i = 0; i < _target_filters.size(); ++i) {
-                total_size += down_cast<InRuntimeFilter<Type>*>(_target_filters[i])->size();
+            if constexpr (Type != TYPE_GEOGRAPHY && Type != TYPE_GEOMETRY) {
+                for (size_t i = 0; i < _target_filters.size(); ++i) {
+                    total_size += down_cast<InRuntimeFilter<Type>*>(_target_filters[i])->size();
+                }
             }
         });
         if (total_size > config::max_pushdown_conditions_per_column) {

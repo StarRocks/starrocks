@@ -30,11 +30,17 @@ namespace starrocks {
 // not an OGC EMPTY geometry. Payload ingestion preserves bytes without eager parsing.
 class GeoColumn final : public CowFactory<Column, GeoColumn> {
 public:
+    using ValueType = Slice;
+    using ImmContainer = BinaryColumn::ImmContainer;
+
+    // An untyped WKB container, also used for the viewer's all-NULL placeholder.
+    GeoColumn();
     explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
     DISALLOW_COPY(GeoColumn);
 
     const GeoColumnDescriptor& descriptor() const { return _descriptor; }
     Slice get_wkb(size_t row) const { return _data->get_slice(row); }
+    ImmContainer immutable_data() const { return _data->immutable_data(); }
     void append_wkb(Slice wkb);
     // Batch ingestion from external buffers (must not alias this column).
     void append_wkb_batch(const Slice* values, size_t count);
