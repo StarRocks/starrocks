@@ -31,7 +31,7 @@ public class ElasticsearchConnector
 
     private EsConfig esConfig;
     private EsRestClient esRestClient;
-    private ConnectorMetadata metadata;
+    private volatile ConnectorMetadata metadata;
 
     /**
      * Default constructor for EsExternalCatalog.
@@ -43,11 +43,15 @@ public class ElasticsearchConnector
     @Override
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
-            try {
-                metadata = new ElasticsearchMetadata(esRestClient, esConfig.getProperties(), catalogName);
-            } catch (StarRocksConnectorException e) {
-                LOG.error("Failed to create elasticsearch metadata on [catalog : {}]", catalogName, e);
-                throw e;
+            synchronized (this) {
+                if (metadata == null) {
+                    try {
+                        metadata = new ElasticsearchMetadata(esRestClient, esConfig.getProperties(), catalogName);
+                    } catch (StarRocksConnectorException e) {
+                        LOG.error("Failed to create elasticsearch metadata on [catalog : {}]", catalogName, e);
+                        throw e;
+                    }
+                }
             }
         }
         return metadata;
