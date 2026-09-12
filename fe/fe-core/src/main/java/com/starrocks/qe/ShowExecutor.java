@@ -457,6 +457,18 @@ public class ShowExecutor {
 
             MetaUtils.checkDbNullAndReport(db, dbName);
 
+            // The walk below resolves the database out of LocalMetastore *by id*, so it is only meaningful for
+            // an internal one -- StarRocks materialized views never live in an external catalog. An external
+            // database's id is minted by the connector and shares an id space with internal databases
+            // (CatalogMgr.createCatalog draws from CONNECTOR_ID_GENERATOR for resource-mapping catalogs and
+            // from GlobalStateMgr.getNextId for the rest), so walking with it can land on an unrelated
+            // internal database. Skip the walk rather than lock a foreign id to make it safe.
+            // The null test is load-bearing, not defensive: the null-catalog branch above resolves through
+            // LocalMetastore, and isInternalCatalog would throw on null.
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                return new ShowResultSet(showResultMetaFactory.getMetadata(statement), EMPTY_SET);
+            }
+
             List<MaterializedView> materializedViews = Lists.newArrayList();
             List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
             Locker locker = new Locker();
@@ -634,8 +646,20 @@ public class ShowExecutor {
             Map<String, String> tableMap = Maps.newTreeMap();
             MetaUtils.checkDbNullAndReport(db, statement.getDb());
 
+            // SHOW TABLES serves both internal and external catalogs. For an internal database db.getId() is a
+            // real id and the lock is real, so it must stay. For an external catalog it is not: the id is minted
+            // by the connector (a fresh CONNECTOR_ID_GENERATOR value per HiveMetastoreApiConverter.toDatabase,
+            // constant 0 for every JDBC database), so the lock either never contends or falsely serializes
+            // unrelated databases. Either way it protects nothing -- connector cache refresh replaces cache
+            // entries and never takes the FE Locker -- while the critical section below is 1 + N connector calls.
+            // Judged on the catalog name rather than through Table#isMetaLockTarget, because the id at stake
+            // is the one this name just produced: a resource-mapping catalog also resolves through the
+            // connector, so it counts as external here even though its tables do not.
+            boolean needLock = CatalogMgr.isInternalCatalog(catalogName);
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            if (needLock) {
+                locker.lockDatabase(db.getId(), LockType.READ);
+            }
             try {
                 List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .listTableNames(context, catalogName, dbName);
@@ -667,7 +691,9 @@ public class ShowExecutor {
                     tableMap.put(tableName, table.getMysqlType());
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                if (needLock) {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
             }
 
             for (Map.Entry<String, String> entry : tableMap.entrySet()) {
