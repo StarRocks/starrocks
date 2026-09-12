@@ -278,6 +278,9 @@ public class OptExpressionDuplicator {
                 }
             }
 
+            if (scanOperator.hasPredicateForMvRewrite()) {
+                scanBuilder.setPredicateForMvRewrite(rewriter.rewrite(scanOperator.getPredicateForMvRewrite()));
+            }
             processCommon(opBuilder);
 
             if (partialPartitionRewrite
