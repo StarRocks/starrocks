@@ -62,7 +62,7 @@ ss	CREATE TABLE `ss` (
   `pv` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`event_day`, `pv`)
-PARTITION BY (`pv`,date_trunc('day', event_day))
+PARTITION BY `pv`, date_trunc('day', event_day)
 DISTRIBUTED BY HASH(`event_day`)
 PROPERTIES (
 "compression" = "LZ4",
@@ -82,7 +82,7 @@ ss1	CREATE TABLE `ss1` (
   `pv` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`event_day`, `pv`)
-PARTITION BY (`pv`,date_trunc('day', event_day))
+PARTITION BY `pv`, date_trunc('day', event_day)
 DISTRIBUTED BY HASH(`event_day`)
 PROPERTIES (
 "compression" = "LZ4",
@@ -127,7 +127,7 @@ ss1	CREATE TABLE `ss1` (
   `pv` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`event_day`, `pv`)
-PARTITION BY (`pv`,date_trunc('day', event_day))
+PARTITION BY `pv`, date_trunc('day', event_day)
 DISTRIBUTED BY HASH(`event_day`)
 PROPERTIES (
 "compression" = "LZ4",
@@ -165,7 +165,7 @@ ss1	CREATE TABLE `ss1` (
   `pv` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`event_day`, `pv`)
-PARTITION BY (`pv`,date_trunc('day', event_day))
+PARTITION BY `pv`, date_trunc('day', event_day)
 DISTRIBUTED BY HASH(`event_day`)
 PROPERTIES (
 "compression" = "LZ4",
@@ -201,7 +201,7 @@ ss	CREATE TABLE `ss` (
   `pv` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`event_day`)
-PARTITION BY (`pv`,date_trunc('day', str2date(event_day, '%Y-%m-%d')))
+PARTITION BY `pv`, date_trunc('day', str2date(event_day, '%Y-%m-%d'))
 DISTRIBUTED BY HASH(`event_day`)
 PROPERTIES (
 "compression" = "LZ4",
@@ -242,7 +242,7 @@ ss	CREATE TABLE `ss` (
   `pv` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`event_day`)
-PARTITION BY (`pv`,str2date(event_day, '%Y-%m-%d'))
+PARTITION BY `pv`, str2date(event_day, '%Y-%m-%d')
 DISTRIBUTED BY HASH(`event_day`)
 PROPERTIES (
 "compression" = "LZ4",
