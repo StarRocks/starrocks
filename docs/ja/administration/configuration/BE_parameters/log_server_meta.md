@@ -453,6 +453,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Thrift クライアントを作成する際に使用される接続タイムアウト（秒）。ClientCacheHelper::_create_client はこの値に 1000 を掛けて ThriftClientImpl::set_conn_timeout() に渡すため、BE クライアントキャッシュによってオープンされる新しい Thrift 接続の TCP/接続ハンドシェイクのタイムアウトを制御します。この設定は接続確立にのみ影響し、送受信タイムアウトは別途設定されます。非常に小さい値は高レイテンシのネットワークで誤検知による接続失敗を引き起こす可能性があり、大きすぎる値は到達不能なピアの検出を遅らせます。
 - 導入バージョン: v3.2.0
 
+### thrift_max_frame_size
+
+- デフォルト: 16384000
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: BE Thrift 層が単一の `TFramedTransport` フレームに許可する最大フレームサイズ（バイト）。この値は thrift の `TConfiguration` に対応し、クライアント側の（デ）シリアライズ経路と受信 RPC を受け付けるサーバ側トランスポートの両方に適用されます。この制限は `TFramedTransport` が使用され、かつトランスポートが `TConfiguration` を付けて作成される場合にのみ有効です。BE Thrift サーバはデフォルトで `THREADED` モードで `TBufferedTransport` を使用し、`NON_BLOCKING` サーバ経路も既定の `TTransportFactory` を使用するため、この設定は既定のサーバ接続には適用されません。`thrift_max_message_size` と競合する場合は、小さい方の値が使用されます。この設定は動的設定のため、実行時の変更は変更後に確立された接続にのみ有効で、既に確立されている接続は作成時の値を維持し、全接続に反映させるには再接続が必要になる場合があります。
+- 導入バージョン: -
+
+### thrift_max_message_size
+
+- デフォルト: 1073741824
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: BE Thrift 層が単一の RPC メッセージに許可する最大メッセージサイズ（バイト）。thrift 0.16 以降、`TTransport` はメッセージごとに消費されたバイト数をカウントすることでこの制限（thrift 自身のデフォルトは 100 MB）を強制します。この値は thrift の `TConfiguration` に対応し、クライアント側の（デ）シリアライズ経路と受信 RPC を受け付けるサーバ側トランスポートの両方に適用されます。特に、列数が多くバケット数も多いワイドテーブルを作成すると、単一の `BackendService.submit_tasks` メッセージが 100 MB を超える可能性があります。制限が小さすぎると、サーバは `TTransportException("MaxMessageSize reached")` をスローして接続を閉じ、FE 側では "Socket is closed by peer" / "Broken pipe" として現れ、`CREATE TABLE` が失敗します。この設定は動的設定のため、実行時の変更は変更後に確立された接続にのみ有効で、既に確立されている接続は作成時の値を維持するため、失敗したリクエストを解除するために制限を引き上げても、進行中の接続ではなく後続の接続に適用されます。設定可能な最大値は 2 GB（`INT32_MAX`）です。
+- 導入バージョン: -
+
+### thrift_max_recursion_depth
+
+- デフォルト: 64
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: BE Thrift 層がメッセージを（デ）シリアライズする際に許可するネスト構造の最大深さ。この値は thrift の `TConfiguration` に対応し、クライアント側の経路と受信 RPC を受け付けるサーバ側トランスポートの両方に適用されます。この設定は動的設定のため、実行時の変更は変更後に確立された接続にのみ有効で、既に確立されている接続は作成時の値を維持します。
+- 導入バージョン: -
+
 ### thrift_port
 
 - デフォルト: 0

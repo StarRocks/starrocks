@@ -41,6 +41,7 @@
 #include <thrift/server/TNonblockingServer.h>
 #include <thrift/server/TThreadPoolServer.h>
 #include <thrift/server/TThreadedServer.h>
+#include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TNonblockingServerSocket.h>
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TSocket.h>
@@ -53,6 +54,7 @@
 #include "common/config_thrift_server_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
+#include "common/util/thrift_util.h"
 
 namespace starrocks {
 
@@ -102,6 +104,12 @@ private:
 };
 
 } // namespace
+
+std::shared_ptr<apache::thrift::transport::TTransport> ConfigurableBufferedTransportFactory::getTransport(
+        std::shared_ptr<apache::thrift::transport::TTransport> transport) {
+    return std::make_shared<apache::thrift::transport::TBufferedTransport>(std::move(transport),
+                                                                           create_thrift_configuration());
+}
 
 // Helper class that starts a server in a separate thread, and handles
 // the inter-thread communication to monitor whether it started
@@ -392,7 +400,7 @@ Status ThriftServer::start() {
                 BackendOptions::get_service_bind_address_without_bracket(), _port);
 
         if (transport_factory == nullptr) {
-            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
+            transport_factory = std::make_shared<ConfigurableBufferedTransportFactory>();
         }
 
         _server = std::make_unique<apache::thrift::server::TThreadPoolServer>(
@@ -407,7 +415,7 @@ Status ThriftServer::start() {
         server_socket->setKeepAlive(true);
 
         if (transport_factory == nullptr) {
-            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
+            transport_factory = std::make_shared<ConfigurableBufferedTransportFactory>();
         }
 
         // Use non-detached thread mode, so the ThreadedServer can correctly wait for all client threads done and exits cleanly.
