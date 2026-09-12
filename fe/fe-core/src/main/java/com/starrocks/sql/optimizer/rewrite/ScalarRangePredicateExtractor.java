@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.RangeExtractor;
 import com.starrocks.sql.optimizer.property.RangeExtractor.ValueDescriptor;
@@ -73,8 +74,7 @@ public class ScalarRangePredicateExtractor {
         if (!decimalKeys.isEmpty()) {
             for (ScalarOperator key : decimalKeys) {
                 ValueDescriptor vd = extractMap.get(key);
-                vd.toScalarOperator().forEach(s -> Preconditions.checkState(
-                        s.getChildren().stream().allMatch(c -> c.getType().matchesType(key.getType()))));
+                vd.toScalarOperator().forEach(s -> checkDecimalTypes(s, key));
             }
         }
 
@@ -137,6 +137,20 @@ public class ScalarRangePredicateExtractor {
         }
 
         return predicate;
+    }
+
+    // a derived operator can be a compound like `(... cmp/IN ...) OR (key IS NULL)`: the
+    // constants to check are inside the compound, and the IS NULL part has no constant at all
+    private static void checkDecimalTypes(ScalarOperator op, ScalarOperator key) {
+        if (op instanceof CompoundPredicateOperator) {
+            op.getChildren().forEach(c -> checkDecimalTypes(c, key));
+            return;
+        }
+        if (op instanceof IsNullPredicateOperator) {
+            return;
+        }
+        Preconditions.checkState(
+                op.getChildren().stream().allMatch(c -> c.getType().matchesType(key.getType())));
     }
 
     private boolean checkStatisticsEstimateValid(ScalarOperator predicate) {
