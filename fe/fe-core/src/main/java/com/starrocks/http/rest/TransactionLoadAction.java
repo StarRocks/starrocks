@@ -69,6 +69,8 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.transaction.TransactionStateSnapshot;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Utils;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -313,7 +315,19 @@ public class TransactionLoadAction extends RestBaseAction {
             TransactionState txnState = GlobalStateMgr.getCurrentState()
                     .getGlobalTransactionMgr().getLabelTransactionState(db.getId(), label);
             if (null == txnState) {
-                throw new StarRocksException(String.format("No transaction found with db[%s] and label[%s]", dbName, label));
+                // The full state may have been evicted (count-based eviction ignores age). If the
+                // terminal outcome is still known (terminal-state cache), route to the default handler,
+                // which returns the idempotent terminal result for a savepoint/resume recommit;
+                // otherwise the label is genuinely unknown.
+                // Routing decision only, so it does not count as a cache hit; the handler that
+                // actually produces the terminal response counts it once.
+                TransactionStateSnapshot snapshot = GlobalStateMgr.getCurrentState()
+                        .getGlobalTransactionMgr().getLabelStatus(db.getId(), label, false);
+                if (snapshot.getStatus() == TransactionStatus.UNKNOWN) {
+                    throw new StarRocksException(
+                            String.format("No transaction found with db[%s] and label[%s]", dbName, label));
+                }
+                return new TransactionWithoutChannelHandler(params);
             }
             sourceType = txnState.getSourceType();
         }
