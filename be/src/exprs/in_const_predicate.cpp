@@ -25,10 +25,6 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
 
     TExprNode node;
     LogicalType probe_type = probe_expr->type().type;
-    if (probe_type == TYPE_GEOGRAPHY || probe_type == TYPE_GEOMETRY) {
-        _st = Status::NotSupported(strings::Substitute("Can not create in-const-predicate on type $0", probe_type));
-        return nullptr;
-    }
 
     // create TExprNode
     node.__set_node_type(TExprNodeType::IN_PRED);
@@ -48,29 +44,23 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
     // create template of in-predicate.
     // and fill actual IN values later.
     switch (probe_type) {
-#define M(NAME)                                                                                        \
-    case LogicalType::NAME: {                                                                          \
-        if constexpr (LogicalType::NAME == TYPE_GEOGRAPHY || LogicalType::NAME == TYPE_GEOMETRY) {     \
-            _st = Status::NotSupported(                                                                \
-                    strings::Substitute("Can not create in-const-predicate on type $0", probe_type));  \
-            return nullptr;                                                                            \
-        } else {                                                                                       \
-            if (_array_size != 0 && !VectorizedInConstPredicate<LogicalType::NAME>::can_use_array()) { \
-                _st = Status::NotSupported(strings::Substitute(                                        \
-                        "Can not create in-const-predicate with array set on type $0", probe_type));   \
-                return nullptr;                                                                        \
-            }                                                                                          \
-            auto* in_pred = _pool->add(new VectorizedInConstPredicate<LogicalType::NAME>(node));       \
-            in_pred->set_null_in_set(_null_in_set);                                                    \
-            in_pred->set_array_size(_array_size);                                                      \
-            _st = in_pred->prepare(_state);                                                            \
-            if (!_st.ok()) return nullptr;                                                             \
-            in_pred->add_child(Expr::copy(_pool, probe_expr));                                         \
-            in_pred->set_is_join_runtime_filter(_is_join_runtime_filter);                              \
-            in_pred->set_eq_null(_eq_null);                                                            \
-            auto* ctx = _pool->add(new ExprContext(in_pred));                                          \
-            return ctx;                                                                                \
-        }                                                                                              \
+#define M(NAME)                                                                                                      \
+    case LogicalType::NAME: {                                                                                        \
+        if (_array_size != 0 && !VectorizedInConstPredicate<LogicalType::NAME>::can_use_array()) {                   \
+            _st = Status::NotSupported(                                                                              \
+                    strings::Substitute("Can not create in-const-predicate with array set on type $0", probe_type)); \
+            return nullptr;                                                                                          \
+        }                                                                                                            \
+        auto* in_pred = _pool->add(new VectorizedInConstPredicate<LogicalType::NAME>(node));                         \
+        in_pred->set_null_in_set(_null_in_set);                                                                      \
+        in_pred->set_array_size(_array_size);                                                                        \
+        _st = in_pred->prepare(_state);                                                                              \
+        if (!_st.ok()) return nullptr;                                                                               \
+        in_pred->add_child(Expr::copy(_pool, probe_expr));                                                           \
+        in_pred->set_is_join_runtime_filter(_is_join_runtime_filter);                                                \
+        in_pred->set_eq_null(_eq_null);                                                                              \
+        auto* ctx = _pool->add(new ExprContext(in_pred));                                                            \
+        return ctx;                                                                                                  \
     }
         APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
@@ -88,30 +78,25 @@ Status VectorizedInConstPredicateBuilder::create() {
 
 void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size_t column_offset) {
     LogicalType type = _expr->type().type;
-    if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
-        return;
-    }
     Expr* expr = _in_pred_ctx->root();
     DCHECK(column != nullptr);
     if (!column->is_nullable()) {
         switch (type) {
-#define M(FIELD_TYPE)                                                                                          \
-    case LogicalType::FIELD_TYPE: {                                                                            \
-        if constexpr (LogicalType::FIELD_TYPE != TYPE_GEOGRAPHY && LogicalType::FIELD_TYPE != TYPE_GEOMETRY) { \
-            using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                             \
-            auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                                   \
-            const auto& data_ptr = GetContainer<FIELD_TYPE>::get_data(column);                                 \
-            if (in_pred->is_use_array()) {                                                                     \
-                for (size_t j = column_offset; j < data_ptr.size(); j++) {                                     \
-                    in_pred->insert_array(data_ptr[j]);                                                        \
-                }                                                                                              \
-            } else {                                                                                           \
-                for (size_t j = column_offset; j < data_ptr.size(); j++) {                                     \
-                    in_pred->insert(data_ptr[j]);                                                              \
-                }                                                                                              \
-            }                                                                                                  \
-        }                                                                                                      \
-        break;                                                                                                 \
+#define M(FIELD_TYPE)                                                          \
+    case LogicalType::FIELD_TYPE: {                                            \
+        using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType; \
+        auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);       \
+        const auto& data_ptr = GetContainer<FIELD_TYPE>::get_data(column);     \
+        if (in_pred->is_use_array()) {                                         \
+            for (size_t j = column_offset; j < data_ptr.size(); j++) {         \
+                in_pred->insert_array(data_ptr[j]);                            \
+            }                                                                  \
+        } else {                                                               \
+            for (size_t j = column_offset; j < data_ptr.size(); j++) {         \
+                in_pred->insert(data_ptr[j]);                                  \
+            }                                                                  \
+        }                                                                      \
+        break;                                                                 \
     }
             APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
@@ -119,36 +104,34 @@ void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size
         }
     } else {
         switch (type) {
-#define M(FIELD_TYPE)                                                                                          \
-    case LogicalType::FIELD_TYPE: {                                                                            \
-        if constexpr (LogicalType::FIELD_TYPE != TYPE_GEOGRAPHY && LogicalType::FIELD_TYPE != TYPE_GEOMETRY) { \
-            using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                             \
-            auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                                   \
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                       \
-            const auto& data_array = GetContainer<FIELD_TYPE>::get_data(nullable_column->data_column());       \
-            if (in_pred->is_use_array()) {                                                                     \
-                for (size_t j = column_offset; j < data_array.size(); j++) {                                   \
-                    if (!nullable_column->is_null(j)) {                                                        \
-                        in_pred->insert_array(data_array[j]);                                                  \
-                    } else {                                                                                   \
-                        if (_eq_null) {                                                                        \
-                            in_pred->insert_null();                                                            \
-                        }                                                                                      \
-                    }                                                                                          \
-                }                                                                                              \
-            } else {                                                                                           \
-                for (size_t j = column_offset; j < data_array.size(); j++) {                                   \
-                    if (!nullable_column->is_null(j)) {                                                        \
-                        in_pred->insert(data_array[j]);                                                        \
-                    } else {                                                                                   \
-                        if (_eq_null) {                                                                        \
-                            in_pred->insert_null();                                                            \
-                        }                                                                                      \
-                    }                                                                                          \
-                }                                                                                              \
-            }                                                                                                  \
-        }                                                                                                      \
-        break;                                                                                                 \
+#define M(FIELD_TYPE)                                                                                \
+    case LogicalType::FIELD_TYPE: {                                                                  \
+        using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                       \
+        auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                             \
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                 \
+        const auto& data_array = GetContainer<FIELD_TYPE>::get_data(nullable_column->data_column()); \
+        if (in_pred->is_use_array()) {                                                               \
+            for (size_t j = column_offset; j < data_array.size(); j++) {                             \
+                if (!nullable_column->is_null(j)) {                                                  \
+                    in_pred->insert_array(data_array[j]);                                            \
+                } else {                                                                             \
+                    if (_eq_null) {                                                                  \
+                        in_pred->insert_null();                                                      \
+                    }                                                                                \
+                }                                                                                    \
+            }                                                                                        \
+        } else {                                                                                     \
+            for (size_t j = column_offset; j < data_array.size(); j++) {                             \
+                if (!nullable_column->is_null(j)) {                                                  \
+                    in_pred->insert(data_array[j]);                                                  \
+                } else {                                                                             \
+                    if (_eq_null) {                                                                  \
+                        in_pred->insert_null();                                                      \
+                    }                                                                                \
+                }                                                                                    \
+            }                                                                                        \
+        }                                                                                            \
+        break;                                                                                       \
     }
             APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M

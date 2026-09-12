@@ -63,9 +63,7 @@ namespace starrocks {
     M(TYPE_JSON)                     \
     M(TYPE_VARBINARY)                \
     M(TYPE_VARIANT)                  \
-    M(TYPE_BOOLEAN)                  \
-    M(TYPE_GEOGRAPHY)                \
-    M(TYPE_GEOMETRY)
+    M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_COMPLEX_TYPE(M) \
     M(TYPE_STRUCT)                \

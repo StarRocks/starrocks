@@ -20,6 +20,7 @@
 #include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/geo_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -416,7 +417,7 @@ struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         if constexpr (ltype == TYPE_UNKNOWN || ltype == TYPE_NULL || ltype == TYPE_BINARY || ltype == TYPE_DECIMAL ||
-                      ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY || lt_is_collection<ltype>) {
+                      lt_is_collection<ltype>) {
             LOG(FATAL) << "Unsupported column type" << ltype;
             return nullptr;
         } else if constexpr (lt_is_decimal<ltype>) {
@@ -469,6 +470,18 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
             columns.emplace_back(std::move(field_column));
         }
         p = StructColumn::create(std::move(columns), type_desc.field_names);
+    } else if (type_desc.is_geo_type()) {
+        GeoColumnDescriptor descriptor;
+        if (type_desc.geo_type.has_value()) {
+            descriptor.type = *type_desc.geo_type;
+        } else {
+            // The primitive supplies the kind, but does not imply a CRS or other semantics.
+            descriptor.type.logical_type =
+                    type == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
+        }
+        descriptor.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED};
+        p = GeoColumn::create(std::move(descriptor));
+        p->resize(size);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }

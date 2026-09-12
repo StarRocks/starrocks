@@ -14,10 +14,12 @@
 
 #include "column/column_helper.h"
 
-#include <cstdlib>
-
 #include "base/testutil/assert.h"
+#include "column/adaptive_nullable_column.h"
+#include "column/array_column.h"
 #include "column/column_builder.h"
+#include "column/geo_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "gtest/gtest.h"
@@ -32,6 +34,16 @@ public:
     void TearDown() override {}
 
 protected:
+    static TypeDescriptor geo_type(LogicalType primitive) {
+        const bool geography = primitive == TYPE_GEOGRAPHY;
+        return TypeDescriptor::create_geo_type(
+                primitive,
+                GeoTypeDescriptor{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                                  geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
+                                  geography ? GEO_EDGE_ALGORITHM_KARNEY : GEO_EDGE_ALGORITHM_PLANAR, "custom:geo-crs",
+                                  4326});
+    }
+
     MutableColumnPtr create_column() {
         ColumnBuilder<TYPE_VARCHAR> builder(1);
         builder.append(Slice("v1"));
@@ -357,56 +369,138 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
     EXPECT_FALSE(b_col->has_null());
 }
 
-TEST_F(ColumnHelperTest, reject_geo_columns) {
-    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
-    auto create_column = [](const TypeDescriptor& type, bool nullable, bool is_const, size_t size, bool adaptive) {
-        // In the death-test child, avoid global crash-handler teardown after the fatal diagnostic.
-        google::InstallFailureFunction([] { std::_Exit(EXIT_FAILURE); });
-        ColumnHelper::create_column(type, nullable, is_const, size, adaptive);
-    };
-    for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
-        GeoTypeDescriptor metadata;
-        metadata.logical_type = primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
-        metadata.coordinate_system =
-                primitive == TYPE_GEOGRAPHY ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN;
-        metadata.edge_algorithm =
-                primitive == TYPE_GEOGRAPHY ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR;
-        metadata.crs = "OGC:CRS84";
-        metadata.srid = 4326;
-        auto type = TypeDescriptor::create_geo_type(primitive, metadata);
-        for (bool nullable : {false, true}) {
-            EXPECT_EXIT(create_column(type, nullable, false, 3, false), ::testing::ExitedWithCode(EXIT_FAILURE),
-                        "Unsupported column type");
+TEST_F(ColumnHelperTest, create_geo_preserves_descriptor_and_copy) {
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        const auto type = geo_type(primitive);
+        auto column = ColumnHelper::create_column(type, false, false, 3);
+        auto* geo = dynamic_cast<GeoColumn*>(column.get());
+        ASSERT_NE(nullptr, geo);
+        EXPECT_EQ(3, geo->size());
+        EXPECT_FALSE(geo->is_binary());
+        EXPECT_EQ(*type.geo_type, geo->descriptor().type);
+        EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
+        EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
+        EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, geo->descriptor().storage.validation_state);
+        for (size_t i = 0; i < geo->size(); ++i) {
+            EXPECT_TRUE(geo->get_wkb(i).empty());
         }
-        EXPECT_EXIT(create_column(type, false, true, 4, false), ::testing::ExitedWithCode(EXIT_FAILURE),
-                    "Unsupported column type");
-        // The existing constant-NULL shortcut does not allocate a typed data column.
-        auto null_constant = ColumnHelper::create_column(type, true, true, 4);
-        EXPECT_TRUE(null_constant->only_null());
-        EXPECT_EQ(4, null_constant->size());
-        EXPECT_EXIT(create_column(type, true, false, 0, true), ::testing::ExitedWithCode(EXIT_FAILURE),
-                    "Unsupported column type");
-        EXPECT_FALSE(type.support_join());
-        EXPECT_FALSE(type.support_groupby());
-        EXPECT_FALSE(type.support_orderby());
+
+        // Physical ingestion copies opaque bytes; it does not infer geometry semantics.
+        geo->append_wkb(Slice("payload"));
+        auto copy = geo->clone();
+        const auto* copied_geo = dynamic_cast<const GeoColumn*>(copy.get());
+        ASSERT_NE(nullptr, copied_geo);
+        EXPECT_EQ(geo->descriptor(), copied_geo->descriptor());
+        EXPECT_EQ("payload", copied_geo->get_wkb(3).to_string());
+
+        auto destination = ColumnHelper::create_column(type, false);
+        destination->append(*column, 3, 1);
+        const auto* destination_geo = dynamic_cast<const GeoColumn*>(destination.get());
+        ASSERT_NE(nullptr, destination_geo);
+        EXPECT_EQ(geo->descriptor(), destination_geo->descriptor());
+        EXPECT_EQ("payload", destination_geo->get_wkb(0).to_string());
     }
 }
 
-TEST_F(ColumnHelperTest, reject_nested_geo_columns) {
-    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
-    auto create_column = [](const TypeDescriptor& type) {
-        google::InstallFailureFunction([] { std::_Exit(EXIT_FAILURE); });
-        ColumnHelper::create_column(type, false);
-    };
-    for (auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
-        TypeDescriptor geo_type(primitive);
-        auto array = TypeDescriptor::create_array_type(geo_type);
-        auto map_key = TypeDescriptor::create_map_type(geo_type, TypeDescriptor(TYPE_INT));
-        auto map_value = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), array);
-        auto structure = TypeDescriptor::create_struct_type({"nested"}, {map_value});
-        for (const auto& type : {geo_type, array, map_key, map_value, structure}) {
-            EXPECT_EXIT(create_column(type), ::testing::ExitedWithCode(EXIT_FAILURE), "Unsupported column type");
+TEST_F(ColumnHelperTest, create_geo_distinguishes_absent_and_empty_metadata) {
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        TypeDescriptor type(primitive);
+        auto absent = ColumnHelper::create_column(type, false);
+        const auto* absent_geo = dynamic_cast<const GeoColumn*>(absent.get());
+        ASSERT_NE(nullptr, absent_geo);
+        const auto& descriptor = absent_geo->descriptor().type;
+        EXPECT_EQ(primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                  descriptor.logical_type);
+        EXPECT_EQ(GEO_COORDINATE_SYSTEM_UNKNOWN, descriptor.coordinate_system);
+        EXPECT_EQ(GEO_EDGE_ALGORITHM_UNKNOWN, descriptor.edge_algorithm);
+        EXPECT_TRUE(descriptor.crs.empty());
+        EXPECT_FALSE(descriptor.srid.has_value());
+
+        type.geo_type = GeoTypeDescriptor{};
+        auto empty = ColumnHelper::create_column(type, false);
+        const auto* empty_geo = dynamic_cast<const GeoColumn*>(empty.get());
+        ASSERT_NE(nullptr, empty_geo);
+        EXPECT_EQ(*type.geo_type, empty_geo->descriptor().type);
+        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, empty_geo->descriptor().type.logical_type);
+    }
+}
+
+TEST_F(ColumnHelperTest, create_geo_nullable_const_and_adaptive) {
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        const auto type = geo_type(primitive);
+        for (const bool adaptive : {false, true}) {
+            auto column = ColumnHelper::create_column(type, true, false, 3, adaptive);
+            auto* nullable = dynamic_cast<NullableColumn*>(column.get());
+            ASSERT_NE(nullptr, nullable);
+            EXPECT_EQ(adaptive, dynamic_cast<AdaptiveNullableColumn*>(column.get()) != nullptr);
+            EXPECT_EQ(3, nullable->size());
+            EXPECT_TRUE(nullable->is_null(0));
+            EXPECT_TRUE(nullable->is_null(2));
+            const auto* geo = dynamic_cast<const GeoColumn*>(nullable->data_column().get());
+            ASSERT_NE(nullptr, geo);
+            EXPECT_EQ(*type.geo_type, geo->descriptor().type);
+            EXPECT_EQ(3, geo->size());
+            column->check_or_die();
         }
+
+        auto constant = ColumnHelper::create_column(type, false, true, 3);
+        ASSERT_TRUE(constant->is_constant());
+        EXPECT_EQ(3, constant->size());
+        const auto* constant_geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(constant.get()));
+        ASSERT_NE(nullptr, constant_geo);
+        EXPECT_EQ(1, constant_geo->size());
+        EXPECT_EQ(*type.geo_type, constant_geo->descriptor().type);
+        constant->check_or_die();
+
+        auto nulls = ColumnHelper::create_column(type, true, true, 3);
+        ASSERT_TRUE(nulls->only_null());
+        auto aligned = ColumnHelper::align_return_type(std::move(nulls), type, 3, true);
+        ASSERT_TRUE(aligned->is_nullable());
+        EXPECT_EQ(3, aligned->size());
+        EXPECT_TRUE(aligned->is_null(0));
+        EXPECT_TRUE(aligned->is_null(2));
+        const auto* aligned_geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(aligned.get()));
+        ASSERT_NE(nullptr, aligned_geo);
+        EXPECT_EQ(*type.geo_type, aligned_geo->descriptor().type);
+        aligned->check_or_die();
+    }
+}
+
+TEST_F(ColumnHelperTest, create_nested_geo_columns) {
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        const auto type = geo_type(primitive);
+        const auto array_type = TypeDescriptor::create_array_type(type);
+        const auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), array_type);
+        const auto struct_type =
+                TypeDescriptor::create_struct_type({"direct", "array", "map"}, {type, array_type, map_type});
+        auto column = ColumnHelper::create_column(struct_type, false);
+        auto* structure = dynamic_cast<StructColumn*>(column.get());
+        ASSERT_NE(nullptr, structure);
+        ASSERT_EQ(3, structure->fields_size());
+        const auto* direct =
+                dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(0)));
+        ASSERT_NE(nullptr, direct);
+        EXPECT_EQ(*type.geo_type, direct->descriptor().type);
+
+        const auto* array =
+                dynamic_cast<const ArrayColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(1)));
+        ASSERT_NE(nullptr, array);
+        const auto* array_geo =
+                dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(array->elements_column_raw_ptr()));
+        ASSERT_NE(nullptr, array_geo);
+        EXPECT_EQ(direct->descriptor(), array_geo->descriptor());
+
+        const auto* map =
+                dynamic_cast<const MapColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(2)));
+        ASSERT_NE(nullptr, map);
+        const auto* values =
+                dynamic_cast<const ArrayColumn*>(ColumnHelper::get_data_column(map->values_column_raw_ptr()));
+        ASSERT_NE(nullptr, values);
+        const auto* map_geo =
+                dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(values->elements_column_raw_ptr()));
+        ASSERT_NE(nullptr, map_geo);
+        EXPECT_EQ(direct->descriptor(), map_geo->descriptor());
+        column->check_or_die();
     }
 }
 

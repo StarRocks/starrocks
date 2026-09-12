@@ -25,10 +25,6 @@ namespace {
 
 } // namespace
 
-GeoColumn::GeoColumn()
-        : GeoColumn(GeoColumnDescriptor{{},
-                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {}
-
 GeoColumn::GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits)
         : _descriptor(std::move(descriptor)), _limits(limits) {
     if (_descriptor.storage.encoding != GEO_ENCODING_WKB)

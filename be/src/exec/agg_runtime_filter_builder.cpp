@@ -70,24 +70,20 @@ MutableColumns extract_group_by_columns(Aggregator* aggregator) {
 struct AggInRuntimeFilterBuilderImpl {
     template <LogicalType ltype>
     RuntimeFilter* operator()(ObjectPool* pool, Aggregator* aggregator, size_t build_expr_order) {
-        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
+        auto group_by_columns = extract_group_by_columns(aggregator);
+        Column* build_column = group_by_columns[build_expr_order].get();
+        // A constant build column carries a single value spread over column->size() logical rows but
+        // is backed by one physical row. InRuntimeFilter::build() down_casts to the typed/nullable
+        // column and iterates column->size() rows (its is_constant() check is only a DCHECK, compiled
+        // out in release builds), so a ConstColumn would be misinterpreted and overrun its backing
+        // storage. Returning nullptr leaves the merged filter always-true (conservative and correct),
+        // mirroring the ConstColumn handling in AggTopNRuntimeFilterBuilder::update().
+        if (build_column->is_constant()) {
             return nullptr;
-        } else {
-            auto group_by_columns = extract_group_by_columns(aggregator);
-            Column* build_column = group_by_columns[build_expr_order].get();
-            // A constant build column carries a single value spread over column->size() logical rows but
-            // is backed by one physical row. InRuntimeFilter::build() down_casts to the typed/nullable
-            // column and iterates column->size() rows (its is_constant() check is only a DCHECK, compiled
-            // out in release builds), so a ConstColumn would be misinterpreted and overrun its backing
-            // storage. Returning nullptr leaves the merged filter always-true (conservative and correct),
-            // mirroring the ConstColumn handling in AggTopNRuntimeFilterBuilder::update().
-            if (build_column->is_constant()) {
-                return nullptr;
-            }
-            auto runtime_filter = InRuntimeFilter<ltype>::create(pool);
-            runtime_filter->build(build_column);
-            return runtime_filter;
         }
+        auto runtime_filter = InRuntimeFilter<ltype>::create(pool);
+        runtime_filter->build(build_column);
+        return runtime_filter;
     }
 };
 
@@ -114,10 +110,8 @@ bool AggInRuntimeFilterMerger::merge(size_t seq, RuntimeFilterBuildDescriptor* d
     if (--_merged == 0) {
         size_t total_size = 0;
         scalar_type_dispatch(desc->build_expr_type(), [this, &total_size]<LogicalType Type>() {
-            if constexpr (Type != TYPE_GEOGRAPHY && Type != TYPE_GEOMETRY) {
-                for (size_t i = 0; i < _target_filters.size(); ++i) {
-                    total_size += down_cast<InRuntimeFilter<Type>*>(_target_filters[i])->size();
-                }
+            for (size_t i = 0; i < _target_filters.size(); ++i) {
+                total_size += down_cast<InRuntimeFilter<Type>*>(_target_filters[i])->size();
             }
         });
         if (total_size > config::max_pushdown_conditions_per_column) {
@@ -139,18 +133,14 @@ struct AggTopRuntimeFilterBuilderImpl {
     std::pair<RuntimeFilter*, HeapBuilder*> operator()(ObjectPool* pool, Aggregator* aggregator,
                                                        size_t build_expr_order, size_t limit, bool asc,
                                                        bool is_nulls_first) {
-        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
-            return {};
+        using CppType = RunTimeCppType<ltype>;
+        if (asc) {
+            // for ascending order, we use max heap to build the topn runtime filter
+            return build<ltype, std::less<CppType>, true>(pool, aggregator, build_expr_order, limit, asc,
+                                                          is_nulls_first);
         } else {
-            using CppType = RunTimeCppType<ltype>;
-            if (asc) {
-                // for ascending order, we use max heap to build the topn runtime filter
-                return build<ltype, std::less<CppType>, true>(pool, aggregator, build_expr_order, limit, asc,
+            return build<ltype, std::greater<CppType>, false>(pool, aggregator, build_expr_order, limit, asc,
                                                               is_nulls_first);
-            } else {
-                return build<ltype, std::greater<CppType>, false>(pool, aggregator, build_expr_order, limit, asc,
-                                                                  is_nulls_first);
-            }
         }
     }
 
@@ -213,18 +203,14 @@ struct AggTopNRuntimeFilterUpdaterImpl {
     template <LogicalType ltype>
     void operator()(HeapBuilder* heap, RuntimeFilter* rf, const Columns& group_by_columns, const Filter& selection,
                     size_t build_expr_order, size_t limit, bool asc, bool is_nulls_first) {
-        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
-            return;
+        using CppType = RunTimeCppType<ltype>;
+        if (asc) {
+            // for ascending order, we use max heap to build the topn runtime filter
+            update_runtime_filter_with_selection<ltype, std::less<CppType>, true>(
+                    heap, rf, group_by_columns[build_expr_order].get(), limit, selection);
         } else {
-            using CppType = RunTimeCppType<ltype>;
-            if (asc) {
-                // for ascending order, we use max heap to build the topn runtime filter
-                update_runtime_filter_with_selection<ltype, std::less<CppType>, true>(
-                        heap, rf, group_by_columns[build_expr_order].get(), limit, selection);
-            } else {
-                update_runtime_filter_with_selection<ltype, std::greater<CppType>, false>(
-                        heap, rf, group_by_columns[build_expr_order].get(), limit, selection);
-            }
+            update_runtime_filter_with_selection<ltype, std::greater<CppType>, false>(
+                    heap, rf, group_by_columns[build_expr_order].get(), limit, selection);
         }
     }
 

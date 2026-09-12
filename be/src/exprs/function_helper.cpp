@@ -21,6 +21,7 @@
 
 #include "base/simd/multi_version.h"
 #include "column/array_column.h"
+#include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
@@ -35,8 +36,7 @@ struct ColumnBuilder {
         } else if constexpr (lt_is_collection<Type>) {
             throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
             return nullptr;
-        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL ||
-                             Type == TYPE_GEOGRAPHY || Type == TYPE_GEOMETRY) {
+        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
             throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
             return nullptr;
         } else {
@@ -46,6 +46,9 @@ struct ColumnBuilder {
 };
 
 MutableColumnPtr FunctionHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
+    if (type_desc.is_geo_type()) {
+        return ColumnHelper::create_column(type_desc, nullable);
+    }
     const auto type = type_desc.type;
     MutableColumnPtr p = nullptr;
 

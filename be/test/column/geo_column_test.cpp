@@ -18,8 +18,6 @@
 
 #include <stdexcept>
 
-#include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 
@@ -62,72 +60,6 @@ TEST(GeoColumnTest, RawBytesAndDistinctSemantics) {
         EXPECT_TRUE(column->has_wkb_cache());
         EXPECT_EQ(GEO_VALIDATION_STATE_UNKNOWN, column->descriptor().storage.validation_state);
     }
-}
-
-TEST(GeoColumnTest, DefaultConstruction) {
-    auto column = GeoColumn::create();
-    EXPECT_EQ(0, column->size());
-    EXPECT_EQ(GeoTypeDescriptor{}, column->descriptor().type);
-    EXPECT_EQ(GEO_ENCODING_WKB, column->descriptor().storage.encoding);
-    EXPECT_EQ(GEO_DIMENSION_UNKNOWN, column->descriptor().storage.dimension);
-    EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, column->descriptor().storage.validation_state);
-    EXPECT_FALSE(column->is_binary());
-    column->append_default();
-    EXPECT_TRUE(column->immutable_data()[0].empty());
-    EXPECT_FALSE(column->has_wkb_cache());
-    const auto bytes = point();
-    column->append_wkb(Slice(bytes));
-    EXPECT_EQ(bytes, column->immutable_data()[1].to_string());
-    auto clone = column->clone_empty();
-    EXPECT_EQ(column->descriptor(), down_cast<const GeoColumn*>(clone.get())->descriptor());
-}
-
-template <LogicalType Type>
-void check_geo_viewer() {
-    static_assert(std::is_same_v<RunTimeColumnType<Type>, GeoColumn>);
-    static_assert(!isArithmeticLT<Type>);
-    static_assert(!isSliceLT<Type>); // A WKB view does not enable binary key semantics.
-    const auto bytes = point();
-    auto desc = descriptor(Type == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY);
-    auto column = GeoColumn::create(desc);
-    column->append_wkb(Slice(bytes));
-    column->append_default();
-    ColumnViewer<Type> viewer(column);
-    EXPECT_EQ(bytes, viewer.value(0).to_string());
-    EXPECT_TRUE(viewer.value(1).empty());
-    EXPECT_FALSE(viewer.is_null(0));
-    EXPECT_EQ(desc, viewer.column()->descriptor());
-    EXPECT_FALSE(viewer.column()->has_wkb_cache());
-
-    auto nulls = NullColumn::create(2, 0);
-    nulls->get_data()[1] = 1;
-    auto nullable = NullableColumn::create(column->clone(), std::move(nulls));
-    ColumnViewer<Type> nullable_viewer(nullable);
-    EXPECT_EQ(bytes, nullable_viewer.value(0).to_string());
-    EXPECT_FALSE(nullable_viewer.is_null(0));
-    EXPECT_TRUE(nullable_viewer.is_null(1));
-    EXPECT_EQ(desc, nullable_viewer.column()->descriptor());
-
-    auto constant = ConstColumn::create(column->clone(), 5);
-    ColumnViewer<Type> const_viewer(constant);
-    EXPECT_EQ(bytes, const_viewer.value(4).to_string());
-    EXPECT_FALSE(const_viewer.is_null(4));
-    EXPECT_EQ(desc, const_viewer.column()->descriptor());
-
-    auto null_constant = ColumnHelper::create_const_null_column(5);
-    ColumnViewer<Type> null_viewer(null_constant);
-    EXPECT_TRUE(null_viewer.is_null(4));
-    EXPECT_TRUE(null_viewer.value(4).empty());
-    EXPECT_EQ(GeoTypeDescriptor{}, null_viewer.column()->descriptor().type);
-    EXPECT_EQ(GEO_ENCODING_WKB, null_viewer.column()->descriptor().storage.encoding);
-}
-
-TEST(GeoColumnTest, GeographyViewer) {
-    check_geo_viewer<TYPE_GEOGRAPHY>();
-}
-
-TEST(GeoColumnTest, GeometryViewer) {
-    check_geo_viewer<TYPE_GEOMETRY>();
 }
 
 TEST(GeoColumnTest, BatchIngestionAndCopyOnWrite) {
