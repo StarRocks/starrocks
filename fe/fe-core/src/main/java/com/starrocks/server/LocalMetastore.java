@@ -2295,22 +2295,47 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void replayCreateTable(CreateTableInfo info) {
         Table table = info.getTable();
         Database db = this.fullNameToDb.get(info.getDbName());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            db.registerTableUnlocked(table);
-            if (table.isTemporaryTable()) {
-                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-                UUID sessionId = ((OlapTable) table).getSessionId();
-                temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                db.registerTableUnlocked(table);
+                if (table.isTemporaryTable()) {
+                    TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                    UUID sessionId = ((OlapTable) table).getSessionId();
+                    temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
+
+            // onReload runs outside the db lock. Registering the table and writing it to the catalog is what
+            // needs mutual exclusion; for an MV the reload is the single most expensive thing this thread
+            // does: onReload walks every base table through MetadataMgr.getTable, twice (analyzePartitionExprs
+            // and checkIsActiveOnLoadBlocking), and expands a hierarchical MV's whole dependency chain
+            // recursively. On a replaying follower the connector caches are cold, so those are real remote
+            // calls -- one slow external catalog used to hold this database's write lock for their entire
+            // duration, stalling every query against it as well as the replay thread.
+            //
+            // Safe here specifically because the table is *new*: before this journal entry nobody could see it
+            // at all, so the worst a reader can observe is a just-registered table whose derived state is not
+            // rebuilt yet, which for anything depending on it is indistinguishable from the entry not having
+            // been replayed. Nothing that was already correct is exposed half-updated -- which is exactly what
+            // would happen if an alter job moved its onReload out of the lock, since there the table is
+            // already serving queries.
+            //
+            // Note the register-then-reload order is unchanged, and Database.getTable is a plain map lookup,
+            // so a lock-free reader could already land between the two; releasing the lock first only widens
+            // that gap for readers that do take the lock, by the few instructions before
+            // MaterializedView.onReload marks itself inactive. From that point waitForReloaded (hierarchical
+            // reload, MVTaskRunProcessor) blocks whoever cannot tolerate a half-reloaded MV. Image loading
+            // leaves MVs in that same registered-but-not-reloaded state far longer and on purpose,
+            // asynchronously -- see GlobalStateMgr.processMvRelatedMeta.
             table.onReload();
         } catch (Throwable e) {
             LOG.error("replay create table failed: {}", table, e);
             // Rethrow, we should not eat the exception when replaying editlog.
             throw e;
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         if (!isCheckpointThread()) {
