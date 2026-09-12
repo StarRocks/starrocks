@@ -78,7 +78,9 @@ public class TableColumnAlterInfoTest {
         Assertions.assertNotNull(replayedTs.getDefaultExpr());
         Assertions.assertTrue(replayedTs.getDefaultExpr().hasArgs(),
                 "edit-log replay must preserve hasArguments for current_timestamp(3)");
-        Assertions.assertEquals(Column.DefaultValueType.VARY, replayedTs.getDefaultValueType());
+        // Stable within a statement, hence CONST (not volatile) - the precision argument is preserved
+        // for rendering but does not change the default-value classification.
+        Assertions.assertEquals(Column.DefaultValueType.CONST, replayedTs.getDefaultValueType());
     }
 
 }
