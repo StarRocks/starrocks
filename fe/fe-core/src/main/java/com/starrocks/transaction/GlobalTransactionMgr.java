@@ -800,7 +800,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return transactionStateList;
     }
 
-    public boolean existCommittedTxns(Long dbId, Long tableId, Long partitionId) {
+    /**
+     * Check whether there is a COMMITTED but not yet VISIBLE transaction on the given target.
+     *
+     * @param physicalPartitionId physical partition id, NOT a logical partition id: commit info is keyed
+     *                            by {@link PartitionCommitInfo#getPhysicalPartitionId()}. Pass null to
+     *                            check the whole table.
+     */
+    public boolean existCommittedTxns(Long dbId, Long tableId, Long physicalPartitionId) {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         if (dbTransactionMgr == null) {
             // The database transaction manager may be absent if the database was dropped concurrently.
@@ -808,25 +815,38 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             // this lock-free (e.g. the online optimize visibility gate).
             return false;
         }
-        if (tableId == null && partitionId == null) {
+        if (tableId == null && physicalPartitionId == null) {
             return !dbTransactionMgr.getCommittedTxnList().isEmpty();
         }
 
         for (TransactionState transactionState : dbTransactionMgr.getCommittedTxnList()) {
             if (transactionState.getTableIdList().contains(tableId)) {
-                if (partitionId == null) {
+                if (physicalPartitionId == null) {
                     return true;
                 }
                 // getTableCommitInfo is @Nullable: a committed txn can list the table in its tableIdList
                 // before its TableCommitInfo is populated, so guard against NPE here (this method is called
                 // lock-free, e.g. by the online optimize visibility gate).
                 TableCommitInfo tableCommitInfo = transactionState.getTableCommitInfo(tableId);
-                if (tableCommitInfo != null && tableCommitInfo.getPartitionCommitInfo(partitionId) != null) {
+                if (tableCommitInfo != null
+                        && tableCommitInfo.getPartitionCommitInfo(physicalPartitionId) != null) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * Find the running transactions that may write to any of the given physical partitions.
+     * See {@link DatabaseTransactionMgr#getConflictingTxnIds(long, Set)}.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public List<Long> getConflictingTxnIds(long dbId, long tableId, Set<Long> physicalPartitionIds) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        return dbTransactionMgr == null ? Collections.emptyList()
+                : dbTransactionMgr.getConflictingTxnIds(tableId, physicalPartitionIds);
     }
 
     /**

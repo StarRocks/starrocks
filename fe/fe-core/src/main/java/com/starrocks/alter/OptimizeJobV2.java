@@ -434,28 +434,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
             } else if (status.getState() == Constants.TaskRunState.SUCCESS) {
-                // Task finished successfully at SQL level. Now gate on visibility for its temp partition.
-                try {
-                    Partition tmpPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
-                    if (tmpPartition == null) {
-                        LOG.warn("temp partition {} not found for task {}", rewriteTask.getTempPartitionName(),
-                                rewriteTask.getName());
-                        rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
-                    } else {
-                        boolean hasCommitted = hasCommittedNotVisible(tmpPartition.getId());
-                        if (hasCommitted) {
-                            // Not visible yet, mark this task as FAILED to avoid replacing this partition.
-                            LOG.warn("optimize task {} not visible yet, mark as FAILED (temp partition: {}, pid: {})",
-                                    rewriteTask.getName(), rewriteTask.getTempPartitionName(), tmpPartition.getId());
-                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
-                        } else {
-                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
-                        }
-                    }
-                } catch (Exception ex) {
-                    LOG.warn("check visibility for task {} failed", rewriteTask.getName(), ex);
-                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
-                }
+                rewriteTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
             }
             progressAcc += 100.0 / taskCount;
         }
@@ -470,6 +449,28 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.progress = 99;
 
         LOG.debug("all insert overwrite tasks finished, optimize job: {}", jobId);
+
+        // A rewrite can be committed without being published yet. Swapping such a temp partition in would
+        // expose a partition whose rows are not visible, but the rewrite itself already succeeded, so wait
+        // for it rather than throwing the work away. The job timeout bounds this wait, see AlterJobV2#run.
+        List<String> pendingTempPartitionNames = Lists.newArrayList();
+        try (AutoCloseableLock ignore =
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
+            for (OptimizeTask rewriteTask : rewriteTasks) {
+                if (rewriteTask.getOptimizeTaskState() != Constants.TaskRunState.SUCCESS) {
+                    continue;
+                }
+                Partition tmpPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
+                if (tmpPartition != null && hasCommittedNotVisibleTxn(tmpPartition)) {
+                    pendingTempPartitionNames.add(rewriteTask.getTempPartitionName());
+                }
+            }
+        }
+        if (!pendingTempPartitionNames.isEmpty()) {
+            LOG.info("optimize job {} waits rewritten data of temp partitions {} to be visible",
+                    jobId, pendingTempPartitionNames);
+            return;
+        }
 
         // replace partition
         try (AutoCloseableLock ignore =
@@ -491,11 +492,21 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // nothing to do
     }
 
-    // Visible check wrapper for testability.
-    // Returns true if there exists committed-but-not-visible txn for the given partition.
-    protected boolean hasCommittedNotVisible(long partitionId) {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .existCommittedTxns(dbId, tableId, partitionId);
+    /**
+     * Find the transactions that may still write to the given partition, see
+     * {@link PartitionUtils#getConflictingIngestionTxnIds(long, long, Partition)}.
+     * Must be called while holding the table write lock. Overridable for testability.
+     */
+    protected List<Long> getConflictingTxnIds(Partition partition) {
+        return PartitionUtils.getConflictingIngestionTxnIds(dbId, tableId, partition);
+    }
+
+    /**
+     * Whether the rewritten data of the given temp partition is published, see
+     * {@link PartitionUtils#hasCommittedNotVisibleTxn(long, long, Partition)}. Overridable for testability.
+     */
+    protected boolean hasCommittedNotVisibleTxn(Partition partition) {
+        return PartitionUtils.hasCommittedNotVisibleTxn(dbId, tableId, partition);
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
@@ -504,32 +515,71 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
 
+            // Detect ingestion that is concurrent with this optimize job, per source partition. A source
+            // partition is only replaced when no transaction can still write to it, otherwise its rows
+            // would be dropped together with the force deleted tablets while the load reports success.
+            // The three signals below cover the three states such a transaction can be in, and the table
+            // write lock held here keeps them conclusive:
+            //   - already published: the visible version of the source partition moved
+            //   - committed but not published yet, and in flight: reported as a conflicting transaction
             Map<String, Long> partitionLastVersion = Maps.newHashMap();
+            Map<String, List<Long>> partitionConflictingTxnIds = Maps.newHashMap();
+            // sourcePartitionNames is persisted with the job, so rebuild it from scratch rather than
+            // appending: entries left over from a previous pass would no longer line up one to one with
+            // tmpPartitionNames, and the removals below only drop a single occurrence each.
+            sourcePartitionNames.clear();
             optimizeClause.getSourcePartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId)).forEach(
                         partition -> {
                             sourcePartitionNames.add(partition.getName());
                             partitionLastVersion.put(partition.getName(), partition.getSubPartitions().stream()
                                     .mapToLong(PhysicalPartition::getVisibleVersion).sum());
+                            partitionConflictingTxnIds.put(partition.getName(), getConflictingTxnIds(partition));
                         }
             );
 
             boolean hasFailedTask = false;
             String errMsg = "";
             for (OptimizeTask rewriteTask : rewriteTasks) {
+                String partitionName = rewriteTask.getPartitionName();
+                List<Long> conflictingTxnIds =
+                        partitionConflictingTxnIds.getOrDefault(partitionName, Lists.newArrayList());
+                boolean versionChanged = partitionLastVersion.get(partitionName) != rewriteTask.getLastVersion();
+                boolean hasIngestion = versionChanged || !conflictingTxnIds.isEmpty();
+
+                // The rewritten data must be fully visible before the temp partition can take over,
+                // otherwise the replacement would publish a partition that is still missing rows.
+                boolean rewriteNotVisible = false;
+                if (rewriteTask.getOptimizeTaskState() != Constants.TaskRunState.FAILED && !hasIngestion) {
+                    Partition tmpPartition = targetTable.getPartition(rewriteTask.getTempPartitionName(), true);
+                    if (tmpPartition == null) {
+                        LOG.warn("optimize job {} temp partition {} not found for task {}",
+                                jobId, rewriteTask.getTempPartitionName(), rewriteTask.getName());
+                        rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                    } else if (hasCommittedNotVisibleTxn(tmpPartition)) {
+                        LOG.warn("optimize job {} rewritten data of task {} is not visible yet, temp partition {}",
+                                jobId, rewriteTask.getName(), rewriteTask.getTempPartitionName());
+                        rewriteNotVisible = true;
+                    }
+                }
+
                 if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
-                        || partitionLastVersion.get(rewriteTask.getPartitionName()) != rewriteTask.getLastVersion()) {
-                    LOG.info("optimize job {} rewrite task {} state {} failed or partition {} version {} change to {}",
-                            jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(), rewriteTask.getPartitionName(),
-                            rewriteTask.getLastVersion(), partitionLastVersion.get(rewriteTask.getPartitionName()));
-                    sourcePartitionNames.remove(rewriteTask.getPartitionName());
+                        || hasIngestion || rewriteNotVisible) {
+                    LOG.info("optimize job {} rewrite task {} state {} failed or partition {} version {} change to {}"
+                                    + ", conflicting txns {}",
+                            jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(), partitionName,
+                            rewriteTask.getLastVersion(), partitionLastVersion.get(partitionName), conflictingTxnIds);
+                    sourcePartitionNames.remove(partitionName);
                     tmpPartitionNames.remove(rewriteTask.getTempPartitionName());
                     targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true);
                     hasFailedTask = true;
-                    if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
-                        errMsg += rewriteTask.getPartitionName() + " rewrite task execute failed, ";
+                    if (hasIngestion) {
+                        errMsg += partitionName + " has ingestion during optimize"
+                                + PartitionUtils.formatConflictingTxnIds(conflictingTxnIds) + ", ";
+                    } else if (rewriteNotVisible) {
+                        errMsg += partitionName + " rewritten data is not visible yet, ";
                     } else {
-                        errMsg += rewriteTask.getPartitionName() + " has ingestion during optimize, ";
+                        errMsg += partitionName + " rewrite task execute failed, ";
                     }
                 }
             }
