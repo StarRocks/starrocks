@@ -2475,7 +2475,9 @@ struct TCloudTabletMeta {
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
     10: optional i32 compression_level;
-    11: optional TCloudTabletMetaExt ext;
+    // Tag 11 is occupied by downstream distributions; never allocate an upstream field here.
+    11: optional bool placeholder_11;
+    12: optional TCloudTabletMetaExt ext;
 }
 
 struct TGetTabletMetadataResponse {
