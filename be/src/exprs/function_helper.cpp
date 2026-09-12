@@ -21,7 +21,6 @@
 
 #include "base/simd/multi_version.h"
 #include "column/array_column.h"
-#include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
@@ -46,9 +45,6 @@ struct ColumnBuilder {
 };
 
 MutableColumnPtr FunctionHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
-    if (type_desc.is_geo_type()) {
-        return ColumnHelper::create_column(type_desc, nullable);
-    }
     const auto type = type_desc.type;
     MutableColumnPtr p = nullptr;
 

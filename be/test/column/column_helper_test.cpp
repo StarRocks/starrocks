@@ -369,7 +369,7 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
     EXPECT_FALSE(b_col->has_null());
 }
 
-TEST_F(ColumnHelperTest, create_geo_preserves_descriptor_and_copy) {
+TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto type = geo_type(primitive);
         auto column = ColumnHelper::create_column(type, false, false, 3);
@@ -377,7 +377,9 @@ TEST_F(ColumnHelperTest, create_geo_preserves_descriptor_and_copy) {
         ASSERT_NE(nullptr, geo);
         EXPECT_EQ(3, geo->size());
         EXPECT_FALSE(geo->is_binary());
-        EXPECT_EQ(*type.geo_type, geo->descriptor().type);
+        // Descriptor-aware generic creation is a separate follow-up. These are
+        // untyped physical placeholders, not silently coerced native values.
+        EXPECT_EQ(GeoTypeDescriptor{}, geo->descriptor().type);
         EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
         EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
         EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, geo->descriptor().storage.validation_state);
@@ -402,15 +404,14 @@ TEST_F(ColumnHelperTest, create_geo_preserves_descriptor_and_copy) {
     }
 }
 
-TEST_F(ColumnHelperTest, create_geo_distinguishes_absent_and_empty_metadata) {
+TEST_F(ColumnHelperTest, create_geo_does_not_infer_metadata) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         TypeDescriptor type(primitive);
         auto absent = ColumnHelper::create_column(type, false);
         const auto* absent_geo = dynamic_cast<const GeoColumn*>(absent.get());
         ASSERT_NE(nullptr, absent_geo);
         const auto& descriptor = absent_geo->descriptor().type;
-        EXPECT_EQ(primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                  descriptor.logical_type);
+        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, descriptor.logical_type);
         EXPECT_EQ(GEO_COORDINATE_SYSTEM_UNKNOWN, descriptor.coordinate_system);
         EXPECT_EQ(GEO_EDGE_ALGORITHM_UNKNOWN, descriptor.edge_algorithm);
         EXPECT_TRUE(descriptor.crs.empty());
@@ -438,7 +439,7 @@ TEST_F(ColumnHelperTest, create_geo_nullable_const_and_adaptive) {
             EXPECT_TRUE(nullable->is_null(2));
             const auto* geo = dynamic_cast<const GeoColumn*>(nullable->data_column().get());
             ASSERT_NE(nullptr, geo);
-            EXPECT_EQ(*type.geo_type, geo->descriptor().type);
+            EXPECT_EQ(GeoTypeDescriptor{}, geo->descriptor().type);
             EXPECT_EQ(3, geo->size());
             column->check_or_die();
         }
@@ -449,7 +450,7 @@ TEST_F(ColumnHelperTest, create_geo_nullable_const_and_adaptive) {
         const auto* constant_geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(constant.get()));
         ASSERT_NE(nullptr, constant_geo);
         EXPECT_EQ(1, constant_geo->size());
-        EXPECT_EQ(*type.geo_type, constant_geo->descriptor().type);
+        EXPECT_EQ(GeoTypeDescriptor{}, constant_geo->descriptor().type);
         constant->check_or_die();
 
         auto nulls = ColumnHelper::create_column(type, true, true, 3);
@@ -461,7 +462,7 @@ TEST_F(ColumnHelperTest, create_geo_nullable_const_and_adaptive) {
         EXPECT_TRUE(aligned->is_null(2));
         const auto* aligned_geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(aligned.get()));
         ASSERT_NE(nullptr, aligned_geo);
-        EXPECT_EQ(*type.geo_type, aligned_geo->descriptor().type);
+        EXPECT_EQ(GeoTypeDescriptor{}, aligned_geo->descriptor().type);
         aligned->check_or_die();
     }
 }
@@ -480,7 +481,7 @@ TEST_F(ColumnHelperTest, create_nested_geo_columns) {
         const auto* direct =
                 dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(0)));
         ASSERT_NE(nullptr, direct);
-        EXPECT_EQ(*type.geo_type, direct->descriptor().type);
+        EXPECT_EQ(GeoTypeDescriptor{}, direct->descriptor().type);
 
         const auto* array =
                 dynamic_cast<const ArrayColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(1)));

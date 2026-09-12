@@ -25,6 +25,12 @@ namespace {
 
 } // namespace
 
+GeoColumn::GeoColumn(size_t size)
+        : GeoColumn(GeoColumnDescriptor{{},
+                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+    resize(size);
+}
+
 GeoColumn::GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits)
         : _descriptor(std::move(descriptor)), _limits(limits) {
     if (_descriptor.storage.encoding != GEO_ENCODING_WKB)
@@ -185,8 +191,32 @@ StatusOr<MutableColumnPtr> GeoColumn::upgrade_if_overflow() {
     return MutableColumnPtr{};
 }
 
-std::string GeoColumn::debug_item(size_t row) const {
-    return fmt::format("geo[{} bytes]", get_wkb(row).size);
+GeoColumn::ImmContainer GeoColumn::immutable_data() const {
+    unsupported("generic scalar access");
+}
+
+GeoColumn::ValueType GeoColumn::min_value() {
+    unsupported("range bounds");
+}
+
+GeoColumn::ValueType GeoColumn::max_value() {
+    unsupported("range bounds");
+}
+
+std::string GeoColumn::debug_item(size_t) const {
+    // Generic fingerprinting uses this as a value representation. A byte count
+    // is not a GEO value and must not silently become its hash input.
+    unsupported("generic scalar rendering");
+}
+
+Status GeoColumn::accept(ColumnVisitor*) const {
+    // Some void-returning hash paths discard visitor Status, including for nested
+    // columns. Throw here so unsupported GEO cannot leave hash seeds unchanged.
+    unsupported("visitor");
+}
+
+Status GeoColumn::accept_mutable(ColumnVisitorMutable*) {
+    unsupported("mutable visitor");
 }
 
 int GeoColumn::compare_at(size_t, size_t, const Column&, int) const {
