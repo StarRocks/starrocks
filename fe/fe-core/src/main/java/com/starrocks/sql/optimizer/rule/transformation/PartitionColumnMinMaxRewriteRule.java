@@ -324,7 +324,12 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 if (CollectionUtils.isEmpty(sorted)) {
                     return null;
                 }
-                valueRow.add(minMaxFunction.first.apply(sorted.get(0), partitionInfo));
+                ScalarOperator minValue = minMaxFunction.first.apply(sorted.get(0), partitionInfo);
+                if (minValue == null) {
+                    // the extreme partition's value cannot be determined from metadata; decline
+                    return null;
+                }
+                valueRow.add(minValue);
                 columns.add(entry.getKey());
             } else if (isMax(entry.getValue())) {
                 List<Long> sorted = partitionInfo.getSortedPartitions(false);
@@ -332,7 +337,12 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 if (CollectionUtils.isEmpty(sorted)) {
                     return null;
                 }
-                valueRow.add(minMaxFunction.second.apply(sorted.get(0), partitionInfo));
+                ScalarOperator maxValue = minMaxFunction.second.apply(sorted.get(0), partitionInfo);
+                if (maxValue == null) {
+                    // the extreme partition's value cannot be determined from metadata; decline
+                    return null;
+                }
+                valueRow.add(maxValue);
                 columns.add(entry.getKey());
             }
         }
@@ -347,6 +357,12 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         ListPartitionInfo.ListPartitionCell partitionValues =
                 ((ListPartitionInfo) partitionInfo).getPartitionListExpr(partitionId);
         Preconditions.checkState(!partitionValues.isEmpty());
+        // Only a single-value LIST partition is safe: a non-empty partition that declares exactly
+        // one value must contain that value. A multi-value partition (VALUES IN (a, b, ...)) is not
+        // guaranteed to hold its declared extreme, so its MIN/MAX cannot be derived from metadata.
+        if (partitionValues.valueCount() != 1) {
+            return null;
+        }
         return partitionValues.minValue().toConstant();
     }
 
@@ -354,6 +370,11 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         ListPartitionInfo.ListPartitionCell partitionValues =
                 ((ListPartitionInfo) partitionInfo).getPartitionListExpr(partitionId);
         Preconditions.checkState(!partitionValues.isEmpty());
+        // See getMinListPartitionValue: only a single-value LIST partition's declared value is
+        // guaranteed present in the data.
+        if (partitionValues.valueCount() != 1) {
+            return null;
+        }
         return partitionValues.maxValue().toConstant();
     }
 
