@@ -50,6 +50,7 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
     private final AtomicInteger tokenSequence = new AtomicInteger();
     private final AtomicInteger tokenFetches = new AtomicInteger();
     private volatile String validToken;
+    private volatile int rejectStatus = 401; // 419 = Iceberg REST AuthenticationTimeoutResponse
 
     @BeforeEach
     public void setUp() throws IOException {
@@ -74,10 +75,16 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
             String auth = exchange.getRequestHeaders().getFirst("Authorization");
             String expected = validToken == null ? null : "Bearer " + validToken;
             if (expected == null || !expected.equals(auth)) {
-                // exact shape observed from Apache Polaris 1.1.0: bare 401, empty body, WWW-Authenticate: Bearer
-                exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
-                exchange.sendResponseHeaders(401, -1);
-                exchange.close();
+                if (rejectStatus == 419) {
+                    // Iceberg REST 419 AuthenticationTimeoutResponse with an error body
+                    respond(exchange, 419, "{\"error\":{\"message\":\"Authentication token is expired\","
+                            + "\"type\":\"AuthenticationTimeoutException\",\"code\":419}}");
+                } else {
+                    // exact shape observed from Apache Polaris 1.1.0: bare 401, empty body, WWW-Authenticate: Bearer
+                    exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
+                    exchange.sendResponseHeaders(401, -1);
+                    exchange.close();
+                }
             } else {
                 respond(exchange, 200, "{\"namespaces\":[[\"db1\"]]}");
             }
@@ -113,6 +120,27 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
         Assertions.assertEquals(List.of("db1"), catalog.listAllDatabases(connectContext));
 
         // the server rotates its signing state: every token issued so far is now rejected with 401,
+        // while the client credential can still mint a fresh one
+        validToken = null;
+
+        Assertions.assertEquals(List.of("db1"), catalog.listAllDatabases(connectContext));
+        Assertions.assertTrue(tokenFetches.get() >= 2,
+                "recovery must have re-authenticated with the client credential, fetches=" + tokenFetches.get());
+    }
+
+    @Test
+    public void testRecoversWhenServerReturns419TokenExpired() {
+        rejectStatus = 419; // server returns 419 (Iceberg REST AuthenticationTimeoutResponse) for an expired token
+        String uri = "http://127.0.0.1:" + server.getAddress().getPort();
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog("rest_catalog", new Configuration(),
+                ImmutableMap.of(
+                        "iceberg.catalog.uri", uri,
+                        "iceberg.catalog.security", "oauth2",
+                        "iceberg.catalog.oauth2.credential", "id:secret"));
+
+        Assertions.assertEquals(List.of("db1"), catalog.listAllDatabases(connectContext));
+
+        // the server rotates its signing state: every token issued so far is now rejected with 419,
         // while the client credential can still mint a fresh one
         validToken = null;
 

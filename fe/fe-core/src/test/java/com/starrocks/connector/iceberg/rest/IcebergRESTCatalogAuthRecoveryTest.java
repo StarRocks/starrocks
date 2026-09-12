@@ -98,6 +98,58 @@ public class IcebergRESTCatalogAuthRecoveryTest {
         };
     }
 
+    // The Iceberg REST spec's 419 (AuthenticationTimeoutResponse) is not mapped by the Iceberg
+    // client, so an expired token surfaces as a generic RESTException instead of a
+    // NotAuthorizedException (HTTP 401). Recovery must still fire on this shape. (#77546)
+    @Test
+    public void testTokenExpiredRestExceptionTriggersRebuildAndRetry() throws Exception {
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionCatalog.SessionContext) any, (Namespace) any);
+                result = new RESTException("Unable to process: Authentication token is expired");
+                result = ImmutableMap.of("location", "s3://bucket/db1");
+            }
+        };
+
+        Database db = newOAuth2CredentialCatalog().getDB(connectContext, "db1");
+
+        Assertions.assertEquals("s3://bucket/db1", db.getLocation());
+        new Verifications() {
+            {
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                times = 2; // constructor + one auth-recovery rebuild
+                restCatalog.close();
+                times = 0; // replaced delegate left for GC (cached tables may still use its FileIO)
+            }
+        };
+    }
+
+    // Newer Iceberg versions include the status and error type in the fallback message
+    // (https://github.com/apache/iceberg/pull/14927). Recovery must also fire on that shape,
+    // including server texts that do not mention "token"/"expired" at all.
+    @Test
+    public void testEmbeddedCode419RestExceptionTriggersRebuildAndRetry() throws Exception {
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionCatalog.SessionContext) any, (Namespace) any);
+                result = new RESTException(
+                        "Unable to process (code: 419, type: AuthenticationTimeoutException): "
+                                + "credentials are no longer valid");
+                result = ImmutableMap.of("location", "s3://bucket/db1");
+            }
+        };
+
+        Database db = newOAuth2CredentialCatalog().getDB(connectContext, "db1");
+
+        Assertions.assertEquals("s3://bucket/db1", db.getLocation());
+        new Verifications() {
+            {
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                times = 2; // constructor + one auth-recovery rebuild
+            }
+        };
+    }
+
     @Test
     public void testFailedRetryPropagatesAfterSingleRebuild() {
         new Expectations() {
