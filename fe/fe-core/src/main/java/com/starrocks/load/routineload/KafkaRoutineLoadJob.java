@@ -212,7 +212,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(partitionLag);
     }
 
-    private boolean checkProgressVal(String progressVal) {
+    boolean checkProgressVal(String progressVal) {
         if (progressVal == null) {
             return false;
         }

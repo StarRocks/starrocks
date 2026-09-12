@@ -23,12 +23,18 @@
 #include <vector>
 
 #include "base/string/slice.h"
+
+namespace starrocks {
+class StreamLoadPipeInputStream;
+}
+
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "connector/file/scanner/file_scanner.h"
 #include "fs/fs.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
@@ -59,6 +65,14 @@ private:
 
     const TBrokerScanRange& _scan_range;
     int _next_file{0};
+    // Index into _scan_range.ranges for the file whose rows are in the current
+    // chunk being built.  Captured in initialize_src_chunk() and used by
+    // finalize_src_chunk() so that path/partition columns are always attributed
+    // to the correct file, even when get_next() breaks at a file boundary after
+    // opening a new file (which would otherwise advance _next_file past the
+    // current chunk's file).
+    int _chunk_file_idx{0};
+    bool _message_boundary{false};
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> _curr_file_reader;
     bool _scanner_eof{false};
     std::shared_ptr<arrow::RecordBatch> _batch;
@@ -72,6 +86,12 @@ private:
     Filter _chunk_filter;
     ArrowConvertContext _conv_ctx;
     int64_t _last_file_scan_rows{0};
+    std::shared_ptr<SequentialFile> _file;
+    ByteBufferPtr _parser_buf;
+    std::shared_ptr<arrow::io::InputStream> _arrow_stream;
+    std::shared_ptr<arrow::io::BufferReader> _arrow_buffer_reader;
+    int _consecutive_errors{0};
+    static constexpr int kMaxConsecutiveErrors = 10;
 };
 
 } // namespace starrocks

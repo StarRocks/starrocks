@@ -11,7 +11,7 @@ import WarehouseProperty from '../../../../_assets/sql-reference/sql-statements/
 
 <Tip />
 
-Routine Load は Apache Kafka® からメッセージを継続的に消費し、StarRocks にデータをロードできます。Routine Load は Kafka クラスターから CSV、JSON、Avro（v3.0.1 以降でサポート）データを消費し、`plaintext`、`ssl`、`sasl_plaintext`、`sasl_ssl` などの複数のセキュリティプロトコルを介して Kafka にアクセスできます。
+Routine Load は Apache Kafka® からメッセージを継続的に消費し、StarRocks にデータをロードできます。Routine Load は Kafka クラスターから CSV、JSON、Avro（v3.0.1 以降でサポート）、および Arrow（v3.4.0 以降でサポート）データを消費し、`plaintext`、`ssl`、`sasl_plaintext`、`sasl_ssl` などの複数のセキュリティプロトコルを介して Kafka にアクセスできます。
 
 このトピックでは、CREATE ROUTINE LOAD ステートメントの構文、パラメーター、および例について説明します。
 
@@ -162,7 +162,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `format`
 
 **必須**: いいえ\
-**説明**: ロードするデータの形式。 有効な値: `CSV`、`JSON`、および `Avro`（v3.0.1 以降でサポート）。デフォルト値: `CSV`。
+**説明**: ロードするデータの形式。 有効な値: `CSV`、`JSON`、`Avro`（v3.0.1 以降でサポート）、および `Arrow`（v3.4.0 以降でサポート）。デフォルト値: `CSV`。
 
 #### `trim_space`
 

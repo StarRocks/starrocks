@@ -23,6 +23,13 @@ ROOT=`cd "$ROOT"; pwd`
 
 export STARROCKS_HOME=${ROOT}
 
+if ! touch "$HOME/.m2/.write_test" 2>/dev/null; then
+    mkdir -p /tmp/.m2/repository
+    export MAVEN_OPTS="${MAVEN_OPTS:-} -Dmaven.repo.local=/tmp/.m2/repository"
+else
+    rm -f "$HOME/.m2/.write_test"
+fi
+
 . ${STARROCKS_HOME}/env.sh
 
 # Check args
@@ -61,7 +68,36 @@ FILTER_TEST=""
 COVERAGE=0
 DUMPCASE=0
 ENABLE_PROFILER=0
-PARALLEL=${FE_UT_PARALLEL:-4}
+
+# Auto-detect memory limits to adjust default parallelism
+detect_default_parallel() {
+    if [[ -n "${FE_UT_PARALLEL:-}" ]]; then
+        echo "$FE_UT_PARALLEL"
+        return
+    fi
+    local mem_limit=""
+    if [ -f /sys/fs/cgroup/memory.max ]; then
+        mem_limit=$(cat /sys/fs/cgroup/memory.max)
+    elif [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+        mem_limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+    fi
+
+    if [[ -n "$mem_limit" && "$mem_limit" =~ ^[0-9]+$ ]]; then
+        # 10GB is 10737418240
+        # 18GB is 19327352832
+        if [ "$mem_limit" -le 10737418240 ]; then
+            echo 1
+        elif [ "$mem_limit" -le 19327352832 ]; then
+            echo 2
+        else
+            echo 4
+        fi
+    else
+        echo 4
+    fi
+}
+
+PARALLEL=$(detect_default_parallel)
 
 # Prefer GNU getopt when available. Fall back to a manual parser on macOS/BSD.
 USE_GNU_GETOPT=0

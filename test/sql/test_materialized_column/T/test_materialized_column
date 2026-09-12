@@ -92,7 +92,7 @@ SELECT * FROM t;
 UPDATE t SET v2 = 400 where v3 = 300;
 SELECT * FROM t;
 
-DROP DATABASE test_update;
+DROP DATABASE test_update FORCE;
 
 -- name: test_schema_change_for_after @native
 CREATE DATABASE test_schema_change_for_after;
