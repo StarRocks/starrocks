@@ -107,4 +107,38 @@ TEST_F(HiveConnectorTest, test_scan_range_indicate_const_column_index) {
     EXPECT_EQ(data_source->scan_range_indicate_const_column_index(99), -1); // Not found
 }
 
+// A mid-query refreshed cloud configuration overrides the plan-time one, including when delivered
+// through the DataSourceProvider base pointer (the incremental scan-range RPC path).
+TEST_F(HiveConnectorTest, test_refreshed_cloud_configuration) {
+    TCloudConfiguration holder;
+
+    // No plan-time config and no refresh: nullptr.
+    THdfsScanNode bare_scan_node;
+    HiveDataSourceProvider bare_provider(0, bare_scan_node);
+    EXPECT_EQ(bare_provider.effective_cloud_configuration(&holder), nullptr);
+
+    // Plan-time config only: returned directly.
+    TCloudConfiguration plan_time;
+    plan_time.__set_cloud_properties({{"fs.gs.temporary.access.token", "tok1"}});
+    THdfsScanNode scan_node;
+    scan_node.__set_cloud_configuration(plan_time);
+    HiveDataSourceProvider provider(0, scan_node);
+    const TCloudConfiguration* effective = provider.effective_cloud_configuration(&holder);
+    ASSERT_NE(effective, nullptr);
+    EXPECT_EQ(effective->cloud_properties.at("fs.gs.temporary.access.token"), "tok1");
+
+    // A refresh delivered through the base interface wins over the plan-time config and is
+    // copied into the caller's holder.
+    TCloudConfiguration refreshed;
+    refreshed.__set_cloud_properties({{"fs.gs.temporary.access.token", "tok2"}});
+    static_cast<DataSourceProvider*>(&provider)->set_refreshed_cloud_configuration(refreshed);
+    effective = provider.effective_cloud_configuration(&holder);
+    ASSERT_EQ(effective, &holder);
+    EXPECT_EQ(effective->cloud_properties.at("fs.gs.temporary.access.token"), "tok2");
+
+    // A refresh also applies when the plan carried no cloud configuration at all.
+    bare_provider.set_refreshed_cloud_configuration(refreshed);
+    EXPECT_EQ(bare_provider.effective_cloud_configuration(&holder), &holder);
+}
+
 } // namespace starrocks::connector

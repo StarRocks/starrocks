@@ -51,6 +51,10 @@ public class AzureCloudConfigurationProvider implements CloudConfigurationProvid
     public static final String ADLS_ENDPOINT = "dfs.core.windows.net";
     public static final String BLOB_ENDPOINT = "blob.core.windows.net";
     public static final String ADLS_SAS_TOKEN = "adls.sas-token.";
+    // Iceberg REST vended-credential expiry, epoch millis, suffixed by storage endpoint
+    // (mirrors iceberg-azure's AzureProperties; hardcoded like ADLS_SAS_TOKEN since the
+    // iceberg-azure artifact is not a dependency).
+    public static final String ADLS_SAS_TOKEN_EXPIRES_AT_MS = "adls.sas-token-expires-at-ms.";
 
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
