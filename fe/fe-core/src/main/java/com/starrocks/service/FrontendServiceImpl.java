@@ -506,11 +506,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.user, params.user_ip);
         }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -561,11 +559,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.user, params.user_ip);
         }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -925,11 +921,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // database privs should be checked in analysis phrase
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.user, params.user_ip);
         }
 
         long limit = params.isSetLimit() ? params.getLimit() : -1;
