@@ -407,6 +407,7 @@ public class MetaService {
 
     public static class DumpAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(DumpAction.class);
+        private static final OperationRateLimiter RATE_LIMITER = new OperationRateLimiter(60 * 1000);
 
         public DumpAction(ActionController controller) {
             super(controller);
@@ -429,26 +430,36 @@ public class MetaService {
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
-            /*
-             * Before dump, we acquired the globalStateMgr read lock and all databases' read lock and all
-             * the jobs' read lock. This will guarantee the consistency of database and job queues.
-             * But Backend may still inconsistent.
-             */
-
-            // TODO: Still need to lock ClusterInfoService to prevent add or drop Backends
-            String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
-            if (dumpFilePath == null) {
-                response.appendContent("dump failed. " + dumpFilePath);
+            if (RATE_LIMITER.isInCooldown()) {
+                response.appendContent("dump request rejected: too frequent. please wait " +
+                        RATE_LIMITER.getRemainingCooldownSeconds() + " seconds before next dump request.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
             }
 
-            response.appendContent("dump finished. " + dumpFilePath);
-            writeResponse(request, response);
-            return;
+            if (!RATE_LIMITER.tryAcquire()) {
+                response.appendContent("dump request rejected: another dump operation is in progress.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
+            }
+
+            try {
+                String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
+                if (dumpFilePath == null) {
+                    response.appendContent("dump failed. " + dumpFilePath);
+                }
+
+                response.appendContent("dump finished. " + dumpFilePath);
+                writeResponse(request, response);
+            } finally {
+                RATE_LIMITER.release();
+            }
         }
     }
 
     public static class DumpStarMgrAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(DumpStarMgrAction.class);
+        private static final OperationRateLimiter RATE_LIMITER = new OperationRateLimiter(60 * 1000);
 
         public DumpStarMgrAction(ActionController controller) {
             super(controller);
@@ -474,13 +485,30 @@ public class MetaService {
             if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
                 String str = "current run mode " + RunMode.name() + " does not support dump starmgr meta.";
                 response.appendContent(str);
-            } else {
-                String str = GlobalStateMgr.getCurrentState().getStarOSAgent().dump();
-                response.appendContent(str);
+                writeResponse(request, response);
+                return;
             }
 
-            writeResponse(request, response);
-            return;
+            if (RATE_LIMITER.isInCooldown()) {
+                response.appendContent("dump request rejected: too frequent. please wait " +
+                        RATE_LIMITER.getRemainingCooldownSeconds() + " seconds before next dump request.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
+            }
+
+            if (!RATE_LIMITER.tryAcquire()) {
+                response.appendContent("dump request rejected: another dump operation is in progress.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
+            }
+
+            try {
+                String str = GlobalStateMgr.getCurrentState().getStarOSAgent().dump();
+                response.appendContent(str);
+                writeResponse(request, response);
+            } finally {
+                RATE_LIMITER.release();
+            }
         }
     }
 
