@@ -14,14 +14,15 @@
 
 package com.starrocks.authorization;
 
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
-import java.util.Objects;
 
 public class MaterializedViewPEntryObject extends TablePEntryObject {
+
+    protected MaterializedViewPEntryObject(long catalogId, String dbUUID, String tblUUID) {
+        super(catalogId, dbUUID, tblUUID);
+    }
 
     protected MaterializedViewPEntryObject(String dbUUID, String tblUUID) {
         super(dbUUID, tblUUID);
@@ -29,36 +30,9 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
 
     public static MaterializedViewPEntryObject generate(List<String> tokens)
             throws PrivilegeException {
-        if (tokens.size() != 2) {
-            throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
-        }
-        String dbUUID;
-        String tblUUID;
-
-        if (Objects.equals(tokens.get(0), "*")) {
-            dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
-            tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
-        } else {
-            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tokens.get(0));
-            if (database == null) {
-                throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
-            }
-            dbUUID = database.getUUID();
-
-            if (Objects.equals(tokens.get(1), "*")) {
-                tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
-            } else {
-                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(database.getFullName(), tokens.get(1));
-                if (table == null || !table.isMaterializedView()) {
-                    throw new PrivObjNotFoundException(
-                            "cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0));
-                }
-                tblUUID = table.getUUID();
-            }
-        }
-
-        return new MaterializedViewPEntryObject(dbUUID, tblUUID);
+        return (MaterializedViewPEntryObject) generateTableLikeObject(tokens, MaterializedViewPEntryObject::new,
+                (catalogName, dbToken, mvToken) ->
+                        resolveObjectUUID(catalogName, dbToken, mvToken, Table::isMaterializedView, "materialized view"));
     }
 
     @Override
@@ -68,6 +42,6 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
 
     @Override
     public MaterializedViewPEntryObject clone() {
-        return new MaterializedViewPEntryObject(this.databaseUUID, this.tableUUID);
+        return new MaterializedViewPEntryObject(getCatalogId(), this.databaseUUID, this.tableUUID);
     }
 }
