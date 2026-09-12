@@ -38,6 +38,7 @@
 #include <butil/reader_writer.h>
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <ctime>
 #include <memory>
 
@@ -159,6 +160,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     _rowset_meta_pb->set_total_disk_size(_total_data_size + _total_index_size);
     _rowset_meta_pb->set_data_disk_size(_total_data_size);
     _rowset_meta_pb->set_index_disk_size(_total_index_size);
+    _rowset_meta_pb->set_standalone_index_size(_total_standalone_index_size);
     // TODO write zonemap to meta
     _rowset_meta_pb->set_empty(_num_rows_written == 0);
     _rowset_meta_pb->set_creation_time(time(nullptr));
@@ -315,10 +317,20 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     {
         std::lock_guard<std::mutex> l(_lock);
         // segment_pb.data_size() is full segment file bytes (column data + embedded index pages).
-        // Subtract embedded index so _total_data_size holds only column data bytes;
-        // invariant: data_disk_size + index_disk_size == total_disk_size == segment file size.
-        _total_data_size += segment_pb.data_size() - segment_pb.index_size();
+        // Subtract only the embedded index so _total_data_size holds the column data bytes:
+        // segment_pb.index_size() also counts standalone index files (vector index .vi) that
+        // are not inside the segment file, and subtracting those too would drive
+        // _total_data_size negative for segments whose .vi outweighs their data.
+        // standalone_index_size() defaults to 0 for messages from an older sender that does not
+        // set it (proto2), which reproduces the previous behaviour; clamp to index_size so a
+        // malformed message where standalone > embedded cannot inflate the data bytes instead.
+        // invariant: data_disk_size + index_disk_size == total_disk_size.
+        const uint64_t embedded_index_size =
+                segment_pb.index_size() -
+                std::min<uint64_t>(segment_pb.standalone_index_size(), segment_pb.index_size());
+        _total_data_size += segment_pb.data_size() - static_cast<int64_t>(embedded_index_size);
         _total_index_size += segment_pb.index_size();
+        _total_standalone_index_size += static_cast<int64_t>(segment_pb.index_size() - embedded_index_size);
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
         DCHECK(_segment_encryption_metas.size() == _num_segment);
@@ -773,6 +785,7 @@ Status HorizontalRowsetWriter::add_rowset(const RowsetSharedPtr& rowset) {
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
     _total_index_size += static_cast<int64_t>(rowset->rowset_meta()->index_disk_size());
+    _total_standalone_index_size += rowset->rowset_meta()->standalone_index_size();
     DCHECK(_segment_encryption_metas.size() == _num_segment);
     RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
                        Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
@@ -934,6 +947,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _total_row_size = 0;
         _total_data_size = 0;
         _total_index_size = 0;
+        _total_standalone_index_size = 0;
 
         // If RowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
         // but this array already have old entries, should clear those entries before write new segments for final merge.
@@ -1105,6 +1119,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _total_row_size = 0;
         _total_data_size = 0;
         _total_index_size = 0;
+        _total_standalone_index_size = 0;
 
         // If RowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
         // but this array already have old entries, should clear those entries before write new segments for final merge.
@@ -1182,12 +1197,19 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
             seg_info->set_partial_footer_size(footer_size);
         }
     }
+    // index_size counts the index pages embedded in the segment file plus any standalone
+    // index file (vector index .vi). Only the embedded part is inside segment_size, so only
+    // that part is subtracted to get the column data bytes; subtracting the standalone bytes
+    // as well makes data_disk_size negative once the .vi outweighs the data (small vectors,
+    // HNSW graph), which then poisons compaction scores and size estimates.
+    const uint64_t standalone_index_size = (*segment_writer)->standalone_index_size();
+    DCHECK_LE(standalone_index_size, index_size);
+    const uint64_t embedded_index_size = index_size - std::min(standalone_index_size, index_size);
     {
         std::lock_guard<std::mutex> l(_lock);
-        // segment_size is full segment file bytes; subtract index_size so
-        // _total_data_size holds only column data bytes.
-        _total_data_size += static_cast<int64_t>(segment_size) - static_cast<int64_t>(index_size);
+        _total_data_size += static_cast<int64_t>(segment_size) - static_cast<int64_t>(embedded_index_size);
         _total_index_size += static_cast<int64_t>(index_size);
+        _total_standalone_index_size += static_cast<int64_t>(index_size - embedded_index_size);
     }
 
     // check global_dict efficacy
@@ -1196,6 +1218,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     if (seg_info) {
         seg_info->set_data_size(segment_size);
         seg_info->set_index_size(index_size);
+        seg_info->set_standalone_index_size(standalone_index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
         seg_info->set_path((*segment_writer)->segment_path());
         seg_info->set_encryption_meta((*segment_writer)->encryption_meta());
@@ -1365,6 +1388,7 @@ Status VerticalRowsetWriter::flush_columns() {
 
 Status VerticalRowsetWriter::final_flush() {
     int64_t total_segment_file_bytes = 0;
+    int64_t total_standalone_index_bytes = 0;
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -1385,6 +1409,9 @@ Status VerticalRowsetWriter::final_flush() {
             partial_rowset_footer->set_size(segment_size - footer_position);
         }
         total_segment_file_bytes += static_cast<int64_t>(segment_size);
+        // Standalone index files (vector index .vi) are counted in _total_index_size but are
+        // not part of the segment files, so they must not be subtracted from the data bytes.
+        total_standalone_index_bytes += static_cast<int64_t>(segment_writer->standalone_index_size());
 
         // check global_dict efficacy
         _check_global_dict(segment_writer.get());
@@ -1395,7 +1422,8 @@ Status VerticalRowsetWriter::final_flush() {
         // _total_index_size was accumulated in _flush_columns() via finalize_columns().
         // Match horizontal RowsetWriter::flush: data_disk_size is column bytes only (segment file minus embedded index).
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += total_segment_file_bytes - _total_index_size;
+        _total_data_size += total_segment_file_bytes - (_total_index_size - total_standalone_index_bytes);
+        _total_standalone_index_size += total_standalone_index_bytes;
     }
     return Status::OK();
 }

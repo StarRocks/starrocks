@@ -42,11 +42,13 @@
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "exec/exec_env.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -1453,5 +1455,180 @@ TEST_F(RowsetTest, vertical_writer_dtor_skips_builtin_gin_index) {
 
     rowset_writer.reset();
     ASSERT_FALSE(fs::path_exist(segment_path));
+}
+
+namespace {
+
+constexpr int64_t kVectorIndexId = 100;
+
+// id(BIGINT key) + v(ARRAY<FLOAT>) with an HNSW vector index on v. The index is a standalone
+// .vi file next to the segment, not part of the segment file.
+std::shared_ptr<TabletSchema> create_vector_index_tablet_schema() {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(1024);
+    schema_pb.set_next_column_unique_id(3);
+
+    auto* col0 = schema_pb.add_column();
+    col0->set_unique_id(0);
+    col0->set_name("id");
+    col0->set_type("BIGINT");
+    col0->set_is_key(true);
+    col0->set_is_nullable(false);
+    col0->set_length(8);
+    col0->set_index_length(8);
+    col0->set_aggregation("NONE");
+
+    auto* col1 = schema_pb.add_column();
+    col1->set_unique_id(1);
+    col1->set_name("v");
+    col1->set_type("ARRAY");
+    col1->set_is_key(false);
+    col1->set_is_nullable(false);
+    col1->set_length(24);
+    col1->set_aggregation("NONE");
+    auto* child = col1->add_children_columns();
+    child->set_unique_id(2);
+    child->set_name("element");
+    child->set_type("FLOAT");
+    child->set_is_key(false);
+    child->set_is_nullable(true);
+    child->set_length(4);
+    child->set_aggregation("NONE");
+
+    auto* idx = schema_pb.add_table_indices();
+    idx->set_index_id(kVectorIndexId);
+    idx->set_index_name("idx_v");
+    idx->set_index_type(IndexType::VECTOR);
+    idx->add_col_unique_id(1);
+    idx->set_index_properties(
+            R"({"common_properties":{"index_type":"hnsw","dim":"3","metric_type":"l2_distance","is_vector_normed":"false"},"index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})");
+
+    return TabletSchema::create(schema_pb);
+}
+
+void append_vector_rows(Chunk* chunk, const std::vector<uint32_t>& column_indexes, size_t num_rows) {
+    for (size_t i = 0; i < num_rows; ++i) {
+        size_t c = 0;
+        for (uint32_t column_index : column_indexes) {
+            if (column_index == 0) {
+                chunk->columns()[c]->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i)));
+            } else {
+                DatumArray arr{Datum(static_cast<float>(i)), Datum(static_cast<float>(i + 1)),
+                               Datum(static_cast<float>(i + 2))};
+                chunk->columns()[c]->as_mutable_ptr()->append_datum(Datum(arr));
+            }
+            ++c;
+        }
+    }
+}
+
+// data_disk_size must be the column-data bytes of the segment files: the standalone .vi bytes
+// are part of index_disk_size, but subtracting them from the segment file size as well drives
+// data_disk_size below zero as soon as the .vi outweighs the data (small vectors + HNSW graph).
+// The negative value then wraps through size_t in compaction statistics, produces negative
+// compaction scores and finally a SIGFPE in CompactionUtils::get_segment_max_rows.
+void check_vector_index_rowset_sizes(const RowsetSharedPtr& rowset, const RowsetWriterContext& ctx,
+                                     int64_t expected_num_rows) {
+    const auto& meta = rowset->rowset_meta();
+    ASSERT_EQ(expected_num_rows, meta->num_rows());
+    ASSERT_GE(meta->num_segments(), 1);
+
+    int64_t segment_file_bytes = 0;
+    int64_t standalone_index_bytes = 0;
+    for (int64_t seg = 0; seg < meta->num_segments(); ++seg) {
+        std::string segment_path = Rowset::segment_file_path(ctx.rowset_path_prefix, ctx.rowset_id, seg);
+        ASSIGN_OR_ABORT(auto seg_size, FileSystem::Default()->get_file_size(segment_path));
+        segment_file_bytes += static_cast<int64_t>(seg_size);
+
+        std::string vi_path = IndexDescriptor::vector_index_file_path(ctx.rowset_path_prefix, ctx.rowset_id.to_string(),
+                                                                      seg, kVectorIndexId);
+        ASSERT_TRUE(fs::path_exist(vi_path)) << vi_path;
+        ASSIGN_OR_ABORT(auto vi_size, FileSystem::Default()->get_file_size(vi_path));
+        ASSERT_GT(vi_size, 0);
+        standalone_index_bytes += static_cast<int64_t>(vi_size);
+    }
+
+    const int64_t data = static_cast<int64_t>(meta->data_disk_size());
+    const int64_t index = static_cast<int64_t>(meta->index_disk_size());
+    const int64_t total = static_cast<int64_t>(meta->total_disk_size());
+    const int64_t standalone = meta->standalone_index_size();
+    ASSERT_GT(data, 0) << "data=" << data << " index=" << index << " total=" << total;
+    ASSERT_GE(index, standalone_index_bytes);
+    ASSERT_EQ(total, data + index);
+    // The persisted standalone_index_size must equal the on-disk .vi bytes, so a consumer that
+    // starts from the segment file size (e.g. the primary-key apply path) can recover the
+    // embedded-only index bytes.
+    ASSERT_EQ(standalone, standalone_index_bytes);
+    // column data + embedded index == segment file bytes; the .vi is outside the segment files.
+    ASSERT_EQ(segment_file_bytes, data + (index - standalone));
+}
+
+} // namespace
+
+TEST_F(RowsetTest, horizontal_writer_standalone_vector_index_not_subtracted_from_data_size) {
+    const int32_t saved_threshold = config::config_vector_index_default_build_threshold;
+    config::config_vector_index_default_build_threshold = 1;
+    DeferOp restore([&] { config::config_vector_index_default_build_threshold = saved_threshold; });
+
+    auto tablet_schema = create_vector_index_tablet_schema();
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(12345, tablet_schema, &writer_context);
+    writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.writer_type = kHorizontal;
+    writer_context.max_rows_per_segment = 4096;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_OK(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
+
+    const size_t num_rows = 64;
+    std::vector<uint32_t> column_indexes{0, 1};
+    auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+    auto chunk = ChunkFactory::new_chunk(schema, num_rows);
+    append_vector_rows(chunk.get(), column_indexes, num_rows);
+    ASSERT_OK(rowset_writer->add_chunk(*chunk));
+    ASSERT_OK(rowset_writer->flush());
+
+    RowsetSharedPtr rowset = rowset_writer->build().value();
+    check_vector_index_rowset_sizes(rowset, writer_context, num_rows);
+}
+
+TEST_F(RowsetTest, vertical_writer_standalone_vector_index_not_subtracted_from_data_size) {
+    const int32_t saved_threshold = config::config_vector_index_default_build_threshold;
+    config::config_vector_index_default_build_threshold = 1;
+    DeferOp restore([&] { config::config_vector_index_default_build_threshold = saved_threshold; });
+
+    auto tablet_schema = create_vector_index_tablet_schema();
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(12345, tablet_schema, &writer_context);
+    writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.writer_type = kVertical;
+    writer_context.max_rows_per_segment = 4096;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_OK(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
+
+    const size_t num_rows = 64;
+    {
+        std::vector<uint32_t> column_indexes{0};
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
+        append_vector_rows(chunk.get(), column_indexes, num_rows);
+        ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
+        ASSERT_OK(rowset_writer->flush_columns());
+    }
+    {
+        std::vector<uint32_t> column_indexes{1};
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
+        append_vector_rows(chunk.get(), column_indexes, num_rows);
+        ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, false));
+        ASSERT_OK(rowset_writer->flush_columns());
+    }
+    ASSERT_OK(rowset_writer->final_flush());
+
+    RowsetSharedPtr rowset = rowset_writer->build().value();
+    check_vector_index_rowset_sizes(rowset, writer_context, num_rows);
 }
 } // namespace starrocks
