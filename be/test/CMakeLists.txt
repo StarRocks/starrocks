@@ -124,6 +124,7 @@ set(EXEC_FILES
         ./http/default_path_handlers_test.cpp
         ./http/dump_tablet_metadata_action_test.cpp
         ./http/handler_required_privilege_test.cpp
+        ./http/health_action_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
