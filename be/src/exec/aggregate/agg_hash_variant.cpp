@@ -100,6 +100,23 @@
     M(phase2_slice_cx8)              \
     M(phase2_slice_cx16)
 
+// Map-only variants: enum entries live in AggHashMapVariant::Type but
+// NOT in AggHashSetVariant::Type, so they must stay out of the shared
+// APPLY_FOR_AGG_VARIANT_ALL macro that AggHashSetVariant::init expands.
+#define APPLY_FOR_AGG_MAP_VARIANT_EXTRA(M) \
+    M(phase1_int32_range_uint16)           \
+    M(phase1_null_int32_range_uint16)      \
+    M(phase2_int32_range_uint16)           \
+    M(phase2_null_int32_range_uint16)      \
+    M(phase1_int32_range_uint8)            \
+    M(phase1_null_int32_range_uint8)       \
+    M(phase2_int32_range_uint8)            \
+    M(phase2_null_int32_range_uint8)
+
+#define APPLY_FOR_AGG_MAP_VARIANT_ALL(M) \
+    APPLY_FOR_AGG_VARIANT_ALL(M)         \
+    APPLY_FOR_AGG_MAP_VARIANT_EXTRA(M)
+
 namespace starrocks {
 namespace detail {
 template <AggHashMapVariant::Type>
@@ -149,6 +166,11 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx1, CompressedFixedSize1A
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx4, CompressedFixedSize4AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx8, CompressedFixedSize8AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_cx16, CompressedFixedSize16AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_int32_range_uint16, CompressibleInt32AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_int32_range_uint16, NullCompressibleInt32AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_int32_range_uint8, CompressibleInt32Uint8AggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_int32_range_uint8,
+                NullCompressibleInt32Uint8AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_uint8, UInt8AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int8, Int8AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int16, Int16AggHashMapWithOneNumberKey<PhmapSeed2>);
@@ -187,6 +209,11 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx1, CompressedFixedSize1A
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx4, CompressedFixedSize4AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx8, CompressedFixedSize8AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_cx16, CompressedFixedSize16AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int32_range_uint16, CompressibleInt32AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_int32_range_uint16, NullCompressibleInt32AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int32_range_uint8, CompressibleInt32Uint8AggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_int32_range_uint8,
+                NullCompressibleInt32Uint8AggHashMap<PhmapSeed2>);
 
 template <AggHashSetVariant::Type>
 struct AggHashSetVariantTypeTraits;
@@ -287,7 +314,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
         hash_map_with_key = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::NAME>::HashMapWithKeyType>( \
                 state->chunk_size(), _agg_stat);                                                                   \
         break;
-        APPLY_FOR_AGG_VARIANT_ALL(M)
+        APPLY_FOR_AGG_MAP_VARIANT_ALL(M)
 #undef M
     }
 }
