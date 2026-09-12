@@ -115,7 +115,11 @@ public class MVVersionManager {
                 }
             }
         }
-        copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        // A run that touches a base table without refreshing any of its partitions yields 0 here; keep the
+        // previous data timestamp rather than reporting the MV as never refreshed.
+        if (maxChangedTableRefreshTime > 0) {
+            copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        }
         // Freshness is confirmed as of the batch's first-run start (the pinned-snapshot moment), and only once
         // the batch's final run completes. Monotonic (>) so it can never move backwards.
         long freshnessBaseline = freshnessBaselineTime();

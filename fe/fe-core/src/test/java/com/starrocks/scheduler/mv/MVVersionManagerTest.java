@@ -14,9 +14,11 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -28,9 +30,11 @@ import com.starrocks.persist.WALApplier;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
@@ -42,8 +46,12 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MVVersionManagerTest {
 
@@ -74,6 +82,16 @@ public class MVVersionManagerTest {
             @Mock
             public EditLog getEditLog() {
                 return new EditLog(null);
+            }
+
+            @Mock
+            public MaterializedViewMgr getMaterializedViewMgr() {
+                return new MaterializedViewMgr();
+            }
+        };
+        new MockUp<MaterializedViewMgr>() {
+            @Mock
+            public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
             }
         };
     }
@@ -192,5 +210,29 @@ public class MVVersionManagerTest {
 
         Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
         Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    // A base table can be processed by a run without any of its partitions being refreshed: the run is not
+    // skipped (isOlapTableRefreshed is set unconditionally), but the derived max is 0.
+    @Test
+    public void updateMVVersionInfoKeepsLastRefreshTimeWhenNoPartitionWasRefreshed() {
+        long absorbedRefreshTime = 1767225600000L;
+        MaterializedView mv = buildMv(1000L);
+        mv.getRefreshScheme().setLastRefreshTime(absorbedRefreshTime);
+
+        OlapTable baseTable = mock(OlapTable.class);
+        when(baseTable.isNativeTableOrMaterializedView()).thenReturn(true);
+        when(baseTable.isOlapOrCloudNativeTable()).thenReturn(true);
+        when(baseTable.getId()).thenReturn(2000L);
+        when(baseTable.getVisiblePartitionNames()).thenReturn(Set.of());
+        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), baseTable);
+        Assertions.assertTrue(snapshot.getRefreshedPartitionInfos().isEmpty());
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        manager.updateMVVersionInfo(Map.of(2000L, snapshot), PCellSortedSet.of(), Set.of(2000L),
+                Map.of(), null, true);
+
+        Assertions.assertEquals(absorbedRefreshTime, mv.getRefreshScheme().getLastRefreshTime(),
+                "a run that refreshed no partition must not report the MV as never refreshed");
     }
 }
