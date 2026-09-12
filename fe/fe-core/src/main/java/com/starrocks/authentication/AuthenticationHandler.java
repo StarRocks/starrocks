@@ -72,7 +72,9 @@ public class AuthenticationHandler {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, authResponse.length == 0 ? "NO" : "YES");
         }
 
+        ConnectContext.set(context);
         setAuthenticationResultToContext(context, authenticationResult);
+        ConnectContext.remove();
         return authenticationResult.authenticatedUser;
     }
 
