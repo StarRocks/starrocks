@@ -371,6 +371,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_sch
     }
 
     _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
+    _double_write_phase = tablet_meta_pb.double_write_phase();
     _primary_index_cache_expire_sec = tablet_meta_pb.primary_index_cache_expire_sec();
 
     if (tablet_meta_pb.has_source_schema()) {
@@ -450,6 +451,7 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
     }
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
+    tablet_meta_pb->set_double_write_phase(_double_write_phase);
     tablet_meta_pb->set_primary_index_cache_expire_sec(_primary_index_cache_expire_sec);
 
     if (_source_schema != nullptr) {
