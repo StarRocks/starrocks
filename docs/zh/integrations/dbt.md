@@ -24,8 +24,13 @@ import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 |        ✅        |        ✅         |    增量物化    |
 |        ✅        |        ✅         |         主键模型         |
 |        ✅        |        ✅         |              源              |
-|        ✅        |        ✅         |         自定义数据测试         |
+|        ✅        |        ✅         | 数据测试（通用测试和单一测试） |
+|        ✅        |        ✅         |            单元测试             |
+|        ✅        |        ✅         |        存储测试失败记录        |
+|        ✅        |        ✅         |  源数据新鲜度（`loaded_at_field`） |
+|        ❌        |        ❌         |    基于元数据的源数据新鲜度    |
 |        ✅        |        ✅         |           文档生成           |
+|        ❌        |        ❌         |          `persist_docs`           |
 |        ✅        |        ✅         |       表达式分区        |
 |        ❌        |        ❌         |               Kafka               |
 |        ❌        |        ✅         |         动态覆盖         |
@@ -296,6 +301,120 @@ FROM {{ source('raw', 'events') }}
 
 :::note
 目前不支持增量合并。
+:::
+
+## 测试
+
+`dbt-starrocks` 支持 dbt 的所有测试类型，无需任何适配器专属配置。测试会被编译为标准 SQL，由 StarRocks 直接执行。
+
+### 数据测试
+
+支持四种内置通用测试（`not_null`、`unique`、`accepted_values` 和 `relationships`），同时也支持在 `macros/` 中定义的自定义通用测试，以及在 `test-paths` 下以 `.sql` 文件定义的单一测试。
+
+```yml
+models:
+  - name: stg_customers
+    columns:
+      - name: id
+        data_tests: [not_null, unique]
+      - name: region
+        data_tests:
+          - accepted_values:
+              values: ['us', 'eu']
+          - relationships:
+              to: ref('dim_customers')
+              field: region
+```
+
+测试严重级别相关配置（`severity`、`error_if`、`warn_if`、`fail_calc` 和 `limit`）由 dbt 在 SQL 下发到 StarRocks 之前处理，其行为与在其他适配器上一致。
+
+### 单元测试
+
+支持单元测试。dbt 会将测试数据直接内联到编译后的查询中，因此不会向 StarRocks 写入任何数据：
+
+```yml
+unit_tests:
+  - name: test_dim_customers_counts
+    model: dim_customers
+    given:
+      - input: ref('stg_customers')
+        rows:
+          - {id: 1, name: 'a', region: 'us'}
+          - {id: 2, name: 'b', region: 'us'}
+    expect:
+      rows:
+        - {region: 'us', n: 2}
+```
+
+运行单元测试：
+
+```sh
+dbt test --select test_type:unit
+```
+
+### 存储测试失败记录
+
+支持 `dbt test --store-failures`、`store_failures` 配置项以及 `store_failures_as`（`table` 或 `view`）。失败的数据行会被写入名为 `<schema>_dbt_test__audit` 的独立数据库中，如果该数据库不存在，适配器会自动创建：
+
+```sql
+SELECT * FROM `analytics_dbt_test__audit`.`not_null_stg_customers_name`;
+```
+
+失败记录表通过 `CREATE TABLE AS` 创建，因此支持与表物化相同的配置选项。您可以借此控制失败记录表的存储方式：
+
+```yml
+      - name: name
+        data_tests:
+          - not_null:
+              config:
+                store_failures: true
+                alias: nn_name_failures
+                distributed_by: ['id']
+                buckets: 3
+```
+
+如果未指定 `distributed_by`，失败记录表将采用随机分桶方式创建。
+
+:::tip
+`store_failures_as: view` 会将失败的数据行存储为视图而非表，从而避免在每次测试运行时创建并重新写入表。
+:::
+
+### 源数据新鲜度
+
+`dbt source freshness` 要求每个源表都声明 `loaded_at_field`：
+
+```yml
+sources:
+  - name: raw
+    tables:
+      - name: events
+        loaded_at_field: updated_at
+        freshness:
+          warn_after: {count: 1, period: hour}
+          error_after: {count: 24, period: hour}
+```
+
+:::warning
+不支持基于元数据的新鲜度检查。如果省略 `loaded_at_field`，检查将失败并报错 `no 'loaded_at_field' provided and starrocks adapter does not support metadata-based freshness checks`。因此，每个需要进行新鲜度检查的源表都必须包含一个时间戳列。
+:::
+
+## 生成文档
+
+`dbt docs generate` 通过查询 `information_schema.tables` 和 `information_schema.columns` 来构建项目目录。模型、种子数据、视图、物化视图和源都会被包含在内，并附带各自的列、列序号和数据类型。`dbt docs generate --static` 和 `dbt docs serve` 同样可用。
+
+您在 `.yml` 文件中编写的描述信息来自 dbt manifest，因此会照常显示在文档站点中。但以下元数据不会从 StarRocks 中采集：
+
+- 存储在数据库中的表注释和列注释。
+- 表的所有者。
+- 表的统计信息，例如行数和大小。
+
+此外，以下两点会影响关系的描述方式：
+
+- 列类型不带精度信息。`VARCHAR(64)` 列会显示为 `varchar`，`DECIMAL(18,4)` 列会显示为 `decimal`。如需确认精确类型，请使用 [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md)。
+- 物化视图会被记录为视图。此行为仅影响文档站点，不影响 `dbt run`。
+
+:::warning
+不支持 `persist_docs`。在视图、增量和快照模型上，它会失败并报错 `alter_relation_comment macro not implemented for adapter starrocks`；在表模型上，它会被静默忽略，不会写入任何注释。请勿在 `dbt_project.yml` 中设置 `persist_docs`，因为该配置会作用于项目中的所有模型。
 :::
 
 ## 故障排除
