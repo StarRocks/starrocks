@@ -1243,9 +1243,9 @@ TEST_F(TransactionStreamLoadActionTest, on_header_channel_id_rejected) {
     TestCase test_cases[] = {
             {"not-a-number", "The value must be an integer"},
             {"1abc", "The value must be an integer"},
-            {"99999999999999999999", "The value must be an integer"},
-            {"-1", "non-negative 32-bit integer"},
-            {"2147483648", "non-negative 32-bit integer"},
+            {"99999999999999999999", "must be between 0 and 2147483647"},
+            {"-1", "must be between 0 and 2147483647"},
+            {"2147483648", "must be between 0 and 2147483647"},
     };
 
     for (const auto& tc : test_cases) {
@@ -1291,15 +1291,19 @@ TEST_F(TransactionStreamLoadActionTest, on_header_channel_id_accepted) {
             << doc["Message"].GetString();
 }
 
-TEST_F(TransactionStreamLoadActionTest, on_header_content_length_rejected) {
+TEST_F(TransactionStreamLoadActionTest, on_header_numeric_headers_rejected) {
     struct TestCase {
+        std::string header;
         std::string value;
         std::string expected_message;
     };
     TestCase test_cases[] = {
-            {"not-a-number", "The value must be an integer"},
-            {"99999999999999999999", "The value must be an integer"},
-            {"-1", "must not be negative"},
+            {HttpHeaders::CONTENT_LENGTH, "not-a-number", "The value must be an integer"},
+            {HttpHeaders::CONTENT_LENGTH, "99999999999999999999", "must be between 0 and"},
+            {HttpHeaders::CONTENT_LENGTH, "-1", "must be between 0 and"},
+            {HTTP_LOAD_DOP, "not-a-number", "The value must be an integer"},
+            // load_dop is an i32 on the wire; a wider value used to be truncated.
+            {HTTP_LOAD_DOP, "2147483648", "must be between -2147483648 and 2147483647"},
     };
 
     for (const auto& tc : test_cases) {
@@ -1309,7 +1313,7 @@ TEST_F(TransactionStreamLoadActionTest, on_header_content_length_rejected) {
         ctx->ref();
         ctx->db = "db";
         ctx->table = "tbl";
-        ctx->label = "content_length_rejected";
+        ctx->label = "numeric_headers_rejected";
         ctx->body_sink = std::make_shared<StreamLoadPipe>();
         bool remove_from_stream_context_mgr = false;
         DeferOp defer([&]() {
@@ -1329,14 +1333,18 @@ TEST_F(TransactionStreamLoadActionTest, on_header_content_length_rejected) {
         request._headers.emplace(HTTP_DB_KEY, ctx->db);
         request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
         request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
-        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, tc.value);
+        if (tc.header != HttpHeaders::CONTENT_LENGTH) {
+            request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+            request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        }
+        request._headers.emplace(tc.header, tc.value);
 
-        ASSERT_EQ(-1, action.on_header(&request)) << tc.value;
+        ASSERT_EQ(-1, action.on_header(&request)) << tc.header << ": " << tc.value;
 
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
         ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_message.c_str()))
-                << tc.value << " -> " << doc["Message"].GetString();
+                << tc.header << ": " << tc.value << " -> " << doc["Message"].GetString();
     }
 }
 

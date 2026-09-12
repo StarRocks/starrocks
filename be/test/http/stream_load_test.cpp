@@ -870,7 +870,7 @@ TEST_F(StreamLoadActionTest, numeric_headers_rejected) {
         std::string expected_message;
     };
     TestCase test_cases[] = {
-            {HttpHeaders::CONTENT_LENGTH, "-1", "must not be negative"},
+            {HttpHeaders::CONTENT_LENGTH, "-1", "must be between 0 and"},
             {HTTP_SKIP_HEADER, "not-a-number", "skip_header"},
             {HTTP_SKIP_HEADER, "1abc", "skip_header"},
             {HTTP_SKIP_HEADER, "-1", "skip_header must be equal or greater than 0"},
@@ -879,6 +879,9 @@ TEST_F(StreamLoadActionTest, numeric_headers_rejected) {
             {HTTP_LOAD_MEM_LIMIT, "-1", "load_mem_limit must be equal or greater than 0"},
             {HTTP_LOAD_DOP, "not-a-number", "load_dop"},
             {HTTP_LOAD_DOP, "99999999999999999999", "load_dop"},
+            // load_dop is an i32 on the wire; a wider value used to be truncated.
+            {HTTP_LOAD_DOP, "2147483648", "must be between -2147483648 and 2147483647"},
+            {HTTP_LOAD_DOP, "-2147483649", "must be between -2147483648 and 2147483647"},
             {HTTP_LOG_REJECTED_RECORD_NUM, "not-a-number", "log_rejected_record_num"},
             {HTTP_LOG_REJECTED_RECORD_NUM, "99999999999999999999", "log_rejected_record_num"},
             {HTTP_LOG_REJECTED_RECORD_NUM, "-2", "log_rejected_record_num must be equal or greater than -1"},

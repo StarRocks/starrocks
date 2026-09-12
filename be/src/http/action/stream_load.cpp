@@ -34,8 +34,10 @@
 
 #include "http/action/stream_load.h"
 
+#include <cstdint>
 #include <deque>
 #include <future>
+#include <limits>
 #include <sstream>
 
 // use string iequal
@@ -313,12 +315,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     if (!http_req->header(HttpHeaders::CONTENT_LENGTH).empty()) {
         int64_t body_bytes = 0;
         RETURN_IF_ERROR(parse_int64_load_header(HttpHeaders::CONTENT_LENGTH,
-                                                http_req->header(HttpHeaders::CONTENT_LENGTH), &body_bytes));
-        if (body_bytes < 0) {
-            return Status::InvalidArgument(
-                    fmt::format("Invalid parameter {}. The value must not be negative, but is {}",
-                                HttpHeaders::CONTENT_LENGTH, http_req->header(HttpHeaders::CONTENT_LENGTH)));
-        }
+                                                http_req->header(HttpHeaders::CONTENT_LENGTH), &body_bytes, 0));
         ctx->body_bytes = body_bytes;
         if (ctx->body_bytes > max_body_bytes) {
             std::stringstream ss;
@@ -633,8 +630,11 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     }
     if (!http_req->header(HTTP_LOAD_DOP).empty()) {
         int64_t parallel_request_num = 0;
-        RETURN_IF_ERROR(parse_int64_load_header(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num));
-        request.__set_load_dop(parallel_request_num);
+        // load_dop is an i32 on the wire, so a wider value used to be truncated.
+        RETURN_IF_ERROR(parse_int64_load_header(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num,
+                                                std::numeric_limits<int32_t>::min(),
+                                                std::numeric_limits<int32_t>::max()));
+        request.__set_load_dop(static_cast<int32_t>(parallel_request_num));
     }
     if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
         int64_t log_rejected_record_num = 0;

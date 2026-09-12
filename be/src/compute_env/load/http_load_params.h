@@ -34,12 +34,13 @@
 
 #pragma once
 
-#include <fmt/format.h>
-
+#include <cstdint>
+#include <limits>
 #include <string>
 
 #include "base/status.h"
 #include "base/string/string_parser.hpp"
+#include "fmt/format.h"
 
 namespace starrocks {
 
@@ -106,13 +107,25 @@ static const std::string HTTP_WAREHOUSE = "warehouse";
 // are handled inside a libevent callback that has no handler above it, so an
 // escaping exception terminates the process instead of failing the one
 // request. StringParser reports both conditions through a return code.
-inline Status parse_int64_load_header(const std::string& name, const std::string& value, int64_t* result) {
+//
+// min and max bound the accepted value, so a caller whose field is narrower
+// than int64_t does not have to repeat the check and cannot silently truncate.
+// A value that overflows int64_t is reported the same way as one that misses
+// those bounds, since from the client's side it is the same mistake.
+inline Status parse_int64_load_header(const std::string& name, const std::string& value, int64_t* result,
+                                      int64_t min = std::numeric_limits<int64_t>::min(),
+                                      int64_t max = std::numeric_limits<int64_t>::max()) {
     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-    *result = StringParser::string_to_int<int64_t>(value.data(), value.length(), &parse_result);
-    if (parse_result != StringParser::PARSE_SUCCESS) {
+    int64_t parsed = StringParser::string_to_int<int64_t>(value.data(), value.length(), &parse_result);
+    if (parse_result == StringParser::PARSE_FAILURE) {
         return Status::InvalidArgument(
                 fmt::format("Invalid parameter {}. The value must be an integer, but is {}", name, value));
     }
+    if (parse_result != StringParser::PARSE_SUCCESS || parsed < min || parsed > max) {
+        return Status::InvalidArgument(fmt::format(
+                "Invalid parameter {}. The value must be between {} and {}, but is {}", name, min, max, value));
+    }
+    *result = parsed;
     return Status::OK();
 }
 
