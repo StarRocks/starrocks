@@ -41,6 +41,9 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnStateCallbackFactory;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -137,5 +140,101 @@ public class InsertLoadJobTest {
             Assertions.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
             Assertions.assertTrue(loadJob.getTabletFailInfos().isEmpty());
         }
+    }
+
+    /**
+     * Verifies that {@code replayOnVisible} transitions the job to FINISHED.
+     *
+     * <p>This regression test covers the scenario where FE crashes between the
+     * txn VISIBLE journal write and the OP_END_LOAD_JOB_V2 write; after restart
+     * the transaction-manager replay should call replayOnVisible and the job must
+     * be marked FINISHED rather than remaining stuck in QUEUEING.
+     */
+    @Test
+    public void testReplayOnVisible(@Mocked GlobalStateMgr globalStateMgr,
+                                    @Injectable GlobalTransactionMgr globalTransactionMgr,
+                                    @Injectable TxnStateCallbackFactory callbackFactory,
+                                    @Injectable TransactionState txnState) throws MetaNotFoundException {
+        InsertLoadJob insertLoadJob = new InsertLoadJob("label_visible", 1L, 1L, 1000, "", "", null);
+        // Override state to simulate a mid-execution job (as if FE crashed)
+        Deencapsulation.setField(insertLoadJob, "state", JobState.LOADING);
+        Deencapsulation.setField(insertLoadJob, "progress", 50);
+
+        long finishMs = System.currentTimeMillis();
+        new Expectations() {
+            {
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = globalTransactionMgr;
+
+                globalTransactionMgr.getCallbackFactory();
+                minTimes = 0;
+                result = callbackFactory;
+
+                callbackFactory.removeCallback(anyLong);
+                minTimes = 0;
+
+                txnState.getFinishTime();
+                minTimes = 0;
+                result = finishMs;
+            }
+        };
+
+        insertLoadJob.replayOnVisible(txnState);
+
+        Assertions.assertEquals(JobState.FINISHED, insertLoadJob.getState());
+        Assertions.assertEquals(100, insertLoadJob.getProgress());
+        Assertions.assertNull(insertLoadJob.getFailMsg());
+        Assertions.assertEquals(finishMs, insertLoadJob.getFinishTimestamp());
+    }
+
+    /**
+     * Verifies that {@code replayOnAborted} transitions the job to CANCELLED.
+     *
+     * <p>This regression test covers the scenario where FE crashes between the
+     * txn ABORTED journal write and the OP_END_LOAD_JOB_V2 write; after restart
+     * the transaction-manager replay should call replayOnAborted and the job must
+     * be marked CANCELLED rather than remaining stuck in QUEUEING.
+     */
+    @Test
+    public void testReplayOnAborted(@Mocked GlobalStateMgr globalStateMgr,
+                                    @Injectable GlobalTransactionMgr globalTransactionMgr,
+                                    @Injectable TxnStateCallbackFactory callbackFactory,
+                                    @Injectable TransactionState txnState) throws MetaNotFoundException {
+        InsertLoadJob insertLoadJob = new InsertLoadJob("label_aborted", 1L, 1L, 1000, "", "", null);
+        Deencapsulation.setField(insertLoadJob, "state", JobState.LOADING);
+        Deencapsulation.setField(insertLoadJob, "progress", 50);
+
+        long finishMs = System.currentTimeMillis();
+        String failReason = "transaction aborted by user";
+        new Expectations() {
+            {
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = globalTransactionMgr;
+
+                globalTransactionMgr.getCallbackFactory();
+                minTimes = 0;
+                result = callbackFactory;
+
+                callbackFactory.removeCallback(anyLong);
+                minTimes = 0;
+
+                txnState.getFinishTime();
+                minTimes = 0;
+                result = finishMs;
+
+                txnState.getReason();
+                minTimes = 0;
+                result = failReason;
+            }
+        };
+
+        insertLoadJob.replayOnAborted(txnState);
+
+        Assertions.assertEquals(JobState.CANCELLED, insertLoadJob.getState());
+        Assertions.assertNotNull(insertLoadJob.getFailMsg());
+        Assertions.assertEquals(failReason, insertLoadJob.getFailMsg().getMsg());
+        Assertions.assertEquals(finishMs, insertLoadJob.getFinishTimestamp());
     }
 }
