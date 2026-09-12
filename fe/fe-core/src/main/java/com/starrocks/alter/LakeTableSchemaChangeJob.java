@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -797,6 +798,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         // Replace the current index with shadow index.
+        Set<String> statsInvalidatedColumns = Sets.newHashSet();
+        OlapTable finishedTable = null;
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTable();
             if (table == null) {
@@ -806,6 +809,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             // collect modified columns for inactivating mv
             // Note: should collect before visualiseShadowIndex
             Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
+            // Collect the columns whose type change invalidates their statistics
+            statsInvalidatedColumns =
+                    AlterHelper.collectStatsInvalidatedColumns(table, indexMetaIdToSchema, indexMetaIdMap);
+            finishedTable = table;
             this.finishedTimeMs = System.currentTimeMillis();
 
             persistStateChange(this, JobState.FINISHED, () -> {
@@ -820,6 +827,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         if (jobState == JobState.FINISHED) {
             AlterMetricRegistry.getInstance().updateAlterDuration(
                     AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
+            // Leader-only cleanup of the now-invalid statistics of type-changed columns, outside the
+            // edit-log applier and after the table lock is released (issues internal DML, writes its
+            // own edit log entry, submits an async re-collection). Followers converge via the
+            // replayed OP_ADD_BASIC_STATS_META entries.
+            if (finishedTable != null) {
+                StatisticUtils.dropStatisticsAfterTypeChange(dbId, finishedTable, statsInvalidatedColumns);
+            }
         }
 
         if (span != null) {
