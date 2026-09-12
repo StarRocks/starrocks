@@ -28,9 +28,11 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -64,9 +66,41 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalIcebergMetadataScanOperator operator = input.getOp().cast();
+        Map<ColumnRefOperator, Column> originalColRefMap = operator.getColRefToColumnMetaMap();
+        Map<Column, ColumnRefOperator> originalColumnMetaToColRefMap = operator.getColumnMetaToColRefMap();
+
+        Map<String, ColumnRefOperator> refsByName = new HashMap<>();
+        for (ColumnRefOperator ref : originalColRefMap.keySet()) {
+            refsByName.put(ref.getName(), ref);
+        }
+
+        // Iceberg snapshot ids are not monotonic with commit time, so aggregating
+        // last_updated_snapshot_id independently from last_updated_at (e.g. max() on each) can
+        // pick the snapshot id and the timestamp from different scan rows. To return a coherent
+        // pair we use max_by(last_updated_snapshot_id, last_updated_at), which requires the
+        // last_updated_at column to be present in the scan output. If the user did not request
+        // it, force-include it here and hide it again via a project on top of the aggregation.
+        ColumnRefOperator syntheticLastUpdatedAt = null;
+        Map<ColumnRefOperator, Column> scanColRefMap = originalColRefMap;
+        Map<Column, ColumnRefOperator> scanColumnMetaToColRefMap = originalColumnMetaToColRefMap;
+        if (refsByName.containsKey("last_updated_snapshot_id") && !refsByName.containsKey("last_updated_at")) {
+            Column lastUpdatedAtCol = operator.getTable().getColumn("last_updated_at");
+            if (lastUpdatedAtCol == null) {
+                throw new StarRocksConnectorException(
+                        "Missing last_updated_at column in iceberg_partitions_table metadata schema");
+            }
+            syntheticLastUpdatedAt = context.getColumnRefFactory().create(
+                    "last_updated_at", lastUpdatedAtCol.getType(), lastUpdatedAtCol.isAllowNull());
+            scanColRefMap = new HashMap<>(originalColRefMap);
+            scanColRefMap.put(syntheticLastUpdatedAt, lastUpdatedAtCol);
+            scanColumnMetaToColRefMap = new HashMap<>(originalColumnMetaToColRefMap);
+            scanColumnMetaToColRefMap.put(lastUpdatedAtCol, syntheticLastUpdatedAt);
+            refsByName.put("last_updated_at", syntheticLastUpdatedAt);
+        }
+
         List<ColumnRefOperator> groupingKeys = new ArrayList<>();
         Map<ColumnRefOperator, CallOperator> aggregations = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, Column> entries : operator.getColRefToColumnMetaMap().entrySet()) {
+        for (Map.Entry<ColumnRefOperator, Column> entries : originalColRefMap.entrySet()) {
             ColumnRefOperator columnRefOperator = entries.getKey();
             Column column = entries.getValue();
             CallOperator agg = null;
@@ -95,6 +129,14 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
                     fun = ExprUtils.getBuiltinFunction("max", argTypes, Function.CompareMode.IS_IDENTICAL);
                     agg = new CallOperator("max", DateType.DATETIME, Lists.newArrayList(columnRefOperator), fun);
                     break;
+                case "last_updated_snapshot_id": {
+                    ColumnRefOperator lastUpdatedAtRef = refsByName.get("last_updated_at");
+                    Type[] maxByArgs = new Type[] {column.getType(), lastUpdatedAtRef.getType()};
+                    fun = ExprUtils.getBuiltinFunction("max_by", maxByArgs, Function.CompareMode.IS_IDENTICAL);
+                    agg = new CallOperator("max_by", IntegerType.BIGINT,
+                            Lists.newArrayList(columnRefOperator, lastUpdatedAtRef), fun);
+                    break;
+                }
                 default:
                     throw new StarRocksConnectorException("Unknown column name %s when rewriting " +
                             "iceberg partitions table", columnName);
@@ -105,14 +147,24 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
             }
         }
 
-        LogicalAggregationOperator agg = new LogicalAggregationOperator(AggType.GLOBAL, groupingKeys, aggregations);
+        LogicalAggregationOperator aggOp = new LogicalAggregationOperator(AggType.GLOBAL, groupingKeys, aggregations);
         LogicalIcebergMetadataScanOperator newScanOp = new LogicalIcebergMetadataScanOperator(
                 operator.getTable(),
-                operator.getColRefToColumnMetaMap(),
-                operator.getColumnMetaToColRefMap(),
+                scanColRefMap,
+                scanColumnMetaToColRefMap,
                 operator.getLimit(),
                 operator.getPredicate());
         newScanOp.setTransformed(true);
-        return Collections.singletonList(OptExpression.create(agg, OptExpression.create(newScanOp)));
+        OptExpression aggExpr = OptExpression.create(aggOp, OptExpression.create(newScanOp));
+
+        if (syntheticLastUpdatedAt == null) {
+            return Collections.singletonList(aggExpr);
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
+        for (ColumnRefOperator ref : originalColRefMap.keySet()) {
+            projectMap.put(ref, ref);
+        }
+        return Collections.singletonList(OptExpression.create(new LogicalProjectOperator(projectMap), aggExpr));
     }
 }
