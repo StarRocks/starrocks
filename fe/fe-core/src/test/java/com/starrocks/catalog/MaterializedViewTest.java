@@ -963,6 +963,10 @@ public class MaterializedViewTest extends StarRocksTestBase {
 
     @Test
     public void testCreateMVWithCoolDownTime() throws Exception {
+        // The assertions below pin the exact "never cool down" epoch, which is only expressible as a
+        // DATETIME literal at or west of the +08:00 storage zone. Pin the session zone so the test does
+        // not depend on the machine's zone (SessionVariable defaults to TimeUtils.getSystemTimeZone()).
+        connectContext.getSessionVariable().setTimeZone("Asia/Shanghai");
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.table1\n" +
                         "(\n" +
@@ -1029,6 +1033,44 @@ public class MaterializedViewTest extends StarRocksTestBase {
                 DataProperty.getInferredDefaultDataProperty(), false);
         Assertions.assertTrue(mockDataProperty.getCooldownTimeMs() < 253402271999000L);
         // misbehavior
+    }
+
+    @Test
+    public void testCoolDownTimeOfPartitionPropertiesEastOfStorageZone() throws Exception {
+        // The "never cool down" cooldown is stored as 9999-12-31 23:59:59 in the fixed +08:00 cluster
+        // zone, so it is not expressible as a DATETIME in a session time zone east of +08:00. Both
+        // zones are pinned here because the stored value is zone independent while the rendered
+        // literal is not: an FE reading this metadata with time_zone = Asia/Seoul used to render
+        // "+10000-01-01 00:59:59", which analyzeDataProperty rejects, so adding a partition to the MV
+        // failed and the refresh stopped making progress.
+        String originalTimeZone = connectContext.getSessionVariable().getTimeZone();
+        try {
+            connectContext.getSessionVariable().setTimeZone("Asia/Shanghai");
+            starRocksAssert.withMaterializedView("create materialized view mv_cooldown_east_of_utc8 " +
+                    "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 REFRESH MANUAL PROPERTIES (" +
+                    "\"replication_num\" = \"1\"," +
+                    "\"storage_medium\" = \"SSD\"," +
+                    "\"storage_cooldown_time\" = \"9999-12-31 23:59:59\")" +
+                    "as select k2, sum(v1) as total from base_t1 group by k2;");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDb("test").getTable("mv_cooldown_east_of_utc8");
+            Assertions.assertEquals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS),
+                    mv.getTableProperty().getProperties().get("storage_cooldown_time"));
+
+            connectContext.getSessionVariable().setTimeZone("Asia/Seoul");
+            Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
+            Assertions.assertEquals("9999-12-31 23:59:59", partitionProperties.get("storage_cooldown_time"));
+
+            // The bounded literal still means "never cool down": every consumer compares the cooldown
+            // against the current time, and this is the furthest instant Asia/Seoul (+09:00) can name.
+            DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(partitionProperties,
+                    DataProperty.getInferredDefaultDataProperty(), false);
+            Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS - 3600 * 1000L,
+                    dataProperty.getCooldownTimeMs());
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(originalTimeZone);
+            starRocksAssert.dropMaterializedView("mv_cooldown_east_of_utc8");
+        }
     }
 
     @Test
