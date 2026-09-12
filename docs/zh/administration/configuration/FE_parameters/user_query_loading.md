@@ -409,6 +409,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，StarRocks 将尝试在基外部表被删除并重新创建或其表标识符更改时自动修复物化视图基表元数据。修复流程可以更新物化视图的基表信息，收集外部表分区的分区级修复信息，并推动异步自动刷新物化视图的分区刷新决策，同时遵守 `autoRefreshPartitionsLimit`。目前自动修复支持 Hive 外部表；不支持的表类型将导致物化视图设置为非活动状态并引发修复异常。分区信息收集是非阻塞的，失败将被记录。
 - 引入版本: v3.3.19, v3.4.8, v3.5.6
 
+### `enable_mv_on_iceberg_table_with_partition_evolution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否允许在发生过 Partition Evolution（即表元数据中保留了多个 partition spec）的 Iceberg 基表上创建和刷新物化视图。默认情况下，只要 Iceberg 基表的 `specs()` 数量大于 1，StarRocks 就会拒绝 `CREATE MATERIALIZED VIEW` 和物化视图刷新，并抛出 `Do not support create materialized view when base iceberg table ... has done partition evolution` 错误。当此项设置为 `true` 时，该限制会被放宽：只要 Iceberg 表当前 snapshot 中所有存活 manifest 的 partition spec id 都等于表的 currentSpec（一般是在执行过 `REWRITE DATA` / `REWRITE MANIFESTS` 将历史 spec 的数据全部重写到最新 spec 后的状态），StarRocks 就允许创建和刷新对应的物化视图。如果仍存在指向非当前 spec 的存活 manifest，创建和刷新仍然会以 Partition Evolution 相关错误失败，以避免读到跨 spec 的不一致数据。
+- 引入版本: -
+
 ### `enable_predicate_columns_collection`
 
 - 默认值: true

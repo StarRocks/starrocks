@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
@@ -30,17 +31,21 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.types.Types;
@@ -253,6 +258,65 @@ public class IcebergPartitionUtils {
                 transform == IcebergPartitionTransform.HOUR ||
                 transform == IcebergPartitionTransform.BUCKET ||
                 transform == IcebergPartitionTransform.TRUNCATE;
+    }
+
+    public static boolean checkPartitionTransformCompatibleWithSpec(IcebergTable table,
+                                                                    Expr partitionByExpr,
+                                                                    SlotRef slotRef) {
+        Table icebergTable = table.getNativeTable();
+        PartitionSpec partitionSpec = icebergTable.spec();
+        for (PartitionField partitionField : partitionSpec.fields()) {
+            String partitionColumnName = icebergTable.schema().findColumnName(partitionField.sourceId());
+            if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
+                IcebergPartitionTransform transform =
+                        IcebergPartitionTransform.fromString(partitionField.transform().toString());
+                switch (transform) {
+                    case YEAR:
+                    case MONTH:
+                    case DAY:
+                    case HOUR:
+                        if (!isDateTruncWithUnit(partitionByExpr, transform.name())) {
+                            throw new StarRocksConnectorException("Materialized view partition expr %s " +
+                                    "must be the same with base table partition transform %s, please use date_trunc" +
+                                    "(<transform>, <partition_colum_name>) instead.",
+                                    ExprToSql.toSql(partitionByExpr), transform.name());
+                        }
+
+                        return true;
+                    case IDENTITY:
+                        if (!(partitionByExpr instanceof SlotRef) && !MvUtils.isStr2Date(partitionByExpr) &&
+                                !MvUtils.isFuncCallExpr(partitionByExpr, FunctionSet.DATE_TRUNC)) {
+                            throw new StarRocksConnectorException("Materialized view partition expr %s: " +
+                                    "only support ref partition column for transform %s, please use " +
+                                    "<partition_column_name> instead.",
+                                    ExprToSql.toSql(partitionByExpr), transform.name());
+                        }
+
+                        return false;
+                    default:
+                        throw new StarRocksConnectorException("Do not support materialized view when " +
+                                "base iceberg table partition transform is: " + transform.name());
+                }
+            }
+        }
+
+        throw new StarRocksConnectorException("Materialized view partition expr %s is no longer compatible with " +
+                "base Iceberg table current partition spec: partition column %s is not found in current " +
+                "partition spec.", ExprToSql.toSql(partitionByExpr), slotRef.getColumnName());
+    }
+
+    private static boolean isDateTruncWithUnit(Expr partitionExpr, String timeUnit) {
+        if (MvUtils.isFuncCallExpr(partitionExpr, FunctionSet.DATE_TRUNC)) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+            if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
+                return false;
+            }
+
+            StringLiteral stringLiteral = (StringLiteral) functionCallExpr.getChild(0);
+            return stringLiteral.getStringValue().equalsIgnoreCase(timeUnit);
+        }
+
+        return false;
     }
 
     public static LocalDateTime addDateTimeInterval(LocalDateTime dateTime, IcebergPartitionTransform transform) {

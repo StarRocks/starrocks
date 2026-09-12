@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
@@ -25,6 +26,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,6 +38,7 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -128,7 +133,7 @@ public class MaterializedViewAnalyzerTest {
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().
-                    contains("Do not support create materialized view when base iceberg table partition transform "));
+                    contains("Do not support materialized view when base iceberg table partition transform is: "));
         }
     }
 
@@ -634,6 +639,75 @@ public class MaterializedViewAnalyzerTest {
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("partition evolution"));
         }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergTableWithPartitionEvolutionAllowedByConfig() throws Exception {
+        boolean originalConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution;
+        Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
+        String partitionedMvName = "iceberg_evolution_partitioned_mv_allowed";
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + partitionedMvName + "`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY date_trunc('month', ts)\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                            + "`t0_date_month_identity_evolution` as a;");
+            Table mv = starRocksAssert.getTable("test", partitionedMvName);
+            Assertions.assertTrue(mv instanceof MaterializedView);
+            starRocksAssert.dropMaterializedView(partitionedMvName);
+        } finally {
+            Config.enable_mv_on_iceberg_table_with_partition_evolution = originalConfig;
+        }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergTableIncompatibleTransformEvenWhenAllowed() throws Exception {
+        boolean originalConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution;
+        Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
+        String partitionedMvName = "iceberg_evolution_partitioned_mv_incompat";
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + partitionedMvName + "`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY date_trunc('day', ts)\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                            + "`t0_date_month_identity_evolution` as a;");
+            Assertions.fail("Should fail because MV partition expr (day) is not compatible with base table "
+                    + "current spec transform (month)");
+        } catch (Exception e) {
+            String msg = e.getMessage() == null ? "" : e.getMessage();
+            Assertions.assertTrue(msg.contains("must be the same with base table partition transform")
+                            || msg.toUpperCase().contains("MONTH"),
+                    "Unexpected error message: " + msg);
+        } finally {
+            Config.enable_mv_on_iceberg_table_with_partition_evolution = originalConfig;
+        }
+    }
+
+    @Test
+    public void testIcebergPartitionTransformCheckRejectsMissingCurrentSpecField() {
+        IcebergTable table = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(starRocksAssert.getCtx(), MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME,
+                        MockIcebergMetadata.MOCKED_PARTITIONED_TRANSFORMS_DB_NAME,
+                        MockIcebergMetadata.MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME);
+        SlotRef missingCurrentSpecSlot = new SlotRef(null, "data");
+
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                IcebergPartitionUtils.checkPartitionTransformCompatibleWithSpec(
+                        table, missingCurrentSpecSlot, missingCurrentSpecSlot));
+        Assertions.assertTrue(exception.getMessage().contains("is not found in current partition spec"),
+                "Unexpected error message: " + exception.getMessage());
     }
 
     @Test
