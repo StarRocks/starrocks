@@ -1,0 +1,25 @@
+-- name: test_execute_as_external_user @sequential
+CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_ext_group_provider` PROPERTIES ("type" = "file", "group_file_url" = "group_mapping_external");
+admin set frontend config ("group_provider"="test_execute_as_ext_group_provider");
+
+drop role if exists ext_select_role;
+create role ext_select_role;
+grant ext_select_role to external group ext_group1;
+grant impersonate on user root to role ext_select_role;
+
+create database test_db_${uuid0};
+use test_db_${uuid0};
+create table t1 (c1 int, c2 varchar(20)) distributed by hash(c1) buckets 1 properties ("replication_num" = "1");
+insert into t1 values (1, 'hello'), (2, 'world');
+grant select on table t1 to role ext_select_role;
+
+execute as external 'ext_user'@'%' with no revert;
+select current_group();
+select current_role();
+select * from t1 order by c1;
+
+execute as root with no revert;
+drop database test_db_${uuid0};
+drop role if exists ext_select_role;
+drop group provider IF EXISTS test_execute_as_ext_group_provider;
+admin set frontend config ("group_provider"="");

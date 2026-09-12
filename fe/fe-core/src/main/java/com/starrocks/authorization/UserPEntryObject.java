@@ -38,7 +38,11 @@ public class UserPEntryObject implements PEntryObject {
             return new UserPEntryObject(null);
         }
 
-        if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(user)) {
+        // Ephemeral identities represent externally-authenticated users that have no entry in the
+        // internal user table; skip the existence check so IMPERSONATE privilege checks against
+        // such targets can proceed to the normal grant-matching step.
+        if (!user.isEphemeral() &&
+                !GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(user)) {
             throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
