@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
@@ -203,7 +204,7 @@ public class AuthenticationHandler {
         // Get user groups from configured group providers (e.g., LDAP groups)
         // Groups are used for role-based access control and permission management
         Set<String> groups = getGroups(context.getCurrentUserIdentity(), context.getDistinguishedName(),
-                authenticationResult.groupProviderName);
+                authenticationResult.groupProviderName, context.getAccessControlContext());
         context.setGroups(groups);
         // Set current role IDs based on the authenticated user and groups
         context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
@@ -246,7 +247,20 @@ public class AuthenticationHandler {
         }
     }
 
+    /**
+     * Resolves groups without a session context. Kept for callers that must not pass one, e.g. EXECUTE AS
+     * resolves groups for the impersonated identity while the session context still carries the
+     * authenticating user's token, so a context-aware provider would derive groups for the wrong user.
+     */
     public static Set<String> getGroups(UserIdentity userIdentity, String distinguishedName, List<String> groupProviderList) {
+        return getGroups(userIdentity, distinguishedName, groupProviderList, null);
+    }
+
+    public static Set<String> getGroups(
+            UserIdentity userIdentity,
+            String distinguishedName,
+            List<String> groupProviderList,
+            @Nullable AccessControlContext accessControlContext) {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         HashSet<String> groups = new HashSet<>();
@@ -255,7 +269,16 @@ public class AuthenticationHandler {
             if (groupProvider == null) {
                 continue;
             }
-            groups.addAll(groupProvider.getGroup(userIdentity, distinguishedName));
+
+            if (accessControlContext != null
+                    && groupProvider instanceof AccessControlContextAwareGroupProvider awareGroupProvider) {
+                groups.addAll(awareGroupProvider.getGroup(
+                        userIdentity,
+                        distinguishedName,
+                        accessControlContext));
+            } else {
+                groups.addAll(groupProvider.getGroup(userIdentity, distinguishedName));
+            }
         }
 
         return groups;
