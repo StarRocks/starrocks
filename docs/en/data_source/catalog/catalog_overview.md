@@ -29,6 +29,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
   - [Hudi catalog](./hudi_catalog.md): used to query data from Hudi.
   - [Delta Lake catalog](./deltalake_catalog.md): used to query data from Delta Lake.
   - [JDBC catalog](./jdbc_catalog.md): used to query data from JDBC-compatible data sources.
+  - [ADBC catalog](./adbc_catalog.md): used to query Arrow Flight SQL services through a native ADBC driver.
   - [Benchmark catalog](./benchmark_catalog.md): used to query in-flight generated datasets for TPC-H, TPC-DS, and SSB schemas.
   - [Elasticsearch catalog](./elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
   - [Paimon catalog](./paimon_catalog.md): used to query data from Paimon. Paimon catalogs are supported from v3.1 onwards.

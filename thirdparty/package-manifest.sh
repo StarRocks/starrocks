@@ -72,6 +72,7 @@ starrocks_set_default_packages() {
         brotli
         xsimd
         arrow
+        adbc
         librdkafka
         pulsar
         s2

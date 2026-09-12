@@ -25,3 +25,5 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - [q - r](./metric_details/q-r.md)
 - [s](./metric_details/s.md)
 - [t - z](./metric_details/t-z.md)
+
+ADBC クエリでは、既存の FE の catalog 別クエリカウンターとレイテンシーヒストグラム、および BE/CN のスキャンバイト数と行数のカウンターに `catalog_type="adbc"` ラベルを使用します。このラベルにより、ADBC と内部 catalog のクエリを区別できます。[ADBC catalog](../../../data_source/catalog/adbc_catalog.md)を参照してください。

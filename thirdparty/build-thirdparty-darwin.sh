@@ -2117,6 +2117,66 @@ build_arrow() {
     sync_lib64_links
 }
 
+build_adbc() {
+    local jni_library
+    jni_library=$(find "${TP_INSTALL_DIR}/adbc_driver_jni" -maxdepth 2 -type f \
+        -name 'libadbc_driver_jni.dylib' -print -quit 2>/dev/null || true)
+    if [[ -f "${TP_INSTALL_DIR}/lib/libadbc_driver_manager.a" && -n "${jni_library}" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${ADBC_SOURCE}"
+    check_if_source_exist "${MAVEN_SOURCE}"
+    local adbc_maven_path="${TP_SOURCE_DIR}/${MAVEN_SOURCE}/bin:${PATH}"
+
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libadbc"* \
+        "${TP_INSTALL_DIR}/lib64/libadbc"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/adbc"*.pc \
+        "${TP_INSTALL_DIR}/lib64/pkgconfig/adbc"*.pc
+    rm -rf \
+        "${TP_INSTALL_DIR}/adbc_driver_jni" \
+        "${TP_INSTALL_DIR}/lib/cmake/AdbcDriverManager" \
+        "${TP_INSTALL_DIR}/lib64/cmake/AdbcDriverManager"
+
+    cd "${TP_SOURCE_DIR}/${ADBC_SOURCE}/c"
+    rm -rf build
+    mkdir build
+    cd build
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DADBC_DRIVER_MANAGER=ON \
+        -DADBC_DRIVER_FLIGHTSQL=OFF \
+        -DADBC_DRIVER_SQLITE=OFF \
+        -DADBC_BUILD_SHARED=OFF \
+        -DADBC_BUILD_STATIC=ON \
+        -DADBC_BUILD_TESTS=OFF \
+        -DADBC_BUILD_BENCHMARKS=OFF \
+        -DADBC_BUILD_EXAMPLES=OFF \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DCMAKE_BUILD_TYPE=Release
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
+    sync_lib64_links
+
+    cd "${TP_SOURCE_DIR}/${ADBC_SOURCE}/java"
+    rm -rf build
+    mkdir build
+    cd build
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DCMAKE_BUILD_TYPE=Release
+    # ADBC's JNI header generation requires Maven 3.9 or newer.
+    PATH="${adbc_maven_path}" "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    PATH="${adbc_maven_path}" "${CMAKE_CMD}" --install .
+
+    sync_lib64_links
+}
+
 build_formula_librdkafka() {
     if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
         build_librdkafka
@@ -3172,6 +3232,9 @@ for package in "${packages[@]}"; do
             ;;
         arrow)
             build_arrow
+            ;;
+        adbc)
+            build_adbc
             ;;
         librdkafka)
             build_formula_librdkafka

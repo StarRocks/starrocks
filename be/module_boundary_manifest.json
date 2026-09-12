@@ -1204,6 +1204,34 @@
       "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage; move registration into ModuleBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
     },
     {
+      "id": "connectoradbc",
+      "doc_label": "ConnectorADBC",
+      "summary": "ADBC connector implementation and native scanner above connector contracts without registry composition, storage, service, or full Exec coupling.",
+      "owned_targets": ["ConnectorADBC"],
+      "allowed_include_prefixes": [
+        "connector/adbc_connector.h",
+        "exec/adbc_scanner.h",
+        "connector_primitive/",
+        "platform/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["storage/", "service/", "http/", "cache/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "exec/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorPrimitive", "Platform", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_adbc_test"],
+      "allowed_test_link_deps": ["ConnectorADBC", "ConnectorPrimitive", "Platform", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorADBC limited to ADBC read-side scan and Arrow conversion; move registration into ModuleBootstrap and avoid pulling registry, storage, service, or full Exec code into the connector library."
+    },
+    {
       "id": "connectorjdbc",
       "doc_label": "ConnectorJDBC",
       "summary": "JDBC connector implementation, scanner, driver manager, and type checker above connector contracts without registry composition, storage, service, or full Exec coupling.",
@@ -1300,6 +1328,7 @@
         "module/",
         "connector/benchmark/",
         "connector/cache_stats/",
+        "connector/adbc_connector.h",
         "connector/file/",
         "connector/hive/",
         "connector/iceberg/",
@@ -1318,7 +1347,7 @@
         "gen_cpp/"
       ],
       "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "http/", "runtime/", "script/", "service/", "storage/", "util/"],
-      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorFile", "ConnectorHive", "ConnectorIceberg", "ConnectorLake", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorADBC", "ConnectorFile", "ConnectorHive", "ConnectorIceberg", "ConnectorLake", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["module_bootstrap_test"],
       "allowed_test_link_deps": ["ModuleBootstrap"],
       "remediation": "Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly."

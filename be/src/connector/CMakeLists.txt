@@ -169,6 +169,29 @@ target_link_libraries(Connector PUBLIC
         StarRocksGen
 )
 
+ADD_BE_LIB(ConnectorADBC
+        adbc_connector.cpp
+        ../exec/adbc_scanner.cpp
+)
+
+target_link_libraries(ConnectorADBC PUBLIC
+        ConnectorPrimitive
+        Runtime
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
+target_link_libraries(ConnectorADBC PRIVATE
+        Platform
+        arrow
+        adbc_driver_manager
+)
+
 ADD_BE_LIB(ConnectorLake
         lake/lake_connector.cpp
         lake/lake_global_late_materialization_context.cpp

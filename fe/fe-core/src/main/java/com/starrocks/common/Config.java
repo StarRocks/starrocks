@@ -581,6 +581,10 @@ public class Config extends ConfigBase {
     @ConfField
     public static String ext_dir = System.getenv("STARROCKS_HOME") + "/lib";
 
+    @ConfField(comment = "Directory containing the StarRocks-built libadbc_driver_jni native library")
+    public static String adbc_jni_library_path =
+            STARROCKS_HOME_DIR == null ? "" : STARROCKS_HOME_DIR + "/lib/adbc_driver_jni";
+
     /**
      * Labels of finished or cancelled load jobs will be removed
      * 1. after *label_keep_max_second*

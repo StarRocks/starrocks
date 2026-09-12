@@ -29,6 +29,7 @@ StarRocks 从 v2.3 版本开始支持 catalog 功能。通过 catalog，您可�
   - [Hudi catalog](./hudi_catalog.md)：用于查询 Hudi 中的数据。
   - [Delta Lake catalog](./deltalake_catalog.md)：用于查询 Delta Lake 中的数据。
   - [JDBC catalog](./jdbc_catalog.md)：用于查询 JDBC 兼容的数据源中的数据。
+  - [ADBC catalog](./adbc_catalog.md)：用于通过原生 ADBC 驱动程序查询 Arrow Flight SQL 服务。
   - [Benchmark catalog](./benchmark_catalog.md)：用于查询 TPC-H、TPC-DS 和 SSB schema 的实时生成数据集。
   - [Elasticsearch catalog](./elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。StarRocks 从 v3.1 开始支持 Elasticsearch catalog。
   - [Paimon catalog](./paimon_catalog.md)：用于查询 Paimon 中的数据。StarRocks 从 v3.1 开始支持 Paimon catalog。

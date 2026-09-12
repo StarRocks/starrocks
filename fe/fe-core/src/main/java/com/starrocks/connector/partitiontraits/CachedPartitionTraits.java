@@ -17,7 +17,6 @@ package com.starrocks.connector.partitiontraits;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
@@ -30,6 +29,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.type.Type;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -178,7 +178,18 @@ public class CachedPartitionTraits extends DefaultTraits {
     @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
+        // Preserve unknown freshness; an empty set would incorrectly mean no changes.
         return getCache("getUpdatedPartitionNames", () -> delegate.getUpdatedPartitionNames(baseTables, context),
-                () -> Sets.newHashSet());
+                () -> null);
+    }
+
+    @Override
+    public Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds) {
+        return delegate.getUpdatedPartitionNames(checkTime, extraSeconds);
+    }
+
+    @Override
+    public LocalDateTime getTableLastUpdateTime(int extraSeconds) {
+        return delegate.getTableLastUpdateTime(extraSeconds);
     }
 }

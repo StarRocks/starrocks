@@ -255,6 +255,18 @@ ARROW_NAME="arrow-apache-arrow-24.0.0.tar.gz"
 ARROW_SOURCE="arrow-apache-arrow-24.0.0"
 ARROW_MD5SUM="66c53bd00baa79034bd2ca167beea436"
 
+# Apache Arrow ADBC C/C++ and Java JNI libraries.
+ADBC_DOWNLOAD="https://github.com/apache/arrow-adbc/archive/refs/tags/apache-arrow-adbc-24.tar.gz"
+ADBC_NAME="arrow-adbc-apache-arrow-adbc-24.tar.gz"
+ADBC_SOURCE="arrow-adbc-apache-arrow-adbc-24"
+ADBC_MD5SUM="2b2a18e95c33bdfd2bfa33a8b57c78d6"
+
+# ADBC's JNI header generation requires Maven 3.9 or newer.
+MAVEN_DOWNLOAD="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz"
+MAVEN_NAME="apache-maven-3.9.11-bin.tar.gz"
+MAVEN_SOURCE="apache-maven-3.9.11"
+MAVEN_MD5SUM="6add8cee7c429c299fac85bfa2cc7e6a"
+
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
 S2_NAME=s2geometry-0.9.0.tar.gz
@@ -511,7 +523,7 @@ PAIMON_CPP_MD5SUM="e82940588fa423926cb47b2617cf21dc"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
-            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
+            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW ADBC MAVEN BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \

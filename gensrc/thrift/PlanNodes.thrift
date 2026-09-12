@@ -99,7 +99,8 @@ enum TPlanNodeType {
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
-  AI_PROJECT_NODE = 45
+  AI_PROJECT_NODE = 45,
+  ADBC_SCAN_NODE = 46
 }
 
 // phases of an execution node
@@ -794,6 +795,16 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+}
+
+struct TADBCScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string table_name
+  3: optional list<string> columns
+  4: optional list<string> filters
+  5: optional i64 limit
+  // Connection contract (driver / adbc_options) lives on TADBCTable,
+  // reached by BE via the tuple descriptor. Mirrors the JDBC pattern.
 }
 
 // Extension point for TLakeScanNode. DO NOT MODIFY: do not add fields here,
@@ -1717,6 +1728,8 @@ struct TPlanNode {
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
   87: optional TPlanNodeExt ext
   88: optional TAIProjectNode ai_project_node
+  // Scan node for adbc
+  89: optional TADBCScanNode adbc_scan_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

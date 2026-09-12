@@ -704,6 +704,20 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
+        if starrocks_is_darwin; then
+            adbc_jni_filename='libadbc_driver_jni.dylib'
+        else
+            adbc_jni_filename='libadbc_driver_jni.so'
+        fi
+        adbc_jni_library=$(find "${STARROCKS_THIRDPARTY}/installed/adbc_driver_jni" -maxdepth 2 -type f \
+            -name "${adbc_jni_filename}" -print -quit 2>/dev/null || true)
+        if [[ -z "${adbc_jni_library}" ]]; then
+            echo "Error: libadbc_driver_jni was not found under ${STARROCKS_THIRDPARTY}/installed/adbc_driver_jni"
+            echo "Build it with ./thirdparty/build-thirdparty.sh adbc"
+            exit 1
+        fi
+        install -d "${STARROCKS_OUTPUT}/fe/lib/adbc_driver_jni"
+        cp -p "${adbc_jni_library}" "${STARROCKS_OUTPUT}/fe/lib/adbc_driver_jni/"
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
