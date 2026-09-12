@@ -130,6 +130,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(restCatalogProperties);
         OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
 
+        // Remove existing OAuth2 properties to avoid duplication before adding the processed ones
+        restCatalogProperties.entrySet().removeIf(entry -> 
+            entry.getKey().startsWith("oauth2.") || entry.getKey().equals("security"));
         restCatalogProperties.putAll(securityProperties.get());
 
         // only an OAuth2 client credential lets us mint a new token; per-user JWTs cannot be renewed by the FE
