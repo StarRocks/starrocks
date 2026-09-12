@@ -697,6 +697,14 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testFoldDoubleModInPredicate() throws Exception {
+        String plan = getFragmentPlan(
+                "SELECT v1 FROM t0 WHERE v1 = (3493131456125200 / 100) % 256");
+        assertContains(plan, "PREDICATES: 1: v1 = 228");
+        assertNotContains(plan, "mod(");
+    }
+
+    @Test
     public void testStrToDateWithAllowThrowException() throws Exception {
         long savedSqlMode = connectContext.getSessionVariable().getSqlMode();
         try {
