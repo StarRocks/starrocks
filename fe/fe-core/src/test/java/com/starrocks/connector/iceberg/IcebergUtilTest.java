@@ -32,6 +32,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,9 @@ import java.util.TimeZone;
 
 import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IcebergUtilTest {
 
@@ -253,6 +256,123 @@ public class IcebergUtilTest {
                     thriftValues.get(5).min_int_value);
             assertEquals(maxMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(1000L) * 1000L,
                     thriftValues.get(5).max_int_value);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testTimestamptzMinMaxDroppedWhenFileSpansDstTransition() {
+        // America/Los_Angeles DST fall-back at 2023-11-05T09:00:00Z: PDT (-07:00) drops to PST (-08:00). A file whose
+        // timestamptz values straddle that instant covers a backward (offset-decreasing) transition, so UTC->local
+        // rewinds and the endpoint conversion is no longer exact; the file-level min/max must be dropped.
+        Schema schema = new Schema(
+                required(3, "ts_ntz", Types.TimestampType.withoutZone()),
+                required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(
+                new SlotDescriptor(new SlotId(3), "ts_ntz", DateType.DATETIME, true),
+                new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true));
+        slots.get(0).setColumn(new Column("ts_ntz", DateType.DATETIME, true));
+        slots.get(1).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+
+        long lowMicros = Instant.parse("2023-11-05T08:30:00Z").getEpochSecond() * 1_000_000L;
+        long highMicros = Instant.parse("2023-11-05T09:30:00Z").getEpochSecond() * 1_000_000L;
+        Map<Integer, ByteBuffer> lowerBounds = Map.of(
+                3, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withoutZone(), lowMicros),
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), lowMicros));
+        Map<Integer, ByteBuffer> upperBounds = Map.of(
+                3, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withoutZone(), highMicros),
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), highMicros));
+        Map<Integer, Long> nullValueCounts = Map.of(3, 0L, 5, 0L);
+        Map<Integer, Long> valueCounts = Map.of(3, 2L, 5, 2L);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/Los_Angeles");
+        ctx.setThreadLocalInfo();
+        try {
+            Map<Integer, IcebergUtil.MinMaxValue> result = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            // timestamp without time zone is unaffected and keeps its raw wall-clock micros.
+            assertTrue(result.containsKey(3));
+            assertEquals(lowMicros, result.get(3).minValue);
+            // timestamptz spanning the DST transition is dropped, so BE falls back to reading the file.
+            assertFalse(result.containsKey(5));
+
+            Map<Integer, TExprMinMaxValue> thriftValues = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertTrue(thriftValues.containsKey(3));
+            assertFalse(thriftValues.containsKey(5));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testTimestamptzMinMaxKeptWhenFileWithinSingleOffset() {
+        // A file whose timestamptz values stay within one offset period (here PDT, summer 2023) has no offset
+        // change inside its range, so endpoint UTC->local conversion is exact and the bounds are converted and kept.
+        Schema schema = new Schema(required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(
+                new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true));
+        slots.get(0).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+
+        long lowMicros = Instant.parse("2023-07-01T10:00:00Z").getEpochSecond() * 1_000_000L;
+        long highMicros = Instant.parse("2023-07-01T11:00:00Z").getEpochSecond() * 1_000_000L;
+        Map<Integer, ByteBuffer> lowerBounds = Map.of(
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), lowMicros));
+        Map<Integer, ByteBuffer> upperBounds = Map.of(
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), highMicros));
+        Map<Integer, Long> nullValueCounts = Map.of(5, 0L);
+        Map<Integer, Long> valueCounts = Map.of(5, 2L);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/Los_Angeles");
+        ctx.setThreadLocalInfo();
+        try {
+            Map<Integer, IcebergUtil.MinMaxValue> result = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertTrue(result.containsKey(5));
+            // PDT offset is -07:00 across the whole range; endpoint conversion adds that offset to each bound.
+            assertEquals(lowMicros + TimeZone.getTimeZone("America/Los_Angeles").getOffset(
+                    Instant.parse("2023-07-01T10:00:00Z").toEpochMilli()) * 1000L, result.get(5).minValue);
+            assertEquals(highMicros + TimeZone.getTimeZone("America/Los_Angeles").getOffset(
+                    Instant.parse("2023-07-01T11:00:00Z").toEpochMilli()) * 1000L, result.get(5).maxValue);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testTimestamptzMinMaxKeptAcrossSpringForward() {
+        // America/Los_Angeles spring-forward at 2023-03-12T10:00:00Z: PST (-08:00) jumps to PDT (-07:00). The offset
+        // increases, so UTC->local stays monotonic and the file's endpoints remain its true local min/max even though
+        // it straddles the transition; the bounds are converted (each with its own instant's offset) and kept.
+        Schema schema = new Schema(required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(
+                new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true));
+        slots.get(0).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+
+        long lowMicros = Instant.parse("2023-03-12T09:30:00Z").getEpochSecond() * 1_000_000L;
+        long highMicros = Instant.parse("2023-03-12T10:30:00Z").getEpochSecond() * 1_000_000L;
+        Map<Integer, ByteBuffer> lowerBounds = Map.of(
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), lowMicros));
+        Map<Integer, ByteBuffer> upperBounds = Map.of(
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), highMicros));
+        Map<Integer, Long> nullValueCounts = Map.of(5, 0L);
+        Map<Integer, Long> valueCounts = Map.of(5, 2L);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/Los_Angeles");
+        ctx.setThreadLocalInfo();
+        try {
+            Map<Integer, IcebergUtil.MinMaxValue> result = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertTrue(result.containsKey(5));
+            // low uses PST (-08:00), high uses PDT (-07:00); each endpoint converts with its own instant's offset.
+            assertEquals(lowMicros + TimeZone.getTimeZone("America/Los_Angeles").getOffset(
+                    Instant.parse("2023-03-12T09:30:00Z").toEpochMilli()) * 1000L, result.get(5).minValue);
+            assertEquals(highMicros + TimeZone.getTimeZone("America/Los_Angeles").getOffset(
+                    Instant.parse("2023-03-12T10:30:00Z").toEpochMilli()) * 1000L, result.get(5).maxValue);
         } finally {
             ConnectContext.remove();
         }
