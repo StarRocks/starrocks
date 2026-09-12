@@ -16,6 +16,7 @@ package com.starrocks.connector.unified;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
@@ -55,6 +56,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +66,7 @@ import org.wildfly.common.Assert;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
@@ -303,6 +307,12 @@ public class UnifiedMetadataTest {
             }
 
             {
+                icebergMetadata.getDeleteFiles(icebergTable, 1L, null, FileContent.EQUALITY_DELETES);
+                result = ImmutableSet.of();
+                times = 1;
+            }
+
+            {
                 icebergMetadata.refreshTable("test_db", icebergTable, ImmutableList.of(), false);
                 times = 1;
             }
@@ -336,6 +346,9 @@ public class UnifiedMetadataTest {
         assertEquals(ImmutableList.of(), remoteFileInfos);
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(icebergTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
+        Set<DeleteFile> deleteFiles =
+                unifiedMetadata.getDeleteFiles(icebergTable, 1L, null, FileContent.EQUALITY_DELETES);
+        assertEquals(ImmutableSet.of(), deleteFiles);
         unifiedMetadata.refreshTable("test_db", icebergTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("iceberg");
