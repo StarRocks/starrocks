@@ -985,6 +985,13 @@ public class RedirectStatusTest {
                         null, NodePosition.ZERO), queryStatement);
         SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("", ""), 0, insertStmt, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
+
+        UpdateStmt updateStmt = new UpdateStmt(null, java.util.Collections.emptyList(), java.util.Collections.emptyList(),
+                null, java.util.Collections.emptyList());
+        SubmitTaskStmt updateTaskStmt = new SubmitTaskStmt(new TaskName("test", "task_update"), 0, updateStmt,
+                NodePosition.ZERO);
+        Assertions.assertSame(updateStmt, updateTaskStmt.getUpdateStmt());
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(updateTaskStmt));
     }
 
     @Test
