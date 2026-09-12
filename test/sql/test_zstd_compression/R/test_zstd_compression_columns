@@ -1,0 +1,104 @@
+-- name: test_zstd_compression_columns
+CREATE DATABASE test_zstd_compression_${uuid0};
+-- result:
+-- !result
+USE test_zstd_compression_${uuid0};
+-- result:
+-- !result
+
+update information_schema.be_configs set value = "true" where name = "enable_zstd_compression_dict";
+-- result:
+-- !result
+
+CREATE TABLE t_zstd_col (
+  k BIGINT NOT NULL,
+  v STRING,
+  j JSON
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "zstd_compression_columns" = "v, j");
+-- result:
+-- !result
+
+function: assert_query_contains("show create table t_zstd_col", "zstd_compression_columns")
+-- result:
+None
+-- !result
+
+insert into t_zstd_col values
+  (1, '{"role":"assistant","parts":[{"type":"text","content":"row one"}]}', parse_json('{"a":1}')),
+  (2, '{"role":"assistant","parts":[{"type":"text","content":"row two"}]}', parse_json('{"a":2}')),
+  (3, '{"role":"assistant","parts":[{"type":"text","content":"row three"}]}', parse_json('{"a":3}'));
+-- result:
+-- !result
+
+select count(*) from t_zstd_col;
+-- result:
+3
+-- !result
+select v from t_zstd_col where k = 2;
+-- result:
+{"role":"assistant","parts":[{"type":"text","content":"row two"}]}
+-- !result
+select get_json_string(j, 'a') from t_zstd_col where k = 3;
+-- result:
+3
+-- !result
+select sum(length(v)) from t_zstd_col;
+-- result:
+200
+-- !result
+
+ALTER TABLE t_zstd_col SET ("zstd_compression_columns" = "v");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_zstd_col", "\"zstd_compression_columns\" = \"v\"")
+-- result:
+None
+-- !result
+
+select count(*) from t_zstd_col;
+-- result:
+3
+-- !result
+select v from t_zstd_col where k = 2;
+-- result:
+{"role":"assistant","parts":[{"type":"text","content":"row two"}]}
+-- !result
+
+ALTER TABLE t_zstd_col DROP COLUMN v;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_query_not_contains("show create table t_zstd_col", "zstd_compression_columns")
+-- result:
+None
+-- !result
+
+ALTER TABLE t_zstd_col ADD COLUMN v STRING;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_query_not_contains("show create table t_zstd_col", "zstd_compression_columns")
+-- result:
+None
+-- !result
+
+-- restore the default (true): the switch was only exercised above to prove flipping it never affects reads
+update information_schema.be_configs set value = "true" where name = "enable_zstd_compression_dict";
+-- result:
+-- !result
+DROP DATABASE test_zstd_compression_${uuid0};
+-- result:
+-- !result

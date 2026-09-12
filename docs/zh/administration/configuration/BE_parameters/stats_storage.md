@@ -278,6 +278,33 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：单次 Compaction 打印 Trace 的时间阈值，如果单次 Compaction 时间超过该阈值就打印 Trace。
 - 引入版本：-
 
+### zstd_compression_dict_min_gain
+
+- 默认值：0.10
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：试压页至少要小多少（以比例表示），列级压缩字典才会被保留。写入端会把采样页之后的若干个页分别用「带字典」和「不带字典」压一遍做对比；低于该阈值时整列放弃字典，改为普通 ZSTD 压缩。字典不是免费的——每列每个 Segment 要多存一个字典页，读取时每个 Segment 要加载一次，而且一旦有数据页引用了它，这个决定就无法回退——因此默认值要求的是「明显更优」而非「可测量的更优」。在 13 份数据集 × 3 档页大小上实测：取 `0.10` 时字典只在收益达到 10% 以上的场景被保留，代价是放弃了一批 5%~9% 的收益（集中在 256 KB 页，那里页内已经吃掉了大部分重复）；若希望把这批也拿到，可下调到约 `0.05`。小于 `0` 的取值按 `0` 处理；即便取 `0`，试压页带字典也必须严格小于不带字典，因此把页压得更大的字典永远不会被保留。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效，且只影响修改之后写入的数据。
+- 引入版本：v4.2
+
+### zstd_compression_dict_min_sample_bytes
+
+- 默认值：1024
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：数据页的 encoded values 至少需要达到的字节数，达到后该页才能被用作字典样本。该阈值用于避免依据一个过小或近乎为空的首个数据页构建出无效字典，并因此将该列永久标记为“字典就绪”。该值会与每一个数据页的 encoded values 依次比较，直到某一页达到为止；因此首页太小的列会改用后面的页采样，而不是就此放弃。请设置为大于等于 `0` 的值。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
+- 引入版本：v4.2
+
+### zstd_compression_dict_sample_bytes
+
+- 默认值：65536
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：为构建压缩字典而从第一个符合条件的数据页采样的字节数。默认值大致相当于一个 64 KB 数据页。实际采样量为 `min(该页 encoded values 的大小, zstd_compression_dict_sample_bytes)`，因此该参数同时限定了字典大小。该值在创建 Column Writer 时读取，因此修改后对之后写入的 Segment 生效。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
+- 引入版本：v4.2
+
 ### cumulative_compaction_check_interval_seconds
 
 - 默认值：1
@@ -448,6 +475,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：否
 - 描述：是否在导入时进行数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
 - 引入版本：-
+
+### enable_zstd_compression_dict
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：列级压缩字典的集群级总开关。列级压缩字典是一个 ZSTD 字典，按列存储在每个 Segment 文件中。该开关在 Segment 写入入口处判定。当其为 `false` 时，由表属性 `zstd_compression_columns` 指定的列**仍然使用 ZSTD 压缩**——这是用户的显式要求，不受该开关影响——只是不再为它们构建共享字典。也就是说该开关只影响压缩率，不会改变压缩算法，因此可以在运行时作为运维安全阀随时切换。
+
+  该参数默认值为 `true`：任何带有这个开关的版本都同时带有读取端（`ColumnMetaPB.zstd_compression_dict_page`，字段 35，先于写入端发布），并且只有通过表属性 `zstd_compression_columns` 被指定的列才会写出字典页——从未设置该属性的集群无论此默认值如何都不会写出任何字典页。
+
+  唯一仍需注意的窗口，是从一个尚不含读取端的旧版本做滚动升级。压缩字典数据页是一个基于原始内容字典（`dictID=0`）压缩的 ZSTD 帧，其帧头不携带任何“需要字典”的标识；不认识字段 35 的旧版本 BE 会在不加载字典的情况下解压该页，从而遇到 ZSTD 数据损坏错误。在这样的升级期间，请勿给任何表添加 `zstd_compression_columns`（或将该参数设置为 `false`），直到所有 BE 升级完成。混合版本窗口期内的跨副本 Clone 与 Replication 同理。
+
+  警告：一旦集群写出了带压缩字典的 Segment，就无法再降级到引入该特性之前的版本，因为旧版本 BE 既无法读取也无法 Compaction 这些 Segment。
+- 引入版本：v4.2
 
 ### enable_event_based_compaction_framework
 

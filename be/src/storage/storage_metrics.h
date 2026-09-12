@@ -120,6 +120,13 @@ public:
     // cluster and restore reads of a snapshot are not counted.
     METRIC_DEFINE_INT_COUNTER(lake_tablet_metadata_get_not_found_total, MetricUnit::REQUESTS);
 
+    // compression dict column-level compression dictionary (a ZSTD dictionary). Aggregate write-side health signal
+    // exported via /metrics: whether compression dict is working, dictionary scale, and the
+    // rate at which the sampling gate fell back (dict never built).
+    METRIC_DEFINE_INT_COUNTER(zstd_compression_dict_pages_written, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(zstd_compression_dict_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(zstd_compression_dict_build_fallback, MetricUnit::NOUNIT);
+
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_failed, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(cumulative_compaction_request_total, MetricUnit::REQUESTS);

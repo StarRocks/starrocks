@@ -539,7 +539,14 @@ public class SparkLoadJob extends BulkLoadJob {
 
                             List<TColumn> columnsDesc = new ArrayList<TColumn>();
                             for (Column column : table.getSchemaByIndexMetaId(indexMetaId)) {
-                                columnsDesc.add(column.toThrift());
+                                TColumn tColumn = column.toThrift();
+                                // BE rebuilds the write schema from these TColumns (push_handler ->
+                                // TabletSchema::copy), so the per-column flags have to be on them or the
+                                // segments this load writes come out with the table codec and no bloom
+                                // filter, unlike everything written through OlapTableSink.
+                                column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds(),
+                                        table.getZstdCompressionColumnIds(), table.getZstdCompressionPageSizes());
+                                columnsDesc.add(tColumn);
                             }
 
                             int bucket = 0;

@@ -40,6 +40,9 @@ public abstract class AlterJobV2Builder {
     protected boolean bloomFilterColumnsChanged = false;
     protected Set<ColumnId> bloomFilterColumns;
     protected double bloomFilterFpp;
+    protected boolean zstdCompressionColumnsChanged = false;
+    protected Set<ColumnId> zstdCompressionColumns;
+    protected Map<ColumnId, Integer> zstdCompressionPageSizes;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
     protected Map<Long, List<Column>> newIndexMetaIdToSchema = new HashMap<>();
@@ -149,6 +152,21 @@ public abstract class AlterJobV2Builder {
     public AlterJobV2Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
         this.bloomFilterColumns = bfColumns;
         this.bloomFilterFpp = bfFpp;
+        return this;
+    }
+
+    public AlterJobV2Builder withZstdCompressionColumnsChanged(boolean changed) {
+        this.zstdCompressionColumnsChanged = changed;
+        return this;
+    }
+
+    public AlterJobV2Builder withZstdCompressionPageSizes(@Nullable Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+        return this;
+    }
+
+    public AlterJobV2Builder withZstdCompressionColumns(@Nullable Set<ColumnId> zstdCompressionColumns) {
+        this.zstdCompressionColumns = zstdCompressionColumns;
         return this;
     }
 

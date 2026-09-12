@@ -78,6 +78,11 @@ message ColumnPB {
     optional bool is_auto_increment = 18;
     // agg_state type
     optional AggStateDescPB agg_state_desc = 19;
+    // column-level compression dictionary (a ZSTD dictionary). Unset (default false) for every
+    // non-compression dict column so schemas serialize byte-identically.
+    optional bool use_zstd_compression = 20 [default = false];
+    // Data page size for this column, in bytes. Unset / 0 keeps the BE default.
+    optional int32 zstd_compression_page_size = 21 [default = 0];
 }
 
 message TabletSchemaPB {

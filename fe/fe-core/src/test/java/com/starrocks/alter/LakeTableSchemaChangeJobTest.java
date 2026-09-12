@@ -379,6 +379,41 @@ public class LakeTableSchemaChangeJobTest {
         }
     }
 
+    // And for a change to the per-column ZSTD set, which reaches the shadow tablets only through
+    // CreateReplicaTask: light-weight creation skips that task, so the CN would build the shadow
+    // tablet's schema from the table's pre-alter set and rewrite every segment without the setting.
+    @Test
+    public void testZstdCompressionChangeDisablesLightWeightTabletCreation() throws Exception {
+        LakeTable zstdTable = createTable(connectContext,
+                    "CREATE TABLE t_zstd(c0 INT, c1 VARCHAR(64), c2 VARCHAR(64)) duplicate key(c0) "
+                                + "distributed by hash(c0) buckets " + NUM_BUCKETS
+                                + " properties('zstd_compression_columns' = 'c1')");
+        alterTable(connectContext, "ALTER TABLE t_zstd SET ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(zstdTable.isLightWeightTabletCreation());
+
+        AtomicBoolean sendCalled = new AtomicBoolean(false);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                                             MarkedCountDownLatch<Long, Long> countDownLatch,
+                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                             AtomicBoolean isCancelling) throws AlterCancelException {
+                sendCalled.set(true);
+            }
+        };
+
+        alterTable(connectContext, "ALTER TABLE t_zstd SET ('zstd_compression_columns' = 'c2:256k')");
+        LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(zstdTable);
+        schemaChangeJob.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertTrue(sendCalled.get(),
+                    "a zstd compression column change must fall back to normal tablet creation even when "
+                                + "light_weight_tablet_creation is enabled");
+
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
     // Same contract for a bloom filter change; a mixed add+drop is used because a pure add or drop takes the
     // lake IDG fast path (no shadow tablet) and would not produce a LakeTableSchemaChangeJob at all.
     @Test
