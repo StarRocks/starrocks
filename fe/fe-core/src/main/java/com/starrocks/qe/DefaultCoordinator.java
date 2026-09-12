@@ -1708,8 +1708,9 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public PQueryStatistics getAuditStatistics() {
-        return auditStatistics;
+    public synchronized PQueryStatistics getAuditStatistics() {
+        // Reports can arrive while execution finishes. Do not expose the mutable accumulator to readers.
+        return AuditStatisticsUtil.copyProtobuf(auditStatistics);
     }
 
     @Override

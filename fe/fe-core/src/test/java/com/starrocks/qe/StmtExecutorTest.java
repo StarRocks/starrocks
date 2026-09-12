@@ -1495,6 +1495,56 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testAuditStatisticsRefreshesCoordinatorSnapshots(@Mocked Coordinator coordinator) {
+        StmtExecutor executor = new StmtExecutor(new ConnectContext(), new ShowFrontendsStmt());
+        Assertions.assertEquals(0L, executor.getQueryStatisticsForAuditLog().scanRows);
+        PQueryStatistics first = new PQueryStatistics();
+        first.scanRows = 1L;
+        PQueryStatistics second = new PQueryStatistics();
+        second.scanRows = 2L;
+        new Expectations() {
+            {
+                coordinator.getAuditStatistics();
+                returns(first, second);
+                minTimes = 0;
+            }
+        };
+        Deencapsulation.setField(executor, "coord", coordinator);
+        Assertions.assertEquals(1L, executor.getQueryStatisticsForAuditLog().scanRows);
+        Assertions.assertEquals(2L, executor.getQueryStatisticsForAuditLog().scanRows);
+        Assertions.assertEquals(1L, first.scanRows);
+    }
+
+    @Test
+    public void testAuditStatisticsPrefersAuthoritativeResults(@Mocked Coordinator coordinator) {
+        PQueryStatistics partial = new PQueryStatistics();
+        partial.scanRows = 1L;
+        new Expectations() {
+            {
+                coordinator.getAuditStatistics();
+                result = partial;
+                minTimes = 0;
+            }
+        };
+        StatementBase stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        stmt.setOrigStmt(new OriginStatement("select 1", 0));
+        StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+        Deencapsulation.setField(executor, "coord", coordinator);
+        Assertions.assertEquals(1L, executor.getQueryStatisticsForAuditLog().scanRows);
+
+        PQueryStatistics forwarded = new PQueryStatistics();
+        forwarded.scanRows = 10L;
+        executor.setQueryStatistics(forwarded);
+        Assertions.assertSame(forwarded, executor.getQueryStatisticsForAuditLog());
+        PQueryStatistics batchStatistics = new PQueryStatistics();
+        batchStatistics.scanRows = 20L;
+        RowBatch batch = new RowBatch();
+        batch.setQueryStatistics(batchStatistics);
+        executor.processQueryStatisticsFromResult(batch, null, false);
+        Assertions.assertSame(batchStatistics, executor.getQueryStatisticsForAuditLog());
+    }
+
+    @Test
     public void testFailedQueryDetailUsesCoordinatorStatistics() {
         boolean oldCollect = Config.enable_collect_query_detail_info;
         Config.enable_collect_query_detail_info = true;

@@ -451,6 +451,31 @@ Project Operator is responsible for performing `SELECT <expr>`. If there're some
 | `ExprComputeTime` | Computation time for expressions. |
 | `CommonSubExprComputeTime` | Computation time for common sub-expressions. |
 
+### AI Project Operator
+
+AI Project executes asynchronous model calls. Its source operator exposes the following fixed counters in `UniqueMetrics`. Each driver reports only its own completed tasks; profile refreshes replace cumulative values rather than adding them again.
+
+| Metric | Unit | Description |
+|--------|------|-------------|
+| `AITaskCount` | Tasks | Terminal dispatcher tasks, including success, row failure, and cancellation. SQL NULL rows and rejections before task submission are not counted. |
+| `AIRequestCount` | Requests | HTTP submissions accepted for these tasks, including retries. Rejected submissions are not counted. |
+| `AIRetryCount` | Requests | Accepted HTTP retry submissions. |
+| `AITimeoutCount` | Events | Timeout events recorded by the dispatcher for accepted attempts. |
+| `AIErrorCount` | Tasks | Tasks ending in a sanitized row failure. Lifecycle cancellation is not a row failure. |
+| `AIHttpTime` | Time | Sum of accepted HTTP attempt durations, from submission to the transport callback. Excludes retry backoff, response parsing, and completion-queue wait time. |
+| `AIPromptTokens` | Tokens | Sum of valid provider-reported prompt token counts. |
+| `AICompletionTokens` | Tokens | Sum of valid provider-reported completion token counts. |
+| `AITotalTokens` | Tokens | Sum of valid provider-reported total token counts; not derived from prompt and completion counts. |
+| `AIPromptUsageCount` | Responses | Parsed responses containing a valid prompt token count, including an explicit zero. |
+| `AICompletionUsageCount` | Responses | Parsed responses containing a valid completion token count, including an explicit zero. |
+| `AITotalUsageCount` | Responses | Parsed responses containing a valid total token count, including an explicit zero. |
+
+All counters, including `AIHttpTime`, aggregate by sum across drivers. Concurrent requests can make this cumulative time exceed query wall-clock time. A task publishes its statistics at terminal completion, so ongoing tasks are not included yet.
+
+AI counters opt into saturating Profile summation: totals stop at the signed 64-bit maximum instead of overflowing. This requires all participating BE and FE Profile mergers to support the optional counter strategy. Older nodes ignore the strategy and retain their existing merge behavior during rolling upgrades. Other counters keep their existing aggregation policies.
+
+A token counter of zero with its corresponding usage count of zero means **unreported**, not zero consumption. A positive usage count does not imply complete provider coverage: missing, invalid, or unparsed response usage is excluded independently for each field. These are observed execution statistics, not token estimates or an exactly-once billing ledger. Query statistics and audit reporting reuse their existing delivery and failure semantics, independently of whether Profile collection is enabled. No prompts, responses, credentials, or model identifiers are added to these counters.
+
 ### LocalExchange Operator
 
 | Metric | Description |
