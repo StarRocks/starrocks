@@ -330,7 +330,8 @@ public class DeleteAnalyzer {
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
-            if (col.isKey() || col.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+            if (col.isKey() || col.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) ||
+                    col.isGeneratedColumn()) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             } else {
                 continue;
