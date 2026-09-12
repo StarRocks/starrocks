@@ -184,22 +184,13 @@ public class TransactionStmtExecutor {
                 context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
-
         try {
-            checkSecondaryReadonly(transactionState, database.getId(), targetTable.getId());
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
+            checkSecondaryReadonly(explicitTxnState == null ? null : explicitTxnState.getTransactionState(),
+                    database.getId(), targetTable.getId());
 
-            if (transactionState.getDbId() == 0) {
-                transactionState.setDbId(database.getId());
-                DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getDatabaseTransactionMgr(database.getId());
-                databaseTransactionMgr.upsertTransactionState(transactionState);
-            }
-
-            if (database.getId() != transactionState.getDbId()) {
-                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
-            }
+            TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                    context.getTxnId(), database.getId());
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
             for (Table table : m.values()) {
@@ -211,9 +202,8 @@ public class TransactionStmtExecutor {
                 }
             }
 
-            if (!transactionState.getTableIdList().contains(targetTable.getId())) {
-                transactionState.addTableIdList(targetTable.getId());
-            }
+            explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                    context.getTxnId(), database.getId(), targetTable.getId());
             // record modified table id in explicit txn state for later SELECT validation
             explicitTxnState.addModifiedTableId(targetTable.getId());
 
@@ -251,18 +241,13 @@ public class TransactionStmtExecutor {
             ConnectContext context) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
+        checkSecondaryReadonly(explicitTxnState == null ? null : explicitTxnState.getTransactionState(),
+                dbId, tableId);
 
-        checkSecondaryReadonly(transactionState, dbId, tableId);
-
-        if (transactionState.getDbId() == 0) {
-            transactionState.setDbId(dbId);
-            DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getDatabaseTransactionMgr(dbId);
-            databaseTransactionMgr.upsertTransactionState(transactionState);
-        }
-
-        transactionState.addTableIdList(tableId);
+        TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                context.getTxnId(), dbId);
+        explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                context.getTxnId(), dbId, tableId);
 
         // record modified table id in explicit txn state for later SELECT validation
         explicitTxnState.addModifiedTableId(tableId);
