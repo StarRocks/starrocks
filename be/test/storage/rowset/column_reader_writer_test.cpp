@@ -71,6 +71,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/range.h"
 #include "testutil/schema_test_helper.h"
 #include "types/date_value.h"
@@ -1327,6 +1328,56 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
     ASSERT_OK(iter->next_batch(&one_row, one.get()));
     ASSERT_EQ(1, one->size());
     ASSERT_EQ(values[kRowsPerPage * 3 + 7], one->get(0).get_slice().to_string());
+}
+
+// A segment zone map that claims to hold non-null values but carries neither `min` nor `max` is
+// rejected by _parse_zone_map. segment_zone_map_filter() has to survive that rejection: it returns
+// bool, so it cannot propagate the Status, and aborting the process is not an acceptable substitute.
+TEST_F(ColumnReaderWriterTest, test_segment_zone_map_without_min_max) {
+    auto col = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    for (int32_t i = 0; i < 128; ++i) {
+        (void)col->append_numbers(&i, sizeof(int32_t));
+    }
+
+    ColumnMetaPB meta;
+    const std::string fname = strings::Substitute("$0/test_segment_zone_map_without_min_max.data", TEST_DIR);
+    auto segment = create_dummy_segment(fname);
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta, false);
+        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_INT);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+
+    // The writer always emits all four fields, so drop min/max while keeping has_not_null set.
+    ColumnMetaPB corrupted_meta = meta;
+    ZoneMapPB* segment_zone_map = nullptr;
+    for (int i = 0; i < corrupted_meta.indexes_size(); ++i) {
+        if (corrupted_meta.indexes(i).type() == ZONE_MAP_INDEX) {
+            segment_zone_map = corrupted_meta.mutable_indexes(i)->mutable_zone_map_index()->mutable_segment_zone_map();
+            break;
+        }
+    }
+    ASSERT_NE(nullptr, segment_zone_map);
+    ASSERT_TRUE(segment_zone_map->has_not_null());
+    segment_zone_map->clear_min();
+    segment_zone_map->clear_max();
+
+    ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&corrupted_meta, segment.get(), nullptr));
+    // _init() strips min/max only when has_not_null is false, so the crafted state must survive.
+    ASSERT_FALSE(reader->segment_zone_map()->has_min());
+
+    std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "0"));
+    std::vector<const ColumnPredicate*> predicates{predicate.get()};
+
+    // Without the production change this CHECK-aborts the process instead of returning.
+    // `true` means "cannot exclude this segment", i.e. the pruning is skipped and the segment is read.
+    ASSERT_TRUE(reader->segment_zone_map_filter(predicates));
 }
 
 } // namespace starrocks
