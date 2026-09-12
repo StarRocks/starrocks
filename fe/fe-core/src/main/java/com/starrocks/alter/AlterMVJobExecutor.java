@@ -44,6 +44,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
@@ -480,6 +481,28 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
     }
 
+    private void alterDataCachePartitionDuration(Map<String, String> properties,
+                                                 Map<String, String> propClone,
+                                                 MaterializedView materializedView,
+                                                 List<Runnable> appliers) {
+        if (!materializedView.isCloudNativeMaterializedView()) {
+            throw new SemanticException(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION
+                    + " is only supported for cloud native materialized view.");
+        }
+        PeriodDuration dataCachePartitionDuration;
+        try {
+            dataCachePartitionDuration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        // setDataCachePartitionDuration() stores the normalized form ("7 days") on the leader, while
+        // propClone still carries the raw user input ("7 day"). Normalize propClone too, otherwise the
+        // follower would replay a different string than the leader holds.
+        propClone.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
+                TimeUtils.toHumanReadableString(dataCachePartitionDuration));
+        appliers.add(() -> materializedView.setDataCachePartitionDuration(dataCachePartitionDuration));
+    }
+
     private void alterBFColumns(Map<String, String> properties,
                                 MaterializedView materializedView,
                                 List<Runnable> appliers) {
@@ -642,6 +665,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
             alterLabelsLocation(properties, materializedView, appliers);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            alterDataCachePartitionDuration(properties, propClone, materializedView, appliers);
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
             alterBFColumns(properties, materializedView,  appliers);

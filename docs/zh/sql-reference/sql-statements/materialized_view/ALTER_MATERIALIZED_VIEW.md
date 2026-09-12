@@ -30,6 +30,7 @@ description: "变更异步物化视图的名称、刷新策略、状态和属性
   - `unique_constraints`
   - `foreign_key_constraints`
   - `colocate_with`
+  - `datacache.partition_duration`
   - `excluded_refresh_tables`
   - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](../../System_variable.md)。
 
