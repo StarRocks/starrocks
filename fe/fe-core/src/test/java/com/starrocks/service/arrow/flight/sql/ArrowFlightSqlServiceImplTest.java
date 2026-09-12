@@ -611,6 +611,30 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
+    public void testCreatePreparedStatementFallsBackToPlaceholderSchemaOnAnalysisError() throws Exception {
+        String query = "SELECT missing_column";
+        FlightSql.ActionCreatePreparedStatementRequest request =
+                FlightSql.ActionCreatePreparedStatementRequest.newBuilder().setQuery(query).build();
+        ArrowFlightSqlConnectContext realContext = new ArrowFlightSqlConnectContext("token123");
+        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(realContext);
+        CapturingResultListener listener = new CapturingResultListener();
+
+        service.createPreparedStatement(request, mockCallContext, listener);
+
+        FlightSql.ActionCreatePreparedStatementResult result = awaitPreparedStatementResult(listener);
+        String handle = result.getPreparedStatementHandle().toStringUtf8();
+        assertTrue(!handle.isEmpty());
+        assertEquals(query, realContext.getPreparedStatement(handle));
+        Schema schema = deserializeSchema(result.getDatasetSchema());
+        assertEquals(1, schema.getFields().size());
+        assertEquals("result", schema.getFields().get(0).getName());
+        assertEquals(new org.apache.arrow.vector.types.pojo.ArrowType.Int(32, true),
+                schema.getFields().get(0).getType());
+        assertTrue(schema.getFields().get(0).isNullable());
+        assertTrue(deserializeSchema(result.getParameterSchema()).getFields().isEmpty());
+    }
+
+    @Test
     public void testBuildSchemaFromQueryRestoresPreviousConnectContext() throws Exception {
         ConnectContext previous = new ConnectContext();
         previous.setThreadLocalInfo();

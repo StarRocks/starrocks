@@ -19,11 +19,13 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
@@ -37,6 +39,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SecurityPolicyRewriteRule {
+    public static void markRelationsForRewrite(StatementBase statement) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                return null;
+            }
+        }.visit(statement);
+    }
+
     public static QueryStatement buildView(ConnectContext context, Relation relation, TableName tableName) {
         if (relation instanceof TableRelation && ((TableRelation) relation).isSyncMVQuery()) {
             return null;
