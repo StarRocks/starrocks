@@ -178,21 +178,35 @@ struct ArithmeticBinaryOperator {
         } else if constexpr (is_bitxor_op<Op>) {
             return l ^ r;
         } else if constexpr (is_bit_shift_left_op<Op>) {
-            return l << r;
+            // A shift count outside [0, bit width) is C++ undefined behavior; on x86 the
+            // hardware masks the count and silently returns a wrong value. Define such
+            // out-of-range counts to return 0. Kept branchless so the per-element loop still
+            // auto-vectorizes: mask the count into [0, width) to make the shift well-defined,
+            // then blend in 0 for out-of-range counts. A negative count wraps to a huge
+            // unsigned value and is caught by the same unsigned comparison. r is a BIGINT.
+            constexpr RType width = sizeof(LType) * 8;
+            LType v = l << (r & (width - 1));
+            return static_cast<uint64_t>(r) >= static_cast<uint64_t>(width) ? LType(0) : v;
         } else if constexpr (is_bit_shift_right_op<Op>) {
-            return l >> r;
+            constexpr RType width = sizeof(LType) * 8;
+            LType v = l >> (r & (width - 1));
+            return static_cast<uint64_t>(r) >= static_cast<uint64_t>(width) ? LType(0) : v;
         } else if constexpr (is_bit_shift_right_logical_op<Op>) {
+            constexpr RType width = sizeof(LType) * 8;
+            const RType shift = r & (width - 1);
+            LType v;
             if constexpr (std::is_same_v<LType, int8_t>) {
-                return uint8_t(l) >> r;
+                v = uint8_t(l) >> shift;
             } else if constexpr (std::is_same_v<LType, int16_t>) {
-                return uint16_t(l) >> r;
+                v = uint16_t(l) >> shift;
             } else if constexpr (std::is_same_v<LType, int32_t>) {
-                return uint32_t(l) >> r;
+                v = uint32_t(l) >> shift;
             } else if constexpr (std::is_same_v<LType, int64_t>) {
-                return uint64_t(l) >> r;
+                v = uint64_t(l) >> shift;
             } else if constexpr (std::is_same_v<LType, __int128_t>) {
-                return uint128_t(l) >> r;
+                v = uint128_t(l) >> shift;
             }
+            return static_cast<uint64_t>(r) >= static_cast<uint64_t>(width) ? LType(0) : v;
         } else {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }
@@ -331,15 +345,37 @@ struct ArithmeticBinaryOperator {
         } else if constexpr (is_bitxor_op<Op>) {
             result.value = b.CreateXor(l, r);
         } else if constexpr (is_bit_shift_left_op<Op>) {
-            result.value = b.CreateShl(l, r);
+            // Mirror the scalar path: a shift count outside [0, bit width) is UB, define it to 0.
+            // r is a BIGINT (i64); adapt it to the operand width for the actual shift instruction.
+            auto* oob = b.CreateOr(b.CreateICmpSLT(r, llvm::ConstantInt::get(r->getType(), 0)),
+                                   b.CreateICmpSGE(r, llvm::ConstantInt::get(r->getType(), sizeof(LType) * 8)));
+            // Mask into [0, width) so the shift is never poison; the select below still
+            // forces 0 for out-of-range counts.
+            auto* amount = b.CreateAnd(b.CreateZExtOrTrunc(r, l->getType()),
+                                       llvm::ConstantInt::get(l->getType(), sizeof(LType) * 8 - 1));
+            result.value = b.CreateSelect(oob, llvm::ConstantInt::get(l->getType(), 0), b.CreateShl(l, amount));
         } else if constexpr (is_bit_shift_right_op<Op>) {
+            auto* oob = b.CreateOr(b.CreateICmpSLT(r, llvm::ConstantInt::get(r->getType(), 0)),
+                                   b.CreateICmpSGE(r, llvm::ConstantInt::get(r->getType(), sizeof(LType) * 8)));
+            // Mask into [0, width) so the shift is never poison; the select below still
+            // forces 0 for out-of-range counts.
+            auto* amount = b.CreateAnd(b.CreateZExtOrTrunc(r, l->getType()),
+                                       llvm::ConstantInt::get(l->getType(), sizeof(LType) * 8 - 1));
+            llvm::Value* shifted;
             if constexpr (lt_is_unsigned<Type>) {
-                result.value = b.CreateLShr(l, r);
+                shifted = b.CreateLShr(l, amount);
             } else {
-                result.value = b.CreateAShr(l, r);
+                shifted = b.CreateAShr(l, amount);
             }
+            result.value = b.CreateSelect(oob, llvm::ConstantInt::get(l->getType(), 0), shifted);
         } else if constexpr (is_bit_shift_right_logical_op<Op>) {
-            result.value = b.CreateLShr(l, r);
+            auto* oob = b.CreateOr(b.CreateICmpSLT(r, llvm::ConstantInt::get(r->getType(), 0)),
+                                   b.CreateICmpSGE(r, llvm::ConstantInt::get(r->getType(), sizeof(LType) * 8)));
+            // Mask into [0, width) so the shift is never poison; the select below still
+            // forces 0 for out-of-range counts.
+            auto* amount = b.CreateAnd(b.CreateZExtOrTrunc(r, l->getType()),
+                                       llvm::ConstantInt::get(l->getType(), sizeof(LType) * 8 - 1));
+            result.value = b.CreateSelect(oob, llvm::ConstantInt::get(l->getType(), 0), b.CreateLShr(l, amount));
         } else {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }

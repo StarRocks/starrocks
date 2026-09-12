@@ -1,0 +1,28 @@
+-- name: test_bit_shift_out_of_range
+-- Regression: bit_shift_left / bit_shift_right / bit_shift_right_logical with a
+-- shift count that is negative or >= the operand bit width was C++ undefined
+-- behavior; on x86 the hardware masks the count to the operand width and returned
+-- a wrong value instead of 0. The fix defines such out-of-range shifts to return 0.
+-- Operands are read from columns so the FE cannot constant-fold them away.
+CREATE TABLE t_bit_shift (
+  k INT,
+  v_tiny TINYINT, v_small SMALLINT, v_int INT, v_big BIGINT,
+  nv_int INT, nv_big BIGINT,
+  s BIGINT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+INSERT INTO t_bit_shift VALUES
+ (1, 1, 1, 1, 1, -1024, -1024,  -1),
+ (2, 1, 1, 1, 1, -1024, -1024,   0),
+ (3, 1, 1, 1, 1, -1024, -1024,   1),
+ (4, 1, 1, 1, 1, -1024, -1024,   8),
+ (5, 1, 1, 1, 1, -1024, -1024,  16),
+ (6, 1, 1, 1, 1, -1024, -1024,  32),
+ (7, 1, 1, 1, 1, -1024, -1024,  64),
+ (8, 1, 1, 1, 1, -1024, -1024, 100);
+-- left shift: out-of-range count (s<0 or s>=bitwidth) must yield 0, in-range is normal
+SELECT k, bit_shift_left(v_tiny, s), bit_shift_left(v_small, s), bit_shift_left(v_int, s), bit_shift_left(v_big, s) FROM t_bit_shift ORDER BY k;
+-- arithmetic right shift of a negative value
+SELECT k, bit_shift_right(nv_int, s), bit_shift_right(nv_big, s) FROM t_bit_shift ORDER BY k;
+-- logical right shift of a negative value
+SELECT k, bit_shift_right_logical(nv_int, s), bit_shift_right_logical(nv_big, s) FROM t_bit_shift ORDER BY k;
