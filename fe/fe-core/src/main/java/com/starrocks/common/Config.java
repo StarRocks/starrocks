@@ -4710,6 +4710,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int arrow_max_service_task_threads_num = 4096;
 
+    @ConfField(mutable = true, comment = "Maximum continuous downstream-not-ready wait for an Arrow Flight proxy " +
+            "result stream, in milliseconds. Must be positive; changes apply to new result streams.")
+    public static int arrow_flight_proxy_backpressure_timeout_ms = 300_000;
+
     // Maximum time in milliseconds that a subsequent query on the same Arrow Flight SQL connection will wait
     // for the previous query to finish before returning an error.
     @ConfField(mutable = true)

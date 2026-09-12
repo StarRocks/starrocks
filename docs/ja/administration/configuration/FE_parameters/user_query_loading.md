@@ -83,6 +83,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## クエリエンジン
 
+### `arrow_flight_proxy_backpressure_timeout_ms`
+
+- デフォルト: 300000
+- タイプ: Int
+- 単位: ミリ秒
+- 範囲: [1, 2147483647]
+- 変更可能: はい
+- 説明: Arrow Flight プロキシが下流クライアントの準備完了を連続して待機できる時間の上限です。リモート BE および FE の結果ストリームに適用されます。タイムアウトすると上流ストリームをキャンセルし、gRPC `DEADLINE_EXCEEDED`（Arrow Flight `TIMED_OUT`）を返します。クエリや転送の総時間、および上流からの読み取り時間は制限しません。変更は新しいストリームに適用され、既存のストリームは開始時の値を保持します。ゼロまたは負の値はタイムアウトを無効にせず、新しいプロキシストリームを `INTERNAL` で拒否します。
+
 ### `ai_default_chat_endpoint`
 
 - デフォルト：空文字列

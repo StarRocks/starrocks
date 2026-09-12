@@ -83,6 +83,15 @@ This topic introduces the following types of FE configurations:
 
 ## Query engine
 
+### `arrow_flight_proxy_backpressure_timeout_ms`
+
+- Default: 300000
+- Type: Int
+- Unit: Milliseconds
+- Range: [1, 2147483647]
+- Is mutable: Yes
+- Description: Maximum duration of each continuous wait for an Arrow Flight proxy client to become ready. Applies to remote BE and FE result streams. On expiry, the proxy cancels the upstream stream and returns gRPC `DEADLINE_EXCEEDED` (Arrow Flight `TIMED_OUT`). This does not limit the total query or transfer duration or time spent reading upstream. Changes apply to new streams; existing streams retain their captured value. Zero or negative values reject new proxy streams with `INTERNAL` instead of disabling the timeout.
+
 ### `ai_default_chat_endpoint`
 
 - Default: Empty string
