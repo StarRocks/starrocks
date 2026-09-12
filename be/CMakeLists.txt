@@ -73,7 +73,7 @@ set(CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON)
 macro( pkg_check_modules )
 endmacro()
 
-project(starrocks CXX C)
+project(starrocks CXX C ASM)
 
 include(CheckSymbolExists)
 
@@ -186,6 +186,16 @@ option(THIN_ARCHIVE "Build binary with thin archive" OFF)
 
 set(WITH_STARCACHE_DEFAULT ON)
 if (APPLE)
+    set(WITH_STARCACHE_DEFAULT OFF)
+endif()
+# The official starcache binary is built from an internal source tree
+# ("starcachelib") that is not published: the public github.com/StarRocks/starcache
+# repo stopped updating in 2023-10 and has a different namespace (starrocks::starcache)
+# and API surface (no time_based_cache_adaptor.h, no exist/touch/metrics APIs) than
+# what this BE expects. Without a matching source there is no way to build the
+# required v4.2-rc2 library for riscv64, so disable starcache there like on macOS;
+# BE falls back to the non-starcache data cache path (a perf feature, not correctness).
+if (CMAKE_BUILD_TARGET_ARCH STREQUAL "riscv64")
     set(WITH_STARCACHE_DEFAULT OFF)
 endif()
 option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEFAULT})
@@ -351,6 +361,10 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif ()
     # Add -rtlib=compiler-rt for ARM architecture to fix LLVM bug: https://bugs.llvm.org/show_bug.cgi?id=16404
     if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -rtlib=compiler-rt")
+    endif()
+    # RISC-V also benefits from compiler-rt for runtime helper functions
+    if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "riscv64")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -rtlib=compiler-rt")
     endif()
 else ()
@@ -545,6 +559,20 @@ else()
     set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
     set(WL_WHOLE_ARCHIVE_PREFIX "-Wl,--whole-archive")
     set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
+endif()
+
+if (NOT APPLE AND "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "riscv64")
+    # s2geometry vendors a copy of gutil (its src/gutil/*.cc compile into the
+    # source-built libs2.a), while BE also links its own Gutil module built
+    # from be/src/gutil. The prebuilt libs2.a used on x86_64/aarch64 does not
+    # carry those objects, but on riscv64 s2 is built from source and ld.bfd
+    # then sees duplicate definitions of StringPrintf/StringAppendV/SStringPrintf/
+    # StringAppendF. Keep the first definition in link order (BE's own Gutil,
+    # which links ahead of the thirdparty archives), matching what the
+    # x86_64/aarch64 link resolves to.
+    set(WL_ALLOW_MULTIPLE_DEF "-Wl,--allow-multiple-definition")
+else()
+    set(WL_ALLOW_MULTIPLE_DEF "")
 endif()
 
 include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
@@ -955,7 +983,7 @@ set (STARROCKS_LINKER "$ENV{STARROCKS_LINKER}")
 include(cmake_modules/FindGlibcVersion.cmake)
 
 if (NOT APPLE AND GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
-    if ("${STARROCKS_LINKER}" STREQUAL "" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    if ("${STARROCKS_LINKER}" STREQUAL "" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "riscv64")
         set(STARROCKS_LINKER "gold")
         message(STATUS "forcibly switch linker to: ${STARROCKS_LINKER}")
     endif()
