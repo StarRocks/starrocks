@@ -81,6 +81,14 @@ public class TableTestBase {
                     required(2, "k1", Types.IntegerType.get()),
                     required(3, "k2", Types.StringType.get()));
 
+    // decimal32 (INT32 physical type), decimal64 (INT64) and decimal128 (FIXED_LEN_BYTE_ARRAY)
+    // boundary precisions, used to verify manifest lower/upper bound encoding for DECIMAL columns.
+    public static final Schema SCHEMA_DECIMAL =
+            new Schema(required(1, "id", Types.IntegerType.get()),
+                    required(2, "d32", Types.DecimalType.of(9, 2)),
+                    required(3, "d64", Types.DecimalType.of(18, 5)),
+                    required(4, "d128", Types.DecimalType.of(38, 5)));
+
     protected static final int BUCKETS_NUMBER = 16;
     protected static final int BUCKETS_NUMBER2 = 64;
 
@@ -272,6 +280,7 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableK = null;
     public TestTables.TestTable mockedNativeTableMultiPartition = null;
     public TestTables.TestTable mockedNativeTable2Bucket = null;
+    public TestTables.TestTable mockedNativeTableDecimal = null;
 
     protected final int formatVersion = 1;
 
@@ -295,6 +304,7 @@ public class TableTestBase {
         this.mockedNativeTableK = create(SCHEMA_E, SPEC_E_2, "tk", 1);
         this.mockedNativeTableMultiPartition = create(SCHEMA_I, SPEC_I, "tmp", 1);
         this.mockedNativeTable2Bucket = create(SCHEMA_J, SPEC_J, "twobucket", 1);
+        this.mockedNativeTableDecimal = create(SCHEMA_DECIMAL, PartitionSpec.unpartitioned(), "tdecimal", 2);
     }
 
     @AfterEach
