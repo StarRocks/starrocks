@@ -1,0 +1,50 @@
+-- name: test_distinct_over_window_non_nullable_agg
+CREATE TABLE t (
+    k INT,
+    ts INT,
+    uid INT
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t VALUES (1,10,100),(1,20,100),(1,30,200),(2,10,300),(2,20,NULL),(3,10,400);
+
+-- bitmap_union_count over a window feeding an outer DISTINCT previously failed with
+-- "error nullablel column": the analytic node emitted a nullable column for an always-non-null
+-- aggregate while the plan declared the slot non-null. The result must be non-null and correct.
+SELECT DISTINCT k, uv FROM (
+    SELECT k, bitmap_union_count(to_bitmap(uid)) OVER (PARTITION BY k) AS uv FROM t) s ORDER BY k;
+
+-- same, alongside a ranking function (the shape found by the fuzzer)
+SELECT DISTINCT k, ts, rk, uv FROM (
+    SELECT k, ts,
+           rank() OVER (PARTITION BY k ORDER BY ts DESC) AS rk,
+           bitmap_union_count(to_bitmap(uid)) OVER (PARTITION BY k) AS uv
+    FROM t) s ORDER BY k, ts;
+
+-- GROUP BY (not just DISTINCT) over the always-non-null window result
+SELECT k, uv, count(*) AS cnt FROM (
+    SELECT k, bitmap_union_count(to_bitmap(uid)) OVER (PARTITION BY k) AS uv FROM t) s
+GROUP BY k, uv ORDER BY k;
+
+-- count over a window feeding an outer DISTINCT (count is also always non-null)
+SELECT DISTINCT k, c FROM (
+    SELECT k, count(uid) OVER (PARTITION BY k) AS c FROM t) s ORDER BY k;
+
+-- approx_top_k over a window feeding an outer DISTINCT (also always non-null; returns an array)
+SELECT DISTINCT k, ak FROM (
+    SELECT k, approx_top_k(uid) OVER (PARTITION BY k) AS ak FROM t) s ORDER BY k;
+
+-- Regression guard: a nullable-output window aggregate over an empty ROWS frame must stay NULL,
+-- not collapse to 0 / type-min / NaN. All frames below are empty (only 1-3 rows per partition).
+SELECT k, ts, SUM(uid) OVER (PARTITION BY k ORDER BY ts ROWS BETWEEN 5 FOLLOWING AND 10 FOLLOWING) AS s
+FROM t ORDER BY k, ts;
+SELECT k, ts, MAX(uid) OVER (PARTITION BY k ORDER BY ts ROWS BETWEEN 5 FOLLOWING AND 10 FOLLOWING) AS m
+FROM t ORDER BY k, ts;
+SELECT k, ts, AVG(uid) OVER (PARTITION BY k ORDER BY ts ROWS BETWEEN 5 FOLLOWING AND 10 FOLLOWING) AS a
+FROM t ORDER BY k, ts;
+
+-- DISTINCT over a nullable window result still works and keeps the NULL group.
+SELECT DISTINCT k, s FROM (
+    SELECT k, SUM(uid) OVER (PARTITION BY k ORDER BY ts ROWS BETWEEN 5 FOLLOWING AND 10 FOLLOWING) AS s FROM t) x
+ORDER BY k, s;
