@@ -346,7 +346,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0");
         analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0 group by rollup(v1);");
 
-        analyzeFail("select array_agg(distinct vj) from ttypes group by v1;");
+        analyzeSuccess("select array_agg(distinct vj) from ttypes group by v1;");
         analyzeFail("select array_agg(null order by 11);");
         analyzeFail("select array_agg(null order by);");
         analyzeFail("select array_agg(null,'a');");

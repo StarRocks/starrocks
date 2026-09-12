@@ -842,4 +842,34 @@ TEST_F(TypeDescriptorTest, test_create_variant_type) {
     ASSERT_EQ(variant_desc.len, variant_desc2.len);
 }
 
+// NOLINTNEXTLINE
+TEST_F(TypeDescriptorTest, test_support_groupby_top_level_json) {
+    // Top-level JSON is allowed as a group-by key (mirrors FE Type.canGroupBy).
+    EXPECT_TRUE(TypeDescriptor(TYPE_JSON).support_groupby());
+
+    // Plain scalar types are allowed.
+    EXPECT_TRUE(TypeDescriptor(TYPE_INT).support_groupby());
+
+    // Nested JSON (inside ARRAY/STRUCT/MAP) must be rejected.
+    TypeDescriptor arr_json = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_JSON));
+    EXPECT_FALSE(arr_json.support_groupby());
+
+    TypeDescriptor struct_json = TypeDescriptor::create_struct_type({"a"}, {TypeDescriptor(TYPE_JSON)});
+    EXPECT_FALSE(struct_json.support_groupby());
+
+    TypeDescriptor map_json_val =
+            TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_JSON));
+    EXPECT_FALSE(map_json_val.support_groupby());
+
+    // Metric / semi-structured types that are always rejected.
+    EXPECT_FALSE(TypeDescriptor(TYPE_HLL).support_groupby());
+    EXPECT_FALSE(TypeDescriptor(TYPE_OBJECT).support_groupby());
+    EXPECT_FALSE(TypeDescriptor(TYPE_PERCENTILE).support_groupby());
+    EXPECT_FALSE(TypeDescriptor::create_variant_type().support_groupby());
+
+    // ARRAY<INT> is still allowed.
+    TypeDescriptor arr_int = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    EXPECT_TRUE(arr_int.support_groupby());
+}
+
 } // namespace starrocks
