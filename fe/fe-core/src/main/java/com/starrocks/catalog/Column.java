@@ -1136,6 +1136,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return physicalName;
     }
 
+    public void setPhysicalName(String physicalName) {
+        this.physicalName = physicalName;
+    }
+
     // return max unique id of all fields
     public int getMaxUniqueId() {
         return Math.max(this.uniqueId, type.getMaxUniqueId());
