@@ -28,6 +28,9 @@ import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
@@ -929,6 +932,96 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
             Assertions.assertEquals(0, result.getTables().size(),
                     "Should return empty result for non-existing db");
         }
+    }
+
+    /**
+     * Regression test for the hierarchical-lock violation in {@link ViewsSystemTable}: scanning
+     * information_schema.views used to request a database READ lock while the planner already
+     * held an INTENTION_SHARED lock on the very same database, which MultiUserLock rejects with
+     * "Can't request Database READ Lock ... in the scope of Database INTENTION_SHARED Lock".
+     * <p>
+     * In production the optimizer reaches this state through authorization, not through the
+     * session variable used below. When a catalog is served by an {@code ExternalAccessController}
+     * (Ranger), {@code ColumnPrivilege.check} runs a nested RULE_BASED optimizer to compute the
+     * pruned column list, and it does so from {@code Authorizer.check} in
+     * {@code StatementPlanner.plan} - which still runs inside the PlannerMetaLocker scope, well
+     * before the lock-free path would have released it. Every query touching
+     * information_schema.views therefore failed on such clusters with default session variables.
+     * <p>
+     * Reproducing that here would need a permissive 34-method ExternalAccessController stub, so
+     * the test instead sets cbo_use_lock_db, which keeps the planner lock held for the whole
+     * planning phase and so puts SchemaTableEvaluateRule -> ViewsSystemTable#evaluate in exactly
+     * the same lock state: INTENTION_SHARED held on every database the query references.
+     */
+    @Test
+    public void testViewsSystemViewUnderWholePhaseLock() throws Exception {
+        starRocksAssert.withDatabase("test_views_lock_db").useDatabase("test_views_lock_db");
+        starRocksAssert.withTable("""
+                CREATE TABLE test_views_lock_db.`lock_tbl1` (
+                  `k1` date COMMENT "",
+                  `k2` varchar(20) COMMENT ""
+                ) ENGINE=OLAP
+                DUPLICATE KEY(`k1`)
+                DISTRIBUTED BY HASH(k1) BUCKETS 1
+                PROPERTIES ('replication_num' = '1');
+                """);
+        starRocksAssert.withView("CREATE VIEW test_views_lock_db.lock_view1 AS " +
+                "SELECT k1, k2 FROM test_views_lock_db.lock_tbl1");
+
+        boolean originCboUseDBLock = connectContext.getSessionVariable().isCboUseDBLock();
+        connectContext.getSessionVariable().setCboUseDBLock(true);
+        try {
+            // (a) the planner holds INTENTION_SHARED on information_schema itself.
+            starRocksAssert.query("select count(1) from information_schema.views")
+                    .explainContains("     constant exprs: ");
+
+            // (b) the planner additionally holds INTENTION_SHARED on the user database, because
+            //     the query joins a table from it. TABLE_SCHEMA pins the scan to that one
+            //     database, so information_schema is never enumerated here - this used to fail
+            //     purely on the user database, which is why skipping the lock only for system
+            //     databases would not have fixed it. Planning just has to succeed; the constant rows
+            //     are folded away by the join, so no "constant exprs: " survives in the plan.
+            String joinPlan = starRocksAssert.query("select count(1) from information_schema.views v, " +
+                    "test_views_lock_db.lock_tbl1 t where v.TABLE_SCHEMA = 'test_views_lock_db'")
+                    .explainQuery();
+            Assertions.assertTrue(joinPlan.contains("lock_tbl1"), joinPlan);
+        } finally {
+            connectContext.getSessionVariable().setCboUseDBLock(originCboUseDBLock);
+        }
+
+        // Everything must be unwound afterwards: a missing release in the new per-table finally
+        // block would leave a lock behind here.
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_views_lock_db").getId();
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        Locker locker = new Locker();
+        Assertions.assertFalse(lockManager.isOwner(dbId, locker, LockType.INTENTION_SHARED));
+        Assertions.assertFalse(lockManager.isOwner(dbId, locker, LockType.READ));
+
+        // The thrift path holds no planner lock and must keep behaving exactly as before.
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCurrent_user_ident(UserIdentityUtils.toThrift(connectContext.getCurrentUserIdentity()));
+        params.setDb("test_views_lock_db");
+        params.setType(TTableType.VIEW);
+        TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
+        Assertions.assertEquals(1, result.getTables().size());
+        Assertions.assertEquals("lock_view1", result.getTables().get(0).getName());
+
+        // The name and pattern filters run inside the per-table lock so that a concurrent rename
+        // cannot make the emitted row disagree with the filter that selected it. Guard that the
+        // reordering did not change what the filters actually accept.
+        params.setPattern("lock_view%");
+        result = ViewsSystemTable.query(params, connectContext);
+        Assertions.assertEquals(1, result.getTables().size());
+        Assertions.assertEquals("lock_view1", result.getTables().get(0).getName());
+
+        params.setPattern("no_such_view%");
+        Assertions.assertEquals(0, ViewsSystemTable.query(params, connectContext).getTables().size());
+
+        params.unsetPattern();
+        params.setTable_name("lock_view1");
+        Assertions.assertEquals(1, ViewsSystemTable.query(params, connectContext).getTables().size());
+        params.setTable_name("lock_view_missing");
+        Assertions.assertEquals(0, ViewsSystemTable.query(params, connectContext).getTables().size());
     }
 
     @Test
