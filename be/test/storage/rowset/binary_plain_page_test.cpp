@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <vector>
 
@@ -123,6 +124,29 @@ public:
 TEST_F(BinaryPlainPageTest, test_seek_by_value) {
     TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<TYPE_VARCHAR>, false>();
     TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<TYPE_VARCHAR>, true>();
+}
+
+TEST_F(BinaryPlainPageTest, test_unaligned_absolute_offset_trailer) {
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BinaryPlainPageBuilder builder(options);
+    Slice slices[] = {"a", "bc"};
+
+    ASSERT_EQ(2, builder.add(reinterpret_cast<const uint8_t*>(slices), 2));
+    OwnedSlice owned_slice = builder.finish()->build();
+    const Slice page = owned_slice.slice();
+    const size_t offsets_pos = page.size - (builder.count() + 1) * sizeof(uint32_t);
+    const auto trailer_address = reinterpret_cast<uintptr_t>(page.data + offsets_pos);
+    ASSERT_NE(0u, trailer_address % alignof(uint32_t));
+
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page);
+    ASSERT_OK(decoder.init());
+
+    auto column = BinaryColumn::create();
+    size_t size = builder.count();
+    ASSERT_OK(decoder.next_batch(&size, column.get()));
+    ASSERT_EQ(2, size);
+    ASSERT_EQ("['a', 'bc']", column->debug_string());
 }
 
 // NOLINTNEXTLINE
