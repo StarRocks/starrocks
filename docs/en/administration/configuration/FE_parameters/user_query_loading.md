@@ -1161,8 +1161,8 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 4 * 3600
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
+- Is mutable: Yes
+- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. The value must be greater than 0. A value of 0 or less is rejected, both by `ADMIN SET FRONTEND CONFIG` and when the FE loads `fe.conf` at startup.
 - Introduced in: -
 
 ### `label_keep_max_num`

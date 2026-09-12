@@ -2452,6 +2452,7 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 clearExpiredJobs();
+                setInterval(Config.label_clean_interval_second * 1000L);
             }
         };
     }
