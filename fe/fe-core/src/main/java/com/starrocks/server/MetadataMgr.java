@@ -709,6 +709,21 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public Optional<List<String>> listPartitionNamesByFilter(String catalogName, String dbName, String tableName,
+                                                             String filter) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return connectorMetadata.get().listPartitionNamesByFilter(dbName, tableName, filter);
+        } catch (Exception e) {
+            LOG.error("Failed to listPartitionNamesByFilter on [{}.{}.{}] with filter [{}]",
+                    catalogName, dbName, tableName, filter, e);
+            throw e;
+        }
+    }
+
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         Statistics.Builder statistics = Statistics.builder();
 
