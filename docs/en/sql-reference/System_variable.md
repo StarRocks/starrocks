@@ -287,6 +287,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: int
 * **Introduced in**: v3.5.3
 
+### cbo_cte_force_reuse_inlined_node_count
+
+* **Description**: Session-scoped threshold that lets the optimizer automatically materialize a Common Table Expression (CTE) instead of inlining it when inlining would blow up its scalar expression. In RelationTransformer.buildCTEAnchorAndProducer, for a CTE that would otherwise be inlined, the planner estimates the size of its output expression **after inlining** — expanding every un-materialized CTE it references (cascaded), while a materialized CTE or a base column counts as a single node. If that estimated inlined node count is greater than this threshold and the threshold is greater than `0`, the CTE is force-materialized. This turns the `Expression too complex` failure of deeply nested CTE chains into a bounded materialization, without any manual `[materialized]` hint. Set it below `max_scalar_operator_flat_children`. Setting the value to `0` disables this optimization.
+* **Scope**: Session
+* **Default**: `0`
+* **Data Type**: int
+* **Introduced in**: -
+
 ### cbo_cte_reuse
 
 * **Description**: Controls whether the optimizer may rewrite multi-distinct aggregate queries by reusing a Common Table Expression (CTE) (the CBO CTE‑reuse rewrite). When enabled, the planner (RewriteMultiDistinctRule) may choose a CTE-based rewrite for multi-column distincts, skewed aggregations, or when statistics indicate the CTE rewrite is more efficient; it also respects the `prefer_cte_rewrite` hint. When disabled, CTE-based rewrite is not allowed and the planner will attempt the multi-function rewrite; if a query requires CTE (for example, multi-column DISTINCT or functions that cannot be handled by multi-function rewrite) the planner will raise a user error. Note: the effective setting checked by the optimizer is the logical AND of this flag and the pipeline engine flag — i.e. `isCboCteReuse()` returns this variable AND `enablePipelineEngine`, so CTE reuse is only effective when `enablePipelineEngine` is on.
