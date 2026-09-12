@@ -697,11 +697,13 @@ jobs:
       BE_UT_LINUX: ${{ needs.info.outputs.BE_UT_LINUX }}
     steps:
       - name: init
+        timeout-minutes: 10
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
 
       - name: save unstable cases
         if: always() && (github.event_name == 'schedule' || (github.event_name != 'schedule' && env.BRANCH != 'main'))
+        timeout-minutes: 15
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh
