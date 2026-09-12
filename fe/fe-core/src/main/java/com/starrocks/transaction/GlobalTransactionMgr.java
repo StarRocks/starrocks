@@ -692,6 +692,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         abortTransaction(dbId, transactionId, reason, Collections.emptyList());
     }
 
+    // abortPrepared=false leaves PREPARED txns for a later COMMIT (coordinator BE is gone).
+    public void abortTransaction(long dbId, long transactionId, String reason, boolean abortPrepared)
+            throws StarRocksException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        dbTransactionMgr.abortTransaction(transactionId, abortPrepared, reason, null,
+                Collections.emptyList(), Collections.emptyList());
+    }
+
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
             throws StarRocksException {
         abortTransaction(dbId, transactionId, reason, Collections.emptyList(), failedTablets, null);
@@ -1127,6 +1135,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return this.idGenerator;
     }
 
+    public long peekNextTransactionId() {
+        return idGenerator.peekNextTransactionId();
+    }
+
     public void loadTransactionStateV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();
@@ -1165,6 +1177,19 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         ArrayList<Pair<Long, Long>> txnInfos = new ArrayList<>();
         for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             txnInfos.addAll(databaseTransactionMgr.getTransactionIdByCoordinateBe(coordinateHost, limit));
+            if (txnInfos.size() > limit) {
+                break;
+            }
+        }
+        return txnInfos.size() > limit ? new ArrayList<>(txnInfos.subList(0, limit)) : txnInfos;
+    }
+
+    public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, long backendId,
+                                                                 long maxTxnIdExclusive, int limit) {
+        ArrayList<Pair<Long, Long>> txnInfos = new ArrayList<>();
+        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            txnInfos.addAll(databaseTransactionMgr.getTransactionIdByCoordinateBe(
+                    coordinateHost, backendId, maxTxnIdExclusive, limit));
             if (txnInfos.size() > limit) {
                 break;
             }

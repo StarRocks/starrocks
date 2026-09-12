@@ -35,9 +35,12 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -56,6 +59,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRunMode;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -247,6 +251,438 @@ public class HeartbeatMgrTest {
                 Assertions.assertEquals(TRunMode.SHARED_DATA, masterInfo.getRun_mode());
             }
         };
+    }
+
+    @Test
+    public void testBackendHandlerCarriesLastHeartbeatTime(@Mocked HeartbeatService.Client client) throws Exception {
+        TStatus shutdownStatus = new TStatus(TStatusCode.SHUTDOWN);
+        shutdownStatus.setError_msgs(Collections.singletonList("BE is shutting down"));
+        THeartbeatResult res = new THeartbeatResult();
+        res.setStatus(shutdownStatus);
+
+        new MockUp<ThriftConnectionPool<HeartbeatService.Client>>() {
+            @Mock
+            public HeartbeatService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
+                return client;
+            }
+
+            @Mock
+            public void returnObject(TNetworkAddress address, HeartbeatService.Client object) {
+            }
+
+            @Mock
+            public void invalidateObject(TNetworkAddress address, HeartbeatService.Client object) {
+            }
+        };
+
+        new MockUp<HeartbeatMgr>() {
+            @Mock
+            public long computeMinActiveTxnId() {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                client.heartbeat((TMasterInfo) any);
+                minTimes = 1;
+                result = res;
+            }
+        };
+
+        // call setLeader() to init the MASTER_INFO
+        new HeartbeatMgr(false).setLeader(1, "123", 1);
+
+        ComputeNode cn = new ComputeNode(1, "192.168.1.1", 8111);
+        cn.setLastUpdateMs(777777L);
+        HeartbeatMgr.BackendHeartbeatHandler handler = new HeartbeatMgr.BackendHeartbeatHandler(cn, true);
+
+        handler.call();
+        new Verifications() {
+            {
+                TMasterInfo masterInfo;
+                client.heartbeat(masterInfo = withCapture());
+                Assertions.assertNotNull(masterInfo);
+                // The request always carries the FE's LastHeartbeat time for this BE; the BE uses
+                // its advance as the shutdown ack.
+                Assertions.assertTrue(masterInfo.isSetLast_heartbeat_time_ms());
+                Assertions.assertEquals(777777L, masterInfo.getLast_heartbeat_time_ms());
+            }
+        };
+    }
+
+    @Test
+    public void testShutdownHeartbeatDoesNotAbortCoordinatorTxns(@Mocked SystemInfoService clusterInfo,
+                                                                 @Mocked GlobalTransactionMgr txnMgr) {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        new Expectations() {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
+
+                clusterInfo.getBackend(1);
+                minTimes = 0;
+                result = cn;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = txnMgr;
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        BackendHbResponse hbResponse = new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down");
+        Deencapsulation.invoke(mgr, "handleHbResponse", hbResponse, false);
+
+        // The shutdown BE keeps draining its coordinator loads; they must commit or abort normally.
+        new Verifications() {
+            {
+                txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
+                times = 0;
+            }
+        };
+        Assertions.assertFalse(cn.isAlive(), "SHUTDOWN must still mark the node not alive");
+    }
+
+    @Test
+    public void testNonShutdownHeartbeatFailureAbortsCoordinatorTxns(@Mocked SystemInfoService clusterInfo,
+                                                                     @Mocked GlobalTransactionMgr txnMgr) {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        cn.setAlive(false); // already marked not alive, e.g. by a previous SHUTDOWN heartbeat
+        new Expectations() {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
+
+                clusterInfo.getBackend(1);
+                minTimes = 0;
+                result = cn;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = txnMgr;
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        BackendHbResponse hbResponse = new BackendHbResponse(1, TStatusCode.INTERNAL_ERROR, "connection refused");
+        // Transient losses while the status is still SHUTDOWN/CONNECTING must not abort; the
+        // node only turns DISCONNECTED (and aborts) after heartbeat_retry_times failures.
+        for (int i = 0; i <= Config.heartbeat_retry_times; i++) {
+            Deencapsulation.invoke(mgr, "handleHbResponse", hbResponse, false);
+        }
+
+        Assertions.assertEquals(ComputeNode.Status.DISCONNECTED, cn.getStatus());
+        new Verifications() {
+            {
+                txnMgr.abortTxnWhenCoordinateBeDown(cn.getHost(), 100);
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testOkAfterShutdownAbortsCoordinatorTxns(@Mocked SystemInfoService clusterInfo,
+                                                        @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        cn.setLastStartTime(100_000L);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        new Expectations() {
+            {
+                txnMgr.peekNextTransactionId();
+                minTimes = 1;
+                result = 100L;
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
+                minTimes = 1;
+                result = java.util.List.of(new Pair<>(5L, 10L), new Pair<>(6L, 20L));
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+
+        new Verifications() {
+            {
+                txnMgr.abortTransaction(5L, 10L, anyString, false);
+                times = 1;
+                txnMgr.abortTransaction(6L, 20L, anyString, false);
+                times = 1;
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
+                times = 2;
+            }
+        };
+        Assertions.assertTrue(cn.isAlive());
+        Assertions.assertEquals(ComputeNode.Status.OK, cn.getStatus());
+        Assertions.assertEquals(0L, cn.getShutdownTxnIdWatermark());
+    }
+
+    @Test
+    public void testOkAfterShutdownSkipsPostRestartTxn(@Mocked SystemInfoService clusterInfo,
+                                                       @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        cn.setLastStartTime(100_000L);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        // Query layer returns only txns below the watermark.
+        new Expectations() {
+            {
+                txnMgr.peekNextTransactionId();
+                minTimes = 1;
+                result = 100L;
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
+                result = java.util.List.of(new Pair<>(5L, 10L));
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+
+        new Verifications() {
+            {
+                txnMgr.abortTransaction(5L, 10L, anyString, false);
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testRepeatedShutdownRaisesWatermark(@Mocked SystemInfoService clusterInfo,
+                                                   @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        new Expectations() {
+            {
+                txnMgr.peekNextTransactionId();
+                returns(100L, 150L);
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 150L, 100);
+                result = java.util.List.of(new Pair<>(1L, 120L));
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Assertions.assertEquals(100L, cn.getShutdownTxnIdWatermark());
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Assertions.assertEquals(150L, cn.getShutdownTxnIdWatermark());
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+
+        new Verifications() {
+            {
+                txnMgr.abortTransaction(1L, 120L, anyString, false);
+                times = 1;
+            }
+        };
+        Assertions.assertEquals(0L, cn.getShutdownTxnIdWatermark());
+    }
+
+    @Test
+    public void testRepeatedShutdownDoesNotLowerWatermark(@Mocked SystemInfoService clusterInfo,
+                                                         @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        new Expectations() {
+            {
+                txnMgr.peekNextTransactionId();
+                returns(100L, 90L);
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
+                result = java.util.List.of(new Pair<>(1L, 50L));
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Assertions.assertEquals(100L, cn.getShutdownTxnIdWatermark());
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Assertions.assertEquals(100L, cn.getShutdownTxnIdWatermark());
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+
+        new Verifications() {
+            {
+                txnMgr.abortTransaction(1L, 50L, anyString, false);
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testReplayShutdownRestoresWatermarkThenOkAborts(@Mocked SystemInfoService clusterInfo,
+                                                               @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        new Expectations() {
+            {
+                txnMgr.peekNextTransactionId();
+                minTimes = 0;
+                txnMgr.getTransactionIdByCoordinateBe(cn.getHost(), 1L, 100L, 100);
+                result = java.util.List.of(new Pair<>(5L, 10L));
+            }
+        };
+
+        BackendHbResponse shutdown = new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down");
+        shutdown.setShutdownTxnIdWatermark(100L);
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", shutdown, true);
+        Assertions.assertEquals(100L, cn.getShutdownTxnIdWatermark());
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+
+        new Verifications() {
+            {
+                txnMgr.abortTransaction(5L, 10L, anyString, false);
+                times = 1;
+            }
+        };
+        Assertions.assertEquals(0L, cn.getShutdownTxnIdWatermark());
+    }
+
+    @Test
+    public void testWatermarkSurvivesGsonRoundTrip() {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        cn.setShutdownTxnIdWatermark(99L);
+        Backend copy = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(cn), Backend.class);
+        Assertions.assertEquals(99L, copy.getShutdownTxnIdWatermark());
+    }
+
+    @Test
+    public void testSameHostPassesRestartedBackendIdToQuery(@Mocked SystemInfoService clusterInfo,
+                                                           @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(7, "10.0.0.1", 8111);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+        new Expectations() {
+            {
+                clusterInfo.getBackend(1);
+                minTimes = 0;
+                result = cn;
+                txnMgr.peekNextTransactionId();
+                result = 50L;
+                txnMgr.getTransactionIdByCoordinateBe("10.0.0.1", 7L, 50L, 100);
+                result = java.util.List.of(new Pair<>(1L, 9L));
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+
+        new Verifications() {
+            {
+                txnMgr.getTransactionIdByCoordinateBe("10.0.0.1", 7L, 50L, 100);
+                times = 1;
+                txnMgr.abortTransaction(1L, 9L, anyString, false);
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testOkRebootWhileAliveDoesNotAbortCoordinatorTxns(@Mocked SystemInfoService clusterInfo,
+                                                                 @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        cn.setAlive(true);
+        cn.setLastStartTime(100_000L);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 200), false);
+
+        new Verifications() {
+            {
+                txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
+                times = 0;
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
+                times = 0;
+            }
+        };
+    }
+
+    @Test
+    public void testReplayOkAfterShutdownDoesNotAbort(@Mocked SystemInfoService clusterInfo,
+                                                     @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        cn.setLastStartTime(100_000L);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        new Expectations() {
+            {
+                txnMgr.peekNextTransactionId();
+                minTimes = 0;
+                result = 100L;
+            }
+        };
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse",
+                new BackendHbResponse(1, TStatusCode.SHUTDOWN, "BE is shutting down"), false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), true);
+
+        new Verifications() {
+            {
+                txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
+                times = 0;
+                // Replay OK after a shutdown must not abort the snapshot.
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
+                times = 0;
+            }
+        };
+    }
+
+    @Test
+    public void testFirstJoinOkDoesNotAbortCoordinatorTxns(@Mocked SystemInfoService clusterInfo,
+                                                          @Mocked GlobalTransactionMgr txnMgr) throws Exception {
+        Backend cn = new Backend(1, "192.168.1.1", 8111);
+        mockBackendTxn(clusterInfo, txnMgr, cn);
+
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        Deencapsulation.invoke(mgr, "handleHbResponse", okHb(1, 100), false);
+
+        new Verifications() {
+            {
+                txnMgr.abortTxnWhenCoordinateBeDown(anyString, anyInt);
+                times = 0;
+                txnMgr.abortTransaction(anyLong, anyLong, anyString, false);
+                times = 0;
+            }
+        };
+    }
+
+    private void mockBackendTxn(SystemInfoService clusterInfo, GlobalTransactionMgr txnMgr, Backend cn) {
+        new Expectations() {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
+
+                clusterInfo.getBackend(1);
+                minTimes = 0;
+                result = cn;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = txnMgr;
+            }
+        };
+    }
+
+    private static BackendHbResponse okHb(long beId, long rebootSec) {
+        BackendHbResponse hb = new BackendHbResponse(beId, 9050, 8040, 8060, 0,
+                System.currentTimeMillis(), "v", 8, 0L);
+        hb.setRebootTime(rebootSec);
+        return hb;
     }
 
     @Test

@@ -25,7 +25,9 @@ add_executable(orchestration_test
     fragment_executor_test.cpp
     fragment_mgr_test.cpp
     orchestration_metrics_test.cpp
+    orchestration_env_test.cpp
     query_orchestrator_test.cpp
+    routine_load_task_executor_admission_test.cpp
     stream_load_orchestrator_test.cpp
 )
 target_link_libraries(orchestration_test Orchestration ${TEST_LINK_LIBS})
