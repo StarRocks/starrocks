@@ -157,10 +157,18 @@ public class AuthenticationHandler {
                 continue;
             }
 
+            // Fall back to the global group providers when the security integration does not name its own.
+            // getGroupProviderName() returns an empty list (never null) for an absent or blank property, so
+            // the fallback has to be keyed on emptiness -- a null check here never fires and leaves external
+            // users with no groups at all, which also makes a configured permitted_groups reject every login.
+            List<String> groupProviderNames = securityIntegration.getGroupProviderName();
+            if (groupProviderNames.isEmpty()) {
+                groupProviderNames = List.of(Config.group_provider);
+            }
+
             authenticationResult = new AuthenticationResult(
                     UserIdentity.createEphemeralUserIdent(user, remoteHost),
-                    securityIntegration.getGroupProviderName() == null ?
-                            List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
+                    groupProviderNames,
                     securityIntegration.getGroupAllowedLoginList(),
                     authMechanism);
         }

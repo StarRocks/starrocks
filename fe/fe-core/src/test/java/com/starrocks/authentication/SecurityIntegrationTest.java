@@ -60,11 +60,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class SecurityIntegrationTest {
     private final MockTokenUtils mockTokenUtils = new MockTokenUtils();
     private ConnectContext ctx;
     private AuthenticationMgr authenticationMgr;
+    private String[] savedGroupProvider;
+    private String[] savedAuthenticationChain;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -80,10 +83,18 @@ public class SecurityIntegrationTest {
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
 
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+
+        // Several tests below point these globals at providers and auth chains registered on the
+        // per-test AuthenticationMgr. Snapshot them so a test cannot leak names that no longer
+        // resolve once the next test installs a fresh manager.
+        savedGroupProvider = Config.group_provider;
+        savedAuthenticationChain = Config.authentication_chain;
     }
 
     @AfterEach
     public void tearDown() throws Exception {
+        Config.group_provider = savedGroupProvider;
+        Config.authentication_chain = savedAuthenticationChain;
     }
 
     /**
@@ -219,6 +230,60 @@ public class SecurityIntegrationTest {
         authenticationMgr.replayAlterSecurityIntegration("oidc", alterProperties);
         Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
                 new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray()));
+    }
+
+    @Test
+    public void testGroupProviderFallsBackToGlobalConfig() throws Exception {
+        // A security integration that does not name its own group_provider must inherit the global
+        // Config.group_provider. getGroupProviderName() returns an empty list rather than null for an
+        // absent property, so a null-based fallback never fires and leaves the user with no groups,
+        // which in turn makes any configured permitted_groups reject the login outright.
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(JWTSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
+        // Deliberately no SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER here.
+        // Gate the login on a group that only the global provider can supply, so the assertion fails
+        // if the fallback is skipped instead of silently passing with an empty group set.
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
+
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        authenticationMgr.replayCreateSecurityIntegration("oidc_no_gp", properties);
+        Assertions.assertTrue(
+                authenticationMgr.getSecurityIntegration("oidc_no_gp").getGroupProviderName().isEmpty(),
+                "integration without the property must expose an empty provider list, not null");
+
+        new MockUp<FileGroupProvider>() {
+            @Mock
+            public InputStream getPath(String groupFileUrl) throws IOException {
+                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath() + "/" + "file_group";
+                return new FileInputStream(path);
+            }
+        };
+        Map<String, String> groupProvider = new HashMap<>();
+        groupProvider.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "file");
+        groupProvider.put(FileGroupProvider.GROUP_FILE_URL, "file_group");
+        authenticationMgr.replayCreateGroupProvider("global_file_group_provider", groupProvider);
+
+        Config.group_provider = new String[] {"global_file_group_provider"};
+        Config.authentication_chain = new String[] {"native", "oidc_no_gp"};
+
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        MysqlCodec.writeInt1(outputStream, 1);
+        MysqlCodec.writeLenEncodedString(outputStream, idToken);
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
+        AuthenticationHandler.authenticate(
+                connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
+
+        // file_group grants harbor both group1 and group2; resolving them proves the global provider was used.
+        Assertions.assertEquals(Set.of("group1", "group2"),
+                connectContext.getAccessControlContext().getGroups(),
+                "groups must come from Config.group_provider when the integration names none");
     }
 
     @Test
