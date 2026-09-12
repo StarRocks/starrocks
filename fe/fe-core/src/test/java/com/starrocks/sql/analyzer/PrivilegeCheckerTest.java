@@ -476,6 +476,65 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         }
     }
 
+    @Test
+    public void testDropSynchronousMaterializedViewPrivilege() throws Exception {
+        String tableName = "sync_mv_drop_auth_tbl";
+        String mvName = "sync_mv_drop_auth_mv";
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        ctxToRoot();
+        starRocksAssert.withTable("CREATE TABLE db1." + tableName + " (" +
+                "k1 INT, v1 INT) DUPLICATE KEY(k1) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                "PROPERTIES('replication_num' = '1')");
+        boolean alterGranted = false;
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW db1." + mvName +
+                    " AS SELECT k1, SUM(v1) FROM db1." + tableName + " GROUP BY k1");
+            DropMaterializedViewStmt dropStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "DROP MATERIALIZED VIEW db1." + mvName, ctx);
+            DropMaterializedViewStmt forceDropStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "DROP MATERIALIZED VIEW db1." + mvName + " FORCE", ctx);
+            OlapTable baseTable = (OlapTable) starRocksAssert.getTable("db1", tableName);
+
+            ctxToTestUser();
+            baseTable.setState(OlapTable.OlapTableState.ROLLUP);
+            try {
+                ErrorReportException forceException = Assertions.assertThrows(ErrorReportException.class,
+                        () -> GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(forceDropStmt));
+                Assertions.assertTrue(forceException.getMessage().contains(
+                        "ALTER privilege(s) on TABLE " + tableName), forceException.getMessage());
+                Assertions.assertEquals(OlapTable.OlapTableState.ROLLUP, baseTable.getState());
+                Assertions.assertTrue(baseTable.hasMaterializedIndex(mvName));
+            } finally {
+                baseTable.setState(OlapTable.OlapTableState.NORMAL);
+            }
+
+            ErrorReportException exception = Assertions.assertThrows(ErrorReportException.class,
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(dropStmt));
+            Assertions.assertTrue(exception.getMessage().contains(
+                    "ALTER privilege(s) on TABLE " + tableName), exception.getMessage());
+            Assertions.assertTrue(baseTable.hasMaterializedIndex(mvName));
+
+            ctxToRoot();
+            grantOrRevoke("GRANT ALTER ON TABLE db1." + tableName + " TO test");
+            alterGranted = true;
+            ctxToTestUser();
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(dropStmt);
+            Assertions.assertFalse(baseTable.hasMaterializedIndex(mvName));
+        } finally {
+            ctxToRoot();
+            try {
+                if (alterGranted) {
+                    grantOrRevoke("REVOKE ALTER ON TABLE db1." + tableName + " FROM test");
+                }
+            } finally {
+                starRocksAssert.dropMaterializedView("db1." + mvName);
+                starRocksAssert.dropTable("db1." + tableName);
+            }
+        }
+    }
+
     private static void checkOperateLoad(String sql) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 
