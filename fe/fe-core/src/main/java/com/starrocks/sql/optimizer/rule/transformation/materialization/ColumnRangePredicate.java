@@ -352,6 +352,10 @@ public class ColumnRangePredicate extends RangePredicate {
         } else if (other instanceof AndRangePredicate) {
             return null;
         } else {
+            // e.g. this=gmv>0, other=OR(gmv>0, id>0): OR(gmv>0, id>0) encloses gmv>0 → return gmv>0
+            if (other.enclose(this)) {
+                return toScalarOperator();
+            }
             OrRangePredicate orRangePredicate = (OrRangePredicate) other;
             for (RangePredicate rangePredicate : orRangePredicate.getChildPredicates()) {
                 ScalarOperator simplied = simplify(rangePredicate);
