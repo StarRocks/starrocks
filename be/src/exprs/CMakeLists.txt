@@ -85,6 +85,7 @@ set(EXPR_FILES
   function_helper.cpp
   find_in_set.cpp
   geo_functions.cpp
+  mgrs_functions.cpp
   gin_functions.cpp
   grouping_sets_functions.cpp
   hash_functions.cpp
