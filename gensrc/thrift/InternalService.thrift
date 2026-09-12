@@ -705,3 +705,13 @@ struct TGetFileSchemaRequest {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
 }
+
+// Asks a backend where the records in a set of CSV files begin, so that the files can be cut into
+// ranges that each start on a real record. The broker scan range carries the CSV dialect and one
+// entry per file; the reply holds one offset list per file, in the same order.
+struct TGetCsvSplitsRequest {
+  1: optional PlanNodes.TScanRange scan_range
+  // Consecutive offsets are at least this far apart, so the reply stays proportional to the number
+  // of ranges wanted rather than to the number of records in the file.
+  2: optional i64 split_size
+}

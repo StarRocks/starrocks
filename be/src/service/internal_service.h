@@ -152,6 +152,9 @@ public:
     void get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
                          PGetFileSchemaResult* response, google::protobuf::Closure* done) override;
 
+    void get_csv_splits(google::protobuf::RpcController* controller, const PGetCsvSplitsRequest* request,
+                        PGetCsvSplitsResult* response, google::protobuf::Closure* done) override;
+
     void submit_mv_maintenance_task(google::protobuf::RpcController* controller,
                                     const PMVMaintenanceTaskRequest* request, PMVMaintenanceTaskResult* response,
                                     google::protobuf::Closure* done) override;
@@ -242,6 +245,9 @@ private:
 
     void _get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
                           PGetFileSchemaResult* response, google::protobuf::Closure* done);
+
+    void _get_csv_splits(google::protobuf::RpcController* controller, const PGetCsvSplitsRequest* request,
+                         PGetCsvSplitsResult* response, google::protobuf::Closure* done);
 
     Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request,
                                PExecPlanFragmentResult* response);

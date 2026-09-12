@@ -65,6 +65,12 @@ public:
     static Status sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
                                 std::vector<SlotDescriptor>* schema);
 
+    // Reports where records begin in each CSV file of |scan_range|, one offset list per file in the
+    // same order, so the frontend can cut the files into ranges that each start on a real record
+    // rather than at an arbitrary byte. See CSVScanner::get_split_offsets for the cost of the pass.
+    static Status csv_split_offsets(RuntimeState* state, const TBrokerScanRange& scan_range, int64_t split_size,
+                                    std::vector<std::vector<int64_t>>* offsets);
+
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
                                      std::shared_ptr<RandomAccessFile>* file);
