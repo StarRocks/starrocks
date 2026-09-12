@@ -150,6 +150,11 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
         }
     }
 
+    if (fill_default_on_absent_key) {
+        writer.Key("FillDefaultOnAbsentKey");
+        writer.Bool(true);
+    }
+
     if (!error_url.empty()) {
         writer.Key("ErrorURL");
         writer.String(error_url.c_str());
@@ -236,6 +241,12 @@ std::string StreamLoadContext::to_json() const {
     writer.Int(write_data_cost_nanos / 1000000);
     writer.Key("CommitAndPublishTimeMs");
     writer.Int64(commit_and_publish_txn_cost_nanos / 1000000);
+
+    if (fill_default_on_absent_key) {
+        // Only written when it was asked for and honored, so no existing caller sees a new field.
+        writer.Key("FillDefaultOnAbsentKey");
+        writer.Bool(true);
+    }
 
     if (!error_url.empty()) {
         writer.Key("ErrorURL");

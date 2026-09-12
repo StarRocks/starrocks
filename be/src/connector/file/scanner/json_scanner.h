@@ -21,6 +21,7 @@
 #include "compute_env/load/stream_load_pipe.h"
 #include "connector/file/scanner/file_scanner.h"
 #include "connector/file/scanner/stream_source_meta.h"
+#include "exprs/expr_context.h"
 #include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "simdjson.h"
@@ -55,6 +56,7 @@ public:
 private:
     Status _construct_json_types();
     Status _construct_cast_exprs();
+    Status _construct_default_exprs_for_absent_key();
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
     StatusOr<ChunkPtr> _cast_chunk(const ChunkPtr& src_chunk);
@@ -66,8 +68,6 @@ private:
     int _next_range{0};
     const uint64_t _max_chunk_size;
 
-    // used to hold current StreamLoadPipe
-    std::unique_ptr<JsonReader> _cur_file_reader;
     bool _cur_file_eof{true}; // indicate the current file is eof
 
     std::vector<std::shared_ptr<SequentialFile>> _files;
@@ -75,6 +75,31 @@ private:
     std::vector<TypeDescriptor> _json_types;
     std::vector<Expr*> _cast_exprs;
     ObjectPool _pool;
+
+    // What to fill a column with when a row's JSON object has no key for it, keyed by source slot
+    // id. Empty unless the load asked for it, which is the only way the FE sends any.
+    //
+    // The expression is the one the plan would have used had the column been left off the columns
+    // list, so a filled value means exactly what a DEFAULT already means for a load.
+    //
+    // A constant default is evaluated once at open and the one row result is held here, because
+    // the fill sits in the row loop and a per row evaluation would allocate a chunk and a column
+    // for every absent key. The cached column also owns the bytes a string default hands out, so
+    // it has to outlive every row that borrows them. A default that is not constant, which in
+    // practice means uuid() or uuid_numeric(), keeps its context and is evaluated per absent key,
+    // because those have to differ per row.
+    struct DefaultOnAbsent {
+        ExprContext* ctx = nullptr;
+        ColumnPtr constant_value;
+    };
+    std::unordered_map<SlotId, DefaultOnAbsent> _default_expr_for_absent_key;
+    // The contexts in a flat list, so they can be closed the way the scanner closes its others.
+    std::vector<ExprContext*> _default_expr_ctxs;
+
+    // Declared after _pool and the absent key defaults on purpose. Members are destroyed in
+    // reverse declaration order, and the reader borrows both.
+    // used to hold current StreamLoadPipe
+    std::unique_ptr<JsonReader> _cur_file_reader;
 
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
     std::vector<SimpleJsonPath> _root_paths;
@@ -177,6 +202,16 @@ private:
     // for _op_col_index -- for the object-order null-fill path. Both empty for non-routine-load.
     StreamSourceMetaColumns _meta_col_by_slot_id;
     std::unordered_map<int, TRoutineLoadMetaColumn> _meta_col_by_index;
+
+    // The scanner's absent key defaults, borrowed rather than owned: the scanner outlives every
+    // reader it opens, and they are built once for the whole scan instead of once per file.
+    const std::unordered_map<SlotId, JsonScanner::DefaultOnAbsent>* _default_expr_for_absent_key = nullptr;
+
+    // Chunk column index -> slot id, for the fill site that only has the column index.
+    std::vector<SlotId> _dense_index_to_slot_id;
+
+    // Writes this slot's absent key default into column, or a null when the slot has none.
+    Status _fill_default_or_null(SlotId slot_id, Column* column);
 
     ByteBufferPtr _file_stream_buffer;
 

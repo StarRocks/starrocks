@@ -51,25 +51,34 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPrimitiveType;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TTypeNode;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -81,6 +90,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -185,6 +196,202 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode =
                 new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable, streamLoadInfo);
         return scanNode;
+    }
+
+    /**
+     * A schema with one key column and two value columns, both of which carry a constant DEFAULT.
+     * The key column carries one too, so a test can check that a merging key is left alone.
+     */
+    private List<Column> getDefaultValueSchema() {
+        List<Column> columns = Lists.newArrayList();
+
+        Column k1 = new Column("k1", IntegerType.BIGINT, true, null, false,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("7")), "");
+        columns.add(k1);
+
+        Column v1 = new Column("v1", IntegerType.BIGINT, false, AggregateType.REPLACE, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("99")), "");
+        columns.add(v1);
+
+        Column v2 = new Column("v2", TypeFactory.createVarcharType(25), false, AggregateType.REPLACE, true,
+                ColumnDef.DefaultValueDef.NOT_SET, "");
+        columns.add(v2);
+
+        columns.add(exprObjectDefaultColumn());
+
+        // Absence is how a REPLACE_IF_NOT_NULL column keeps its stored value, so it must not be
+        // filled even though it declares a DEFAULT.
+        Column v4 = new Column("v4", IntegerType.BIGINT, false, AggregateType.REPLACE_IF_NOT_NULL, true,
+                new ColumnDef.DefaultValueDef(true, new StringLiteral("5")), "");
+        columns.add(v4);
+
+        return columns;
+    }
+
+    /**
+     * A column whose DEFAULT is held as an expression object rather than a rendered string. That is
+     * how a complex default such as {@code ARRAY<INT> DEFAULT [1, 2]} is stored, and
+     * {@code calculatedDefaultValue()} returns null for it.
+     */
+    private Column exprObjectDefaultColumn() {
+        Type arrayType = ArrayType.ARRAY_INT;
+        ArrayExpr defaultArray = new ArrayExpr(arrayType,
+                Lists.newArrayList(new IntLiteral(1, IntegerType.INT), new IntLiteral(2, IntegerType.INT)));
+        return new Column("v3", arrayType, false, AggregateType.REPLACE, true,
+                new ColumnDef.DefaultValueDef(true, defaultArray), "");
+    }
+
+    /** Source slot ids from the most recent {@link #runAndGetAbsentKeyDefaults} call, in schema order. */
+    private List<Integer> lastSrcSlotIds;
+
+    private Map<Integer, TExpr> runAndGetAbsentKeyDefaults(
+            boolean fillDefaultOnAbsentKey, KeysType keysType) throws StarRocksException {
+        DescriptorTable descTbl = new DescriptorTable();
+
+        List<Column> columns = getDefaultValueSchema();
+        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            slot.setIsNullable(column.isAllowNull());
+        }
+
+        TStreamLoadPutRequest request = getBaseRequest();
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setFill_default_on_absent_key(fillDefaultOnAbsentKey);
+        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+        new Expectations() {{
+            dstTable.getBaseSchema();
+            result = columns;
+            minTimes = 0;
+            dstTable.getFullSchema();
+            result = columns;
+            minTimes = 0;
+            dstTable.getColumn("k1");
+            result = columns.get(0);
+            minTimes = 0;
+            dstTable.getColumn("v1");
+            result = columns.get(1);
+            minTimes = 0;
+            dstTable.getColumn("v2");
+            result = columns.get(2);
+            minTimes = 0;
+            dstTable.getColumn("v3");
+            result = columns.get(3);
+            minTimes = 0;
+            dstTable.getColumn("v4");
+            result = columns.get(4);
+            minTimes = 0;
+            dstTable.getKeysType();
+            result = keysType;
+            minTimes = 0;
+        }};
+
+        scanNode.init(descTbl);
+        scanNode.finalizeStats();
+
+        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
+        Assertions.assertEquals(1, locations.size());
+        TBrokerScanRangeParams params = locations.get(0).scan_range.broker_scan_range.params;
+        lastSrcSlotIds = params.getSrc_slot_ids();
+        Map<Integer, TExpr> defaults = params.getDefault_expr_of_src_slot();
+        if (defaults != null) {
+            // Every key must be a source slot id. A destination slot id here would look right by
+            // count and find nothing on the BE, which looks up by source slot id.
+            for (Integer slotId : defaults.keySet()) {
+                Assertions.assertTrue(params.getSrc_slot_ids().contains(slotId),
+                        "default keyed on " + slotId + ", which is not a source slot id");
+            }
+        }
+        return defaults;
+    }
+
+    private int indexOfColumn(String columnName) {
+        List<Column> columns = getDefaultValueSchema();
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).getName().equals(columnName)) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException(columnName);
+    }
+
+    /**
+     * A value column with a constant DEFAULT gets an expression sent down, so a row with no key for
+     * it is filled rather than nulled. A value column with no DEFAULT does not, which leaves the
+     * existing behavior in place for it.
+     */
+    @Test
+    public void testFillDefaultOnAbsentKeySendsDefaultForValueColumn() throws StarRocksException {
+        Map<Integer, TExpr> defaults = runAndGetAbsentKeyDefaults(true, KeysType.AGG_KEYS);
+        Assertions.assertNotNull(defaults);
+        // v1 and v3: k1 is a key on a merging table, and v2 has no DEFAULT.
+        Assertions.assertEquals(
+                Set.of(lastSrcSlotIds.get(indexOfColumn("v1")), lastSrcSlotIds.get(indexOfColumn("v3"))),
+                defaults.keySet());
+    }
+
+    /**
+     * A REPLACE_IF_NOT_NULL column relies on an absent key meaning NULL to keep its stored value, so
+     * filling it from its DEFAULT would overwrite exactly what the user meant to keep. This is the
+     * same conflict that makes partial_update refuse the option outright.
+     */
+    @Test
+    public void testFillDefaultOnAbsentKeySkipsReplaceIfNotNull() throws StarRocksException {
+        Map<Integer, TExpr> defaults = runAndGetAbsentKeyDefaults(true, KeysType.AGG_KEYS);
+        Assertions.assertNotNull(defaults);
+        Assertions.assertFalse(defaults.containsKey(lastSrcSlotIds.get(indexOfColumn("v4"))),
+                "a REPLACE_IF_NOT_NULL column must never be filled from its DEFAULT");
+    }
+
+    /**
+     * A complex DEFAULT such as {@code ARRAY<INT> DEFAULT [1, 2]} is stored as an expression object
+     * rather than a rendered string, so reading only the rendered value would drop it and load NULL.
+     */
+    @Test
+    public void testFillDefaultOnAbsentKeySendsExprObjectDefault() throws StarRocksException {
+        Map<Integer, TExpr> defaults = runAndGetAbsentKeyDefaults(true, KeysType.AGG_KEYS);
+        Assertions.assertNotNull(defaults);
+        Assertions.assertTrue(defaults.containsKey(lastSrcSlotIds.get(indexOfColumn("v3"))),
+                "a DEFAULT held as an expression object must still be sent down");
+    }
+
+    /**
+     * A key on a table that merges rows is never filled. Filling it would give every row missing
+     * that key the same key, and the rows would aggregate or replace into one another.
+     */
+    @Test
+    public void testFillDefaultOnAbsentKeySkipsMergingKey() throws StarRocksException {
+        Map<Integer, TExpr> defaults = runAndGetAbsentKeyDefaults(true, KeysType.PRIMARY_KEYS);
+        Assertions.assertNotNull(defaults);
+        Assertions.assertFalse(defaults.containsKey(lastSrcSlotIds.get(indexOfColumn("k1"))),
+                "a primary key column must never be filled from its DEFAULT");
+        Assertions.assertEquals(
+                Set.of(lastSrcSlotIds.get(indexOfColumn("v1")), lastSrcSlotIds.get(indexOfColumn("v3"))),
+                defaults.keySet());
+    }
+
+    /**
+     * A duplicate key table's key is only a sort key, with no row merging behind it, so it is
+     * filled like any other column.
+     */
+    @Test
+    public void testFillDefaultOnAbsentKeyFillsDuplicateKey() throws StarRocksException {
+        Map<Integer, TExpr> defaults = runAndGetAbsentKeyDefaults(true, KeysType.DUP_KEYS);
+        Assertions.assertNotNull(defaults);
+        Assertions.assertEquals(
+                Set.of(lastSrcSlotIds.get(indexOfColumn("k1")), lastSrcSlotIds.get(indexOfColumn("v1")),
+                        lastSrcSlotIds.get(indexOfColumn("v3"))),
+                defaults.keySet());
+    }
+
+    /** Without the property, nothing is sent and every load behaves exactly as it does today. */
+    @Test
+    public void testFillDefaultOnAbsentKeyOffSendsNothing() throws StarRocksException {
+        Map<Integer, TExpr> defaults = runAndGetAbsentKeyDefaults(false, KeysType.DUP_KEYS);
+        Assertions.assertTrue(defaults == null || defaults.isEmpty());
     }
 
     @Test

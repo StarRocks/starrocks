@@ -33,7 +33,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link StreamLoadInfo}. */
 public class StreamLoadInfoTest {
@@ -140,6 +142,63 @@ public class StreamLoadInfoTest {
 
         StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
         assertEquals(TEnvelopeType.DEBEZIUM, info.getEnvelope());
+    }
+
+    @Test
+    public void testFillDefaultOnAbsentKeyReadFromRequest() throws Exception {
+        // The shared fixture sets jsonpaths, which this option refuses; clear it so the test
+        // exercises what it is named for.
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setJsonpaths("");
+        request.setPartial_update(false);
+        request.setFill_default_on_absent_key(true);
+        assertTrue(StreamLoadInfo.fromTStreamLoadPutRequest(request, null).isFillDefaultOnAbsentKey());
+    }
+
+    /** The property only means anything for JSON, which is the only format with absent keys. */
+    @Test
+    public void testFillDefaultOnAbsentKeyIgnoredForNonJson() throws Exception {
+        // The shared fixture sets jsonpaths, which this option refuses; clear it so the test
+        // exercises what it is named for.
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setJsonpaths("");
+        request.setPartial_update(false);
+        request.setFill_default_on_absent_key(true);
+        assertFalse(StreamLoadInfo.fromTStreamLoadPutRequest(request, null).isFillDefaultOnAbsentKey());
+    }
+
+    /**
+     * A partial update already keeps a column the load did not supply at its stored value, so
+     * asking for the DEFAULT instead is a contradiction rather than a refinement.
+     */
+    @Test
+    public void testFillDefaultOnAbsentKeyRejectsPartialUpdate() {
+        // The shared fixture sets jsonpaths, which this option refuses; clear it so the test
+        // exercises what it is named for.
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setJsonpaths("");
+        request.setFill_default_on_absent_key(true);
+        request.setPartial_update(true);
+        Exception e = assertThrows(Exception.class, () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertTrue(e.getMessage().contains("cannot be used together with partial_update"));
+    }
+
+    /**
+     * A jsonpath cannot tell an absent key from one whose value is null, so nothing is filled on that
+     * path. Accepting the combination would quietly do nothing, so it is refused instead.
+     */
+    @Test
+    public void testFillDefaultOnAbsentKeyRejectsJsonPaths() {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setPartial_update(false);
+        request.setFill_default_on_absent_key(true);
+        request.setJsonpaths("[\"$.k1\"]");
+        Exception e = assertThrows(Exception.class, () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertTrue(e.getMessage().contains("cannot be used together with jsonpaths"));
     }
 
     private TStreamLoadPutRequest buildTStreamLoadPutRequest() {

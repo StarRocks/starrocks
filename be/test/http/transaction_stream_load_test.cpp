@@ -1133,6 +1133,112 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
     ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
 }
 
+// fill_default_on_absent_key is parsed out of the header on the transaction path too. Both bool
+// spellings are accepted case insensitively, and anything else is rejected rather than guessed at.
+TEST_F(TransactionStreamLoadActionTest, on_header_fill_default_on_absent_key_true) {
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "fill_default_true";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "true");
+
+    ASSERT_EQ(0, action.on_header(&request));
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_fill_default_on_absent_key_false) {
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "fill_default_false";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "False");
+
+    ASSERT_EQ(0, action.on_header(&request));
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_invalid_fill_default_on_absent_key) {
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "invalid_fill_default";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "yes");
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid fill_default_on_absent_key format"));
+}
+
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
     TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
     auto ctx = new StreamLoadContext(_env.load_stream_mgr());

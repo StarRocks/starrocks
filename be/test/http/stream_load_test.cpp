@@ -738,6 +738,49 @@ TEST_F(StreamLoadActionTest, invalid_envelope) {
     ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
 }
 
+// fill_default_on_absent_key is parsed out of the header into the plan request. A value that is
+// neither true nor false is rejected rather than quietly treated as one of them.
+TEST_F(StreamLoadActionTest, fill_default_on_absent_key_accepts_bool) {
+    for (const auto* value : {"true", "TRUE", "false", "False"}) {
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+
+        HttpRequest request(_evhttp_req);
+        request._params.emplace(HTTP_DB_KEY, "db");
+        request._params.emplace(HTTP_TABLE_KEY, "tbl");
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, value);
+        request.set_handler(&action);
+
+        ASSERT_EQ(0, action.on_header(&request)) << "rejected " << value;
+        action.on_chunk_data(&request);
+        action.handle(&request);
+    }
+}
+
+TEST_F(StreamLoadActionTest, fill_default_on_absent_key_rejects_non_bool) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "yes");
+    request.set_handler(&action);
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid fill_default_on_absent_key format"));
+}
+
 TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     struct TestCase {
         const char* timeout_header;
