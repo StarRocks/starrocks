@@ -54,6 +54,9 @@ struct MysqlColumnSerializer {
     template <LogicalType ltype>
     static void serialize(const MysqlColumnViewer& viewer, const TypeDescriptor& type_desc, MysqlRowBuffer* buf,
                           size_t idx, bool is_binary_protocol) {
+        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
+            throw std::runtime_error("Unsupported geo type in mysql serializer");
+        }
         const auto& typed_viewer = std::get<ColumnViewer<ltype>>(viewer);
         if (typed_viewer.is_null(idx)) {
             buf->push_null(is_binary_protocol);
@@ -98,11 +101,7 @@ using MysqlSerializeFn = void (*)(const MysqlColumnViewer&, const TypeDescriptor
 struct MysqlSerializerBuilder {
     template <LogicalType ltype>
     MysqlSerializeFn operator()() const {
-        if constexpr (ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
-            throw std::runtime_error("Unsupported geo type in mysql serializer");
-        } else {
-            return &MysqlColumnSerializer::serialize<ltype>;
-        }
+        return &MysqlColumnSerializer::serialize<ltype>;
     }
 };
 

@@ -97,9 +97,9 @@ TEST(LogicalTypeInfraTest, GeoScalarDispatch) {
                   }));
         EXPECT_EQ(type, observed);
         observed = TYPE_UNKNOWN;
-        EXPECT_FALSE(type_dispatch_filter(type, false, DispatchBoolFunctor(), &observed));
-        EXPECT_FALSE(type_dispatch_predicate<bool>(type, false, DispatchBoolFunctor(), &observed));
-        EXPECT_EQ(TYPE_UNKNOWN, observed);
+        EXPECT_TRUE(type_dispatch_filter(type, false, DispatchBoolFunctor(), &observed));
+        EXPECT_TRUE(type_dispatch_predicate<bool>(type, false, DispatchBoolFunctor(), &observed));
+        EXPECT_EQ(type, observed);
         observed = TYPE_UNKNOWN;
         EXPECT_EQ(type, type_dispatch_basic_and_complex_types(type, DispatchLogicalTypeFunctor(), &observed));
         EXPECT_EQ(type, observed);

@@ -68,6 +68,9 @@ Status RuntimeFilterBuilder::fill(RuntimeFilter* filter, LogicalType type, const
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }
+    if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
+        return Status::NotSupported("unsupported build runtime filter for geo column");
+    }
 
     switch (filter->type()) {
     case RuntimeFilterSerializeType::BLOOM_FILTER:

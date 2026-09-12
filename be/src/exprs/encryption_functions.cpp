@@ -937,11 +937,18 @@ StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionConte
                     "FunctionContext arg types not initialized for ENCODE_FINGERPRINT_SHA256 at index {}", col_idx));
         }
         LogicalType type = type_desc->type;
+        if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
+            return Status::NotSupported("ENCODE_FINGERPRINT_SHA256 does not support geo columns");
+        }
 
         // Use type dispatch to call the appropriate template specialization
         type_dispatch_filter(type, false, [&]<LogicalType LT>() -> bool {
-            EncodeColumnToDigest<LT>::encode(data_col, null_col, chunk_size, is_const, digests);
-            return true;
+            if constexpr (LT == TYPE_GEOGRAPHY || LT == TYPE_GEOMETRY) {
+                return false;
+            } else {
+                EncodeColumnToDigest<LT>::encode(data_col, null_col, chunk_size, is_const, digests);
+                return true;
+            }
         });
     }
 

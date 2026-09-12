@@ -42,6 +42,7 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
         datetime_is_ntz = scalar_type.__isset.datetime_is_ntz && scalar_type.datetime_is_ntz;
         if (scalar_type.__isset.geo) {
+            DCHECK(is_geo_type());
             geo_type = GeoTypeDescriptor::from_thrift(scalar_type.geo);
         }
 
@@ -182,6 +183,7 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         scale = scalar_type.has_scale() ? scalar_type.scale() : -1;
         precision = scalar_type.has_precision() ? scalar_type.precision() : -1;
         if (scalar_type.has_geo()) {
+            DCHECK(is_geo_type());
             geo_type = GeoTypeDescriptor::from_protobuf(scalar_type.geo());
         }
 

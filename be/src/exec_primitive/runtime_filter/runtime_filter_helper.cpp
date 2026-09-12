@@ -62,6 +62,7 @@ void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotI
     *min_max_predicate = nullptr;
     if (filter == nullptr) return;
     if (filter->get_min_max_filter() == nullptr) return;
+    if (slot_type == TYPE_GEOGRAPHY || slot_type == TYPE_GEOMETRY) return;
     // TODO, if you want to enable it for string, pls adapt for low-cardinality string
     if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
     auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));

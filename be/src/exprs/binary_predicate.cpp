@@ -504,25 +504,29 @@ public:
 struct BinaryPredicateBuilder {
     template <LogicalType data_type>
     Expr* operator()(const TExprNode& node) {
-        switch (node.opcode) {
-        case TExprOpcode::EQ:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
-        case TExprOpcode::NE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalNe<data_type>>>(node);
-        case TExprOpcode::LT:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalLt<data_type>>>(node);
-        case TExprOpcode::LE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalLe<data_type>>>(node);
-        case TExprOpcode::GT:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalGt<data_type>>>(node);
-        case TExprOpcode::GE:
-            return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalGe<data_type>>>(node);
-        case TExprOpcode::EQ_FOR_NULL:
-            return new VectorizedNullSafeEqPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
-        default:
-            break;
+        if constexpr (data_type == TYPE_GEOGRAPHY || data_type == TYPE_GEOMETRY) {
+            return nullptr;
+        } else {
+            switch (node.opcode) {
+            case TExprOpcode::EQ:
+                return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
+            case TExprOpcode::NE:
+                return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalNe<data_type>>>(node);
+            case TExprOpcode::LT:
+                return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalLt<data_type>>>(node);
+            case TExprOpcode::LE:
+                return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalLe<data_type>>>(node);
+            case TExprOpcode::GT:
+                return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalGt<data_type>>>(node);
+            case TExprOpcode::GE:
+                return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalGe<data_type>>>(node);
+            case TExprOpcode::EQ_FOR_NULL:
+                return new VectorizedNullSafeEqPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
+            default:
+                break;
+            }
+            return nullptr;
         }
-        return nullptr;
     }
 };
 

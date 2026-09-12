@@ -24,6 +24,9 @@ namespace starrocks {
 
 template <template <LogicalType> typename FilterType>
 static RuntimeFilter* create_runtime_filter_helper(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
+        return nullptr;
+    }
     RuntimeFilter* filter = type_dispatch_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() {
         RuntimeFilter* rf = new FilterType<LT>();
         rf->get_membership_filter()->set_join_mode(join_mode);
@@ -40,6 +43,9 @@ static RuntimeFilter* create_runtime_filter_helper(ObjectPool* pool, LogicalType
 RuntimeFilter* RuntimeFilterFactory::to_empty_filter(ObjectPool* pool, RuntimeFilter* rf) {
     const auto* min_max_filter = rf->get_min_max_filter();
     const auto* membership_filter = rf->get_membership_filter();
+    if (membership_filter->logical_type() == TYPE_GEOGRAPHY || membership_filter->logical_type() == TYPE_GEOMETRY) {
+        return nullptr;
+    }
     RuntimeFilter* filter = type_dispatch_filter(
             membership_filter->logical_type(), static_cast<RuntimeFilter*>(nullptr),
             [&]<LogicalType LT>() -> RuntimeFilter* {
