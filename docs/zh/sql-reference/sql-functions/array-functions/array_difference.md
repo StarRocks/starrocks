@@ -21,7 +21,16 @@ output array_difference(input)
 
 ## 返回值说明
 
-类型为 ARRAY (与输入 `input` 保持一致)，内容为将输入 `input` 中相邻两元素的差，长度与 `input` 保持一致。
+返回一个与输入数组长度相同的数组。返回元素类型根据输入元素类型确定，具体映射如下：
+
+| 输入元素类型 | 返回元素类型 |
+| --- | --- |
+| `BOOLEAN`、`TINYINT`、`SMALLINT`、`INT` 或 `BIGINT` | `BIGINT` |
+| `LARGEINT` | `LARGEINT` |
+| `FLOAT` 或 `DOUBLE` | `DOUBLE` |
+| `DECIMAL(P, S)`，其中 `P <= 38` | `DECIMAL(min(P + 1, 38), S)` |
+
+目前不支持 `ARRAY<DECIMAL256>`（`P > 38`）。
 
 ## 示例
 
