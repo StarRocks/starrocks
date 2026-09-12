@@ -182,6 +182,10 @@ The following table describes the parameter you need to configure in `MetastoreP
   - Required: Yes
   - Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
 
+- `hive.metastore.warehouse.dir`
+  - Required: No
+  - Description: The warehouse directory under which StarRocks creates databases and tables in this catalog when no location is given explicitly. Specify it if your Hive metastore uses a warehouse directory other than the default `/user/hive/warehouse`, for example, `"hive.metastore.warehouse.dir" = "s3://my-bucket/warehouse"`.<br />Precedence: a `location` property given in `CREATE DATABASE` wins over this parameter, and this parameter wins over the built-in default. Because the value is read from the catalog properties, it does not need to be present in your `hive-site.xml`. 
+
 </TabItem>
 
 <TabItem value="GLUE" label="AWS Glue">
