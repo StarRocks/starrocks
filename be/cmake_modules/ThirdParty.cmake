@@ -339,6 +339,9 @@ set_target_properties(libs2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/l
 add_library(bitshuffle STATIC IMPORTED)
 set_target_properties(bitshuffle PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbitshuffle.a)
 
+add_library(alp STATIC IMPORTED)
+set_target_properties(alp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libalp.a)
+
 add_library(roaring STATIC IMPORTED)
 set_target_properties(roaring PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libroaring.a)
 
