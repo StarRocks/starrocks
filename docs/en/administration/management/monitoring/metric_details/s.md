@@ -715,6 +715,12 @@ All transaction metrics share the following labels:
 - Type: Instantaneous
 - Description: Indicates the number of tablets on each BE node.
 
+## `starrocks_fe_txn_committed_pending_publish`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of transactions currently in the `COMMITTED` status pending publish to `VISIBLE`, that is, committed but not yet published. It pairs with `starrocks_fe_txn_max_committed_pending_publish_ms` (the age of the oldest pending publish): this metric reports how many transactions are pending publish, while that one reports how long the oldest has waited. The value is reported per database via the `db` label and only by the Leader FE node (`is_leader="true"`). It returns `0` when no committed transaction is pending publish. A high or continuously growing value indicates that version publishing is stuck or lagging behind commits.
+
 ## `starrocks_fe_txn_max_committed_pending_publish_ms`
 
 - Unit: ms

@@ -737,6 +737,12 @@ description: "Alphabetical s"
 - 类型：瞬时
 - 描述：表示每个BE节点上的tablet数量。
 
+## `starrocks_fe_txn_committed_pending_publish`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：当前处于 `COMMITTED` 状态、等待发布为 `VISIBLE` 的事务数量，即已提交但尚未发布的事务数。它与 `starrocks_fe_txn_max_committed_pending_publish_ms`（最早等待发布的事务的存在时长）配对使用：该指标反映有多少事务正在等待发布，而后者反映最早的事务已等待了多久。该值按数据库通过 `db` 标签上报，且仅由 Leader FE 节点上报（`is_leader="true"`）。当没有等待发布的已提交事务时返回 `0`。该值较高或持续增长，表示版本发布卡住或落后于提交。
+
 ## `starrocks_fe_txn_max_committed_pending_publish_ms`
 
 - 单位：毫秒
