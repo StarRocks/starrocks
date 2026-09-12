@@ -32,6 +32,13 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
             return Status::OK();
         }
     }
+    if (_holder != nullptr) {
+        // The held instance is shared, not copied: this path (compaction reads) never mutates a
+        // loaded delvec. get_or_load is single-flight per (segment, version), so concurrent
+        // range-split subtasks that miss together produce exactly one file read.
+        return _holder->get_or_load(tsid, version, pdelvec,
+                                    [&](DelVectorPtr* out) { return load_from_file(tsid, version, out); });
+    }
     return load_from_file(tsid, version, pdelvec);
 }
 
