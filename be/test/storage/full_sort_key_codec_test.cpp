@@ -469,4 +469,60 @@ TEST_F(FullSortKeyCodecTest, SeededRandomOrderAndRoundTripFuzz) {
     }
 }
 
+TEST_F(FullSortKeyCodecTest, MalformedVarcharSeparatorReturnsStatusNotAbort) {
+    // Regression: ensures decode_full_sort_key propagates Status::InvalidArgument
+    // for a truncated non-terminal VARCHAR column (missing \0\0 terminator)
+    // rather than aborting via DCHECK. Validates tablet_splitter.cpp:101-103
+    // can safely fall back on malformed persisted sort-key samples.
+
+    // Schema: (INT, VARCHAR, INT) — VARCHAR is a non-terminal sort key column.
+    std::vector<FieldPtr> fields = {
+            make_field(0, TYPE_INT, false),
+            make_field(1, TYPE_VARCHAR, false),
+            make_field(2, TYPE_INT, false),
+    };
+    Schema schema(fields);
+    std::vector<uint32_t> idxes = {0, 1, 2};
+
+    // Case 1: Valid sort-key markers so decoding proceeds past column 0 (INT 42)
+    // to column 1 (non-terminal VARCHAR), reaching decode_slice with no \0\0 terminator.
+    // This directly exercises the Batch A fix (removal of DCHECK(separator)).
+    {
+        std::string malformed;
+        malformed += KEY_NORMAL_MARKER;
+        malformed += '\x80';
+        malformed += '\x00';
+        malformed += '\x00';
+        malformed += '\x2a';
+        malformed += KEY_NORMAL_MARKER;
+        malformed += "corrupt_middle_no_terminator"; // no \0\0 appended
+
+        VariantTuple out;
+        Status st = decode_full_sort_key(Slice(malformed), schema, idxes, &out);
+        EXPECT_FALSE(st.ok()) << "Expected decode_full_sort_key to return error for truncated VARCHAR column, got: "
+                              << st.to_string();
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // Case 2: Byte sequence without marker bytes (as described in brief).
+    // decode_full_sort_key rejects this as malformed marker at column 0.
+    {
+        // Hand-craft a byte sequence: valid 4-byte INT encoding for value 42,
+        // followed by a VARCHAR payload with NO \0\0 terminator.
+        // INT encoding: value XOR 0x80000000 in big-endian = 0x8000002a
+        std::string malformed;
+        malformed += '\x80';
+        malformed += '\x00';
+        malformed += '\x00';
+        malformed += '\x2a';
+        malformed += "corrupt_middle_no_terminator"; // no \0\0 appended
+
+        VariantTuple out;
+        Status st = decode_full_sort_key(Slice(malformed), schema, idxes, &out);
+        EXPECT_FALSE(st.ok()) << "Expected decode_full_sort_key to return error for truncated VARCHAR column, got: "
+                              << st.to_string();
+        // The process must still be running here (no abort). If DCHECK were present
+        // this test would never reach this EXPECT — it would have aborted above.
+    }
+}
 } // namespace starrocks

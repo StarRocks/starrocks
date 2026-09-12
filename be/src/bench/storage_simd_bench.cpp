@@ -38,8 +38,12 @@
 #include <benchmark/benchmark.h>
 
 #include <cstdint>
+#include <cstring>
 #include <random>
+#include <string>
 #include <vector>
+
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -144,6 +148,155 @@ static void BM_MatchTags_SIMD(benchmark::State& state) {
 
 BENCHMARK(BM_MatchTags_SSE2)->Arg(0)->Arg(1)->Arg(10)->Arg(50)->Arg(100);
 BENCHMARK(BM_MatchTags_SIMD)->Arg(0)->Arg(1)->Arg(10)->Arg(50)->Arg(100);
+
+// =====================================================================
+// primary_key_encoder :: encode_slice & decode_slice
+// =====================================================================
+
+static void scalar_encode_slice(const Slice& s, std::string* dst) {
+    size_t old_size = dst->size();
+    dst->resize(old_size + s.size * 2 + 2);
+    const auto* srcp = reinterpret_cast<const uint8_t*>(s.data);
+    auto* dstp = reinterpret_cast<uint8_t*>(&(*dst)[old_size]);
+    size_t len = s.size;
+    while (len--) {
+        if (PREDICT_FALSE(*srcp == '\0')) {
+            *dstp++ = 0;
+            *dstp++ = 1;
+        } else {
+            *dstp++ = *srcp;
+        }
+        srcp++;
+    }
+    *dstp++ = 0;
+    *dstp++ = 0;
+    dst->resize(dstp - reinterpret_cast<uint8_t*>(&(*dst)[0]));
+}
+
+static void BM_EncodeSlice_Scalar(benchmark::State& state) {
+    size_t len = state.range(0);
+    std::string src_str(len, 'a');
+    for (size_t i = 0; i < len; ++i) {
+        src_str[i] = static_cast<char>('a' + (i % 26));
+    }
+    Slice s(src_str);
+    std::string dst;
+    for (auto _ : state) {
+        dst.clear();
+        scalar_encode_slice(s, &dst);
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetBytesProcessed(state.iterations() * len);
+}
+
+static void BM_EncodeSlice_SIMD(benchmark::State& state) {
+    size_t len = state.range(0);
+    std::string src_str(len, 'a');
+    for (size_t i = 0; i < len; ++i) {
+        src_str[i] = static_cast<char>('a' + (i % 26));
+    }
+    Slice s(src_str);
+    std::string dst;
+    for (auto _ : state) {
+        dst.clear();
+        encoding_utils::encode_slice(s, &dst, false);
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetBytesProcessed(state.iterations() * len);
+}
+
+static void BM_EncodeSlice_WithNulls_Scalar(benchmark::State& state) {
+    size_t len = state.range(0);
+    std::string src_str(len, 'a');
+    for (size_t i = 0; i < len; ++i) {
+        src_str[i] = static_cast<char>('a' + (i % 26));
+    }
+    if (len > 4) {
+        src_str[len / 2] = '\0';
+    }
+    Slice s(src_str);
+    std::string dst;
+    for (auto _ : state) {
+        dst.clear();
+        scalar_encode_slice(s, &dst);
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetBytesProcessed(state.iterations() * len);
+}
+
+static void BM_EncodeSlice_WithNulls_SIMD(benchmark::State& state) {
+    size_t len = state.range(0);
+    std::string src_str(len, 'a');
+    for (size_t i = 0; i < len; ++i) {
+        src_str[i] = static_cast<char>('a' + (i % 26));
+    }
+    if (len > 4) {
+        src_str[len / 2] = '\0';
+    }
+    Slice s(src_str);
+    std::string dst;
+    for (auto _ : state) {
+        dst.clear();
+        encoding_utils::encode_slice(s, &dst, false);
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetBytesProcessed(state.iterations() * len);
+}
+
+// Evaluates the un-optimised scalar loop decode baseline under identical
+// memory allocation semantics.
+static void BM_DecodeSlice_Scalar(benchmark::State& state) {
+    size_t len = state.range(0);
+    std::string src_str(len, 'a');
+    for (size_t i = 0; i < len; ++i) {
+        src_str[i] = static_cast<char>('a' + (i % 26));
+    }
+    Slice s(src_str);
+    std::string enc;
+    encoding_utils::encode_slice(s, &enc, false);
+    for (auto _ : state) {
+        Slice cur(enc);
+        auto* separator = static_cast<uint8_t*>(memmem(cur.data, cur.size, "\0\0", 2));
+        auto* data = (uint8_t*)cur.data;
+        int dlen = separator - data;
+        std::string decoded;
+        for (int i = 0; i < dlen; i++) {
+            if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') continue;
+            decoded.push_back((char)data[i]);
+        }
+        benchmark::DoNotOptimize(decoded.data());
+    }
+    state.SetBytesProcessed(state.iterations() * len);
+}
+
+// Measures the production encoding_utils::decode_slice path, including
+// the memchr fast-path, Status construction, and src advancement.
+// Calling the real function prevents benchmark drift if the implementation changes.
+static void BM_DecodeSlice_Fast(benchmark::State& state) {
+    size_t len = state.range(0);
+    std::string src_str(len, 'a');
+    for (size_t i = 0; i < len; ++i) {
+        src_str[i] = static_cast<char>('a' + (i % 26));
+    }
+    Slice s(src_str);
+    std::string enc;
+    encoding_utils::encode_slice(s, &enc, false);
+    for (auto _ : state) {
+        Slice cur(enc);
+        std::string decoded;
+        auto st = encoding_utils::decode_slice(&cur, &decoded, nullptr, false, false);
+        benchmark::DoNotOptimize(decoded.data());
+        benchmark::DoNotOptimize(st);
+    }
+    state.SetBytesProcessed(state.iterations() * len);
+}
+
+BENCHMARK(BM_EncodeSlice_Scalar)->RangeMultiplier(2)->Range(8, 256);
+BENCHMARK(BM_EncodeSlice_SIMD)->RangeMultiplier(2)->Range(8, 256);
+BENCHMARK(BM_EncodeSlice_WithNulls_Scalar)->RangeMultiplier(2)->Range(8, 256);
+BENCHMARK(BM_EncodeSlice_WithNulls_SIMD)->RangeMultiplier(2)->Range(8, 256);
+BENCHMARK(BM_DecodeSlice_Scalar)->RangeMultiplier(2)->Range(8, 256);
+BENCHMARK(BM_DecodeSlice_Fast)->RangeMultiplier(2)->Range(8, 256);
 
 } // namespace starrocks
 

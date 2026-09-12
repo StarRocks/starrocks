@@ -20,6 +20,7 @@
 #include "runtime/mem_pool.h"
 #include "storage/base/short_key_index.h"
 #include "storage_primitive/key_coder.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/datum.h"
 #include "types/storage_type_traits.h"
 
@@ -27,32 +28,16 @@ namespace starrocks {
 
 namespace {
 
-// Reverses encoding_utils::encode_slice (be/src/storage_primitive/primary_key_encoder.cpp): un-escape
-// 0x00 0x01 -> 0x00 and stop at the 0x00 0x00 terminator, unless |is_last| (in which case the remainder
-// of |src| is the raw, un-terminated value). Mirrors the local free function `decode_slice` defined at
-// primary_key_encoder.cpp:174-213, which isn't declared in that module's header and so isn't linkable
-// from here.
-Status unescape_slice_column(Slice* src, bool is_last, std::string* dest) {
-    if (is_last) {
-        dest->append(src->data, src->size);
-        src->remove_prefix(src->size);
-        return Status::OK();
-    }
-    auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
-    if (separator == nullptr) {
-        return Status::InvalidArgument("full sort key: separator not found in encoded string column");
-    }
-    auto* data = reinterpret_cast<uint8_t*>(src->data);
-    size_t len = separator - data;
-    dest->reserve(len);
-    for (size_t i = 0; i < len; i++) {
-        if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
-            continue;
-        }
-        dest->push_back(static_cast<char>(data[i]));
-    }
-    src->remove_prefix(len + 2);
-    return Status::OK();
+// Decode an encoded variable-length string column by reversing
+// encoding_utils::encode_slice. Delegates to encoding_utils::decode_slice so
+// that sort-key decoding inherits the memchr fast-path and SIMD libc routines
+// added in the ARM64 acceleration work.
+//
+// Note: error messages on corrupt input now read "bad encoded primary key,
+// separator not found" rather than the previous "full sort key: separator not
+// found in encoded string column".
+inline Status unescape_slice_column(Slice* src, bool is_last, std::string* dest) {
+    return encoding_utils::decode_slice(src, dest, nullptr, is_last, false);
 }
 
 // Decode a fixed-size, non-string key column: KeyCoder::decode_ascending fills a local |CppType| buffer
