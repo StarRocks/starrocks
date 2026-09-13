@@ -148,6 +148,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Data Lake Storage Gen2 アカウントのエンドポイント。例: `https://test.dfs.core.windows.net`。
 - 導入時期：v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- デフォルト：Empty string
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID の OAuth 2.0 トークンエンドポイント。v3.5.19、v4.0.12、v4.1.2 より前は、この項目は `azure_adls2_oauth2_oauth2_client_endpoint` という名前でした。旧名称は現在もエイリアスとして受け付けられます。
+- 導入時期：v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - デフォルト：Empty string
