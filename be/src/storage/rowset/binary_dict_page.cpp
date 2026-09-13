@@ -283,6 +283,180 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
 }
 
 template <LogicalType Type>
+<<<<<<< HEAD
+=======
+Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
+        Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
+        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
+    DCHECK(Type != TYPE_CHAR);
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->next_batch_with_filter(column, range, compound_and_predicates, null_data, selection,
+                                                          selected_idx);
+    }
+
+    DCHECK(_parsed);
+    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
+    DCHECK(null_data == nullptr || column->is_nullable());
+
+    // caller must make sure SparseRange's ranges are all in the same page
+    size_t num_rows = range.span_size();
+    if (null_data != nullptr) {
+        // Create temporary nullable column for predicate evaluation
+        auto temp_column = column->clone_empty();
+        auto temp_nullable_column = down_cast<NullableColumn*>(temp_column.get());
+        auto temp_data_column = temp_nullable_column->data_column_raw_ptr();
+        auto& temp_null_column = temp_nullable_column->null_column_ref();
+
+        // Read data column and null column. null_data is indexed by the in-page ordinal (see
+        // PageDecoder::next_batch_with_filter): a contiguous range can alias the page's null flags directly, a sparse
+        // range has to pick the flags of each sub-range, otherwise the rows after the first gap would take the
+        // null flags of the skipped rows.
+        if (range.size() == 1) {
+            ContainerResource container(_page_handle, null_data + range.begin(), num_rows);
+            int n = temp_null_column.append_numbers(container);
+            DCHECK_EQ(n, num_rows);
+        } else {
+            temp_null_column.reserve(num_rows);
+            SparseRangeIterator<> iter = range.new_iterator();
+            while (iter.has_more()) {
+                Range<> r = iter.next(num_rows);
+                temp_null_column.append_numbers(null_data + r.begin(), r.span_size());
+            }
+        }
+        RETURN_IF_ERROR(next_batch(range, temp_data_column));
+        DCHECK(temp_null_column.size() == num_rows);
+        DCHECK(temp_data_column->size() == num_rows);
+        temp_nullable_column->update_has_null();
+
+        // Evaluate predicates on the temporary column
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
+                                                         selected_idx, 0, num_rows));
+
+        uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
+        if (selected_count == 0) {
+            return Status::OK();
+        }
+
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        RETURN_IF_ERROR(
+                append_with_mask</*PositiveSelect=*/true>(nullable_column, *temp_nullable_column, selection, num_rows));
+
+        return Status::OK();
+    }
+
+    if (PREDICT_FALSE(_data_page_decoder->current_index() >= _data_page_decoder->count())) {
+        return Status::OK();
+    }
+
+    // Step 1: Evaluate predicates on dictionary once and reuse the selection across pages.
+    uint32_t dict_size = 0;
+    uint32_t dict_selected_count = 0;
+    const uint8_t* dict_selection = nullptr;
+    RETURN_IF_ERROR(_dict_decoder->get_dict_filter_selection(compound_and_predicates, &dict_selection, &dict_size,
+                                                             &dict_selected_count));
+    if (dict_selected_count == 0) {
+        memset(selection, 0, num_rows);
+        return Status::OK();
+    }
+    if (dict_selected_count == dict_size) {
+        memset(selection, 1, num_rows);
+        return next_batch(range, column);
+    }
+
+    // Step 2: Read dictionary codes for the range (we must do this regardless of dict selection)
+    if (_vec_code_buf == nullptr) {
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    }
+    _vec_code_buf->resize(0);
+    _vec_code_buf->reserve(num_rows);
+
+    RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
+    size_t nread = _vec_code_buf->size();
+
+    if (nread == 0) {
+        return Status::OK();
+    }
+
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
+
+    // Step 3: Update selection based on dictionary selection and collect matching slices
+    std::vector<Slice> selected_slices;
+    selected_slices.reserve(nread);
+
+    for (size_t i = 0; i < nread; ++i) {
+        uint32_t code = codewords[i];
+        if (code < dict_size && dict_selection[code]) {
+            selection[i] = 1;
+            Slice element = _dict_decoder->string_at_index(code);
+            selected_slices.emplace_back(element);
+        } else {
+            selection[i] = 0;
+        }
+    }
+
+    // Step 4: Append selected strings to column using append_strings_overflow
+    if (!selected_slices.empty()) {
+        SliceContainerAdaptor adaptor(selected_slices);
+        bool ok = column->append_strings_overflow(adaptor, _max_value_length);
+        RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch_with_filter failed"));
+    }
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                                   size_t* count, Column* column) {
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, count, column);
+    }
+    DCHECK(_parsed);
+    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
+    if (PREDICT_FALSE(*count == 0)) {
+        return Status::OK();
+    }
+    if (_vec_code_buf == nullptr) {
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    }
+    _vec_code_buf->resize(0);
+    _vec_code_buf->reserve(*count);
+    size_t read_count = *count;
+    RETURN_IF_ERROR(
+            _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, &read_count, _vec_code_buf.get()));
+    DCHECK_EQ(_vec_code_buf->size(), read_count);
+
+    if (PREDICT_FALSE(read_count == 0)) {
+        *count = 0;
+        return Status::OK();
+    }
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
+    auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(read_count * sizeof(Slice));
+    Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
+    if constexpr (Type == TYPE_CHAR) {
+        for (size_t i = 0; i < read_count; i++) {
+            Slice element = _dict_decoder->string_at_index(codewords[i]);
+            element.size = strnlen(element.data, element.size);
+            slices[i] = element;
+        }
+    } else {
+        _dict_decoder->batch_string_at_index(slices, codewords, read_count);
+    }
+
+    SliceContainerAdaptor adaptor(slices, read_count);
+    bool ok = column->append_strings_overflow(adaptor, _max_value_length);
+    RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::read_by_rowids failed"));
+    *count = read_count;
+    return Status::OK();
+}
+
+template <LogicalType Type>
+>>>>>>> 1e7dcde ([BugFix] Index page null flags by ordinal when a pushed-down predicate reads a sparse range (#78389))
 Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
