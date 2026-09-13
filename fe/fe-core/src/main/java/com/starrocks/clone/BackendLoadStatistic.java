@@ -293,9 +293,19 @@ public class BackendLoadStatistic {
 
         ImmutableMap<String, DiskInfo> disks = be.getDisks();
         Set<TStorageMedium> mediaOnBackend = EnumSet.noneOf(TStorageMedium.class);
+        boolean anyMediumUnknown = false;
         for (DiskInfo diskInfo : disks.values()) {
             TStorageMedium medium = diskInfo.getStorageMedium();
-            mediaOnBackend.add(medium);
+            if (medium == null) {
+                // A disk's medium is not persisted in the image, it is only filled in by the BE's
+                // disk report, so it stays null from a leader restart until that BE's first report
+                // (forever for a BE that never comes back). Such a disk must be kept out of the
+                // EnumSet, which rejects null; leaving its medium unknown is also what the
+                // hasMedium() checks below have always done with it.
+                anyMediumUnknown = true;
+            } else {
+                mediaOnBackend.add(medium);
+            }
             if (diskInfo.getState() == DiskState.ONLINE) {
                 // we only collect online disk's capacity
                 totalCapacityMap
@@ -312,13 +322,13 @@ public class BackendLoadStatistic {
 
         totalReplicaNumMap = Maps.newHashMap();
         if (mediaOnBackend.isEmpty()) {
-            // BE has not reported any disks yet (newly added / dead / pre-heartbeat). Skip the
-            // per-tablet scan -- with no pathStatistics, the hasMedium() post-pass would zero
-            // every count anyway. Match that outcome directly.
+            // No disk with a known medium (BE newly added / dead / pre-report). Skip the
+            // per-tablet scan -- with no pathStatistics carrying a medium, the hasMedium()
+            // post-pass would zero every count anyway. Match that outcome directly.
             for (TStorageMedium medium : TStorageMedium.values()) {
                 totalReplicaNumMap.put(medium, 0L);
             }
-        } else if (mediaOnBackend.size() == 1) {
+        } else if (mediaOnBackend.size() == 1 && !anyMediumUnknown) {
             // Homogeneous-disk BE: every replica on the BE physically resides on its only
             // medium, so we can read the count directly from the backend->tablet index in O(1)
             // instead of scanning every TabletMeta. This avoids holding the inverted-index walk
@@ -331,19 +341,24 @@ public class BackendLoadStatistic {
             // replicas to the medium the BE physically lacks, and the post-pass below would
             // zero them out -- making the replicas vanish from the load-balance averages.
             // Counting by physical placement here is both cheaper and more accurate.
+            //
+            // A disk whose medium is still unknown disqualifies the shortcut: it may hold replicas
+            // of the other medium, so "one known medium" is not "one medium on the BE". Such a
+            // backend falls through to the per-tablet scan, the way it was counted before this
+            // shortcut existed.
             TStorageMedium onlyMedium = mediaOnBackend.iterator().next();
             long totalOnBe = invertedIndex.getTabletNumByBackendId(beId);
             for (TStorageMedium medium : TStorageMedium.values()) {
                 totalReplicaNumMap.put(medium, medium == onlyMedium ? totalOnBe : 0L);
             }
         } else {
-            // Mixed-medium BE (BE has both HDD and SSD disks): per-tablet scan so the count
-            // reflects each replica's TabletMeta.storageMedium, which is what drives migration
-            // scheduling on BEs that actually have both media available.
+            // Either a mixed-medium BE (both HDD and SSD disks) or one that is not fully
+            // classified yet: per-tablet scan so the count reflects each replica's
+            // TabletMeta.storageMedium, which is what drives migration scheduling on BEs that
+            // actually have both media available.
             totalReplicaNumMap = invertedIndex.getReplicaNumByBeIdAndStorageMedium(beId);
-            // Defensive post-pass: zero a medium if the BE has no disks of that type. With
-            // mediaOnBackend.size() == 2 both media are present, so this is currently a no-op;
-            // kept for parity with the historical behavior if disk reporting becomes partial.
+            // Post-pass: zero a medium the BE has no disk of. A no-op when both media are present,
+            // load-bearing when we got here with a single known medium plus an unclassified disk.
             for (TStorageMedium medium : TStorageMedium.values()) {
                 if (!hasMedium(medium)) {
                     totalReplicaNumMap.put(medium, 0L);
