@@ -40,11 +40,13 @@ import org.apache.commons.lang3.StringUtils;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -523,6 +525,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return Optional.empty();
         }
 
+        if (type.getPrimitiveType().isBinaryType()) {
+            return castBinaryTo(desc);
+        }
+
         String childString = toString();
         if (getType().isBoolean()) {
             childString = getBoolean() ? "1" : "0";
@@ -622,8 +628,47 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } catch (Exception e) {
             return Optional.empty();
         }
-        
+
         return Optional.ofNullable(res);
+    }
+
+    /**
+     * Fold a cast whose source is a BINARY/VARBINARY constant.
+     * <p>
+     * The value of such a constant is a {@code byte[]}, so {@link #toString()} yields the JVM default
+     * {@code [B@<identityHashCode>}: it must never be used as the source value of a cast, otherwise the
+     * identity hash gets baked into the plan as a real value and the result is both wrong and different
+     * on every run.
+     * <p>
+     * The BE implements binary -> string as a raw passthrough of the underlying column
+     * (VectorizedCastToStringExpr in be/src/exprs/cast_expr_tpl.hpp: VARBINARY and VARCHAR share the same
+     * physical BinaryColumn, so the cast is the identity, with neither hex encoding nor length truncation).
+     * FE folding has to produce exactly the same bytes.
+     */
+    private Optional<ConstantOperator> castBinaryTo(Type desc) {
+        byte[] bytes = isNull() ? null : getBinary();
+        if (bytes == null) {
+            return Optional.empty();
+        }
+
+        if (desc.isChar() || desc.isVarchar()) {
+            // The FE carries string constants as java Strings and ships them to the BE as UTF-8, so folding
+            // is only byte-exact when the bytes are valid UTF-8. Otherwise decoding substitutes U+FFFD and
+            // the folded value would no longer match what the BE computes, so leave the cast to the BE.
+            String decoded = new String(bytes, StandardCharsets.UTF_8);
+            if (!Arrays.equals(decoded.getBytes(StandardCharsets.UTF_8), bytes)) {
+                return Optional.empty();
+            }
+            return Optional.of(ConstantOperator.createChar(decoded, desc));
+        }
+
+        if (desc.getPrimitiveType().isBinaryType()) {
+            // binary -> binary is the identity, the target length is not applied (the BE does not truncate).
+            return Optional.of(ConstantOperator.createBinary(bytes, desc));
+        }
+
+        // The BE only supports casting a binary value to a string, so don't fold anything else either.
+        return Optional.empty();
     }
 
     public Optional<ConstantOperator> successor() {
