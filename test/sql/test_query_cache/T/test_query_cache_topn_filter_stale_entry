@@ -1,8 +1,9 @@
 -- name: test_query_cache_topn_filter_stale_entry
--- PushDownTopNToPreAggRule attaches the TopN of `group by k order by k limit n` to the local
--- aggregation, which is exactly where the query cache interpolates its cache operator. The
--- aggregation then builds a TOPN_FILTER that probes the scan feeding it, so the per-tablet results
--- that get populated only hold the rows below the boundary that filter happened to reach. The
+-- c1 is both the distribution key and the group-by key, so `group by c1 order by c1 limit 10` is
+-- planned as a one-phase aggregation and the partial TopN stays in the scan fragment, right above
+-- the aggregation where the query cache interpolates its cache operator. That SortNode builds a
+-- TOPN_FILTER that probes the scan feeding the cache point, so the per-tablet results that get
+-- populated only hold the rows below the boundary that filter happened to reach. The
 -- boundary is a property of the whole query's data scope, not of the tablet, and it is not part of
 -- the cache key -- so the entries are only accidentally safe while every later reader's scope is a
 -- superset of the writer's. Dropping the partitions that held the small keys narrows the scope,
