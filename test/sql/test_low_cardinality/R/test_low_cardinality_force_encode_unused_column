@@ -1,0 +1,58 @@
+-- name: test_low_cardinality_force_encode_unused_column
+set cbo_enable_low_cardinality_optimize = true;
+-- result:
+-- !result
+set enable_filter_unused_columns_in_scan_stage = true;
+-- result:
+-- !result
+CREATE TABLE `t_force_encode` (
+  `k` int NOT NULL,
+  `c_str` varchar(64) NULL,
+  `c_out` int NULL,
+  `c_pred_only` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_force_encode
+select generate_series,
+       concat('v', generate_series % 3),
+       generate_series % 11,
+       generate_series % 13
+from TABLE(generate_series(0, 999));
+-- result:
+-- !result
+[UC] analyze full table t_force_encode;
+function: wait_global_dict_ready('c_str', 't_force_encode')
+-- result:
+
+-- !result
+admin enable failpoint 'segment_iterator_force_global_dict_encode';
+-- result:
+-- !result
+select count(*), count(distinct c_str), sum(c_out) from t_force_encode
+where c_str >= 'v' and c_out >= 0 and c_pred_only >= 0;
+-- result:
+1000	3	4995
+-- !result
+select count(*), count(distinct c_str), sum(c_out), sum(c_pred_only) from t_force_encode
+where c_str >= 'v' and c_out >= 0 and c_pred_only >= 0;
+-- result:
+1000	3	4995	5994
+-- !result
+admin disable failpoint 'segment_iterator_force_global_dict_encode';
+-- result:
+-- !result
+select count(*), count(distinct c_str), sum(c_out) from t_force_encode
+where c_str >= 'v' and c_out >= 0 and c_pred_only >= 0;
+-- result:
+1000	3	4995
+-- !result
+drop table t_force_encode force;
+-- result:
+-- !result
+CLEANUP {
+    admin disable failpoint 'segment_iterator_force_global_dict_encode';
+} END CLEANUP
