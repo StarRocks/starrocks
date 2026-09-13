@@ -44,6 +44,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -172,6 +173,8 @@ public class IndexAnalyzer {
                     "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
+        lowerCasePropertyKeys(properties);
+
         if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {
             String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
             if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
@@ -197,6 +200,23 @@ public class IndexAnalyzer {
 
         // add default properties
         addDefaultProperties(properties);
+    }
+
+    // BE finds the GIN properties by exact lower-case key, so any other spelling must be folded before storing.
+    private static void lowerCasePropertyKeys(Map<String, String> properties) {
+        if (properties.keySet().stream().allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT)))) {
+            return;
+        }
+        Map<String, String> lowerCased = new LinkedHashMap<>();
+        for (Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey().toLowerCase(Locale.ROOT);
+            if (lowerCased.containsKey(key)) {
+                throw new SemanticException("Duplicated index property for GIN after lower-casing the key: " + key);
+            }
+            lowerCased.put(key, entry.getValue());
+        }
+        properties.clear();
+        properties.putAll(lowerCased);
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
