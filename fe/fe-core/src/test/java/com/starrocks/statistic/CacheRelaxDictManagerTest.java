@@ -16,10 +16,12 @@ package com.starrocks.statistic;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -77,7 +79,8 @@ public class CacheRelaxDictManagerTest {
     private TResultBatch generateDictResult(int size) throws TException {
         TStatisticData sd = new TStatisticData();
         TGlobalDict dict = new TGlobalDict();
-        TreeSet<ByteBuffer> orderSet = new TreeSet<>();
+        // BE orders dictionary strings with memcmp, i.e. unsigned bytes
+        TreeSet<ByteBuffer> orderSet = new TreeSet<>(ColumnDict.UNSIGNED_LEX);
         for (int i = 0; i < size; i++) {
             orderSet.add(ByteBuffer.wrap(Integer.toString(i).getBytes(StandardCharsets.UTF_8)));
         }
@@ -255,6 +258,39 @@ public class CacheRelaxDictManagerTest {
 
             manager.removeGlobalDict(tableUUID, columnName);
         }
+    }
+
+    @Test
+    public void testMergeKeepsUnsignedByteOrder() {
+        // Existing dict as BE delivered it: memcmp order, codes 1..n. 'z' (0x7A) sorts before the
+        // multi-byte keys (0xC3.., 0xE4..) on BE; ByteBuffer's signed natural order would put them first.
+        ImmutableMap.Builder<ByteBuffer, Integer> oldDict = ImmutableMap.builder();
+        oldDict.put(utf8("a"), 1);
+        oldDict.put(utf8("z"), 2);
+        oldDict.put(utf8("中"), 3);
+        Optional<ColumnDict> oldValue = Optional.of(new ColumnDict(oldDict.build(), 0, 0));
+
+        // A refreshed collection that adds 'b' and 'é'; ids from BE are irrelevant to the merge.
+        TGlobalDict stat = new TGlobalDict();
+        stat.setIds(List.of(1, 2));
+        stat.setStrings(List.of(utf8("b"), utf8("é")));
+
+        List<String> expected = List.of("a", "b", "z", "é", "中");
+        for (boolean mergeVersion : new boolean[] {true, false}) {
+            Optional<ColumnDict> merged = Deencapsulation.invoke(CacheRelaxDictManager.class,
+                    "mergeStatToColumnDict", stat, oldValue, mergeVersion);
+            Assertions.assertTrue(merged.isPresent());
+            Assertions.assertEquals(expected.size(), merged.get().getDictSize());
+            for (int i = 0; i < expected.size(); i++) {
+                Integer code = merged.get().getDict().get(utf8(expected.get(i)));
+                Assertions.assertEquals(Integer.valueOf(i + 1), code,
+                        "code of " + expected.get(i) + " (mergeVersion=" + mergeVersion + ")");
+            }
+        }
+    }
+
+    private static ByteBuffer utf8(String s) {
+        return ByteBuffer.wrap(s.getBytes(StandardCharsets.UTF_8));
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {
