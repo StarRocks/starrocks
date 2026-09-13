@@ -156,7 +156,7 @@ static inline uint32_t LE_LOAD32(const uint8_t* p) {
     return decode_fixed32_le(p);
 }
 
-#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64))
+#if (defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64))) || (defined(__ARM_NEON) && defined(__aarch64__))
 static inline uint64_t LE_LOAD64(const uint8_t* p) {
     return decode_fixed64_le(p);
 }
@@ -175,10 +175,8 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
 #ifndef __SSE4_2__
 #if defined(__ARM_NEON) && defined(__aarch64__)
-    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
-    *p += 4;
-    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
-    *p += 4;
+    *l = __crc32cd(static_cast<uint32_t>(*l), LE_LOAD64(*p));
+    *p += 8;
 #else
     Slow_CRC32(l, p);
 #endif // defined(__ARM_NEON) && defined(__aarch64__)
