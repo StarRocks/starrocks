@@ -59,6 +59,7 @@ DROP TABLE t_dict_mapping_streamload;
 DROP DATABASE test_dict_mapping_streamload;
 -- result:
 -- !result
+
 -- name: test_dictmapping_multiple_column @native
 CREATE DATABASE test_dictmapping_multiple_column;
 -- result:
@@ -95,6 +96,7 @@ SELECT dict_mapping("dict", col_1, col_2) FROM t;
 DROP DATABASE test_dictmapping_multiple_column;
 -- result:
 -- !result
+
 -- name: test_dictmapping_null_column @native
 CREATE DATABASE test_dictmapping_null_column;
 -- result:
@@ -129,6 +131,51 @@ SELECT dict_mapping("dict", col_1, col_2) FROM t;
 [REGEX].*invalid parameter : get NULL paramenter.*
 -- !result
 DROP DATABASE test_dictmapping_null_column;
+-- result:
+-- !result
+
+-- name: test_dictmapping_nested_null_key @native
+CREATE DATABASE test_dictmapping_nested_null_key;
+-- result:
+-- !result
+use test_dictmapping_nested_null_key;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO dict VALUES (1, "abc", default, 0);
+-- result:
+-- !result
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t VALUES (1, NULL);
+-- result:
+-- !result
+SELECT dict_mapping("dict", col_1, dict_mapping("dict", col_1, col_2)) FROM t;
+-- result:
+[REGEX].*invalid parameter : get NULL paramenter.*
+-- !result
+SELECT bit_shift_left(1, dict_mapping("dict", col_1, col_2)) FROM t;
+-- result:
+[REGEX].*invalid parameter : get NULL paramenter.*
+-- !result
+SELECT count(*) FROM t;
+-- result:
+1
+-- !result
+DROP DATABASE test_dictmapping_nested_null_key;
 -- result:
 -- !result
 -- name: test_dictmapping_DictQueryOperator_bug @native
@@ -192,6 +239,7 @@ insert into fact_tbl_2
 DROP DATABASE test_dictmapping_DictQueryOperator_bug;
 -- result:
 -- !result
+
 -- name: test_dictmapping_add_generated_column_with_dict_mapping @native
 CREATE DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
 -- result:
@@ -239,6 +287,7 @@ DROP TABLE t_dictmapping_add_generated_column_with_dict_mapping;
 DROP DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
 -- result:
 -- !result
+
 -- name: test_dictmapping_generated_column_in_create_table @native
 CREATE DATABASE test_dictmapping_generated_column_in_create_table;
 -- result:
@@ -264,6 +313,7 @@ E: (1064, 'Getting analyzing error. Detail message: column:COL_1 does not exist.
 DROP DATABASE test_dictmapping_generated_column_in_create_table;
 -- result:
 -- !result
+
 -- name: test_dictmapping_null_if_not_found @native
 CREATE DATABASE test_dictmapping_null_if_not_found;
 -- result:
@@ -307,6 +357,7 @@ drop table t_dictmapping_null_if_not_found;
 drop database test_dictmapping_null_if_not_found;
 -- result:
 -- !result
+
 -- name: test_dictmapping_multiple_open_crash @native
 CREATE TABLE `t_dictmapping_multiple_open_crash` (
   `k` BIGINT NOT NULL COMMENT "",

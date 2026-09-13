@@ -35,7 +35,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
     bool null_if_not_found = !_dict_query_expr.strict_mode;
     for (int i = 0; i < _children.size(); ++i) {
-        columns[i] = _children[i]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, ptr));
     }
 
     MutableColumnPtr res;
