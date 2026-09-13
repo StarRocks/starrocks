@@ -302,6 +302,8 @@ struct TIcebergTableSink {
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
     12: optional TIcebergTableSinkExt ext
+    // Parquet encryption info for encrypted Iceberg tables
+    13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
 }
 
 struct THiveTableSink {

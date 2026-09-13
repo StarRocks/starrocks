@@ -32,6 +32,14 @@ class StoragePageCache;
 class BlockCompressionCodec;
 } // namespace starrocks
 
+// Apache parquet-cpp Parquet Modular Encryption primitives (forward declarations so
+// the heavy internal headers stay confined to page_reader.cpp).
+namespace parquet {
+class InternalFileDecryptor;
+class Decryptor;
+class FileDecryptionProperties;
+} // namespace parquet
+
 namespace starrocks::parquet {
 
 struct ColumnReaderOptions;
@@ -40,9 +48,10 @@ struct ColumnReaderOptions;
 class PageReader {
 public:
     PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values,
-               const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec);
+               const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec,
+               int16_t column_ordinal = 0);
 
-    ~PageReader() = default;
+    ~PageReader();
 
     // Try to parse header starts from current _offset. Caller should assure that
     // _offset locates at the start of page header. If _offset doesn't locate the
@@ -65,6 +74,11 @@ public:
 
     void set_page_num(size_t page_num) { _page_num = page_num; }
 
+    // Tell the reader whether this column chunk begins with a dictionary page; needed
+    // to choose the correct PME module type/AAD for the first page before it can be
+    // decrypted (the page type is only known after decryption).
+    void set_has_dictionary_page(bool v) { _has_dictionary_page = v; }
+
     void set_next_read_page_idx(size_t cur_page_idx) { _next_read_page_idx = cur_page_idx; }
 
     StatusOr<Slice> read_and_decompress_page_data();
@@ -79,6 +93,11 @@ private:
     StatusOr<std::string_view> _peek(size_t size);
 
     int32_t _data_length() {
+        // For an encrypted file, compressed_page_size is the on-disk (encrypted) module
+        // size regardless of codec; the plaintext size emerges after decryption.
+        if (_encrypted) {
+            return _cur_header.compressed_page_size;
+        }
         return _codec != tparquet::CompressionCodec::UNCOMPRESSED ? _cur_header.compressed_page_size
                                                                   : _cur_header.uncompressed_page_size;
     }
@@ -90,6 +109,18 @@ private:
     Status _read_and_decompress_internal(bool need_fill_cache);
     bool _cache_decompressed_data();
     Status _decompress_page(Slice& input, Slice* output);
+
+    // Parquet Modular Encryption (PME). Built once when the file's footer was
+    // encrypted; each PageReader owns its own decryptors (the parquet Decryptor
+    // mutates AAD per page and must not be shared across column readers).
+    Status _init_decryption();
+    // Read and decrypt the (length-prefixed) encrypted page header module, then
+    // deserialize the plaintext into _cur_header. Used instead of the incremental
+    // peek path for encrypted files.
+    Status _read_and_decrypt_header();
+    // Decrypt one encrypted page-data module (ciphertext) into _decrypt_buf and
+    // return the plaintext (still-compressed) slice.
+    StatusOr<Slice> _decrypt_page_module(const uint8_t* ciphertext, size_t ciphertext_len);
 
     io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;
@@ -121,6 +152,22 @@ private:
     bool _skip_page_cache = false;
 
     Slice _uncompressed_data;
+
+    // Parquet Modular Encryption state (only used when _encrypted is true).
+    bool _encrypted = false;
+    Status _encryption_status; // result of _init_decryption(), checked before first use
+    int16_t _column_ordinal = 0;
+    bool _has_dictionary_page = false; // set by ColumnChunkReader from chunk metadata
+    bool _dict_page_read = false;      // the dictionary page (if any) is the first page
+    bool _cur_is_dict_page = false;    // is the page currently being read the dict page
+    int32_t _cur_page_ordinal = 0;     // ordinal of the page currently being read (PME AAD)
+    std::shared_ptr<::parquet::FileDecryptionProperties> _decryption_props;
+    std::shared_ptr<::parquet::InternalFileDecryptor> _file_decryptor;
+    std::shared_ptr<::parquet::Decryptor> _meta_decryptor; // page headers
+    std::shared_ptr<::parquet::Decryptor> _data_decryptor; // page data
+    std::vector<uint8_t> _decrypt_buf;                     // scratch for decrypted page data
+    std::vector<uint8_t> _enc_header_buf;                  // scratch for the encrypted header module
+    std::vector<uint8_t> _header_plain_buf;                // scratch for the decrypted header thrift
 };
 
 } // namespace starrocks::parquet

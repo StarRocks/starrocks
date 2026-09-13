@@ -42,6 +42,11 @@ struct FileCommitResult {
     FileStatistics file_statistics;
     std::string location;
     std::function<void()> rollback_action;
+    // Per-file Parquet Modular Encryption material, set by the writer when the file was
+    // written encrypted (empty otherwise). The raw data key is handed back to FE at commit
+    // so FE can build the Iceberg key_metadata; BE never persists it.
+    std::string encryption_dek;
+    std::string encryption_aad_prefix;
 };
 
 } // namespace starrocks::formats

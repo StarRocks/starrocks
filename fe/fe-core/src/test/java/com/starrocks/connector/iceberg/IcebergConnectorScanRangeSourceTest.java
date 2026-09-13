@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -32,22 +33,34 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.type.DateType;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.encryption.EncryptedInputFile;
+import org.apache.iceberg.encryption.EncryptedOutputFile;
+import org.apache.iceberg.encryption.EncryptionManager;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
+import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.VarcharType.VARCHAR;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 /**
  * Test cases for IcebergConnectorScanRangeSource focusing on initBucketInfo and extractBucketId methods
@@ -1011,5 +1024,159 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 prevCtx.setThreadLocalInfo();
             }
         }
+    }
+
+    /** Non-plaintext EncryptionManager stub: buildEncryptionInfo only checks it is not the plaintext one. */
+    private static class StubEncryptionManager implements EncryptionManager {
+        @Override
+        public InputFile decrypt(EncryptedInputFile encrypted) {
+            throw new UnsupportedOperationException("not reached: the DEK is read straight from key_metadata");
+        }
+
+        @Override
+        public EncryptedOutputFile encrypt(OutputFile rawOutput) {
+            throw new UnsupportedOperationException("not reached: this is the read path");
+        }
+    }
+
+    private TupleDescriptor twoColumnTuple(int tupleId) {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(tupleId));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), tuple);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        tuple.addSlot(idSlot);
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), tuple);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        tuple.addSlot(dataSlot);
+        return tuple;
+    }
+
+    private IcebergConnectorScanRangeSource sourceForTable(TupleDescriptor tuple) {
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+        return new IcebergConnectorScanRangeSource(icebergTable, RemoteFileInfoDefaultSource.EMPTY,
+                IcebergMORParams.EMPTY, tuple, Optional.empty(), PartitionIdGenerator.of(), false, false);
+    }
+
+    private static DataFile encryptedDataFile(String path, ByteBuffer keyMetadata) {
+        return DataFiles.builder(SPEC_A)
+                .withPath(path)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(2)
+                .withEncryptionKeyMetadata(keyMetadata)
+                .build();
+    }
+
+    @Test
+    public void testBuildScanRangeRecoversDekAndAadFromKeyMetadata() throws Exception {
+        // The read path's whole job: turn the key_metadata Iceberg committed back into the DEK and AAD
+        // prefix the BE needs. Nothing else in FE tests this, and it is what decides whether a file
+        // another engine wrote can be decrypted at all.
+        byte[] dek = new byte[32];
+        byte[] aadPrefix = new byte[16];
+        for (int i = 0; i < dek.length; i++) {
+            dek[i] = (byte) (i + 1);
+        }
+        for (int i = 0; i < aadPrefix.length; i++) {
+            aadPrefix[i] = (byte) (i + 100);
+        }
+
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-a.parquet",
+                        StarRocksKeyMetadata.serialize(dek, aadPrefix)))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(40);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        THdfsScanRange range = source.buildScanRange(task, task.file(), source.addPartition(task));
+
+        Assertions.assertTrue(range.isSetParquet_encryption_info(),
+                "an encrypted file's scan range must carry key material for the BE");
+        Assertions.assertArrayEquals(dek, range.getParquet_encryption_info().getFile_dek());
+        Assertions.assertArrayEquals(aadPrefix, range.getParquet_encryption_info().getAad_prefix());
+    }
+
+    @Test
+    public void testBuildScanRangeFailsWhenKeyMetadataCarriesNoDataKey() throws Exception {
+        // Fail closed: a key_metadata with no usable key must fail the query rather than produce a
+        // scan range the BE will then try to read as plaintext.
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-nokey.parquet", ByteBuffer.wrap(new byte[] {0x00})))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(41);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+    }
+
+    @Test
+    public void testBuildScanRangeOnPlaintextTableCarriesNoEncryptionInfo() throws Exception {
+        // A plaintext table must not get encryption info even though the file carries key metadata:
+        // the table's EncryptionManager is what decides, not the presence of bytes on the file.
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/plain-a.parquet",
+                        StarRocksKeyMetadata.serialize(new byte[16], new byte[16])))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(42);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        THdfsScanRange range = source.buildScanRange(task, task.file(), source.addPartition(task));
+
+        Assertions.assertFalse(range.isSetParquet_encryption_info(),
+                "a plaintext table must not ship key material to the BE");
+    }
+
+    @Test
+    public void testDeclaredEncryptionWithPlaintextManagerFailsEvenForAFileWithNoKeyMetadata() throws Exception {
+        // Regression test for the fail-open this gate exists to close. The gate used to live inside
+        // buildEncryptionInfo(), which is only reached when a file HAS key metadata -- but the state it
+        // guards against is a table declaring encryption.key-id while the catalog supplies a plaintext
+        // manager, and such a table's files are written WITHOUT key metadata. So the offending file
+        // skipped the branch, skipped the gate, and was served silently.
+        //
+        // The file below therefore deliberately has NO key metadata: that is the case that must fail.
+        // If the gate is ever moved back inside the per-file branch, this test fails.
+        // Declared via a mocked property map, not updateProperties(): TableTestBase builds format-v2
+        // tables and EncryptionUtil.checkCompatibility rejects encryption.key-id below v3, so a real
+        // commit would fail for an unrelated reason.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+
+        TupleDescriptor tuple = twoColumnTuple(43);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        // No MockUp on encryption(): the real TestTable returns PlaintextEncryptionManager, which is
+        // exactly the unsupported-catalog shape.
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+        Assertions.assertTrue(e.getMessage().contains("cannot read"), e.getMessage());
     }
 }

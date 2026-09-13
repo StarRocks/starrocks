@@ -171,6 +171,7 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotFoundException;
@@ -1310,6 +1311,287 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testFinishSinkRejectsMissingDataKeyOnEncryptedTable() {
+        // Regression test for the rolling-upgrade fail-open. The guard used to be keyed on
+        // isSetFile_dek(): a BE without encryption support ignores the unknown optional thrift field,
+        // writes plaintext, and returns NO key -- so the check was skipped entirely and the plaintext
+        // file was committed into an encrypted table. The requirement must come from the TABLE.
+        //
+        // file_dek is deliberately NOT set below. If the guard is ever keyed on the BE's response
+        // again, this test fails.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        // Declared via a mocked property map: TableTestBase builds format-v2 tables and
+        // EncryptionUtil.checkCompatibility rejects encryption.key-id below v3.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/plain.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(tSinkCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("returned no data encryption key"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRejectsWrongLengthDataKey() {
+        // A data key shorter than the table's encryption.data-key-length must not be committed.
+        // Nothing downstream re-checks it: the key goes straight into key_metadata, so a file
+        // encrypted below the table's declared strength would become part of the table silently.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        // Partial-mock IcebergMetadata.getTable, not the catalog: finishSink calls getTable, which
+        // calls getDb, which reaches HiveCatalog.loadNamespaceMetadata and tries to open a real Hive
+        // Metastore connection. Mocking IcebergHiveCatalog.getTable does not intercept that, so the
+        // test failed with RuntimeMetaException instead of reaching the guard. This is the same
+        // pattern testFinishSink above uses.
+        // The guard is keyed on the TABLE declaring encryption, not on what BE returned, so the
+        // property has to be present for the length check to be reached at all. Declared via a mocked
+        // property map because TableTestBase builds format-v2 tables and EncryptionUtil.checkCompatibility
+        // rejects encryption.key-id below v3.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/enc.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+        // The table carries no encryption.data-key-length, so Iceberg's default of 16 applies.
+        // An 8-byte key is therefore a downgrade and has to be refused.
+        tIcebergDataFile.setFile_dek(new byte[8]);
+        tIcebergDataFile.setAad_prefix(new byte[16]);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(tSinkCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("8-byte data key"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRejectsMissingDataKeyOnAPositionDeleteFile() {
+        // DELETE takes a different commit path (commitDeleteOperation -> buildPositionDeleteFile) from
+        // INSERT, and it originally applied no encryption at all: a position-delete file was committed
+        // into an encrypted table with no key_metadata whether or not the BE encrypted it. A delete file
+        // names the data file and the row positions removed from it, so leaving it unprotected discloses
+        // exactly what table encryption exists to hide. Iceberg treats delete files like data files here
+        // -- PositionDeleteWriter takes an EncryptedOutputFile and records its own keyMetadata -- and so
+        // must we. file_content routes this file down the delete path.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/plain-deletes.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(3);
+        deleteFile.setSplit_offsets(Lists.newArrayList(4L));
+        deleteFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        deleteFile.setFile_size_in_bytes(500);
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        // file_dek deliberately unset: the shape an encryption-unaware BE produces.
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(deleteFile);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(tSinkCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("returned no data encryption key"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRejectsEqualityDeleteFiles() {
+        // StarRocks emits no equality deletes, and finishSink's dispatch is a two-way split on
+        // POSITION_DELETES -- so without this guard an equality-delete file falls into the data-file
+        // arm and is committed as a DataFile, ADDING its rows to the table instead of deleting
+        // anything. Refused for any table, encrypted or not; on an encrypted one it would also
+        // expose the column values it matches on. The check is a full pass over the file list on
+        // purpose: the flag scan after it short-circuits, so a per-file check there would miss an
+        // equality delete that is not first -- which is why this fixture puts a data file first.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/data.parquet");
+        dataFile.setFormat("parquet");
+        dataFile.setRecord_count(10);
+        dataFile.setSplit_offsets(Lists.newArrayList(4L));
+        dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        dataFile.setFile_size_in_bytes(2000);
+        dataFile.setPartition_null_fingerprint("0");
+        TSinkCommitInfo dataCommitInfo = new TSinkCommitInfo();
+        dataCommitInfo.setIs_overwrite(false);
+        dataCommitInfo.setIceberg_data_file(dataFile);
+
+        TIcebergDataFile eqDelete = new TIcebergDataFile();
+        eqDelete.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/eq-deletes.parquet");
+        eqDelete.setFormat("parquet");
+        eqDelete.setRecord_count(3);
+        eqDelete.setSplit_offsets(Lists.newArrayList(4L));
+        eqDelete.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        eqDelete.setFile_size_in_bytes(500);
+        eqDelete.setPartition_null_fingerprint("0");
+        eqDelete.setFile_content(TIcebergFileContent.EQUALITY_DELETES);
+        TSinkCommitInfo eqCommitInfo = new TSinkCommitInfo();
+        eqCommitInfo.setIs_overwrite(false);
+        eqCommitInfo.setIceberg_data_file(eqDelete);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(dataCommitInfo, eqCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("equality-delete files are not supported"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRecordsKeyMetadataOnAnEncryptedFile() {
+        // The refusals are all tested; this tests the thing they protect. Without an assertion here,
+        // dropping builder.withEncryptionKeyMetadata(...) leaves the whole suite green while every
+        // encrypted file StarRocks writes becomes undecryptable by anything, StarRocks included --
+        // the DEK would exist only in the BE process that generated it.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        // Declared via a mocked property map: TableTestBase builds format-v2 tables and
+        // EncryptionUtil.checkCompatibility rejects encryption.key-id below v3.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        byte[] dek = new byte[TableProperties.ENCRYPTION_DEK_LENGTH_DEFAULT];
+        for (int i = 0; i < dek.length; i++) {
+            dek[i] = (byte) (i + 1);
+        }
+        byte[] aadPrefix = new byte[16];
+        for (int i = 0; i < aadPrefix.length; i++) {
+            aadPrefix[i] = (byte) (0x40 + i);
+        }
+
+        String path = mockedNativeTableA.location() + "/data/data_bucket=0/encrypted.parquet";
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(path);
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+        tIcebergDataFile.setFile_dek(dek);
+        tIcebergDataFile.setAad_prefix(aadPrefix);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo),
+                null, null, connectContext);
+        mockedNativeTableA.refresh();
+
+        List<FileScanTask> tasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
+        Assertions.assertEquals(1, tasks.size());
+        DataFile committed = tasks.get(0).file();
+        Assertions.assertEquals(path, committed.path());
+        Assertions.assertNotNull(committed.keyMetadata(),
+                "an encrypted table's committed file must carry key_metadata or nothing can decrypt it");
+
+        // Round-trip it: the bytes must be the DEK and prefix that went in, in Iceberg's own format.
+        StarRocksKeyMetadata.Parsed parsed = StarRocksKeyMetadata.parse(committed.keyMetadata());
+        Assertions.assertArrayEquals(dek, parsed.dek, "key_metadata must carry the DEK the BE returned");
+        Assertions.assertArrayEquals(aadPrefix, parsed.aadPrefix, "key_metadata must carry the AAD prefix");
+    }
+
+    @Test
     public void testFinishSink2() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
@@ -1868,8 +2150,12 @@ public class IcebergMetadataTest extends TableTestBase {
                                 .setFieldNames(Lists.newArrayList())
                                 .setLimit(10)
                                 .build()));
-        assertTrue(ex.getMessage().contains("encryption is not supported"),
-                "Expected encryption error, got: " + ex.getMessage());
+        // Reading Parquet Modular Encryption is now supported, so this no longer fails because the table
+        // is encrypted. It fails because TestTable's catalog returns a plaintext EncryptionManager while
+        // the table declares encryption.key-id -- the unwired-catalog case, where no key can be
+        // recovered and serving the scan as plaintext would be the fail-open.
+        assertTrue(ex.getMessage().contains("cannot read"),
+                "Expected an unsupported-catalog error, got: " + ex.getMessage());
     }
 
     @Test

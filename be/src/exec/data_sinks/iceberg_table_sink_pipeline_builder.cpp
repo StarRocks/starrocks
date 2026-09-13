@@ -202,6 +202,64 @@ Status IcebergTableSinkPipelineBuilder::decompose_to_pipeline(pipeline::OpFactor
     return Status::OK();
 }
 
+// Carry the FE's Parquet Modular Encryption signal onto the data sink context. FE sends only the
+// algorithm and key length -- BE generates a fresh per-file DEK at write time and returns it at
+// commit. Applied to both the plain data sink and the row-delta composite's data sub-sink so the
+// two cannot drift; a miss here means silently writing plaintext into an encrypted table.
+//
+// Returns an error when encryption is on but no key length came with it. The length is NOT defaulted:
+// choosing one here would write a key weaker than the table's encryption.data-key-length policy and
+// commit it with nothing surfaced. Failing at plan build keeps that out of the table entirely, rather
+// than surfacing later when the first file is opened.
+Status apply_iceberg_encryption_signal(const TIcebergTableSink& t_iceberg_sink,
+                                       connector::IcebergChunkSinkContext* ctx) {
+    if (!t_iceberg_sink.__isset.parquet_encryption_info) {
+        return Status::OK();
+    }
+    const auto& enc = t_iceberg_sink.parquet_encryption_info;
+    ctx->encryption_enabled = true;
+    if (enc.__isset.encryption_algorithm && !enc.encryption_algorithm.empty()) {
+        ctx->encryption_algorithm = enc.encryption_algorithm;
+    }
+    if (enc.__isset.dek_length) {
+        ctx->encryption_dek_length = enc.dek_length;
+    } else {
+        return Status::InvalidArgument(
+                "Iceberg table encryption is enabled but the FE sent no DEK length. Refusing to choose one: "
+                "it could be weaker than the table's encryption.data-key-length policy. This indicates an "
+                "FE/BE version mismatch.");
+    }
+    return Status::OK();
+}
+
+// Same signal, for the position-delete sinks. IcebergDeleteSinkContext is a sibling of
+// IcebergChunkSinkContext rather than a subclass, so it cannot share the overload above; and its
+// ParquetFileWriterFactory consumes ctx->options directly, so the keys go straight in rather than
+// through dedicated fields.
+//
+// Applied to the delete context created by BOTH create_delete_sink_context (DELETE) and
+// create_row_delta_sink_context (UPDATE / MERGE). Missing it meant position-delete files on an
+// encrypted table were written and committed as plaintext, silently.
+Status apply_iceberg_encryption_signal_to_delete_ctx(const TIcebergTableSink& t_iceberg_sink,
+                                                     connector::IcebergDeleteSinkContext* ctx) {
+    if (!t_iceberg_sink.__isset.parquet_encryption_info) {
+        return Status::OK();
+    }
+    const auto& enc = t_iceberg_sink.parquet_encryption_info;
+    if (!enc.__isset.dek_length) {
+        return Status::InvalidArgument(
+                "Iceberg table encryption is enabled but the FE sent no DEK length for delete files. "
+                "Refusing to choose one: it could be weaker than the table's encryption.data-key-length "
+                "policy. This indicates an FE/BE version mismatch.");
+    }
+    ctx->options["encryption_enabled"] = "true";
+    if (enc.__isset.encryption_algorithm && !enc.encryption_algorithm.empty()) {
+        ctx->options["encryption_algorithm"] = enc.encryption_algorithm;
+    }
+    ctx->options["encryption_dek_length"] = std::to_string(enc.dek_length);
+    return Status::OK();
+}
+
 Status IcebergTableSinkPipelineBuilder::create_delete_sink_context(
         const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* /*context*/,
         IcebergTableDescriptor* iceberg_table_desc, std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
@@ -210,6 +268,7 @@ Status IcebergTableSinkPipelineBuilder::create_delete_sink_context(
 
     // Create merge sink context for delete files
     auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
+    RETURN_IF_ERROR(apply_iceberg_encryption_signal_to_delete_ctx(t_iceberg_sink, delete_sink_ctx.get()));
     delete_sink_ctx->path = t_iceberg_sink.data_location;
     delete_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
     // Position-delete codec lives in delete_compression_type; fall back to
@@ -297,6 +356,7 @@ Status IcebergTableSinkPipelineBuilder::create_data_sink_context(
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
+    RETURN_IF_ERROR(apply_iceberg_encryption_signal(t_iceberg_sink, data_sink_ctx.get()));
     data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(_sink.get_output_expr(), runtime_state);
 
     size_t num_evaluators = data_sink_ctx->column_evaluators.size();
@@ -457,6 +517,7 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
 
     // --- Create delete sub-context ---
     auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
+    RETURN_IF_ERROR(apply_iceberg_encryption_signal_to_delete_ctx(t_iceberg_sink, delete_sink_ctx.get()));
     delete_sink_ctx->writer_tag = "delete";
     delete_sink_ctx->path = t_iceberg_sink.data_location;
     delete_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
@@ -519,6 +580,7 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
+    RETURN_IF_ERROR(apply_iceberg_encryption_signal(t_iceberg_sink, data_sink_ctx.get()));
 
     // Data output_exprs: data columns only; mixed-mode op_code is private to the
     // composite row-delta sink and must not be written into data files.

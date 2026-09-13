@@ -14,12 +14,19 @@
 
 #include "formats/parquet/page_reader.h"
 
+#include <arrow/memory_pool.h>
+#include <arrow/util/secure_string.h>
 #include <glog/logging.h>
+#include <parquet/encryption/encryption.h>
+#include <parquet/encryption/encryption_internal.h>
+#include <parquet/encryption/internal_file_decryptor.h>
 
 #include <memory>
 #include <ostream>
+#include <span>
 #include <vector>
 
+#include "base/coding.h"
 #include "base/compression/block_compression.h"
 #include "base/container/raw_container.h"
 #include "cache/datacache.h"
@@ -28,7 +35,9 @@
 #include "common/status.h"
 #include "common/util/thrift_util.h"
 #include "formats/parquet/column_reader.h"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/utils.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 
@@ -41,18 +50,166 @@ static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
 PageReader::PageReader(io::SeekableInputStream* stream, size_t start_offset, size_t length, size_t num_values,
-                       const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec)
+                       const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec,
+                       int16_t column_ordinal)
         : _stream(stream),
           _finish_offset(start_offset + length),
           _num_values_total(num_values),
           _opts(opts),
-          _codec(codec) {
+          _codec(codec),
+          _column_ordinal(column_ordinal) {
     if (_opts.use_file_pagecache) {
         _cache = DataCache::GetInstance()->page_cache();
         _init_page_cache_key();
     }
     _compressed_buf = std::make_unique<std::vector<uint8_t>>();
     _uncompressed_buf = std::make_unique<std::vector<uint8_t>>();
+    if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+        // Mark encrypted up front so a failed init surfaces as an error in next_header
+        // rather than silently falling through to the plaintext page-header path.
+        _encrypted = true;
+        _encryption_status = _init_decryption();
+    }
+}
+
+PageReader::~PageReader() = default;
+
+Status PageReader::_init_decryption() {
+    const auto& ctx = *_opts.file_meta_data->encryption_ctx();
+    // The DEK comes from the scan range, never from the cached footer. Refusing here rather
+    // than relying on the footer-parse path means an encrypted file with no planner-supplied key
+    // fails on EVERY scan; when the key was cached alongside the footer, a cache hit skipped
+    // that check entirely and decrypted the file anyway.
+    if (_opts.parquet_encryption_info == nullptr || !_opts.parquet_encryption_info->__isset.file_dek ||
+        _opts.parquet_encryption_info->file_dek.empty()) {
+        return Status::NotSupported(
+                "cannot read encrypted Parquet file: no decryption key was provided by the planner");
+    }
+    const std::string& dek = _opts.parquet_encryption_info->file_dek;
+    try {
+        const auto cipher = static_cast<::parquet::ParquetCipher::type>(ctx.algorithm);
+        _decryption_props = ::parquet::FileDecryptionProperties::Builder()
+                                    .footer_key(::arrow::util::SecureString(std::string(dek)))
+                                    ->build();
+        const std::string file_aad = ctx.aad_prefix + ctx.aad_file_unique;
+        _file_decryptor = std::make_shared<::parquet::InternalFileDecryptor>(
+                _decryption_props, file_aad, cipher, ctx.key_metadata, ::arrow::default_memory_pool());
+        // Iceberg PME: encrypted footer, every column keyed with the footer key (no
+        // per-column keys). arrow 24 dropped GetFooterDecryptorForColumn{Meta,Data}, and the
+        // public GetColumn{Meta,Data}Decryptor cannot stand in: GetColumnKey() returns an
+        // empty key when there is neither an explicit column key nor a key retriever, which
+        // is exactly our case. Build the two Decryptors directly, the same way the (private)
+        // GetFooterDecryptor(aad, metadata) does. metadata=true forces GCM, which is correct
+        // for page headers even in a GCM_CTR file; metadata=false follows the file algorithm
+        // for page data. The aad passed here is a placeholder -- both decryptors get
+        // UpdateAad() per page before every Decrypt().
+        const auto& footer_key = _file_decryptor->GetFooterKey();
+        const auto key_len = static_cast<int32_t>(footer_key.size());
+        _meta_decryptor = std::make_shared<::parquet::Decryptor>(
+                ::parquet::encryption::AesDecryptor::Make(cipher, key_len, /*metadata=*/true), footer_key, file_aad,
+                /*aad=*/"", ::arrow::default_memory_pool());
+        _data_decryptor = std::make_shared<::parquet::Decryptor>(
+                ::parquet::encryption::AesDecryptor::Make(cipher, key_len, /*metadata=*/false), footer_key, file_aad,
+                /*aad=*/"", ::arrow::default_memory_pool());
+    } catch (const ::parquet::ParquetException& e) {
+        return Status::InternalError(fmt::format("failed to initialize Parquet page decryptor: {}", e.what()));
+    }
+    return Status::OK();
+}
+
+Status PageReader::_read_and_decrypt_header() {
+    // The dictionary page (when present) is always the first page in the chunk; its
+    // module type must be chosen by position because the page type is only known
+    // after decryption.
+    const bool is_dict = _has_dictionary_page && !_dict_page_read;
+    int8_t header_module;
+    if (is_dict) {
+        _cur_is_dict_page = true;
+        _cur_page_ordinal = ::parquet::kNonPageOrdinal;
+        header_module = ::parquet::encryption::kDictionaryPageHeader;
+    } else {
+        _cur_is_dict_page = false;
+        // The writer bakes the ABSOLUTE data-page index into the AAD, so this must be the page's real
+        // index, not a count of headers this reader happened to read. _next_read_page_idx is exactly
+        // that: it advances only for DATA_PAGE / DATA_PAGE_V2 (never the dictionary page, matching
+        // parquet's "the page ordinal does not count the dictionary page"), and the page-skipping
+        // reader sets it through set_next_read_page_idx() before seeking. Using a private sequential
+        // counter here instead meant that seeking straight to page N built the AAD for a lower
+        // ordinal and failed GCM verification on a perfectly valid file.
+        _cur_page_ordinal = static_cast<int32_t>(_next_read_page_idx);
+        header_module = ::parquet::encryption::kDataPageHeader;
+    }
+
+    // Read the length-prefixed encrypted header module: [4-byte len][nonce][ct][tag].
+    uint8_t len_buf[4];
+    RETURN_IF_ERROR(_stream->read_at_fully(_offset, len_buf, 4));
+    const uint32_t module_len = decode_fixed32_le(len_buf);
+    // Widened deliberately: the prefix spans the whole uint32 range, so `4 + module_len` in 32 bits
+    // wraps for the top four values and a length of 0xFFFFFFFF would come out as 3 and sail past every
+    // bound below.
+    const uint64_t total_len = 4ULL + module_len;
+    // Bound the length BEFORE allocating. This prefix sits outside the AEAD, so it is unauthenticated
+    // attacker-controlled input: a corrupt or hostile file can ask for gigabytes and the allocation
+    // would happen before read_at_fully() ever discovers the header runs past the chunk. Same two
+    // bounds the plaintext header path applies -- the bytes actually left in this column chunk, and
+    // kMaxPageHeaderSize.
+    const uint64_t remaining = (_finish_offset > _offset) ? (_finish_offset - _offset) : 0;
+    if (UNLIKELY(module_len == 0 || total_len > remaining || total_len > kMaxPageHeaderSize)) {
+        return Status::Corruption(
+                fmt::format("invalid encrypted Parquet page-header length: {} (chunk bytes remaining={}, max={}, "
+                            "offset={}, finish={})",
+                            module_len, remaining, kMaxPageHeaderSize, _offset, _finish_offset));
+    }
+    TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(&_enc_header_buf, total_len));
+    RETURN_IF_ERROR(_stream->read_at_fully(_offset, _enc_header_buf.data(), total_len));
+
+    try {
+        const std::string aad =
+                ::parquet::encryption::CreateModuleAad(_meta_decryptor->file_aad(), header_module,
+                                                       _opts.row_group_ordinal, _column_ordinal, _cur_page_ordinal);
+        _meta_decryptor->UpdateAad(aad);
+        // arrow 24: Decrypt takes spans and the output is sized via PlaintextLength()
+        // (CiphertextSizeDelta was removed). contains_length=true, so the 4-byte length
+        // prefix stays part of the ciphertext span.
+        const int32_t plain_cap = _meta_decryptor->PlaintextLength(static_cast<int32_t>(total_len));
+        TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(&_header_plain_buf, plain_cap));
+        const int plain_len = _meta_decryptor->Decrypt(
+                std::span<const uint8_t>(_enc_header_buf.data(), static_cast<size_t>(total_len)),
+                std::span<uint8_t>(_header_plain_buf.data(), static_cast<size_t>(plain_cap)));
+        auto deser_len = static_cast<uint32_t>(plain_len);
+        RETURN_IF_ERROR(
+                deserialize_thrift_msg(_header_plain_buf.data(), &deser_len, TProtocolType::COMPACT, &_cur_header));
+    } catch (const ::parquet::ParquetException& e) {
+        return Status::Corruption(fmt::format("failed to decrypt Parquet page header: {}", e.what()));
+    }
+
+    _header_length = static_cast<uint32_t>(total_len);
+    _next_header_pos = _offset + _header_length + _data_length();
+    RETURN_IF_ERROR(_skip_bytes(_header_length));
+    _opts.stats->request_bytes_read += _header_length;
+    _opts.stats->request_bytes_read_uncompressed += _header_length;
+    if (is_dict) {
+        _dict_page_read = true;
+    }
+    return Status::OK();
+}
+
+StatusOr<Slice> PageReader::_decrypt_page_module(const uint8_t* ciphertext, size_t ciphertext_len) {
+    const int8_t data_module =
+            _cur_is_dict_page ? ::parquet::encryption::kDictionaryPage : ::parquet::encryption::kDataPage;
+    try {
+        const std::string aad = ::parquet::encryption::CreateModuleAad(
+                _data_decryptor->file_aad(), data_module, _opts.row_group_ordinal, _column_ordinal, _cur_page_ordinal);
+        _data_decryptor->UpdateAad(aad);
+        const int32_t plain_cap = _data_decryptor->PlaintextLength(static_cast<int32_t>(ciphertext_len));
+        TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(&_decrypt_buf, plain_cap));
+        const int plain_len =
+                _data_decryptor->Decrypt(std::span<const uint8_t>(ciphertext, ciphertext_len),
+                                         std::span<uint8_t>(_decrypt_buf.data(), static_cast<size_t>(plain_cap)));
+        return Slice(_decrypt_buf.data(), plain_len);
+    } catch (const ::parquet::ParquetException& e) {
+        return Status::Corruption(fmt::format("failed to decrypt Parquet page data: {}", e.what()));
+    }
 }
 
 Status PageReader::next_page() {
@@ -188,7 +345,10 @@ Status PageReader::next_header() {
         return Status::EndOfFile("");
     }
 
-    if (_opts.use_file_pagecache) {
+    if (_encrypted) {
+        RETURN_IF_ERROR(_encryption_status);
+        RETURN_IF_ERROR(_read_and_decrypt_header());
+    } else if (_opts.use_file_pagecache) {
         RETURN_IF_ERROR(_deal_page_with_cache());
     } else {
         RETURN_IF_ERROR(_read_and_deserialize_header(false));
@@ -247,7 +407,11 @@ std::string& PageReader::_current_page_cache_key() {
 
 StatusOr<Slice> PageReader::read_and_decompress_page_data() {
     _opts.stats->page_read_counter += 1;
-    if (!_opts.use_file_pagecache || _skip_page_cache) {
+    // Encrypted files never populate _cache_buf: the header path bypasses the page cache
+    // (see next_header -> _read_and_decrypt_header), and page decryption only happens on the
+    // non-cache path (_read_and_decompress_internal). Force encrypted pages down that path so
+    // they are (a) decrypted and (b) do not dereference the null _cache_buf below (SIGSEGV).
+    if (!_opts.use_file_pagecache || _skip_page_cache || _encrypted) {
         RETURN_IF_ERROR(_read_and_decompress_internal(false));
         return _uncompressed_data;
     } else {
@@ -344,6 +508,17 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
             read_data = Slice(_cache_buf->data() + original_size, read_size);
         }
         RETURN_IF_ERROR(_read_bytes(read_data.data, read_data.size));
+    }
+
+    // For an encrypted file, read_data currently holds the encrypted page-data module
+    // (its on-disk size == compressed_page_size). Decrypt it in place of the original
+    // bytes; the plaintext (still-compressed) data then flows into decompression. This
+    // sits below all of StarRocks' decode/filter logic, so those optimizations are
+    // unaffected. (Encrypted files use the buffered, non-cache path: need_fill_cache
+    // is always false here.)
+    if (_encrypted) {
+        ASSIGN_OR_RETURN(read_data,
+                         _decrypt_page_module(reinterpret_cast<const uint8_t*>(read_data.data), read_data.size));
     }
 
     // if it's compressed, we have to uncompress page
