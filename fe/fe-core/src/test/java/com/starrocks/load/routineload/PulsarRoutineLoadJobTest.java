@@ -260,6 +260,10 @@ public class PulsarRoutineLoadJobTest {
         customProperties.put("pulsar.service.url", "pulsar://localhost:6650");
         job.prepare();
         job.convertCustomProperties(false);
+
+        Map<String, String> convertedCustomProperties = Deencapsulation.getField(job, "convertedCustomProperties");
+        Assertions.assertNotNull(convertedCustomProperties);
+        Assertions.assertEquals("pulsar://localhost:6650", convertedCustomProperties.get("pulsar.service.url"));
     }
 }
 
