@@ -14,23 +14,32 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <type_traits>
+
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
 #endif
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
-#include <cstddef>
-#include <cstdint>
+#if defined(__GNUC__) || defined(__clang__)
+#define STARROCKS_PREFETCH(addr) __builtin_prefetch(static_cast<const void*>(addr), 0, 3)
+#elif defined(__x86_64__) || defined(_M_X64)
+#define STARROCKS_PREFETCH(addr) _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0)
+#else
+#define STARROCKS_PREFETCH(addr) ((void)0)
+#endif
 
 namespace starrocks {
 
 struct SIMDGather {
-    // https://johnysswlab.com/when-vectorization-hits-the-memory-wall-investigating-the-avx2-memory-gather-instruction
-    // 512K
     static constexpr const int max_process_size = 512 * 1024;
-    // b[i] = a[c[i]];
-    // T was int32_t or uint32_t
+
     template <class TB, class TC>
     static void gather(TB* b, const int16_t* a, const TC* c, size_t buckets, int num_rows) {
         static_assert(sizeof(TB) == 4);
@@ -40,14 +49,6 @@ struct SIMDGather {
         int i = 0;
 #ifdef __AVX2__
         if (buckets < max_process_size) {
-            // gather will collect data of size sizeof(int32)
-            // we only need the lower 16 bits
-            // eg:
-            // a = [0x12 0x34 0x56 0x78 0x9a 0x...]
-            // gather (a, [0,1,2,3], 2) will be:
-            // [0x12 0x32 0x56 0x78] [0x56 0x78 0x9a..0.] [....]
-            // use will use mask to get lower 16 bits
-            // [0x12 0x32 0x00 0x00] [0x56 0x78 0x00 0x00] [....]
             __m256i mask = _mm256_set1_epi32(0xFFFF);
             for (; i + 8 <= num_rows; i += 8) {
                 __m256i loaded = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(c));
@@ -60,21 +61,43 @@ struct SIMDGather {
             _mm256_zeroupper();
         }
 #endif
+        constexpr int kPrefetchDist = 16;
+        if (num_rows >= 8192) {
+            for (; i + kPrefetchDist + 8 <= num_rows; i += 8) {
+                STARROCKS_PREFETCH(&a[c[kPrefetchDist + 0]]);
+                STARROCKS_PREFETCH(&a[c[kPrefetchDist + 2]]);
+                STARROCKS_PREFETCH(&a[c[kPrefetchDist + 4]]);
+                STARROCKS_PREFETCH(&a[c[kPrefetchDist + 6]]);
+
+                b[0] = static_cast<TB>(a[c[0]]);
+                b[1] = static_cast<TB>(a[c[1]]);
+                b[2] = static_cast<TB>(a[c[2]]);
+                b[3] = static_cast<TB>(a[c[3]]);
+                b[4] = static_cast<TB>(a[c[4]]);
+                b[5] = static_cast<TB>(a[c[5]]);
+                b[6] = static_cast<TB>(a[c[6]]);
+                b[7] = static_cast<TB>(a[c[7]]);
+                b += 8;
+                c += 8;
+            }
+        }
+        for (; i + 8 <= num_rows; i += 8) {
+            b[0] = static_cast<TB>(a[c[0]]);
+            b[1] = static_cast<TB>(a[c[1]]);
+            b[2] = static_cast<TB>(a[c[2]]);
+            b[3] = static_cast<TB>(a[c[3]]);
+            b[4] = static_cast<TB>(a[c[4]]);
+            b[5] = static_cast<TB>(a[c[5]]);
+            b[6] = static_cast<TB>(a[c[6]]);
+            b[7] = static_cast<TB>(a[c[7]]);
+            b += 8;
+            c += 8;
+        }
         for (; i < num_rows; i++) {
-            *b = a[*c];
+            *b = static_cast<TB>(a[*c]);
             b++;
             c++;
         }
-    }
-
-    static constexpr uint32_t simd_register_bitwidth() {
-#ifdef __AVX2__
-        return 256;
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-        return 128;
-#else
-        return 128;
-#endif
     }
 
     /// dest[i] = src[indexes[i]]
@@ -82,28 +105,43 @@ struct SIMDGather {
     static void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
         static_assert(std::is_integral_v<IndexType>);
 
-        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
-        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-
         size_t i = 0;
+        constexpr size_t kUnroll = 8;
+        constexpr size_t kPrefetchDistance = 16;
 
-        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
-        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
-        if constexpr (NUM_BATCH_VALUES > 0) {
-            DataType buffer[NUM_BATCH_VALUES];
+        // Large array path: prefetch ahead to mitigate DRAM/L3 latency
+        if (num_rows >= 8192) {
+            for (; i + kPrefetchDistance + kUnroll <= num_rows; i += kUnroll) {
+                STARROCKS_PREFETCH(&src[indexes[i + kPrefetchDistance + 0]]);
+                STARROCKS_PREFETCH(&src[indexes[i + kPrefetchDistance + 2]]);
+                STARROCKS_PREFETCH(&src[indexes[i + kPrefetchDistance + 4]]);
+                STARROCKS_PREFETCH(&src[indexes[i + kPrefetchDistance + 6]]);
 
-            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    buffer[j] = src[indexes[i + j]];
-                }
-
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    dest[i + j] = buffer[j];
-                }
+                dest[i + 0] = src[indexes[i + 0]];
+                dest[i + 1] = src[indexes[i + 1]];
+                dest[i + 2] = src[indexes[i + 2]];
+                dest[i + 3] = src[indexes[i + 3]];
+                dest[i + 4] = src[indexes[i + 4]];
+                dest[i + 5] = src[indexes[i + 5]];
+                dest[i + 6] = src[indexes[i + 6]];
+                dest[i + 7] = src[indexes[i + 7]];
             }
         }
 
-        for (; i < num_rows; i++) {
+        // L1/L2 fast path: unrolled vector copy without prefetch overhead
+        for (; i + kUnroll <= num_rows; i += kUnroll) {
+            dest[i + 0] = src[indexes[i + 0]];
+            dest[i + 1] = src[indexes[i + 1]];
+            dest[i + 2] = src[indexes[i + 2]];
+            dest[i + 3] = src[indexes[i + 3]];
+            dest[i + 4] = src[indexes[i + 4]];
+            dest[i + 5] = src[indexes[i + 5]];
+            dest[i + 6] = src[indexes[i + 6]];
+            dest[i + 7] = src[indexes[i + 7]];
+        }
+
+        // Remainder loop
+        for (; i < num_rows; ++i) {
             dest[i] = src[indexes[i]];
         }
     }
@@ -114,38 +152,44 @@ struct SIMDGather {
                        size_t num_rows) {
         static_assert(std::is_integral_v<IndexType>);
 
-        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
-        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-
         size_t i = 0;
+        constexpr size_t kUnroll = 8;
+        constexpr size_t kPrefetchDistance = 16;
 
-        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
-        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
-        if constexpr (NUM_BATCH_VALUES > 0) {
-            DataType buffer[NUM_BATCH_VALUES];
-
-            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    if (is_filtered[i + j] == 0) {
-                        buffer[j] = src[indexes[i + j]];
-                    } else {
-                        buffer[j] = 0;
+        if (num_rows >= 8192) {
+            for (; i + kPrefetchDistance + kUnroll <= num_rows; i += kUnroll) {
+                for (size_t k = 0; k < kUnroll; k += 2) {
+                    if (is_filtered[i + kPrefetchDistance + k] == 0) {
+                        STARROCKS_PREFETCH(&src[indexes[i + kPrefetchDistance + k]]);
                     }
                 }
 
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    dest[i + j] = buffer[j];
-                }
+                dest[i + 0] = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType{};
+                dest[i + 1] = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType{};
+                dest[i + 2] = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType{};
+                dest[i + 3] = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType{};
+                dest[i + 4] = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType{};
+                dest[i + 5] = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType{};
+                dest[i + 6] = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType{};
+                dest[i + 7] = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType{};
             }
         }
 
-        for (; i < num_rows; i++) {
-            if (is_filtered[i] == 0) {
-                dest[i] = src[indexes[i]];
-            } else {
-                dest[i] = 0;
-            }
+        for (; i + kUnroll <= num_rows; i += kUnroll) {
+            dest[i + 0] = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType{};
+            dest[i + 1] = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType{};
+            dest[i + 2] = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType{};
+            dest[i + 3] = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType{};
+            dest[i + 4] = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType{};
+            dest[i + 5] = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType{};
+            dest[i + 6] = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType{};
+            dest[i + 7] = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType{};
+        }
+
+        for (; i < num_rows; ++i) {
+            dest[i] = (is_filtered[i] == 0) ? src[indexes[i]] : DataType{};
         }
     }
 };
+
 } // namespace starrocks

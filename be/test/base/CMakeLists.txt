@@ -75,6 +75,7 @@ set(BASE_TEST_FILES
     simd/byte_stream_split_test.cpp
     simd/batch_run_counter_test.cpp
     simd/filter_test.cpp
+    simd/gather_test.cpp
     simd/simd_expand_test.cpp
     simd/simd_test.cpp
     simd/rle_simd_test.cpp
