@@ -33,7 +33,6 @@
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "compute_env/load_path/rejected_record_writer.h"
-#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 #include "exprs/column_ref.h"
 #include "formats/arrow/arrow_column_converter.h"
 #include "gutil/strings/substitute.h"
@@ -198,8 +197,9 @@ Status ArrowScanner::open_next_reader() {
     RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &_file));
 
     auto* stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
-    auto* consumer_pipe = stream_file ? dynamic_cast<KafkaConsumerPipe*>(stream_file->pipe().get()) : nullptr;
-    if (consumer_pipe != nullptr) {
+    auto* pipe = stream_file ? stream_file->pipe().get() : nullptr;
+    const bool is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
+    if (is_discrete_pipe) {
         // Delay opening reader until next_batch() for discrete buffers (Kafka/Pulsar Routine Load)
         _curr_file_reader = nullptr;
     } else {
@@ -226,7 +226,8 @@ Status ArrowScanner::next_batch() {
     _batch_start_idx = 0;
 
     auto* stream_file = _file ? dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get()) : nullptr;
-    auto* consumer_pipe = stream_file ? dynamic_cast<KafkaConsumerPipe*>(stream_file->pipe().get()) : nullptr;
+    auto* pipe = stream_file ? stream_file->pipe().get() : nullptr;
+    bool is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
 
     while (true) {
         if (_curr_file_reader == nullptr) {
@@ -244,12 +245,13 @@ Status ArrowScanner::next_batch() {
                     return status;
                 }
                 stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
-                consumer_pipe = stream_file ? dynamic_cast<KafkaConsumerPipe*>(stream_file->pipe().get()) : nullptr;
+                pipe = stream_file ? stream_file->pipe().get() : nullptr;
+                is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
             }
 
             if (_curr_file_reader == nullptr) {
-                if (consumer_pipe != nullptr) {
-                    auto res = consumer_pipe->read();
+                if (is_discrete_pipe) {
+                    auto res = pipe->read();
                     if (!res.ok()) {
                         _parser_buf.reset();
                         _arrow_stream.reset();
@@ -318,7 +320,7 @@ Status ArrowScanner::next_batch() {
             _curr_file_reader.reset();
             _parser_buf.reset();
             _arrow_stream.reset();
-            if (consumer_pipe != nullptr) {
+            if (is_discrete_pipe) {
                 // Reset conversion plans and mark message boundary so the next
                 // message gets a fresh schema mapping (mirrors the EOF path).
                 for (auto& conv : _conv_funcs) {
@@ -337,7 +339,7 @@ Status ArrowScanner::next_batch() {
             for (auto& conv : _conv_funcs) {
                 conv = std::make_unique<ConvertFuncTree>();
             }
-            if (consumer_pipe != nullptr) {
+            if (is_discrete_pipe) {
                 _consecutive_errors = 0;
                 _message_boundary = true;
                 continue;
