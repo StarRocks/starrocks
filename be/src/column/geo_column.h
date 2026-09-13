@@ -96,8 +96,8 @@ public:
     StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
     StatusOr<MutableColumnPtr> downgrade() override { return MutableColumnPtr{}; }
 
-    // No binary visitor fallback. Serde/public rendering require a separate contract;
-    // equality, ordering and geo keys remain unsupported.
+    // No binary visitor fallback. Only GEOGRAPHY WKB MySQL output is supported;
+    // transport serde, equality, ordering and geo keys remain unsupported.
     Status accept(ColumnVisitor* visitor) const override;
     Status accept_mutable(ColumnVisitorMutable* visitor) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int hint) const override;

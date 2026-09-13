@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 
 namespace starrocks {
@@ -280,8 +281,54 @@ TEST(GeoColumnTest, UnsupportedPathsDoNotFallBackToBinary) {
     EXPECT_THROW(column->compare_at(0, 0, *column, 1), std::runtime_error);
     EXPECT_THROW(column->serialize_size(0), std::runtime_error);
     EXPECT_THROW(column->deserialize_and_append(nullptr), std::runtime_error);
-    EXPECT_THROW(column->put_mysql_row_buffer(nullptr, 0), std::runtime_error);
+    auto geometry = GeoColumn::create(descriptor(GEO_LOGICAL_TYPE_GEOMETRY));
+    EXPECT_THROW(geometry->put_mysql_row_buffer(nullptr, 0), std::runtime_error);
+    auto untyped = GeoColumn::create();
+    EXPECT_THROW(untyped->put_mysql_row_buffer(nullptr, 0), std::runtime_error);
     EXPECT_FALSE(column->append_strings(nullptr, 0));
+}
+
+TEST(GeoColumnTest, MysqlWkbUsesExistingBinaryEncoding) {
+    std::vector<std::string> values{point()};
+    // Empty instances of the other six OGC families; output does not parse or normalize them.
+    for (char family = 2; family <= 7; ++family) {
+        std::string wkb("\x01\0\0\0\0\0\0\0\0", 9);
+        wkb[1] = family;
+        values.emplace_back(std::move(wkb));
+    }
+    // Exercise length-encoded output beyond the single-byte length prefix.
+    std::string line("\x01\x02\0\0\0\x20\0\0\0", 9);
+    line.append(32 * 16, '\0');
+    values.emplace_back(std::move(line));
+    auto column = GeoColumn::create(descriptor());
+    for (const auto& value : values) column->append_wkb(Slice(value));
+    for (bool binary : {false, true}) {
+        for (auto format :
+             {MysqlRowBufferOptions::BinaryEncodingFormat::RAW, MysqlRowBufferOptions::BinaryEncodingFormat::HEX,
+              MysqlRowBufferOptions::BinaryEncodingFormat::BASE64}) {
+            for (auto level : {MysqlRowBufferOptions::BinaryEncodingLevel::NESTED,
+                               MysqlRowBufferOptions::BinaryEncodingLevel::ALL}) {
+                MysqlRowBufferOptions options;
+                options.binary_encoding_format = format;
+                options.binary_encoding_level = level;
+                for (size_t row = 0; row < values.size(); ++row) {
+                    MysqlRowBuffer actual(binary, options);
+                    MysqlRowBuffer expected(binary, options);
+                    if (binary) {
+                        actual.start_binary_row(1);
+                        expected.start_binary_row(1);
+                        actual.update_field_pos();
+                        expected.update_field_pos();
+                    }
+                    column->put_mysql_row_buffer(&actual, row, binary);
+                    expected.push_binary(values[row].data(), values[row].size());
+                    EXPECT_EQ(expected.data(), actual.data());
+                    EXPECT_EQ(values[row], column->get_wkb(row).to_string());
+                }
+            }
+        }
+    }
+    EXPECT_FALSE(column->has_wkb_cache());
 }
 
 TEST(GeoColumnTest, GenericCreationCannotRelabelTypedPayload) {
