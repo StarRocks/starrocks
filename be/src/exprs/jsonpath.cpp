@@ -53,13 +53,23 @@ bool ArraySelectorSlice::match(const std::string& input) {
 }
 
 void ArraySelectorSingle::iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) {
-    try {
-        callback(array_slice.at(index));
-    } catch (const vpack::Exception& e) {
-        if (e.errorCode() == vpack::Exception::IndexOutOfBounds) {
-            callback(noneJsonSlice());
+    // Bounds-check up front instead of relying on velocypack to throw. Slice::at() raises IndexOutOfBounds
+    // for every row whose array is shorter than the index, and a C++ throw per row is extremely expensive:
+    // the unwinder serializes on a process-wide lock, so a scan over millions of short/empty arrays turns
+    // into a lock convoy that burns most of the node's CPU in the kernel. The try/catch stays as a safety
+    // net for malformed data (it costs nothing unless something is actually thrown); in the common
+    // out-of-range case it is never reached.
+    vpack::Slice item = noneJsonSlice();
+    if (array_slice.isArray() && index >= 0) {
+        try {
+            if (static_cast<vpack::ValueLength>(index) < array_slice.length()) {
+                item = array_slice.at(index);
+            }
+        } catch (const vpack::Exception&) {
+            item = noneJsonSlice();
         }
     }
+    callback(item);
 }
 
 void ArraySelectorWildcard::iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) {
