@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -620,6 +621,53 @@ public class ListPartitionPrunerTest {
         conjuncts.add(new InPredicateOperator(true,
                 Lists.newArrayList(intColumn, ConstantOperator.createInt(1), ConstantOperator.createInt(2))));
         Assertions.assertEquals(Lists.newArrayList(0L, 3L, 6L), pruner.prune());
+    }
+
+    @Test
+    public void testNullRejectingPredicatesKeepMixedNullPartition() throws AnalysisException {
+        // city=beijing,null   0   (multi-value partition that merely contains NULL)
+        // city=shanghai       1
+        // city=null           2   (NULL-only partition)
+        ColumnRefOperator city = new ColumnRefOperator(1, VarcharType.VARCHAR, "city", true);
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> cityValues = new ConcurrentSkipListMap<>();
+        cityValues.put(new StringLiteral("beijing"), Sets.newHashSet(0L));
+        cityValues.put(new StringLiteral("shanghai"), Sets.newHashSet(1L));
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> valuesMap = Maps.newHashMap();
+        valuesMap.put(city, cityValues);
+        Map<ColumnRefOperator, Set<Long>> nullPartitions = Maps.newHashMap();
+        nullPartitions.put(city, Sets.newHashSet(0L, 2L));
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo();
+        listPartitionInfo.setValues(0L, Lists.newArrayList("beijing", "NULL"));
+        listPartitionInfo.setValues(1L, Lists.newArrayList("shanghai"));
+        listPartitionInfo.setValues(2L, Lists.newArrayList("NULL"));
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        ListPartitionPruner mixedPruner =
+                new ListPartitionPruner(valuesMap, nullPartitions, predicates, null, listPartitionInfo);
+
+        // city is not null: only the NULL-only partition can go, the mixed one still holds beijing rows.
+        predicates.add(new IsNullPredicateOperator(true, city));
+        Assertions.assertEquals(Lists.newArrayList(0L, 1L), sorted(mixedPruner.prune()));
+
+        // city is null: both partitions holding NULL stay.
+        predicates.clear();
+        predicates.add(new IsNullPredicateOperator(false, city));
+        Assertions.assertEquals(Lists.newArrayList(0L, 2L), sorted(mixedPruner.prune()));
+
+        // city != 'shanghai': drops the single-value shanghai partition and the NULL-only one.
+        predicates.clear();
+        predicates.add(new BinaryPredicateOperator(BinaryType.NE, city, ConstantOperator.createVarchar("shanghai")));
+        Assertions.assertEquals(Lists.newArrayList(0L), sorted(mixedPruner.prune()));
+
+        // city not in ('shanghai'): same shape as !=.
+        predicates.clear();
+        predicates.add(new InPredicateOperator(true, city, ConstantOperator.createVarchar("shanghai")));
+        Assertions.assertEquals(Lists.newArrayList(0L), sorted(mixedPruner.prune()));
+    }
+
+    private static List<Long> sorted(List<Long> partitions) {
+        List<Long> copy = Lists.newArrayList(partitions);
+        copy.sort(null);
+        return copy;
     }
 
     @Test
