@@ -432,20 +432,72 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
     size_t total = *count;
     size_t read_count = 0;
-    auto data = std::make_unique_for_overwrite<CppType[]>(total);
-    for (size_t i = 0; i < total; i++) {
-        ordinal_t ord = rowids[i] - first_ordinal_in_page;
-        if (UNLIKELY(ord >= _num_elements)) {
-            break;
+
+    FixedLengthColumnBase<CppType>* fixed_col = nullptr;
+    NullableColumn* nullable_col = nullptr;
+    if constexpr (!std::is_same_v<CppType, bool>) {
+        if (column->is_nullable()) {
+            nullable_col = down_cast<NullableColumn*>(column);
+            if (!nullable_col->data_column_raw_ptr()->is_constant()) {
+                fixed_col = dynamic_cast<FixedLengthColumnBase<CppType>*>(nullable_col->data_column_raw_ptr());
+            }
+        } else {
+            fixed_col = dynamic_cast<FixedLengthColumnBase<CppType>*>(column);
         }
-        data[read_count++] = *reinterpret_cast<const CppType*>(get_data(ord * SIZE_OF_TYPE));
+
+        if (fixed_col != nullptr) {
+            // Zero-copy fast path: write directly into column storage
+            auto& datas = fixed_col->get_data();
+            size_t orig_size = datas.size();
+            raw::stl_vector_resize_uninitialized(&datas, orig_size + total);
+            CppType* dst = datas.data() + orig_size;
+
+            constexpr size_t kPrefetchDist = 16;
+            for (size_t i = 0; i < total; i++) {
+                ordinal_t ord = rowids[i] - first_ordinal_in_page;
+                if (UNLIKELY(ord >= _num_elements)) {
+                    break;
+                }
+                if (i + kPrefetchDist < total) {
+                    ordinal_t pre_ord = rowids[i + kPrefetchDist] - first_ordinal_in_page;
+                    if (pre_ord < _num_elements) {
+                        __builtin_prefetch(get_data(pre_ord * SIZE_OF_TYPE), 0, 3);
+                    }
+                }
+                dst[read_count++] = *reinterpret_cast<const CppType*>(get_data(ord * SIZE_OF_TYPE));
+            }
+
+            if (read_count < total) {
+                datas.resize(orig_size + read_count);
+            }
+            if (nullable_col != nullptr && read_count > 0) {
+                nullable_col->null_column_data().insert(nullable_col->null_column_data().end(), read_count, 0);
+            }
+        }
     }
 
-    if (read_count > 0) {
-        size_t nappend = column->append_numbers(data.get(), SIZE_OF_TYPE * read_count);
-        if (UNLIKELY(nappend != read_count)) {
-            return Status::InternalError(
-                    fmt::format("append_numbers failed, expected rows[{}], actual rows[{}]", read_count, nappend));
+    if (fixed_col == nullptr) {
+        // Fallback path: small-buffer optimization avoiding heap allocation
+        constexpr size_t kStackBatch = 1024;
+        CppType stack_buf[kStackBatch];
+        std::unique_ptr<CppType[]> heap_buf;
+        CppType* data = (total <= kStackBatch) ? stack_buf
+                                               : (heap_buf = std::make_unique_for_overwrite<CppType[]>(total)).get();
+
+        for (size_t i = 0; i < total; i++) {
+            ordinal_t ord = rowids[i] - first_ordinal_in_page;
+            if (UNLIKELY(ord >= _num_elements)) {
+                break;
+            }
+            data[read_count++] = *reinterpret_cast<const CppType*>(get_data(ord * SIZE_OF_TYPE));
+        }
+
+        if (read_count > 0) {
+            size_t nappend = column->append_numbers(data, SIZE_OF_TYPE * read_count);
+            if (UNLIKELY(nappend != read_count)) {
+                return Status::InternalError(
+                        fmt::format("append_numbers failed, expected rows[{}], actual rows[{}]", read_count, nappend));
+            }
         }
     }
     *count = read_count;

@@ -655,4 +655,89 @@ TEST_F(BitShufflePageTest, TestReadByRowids) {
     ASSERT_EQ(99, column->get(2).get_int32());
 }
 
+TEST_F(BitShufflePageTest, test_read_by_rowids_large_batch_and_nullable) {
+    constexpr size_t size = 16384;
+    auto ints = std::make_unique<int32_t[]>(size);
+    for (int i = 0; i < size; ++i) {
+        ints[i] = i * 13 + 5;
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 512 * 1024;
+    BitshufflePageBuilder<TYPE_INT> page_builder(options);
+
+    size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
+    ASSERT_EQ(size, added);
+    OwnedSlice s = page_builder.finish()->build();
+
+    Slice encoded_data = s.slice();
+    starrocks::PageFooterPB footer;
+    footer.set_type(starrocks::DATA_PAGE);
+    starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+    data_page_footer->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+    Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
+    ASSERT_TRUE(st.ok());
+
+    BitShufflePageDecoder<TYPE_INT> page_decoder(encoded_data);
+    st = page_decoder.init();
+    ASSERT_TRUE(st.ok());
+
+    // 1. Test non-nullable column with scattered rowids
+    {
+        std::vector<rowid_t> rowids;
+        rowids.reserve(2048);
+        for (rowid_t r = 0; r < size; r += 7) {
+            rowids.push_back(r);
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(rowids.size(), count);
+        ASSERT_EQ(rowids.size(), column->size());
+
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_EQ(ints[rowids[i]], column->get(i).get_int32()) << "mismatch at index " << i;
+        }
+    }
+
+    // 2. Test nullable column with scattered rowids
+    {
+        std::vector<rowid_t> rowids;
+        rowids.reserve(1024);
+        for (rowid_t r = 3; r < size; r += 11) {
+            rowids.push_back(r);
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, true);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(rowids.size(), count);
+        ASSERT_EQ(rowids.size(), column->size());
+
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_FALSE(column->is_null(i));
+            ASSERT_EQ(ints[rowids[i]], column->get(i).get_int32()) << "nullable mismatch at index " << i;
+        }
+    }
+
+    // 3. Test out-of-page bounds truncation
+    {
+        std::vector<rowid_t> rowids = {10, 20, static_cast<rowid_t>(size - 1), static_cast<rowid_t>(size + 100),
+                                       static_cast<rowid_t>(size + 200)};
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(3, count);
+        ASSERT_EQ(3, column->size());
+        ASSERT_EQ(ints[10], column->get(0).get_int32());
+        ASSERT_EQ(ints[20], column->get(1).get_int32());
+        ASSERT_EQ(ints[size - 1], column->get(2).get_int32());
+    }
+}
+
 } // namespace starrocks
