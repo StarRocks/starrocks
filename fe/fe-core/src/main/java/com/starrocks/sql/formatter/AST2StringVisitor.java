@@ -637,7 +637,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                     selectItemLabel += " EXCLUDE ( ";
                     selectItemLabel +=
                             item.getExcludedColumns().stream()
-                                    .map(col -> "`" + col + "`")
+                                    .map(ParseUtil::backquote)
                                     .collect(Collectors.joining(","));
                     selectItemLabel += " ) ";
                 }

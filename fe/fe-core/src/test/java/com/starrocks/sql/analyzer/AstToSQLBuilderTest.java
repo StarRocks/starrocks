@@ -83,13 +83,28 @@ public class AstToSQLBuilderTest {
     public void testSelectStarExcludeToSQL() throws Exception {
         String sql = "SELECT * EXCLUDE (name, email) FROM test_exclude;";
         StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        Assertions.assertEquals("SELECT * EXCLUDE ( \"name\",\"email\" ) \nFROM `test_exclude`",
+        Assertions.assertEquals("SELECT * EXCLUDE ( `name`,`email` ) \nFROM `test_exclude`",
                 AstToSQLBuilder.toSQL(stmt));
-        
+
         sql = "SELECT test_exclude.* EXCLUDE (name) FROM test_exclude";
         stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        Assertions.assertEquals("SELECT test_exclude.* EXCLUDE ( \"name\" ) \nFROM `test_exclude`",
+        Assertions.assertEquals("SELECT test_exclude.* EXCLUDE ( `name` ) \nFROM `test_exclude`",
                 AstToSQLBuilder.toSQL(stmt));
+    }
+
+    @Test
+    public void testSelectStarExcludeRoundTrips() throws Exception {
+        // The point of this deparser is that its output parses again. Quoting the excluded columns
+        // the way the grammar does not accept -- with double quotes -- made that false, and an
+        // assertion that only compares the printed text cannot see it.
+        for (String sql : new String[] {
+                "SELECT * EXCLUDE (name, email) FROM test_exclude",
+                "SELECT test_exclude.* EXCLUDE (name) FROM test_exclude",
+                "SELECT * EXCLUDE (`odd name`) FROM test_exclude"}) {
+            StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            String printed = AstToSQLBuilder.toSQL(stmt);
+            SqlParser.parseSingleStatement(printed, SqlModeHelper.MODE_DEFAULT);
+        }
     }
 
     @Test
