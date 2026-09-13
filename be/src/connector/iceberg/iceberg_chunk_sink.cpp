@@ -80,6 +80,13 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
             iceberg_data_file.__set_split_offsets(result.file_result.file_statistics.split_offsets.value());
         }
 
+        // Per-file encryption material: BE generated the DEK at write time; pass the
+        // raw DEK + AAD prefix back so FE can build the Iceberg key_metadata.
+        if (!result.file_result.encryption_dek.empty()) {
+            iceberg_data_file.__set_file_dek(result.file_result.encryption_dek);
+            iceberg_data_file.__set_aad_prefix(result.file_result.encryption_aad_prefix);
+        }
+
         TSinkCommitInfo commit_info;
         commit_info.__set_iceberg_data_file(iceberg_data_file);
         _state->add_sink_commit_info(commit_info);
@@ -109,8 +116,16 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergChunkSinkProvider::create_sink(i
     auto partition_evaluators = ColumnEvaluator::clone(ctx->partition_evaluators);
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
+        auto options = ctx->options;
+        // Signal Parquet Modular Encryption to the writer; BE generates the per-file
+        // DEK itself (FE supplies only the algorithm and key length).
+        if (ctx->encryption_enabled) {
+            options["encryption_enabled"] = "true";
+            options["encryption_algorithm"] = ctx->encryption_algorithm;
+            options["encryption_dek_length"] = std::to_string(ctx->encryption_dek_length);
+        }
         file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-                fs, ctx->compression_type, ctx->options, ctx->column_names, column_evaluators, ctx->parquet_field_ids,
+                fs, ctx->compression_type, options, ctx->column_names, column_evaluators, ctx->parquet_field_ids,
                 ctx->executor, runtime_state, ctx->nullable);
     } else {
         file_writer_factory = std::make_shared<formats::UnknownFileWriterFactory>(ctx->format);

@@ -36,7 +36,7 @@
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <hadoop.version>3.4.3</hadoop.version>
         <zookeeper.version>3.8.6</zookeeper.version>
-        <iceberg.version>1.10.0</iceberg.version>
+        <iceberg.version>1.11.0</iceberg.version>
         <log4j2.version>2.23.1</log4j2.version>
         <junit.version>5.10.3</junit.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>

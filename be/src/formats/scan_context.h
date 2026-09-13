@@ -47,6 +47,7 @@ class RuntimeFilterPredicates;
 class RuntimeScanRangePruner;
 struct FileScanSplitContext;
 class TIcebergSchema;
+class TParquetEncryptionInfo;
 
 struct SkipRowsContext {
     DeletionBitmapPtr deletion_bitmap;
@@ -283,6 +284,13 @@ struct FormatScanContext {
 
     // Table/lake schema used by Parquet schema evolution matching.
     const TIcebergSchema* lake_schema = nullptr;
+
+    // Non-owning. Parquet Modular Encryption material for this scan range: the per-file data
+    // key and, when the writer withheld it from the file, the AAD prefix. FE recovers both from
+    // the Iceberg data file's key_metadata. nullptr for plaintext tables. Owned by the
+    // THdfsScanRange held in the scanner context, which outlives every format reader built
+    // from it.
+    const TParquetEncryptionInfo* parquet_encryption_info = nullptr;
 
     // Non-owning predicate state built by upper scan orchestration.
     const PredicateTree* predicate_tree = nullptr;

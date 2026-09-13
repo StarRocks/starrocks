@@ -91,6 +91,15 @@ void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
         iceberg_delete_file.__set_file_content(TIcebergFileContent::POSITION_DELETES);
         iceberg_delete_file.__set_referenced_data_file(result.referenced_data_file);
 
+        // Per-file encryption material, same contract as the data path in iceberg_chunk_sink: a
+        // position-delete file in an encrypted table has its OWN per-file DEK, and FE needs it to build
+        // that file's Iceberg key_metadata. Without this the file is written encrypted but committed
+        // with no key, making it permanently undecryptable.
+        if (!result.file_result.encryption_dek.empty()) {
+            iceberg_delete_file.__set_file_dek(result.file_result.encryption_dek);
+            iceberg_delete_file.__set_aad_prefix(result.file_result.encryption_aad_prefix);
+        }
+
         TSinkCommitInfo commit_info;
         commit_info.__set_iceberg_data_file(iceberg_delete_file);
         _state->add_sink_commit_info(commit_info);

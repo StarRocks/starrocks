@@ -38,7 +38,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.5.0/core/src/main/java/org/apache/iceberg/PartitionData.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.11.0/core/src/main/java/org/apache/iceberg/PartitionData.java
+// KEEP THIS TAG IN SYNC WITH ${iceberg.version} IN fe/pom.xml -- this class shadows the one
+// in iceberg-core, so upstream behaviour changes must be re-applied here on every bump.
+// StarRocks additions on top of upstream: the Caffeine SCHEMA_CACHE/CachedSchema and the
+// PartitionData(PartitionData, Object[]) copy constructor.
 public class PartitionData
         implements IndexedRecord, StructLike, SpecificData.SchemaConstructable, Serializable {
 
@@ -168,7 +172,13 @@ public class PartitionData
         }
 
         if (data[pos] instanceof byte[]) {
-            return ByteBuffer.wrap((byte[]) data[pos]);
+            // Iceberg 1.11.0 added this defensive copy; 1.5.0 (which this file was vendored from),
+            // 1.9.0 and 1.10.0 all wrapped the live array. Without it the returned buffer aliases
+            // this PartitionData's internal array, so a caller mutating the buffer corrupts the
+            // partition value and vice versa. This class shadows the one in iceberg-core, so
+            // omitting the copy would silently give iceberg-core the pre-fix behaviour.
+            byte[] copied = Arrays.copyOf((byte[]) data[pos], ((byte[]) data[pos]).length);
+            return ByteBuffer.wrap(copied);
         }
 
         return data[pos];

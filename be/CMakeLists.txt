@@ -694,6 +694,10 @@ set(STARROCKS_DEPENDENCIES
     zstd
     streamvbyte
     arrow
+    # Kept here because test targets link ${STARROCKS_DEPENDENCIES} directly and some genuinely
+    # use Arrow's test helpers (arrow::ArrayFromJSON in be/test/column's arrow converter tests).
+    # It is removed from STARROCKS_LINK_LIBS further down so it does not reach the production
+    # binary -- see the REMOVE_ITEM below.
     arrow_testing
     arrow_flight
     arrow_flight_sql
@@ -947,6 +951,21 @@ set (BENCH_LINK_LIBS
     gtest
     ${WL_END_GROUP}
 )
+
+# arrow_testing must not reach the production binary. It is Arrow's test-support library and its
+# gtest_util.cc references GoogleTest, which is deliberately confined to TEST_LINK_LIBS and
+# BENCH_LINK_LIBS above ("TestUtil is UT-only and intentionally stays out of STARROCKS_LINK_LIBS").
+# With it on the production link, `build.sh --be` dies with 26 undefined gtest symbols
+# (testing::Message::Message(), testing::internal::AssertHelper::..., ...) out of libarrow_testing.a.
+# Introduced by 58d8f0d2fd0 ("Upgrade Apache Arrow thirdparty to 24.0.0", #75868), which added
+# arrow_testing to the BE link and -DARROW_TESTING=ON in the same commit; neither was present on
+# Arrow 19.0.1. It hides from the UT gate because test binaries link gtest and resolve the
+# symbols -- only a production build surfaces it.
+#
+# Removed HERE, not from STARROCKS_DEPENDENCIES: test targets link that list directly and some need
+# Arrow's test helpers (arrow::ArrayFromJSON). TEST_LINK_LIBS and BENCH_LINK_LIBS are already set
+# above, so they keep it; only the production link loses it.
+list(REMOVE_ITEM STARROCKS_LINK_LIBS arrow_testing)
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)

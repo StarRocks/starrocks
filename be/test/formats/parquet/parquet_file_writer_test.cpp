@@ -68,7 +68,24 @@ protected:
         parquet::Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-        ctx->scan_range = _create_scan_range(_file_path, file_size);
+        auto* scan_range = _create_scan_range(_file_path, file_size);
+        // Inject the per-file DEK on the scan range, as the FE planner would for an encrypted
+        // Iceberg file, so the reader can decrypt the footer and pages. Mutate before assigning:
+        // HdfsScannerContext::scan_range is a const pointer.
+        if (!_read_dek.empty()) {
+            TParquetEncryptionInfo enc_info;
+            enc_info.__set_file_dek(_read_dek);
+            // Required, not optional: the writer applies the AAD prefix and withholds it from the
+            // file (disable_aad_prefix_storage), so the reader can only get it from here -- exactly
+            // as FE supplies it from the Iceberg key_metadata in production.
+            if (!_read_aad_prefix.empty()) {
+                enc_info.__set_aad_prefix(_read_aad_prefix);
+            }
+            scan_range->__set_parquet_encryption_info(enc_info);
+        }
+        ctx->scan_range = scan_range;
+        ctx->format_scan_context.parquet_encryption_info =
+                scan_range->__isset.parquet_encryption_info ? &scan_range->parquet_encryption_info : nullptr;
         ctx->format_scan_context.scan_range_offset = ctx->scan_range->offset;
         ctx->format_scan_context.scan_range_length = ctx->scan_range->length;
         ctx->format_scan_context.timezone = "Asia/Shanghai";
@@ -118,6 +135,49 @@ protected:
         return read_chunk;
     }
 
+    // Drains the reader instead of taking a single chunk. _read_chunk calls get_next() once, which is
+    // enough for the small single-row-group files most tests write, but returns only the first row
+    // group when a test deliberately forces several.
+    ChunkPtr _read_all_rows(const std::vector<TypeDescriptor>& type_descs) {
+        auto ctx = _create_scan_context(type_descs);
+        ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
+        ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+        auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
+
+        auto st = file_reader->init(&ctx->format_scan_context);
+        if (!st.ok()) {
+            std::cout << st.to_string() << std::endl;
+            return nullptr;
+        }
+
+        auto make_chunk = [&]() {
+            auto chunk = std::make_shared<Chunk>();
+            for (const auto& type_desc : type_descs) {
+                auto col = ColumnHelper::create_column(type_desc, true);
+                chunk->append_column(std::move(col), chunk->num_columns());
+            }
+            return chunk;
+        };
+
+        auto all = make_chunk();
+        while (true) {
+            auto chunk = make_chunk();
+            Status read_st = file_reader->get_next(&chunk);
+            if (read_st.is_end_of_file()) {
+                break;
+            }
+            if (!read_st.ok()) {
+                std::cout << read_st.to_string() << std::endl;
+                return nullptr;
+            }
+            if (chunk->num_rows() == 0) {
+                break;
+            }
+            all->append(*chunk);
+        }
+        return all;
+    }
+
     StatusOr<std::unique_ptr<ParquetFileWriter>> _create_writer(const std::vector<TypeDescriptor>& type_descs,
                                                                 std::vector<bool> nullable = {},
                                                                 std::vector<std::string> column_names = {});
@@ -131,6 +191,8 @@ protected:
     std::atomic<int> _lazy_column_coalesce_counter = 0;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     TCompressionType::type _compression_type = TCompressionType::NO_COMPRESSION;
+    std::string _read_dek;        // when set, injected as the scan range's per-file DEK on read
+    std::string _read_aad_prefix; // when set, injected as the scan range's AAD prefix on read
 };
 
 StatusOr<std::unique_ptr<ParquetFileWriter>> ParquetFileWriterTest::_create_writer(
@@ -1178,6 +1240,175 @@ TEST_F(ParquetFileWriterTest, TestColumnDictionaryEncodingEnabledByDefault) {
         }
     }
     EXPECT_TRUE(has_dict_encoding) << "Column should use dictionary encoding by default";
+}
+
+// Round-trip Parquet Modular Encryption: write an encrypted file with a BE-generated
+// per-file DEK, then read it back through StarRocks' own reader (footer + page
+// decryption) by supplying that DEK on the scan range, and verify the data matches.
+TEST_F(ParquetFileWriterTest, TestWriteReadEncrypted) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_BIGINT),
+            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+    };
+
+    // Turn on Parquet Modular Encryption; BE generates the per-file DEK itself. Configure the
+    // fixture's own options/stream and go through _create_writer, rather than opening
+    // _file_path a second time: SetUp() already created it and MemoryFileSystem defaults to
+    // MUST_CREATE, so a second new_writable_file() on the same path returns AlreadyExist.
+    _writer_options->encryption_enabled = true;
+    _writer_options->encryption_algorithm = "AES_GCM_V1";
+    _writer_options->encryption_dek_length = 16;
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 12345};
+        ASSERT_EQ(4, col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t)));
+        chunk->append_column(std::move(col0), chunk->num_columns());
+
+        auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+        std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 67890};
+        ASSERT_EQ(4, col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t)));
+        chunk->append_column(std::move(col1), chunk->num_columns());
+
+        auto col2_data = BinaryColumn::create();
+        col2_data->append("encrypted");
+        col2_data->append("parquet");
+        col2_data->append("round");
+        col2_data->append("trip");
+        auto col2_null = UInt8Column::create();
+        std::vector<uint8_t> col2_nulls = {0, 0, 0, 0};
+        col2_null->append_numbers(col2_nulls.data(), col2_nulls.size());
+        auto col2 = NullableColumn::create(std::move(col2_data), std::move(col2_null));
+        chunk->append_column(std::move(col2), chunk->num_columns());
+    }
+
+    ASSERT_TRUE(writer->write(chunk.get()).ok());
+    auto result = writer->close();
+    ASSERT_TRUE(result.io_status.ok());
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+    // BE must have generated and returned a per-file DEK for the encrypted file.
+    ASSERT_FALSE(result.encryption_dek.empty());
+    // The prefix must be generated AND applied. It is withheld from the file, so a reader that does
+    // not supply it cannot decrypt -- asserted below.
+    ASSERT_EQ(16, result.encryption_aad_prefix.size());
+    ASSERT_EQ(16, result.encryption_dek.size());
+
+    // Read it back, supplying the DEK on the scan range (as the FE planner would).
+    _read_dek = result.encryption_dek;
+    _read_aad_prefix = result.encryption_aad_prefix;
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    ASSERT_EQ(read_chunk->num_rows(), 4);
+    parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+
+    // Sanity: without the DEK the encrypted footer must not be readable as plaintext.
+    _read_dek.clear();
+    _read_aad_prefix.clear();
+    auto plain_ctx = _create_scan_context(type_descs);
+    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
+    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
+    ASSERT_FALSE(file_reader->init(&plain_ctx->format_scan_context).ok());
+}
+
+// Encryption on with no DEK length supplied must fail the write, not fall back to a length of BE's
+// choosing. FE is the only side that can see encryption.data-key-length, so if it sent nothing, BE
+// picking a length would encrypt below the table's declared policy and commit it with no error.
+TEST_F(ParquetFileWriterTest, TestEncryptedWriteRejectsUnsetDekLength) {
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_INT)};
+
+    _writer_options->encryption_enabled = true;
+    _writer_options->encryption_algorithm = "AES_GCM_V1";
+    // Left at the default, which means "not supplied".
+    ASSERT_EQ(0, _writer_options->encryption_dek_length);
+
+    auto res = _create_writer(type_descs);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_invalid_argument()) << res.status();
+}
+
+// A length outside {16, 24, 32} is rejected too -- guards the branch that would otherwise hand
+// RAND_bytes an unusable size.
+TEST_F(ParquetFileWriterTest, TestEncryptedWriteRejectsBadDekLength) {
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_INT)};
+
+    _writer_options->encryption_enabled = true;
+    _writer_options->encryption_algorithm = "AES_GCM_V1";
+    _writer_options->encryption_dek_length = 20;
+
+    auto res = _create_writer(type_descs);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_invalid_argument()) << res.status();
+}
+
+// PME derives a distinct AAD per module from (row group ordinal, column ordinal, page ordinal), so a
+// wrong or hardcoded ordinal makes GCM authentication fail -- or, worse, makes two modules share an
+// AAD. A 4-row single-page file pins the row-group and page ordinals at 0, so it cannot see either
+// mistake: every real file has many row groups and many pages per chunk. This forces both above zero.
+TEST_F(ParquetFileWriterTest, TestWriteReadEncryptedAcrossRowGroupsAndPages) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_BIGINT),
+    };
+
+    _writer_options->encryption_enabled = true;
+    _writer_options->encryption_algorithm = "AES_GCM_V1";
+    _writer_options->encryption_dek_length = 16;
+    // rowgroup_size=1 flushes a row group per write, so three writes give row_group_ordinal 0,1,2.
+    // A tiny page_size splits each column chunk into several data pages, driving page_ordinal past 0.
+    _writer_options->rowgroup_size = 1;
+    _writer_options->page_size = 64;
+    _writer_options->dictionary_pagesize = 64;
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
+
+    // Enough rows per chunk that 64-byte pages cannot hold a chunk in one page.
+    constexpr int kRows = 500;
+    auto make_chunk = [&](int base) {
+        auto chunk = std::make_shared<Chunk>();
+        std::vector<int32_t> i32(kRows);
+        std::vector<int64_t> i64(kRows);
+        for (int i = 0; i < kRows; ++i) {
+            i32[i] = base + i;
+            i64[i] = static_cast<int64_t>(base + i) * 1000003LL;
+        }
+        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        col0->append_numbers(i32.data(), i32.size() * sizeof(int32_t));
+        chunk->append_column(std::move(col0), chunk->num_columns());
+        auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+        col1->append_numbers(i64.data(), i64.size() * sizeof(int64_t));
+        chunk->append_column(std::move(col1), chunk->num_columns());
+        return chunk;
+    };
+
+    auto c0 = make_chunk(0);
+    auto c1 = make_chunk(kRows);
+    auto c2 = make_chunk(2 * kRows);
+    ASSERT_OK(writer->write(c0.get()));
+    ASSERT_OK(writer->write(c1.get()));
+    ASSERT_OK(writer->write(c2.get()));
+    auto result = writer->close();
+    ASSERT_TRUE(result.io_status.ok()) << result.io_status;
+    ASSERT_EQ(result.file_statistics.record_count, 3 * kRows);
+    ASSERT_EQ(16, result.encryption_dek.size());
+    ASSERT_EQ(16, result.encryption_aad_prefix.size());
+
+    // Every row group and every page must decrypt. A hardcoded row_group_ordinal or a page_ordinal
+    // that stops advancing fails here even though the 4-row round trip still passes.
+    _read_dek = result.encryption_dek;
+    _read_aad_prefix = result.encryption_aad_prefix;
+    // Drained, not a single chunk: with three row groups a single get_next() returns only the first,
+    // which would leave row_group_ordinal 1 and 2 -- the whole point of this test -- unread.
+    auto read_chunk = _read_all_rows(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    ASSERT_EQ(3 * kRows, read_chunk->num_rows());
+
+    auto expected = make_chunk(0);
+    expected->append(*c1);
+    expected->append(*c2);
+    parquet::Utils::assert_equal_chunk(expected.get(), read_chunk.get());
 }
 
 } // namespace starrocks::formats
