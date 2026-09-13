@@ -46,6 +46,7 @@
 #include "util/metrics.h"
 #include "util/metrics/catalog_scan_metrics.h"
 #include "util/metrics/file_scan_metrics.h"
+#include "util/metrics/spill_metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
 
@@ -485,6 +486,7 @@ public:
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
     FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
     CatalogScanMetrics* catalog_scan_metrics() { return _catalog_scan_metrics.get(); }
+    SpillMetrics* spill_metrics() { return _spill_metrics.get(); }
 
 private:
     // Don't allow constructor
@@ -506,6 +508,7 @@ private:
     TableMetricsManager _table_metrics_mgr;
 
     std::unique_ptr<FileScanMetrics> _file_scan_metrics;
+    std::unique_ptr<SpillMetrics> _spill_metrics;
     std::unique_ptr<CatalogScanMetrics> _catalog_scan_metrics;
 };
 

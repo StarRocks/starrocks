@@ -21,6 +21,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "io/input_stream.h"
+#include "util/metrics.h"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
 
@@ -86,6 +87,12 @@ struct BlockReaderOptions {
     RuntimeProfile::Counter* read_io_timer = nullptr;
     RuntimeProfile::Counter* read_io_count = nullptr;
     RuntimeProfile::Counter* read_io_bytes = nullptr;
+
+    // Global per-(operator_type, storage_type) counters mirrored for
+    // server-level observability. May be null if the caller has no
+    // global metrics registered.
+    IntCounter* global_read_io_duration_ns = nullptr;
+    IntCounter* global_read_bytes = nullptr;
 };
 
 class BlockReader {
