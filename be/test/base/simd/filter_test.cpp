@@ -150,4 +150,107 @@ PARALLEL_TEST(SimdFilterTest, vectorized_path_matches_scalar) {
     }
 }
 
+PARALLEL_TEST(SimdFilterTest, cross_platform_stream_compaction_sweep) {
+    const std::vector<size_t> test_sizes = {7, 15, 16, 31, 32, 63, 64, 127, 128, 255, 256, 1024, 4096};
+    const std::vector<int> selectivities = {0, 10, 25, 50, 75, 90, 100};
+
+    // Test both 32-bit and 64-bit elements
+    for (size_t n : test_sizes) {
+        for (int sel_pct : selectivities) {
+            // 1. Test int32_t out-of-place and in-place
+            {
+                std::vector<int32_t> src(n);
+                std::vector<int32_t> dst(n, -1);
+                std::vector<uint8_t> selector(n, 0);
+                std::vector<int32_t> expected;
+                expected.reserve(n);
+
+                for (size_t i = 0; i < n; ++i) {
+                    src[i] = static_cast<int32_t>(1000 + i);
+                    if ((i * 37 + sel_pct) % 100 < sel_pct) {
+                        selector[i] = static_cast<uint8_t>((i % 3 == 0) ? 0x80 : ((i % 5) + 1));
+                        expected.push_back(src[i]);
+                    }
+                }
+
+                // Out-of-place test
+                size_t actual_count = SIMD::Filter::filter_range(dst.data(), src.data(), selector.data(), 0, n);
+                ASSERT_EQ(expected.size(), actual_count) << "int32 out-of-place n=" << n << " sel=" << sel_pct;
+                for (size_t i = 0; i < actual_count; ++i) {
+                    ASSERT_EQ(expected[i], dst[i]) << "mismatch at " << i << " n=" << n;
+                }
+
+                // In-place test
+                std::vector<int32_t> in_place_buf = src;
+                size_t in_place_count =
+                        SIMD::Filter::filter_range(in_place_buf.data(), in_place_buf.data(), selector.data(), 0, n);
+                ASSERT_EQ(expected.size(), in_place_count) << "int32 in-place n=" << n << " sel=" << sel_pct;
+                for (size_t i = 0; i < in_place_count; ++i) {
+                    ASSERT_EQ(expected[i], in_place_buf[i]) << "in-place mismatch at " << i << " n=" << n;
+                }
+            }
+
+            // 2. Test int64_t out-of-place and in-place
+            {
+                std::vector<int64_t> src(n);
+                std::vector<int64_t> dst(n, -1);
+                std::vector<uint8_t> selector(n, 0);
+                std::vector<int64_t> expected;
+                expected.reserve(n);
+
+                for (size_t i = 0; i < n; ++i) {
+                    src[i] = static_cast<int64_t>(100000000000LL + i);
+                    if ((i * 37 + sel_pct) % 100 < sel_pct) {
+                        selector[i] = static_cast<uint8_t>((i % 2 == 0) ? 1 : 255);
+                        expected.push_back(src[i]);
+                    }
+                }
+
+                size_t actual_count = SIMD::Filter::filter_range(dst.data(), src.data(), selector.data(), 0, n);
+                ASSERT_EQ(expected.size(), actual_count) << "int64 out-of-place n=" << n << " sel=" << sel_pct;
+                for (size_t i = 0; i < actual_count; ++i) {
+                    ASSERT_EQ(expected[i], dst[i]) << "int64 mismatch at " << i << " n=" << n;
+                }
+            }
+
+            // 3. Test sub-range [from, to) with non-zero offsets
+            if (n >= 32) {
+                size_t from = 5;
+                size_t to = n - 7;
+                std::vector<int32_t> src(n);
+                std::vector<uint8_t> selector(n, 0);
+                std::vector<int32_t> expected_in_place(n);
+
+                for (size_t i = 0; i < n; ++i) {
+                    src[i] = static_cast<int32_t>(5000 + i);
+                    expected_in_place[i] = src[i];
+                    if (i >= from && i < to && ((i * 37 + sel_pct) % 100 < sel_pct)) {
+                        selector[i] = 1;
+                    }
+                }
+
+                size_t write_idx = from;
+                for (size_t i = from; i < to; ++i) {
+                    if (selector[i]) {
+                        expected_in_place[write_idx++] = src[i];
+                    }
+                }
+
+                std::vector<int32_t> in_place_buf = src;
+                size_t res_end =
+                        SIMD::Filter::filter_range(in_place_buf.data(), in_place_buf.data(), selector.data(), from, to);
+                ASSERT_EQ(write_idx, res_end);
+                // Elements before 'from' must remain untouched
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place_buf[i]);
+                }
+                // Compacted elements in [from, res_end) must match
+                for (size_t i = from; i < res_end; ++i) {
+                    ASSERT_EQ(expected_in_place[i], in_place_buf[i]);
+                }
+            }
+        }
+    }
+}
+
 } // namespace starrocks

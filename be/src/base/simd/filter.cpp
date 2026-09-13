@@ -105,6 +105,44 @@ size_t scan_scalar_bytes(void* dst, const void* src, size_t esz, const uint8_t* 
 
 constexpr size_t kBatchNums = 256 / 8; // selector bytes scanned per 256-bit AVX2 load
 
+constexpr auto make_permute_table_8x32() {
+    std::array<std::array<int32_t, 8>, 256> table{};
+    for (int mask = 0; mask < 256; ++mask) {
+        int out_idx = 0;
+        for (int bit = 0; bit < 8; ++bit) {
+            if (mask & (1 << bit)) {
+                table[mask][out_idx++] = bit;
+            }
+        }
+        for (int i = out_idx; i < 8; ++i) {
+            table[mask][i] = 0;
+        }
+    }
+    return table;
+}
+
+alignas(64) inline constexpr auto kPermuteTable8x32 = make_permute_table_8x32();
+
+constexpr auto make_permute_table_4x64() {
+    std::array<std::array<int32_t, 8>, 16> table{};
+    for (int mask = 0; mask < 16; ++mask) {
+        int out_lane = 0;
+        for (int lane = 0; lane < 4; ++lane) {
+            if (mask & (1 << lane)) {
+                table[mask][out_lane * 2] = lane * 2;
+                table[mask][out_lane * 2 + 1] = lane * 2 + 1;
+                out_lane++;
+            }
+        }
+        for (int i = out_lane * 2; i < 8; ++i) {
+            table[mask][i] = 0;
+        }
+    }
+    return table;
+}
+
+alignas(64) inline constexpr auto kPermuteTable4x64 = make_permute_table_4x64();
+
 // AVX2 batch scan (compile-time element width). Whole all-dropped batches are
 // skipped and whole all-kept batches move with one memmove; only mixed batches
 // fall to a per-element copy. Fast path for EVERY width, independent of the
@@ -129,6 +167,88 @@ __attribute__((target("avx2"))) size_t scan_avx2(Elem* dst, const Elem* src, con
         } else {
             for (uint32_t m = mask; m != 0; m &= m - 1) {
                 dst[result++] = src[start + __builtin_ctz(m)];
+            }
+        }
+        start += kBatchNums;
+    }
+    for (; start < to; ++start) {
+        if (selector[start]) dst[result++] = src[start];
+    }
+    return result;
+}
+
+// AVX2 vectorized compaction for 4-byte lanes using _mm256_permutevar8x32_epi32
+__attribute__((target("avx2"))) size_t compress_avx2_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selector,
+                                                        size_t from, size_t to) {
+    size_t start = from;
+    size_t result = from;
+    const __m256i all0 = _mm256_setzero_si256();
+    while (start + kBatchNums <= to) {
+        __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selector + start));
+        uint32_t mask = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(sel, all0));
+        if (mask == 0) {
+            // whole batch dropped
+        } else if (mask == 0xffffffff) {
+            memmove(dst + result, src + start, kBatchNums * sizeof(uint32_t));
+            result += kBatchNums;
+        } else {
+            for (int g = 0; g < 4; ++g) {
+                uint32_t sub_mask = (mask >> (g * 8)) & 0xffu;
+                if (sub_mask == 0) {
+                    continue;
+                } else if (sub_mask == 0xffu) {
+                    __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 8));
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v);
+                    result += 8;
+                } else {
+                    __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 8));
+                    __m256i v_perm =
+                            _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable8x32[sub_mask].data()));
+                    __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
+                    result += _mm_popcnt_u32(sub_mask);
+                }
+            }
+        }
+        start += kBatchNums;
+    }
+    for (; start < to; ++start) {
+        if (selector[start]) dst[result++] = src[start];
+    }
+    return result;
+}
+
+// AVX2 vectorized compaction for 8-byte lanes using _mm256_permutevar8x32_epi32
+__attribute__((target("avx2"))) size_t compress_avx2_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selector,
+                                                        size_t from, size_t to) {
+    size_t start = from;
+    size_t result = from;
+    const __m256i all0 = _mm256_setzero_si256();
+    while (start + kBatchNums <= to) {
+        __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selector + start));
+        uint32_t mask = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(sel, all0));
+        if (mask == 0) {
+            // whole batch dropped
+        } else if (mask == 0xffffffff) {
+            memmove(dst + result, src + start, kBatchNums * sizeof(uint64_t));
+            result += kBatchNums;
+        } else {
+            for (int g = 0; g < 8; ++g) {
+                uint32_t sub_mask = (mask >> (g * 4)) & 0x0fu;
+                if (sub_mask == 0) {
+                    continue;
+                } else if (sub_mask == 0x0fu) {
+                    __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 4));
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v);
+                    result += 4;
+                } else {
+                    __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 4));
+                    __m256i v_perm =
+                            _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable4x64[sub_mask].data()));
+                    __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
+                    result += _mm_popcnt_u32(sub_mask);
+                }
             }
         }
         start += kBatchNums;
@@ -224,7 +344,52 @@ __attribute__((target("avx2"))) size_t scan_avx2_any(void* dst, const void* src,
 
 #if defined(__ARM_NEON) && defined(__aarch64__)
 
+#if defined(__has_include)
+#if __has_include(<sys/auxv.h>) && __has_include(<asm/hwcap.h>)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#define STARROCKS_HAS_ARM_HWCAP 1
+#endif
+#endif
+
+#if defined(__has_include)
+#if __has_include(<arm_sve.h>)
+#define STARROCKS_HAS_ARM_SVE 1
+#include <arm_sve.h>
+#endif
+#endif
+
+inline bool cpu_has_sve2() {
+#if defined(STARROCKS_HAS_ARM_HWCAP) && defined(HWCAP2_SVE2)
+    static const bool has_sve2 = (getauxval(AT_HWCAP2) & HWCAP2_SVE2) != 0;
+    return has_sve2;
+#else
+    return false;
+#endif
+}
+
 constexpr size_t kBatchNums = 128 / 8; // selector bytes per 128-bit NEON load
+
+constexpr auto make_neon_shuffle_table_4x32() {
+    std::array<std::array<uint8_t, 16>, 16> table{};
+    for (int mask = 0; mask < 16; ++mask) {
+        int out_lane = 0;
+        for (int lane = 0; lane < 4; ++lane) {
+            if (mask & (1 << lane)) {
+                for (int b = 0; b < 4; ++b) {
+                    table[mask][out_lane * 4 + b] = static_cast<uint8_t>(lane * 4 + b);
+                }
+                out_lane++;
+            }
+        }
+        for (int i = out_lane * 4; i < 16; ++i) {
+            table[mask][i] = 0xFF;
+        }
+    }
+    return table;
+}
+
+alignas(64) inline constexpr auto kNeonShuffleTable4x32 = make_neon_shuffle_table_4x32();
 
 // NEON batch scan (compile-time element width); FMV is x86-only, dispatch here.
 template <typename Elem>
@@ -232,7 +397,7 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
     size_t start = from;
     size_t result = from;
     const uint8_t* sel = selector + from;
-    while (start + kBatchNums < to) {
+    while (start + kBatchNums <= to) {
         const uint8x16_t vsel = vld1q_u8(sel);
         // nibble_mask[i] != 0 ? 0xF : 0x0
         uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
@@ -257,6 +422,91 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
     return result;
 }
 
+// Vectorized NEON compaction for 4-byte lanes using vqtbl1q_u8 table permute
+size_t compress_neon_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selector, size_t from, size_t to) {
+    size_t start = from;
+    size_t result = from;
+    while (start + kBatchNums <= to) {
+        const uint8x16_t vsel = vld1q_u8(selector + start);
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
+        if (nibble_mask == 0) {
+            // all dropped
+        } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
+            memmove(dst + result, src + start, kBatchNums * sizeof(uint32_t));
+            result += kBatchNums;
+        } else {
+            for (int g = 0; g < 4; ++g) {
+                uint32_t chunk_nibbles = static_cast<uint32_t>((nibble_mask >> (g * 16)) & 0xffffu);
+                if (chunk_nibbles == 0) {
+                    continue;
+                } else if (chunk_nibbles == 0x8888u) {
+                    uint32x4_t v = vld1q_u32(src + start + g * 4);
+                    vst1q_u32(dst + result, v);
+                    result += 4;
+                } else {
+                    uint32_t mask = ((chunk_nibbles & 0x8u) >> 3) | ((chunk_nibbles & 0x80u) >> 6) |
+                                    ((chunk_nibbles & 0x800u) >> 9) | ((chunk_nibbles & 0x8000u) >> 12);
+                    uint8x16_t v_src = vld1q_u8(reinterpret_cast<const uint8_t*>(src + start + g * 4));
+                    uint8x16_t v_perm = vld1q_u8(kNeonShuffleTable4x32[mask].data());
+                    uint8x16_t v_compact = vqtbl1q_u8(v_src, v_perm);
+                    vst1q_u8(reinterpret_cast<uint8_t*>(dst + result), v_compact);
+                    result += __builtin_popcount(mask);
+                }
+            }
+        }
+        start += kBatchNums;
+    }
+    for (; start < to; ++start) {
+        if (selector[start]) dst[result++] = src[start];
+    }
+    return result;
+}
+
+#if defined(STARROCKS_HAS_ARM_SVE)
+__attribute__((target("+sve2"))) size_t compress_sve2_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selector,
+                                                         size_t from, size_t to) {
+    size_t start = from;
+    size_t result = from;
+    while (start + kBatchNums <= to) {
+        const uint8x16_t vsel = vld1q_u8(selector + start);
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
+        if (nibble_mask == 0) {
+            // all dropped
+        } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
+            memmove(dst + result, src + start, kBatchNums * sizeof(uint32_t));
+            result += kBatchNums;
+        } else {
+            for (size_t g = 0; g < kBatchNums; g += svcntw()) {
+                svbool_t pg = svwhilelt_b32_u64(g, kBatchNums);
+                svuint32_t sel_u32 = svld1ub_u32(pg, selector + start + g);
+                svbool_t mask_pg = svcmpne_n_u32(pg, sel_u32, 0);
+                uint64_t count = svcntp_b32(pg, mask_pg);
+                if (count == 0) {
+                    continue;
+                }
+                uint64_t active_lanes = svcntp_b32(pg, pg);
+                if (count == active_lanes) {
+                    svuint32_t v_src = svld1_u32(pg, src + start + g);
+                    svst1_u32(pg, dst + result, v_src);
+                    result += active_lanes;
+                } else {
+                    svuint32_t v_src = svld1_u32(pg, src + start + g);
+                    svuint32_t compacted = svcompact_u32(mask_pg, v_src);
+                    svbool_t store_pg = svwhilelt_b32_u64(0, count);
+                    svst1_u32(store_pg, dst + result, compacted);
+                    result += count;
+                }
+            }
+        }
+        start += kBatchNums;
+    }
+    for (; start < to; ++start) {
+        if (selector[start]) dst[result++] = src[start];
+    }
+    return result;
+}
+#endif // STARROCKS_HAS_ARM_SVE
+
 #endif // __ARM_NEON
 
 // Scalar dispatch shared by the default clone (x86) and non-SIMD targets.
@@ -273,7 +523,11 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
 MFV_DEFAULT(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                                size_t to) { return scan_scalar_any(dst, src, element_size, selector, from, to); })
 MFV_AVX2(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
-                            size_t to) { return scan_avx2_any(dst, src, element_size, selector, from, to); })
+                            size_t to) {
+    if (element_size == 4) return FILTER_CALL(compress_avx2_w4, uint32_t);
+    if (element_size == 8) return FILTER_CALL(compress_avx2_w8, uint64_t);
+    return scan_avx2_any(dst, src, element_size, selector, from, to);
+})
 MFV_AVX512VLBW(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                                   size_t to) {
     if (element_size == 4) return FILTER_CALL(compress_w4, uint32_t);
@@ -290,6 +544,12 @@ size_t detail::filter_range(void* dst, const void* src, size_t element_size, con
 #if defined(__x86_64__)
     return filter_impl(dst, src, element_size, selector, from, to);
 #elif defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(STARROCKS_HAS_ARM_SVE)
+    if (cpu_has_sve2()) {
+        if (element_size == 4) return FILTER_CALL(compress_sve2_w4, uint32_t);
+    }
+#endif
+    if (element_size == 4) return FILTER_CALL(compress_neon_w4, uint32_t);
     FILTER_WIDTH_DISPATCH(scan_neon)
 #else
     return scan_scalar_any(dst, src, element_size, selector, from, to);
