@@ -191,35 +191,43 @@ size_t FilterDataBench<T>::do_bench() {
     }
 }
 
-template <FilterType type>
+template <typename T, FilterType type>
 static void BM_FilterData_T(benchmark::State& state) {
     for (auto _ : state) {
         state.PauseTiming();
-        FilterDataBench<uint64_t> bench(state.range(0));
+        FilterDataBench<T> bench(state.range(0));
         bench.SetUp();
         size_t sum = bench.expect_result();
         size_t res = 0;
         state.ResumeTiming();
-        res = bench.do_bench<type>();
+        res = bench.template do_bench<type>();
         state.PauseTiming();
-        ASSERT_EQ(sum, bench.final_result<type>(res));
+        ASSERT_EQ(sum, bench.template final_result<type>(res));
     }
 }
 
 static void BM_FilterData_Custom(benchmark::State& state) {
-    BM_FilterData_T<FilterType::CUSTOM>(state);
+    BM_FilterData_T<uint64_t, FilterType::CUSTOM>(state);
 }
 
 static void BM_FilterData_Ordinary(benchmark::State& state) {
-    BM_FilterData_T<FilterType::ORDINARY>(state);
+    BM_FilterData_T<uint64_t, FilterType::ORDINARY>(state);
 }
 
 static void BM_FilterData_CAndA(benchmark::State& state) {
-    BM_FilterData_T<FilterType::COLLECT_ASSIGN>(state);
+    BM_FilterData_T<uint64_t, FilterType::COLLECT_ASSIGN>(state);
 }
 
 [[maybe_unused]] static void BM_FilterData_Compress(benchmark::State& state) {
-    BM_FilterData_T<FilterType::COMPRESS>(state);
+    BM_FilterData_T<uint64_t, FilterType::COMPRESS>(state);
+}
+
+static void BM_FilterData_U32_Custom(benchmark::State& state) {
+    BM_FilterData_T<uint32_t, FilterType::CUSTOM>(state);
+}
+
+static void BM_FilterData_U32_Ordinary(benchmark::State& state) {
+    BM_FilterData_T<uint32_t, FilterType::ORDINARY>(state);
 }
 
 BENCHMARK(BM_FilterData_Custom)->ArgsProduct({{0, 20, 40, 60, 80, 100, 300, 500, 700, 900, 920, 940, 960, 980, 1000}});
@@ -233,6 +241,11 @@ BENCHMARK(BM_FilterData_Ordinary)
         ->ArgsProduct({{0, 20, 40, 60, 80, 100, 300, 500, 700, 900, 920, 940, 960, 980, 1000}});
 
 BENCHMARK(BM_FilterData_CAndA)->ArgsProduct({{0, 20, 40, 60, 80, 100, 300, 500, 700, 900, 920, 940, 960, 980, 1000}});
+
+BENCHMARK(BM_FilterData_U32_Custom)
+        ->ArgsProduct({{0, 20, 40, 60, 80, 100, 300, 500, 700, 900, 920, 940, 960, 980, 1000}});
+BENCHMARK(BM_FilterData_U32_Ordinary)
+        ->ArgsProduct({{0, 20, 40, 60, 80, 100, 300, 500, 700, 900, 920, 940, 960, 980, 1000}});
 
 } //namespace starrocks
 
