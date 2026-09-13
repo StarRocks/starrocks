@@ -33,6 +33,7 @@
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "compute_env/load_path/rejected_record_writer.h"
+#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 #include "exprs/column_ref.h"
 #include "formats/arrow/arrow_column_converter.h"
 #include "gutil/strings/substitute.h"
@@ -197,10 +198,12 @@ Status ArrowScanner::open_next_reader() {
     RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &_file));
 
     auto* stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
-    if (stream_file) {
-        // Delay opening reader until next_batch() for discrete buffers
+    auto* consumer_pipe = stream_file ? dynamic_cast<KafkaConsumerPipe*>(stream_file->pipe().get()) : nullptr;
+    if (consumer_pipe != nullptr) {
+        // Delay opening reader until next_batch() for discrete buffers (Kafka/Pulsar Routine Load)
         _curr_file_reader = nullptr;
     } else {
+        // Continuous input stream for HTTP Stream Load and local/remote files
         auto arrow_stream = std::make_shared<StarRocksArrowInputStream>(_state, _file);
         auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(arrow_stream);
         if (!reader_res.ok()) {
@@ -223,6 +226,7 @@ Status ArrowScanner::next_batch() {
     _batch_start_idx = 0;
 
     auto* stream_file = _file ? dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get()) : nullptr;
+    auto* consumer_pipe = stream_file ? dynamic_cast<KafkaConsumerPipe*>(stream_file->pipe().get()) : nullptr;
 
     while (true) {
         if (_curr_file_reader == nullptr) {
@@ -240,11 +244,12 @@ Status ArrowScanner::next_batch() {
                     return status;
                 }
                 stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+                consumer_pipe = stream_file ? dynamic_cast<KafkaConsumerPipe*>(stream_file->pipe().get()) : nullptr;
             }
 
             if (_curr_file_reader == nullptr) {
-                if (stream_file) {
-                    auto res = stream_file->pipe()->read();
+                if (consumer_pipe != nullptr) {
+                    auto res = consumer_pipe->read();
                     if (!res.ok()) {
                         _parser_buf.reset();
                         _arrow_stream.reset();
@@ -272,9 +277,6 @@ Status ArrowScanner::next_batch() {
                         }
                     }
 
-                    // Always create a new BufferReader wrapping the new buffer pointer.
-                    // BufferReader is a thin wrapper (no data copy); the real cost is
-                    // RecordBatchStreamReader::Open which is done once per discrete message.
                     _arrow_buffer_reader = std::make_shared<arrow::io::BufferReader>(arrow::Buffer::Wrap(
                             reinterpret_cast<const uint8_t*>(_parser_buf->ptr), _parser_buf->remaining()));
                     _arrow_stream = _arrow_buffer_reader;
@@ -316,7 +318,7 @@ Status ArrowScanner::next_batch() {
             _curr_file_reader.reset();
             _parser_buf.reset();
             _arrow_stream.reset();
-            if (stream_file) {
+            if (consumer_pipe != nullptr) {
                 // Reset conversion plans and mark message boundary so the next
                 // message gets a fresh schema mapping (mirrors the EOF path).
                 for (auto& conv : _conv_funcs) {
@@ -335,7 +337,7 @@ Status ArrowScanner::next_batch() {
             for (auto& conv : _conv_funcs) {
                 conv = std::make_unique<ConvertFuncTree>();
             }
-            if (stream_file) {
+            if (consumer_pipe != nullptr) {
                 _consecutive_errors = 0;
                 _message_boundary = true;
                 continue;
