@@ -578,9 +578,13 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
             return;
         }
     } else if (_use_removable_cumulative_process || !_is_unbounded_preceding) {
-        // Both cumulative process or sliding process need to access position around range.start
+        // Both cumulative process or sliding process need to access position around range.start.
+        // For a frame starting at a FOLLOWING offset, range.start runs ahead of the current row, so the
+        // current row position is the one that must be kept, otherwise it would be removed along with the
+        // rows before it and turn negative.
         const auto frame = _get_frame_range();
-        if (_get_global_position(frame.start - 1) <= remove_end_position) {
+        const int64_t referenced_position = std::min(_current_row_position, frame.start - 1);
+        if (_get_global_position(referenced_position) <= remove_end_position) {
             return;
         }
     } else {
