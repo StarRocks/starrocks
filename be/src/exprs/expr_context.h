@@ -105,6 +105,7 @@ public:
     }
 
     Expr* root() { return _root; }
+    RuntimeState* runtime_state() const { return _runtime_state; }
 
     bool closed() { return _closed; }
 
