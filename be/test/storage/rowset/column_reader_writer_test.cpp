@@ -34,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <iostream>
 
 #include "column/array_column.h"
@@ -52,9 +53,12 @@
 #include "storage/decimal12.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
+#include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/ordinal_page_index.h"
+#include "storage/rowset/page_io.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
@@ -63,6 +67,8 @@
 #include "storage/types.h"
 #include "testutil/assert.h"
 #include "types/date_value.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/zstd_dict.h"
 
 using std::string;
 
@@ -914,6 +920,160 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
         }
         config::dictionary_speculate_min_chunk_size = old_config;
     }
+}
+
+// End-to-end read of a column that carries a compression dictionary.
+//
+// This build has no writer for such a column -- that is the point of splitting the
+// read support out -- so the column file is assembled here the way the writer will:
+// a DICTIONARY_PAGE holding a raw sample taken from the first data page, and every
+// page after it compressed against that sample. Reading it back through
+// ColumnReader is what exercises the dictionary load and the per-page reference,
+// and asserting every value round-trips is what proves they are right.
+TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
+    const std::string fname = strings::Substitute("$0/read_with_dict.data", TEST_DIR);
+    const int kRowsPerPage = 400;
+    const int kPages = 6;
+    const int N = kRowsPerPage * kPages;
+
+    // Rows that share a long scaffolding, so a dictionary taken from the first page
+    // actually helps the ones after it.
+    std::vector<std::string> values(N);
+    for (int i = 0; i < N; i++) {
+        values[i] = strings::Substitute(
+                R"({"role":"assistant","trace":"trace_0001","parts":[{"type":"text","content":"row $0 of a )"
+                R"(replayed conversation whose scaffolding repeats verbatim across every row"}]})",
+                i);
+    }
+
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_OK(get_block_compression_codec(CompressionTypePB::ZSTD, &codec));
+
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+
+    ColumnMetaPB meta;
+    meta.set_column_id(0);
+    meta.set_unique_id(0);
+    meta.set_type(TYPE_VARCHAR);
+    meta.set_length(1024);
+    meta.set_encoding(PLAIN_ENCODING);
+    meta.set_compression(CompressionTypePB::ZSTD);
+    meta.set_compression_level(-1);
+    meta.set_is_nullable(false);
+    meta.set_num_rows(N);
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+
+        // Encode each group of rows into a plain page body, exactly as the writer's
+        // page builder would.
+        PageBuilderOptions page_opts;
+        page_opts.data_page_size = 1024 * 1024; // one page per group, no early flush
+        std::vector<std::string> page_bodies;
+        for (int p = 0; p < kPages; p++) {
+            BinaryPlainPageBuilder builder(page_opts);
+            for (int i = 0; i < kRowsPerPage; i++) {
+                Slice v(values[p * kRowsPerPage + i]);
+                ASSERT_EQ(1u, builder.add(reinterpret_cast<const uint8_t*>(&v), 1));
+            }
+            faststring* body = builder.finish();
+            page_bodies.emplace_back(reinterpret_cast<const char*>(body->data()), body->size());
+        }
+
+        // The dictionary is the first page's encoded values, verbatim -- raw content,
+        // which is why it must never be parsed as a structured dictionary.
+        const std::string& sample = page_bodies.front();
+        auto cdict = compression::ZstdCDict::create(Slice(sample), -1);
+        ASSERT_TRUE(cdict.ok()) << cdict.status();
+
+        PagePointer dict_pp;
+        {
+            PageFooterPB footer;
+            footer.set_type(DICTIONARY_PAGE);
+            footer.set_uncompressed_size(sample.size());
+            footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+            std::vector<Slice> body{Slice(sample)};
+            ASSERT_OK(PageIO::compress_and_write_page(codec, 0.1, wfile.get(), body, footer, &dict_pp));
+        }
+
+        OrdinalIndexWriter ordinal_index;
+        for (int p = 0; p < kPages; p++) {
+            PageFooterPB footer;
+            footer.set_type(DATA_PAGE);
+            footer.set_uncompressed_size(page_bodies[p].size());
+            auto* data_footer = footer.mutable_data_page_footer();
+            data_footer->set_first_ordinal(p * kRowsPerPage);
+            data_footer->set_num_values(kRowsPerPage);
+            data_footer->set_nullmap_size(0);
+            data_footer->set_format_version(2);
+
+            // Every page but the sample is compressed against the dictionary; the
+            // sample page goes out plain, and the reader has to handle both.
+            std::string compressed;
+            std::vector<Slice> body{Slice(page_bodies[p])};
+            if (p == 0) {
+                faststring plain;
+                ASSERT_OK(PageIO::compress_page_body(codec, 0.1, body, &plain));
+                compressed.assign(reinterpret_cast<const char*>(plain.data()), plain.size());
+            } else {
+                compressed.resize(codec->max_compressed_len(page_bodies[p].size()));
+                Slice out(compressed);
+                ASSERT_OK(codec->compress(body, &out, false, page_bodies[p].size(), nullptr, nullptr,
+                                          cdict.value().get()));
+                compressed.resize(out.size);
+                ASSERT_LT(compressed.size(), page_bodies[p].size());
+            }
+            PagePointer data_pp;
+            std::vector<Slice> to_write{compressed.empty() ? body[0] : Slice(compressed)};
+            ASSERT_OK(PageIO::write_page(wfile.get(), to_write, footer, &data_pp));
+            ordinal_index.append_entry(p * kRowsPerPage, data_pp);
+        }
+        ASSERT_OK(ordinal_index.finish(wfile.get(), meta.add_indexes()));
+        dict_pp.to_proto(meta.mutable_zstd_compression_dict_page());
+        ASSERT_OK(wfile->close());
+    }
+
+    // The dictionary page must be recorded, or the read below would be testing
+    // nothing in particular.
+    ASSERT_TRUE(meta.has_zstd_compression_dict_page());
+    ASSERT_GT(meta.zstd_compression_dict_page().size(), 0u);
+
+    auto segment = create_dummy_segment(fs, fname);
+    ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    iter_opts.read_file = read_file.get();
+    iter_opts.use_page_cache = false;
+    ASSERT_OK(iter->init(iter_opts));
+
+    // Scan: every value has to come back byte for byte, including the plain first
+    // page and the dictionary-compressed ones after it.
+    ASSERT_OK(iter->seek_to_first());
+    auto dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    size_t remaining = N;
+    while (remaining > 0) {
+        size_t n = std::min<size_t>(128, remaining);
+        ASSERT_OK(iter->next_batch(&n, dst.get()));
+        ASSERT_GT(n, 0u);
+        remaining -= n;
+    }
+    ASSERT_EQ(N, dst->size());
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], dst->get(i).get_slice().to_string()) << "row " << i;
+    }
+
+    // And a seek straight into a dictionary-compressed page, which is the path a
+    // point lookup takes.
+    ASSERT_OK(iter->seek_to_ordinal(kRowsPerPage * 3 + 7));
+    auto one = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    size_t one_row = 1;
+    ASSERT_OK(iter->next_batch(&one_row, one.get()));
+    ASSERT_EQ(1, one->size());
+    ASSERT_EQ(values[kRowsPerPage * 3 + 7], one->get(0).get_slice().to_string());
 }
 
 } // namespace starrocks
