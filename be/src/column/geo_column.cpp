@@ -16,6 +16,8 @@
 
 #include <stdexcept>
 
+#include "column/mysql_row_buffer.h"
+
 namespace starrocks {
 namespace {
 
@@ -225,8 +227,13 @@ int GeoColumn::compare_at(size_t, size_t, const Column&, int) const {
 int64_t GeoColumn::xor_checksum(uint32_t, uint32_t) const {
     unsupported("checksum");
 }
-void GeoColumn::put_mysql_row_buffer(MysqlRowBuffer*, size_t, bool) const {
-    unsupported("public rendering");
+void GeoColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t row, bool) const {
+    if (_descriptor.type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY ||
+        _descriptor.storage.encoding != GEO_ENCODING_WKB) {
+        unsupported("MySQL output for non-GEOGRAPHY or non-WKB columns");
+    }
+    const auto wkb = get_wkb(row);
+    buf->push_binary(wkb.data, wkb.size);
 }
 uint32_t GeoColumn::max_one_element_serialize_size() const {
     unsupported("serialization");
