@@ -26,6 +26,12 @@
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
+#if defined(__linux__)
+#include <sys/auxv.h>
+#if __has_include(<asm/hwcap.h>)
+#include <asm/hwcap.h>
+#endif
+#endif
 #include "base/coding.h"
 
 namespace starrocks::crc32c {
@@ -238,6 +244,23 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+namespace {
+inline bool has_arm_pmull() {
+#if defined(__APPLE__)
+    return true;
+#elif defined(__linux__) && defined(HWCAP_PMULL)
+    static const bool s_has_pmull = (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
+    return s_has_pmull;
+#else
+    return false;
+#endif
+}
+} // namespace
+
+uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#endif
+
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #if defined(__SSE4_2__) && defined(__PCLMUL__)
     constexpr size_t CRC32C_SSE42_CHUNKSIZE_MASK = ((1 << 4) - 1);
@@ -246,6 +269,16 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
         size_t chunk_size = size & ~CRC32C_SSE42_CHUNKSIZE_MASK;
         size &= CRC32C_SSE42_CHUNKSIZE_MASK;
         crc = ~crc32c_sse42_simd(~crc, buf, chunk_size);
+        if (!size) return crc;
+        buf += chunk_size;
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    constexpr size_t CRC32C_CHUNKSIZE_MASK = ((1 << 4) - 1);
+    constexpr size_t CRC32C_MINIMUM_LENGTH = (1 << 6);
+    if (size >= CRC32C_MINIMUM_LENGTH && has_arm_pmull()) {
+        size_t chunk_size = size & ~CRC32C_CHUNKSIZE_MASK;
+        size &= CRC32C_CHUNKSIZE_MASK;
+        crc = ~crc32c_pmull_simd(~crc, buf, chunk_size);
         if (!size) return crc;
         buf += chunk_size;
     }

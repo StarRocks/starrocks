@@ -86,4 +86,24 @@ TEST(CRC, SmallAndUnalignedBuffers) {
     }
 }
 
+TEST(CRC, LargeBuffersAndChunking) {
+    std::vector<char> buffer(65536 + 64);
+    for (size_t i = 0; i < buffer.size(); ++i) {
+        buffer[i] = static_cast<char>((i * 131) ^ (i >> 3));
+    }
+
+    const size_t test_sizes[] = {0,  1,   7,   8,   9,   15,  16,   17,   31,   32,    63,   64,
+                                 65, 127, 128, 129, 511, 512, 1023, 1024, 4096, 16384, 65536};
+    for (size_t size : test_sizes) {
+        for (size_t offset = 0; offset < 16 && (offset + size) <= buffer.size(); ++offset) {
+            uint32_t val = Value(buffer.data() + offset, size);
+            // Split into two halves to test state continuation across SIMD boundaries
+            size_t half = size / 2;
+            uint32_t val_split =
+                    Extend(Value(buffer.data() + offset, half), buffer.data() + offset + half, size - half);
+            ASSERT_EQ(val, val_split);
+        }
+    }
+}
+
 } // namespace starrocks::crc32c
