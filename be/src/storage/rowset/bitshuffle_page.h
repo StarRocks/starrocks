@@ -423,33 +423,4 @@ inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range
     return Status::OK();
 }
 
-template <LogicalType Type>
-inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
-                                                          size_t* count, Column* column) {
-    DCHECK(_parsed);
-    if (PREDICT_FALSE(*count == 0)) {
-        return Status::OK();
-    }
-    size_t total = *count;
-    size_t read_count = 0;
-    auto data = std::make_unique_for_overwrite<CppType[]>(total);
-    for (size_t i = 0; i < total; i++) {
-        ordinal_t ord = rowids[i] - first_ordinal_in_page;
-        if (UNLIKELY(ord >= _num_elements)) {
-            break;
-        }
-        data[read_count++] = *reinterpret_cast<const CppType*>(get_data(ord * SIZE_OF_TYPE));
-    }
-
-    if (read_count > 0) {
-        size_t nappend = column->append_numbers(data.get(), SIZE_OF_TYPE * read_count);
-        if (UNLIKELY(nappend != read_count)) {
-            return Status::InternalError(
-                    fmt::format("append_numbers failed, expected rows[{}], actual rows[{}]", read_count, nappend));
-        }
-    }
-    *count = read_count;
-    return Status::OK();
-}
-
 } // namespace starrocks
