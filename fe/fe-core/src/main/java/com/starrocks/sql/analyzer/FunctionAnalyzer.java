@@ -628,7 +628,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(fnName + " function 's args must be constant");
+                throw new SemanticException(fnName + " function 's args must not be constant");
             }
         }
 
