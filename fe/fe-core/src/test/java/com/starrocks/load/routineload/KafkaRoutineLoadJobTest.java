@@ -396,8 +396,7 @@ public class KafkaRoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) throws
-                    StarRocksException {
+                                                       ImmutableMap<String, String> properties) {
                 return Lists.newArrayList(1, 2, 3);
             }
         };
@@ -964,8 +963,7 @@ public class KafkaRoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) throws
-                    StarRocksException {
+                                                       ImmutableMap<String, String> properties) {
                 return Lists.newArrayList(1, 2, 3);
             }
         };
@@ -1027,8 +1025,7 @@ public class KafkaRoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) throws
-                    StarRocksException {
+                                                       ImmutableMap<String, String> properties) {
                 return Lists.newArrayList(1, 2, 3);
             }
         };
