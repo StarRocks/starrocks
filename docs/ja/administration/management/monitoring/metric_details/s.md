@@ -494,6 +494,39 @@ description: "Alphabetical s"
 - タイプ: 累積
 - 説明: サンプリングベースのタブレット事前分割が、受理された reshard ジョブの `FINISHED` 到達を期限内に確認できなかったために中止された取り込みトランザクションの累計回数。`tablet_pre_split_post_submit_hard_cap` の兄弟カウンタ。本番の取り込み経路は post-submit タイムアウト時に取り込みを中止せず、その時点で可視のレイアウトに対して継続実行するため、このカウンタは現状の本番環境では 0 のままです。厳格な `runPreSplit` ラッパー（テスト、または将来「タイムアウト＝中止」を選択する呼び出し元）を使った場合にのみ発火します。
 
+## `starrocks_fe_tablet_reshard_job_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type`（`split` または `merge`）
+- 説明: `TabletReshardJobMgr` が受理したタブレット reshard ジョブの累計数。ジョブがキューに入り journal に書き込まれた時点でインクリメントされます。自動 reshard（タブレットの分割とマージ）と、サンプリングベースのタブレット事前分割が提出したジョブの両方を含みます。状態別のジョブ数は、`job="tablet_reshard"`、`type`、`state` のラベルを持つ汎用の `job` ゲージからも取得できます。このカウンタをインクリメントするのは Leader FE のみで、フォロワーでは 0 のままです。また FE の再起動やリーダー切り替え後は 0 から再開します。
+
+## `starrocks_fe_tablet_reshard_job_finished`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type`（`split` または `merge`）
+- 説明: `FINISHED` に到達したタブレット reshard ジョブの累計数。`tablet_reshard_job_total` と比較することで、受理されたジョブのうちどれだけが完了したかが分かります。このカウンタをインクリメントするのは Leader FE のみです。
+
+## `starrocks_fe_tablet_reshard_job_aborted`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type`（`split` または `merge`）
+- 説明: `ABORTED` で終了したタブレット reshard ジョブの累計数。ジョブが中止できるのはトランザクションのコミット前だけです。コミット後はロールバック経路がないため、それ以降の失敗は中止ではなく再試行され、ここには計上されません。そのケースは `tablet_reshard_publish_failed` で検出してください。このカウンタをインクリメントするのは Leader FE のみです。
+
+## `starrocks_fe_tablet_reshard_publish_failed`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 失敗して再試行される reshard publish 試行の累計数。試行ごとに 1 ずつインクリメントされます。reshard のトランザクションは publish 時点で既にコミット済みなので、publish が失敗すると成功するまで指数バックオフ（1 秒から倍増、上限 30 秒）で再試行されます。ジョブは `RUNNING` のままで中止されないため、ジョブが詰まっている間も `tablet_reshard_job_aborted` は平坦なままです。したがってアラートはこのカウンタを対象にしてください。30 秒の上限に達した後も、失敗し続けるパーティションは 1 分あたり約 2 回このカウンタを動かすため、`increase(starrocks_fe_tablet_reshard_publish_failed[5m]) > 0` で最初の失敗から 1 分程度で詰まりを検出できます。各失敗の理由は `information_schema.tablet_reshard_jobs` の `ERROR_MESSAGE` 列と `fe.warn.log` に記録されます。このカウンタをインクリメントするのは Leader FE のみです。
+
+## `starrocks_fe_tablet_reshard_parallel_tablets`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: 未完了のすべての reshard ジョブにおいて現在 reshard 中のタブレット数、すなわちリアルタイムの reshard 並列度。Leader 以外の FE ノードは `0` を報告します。
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - 単位: カウント

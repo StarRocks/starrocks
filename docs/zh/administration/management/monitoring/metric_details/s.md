@@ -520,6 +520,39 @@ description: "Alphabetical s"
 - 类型：累计
 - 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。生产导入路径超时后不中止地继续执行（按当时可见的布局做计划）而非中止事务，因此该计数器在当前生产环境保持为零；仅在使用严格语义的 `runPreSplit` 包装路径（测试，或未来选择 "超时即中止" 的调用方）时触发。
 
+## `starrocks_fe_tablet_reshard_job_total`
+
+- 单位：计数
+- 类型：累计
+- 标签：`type`（`split` 或 `merge`）
+- 描述：`TabletReshardJobMgr` 接纳的 Tablet reshard 作业总数，在作业入队并写入 journal 后递增。既包含自动 reshard（Tablet 分裂与合并），也包含由基于采样的 Tablet 预分裂提交的作业。按状态细分的作业数还可通过通用的 `job` gauge 观察，其标签为 `job="tablet_reshard"`、`type` 与 `state`。仅 Leader FE 递增该计数器；Follower 上保持为零，FE 重启或主从切换后从零重新开始。
+
+## `starrocks_fe_tablet_reshard_job_finished`
+
+- 单位：计数
+- 类型：累计
+- 标签：`type`（`split` 或 `merge`）
+- 描述：到达 `FINISHED` 的 Tablet reshard 作业总数。与 `tablet_reshard_job_total` 对比即可看出已接纳的作业中有多少完成。仅 Leader FE 递增该计数器。
+
+## `starrocks_fe_tablet_reshard_job_aborted`
+
+- 单位：计数
+- 类型：累计
+- 标签：`type`（`split` 或 `merge`）
+- 描述：以 `ABORTED` 结束的 Tablet reshard 作业总数。作业只能在其事务提交前中止；一旦提交便没有回滚路径，此后的失败只会重试而不会中止，因此不会计入这里。该情形请用 `tablet_reshard_publish_failed` 观察。仅 Leader FE 递增该计数器。
+
+## `starrocks_fe_tablet_reshard_publish_failed`
+
+- 单位：计数
+- 类型：累计
+- 描述：失败并将被重试的 reshard publish 尝试总数，每次尝试递增一次。由于 reshard 事务在 publish 时已经提交，publish 失败会按指数退避（1s 起翻倍，上限 30s）一直重试直到成功：作业保持 `RUNNING` 且永不中止，所以作业卡住期间 `tablet_reshard_job_aborted` 一直是平的。因此告警应以该计数器为准。退避到 30s 上限后，持续失败的分区仍会让它每分钟递增约两次，故 `increase(starrocks_fe_tablet_reshard_publish_failed[5m]) > 0` 可在首次失败后约一分钟内发现卡住的作业。每次失败的原因会写入 `information_schema.tablet_reshard_jobs` 的 `ERROR_MESSAGE` 列以及 `fe.warn.log`。仅 Leader FE 递增该计数器。
+
+## `starrocks_fe_tablet_reshard_parallel_tablets`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：所有未完成的 reshard 作业中当前正在 reshard 的 Tablet 数量，即实时的 reshard 并行度。非 Leader FE 节点上报 `0`。
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - 单位：计数

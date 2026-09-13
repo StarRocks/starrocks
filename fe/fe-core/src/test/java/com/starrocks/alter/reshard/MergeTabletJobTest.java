@@ -324,6 +324,40 @@ public class MergeTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
     }
 
+    /**
+     * A publish that fails leaves the job retrying -- once the reshard transaction has committed there
+     * is no rollback path -- but the retry has to be paced. While the backoff runs, a publish pass must
+     * neither resubmit the doomed publish nor lose the reason it failed, which is what a job stuck in
+     * RUNNING reports as its ERROR_MESSAGE.
+     */
+    @Test
+    public void testRunRunningDefersRetryOfFailedPublish() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        mergeJob.setJobState(TabletReshardJob.JobState.RUNNING);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ReshardingPhysicalPartition reshardingPhysicalPartition =
+                mergeJob.getReshardingPhysicalPartitions().values().iterator().next();
+        reshardingPhysicalPartition.setCommitVersion(physicalPartition.getVisibleVersion() + 1);
+
+        CompletableFuture<Map<Long, TabletRange>> failedPublish = new CompletableFuture<>();
+        failedPublish.completeExceptionally(
+                new TabletReshardException("Segment id overflow during tablet merge"));
+        reshardingPhysicalPartition.setPublishFuture(failedPublish);
+
+        // The pass that observes the failure is already subject to the backoff it stamps, so this one
+        // pass covers what every later pass within the backoff does too.
+        mergeJob.runRunningJob();
+
+        // Still retrying, not wedged into a terminal state...
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
+        // ...and the failed attempt is still the one in place: the pass did not resubmit it.
+        Assertions.assertSame(failedPublish, reshardingPhysicalPartition.publishFuture);
+        Assertions.assertEquals(1, reshardingPhysicalPartition.consecutivePublishFailures);
+        Assertions.assertFalse(reshardingPhysicalPartition.isPublishRetryDue());
+        Assertions.assertEquals("Segment id overflow during tablet merge",
+                reshardingPhysicalPartition.getPublishFailureReason());
+    }
+
     @Test
     public void testRunRunningUnknownState() throws Exception {
         MergeTabletJob mergeJob = createMergeTabletReshardJob();

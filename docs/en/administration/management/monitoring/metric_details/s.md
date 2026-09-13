@@ -492,6 +492,39 @@ All transaction metrics share the following labels:
 - Type: Cumulative
 - Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Production load paths proceed without abort against the currently visible layout on post-submit timeout rather than abort, so this counter stays at zero in production today; it only fires when a caller uses the strict `runPreSplit` wrapper (tests, or a future caller that opts into abort-on-timeout).
 
+## `starrocks_fe_tablet_reshard_job_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`split` or `merge`)
+- Description: Total tablet reshard jobs admitted by `TabletReshardJobMgr`, counted once the job has been queued and journaled. Covers both automatic reshard (tablet split and merge) and jobs submitted by Sample-Based Tablet Pre-Split. Per-state job counts are also exposed through the generic `job` gauge with the labels `job="tablet_reshard"`, `type`, and `state`. Only the Leader FE increments this counter; it stays at zero on followers and restarts from zero after an FE restart or a leader change.
+
+## `starrocks_fe_tablet_reshard_job_finished`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`split` or `merge`)
+- Description: Total tablet reshard jobs that reached `FINISHED`. Compare with `tablet_reshard_job_total` to see how many admitted jobs have completed. Only the Leader FE increments this counter.
+
+## `starrocks_fe_tablet_reshard_job_aborted`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`split` or `merge`)
+- Description: Total tablet reshard jobs that ended in `ABORTED`. A job can only abort before its transaction commits; once committed there is no rollback path, so a failure after that point is retried instead of aborted and is never counted here. Use `tablet_reshard_publish_failed` to detect that case. Only the Leader FE increments this counter.
+
+## `starrocks_fe_tablet_reshard_publish_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total reshard publish attempts that failed and will be retried, one increment per attempt. Because a reshard transaction is already committed by publish time, a failed publish is retried with exponential backoff (1s, doubling, capped at 30s) until it succeeds: the job stays `RUNNING` and never aborts, so `tablet_reshard_job_aborted` stays flat while the job is stuck. This counter is therefore the metric to alert on. At the 30s cap a permanently failing partition keeps it moving about twice a minute, so `increase(starrocks_fe_tablet_reshard_publish_failed[5m]) > 0` catches a stuck job within roughly a minute of the first failure. The reason for each failure is reported in the `ERROR_MESSAGE` column of `information_schema.tablet_reshard_jobs` and in `fe.warn.log`. Only the Leader FE increments this counter.
+
+## `starrocks_fe_tablet_reshard_parallel_tablets`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of tablets currently being resharded across all unfinished reshard jobs, that is, the live reshard parallelism. Non-Leader FE nodes report `0`.
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - Unit: Count
