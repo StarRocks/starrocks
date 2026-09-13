@@ -67,7 +67,7 @@ sidebar_label: "能力边界"
         <td>待支持</td>
         <td>Yes (v3.0+) [1]</td>
         <td colspan="2">待支持</td>
-        <td>Yes (v3.4.0+)</td>
+        <td>Yes (v4.2.0+)</td>
     </tr>
     <tr>
         <td>Spark Load</td>

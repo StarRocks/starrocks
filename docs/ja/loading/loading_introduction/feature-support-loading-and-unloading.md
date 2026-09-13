@@ -68,7 +68,7 @@ sidebar_label: 機能サポート
         <td>Yes (v3.0+) [1]</td>
         <td>サポート予定</td>
         <td>サポート予定</td>
-        <td>Yes (v3.4.0+)</td>
+        <td>Yes (v4.2.0+)</td>
     </tr>
     <tr>
         <td>Spark Load</td>
