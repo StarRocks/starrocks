@@ -33,6 +33,7 @@
 #include "common/status.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load_path/load_path_mgr.h"
+#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -784,7 +785,7 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMultiBatch) {
 TEST_F(ArrowScannerTest, TestScanArrowStreamDiscrete) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1148,7 +1149,7 @@ TEST_F(ArrowScannerTest, TestOpenDifferentColumnCounts) {
 TEST_F(ArrowScannerTest, TestStreamNullOrEmptyBuffer) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1251,7 +1252,7 @@ TEST_F(ArrowScannerTest, TestStreamNullOrEmptyBuffer) {
 TEST_F(ArrowScannerTest, TestStreamMalformedBufferAndCircuitBreaker) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1334,7 +1335,7 @@ TEST_F(ArrowScannerTest, TestStreamMalformedBufferAndCircuitBreaker) {
 TEST_F(ArrowScannerTest, TestStreamMessageMetaExtraction) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1419,7 +1420,7 @@ TEST_F(ArrowScannerTest, TestStreamMessageMetaExtraction) {
 TEST_F(ArrowScannerTest, TestStreamFileEmptyBuffer) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1676,7 +1677,7 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextEOS) {
     slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
 
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
     ASSERT_OK(ctx_res.status());
     auto& ctx = ctx_res.value();
@@ -1712,7 +1713,7 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextFailure) {
     slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
 
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
     ASSERT_OK(ctx_res.status());
     auto& ctx = ctx_res.value();
@@ -1771,33 +1772,111 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextFailure) {
 // Exercises the pipe read non-EOF error path (line 255):
 // use a non-blocking StreamLoadPipe, cancel it before calling get_next().
 // In non-blocking mode, cancel causes pipe->read() (no_block_read) to return
-// _err_st (the cancelled status), which is not EOF. The scanner then hits line 255
-// and propagates the error.
+struct TestErrorKafkaConsumerPipe : public KafkaConsumerPipe {
+    using KafkaConsumerPipe::KafkaConsumerPipe;
+    void cancel(const Status& status) override {
+        _cancel_st = status;
+        KafkaConsumerPipe::cancel(status);
+    }
+    StatusOr<ByteBufferPtr> read() override {
+        if (!_cancel_st.ok()) {
+            return _cancel_st;
+        }
+        return KafkaConsumerPipe::read();
+    }
+    Status _cancel_st = Status::OK();
+};
+
+// Exercises the pipe->read() error path in next_batch():
+// when consumer_pipe->read() returns a non-OK status that is not EOF (e.g. Cancelled),
+// _parser_buf and _arrow_stream are reset and the status is returned.
 TEST_F(ArrowScannerTest, TestStreamPipeReadError) {
     SlotTypeDescInfoArray slots;
     slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
 
     auto load_id = UniqueId::gen_uid();
-    // Create a non-blocking pipe (non_blocking_read=true, wait_us=1000 = 1ms).
-    // In non-blocking mode, cancel() causes read() to return _err_st, not EOF.
-    auto pipe = std::make_shared<StreamLoadPipe>(/*non_blocking_read=*/true,
-                                                 /*non_blocking_wait_us=*/1000,
-                                                 /*max_buffered_bytes=*/1024 * 1024,
-                                                 /*min_chunk_size=*/64 * 1024);
+    auto pipe = std::make_shared<TestErrorKafkaConsumerPipe>(1024 * 1024, 64 * 1024);
     auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
     ASSERT_OK(ctx_res.status());
     auto& ctx = ctx_res.value();
 
-    // Cancel the pipe — non-blocking read() returns the _err_st (cancelled), not EOF.
+    // Cancel the pipe — read() returns the cancelled status, not EOF.
     pipe->cancel(Status::Cancelled("test cancellation"));
 
     auto scanner = std::make_unique<ArrowScanner>(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
     ASSERT_OK(scanner->open());
 
-    // The scanner should see the non-EOF cancelled status from pipe->read() (line 255).
+    // The scanner should see the non-EOF cancelled status from consumer_pipe->read().
     auto res = scanner->get_next();
-    // Non-blocking cancelled pipe: scanner returns Cancelled, not EndOfFile.
     EXPECT_FALSE(res.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestScanArrowStreamContinuousMultiChunk) {
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    slots.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+
+    auto load_id = UniqueId::gen_uid();
+    // Plain StreamLoadPipe (HTTP continuous stream load, not KafkaConsumerPipe)
+    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    // Create an Arrow RecordBatch stream serialized to a buffer
+    arrow::Int32Builder int_builder;
+    arrow::StringBuilder str_builder;
+    ASSERT_ARROW_OK(int_builder.AppendValues({1, 2, 3, 4, 5}));
+    ASSERT_ARROW_OK(str_builder.AppendValues({"a", "b", "c", "d", "e"}));
+    std::shared_ptr<arrow::Array> int_array, str_array;
+    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+    auto int_field = std::make_shared<arrow::Field>("c0_int", arrow::int32());
+    auto str_field = std::make_shared<arrow::Field>("c1_str", arrow::utf8());
+    auto schema = arrow::schema({int_field, str_field});
+    auto batch = arrow::RecordBatch::Make(schema, 5, {int_array, str_array});
+
+    auto os = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer = arrow::ipc::MakeStreamWriter(os, schema).ValueOrDie();
+    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_ARROW_OK(writer->Close());
+    auto buf = os->Finish().ValueOrDie();
+
+    // Split the serialized buffer into two arbitrary halves (chunk1 and chunk2)
+    ASSERT_GT(buf->size(), 10u);
+    size_t split_point = buf->size() / 2;
+
+    ByteBufferPtr bb1 = ByteBuffer::allocate_with_tracker(split_point).value();
+    bb1->put_bytes(reinterpret_cast<const char*>(buf->data()), split_point);
+    bb1->flip_to_read();
+    EXPECT_OK(pipe->append(std::move(bb1)));
+
+    size_t chunk2_size = buf->size() - split_point;
+    ByteBufferPtr bb2 = ByteBuffer::allocate_with_tracker(chunk2_size).value();
+    bb2->put_bytes(reinterpret_cast<const char*>(buf->data() + split_point), chunk2_size);
+    bb2->flip_to_read();
+    EXPECT_OK(pipe->append(std::move(bb2)));
+
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner->open());
+
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(5, chunk->num_rows());
+    ASSERT_EQ(1, chunk->columns()[0]->get(0).get_int32());
+    ASSERT_EQ("a", chunk->columns()[1]->get(0).get_slice());
+    ASSERT_EQ(5, chunk->columns()[0]->get(4).get_int32());
+    ASSERT_EQ("e", chunk->columns()[1]->get(4).get_slice());
+
+    auto eof_res = scanner->get_next();
+    EXPECT_TRUE(eof_res.status().is_end_of_file());
 
     scanner->close();
 }
