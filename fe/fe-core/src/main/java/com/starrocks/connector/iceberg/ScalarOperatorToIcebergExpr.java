@@ -516,6 +516,31 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
+    // A cast is lossless when it maps every value of the source type to a distinct value of the target type
+    // and keeps their order, so a predicate over the cast result can be evaluated on the untouched column
+    // instead. Only implicit widening within one type family qualifies; conversions that change the
+    // comparator (numeric to string) or drop information (decimal to integer, exact to floating point) do not.
+    private static boolean isLosslessCast(com.starrocks.type.Type from, com.starrocks.type.Type to) {
+        if (from.equals(to)) {
+            return true;
+        }
+        if (!from.isScalarType() || !to.isScalarType()) {
+            return false;
+        }
+        if (from.isDecimalV3() && to.isDecimalV3()) {
+            ScalarType fromDecimal = (ScalarType) from;
+            ScalarType toDecimal = (ScalarType) to;
+            // Both the fractional and the integral digits must survive the widening.
+            return toDecimal.getScalarScale() >= fromDecimal.getScalarScale()
+                    && toDecimal.getScalarPrecision() - toDecimal.getScalarScale()
+                    >= fromDecimal.getScalarPrecision() - fromDecimal.getScalarScale();
+        }
+        if (from.isIntegerType() && to.isIntegerType()) {
+            return ((ScalarType) from).ordinal() <= ((ScalarType) to).ordinal();
+        }
+        return false;
+    }
+
     private static String getColumnName(ScalarOperator operator) {
         if (operator == null) {
             return null;
@@ -545,9 +570,11 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public String visitCastOperator(CastOperator operator, Void context) {
-            // Stripping a non-identity cast can change predicate semantics and incorrectly prune files.
-            // Any non-identity cast that still reaches this converter must remain a residual predicate.
-            if (!operator.getType().equals(operator.getChild(0).getType())) {
+            // Stripping the cast re-expresses the predicate against the column's own type, which only holds
+            // when the cast is lossless and order preserving. A narrowing cast folds several column values
+            // into one target value, so rewriting CAST(d AS BIGINT) = 10 on a DECIMAL(5,2) column into
+            // d = 10.00 would prune files that do hold matching rows such as 10.50. Keep those residual.
+            if (!isLosslessCast(operator.getChild(0).getType(), operator.getType())) {
                 return null;
             }
             return operator.getChild(0).accept(this, context);

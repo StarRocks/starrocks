@@ -36,6 +36,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.iceberg.Schema;
@@ -45,6 +46,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -452,6 +454,26 @@ public class IcebergExprVisitorTest {
         expectedExpr = Expressions.equal("k1", 11);
         Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString());
 
+        // So is the widening cast the planner adds when a DECIMAL column meets a literal of a larger scale:
+        // DECIMAL(5,2) keeps its values and their order in DECIMAL(6,3), so the file can still be pruned.
+        Type wider = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 6, 3);
+        value = ConstantOperator.createDecimal(new BigDecimal("11.090"), wider);
+        cast = new CastOperator(wider, K18);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        expectedExpr = Expressions.equal("k18", new BigDecimal("11.09"));
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString());
+        convertedExpr = converter.convertStrict(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString());
+
+        // A cast that keeps the scale but loses integral digits is not: DECIMAL(5,2) does not fit DECIMAL(4,2).
+        Type narrower = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 2);
+        value = ConstantOperator.createDecimal(new BigDecimal("11.09"), narrower);
+        cast = new CastOperator(narrower, K18);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, cast, value)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }
 
     @Test
