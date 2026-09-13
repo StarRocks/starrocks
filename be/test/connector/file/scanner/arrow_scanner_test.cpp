@@ -33,7 +33,6 @@
 #include "common/status.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load_path/load_path_mgr.h"
-#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -782,10 +781,16 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMultiBatch) {
     scanner->close();
 }
 
+class MockDiscreteStreamLoadPipe : public StreamLoadPipe {
+public:
+    using StreamLoadPipe::StreamLoadPipe;
+    bool is_discrete_message_pipe() const override { return true; }
+};
+
 TEST_F(ArrowScannerTest, TestScanArrowStreamDiscrete) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1149,7 +1154,7 @@ TEST_F(ArrowScannerTest, TestOpenDifferentColumnCounts) {
 TEST_F(ArrowScannerTest, TestStreamNullOrEmptyBuffer) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1252,7 +1257,7 @@ TEST_F(ArrowScannerTest, TestStreamNullOrEmptyBuffer) {
 TEST_F(ArrowScannerTest, TestStreamMalformedBufferAndCircuitBreaker) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1335,7 +1340,7 @@ TEST_F(ArrowScannerTest, TestStreamMalformedBufferAndCircuitBreaker) {
 TEST_F(ArrowScannerTest, TestStreamMessageMetaExtraction) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1420,7 +1425,7 @@ TEST_F(ArrowScannerTest, TestStreamMessageMetaExtraction) {
 TEST_F(ArrowScannerTest, TestStreamFileEmptyBuffer) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
     DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
     ASSERT_OK(load_stream_mgr.put(load_id, pipe));
 
@@ -1677,7 +1682,7 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextEOS) {
     slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
 
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
     auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
     ASSERT_OK(ctx_res.status());
     auto& ctx = ctx_res.value();
@@ -1713,7 +1718,7 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextFailure) {
     slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
 
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
     auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
     ASSERT_OK(ctx_res.status());
     auto& ctx = ctx_res.value();
@@ -1772,17 +1777,17 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextFailure) {
 // Exercises the pipe read non-EOF error path (line 255):
 // use a non-blocking StreamLoadPipe, cancel it before calling get_next().
 // In non-blocking mode, cancel causes pipe->read() (no_block_read) to return
-struct TestErrorKafkaConsumerPipe : public KafkaConsumerPipe {
-    using KafkaConsumerPipe::KafkaConsumerPipe;
+struct TestErrorDiscretePipe : public MockDiscreteStreamLoadPipe {
+    using MockDiscreteStreamLoadPipe::MockDiscreteStreamLoadPipe;
     void cancel(const Status& status) override {
         _cancel_st = status;
-        KafkaConsumerPipe::cancel(status);
+        MockDiscreteStreamLoadPipe::cancel(status);
     }
     StatusOr<ByteBufferPtr> read() override {
         if (!_cancel_st.ok()) {
             return _cancel_st;
         }
-        return KafkaConsumerPipe::read();
+        return MockDiscreteStreamLoadPipe::read();
     }
     Status _cancel_st = Status::OK();
 };
@@ -1795,7 +1800,7 @@ TEST_F(ArrowScannerTest, TestStreamPipeReadError) {
     slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
 
     auto load_id = UniqueId::gen_uid();
-    auto pipe = std::make_shared<TestErrorKafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    auto pipe = std::make_shared<TestErrorDiscretePipe>(1024 * 1024, 64 * 1024);
     auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
     ASSERT_OK(ctx_res.status());
     auto& ctx = ctx_res.value();
