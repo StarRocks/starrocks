@@ -24,8 +24,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.validation.constraints.AssertTrue;
-import javax.validation.constraints.Min;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Min;
 
 import org.mariadb.jdbc.Driver;
 
