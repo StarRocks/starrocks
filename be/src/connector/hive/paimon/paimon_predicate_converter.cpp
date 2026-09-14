@@ -14,6 +14,7 @@
 
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 
+#include <paimon/data/decimal.h>
 #include <paimon/predicate/literal.h>
 
 #include "column/column.h"
@@ -21,6 +22,7 @@
 #include "exprs/literal.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
+#include "types/date_value.h"
 #include "types/datum.h"
 
 namespace starrocks {
@@ -259,6 +261,10 @@ bool PaimonPredicateConverter::_ok_to_paimon_literal(starrocks::Expr* lit) {
     case LogicalType::TYPE_DOUBLE:
     case LogicalType::TYPE_VARCHAR:
     case LogicalType::TYPE_CHAR:
+    case LogicalType::TYPE_DATE:
+    case LogicalType::TYPE_DECIMAL32:
+    case LogicalType::TYPE_DECIMAL64:
+    case LogicalType::TYPE_DECIMAL128:
         return true;
     default:
         return false;
@@ -301,6 +307,24 @@ paimon::Literal PaimonPredicateConverter::translate_to_paimon_literal(starrocks:
         const Slice& slice = datum.get_slice();
         return ::paimon::Literal(::paimon::FieldType::STRING, slice.data, slice.size);
     }
+    case ::paimon::FieldType::DATE:
+        return ::paimon::Literal(::paimon::FieldType::DATE, datum.get_date().to_days_since_unix_epoch());
+    case ::paimon::FieldType::DECIMAL: {
+        const TypeDescriptor& type = lit->type();
+        __int128_t unscaled;
+        switch (type.type) {
+        case LogicalType::TYPE_DECIMAL32:
+            unscaled = datum.get_int32();
+            break;
+        case LogicalType::TYPE_DECIMAL64:
+            unscaled = datum.get_int64();
+            break;
+        default:
+            unscaled = datum.get_int128();
+            break;
+        }
+        return ::paimon::Literal(::paimon::Decimal(type.precision, type.scale, unscaled));
+    }
     default:
         throw std::runtime_error("unknown data type error");
     }
@@ -318,6 +342,10 @@ bool PaimonPredicateConverter::_ok_to_paimon_type(const starrocks::TypeDescripto
     case LogicalType::TYPE_DOUBLE:
     case LogicalType::TYPE_CHAR:
     case LogicalType::TYPE_VARCHAR:
+    case LogicalType::TYPE_DATE:
+    case LogicalType::TYPE_DECIMAL32:
+    case LogicalType::TYPE_DECIMAL64:
+    case LogicalType::TYPE_DECIMAL128:
         return true;
     default:
         return false;
@@ -346,6 +374,12 @@ bool PaimonPredicateConverter::_ok_to_paimon_type(const starrocks::TypeDescripto
         return ::paimon::FieldType::STRING;
     case LogicalType::TYPE_BINARY:
         return ::paimon::FieldType::BINARY;
+    case LogicalType::TYPE_DATE:
+        return ::paimon::FieldType::DATE;
+    case LogicalType::TYPE_DECIMAL32:
+    case LogicalType::TYPE_DECIMAL64:
+    case LogicalType::TYPE_DECIMAL128:
+        return ::paimon::FieldType::DECIMAL;
     default:
         return ::paimon::FieldType::UNKNOWN;
     }
