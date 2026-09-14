@@ -491,6 +491,14 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - 两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
+:::note
+
+**排序键与主键不同**的范围分布主键表**不支持 MERGE**。这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。`ALTER TABLE ... MERGE TABLETS` 与基于大小的自动合并都会被拒绝，报错 `Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key`。
+
+SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。
+
+:::
+
 详细示例，参考[拆分或合并 Tablet](#拆分或合并-tablet)。
 
 ### 修改列（添加/删除列，改变列的顺序或注释）

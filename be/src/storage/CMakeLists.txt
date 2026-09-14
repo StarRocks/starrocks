@@ -204,6 +204,7 @@ set(STORAGE_FILES
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
     lake/tablet_merger.cpp
+    lake/tablet_virtual_merge.cpp
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
