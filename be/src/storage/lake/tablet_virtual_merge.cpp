@@ -34,6 +34,14 @@ namespace starrocks::lake {
 
 namespace {
 
+// One page a target rssid draws from, and the child it lives in. The child matters: get_del_vec
+// resolves the file path through the metadata it is handed, so a page must be read against its own
+// child's metadata, not any sibling's.
+struct AliasDelvecSource {
+    size_t child_index = 0;
+    DelvecPageInfo info;
+};
+
 // One logical rowset of the alias and every child occurrence of it.
 struct AliasRowset {
     uint32_t target_id = 0;
@@ -191,7 +199,14 @@ StatusOr<MutableTabletMetadataPtr> virtual_merge_for_read(TabletManager* tablet_
     // Unioning the children's pages for a segment is what makes the alias the parent's view: each row of a
     // shared segment belongs to exactly one child, and only its owner deletes it. The children's pages for
     // one inherited segment are byte-identical, and unioning a bitmap with itself is that bitmap.
-    std::map<uint32_t, DelVector> delvec_of_target;
+    // Collect the distinct pages each target rssid draws from, WITHOUT decoding any of them. Only an
+    // rssid that draws from more than one has to be merged; the common one -- an inherited page no child
+    // has touched since the split, or a segment only one child ever deleted from -- is copied straight
+    // through, so neither its bitmap nor its serialized form is ever held in memory here. That matters
+    // because this runs on the publish critical path once per version for as long as the split lives:
+    // materializing every page would hold roughly the tablet's whole delete-vector set, decoded, plus
+    // the serialized copy, at once.
+    std::map<uint32_t, std::vector<AliasDelvecSource>> sources_of_target;
     for (size_t g = 0; g < groups.size(); ++g) {
         const auto& group = groups[g];
         // groups and the emitted rowsets are built in the same pass, so they stay index-aligned.
@@ -244,31 +259,64 @@ StatusOr<MutableTabletMetadataPtr> virtual_merge_for_read(TabletManager* tablet_
                 if (!unioned_pages.emplace(file_it->second.name(), page.offset(), page.size()).second) {
                     continue; // the same physical page this rssid already took
                 }
-                DelVector page_delvec;
-                LakeIOOptions io_opts{.fill_data_cache = false};
-                RETURN_IF_ERROR(get_del_vec(tablet_manager, child, page, false, io_opts, &page_delvec));
-                if (page_delvec.empty()) {
-                    continue;
-                }
-                delvec_of_target[group.target_id + i].union_with(new_version, *page_delvec.roaring());
+                sources_of_target[group.target_id + i].push_back(AliasDelvecSource{
+                        .child_index = child_index,
+                        .info = DelvecPageInfo{.tablet_id = child.id(), .delvec_file = file_it->second, .page = page}});
             }
         }
     }
 
-    if (delvec_of_target.empty()) {
+    if (sources_of_target.empty()) {
         return alias;
     }
 
     // One file the alias owns, rather than references into the children's: it must not own a child's file,
     // and it is rewritten at every version anyway.
     std::vector<uint32_t> target_rssids;
-    std::vector<uint32_t> page_crcs;
+    std::vector<DelvecPagePB> pages;
     std::vector<DelvecOutputPage> output_pages;
-    for (const auto& [target_rssid, delvec] : delvec_of_target) {
-        std::string data = delvec.save();
+    target_rssids.reserve(sources_of_target.size());
+    pages.reserve(sources_of_target.size());
+    output_pages.reserve(sources_of_target.size());
+    for (auto& [target_rssid, sources] : sources_of_target) {
+        DelvecPagePB out_page;
+        out_page.set_version(new_version);
+        out_page.set_crc32c_gen_version(new_version);
+        // A single source is copied byte for byte, through write_compacted_delvec_pages's bounded buffer.
+        // Its checksum carries over with its bytes, and only when the source's own was valid: meta_file
+        // reads crc32c_gen_version != version as "no checksum", so an invalid one must not be restated as
+        // this version's. An encrypted file is refused as a raw page, so it takes the decode path.
+        const bool copy_verbatim = sources.size() == 1 && !sources.front().info.delvec_file.name().empty() &&
+                                   sources.front().info.delvec_file.encryption_meta().empty();
+        if (copy_verbatim) {
+            const auto& only = sources.front().info;
+            out_page.set_size(only.page.size());
+            if (only.page.has_crc32c() && only.page.crc32c_gen_version() == only.page.version()) {
+                out_page.set_crc32c(only.page.crc32c());
+            } else {
+                out_page.clear_crc32c();
+                out_page.clear_crc32c_gen_version();
+            }
+            output_pages.push_back(DelvecOutputPage{.raw_page = only});
+        } else {
+            DelVector merged;
+            for (const auto& source : sources) {
+                DelVector page_delvec;
+                LakeIOOptions io_opts{.fill_data_cache = false};
+                RETURN_IF_ERROR(get_del_vec(tablet_manager, *child_metadatas[source.child_index], source.info.page,
+                                            false, io_opts, &page_delvec));
+                if (page_delvec.empty()) {
+                    continue;
+                }
+                merged.union_with(new_version, *page_delvec.roaring());
+            }
+            std::string data = merged.save();
+            out_page.set_size(data.size());
+            out_page.set_crc32c(crc32c::Mask(crc32c::Value(data.data(), data.size())));
+            output_pages.push_back(DelvecOutputPage{.serialized_page = std::move(data)});
+        }
         target_rssids.push_back(target_rssid);
-        page_crcs.push_back(crc32c::Mask(crc32c::Value(data.data(), data.size())));
-        output_pages.push_back(DelvecOutputPage{.serialized_page = std::move(data)});
+        pages.push_back(std::move(out_page));
     }
 
     FileMetaPB delvec_file;
@@ -282,12 +330,8 @@ StatusOr<MutableTabletMetadataPtr> virtual_merge_for_read(TabletManager* tablet_
     auto* delvec_meta = alias->mutable_delvec_meta();
     (*delvec_meta->mutable_version_to_file())[new_version] = delvec_file;
     for (size_t i = 0; i < target_rssids.size(); ++i) {
-        auto& page = (*delvec_meta->mutable_delvecs())[target_rssids[i]];
-        page.set_version(new_version);
-        page.set_offset(page_offsets[i]);
-        page.set_size(output_pages[i].serialized_page.size());
-        page.set_crc32c(page_crcs[i]);
-        page.set_crc32c_gen_version(new_version);
+        pages[i].set_offset(page_offsets[i]);
+        (*delvec_meta->mutable_delvecs())[target_rssids[i]] = std::move(pages[i]);
     }
 
     return alias;

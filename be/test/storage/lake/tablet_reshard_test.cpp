@@ -21093,6 +21093,77 @@ TEST_F(LakeTabletReshardTest, test_virtual_merge_rowsets_and_delvecs_match_a_rea
     EXPECT_TRUE(alias->idg_meta().idgs().empty());
 }
 
+// A page only one child draws from is copied through byte for byte, never decoded into a bitmap and
+// re-serialized. What must survive that shortcut is the page's CONTENT and its checksum: the copy
+// carries the source's crc32c over with its bytes, and restates it at the alias's version so
+// MetaFileBuilder still reads it as a live checksum rather than as none.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_copies_a_single_source_page_verbatim) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "verbatim_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    // Only child A ever deleted from the shared segment, so its page is the rssid's single source.
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {1, 4, 6};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    const std::string content = delvec_a.save();
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "verbatim_a.delvec", content);
+    // Give it a valid checksum, the way a published page carries one.
+    auto& source_page = (*meta_a->mutable_delvec_meta()->mutable_delvecs())[1];
+    source_page.set_crc32c(crc32c::Mask(crc32c::Value(content.data(), content.size())));
+    source_page.set_crc32c_gen_version(10);
+
+    int raw_copy_opens = 0;
+    std::vector<size_t> raw_read_sizes;
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+        if (*static_cast<int*>(arg) == 1) {
+            ++raw_copy_opens;
+        }
+    });
+    sync->SetCallBack("write_compacted_delvec_pages:read_chunk_size",
+                      [&](void* arg) { raw_read_sizes.push_back(*static_cast<size_t*>(arg)); });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+    EXPECT_EQ(1, raw_copy_opens) << "the single source must use the raw-copy path";
+    EXPECT_EQ(std::vector<size_t>({content.size()}), raw_read_sizes);
+
+    ASSERT_EQ(1, alias->rowsets_size());
+    const uint32_t target_rssid = alias->rowsets(0).id();
+    DelVector copied;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, target_rssid, false, io_options, &copied));
+    ASSERT_NE(nullptr, copied.roaring());
+    EXPECT_EQ(3, copied.cardinality());
+    for (uint32_t rowid : deleted_by_a) {
+        EXPECT_TRUE(copied.roaring()->contains(rowid)) << "rowid " << rowid;
+    }
+
+    // The bytes went through untouched, so the checksum is the source's -- restated at this version.
+    const auto& alias_page = alias->delvec_meta().delvecs().at(target_rssid);
+    EXPECT_EQ(content.size(), alias_page.size());
+    EXPECT_EQ(source_page.crc32c(), alias_page.crc32c());
+    EXPECT_EQ(kNewVersion, alias_page.crc32c_gen_version())
+            << "a checksum whose gen version is not the page's version reads as no checksum at all";
+    EXPECT_EQ(kNewVersion, alias_page.version());
+}
+
 // Two children can hold delvec pages that agree on version, offset and size while listing different
 // rowids, so a page cannot be identified by those three alone. One publish advances every child to the
 // same version and each child writes its OWN delvec file for it, its own page at offset 0 -- so when
