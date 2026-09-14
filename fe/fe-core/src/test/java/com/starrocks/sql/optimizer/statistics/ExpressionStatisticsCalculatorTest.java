@@ -467,28 +467,28 @@ public class ExpressionStatisticsCalculatorTest {
         // test days_diff function
         callOperator = new CallOperator(FunctionSet.DAYS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.01);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.01);
+        Assertions.assertEquals(-0.0035, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
         // test datediff function
         callOperator = new CallOperator(FunctionSet.DATEDIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.01);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.01);
+        Assertions.assertEquals(-0.0035, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
         // test hours_diff function
         callOperator = new CallOperator(FunctionSet.HOURS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 1);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 1);
+        Assertions.assertEquals(-0.0833, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
         // test minutes_diff function
         callOperator = new CallOperator(FunctionSet.MINUTES_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-5, columnStatistic.getMinValue(), 1);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 1);
+        Assertions.assertEquals(-5, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
         // test seconds_diff function
         callOperator = new CallOperator(FunctionSet.SECONDS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-300, columnStatistic.getMinValue(), 1);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 1);
+        Assertions.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
         // test mod function
         callOperator = new CallOperator(FunctionSet.MOD, IntegerType.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
