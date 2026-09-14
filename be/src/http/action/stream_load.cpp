@@ -75,6 +75,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "http/utils.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/http/http_auth.h"
 #include "platform/http/http_channel.h"
@@ -314,8 +315,8 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     size_t max_body_bytes = config::streaming_load_max_mb * 1024 * 1024;
     if (!http_req->header(HttpHeaders::CONTENT_LENGTH).empty()) {
         int64_t body_bytes = 0;
-        RETURN_IF_ERROR(parse_int64_load_header(HttpHeaders::CONTENT_LENGTH,
-                                                http_req->header(HttpHeaders::CONTENT_LENGTH), &body_bytes, 0));
+        RETURN_IF_ERROR(parse_int64_param(HttpHeaders::CONTENT_LENGTH, http_req->header(HttpHeaders::CONTENT_LENGTH),
+                                          &body_bytes, 0));
         ctx->body_bytes = body_bytes;
         if (ctx->body_bytes > max_body_bytes) {
             std::stringstream ss;
@@ -520,7 +521,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     }
     if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
         int64_t skip_header = 0;
-        RETURN_IF_ERROR(parse_int64_load_header(HTTP_SKIP_HEADER, http_req->header(HTTP_SKIP_HEADER), &skip_header));
+        RETURN_IF_ERROR(parse_int64_param(HTTP_SKIP_HEADER, http_req->header(HTTP_SKIP_HEADER), &skip_header));
         if (skip_header < 0) {
             return Status::InvalidArgument("skip_header must be equal or greater than 0");
         }
@@ -574,8 +575,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     }
     if (!http_req->header(HTTP_LOAD_MEM_LIMIT).empty()) {
         int64_t load_mem_limit = 0;
-        RETURN_IF_ERROR(
-                parse_int64_load_header(HTTP_LOAD_MEM_LIMIT, http_req->header(HTTP_LOAD_MEM_LIMIT), &load_mem_limit));
+        RETURN_IF_ERROR(parse_int64_param(HTTP_LOAD_MEM_LIMIT, http_req->header(HTTP_LOAD_MEM_LIMIT), &load_mem_limit));
         if (load_mem_limit < 0) {
             return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
         }
@@ -631,16 +631,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_LOAD_DOP).empty()) {
         int64_t parallel_request_num = 0;
         // load_dop is an i32 on the wire, so a wider value used to be truncated.
-        RETURN_IF_ERROR(parse_int64_load_header(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num,
-                                                std::numeric_limits<int32_t>::min(),
-                                                std::numeric_limits<int32_t>::max()));
+        RETURN_IF_ERROR(parse_int64_param(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num,
+                                          std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
         request.__set_load_dop(static_cast<int32_t>(parallel_request_num));
     }
     if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
         int64_t log_rejected_record_num = 0;
-        RETURN_IF_ERROR(parse_int64_load_header(HTTP_LOG_REJECTED_RECORD_NUM,
-                                                http_req->header(HTTP_LOG_REJECTED_RECORD_NUM),
-                                                &log_rejected_record_num));
+        RETURN_IF_ERROR(parse_int64_param(HTTP_LOG_REJECTED_RECORD_NUM, http_req->header(HTTP_LOG_REJECTED_RECORD_NUM),
+                                          &log_rejected_record_num));
         if (log_rejected_record_num < -1) {
             return Status::InvalidArgument("log_rejected_record_num must be equal or greater than -1");
         }
@@ -689,8 +687,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
 
     if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {
         int64_t exec_mem_limit = 0;
-        RETURN_IF_ERROR(
-                parse_int64_load_header(HTTP_EXEC_MEM_LIMIT, http_req->header(HTTP_EXEC_MEM_LIMIT), &exec_mem_limit));
+        RETURN_IF_ERROR(parse_int64_param(HTTP_EXEC_MEM_LIMIT, http_req->header(HTTP_EXEC_MEM_LIMIT), &exec_mem_limit));
         if (exec_mem_limit <= 0) {
             return Status::InvalidArgument("exec_mem_limit must be greater than 0");
         }
