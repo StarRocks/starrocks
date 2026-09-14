@@ -104,7 +104,7 @@ private:
     };
 
     // This function can be made static perfectly. The only reason to make it `virtual`
-    // is, for unit test MOCK as it is the only interface to interact with g_starlet.
+    // is, for unit test MOCK as it is the only interface to interact with the starlet runtime.
     virtual absl::StatusOr<ShardInfo> _fetch_shard_info_from_remote(ShardId id);
 
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
@@ -150,8 +150,12 @@ private:
     TableMetricsManager* _table_metrics_mgr;
 };
 
-extern std::shared_ptr<StarOSWorker> g_worker;
-extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
+std::shared_ptr<StarOSWorker> get_staros_worker();
+// Returns a strong reference, or nullptr once `shutdown_staros_worker()` has released the runtime.
+// Callers must hold the returned pointer for as long as they use it: shutdown drops the global at
+// any moment, and a raw pointer would dangle across the blocking starmgr RPCs behind these calls.
+std::shared_ptr<staros::starlet::Starlet> get_starlet();
+
 void apply_starlet_upload_threshold_configs();
 std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client);
 
@@ -159,6 +163,11 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
 void shutdown_staros_worker();
 void update_staros_starcache();
 void set_starlet_in_shutdown();
+
+#ifdef BE_TEST
+void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);
+std::shared_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::shared_ptr<staros::starlet::Starlet> starlet);
+#endif
 
 } // namespace starrocks
 #endif // USE_STAROS

@@ -668,7 +668,13 @@ private:
             return fs_st;
         }
 #endif
-        return g_worker->get_shard_filesystem(shard_id, _conf);
+        auto worker = get_staros_worker();
+        if (worker == nullptr) {
+            // Shutdown already released the StarOS worker while this operation was in flight.
+            // Fail the operation instead of dereferencing the retired global.
+            return absl::UnavailableError(fmt::format("StarOS worker is not available, shard_id: {}", shard_id));
+        }
+        return worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
@@ -697,6 +703,18 @@ void TEST_clear_shard_fs_cache() {
     get_shard_fs_cache()->prune();
 }
 #endif
+
+// Resolve a shard filesystem through the global StarOS worker. The worker is null once
+// `shutdown_staros_worker()` has retired it, which an in-flight operation can still reach; report
+// that as a status so the caller fails the operation instead of dereferencing the retired global.
+static absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem_from_worker(
+        int64_t shard_id, const staros::starlet::fslib::Configuration& conf) {
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        return absl::UnavailableError("StarOS worker is not available");
+    }
+    return worker->get_shard_filesystem(shard_id, conf);
+}
 
 std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) {
     // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
@@ -735,10 +753,10 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) 
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
     TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
     if (absl::IsUnimplemented(fs_st.status())) {
-        fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+        fs_st = get_shard_filesystem_from_worker(shard_id, conf);
     }
 #else
-    auto fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+    auto fs_st = get_shard_filesystem_from_worker(shard_id, conf);
 #endif
     if (!fs_st.ok()) {
         LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path
