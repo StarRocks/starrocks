@@ -1595,21 +1595,24 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
                 const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
                 auto source_size_it = resolved_source_sizes.find(source_key);
                 if (source_size_it == resolved_source_sizes.end()) {
-                    RandomAccessFileOptions options{.skip_fill_local_cache = true};
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &options);
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:preflight_source_open", nullptr);
-                    ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(
-                                                          options, tablet_mgr->delvec_location(
-                                                                           raw.tablet_id, raw.delvec_file.name())));
-                    std::optional<StatusOr<int64_t>> source_size_override;
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size_override",
-                                             &source_size_override);
                     int64_t resolved_size = 0;
-                    if (source_size_override.has_value()) {
-                        RETURN_IF_ERROR(source_size_override->status());
-                        resolved_size = source_size_override->value();
-                    } else {
-                        ASSIGN_OR_RETURN(resolved_size, reader->get_size());
+                    {
+                        TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+                        RandomAccessFileOptions options{.skip_fill_local_cache = true};
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &options);
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:preflight_source_open", nullptr);
+                        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(
+                                                              options, tablet_mgr->delvec_location(
+                                                                               raw.tablet_id, raw.delvec_file.name())));
+                        std::optional<StatusOr<int64_t>> source_size_override;
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size_override",
+                                                 &source_size_override);
+                        if (source_size_override.has_value()) {
+                            RETURN_IF_ERROR(source_size_override->status());
+                            resolved_size = source_size_override->value();
+                        } else {
+                            ASSIGN_OR_RETURN(resolved_size, reader->get_size());
+                        }
                     }
                     TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size", &resolved_size);
                     RETURN_IF_ERROR(validate_source_size(resolved_size, page_end, true));
@@ -1670,6 +1673,10 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
         const auto& raw = *output_page.raw_page;
         const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
         if (!current_source.has_value() || *current_source != source_key) {
+            // A page copied through raw is never read by get_del_vec, so the read it does here is the
+            // only delvec read of that page -- account for it under the same counter, or the latency of
+            // a whole publish's delvec reads disappears exactly for the pages this path handles.
+            TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
             close_reader();
             RandomAccessFileOptions source_options{.skip_fill_local_cache = true};
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &source_options);
@@ -1690,8 +1697,11 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
             Status read_status;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_read_chunk", &read_status);
             RETURN_IF_ERROR(read_status);
-            RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
-                                                          buffer.data(), static_cast<int64_t>(chunk_size)));
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+                RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
+                                                              buffer.data(), static_cast<int64_t>(chunk_size)));
+            }
             RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(buffer.data(), chunk_size)));
             copied += chunk_size;
         }
