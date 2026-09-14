@@ -3187,7 +3187,6 @@ public class ShowExecutor {
             List<List<String>> rows = Lists.newArrayList();
             rows.add(Lists.newArrayList("Name", provider.getName()));
             rows.add(Lists.newArrayList("Type", provider.getType().lower()));
-            rows.add(Lists.newArrayList("Protocol", provider.getProtocol().lower()));
             rows.add(Lists.newArrayList("IsDefault", provider.getId().equals(defaultId) ? "true" : "false"));
             java.util.Map<String, String> masked = provider.getMaskedParams();
             for (java.util.Map.Entry<String, String> entry : masked.entrySet()) {

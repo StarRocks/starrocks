@@ -128,23 +128,23 @@ public class AIProviderAnalysisTest {
     }
 
     @Test
-    public void testCreateRejectsProtocolNotAllowedForType() {
+    public void testCreateAcceptsAnyProtocolForAnyType() {
+        // The type only decides the default; any supported protocol may be declared explicitly.
         Map<String, String> emb = validEmbedding();
         emb.put("protocol", "anthropic");
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("embedding", emb), new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("not supported for AI provider type embedding"),
-                ex.getMessage());
+        CreateAIProviderStmt embStmt = create("embedding", emb);
+        AIProviderAnalyzer.analyze(embStmt, new ConnectContext());
+        Assertions.assertEquals("anthropic", embStmt.getProperties().get("protocol"));
 
         Map<String, String> embCohere = validEmbedding();
         embCohere.put("protocol", "cohere");
-        Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("embedding", embCohere), new ConnectContext()));
+        AIProviderAnalyzer.analyze(create("embedding", embCohere), new ConnectContext());
 
         Map<String, String> rr = validRerank();
         rr.put("protocol", "openai");
-        Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("rerank", rr), new ConnectContext()));
+        CreateAIProviderStmt rrStmt = create("rerank", rr);
+        AIProviderAnalyzer.analyze(rrStmt, new ConnectContext());
+        Assertions.assertEquals("openai", rrStmt.getProperties().get("protocol"));
     }
 
     @Test
@@ -163,8 +163,7 @@ public class AIProviderAnalysisTest {
 
     @Test
     public void testAlterProtocol() {
-        // No provider named p1 is registered here, so only the type-independent checks apply; the
-        // type-aware ALTER checks are covered in AIProviderMgrTest against a stored provider.
+        // ALTER is type-agnostic: any supported protocol value passes, only the value shape is checked.
         Map<String, String> ok = new LinkedHashMap<>();
         ok.put("protocol", "anthropic");
         AIProviderAnalyzer.analyze(

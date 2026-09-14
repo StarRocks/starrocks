@@ -16,10 +16,7 @@ package com.starrocks.context.ai;
 
 import com.google.common.base.Strings;
 
-import java.util.EnumSet;
 import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * The HTTP request/response protocol an {@link AIProvider} endpoint speaks. Stored as the
@@ -30,14 +27,13 @@ import java.util.stream.Collectors;
  *   <li>OPENAI — OpenAI-compatible: {@code /v1/embeddings} for embedding providers, Chat Completions
  *       for chat providers. The de-facto format most vendors (OpenAI, DeepSeek, Qwen, vLLM, Ollama,
  *       OpenRouter, ...) expose.</li>
- *   <li>ANTHROPIC — Anthropic Messages API. Chat providers only.</li>
- *   <li>COHERE — Cohere-compatible {@code /rerank} (Cohere, Jina, Voyage, OpenRouter, local TEI).
- *       Rerank providers only.</li>
+ *   <li>ANTHROPIC — Anthropic Messages API.</li>
+ *   <li>COHERE — Cohere-compatible {@code /rerank} (Cohere, Jina, Voyage, OpenRouter, local TEI).</li>
  * </ul>
  *
- * <p>Every provider has a protocol: when the user omits it, {@link #defaultFor(AIProviderType)} picks
- * the protocol the type implied before this property existed, and {@code AIProviderMgr} writes it into
- * the params so SHOW/DESC never show an empty value.
+ * <p>Any protocol may be declared on any provider type; the type only decides the default. Every
+ * provider has a protocol: when CREATE omits it, the analyzer fills in {@link #defaultFor(AIProviderType)},
+ * the protocol the type implied before this property existed, so SHOW/DESC never show an empty value.
  */
 public enum AIProviderProtocol {
     OPENAI,

@@ -35,9 +35,9 @@ import java.util.TreeSet;
 /**
  * Semantic validation for the unified {@code AI PROVIDER} DDL. Validation is keyed off the declared
  * {@code TYPE} (embedding / rerank / chat): the common params (endpoint / model / api_key /
- * timeout_ms / protocol) apply to every type, and each type adds its own allowed keys. ALTER resolves
- * the stored provider by name so the same type-specific rules apply to the patch; DROP/SET DEFAULT only
- * need a name check.
+ * timeout_ms / protocol) apply to every type, and each type adds its own allowed keys. ALTER/DROP/SET DEFAULT
+ * are type-agnostic (the provider is resolved by name), so they only need a name check — the manager
+ * infers the type from the stored provider.
  */
 public class AIProviderAnalyzer {
 
@@ -151,7 +151,7 @@ public class AIProviderAnalyzer {
             }
         }
 
-        private void validateProtocol(String protocol) {
+        private static void validateProtocol(String protocol) {
             try {
                 AIProviderProtocol.fromString(protocol);
             } catch (IllegalArgumentException e) {

@@ -112,39 +112,25 @@ public class AIProviderMgrTest {
     }
 
     @Test
-    public void testAlterAnalysisUsesStoredProviderType() throws Exception {
-        // The analyzer resolves the stored provider, so ALTER is checked against the real type.
+    public void testAlterProtocolAcceptsAnySupportedValue() throws Exception {
+        // ALTER is type-agnostic: the analyzer checks the value shape and the manager stores it as-is.
         AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
         mgr.createProvider("emb", AIProviderType.EMBEDDING, embProps(), null);
-        Map<String, String> chatNoProtocol = chatProps();
-        chatNoProtocol.remove(AIProvider.PROPERTY_PROTOCOL);
-        mgr.createProvider("ch", AIProviderType.CHAT, chatNoProtocol, null);
 
         Map<String, String> anthropic = new LinkedHashMap<>();
         anthropic.put(AIProvider.PROPERTY_PROTOCOL, "anthropic");
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(
-                        new AlterAIProviderStmt(false, "emb", anthropic, NodePosition.ZERO), new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("not supported for AI provider type embedding"),
-                ex.getMessage());
-        Assertions.assertEquals(AIProviderProtocol.OPENAI, mgr.getProvider("emb").getProtocol());
-
         AIProviderAnalyzer.analyze(
-                new AlterAIProviderStmt(false, "ch", anthropic, NodePosition.ZERO), new ConnectContext());
-        mgr.alterProvider("ch", anthropic, false);
-        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, mgr.getProvider("ch").getProtocol());
+                new AlterAIProviderStmt(false, "emb", anthropic, NodePosition.ZERO), new ConnectContext());
+        mgr.alterProvider("emb", anthropic, false);
+        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, mgr.getProvider("emb").getProtocol());
+        Assertions.assertEquals("anthropic", mgr.getProvider("emb").getParams().get(AIProvider.PROPERTY_PROTOCOL));
 
-        // Keys of another type are rejected on ALTER as well, now that the type is known.
-        Map<String, String> rerankKey = new LinkedHashMap<>();
-        rerankKey.put(AIProvider.PROPERTY_MAX_DOCUMENTS, "5");
+        Map<String, String> bogus = new LinkedHashMap<>();
+        bogus.put(AIProvider.PROPERTY_PROTOCOL, "gemini");
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
-                        new AlterAIProviderStmt(false, "emb", rerankKey, NodePosition.ZERO), new ConnectContext()));
-        Map<String, String> unknownKey = new LinkedHashMap<>();
-        unknownKey.put("foo", "bar");
-        Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(
-                        new AlterAIProviderStmt(false, "emb", unknownKey, NodePosition.ZERO), new ConnectContext()));
+                        new AlterAIProviderStmt(false, "emb", bogus, NodePosition.ZERO), new ConnectContext()));
+        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, mgr.getProvider("emb").getProtocol());
     }
 
     @Test

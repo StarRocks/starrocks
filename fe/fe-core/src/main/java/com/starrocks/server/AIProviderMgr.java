@@ -53,9 +53,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * duplicating the machinery.
  *
  * <p>Every stored provider carries a {@code protocol} param: the analyzer fills in the type's default
- * when CREATE omits it, and {@link #normalize(AIProvider)} back-fills it on records persisted before
- * the property existed. Value validation (allowed keys, protocol vs. type) is the analyzer's job too;
- * this class only stores what it is given.
+ * when CREATE omits it, and {@link #normalizeProvider(AIProvider)} back-fills it on records persisted before
+ * the property existed. Value validation is the analyzer's job too; this class only stores what it is given.
  *
  * <p>Persisted as image block {@link SRMetaBlockID#AI_PROVIDER_MGR} and replayed via the
  * {@code OP_*_AI_PROVIDER} edit-log ops. A provider record with no {@code type} tag and the
@@ -217,14 +216,14 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
 
     public void replayCreateProvider(AIProvider provider) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            normalize(provider);
+            normalizeProvider(provider);
             idToProvider.put(provider.getId(), provider);
         }
     }
 
     public void replayAlterProvider(AIProvider provider) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            normalize(provider);
+            normalizeProvider(provider);
             idToProvider.put(provider.getId(), provider);
         }
     }
@@ -243,7 +242,7 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
 
     // Fill in what older records lack: a missing type tag means EMBEDDING, and a missing protocol means
     // the type's default protocol. Both decisions are persisted on the object so the next image carries them.
-    private static void normalize(AIProvider provider) {
+    private static void normalizeProvider(AIProvider provider) {
         if (provider != null) {
             provider.setType(provider.getType());
             provider.ensureProtocol();
@@ -284,7 +283,7 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         // Tag legacy (pre-unification) providers, which were all embedding providers, as EMBEDDING, and
         // back-fill the protocol on records persisted before it existed.
         for (AIProvider p : idToProvider.values()) {
-            normalize(p);
+            normalizeProvider(p);
         }
         // Migrate the old single embedding default into the per-type map.
         if (!Strings.isNullOrEmpty(defaultProviderId)
