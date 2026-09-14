@@ -106,9 +106,6 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 
-// Whether enable parallel compaction for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_compaction, "true");
-
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.

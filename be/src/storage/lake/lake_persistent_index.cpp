@@ -46,16 +46,10 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/parallel_upsert_context.h"
 #include "storage/primary_index.h"
-#include "storage/sstable/iterator.h"
-#include "storage/sstable/merger.h"
-#include "storage/sstable/options.h"
-#include "storage/sstable/table_builder.h"
-#include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -112,11 +106,8 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         return Status::OK();
     };
 
-    std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution) {
-        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                ThreadPool::ExecutionMode::CONCURRENT);
-    }
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
     ParallelTaskRunner runner(token.get());
     for (int i = 0; i < num_sstables; i++) {
         runner.run([&open_one, i]() { return open_one(i); });
@@ -539,8 +530,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // task each), so use that as both the per-task subset size and the serial/parallel threshold.
     const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
     const bool have_backing_store = !_sstable_filesets.empty() || !_inactive_memtables.empty();
-    const bool parallel_worthwhile =
-            config::enable_pk_index_parallel_execution && have_backing_store && not_founds.size() > min_rows_per_task;
+    const bool parallel_worthwhile = have_backing_store && not_founds.size() > min_rows_per_task;
 
     // Split not_founds into min_rows_per_task-sized subsets (or one whole-set subset when running serial).
     std::vector<KeyIndexSet> subsets;
@@ -593,8 +583,8 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     //    contiguous key-index chunks. Each task builds its own small KeyIndexSet inside the task (avoiding
     //    one giant not_founds set for a large delete).
     const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
-    const bool parallel_worthwhile = config::enable_pk_index_parallel_execution && n > min_rows_per_task &&
-                                     (!_sstable_filesets.empty() || !_inactive_memtables.empty());
+    const bool parallel_worthwhile =
+            n > min_rows_per_task && (!_sstable_filesets.empty() || !_inactive_memtables.empty());
     const size_t num_tasks = (n + min_rows_per_task - 1) / min_rows_per_task;
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("bulk_erase_lookup_wait_us");
@@ -676,164 +666,6 @@ Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValu
     RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
-}
-
-void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
-                                                  std::vector<PersistentIndexSstablePB>* sstables,
-                                                  bool* merge_base_level) {
-    // There are two levels in persistent index:
-    //  1) base level. It contains only one sst file.
-    //  2) cumulative level. Sst files that except base level.
-    // And there are two kinds of merge:
-    //  1) base merge. Merge all sst files.
-    //  2) cumulative merge. Only merge cumulative sst files.
-    //
-    // And we use this strategy to decide whether to use base merge or cumulative merge:
-    // 1. When total size of cumulative level sst files reach 1/10 of base level, use base merge.
-    // 2. Otherwise, use cumulative merge.
-    DCHECK(sstable_meta.sstables_size() > 0);
-    int64_t base_level_bytes = 0;
-    int64_t cumulative_level_bytes = 0;
-    std::vector<PersistentIndexSstablePB> cumulative_sstables;
-    for (int i = 0; i < sstable_meta.sstables_size(); i++) {
-        if (i == 0) {
-            base_level_bytes = sstable_meta.sstables(i).filesize();
-        } else {
-            cumulative_level_bytes += sstable_meta.sstables(i).filesize();
-            cumulative_sstables.push_back(sstable_meta.sstables(i));
-        }
-    }
-
-    if ((double)base_level_bytes * config::lake_pk_index_cumulative_base_compaction_ratio >
-        (double)cumulative_level_bytes) {
-        // cumulative merge
-        sstables->swap(cumulative_sstables);
-        *merge_base_level = false;
-    } else {
-        // base merge
-        sstables->push_back(sstable_meta.sstables(0));
-        sstables->insert(sstables->end(), cumulative_sstables.begin(), cumulative_sstables.end());
-        *merge_base_level = true;
-    }
-    // Limit max sstable count that can do merge, to avoid cost too much memory.
-    const int32_t max_limit = config::lake_pk_index_sst_max_compaction_versions;
-    if (sstables->size() > max_limit) {
-        sstables->resize(max_limit);
-    }
-    if (!*merge_base_level && sstables->size() > 0 &&
-        sstable_meta.sstables(0).max_rss_rowid() == sstables->back().max_rss_rowid()) {
-        // If base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
-        // we should force to do base merge.
-        // That's because in `LakePersistentIndex::apply_opcompaction`, we will sort sstable
-        // by max_rss_rowid, and if they are same, the base sstable will be after cumulative sstable,
-        // which is not what we want. E.g.
-        //  t1 : (base sst: max_rss_rowid = 4, cumulative sst: max_rss_rowid = 4, cumulative sst: max_rss_rowid = 4)
-        //  t2 : do cumulative compaction, merge these two cumulative sst, and get new (cumulative sst: max_rss_rowid = 4).
-        //  t3 : apply new cumulative sst, now the order is:
-        //       (cumulative sst: max_rss_rowid = 4, base sst: max_rss_rowid = 4)
-        //       which is wrong, because base sst should be before cumulative sst.
-        // so we force to do base merge here.
-        *merge_base_level = true;
-        sstables->insert(sstables->begin(), sstable_meta.sstables(0));
-    }
-}
-
-Status LakePersistentIndex::prepare_merging_iterator(
-        TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log,
-        std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level, bool* contain_shared_sstables) {
-    sstable::ReadOptions read_options;
-    // No need to cache input sst's blocks.
-    read_options.fill_cache = false;
-    // Catch corrupted data blocks as Corruption instead of merging garbage into the
-    // compaction output.
-    read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
-    std::vector<sstable::Iterator*> iters;
-    DeferOp free_iters([&] {
-        for (sstable::Iterator* iter : iters) {
-            delete iter;
-        }
-    });
-
-    iters.reserve(metadata->sstable_meta().sstables().size());
-    std::stringstream ss_debug;
-    std::vector<PersistentIndexSstablePB> sstables_to_merge;
-    // Pick sstable for merge, decide to use base merge or cumulative merge.
-    pick_sstables_for_merge(metadata->sstable_meta(), &sstables_to_merge, merge_base_level);
-    if (sstables_to_merge.size() <= 1) {
-        // no need to do merge
-        return Status::OK();
-    }
-    // Record the full picked input set before opening anything: if an open below fails
-    // with corruption, the caller's cleanup handler walks this list to drop every
-    // input's local cache (the failing file itself never makes it into
-    // `merging_sstables`).
-    for (const auto& sstable_pb : sstables_to_merge) {
-        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
-    }
-    for (const auto& sstable_pb : sstables_to_merge) {
-        // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
-        ASSIGN_OR_RETURN(auto sstable,
-                         PersistentIndexSstable::new_sstable(
-                                 sstable_pb, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()), nullptr,
-                                 false /* need filter */, nullptr, metadata, tablet_mgr));
-        PersistentIndexSstablePtr merging_sstable = std::move(sstable);
-        merging_sstables->push_back(merging_sstable);
-        // Pass `max_rss_rowid` to iterator, will be used when compaction.
-        read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
-        read_options.shared_rssid = sstable_pb.shared_rssid();
-        read_options.shared_version = sstable_pb.shared_version();
-        read_options.rssid_offset = sstable_pb.rssid_offset();
-        read_options.delvec = merging_sstable->delvec();
-        sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
-        iters.emplace_back(iter);
-        ss_debug << sstable_pb.filename() << " | ";
-
-        if (sstable_pb.shared()) {
-            *contain_shared_sstables = true;
-        }
-    }
-    sstable::Options options;
-    (*merging_iter_ptr).reset(sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
-    (*merging_iter_ptr)->SeekToFirst();
-    iters.clear(); // Clear the vector without deleting iterators since they are now managed by merge_iter_ptr.
-    VLOG(2) << "prepare sst for merge : " << ss_debug.str();
-    return Status::OK();
-}
-
-StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex::merge_sstables(
-        std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-        const TabletMetadataPtr& metadata, bool contain_shared_sstables) {
-    SstSeekRange seek_range;
-    // adjust sst seek range by tablet range
-    if (contain_shared_sstables) {
-        RETURN_IF(!metadata->has_range(), Status::InternalError("Tablet range is not set"));
-        auto tablet_schema = TabletSchema::create(metadata->schema());
-        ASSIGN_OR_RETURN(seek_range, TabletRangeHelper::create_sst_seek_range_from(metadata->range(), tablet_schema));
-        if (!seek_range.seek_key.empty()) {
-            iter_ptr->Seek(seek_range.seek_key);
-        }
-    }
-
-    if (!iter_ptr->Valid()) {
-        RETURN_IF_ERROR(iter_ptr->status());
-        return std::vector<KeyValueMerger::KeyValueMergerOutput>();
-    }
-
-    sstable::Options options;
-    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(),
-                                                   base_level_merge, tablet_mgr, metadata->id(), false);
-    while (iter_ptr->Valid()) {
-        const Slice cur_key = iter_ptr->key();
-        if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
-            // meet the scan range boundary, quit.
-            break;
-        }
-        RETURN_IF_ERROR(merger->merge(iter_ptr.get()));
-        iter_ptr->Next();
-    }
-    RETURN_IF_ERROR(iter_ptr->status());
-    return merger->finish();
 }
 
 // During large import, we may have many sst files to ingest and get, so we do parallel compaction to speedup the process.
@@ -920,74 +752,6 @@ Status LakePersistentIndex::parallel_major_compact(lake::LakePersistentIndexPara
         output_sstable->set_max_rss_rowid(max_rss_rowid);
     }
 
-    return Status::OK();
-}
-
-Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                          TxnLogPB* txn_log) {
-    if (metadata->sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
-        return Status::OK();
-    }
-
-    std::vector<std::shared_ptr<PersistentIndexSstable>> sstable_vec;
-    std::unique_ptr<sstable::Iterator> merging_iter_ptr;
-    bool merge_base_level = false;
-    bool contain_shared_sstables = false;
-    // Corrupted bytes usually come from the local cache copy of an input sstable. Drop
-    // those cache entries so the next compaction round re-reads from remote storage,
-    // instead of hitting the same bad blocks and failing forever. The handler walks the
-    // input list in `txn_log`, which prepare_merging_iterator fills with the full picked
-    // set before opening anything, so corruption hit while opening an input is covered
-    // too (the failing file never makes it into `sstable_vec`).
-    auto drop_input_cache_on_corruption = [&](const Status& st) {
-        if (!st.is_corruption()) {
-            return;
-        }
-        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of "
-                     << txn_log->op_compaction().input_sstables_size()
-                     << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
-        for (const auto& sstable_pb : txn_log->op_compaction().input_sstables()) {
-            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()));
-        }
-    };
-    // build merge iterator
-    auto prepare_st = prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
-                                               &merge_base_level, &contain_shared_sstables);
-    if (!prepare_st.ok()) {
-        drop_input_cache_on_corruption(prepare_st);
-        return prepare_st;
-    }
-    if (merging_iter_ptr == nullptr) {
-        // no need to do merge
-        return Status::OK();
-    }
-    if (!merging_iter_ptr->Valid()) {
-        drop_input_cache_on_corruption(merging_iter_ptr->status());
-        return merging_iter_ptr->status();
-    }
-    // merge sstable files.
-    auto merge_results_or = merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata,
-                                           contain_shared_sstables);
-    if (!merge_results_or.ok()) {
-        drop_input_cache_on_corruption(merge_results_or.status());
-        return merge_results_or.status();
-    }
-    auto& merge_results = merge_results_or.value();
-    if (merge_results.empty()) {
-        // no output file generated.
-        return Status::OK();
-    }
-
-    // record output sstable pb, there will be only one output file.
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(merge_results[0].filename);
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(merge_results[0].filesize);
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_encryption_meta(merge_results[0].encryption_meta);
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->mutable_range()->set_start_key(
-            merge_results[0].start_key);
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->mutable_range()->set_end_key(merge_results[0].end_key);
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->mutable_fileset_id()->CopyFrom(
-            UniqueId::gen_uid().to_proto());
     return Status::OK();
 }
 
@@ -1163,12 +927,12 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
 // Decide whether the parallel two-phase prefetch should run while rebuilding the PK index.
 // The parallel path reads all `num_files` files concurrently and holds their decoded columns
 // in memory at once, so it is gated on update-memtracker pressure: returns false (use the
-// single-pass fallback) when parallel execution is disabled, there is nothing to parallelise,
-// or the update tracker is already past `pk_index_parallel_rebuild_mem_ratio` of its limit.
+// single-pass fallback) when there is nothing to parallelise, or the update tracker is already
+// past `pk_index_parallel_rebuild_mem_ratio` of its limit.
 // Cold-start latency loss is acceptable in that regime; OOM is not. Shared by del-file loading
 // and segment-file parallel reads.
 static bool should_parallel_rebuild_prefetch(int num_files) {
-    if (!config::enable_pk_index_parallel_execution || num_files <= 1) {
+    if (num_files <= 1) {
         return false;
     }
     auto* update_tracker = RuntimeEnv::GetInstance()->update_mem_tracker();

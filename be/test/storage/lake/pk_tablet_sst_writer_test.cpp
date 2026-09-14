@@ -672,8 +672,7 @@ TEST_F(PkTabletSSTWriterTest, test_publish_with_parallel_index_get) {
     auto tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
-    ConfigResetGuard<bool> guard4(&config::enable_pk_index_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard5(&config::pk_index_parallel_execution_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard4(&config::pk_index_parallel_execution_min_rows, 4096);
     for (int i = 0; i < 5; i++) {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
