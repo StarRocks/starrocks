@@ -400,8 +400,9 @@ Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
 
         Status st = _load_index(lake_io_opts);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(),
-                                     _short_key_index_mem_usage());
+            const auto index_mem_usage = _short_key_index_mem_usage();
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), index_mem_usage);
+            _loaded_key_index_mem_usage.store(index_mem_usage, std::memory_order_relaxed);
             update_cache_size();
         } else {
             _reset();
@@ -560,6 +561,7 @@ Status Segment::_load_full_sort_key_index() {
     _full_sk_index_decoder = std::move(decoder);
     int64_t full_index_mem = _full_sk_index_handle.mem_usage() + _full_sk_index_decoder->mem_usage();
     MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), full_index_mem);
+    _loaded_key_index_mem_usage.fetch_add(full_index_mem, std::memory_order_relaxed);
     update_cache_size();
     return Status::OK();
 }
@@ -868,7 +870,8 @@ size_t Segment::mem_usage() const {
         // just report the basic info memory usage if not opened yet
         return _basic_info_mem_usage();
     }
-    return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
+    return _basic_info_mem_usage() + _loaded_key_index_mem_usage.load(std::memory_order_relaxed) +
+           _column_index_mem_usage();
 }
 
 StatusOr<int64_t> Segment::get_data_size() const {
