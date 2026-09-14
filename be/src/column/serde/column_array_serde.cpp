@@ -801,10 +801,9 @@ public:
                Serde::max_serialized_size(*column.data_column(), encode_level);
     }
 
-    static StatusOr<uint8_t*> serialize(const NullableColumn& column, uint8_t* buff, const int encode_level,
-                                        bool is_chunk_transport) {
-        ASSIGN_OR_RETURN(buff, Serde::serialize(*column.null_column(), buff, false, encode_level, is_chunk_transport));
-        ASSIGN_OR_RETURN(buff, Serde::serialize(*column.data_column(), buff, false, encode_level, is_chunk_transport));
+    static StatusOr<uint8_t*> serialize(const NullableColumn& column, uint8_t* buff, const int encode_level) {
+        ASSIGN_OR_RETURN(buff, Serde::serialize(*column.null_column(), buff, false, encode_level));
+        ASSIGN_OR_RETURN(buff, Serde::serialize(*column.data_column(), buff, false, encode_level));
         return buff;
     }
 
@@ -898,25 +897,13 @@ class ConstColumnSerde {
 public:
     using Serde = serde::ColumnArraySerde;
     static int64_t max_serialized_size(const ConstColumn& column, const int encode_level) {
-        auto size = Serde::max_serialized_size(*column.data_column(), encode_level);
-        if (column.is_nullable()) {
-            auto null = ColumnHelper::create_const_null_column(column.size());
-            size = std::max(size, Serde::max_serialized_size(*down_cast<ConstColumn*>(null.get())->data_column(),
-                                                             encode_level));
-        }
-        return 8 + size;
+        return /*sizeof(uint64_t)=*/8 + Serde::max_serialized_size(*column.data_column(), encode_level);
     }
 
-    static StatusOr<uint8_t*> serialize(const ConstColumn& column, uint8_t* buff, const int encode_level,
-                                        bool is_chunk_transport) {
+    static StatusOr<uint8_t*> serialize(const ConstColumn& column, uint8_t* buff, const int encode_level) {
         buff = write_little_endian_64(column.size(), buff);
-        // CN constant NULL keeps the existing Boolean placeholder wire representation.
-        // Its logical type belongs to the receiving plan, not to the NULL payload.
-        if (is_chunk_transport && column.is_nullable()) {
-            auto null = ColumnHelper::create_const_null_column(column.size());
-            return Serde::serialize(*down_cast<ConstColumn*>(null.get())->data_column(), buff, false, encode_level);
-        }
-        return Serde::serialize(*column.data_column(), buff, false, encode_level, is_chunk_transport);
+        ASSIGN_OR_RETURN(buff, Serde::serialize(*column.data_column(), buff, false, encode_level));
+        return buff;
     }
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, ConstColumn* column,
@@ -1008,21 +995,16 @@ private:
 class ColumnSerializingVisitor final : public ColumnVisitorAdapter<ColumnSerializingVisitor> {
 public:
     using ColumnVisitorAdapter::visit;
-    explicit ColumnSerializingVisitor(uint8_t* buff, bool sorted, const int encode_level, bool is_chunk_transport)
-            : ColumnVisitorAdapter(this),
-              _buff(buff),
-              _cur(buff),
-              _sorted(sorted),
-              _encode_level(encode_level),
-              _is_chunk_transport(is_chunk_transport) {}
+    explicit ColumnSerializingVisitor(uint8_t* buff, bool sorted, const int encode_level)
+            : ColumnVisitorAdapter(this), _buff(buff), _cur(buff), _sorted(sorted), _encode_level(encode_level) {}
 
     Status do_visit(const NullableColumn& column) {
-        ASSIGN_OR_RETURN(_cur, NullableColumnSerde::serialize(column, _cur, _encode_level, _is_chunk_transport));
+        ASSIGN_OR_RETURN(_cur, NullableColumnSerde::serialize(column, _cur, _encode_level));
         return Status::OK();
     }
 
     Status do_visit(const ConstColumn& column) {
-        ASSIGN_OR_RETURN(_cur, ConstColumnSerde::serialize(column, _cur, _encode_level, _is_chunk_transport));
+        ASSIGN_OR_RETURN(_cur, ConstColumnSerde::serialize(column, _cur, _encode_level));
         return Status::OK();
     }
 
@@ -1089,7 +1071,6 @@ private:
     uint8_t* _cur;
     bool _sorted;
     int _encode_level;
-    bool _is_chunk_transport;
 };
 
 class ColumnDeserializingVisitor final : public ColumnVisitorMutableAdapter<ColumnDeserializingVisitor> {
@@ -1187,9 +1168,6 @@ Status ColumnSerializedSizeVisitor::visit(const GeoColumn& column) {
 }
 
 Status ColumnSerializingVisitor::visit(const GeoColumn& column) {
-    if (!_is_chunk_transport) {
-        return Status::NotSupported("GEOGRAPHY requires CN chunk transport");
-    }
     ASSIGN_OR_RETURN(_cur, column.serialize_column(_cur));
     return Status::OK();
 }
@@ -1208,12 +1186,7 @@ int64_t ColumnArraySerde::max_serialized_size(const Column& column, const int en
 
 StatusOr<uint8_t*> ColumnArraySerde::serialize(const Column& column, uint8_t* buff, bool sorted,
                                                const int encode_level) {
-    return serialize(column, buff, sorted, encode_level, false);
-}
-
-StatusOr<uint8_t*> ColumnArraySerde::serialize(const Column& column, uint8_t* buff, bool sorted, const int encode_level,
-                                               bool is_chunk_transport) {
-    ColumnSerializingVisitor visitor(buff, sorted, encode_level, is_chunk_transport);
+    ColumnSerializingVisitor visitor(buff, sorted, encode_level);
     RETURN_IF_ERROR(column.accept(&visitor));
     return visitor.cur();
 }

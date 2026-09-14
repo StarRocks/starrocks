@@ -40,7 +40,7 @@ static int64_t extra_columns_max_serialized_size(const ChunkExtraColumnsData& ex
 
 static StatusOr<uint8_t*> serialize_extra_columns(const ChunkExtraColumnsData& extra_data, uint8_t* buff) {
     for (auto& column : extra_data.columns()) {
-        ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*column, buff, false, 0, true));
+        ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*column, buff));
     }
     return buff;
 }
@@ -122,14 +122,13 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
     int padding_size = 0; // as streamvbyte may read up to 16 extra bytes from the input.
     if (context == nullptr) {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
-            ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, 0, true));
+            ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*chunk.columns()[i], buff));
         }
     } else {
         using Serd = ColumnArraySerde;
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
-            ASSIGN_OR_RETURN(buff,
-                             Serd::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i), true));
+            ASSIGN_OR_RETURN(buff, Serd::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i)));
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
             if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
                 padding_size = context->STREAMVBYTE_PADDING_SIZE;

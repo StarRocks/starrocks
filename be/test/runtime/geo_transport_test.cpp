@@ -18,11 +18,14 @@
 #include <iostream>
 
 #include "base/coding.h"
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/geo_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/serde/column_array_serde.h"
+#include "column/struct_column.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks::serde {
@@ -64,6 +67,8 @@ TEST(GeoTransportTest, ChunkRoundTripAndOwnership) {
                 column = NullableColumn::create(std::move(column), std::move(nulls));
             }
             if (shape == 2 || shape == 3) column = ConstColumn::create(std::move(column), 128);
+            // Use the existing factory's canonical constant-NULL representation.
+            if (shape == 3) column = ColumnHelper::create_column(type, true, true, 128);
             Chunk source;
             source.append_column(column, 1);
             ProtobufChunkMeta meta;
@@ -162,7 +167,13 @@ TEST(GeoTransportTest, OrdinaryWireFormatAndUnsupportedPaths) {
     auto geo = GeoColumn::create(descriptor());
     geo->append_wkb(Slice(point()));
     std::vector<uint8_t> bytes(geo->serialized_column_size());
-    EXPECT_TRUE(ColumnArraySerde::serialize(*geo, bytes.data()).status().is_not_supported());
+    auto written = ColumnArraySerde::serialize(*geo, bytes.data());
+    ASSERT_TRUE(written.ok()) << written.status();
+    auto restored = geo->clone_empty();
+    auto read = ColumnArraySerde::deserialize(bytes.data(), *written, restored.get());
+    ASSERT_TRUE(read.ok()) << read.status();
+    EXPECT_EQ(*written, *read);
+    EXPECT_EQ(point(), down_cast<const GeoColumn*>(restored.get())->get_wkb(0).to_string());
     auto geometry_desc = descriptor();
     geometry_desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
     auto geometry = GeoColumn::create(geometry_desc);
@@ -287,9 +298,8 @@ TEST(GeoTransportTest, LegacyConstantNullInOrdinaryAndMixedChunks) {
 
 TEST(GeoTransportTest, ConstantNullRetainsLegacyWireBytes) {
     for (size_t rows : {size_t{0}, size_t{16}}) {
-        auto geo = GeoColumn::create(descriptor());
-        geo->append_default();
-        auto typed = ConstColumn::create(NullableColumn::create(std::move(geo), NullColumn::create(1, 1)), rows);
+        auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor().type);
+        auto typed = ColumnHelper::create_column(type, true, true, rows);
         auto legacy = ColumnHelper::create_const_null_column(rows);
         Chunk typed_chunk;
         typed_chunk.append_column(std::move(typed), 1);
@@ -334,6 +344,79 @@ TEST(GeoTransportTest, UnversionedTypedConstantNullRemainsUnchanged) {
     EXPECT_TRUE(restored->only_null());
     auto* values = down_cast<const Int64Column*>(ColumnHelper::get_data_column(restored.get()));
     EXPECT_EQ(42, values->get_data()[0]);
+    // Chunk serialization must not rewrite the physical child either.
+    Chunk chunk;
+    chunk.append_column(column, 1);
+    auto wire = ProtobufChunkSerde::serialize(chunk);
+    ASSERT_TRUE(wire.ok()) << wire.status();
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(bytes.data()), *written - bytes.data()),
+              wire->data().substr(8));
+}
+
+TEST(GeoTransportTest, SharedSerdePreservesTypedGeoConstantNull) {
+    auto geo = GeoColumn::create(descriptor());
+    geo->append_wkb(Slice(point()));
+    auto column = ConstColumn::create(NullableColumn::create(std::move(geo), NullColumn::create(1, 1)), 16);
+    std::vector<uint8_t> bytes(ColumnArraySerde::max_serialized_size(*column));
+    auto written = ColumnArraySerde::serialize(*column, bytes.data());
+    ASSERT_TRUE(written.ok()) << written.status();
+    auto restored = column->clone_empty();
+    auto read = ColumnArraySerde::deserialize(bytes.data(), *written, restored.get());
+    ASSERT_TRUE(read.ok()) << read.status();
+    EXPECT_EQ(*written, *read);
+    EXPECT_EQ(16, restored->size());
+    EXPECT_TRUE(restored->only_null());
+    const auto* values = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(restored.get()));
+    EXPECT_EQ(descriptor(), values->descriptor());
+    EXPECT_EQ(point(), values->get_wkb(0).to_string());
+}
+
+TEST(GeoTransportTest, SharedSerdeSupportsNestedGeoWithoutTransportFlags) {
+    const auto geo_type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor().type);
+    std::vector<TypeDescriptor> types = {TypeDescriptor::create_array_type(geo_type),
+                                         TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), geo_type),
+                                         TypeDescriptor::create_struct_type({"geo"}, {geo_type})};
+    for (const auto& type : types) {
+        for (int level : {0, 7}) {
+            auto column = ColumnHelper::create_column(type, false);
+            auto geo = GeoColumn::create(geo_type, 0);
+            geo->append_wkb(Slice(point()));
+            Column* child = nullptr;
+            if (type.type == TYPE_ARRAY) {
+                auto* array = down_cast<ArrayColumn*>(column.get());
+                array->offsets_column_raw_ptr()->append(1);
+                child = array->elements_column_raw_ptr();
+            } else if (type.type == TYPE_MAP) {
+                auto* map = down_cast<MapColumn*>(column.get());
+                map->offsets_column_raw_ptr()->append(1);
+                map->keys_column_raw_ptr()->append_default();
+                child = map->values_column_raw_ptr();
+            } else {
+                child = down_cast<StructColumn*>(column.get())->field_column_raw_ptr(0);
+            }
+            child->append(*geo, 0, 1);
+            std::vector<uint8_t> bytes(ColumnArraySerde::max_serialized_size(*column, level));
+            auto written = ColumnArraySerde::serialize(*column, bytes.data(), false, level);
+            ASSERT_TRUE(written.ok()) << written.status();
+            auto restored = column->clone_empty();
+            auto read = ColumnArraySerde::deserialize(bytes.data(), *written, restored.get(), false, level);
+            ASSERT_TRUE(read.ok()) << read.status();
+            EXPECT_EQ(*written, *read);
+            restored->check_or_die();
+            EXPECT_EQ(1, restored->size());
+            const Column* restored_child = nullptr;
+            if (type.type == TYPE_ARRAY) {
+                restored_child = down_cast<ArrayColumn*>(restored.get())->elements_column().get();
+            } else if (type.type == TYPE_MAP) {
+                restored_child = down_cast<MapColumn*>(restored.get())->values_column().get();
+            } else {
+                restored_child = down_cast<StructColumn*>(restored.get())->field_column_raw_ptr(0);
+            }
+            const auto* values = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(restored_child));
+            EXPECT_EQ(geo->descriptor(), values->descriptor());
+            EXPECT_EQ(point(), values->get_wkb(0).to_string());
+        }
+    }
 }
 
 TEST(GeoTransportTest, RejectsConflictingReceiverPrimitive) {
@@ -369,7 +452,7 @@ TEST(GeoTransportTest, DISABLED_TransportBenchmark) {
         constexpr int iterations = 1000;
         auto start = std::chrono::steady_clock::now();
         for (int i = 0; i < iterations; ++i) {
-            ASSERT_TRUE(ColumnArraySerde::serialize(*column, bytes.data(), false, 0, true).ok());
+            ASSERT_TRUE(ColumnArraySerde::serialize(*column, bytes.data()).ok());
         }
         auto serialized = std::chrono::steady_clock::now();
         for (int i = 0; i < iterations; ++i) {
