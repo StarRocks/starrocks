@@ -1338,6 +1338,25 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             addListPartition(tableName, "p4", "guangdong", "2024-01-02");
         }
     }
+    /**
+     * Add the two partitions the retention tests expect to stay inside a one-month window: one for
+     * today, one for the oldest retained day.
+     *
+     * <p>The window boundary is {@code current_date() - interval 1 month}, which the planner
+     * re-evaluates on every statement, while these partitions keep whatever date they were created
+     * with. Anchoring the older partition exactly on the boundary therefore breaks whenever the
+     * calendar day rolls over between creating it and planning the final query: it drops out of the
+     * window, the MV no longer covers the query, and the plan grows a UNION against the base table.
+     * Keep one day of margin so a single rollover is harmless.
+     */
+    private void addRetainedPartitions(String tableName) {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        addListPartition(tableName, "p5", "guangdong", now.format(formatter), true);
+        addListPartition(tableName, "p6", "guangdong",
+                now.minusMonths(1).plusDays(1).format(formatter), true);
+    }
+
     private void testMVRefreshWithTTLCondition(String tableName) {
         withTablePartitions(tableName);
         String mvCreateDdl = String.format("create materialized view test_mv1\n" +
@@ -1366,11 +1385,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     {
                         // add new partitions
-                        LocalDateTime now = LocalDateTime.now();
-                        addListPartition(tableName, "p5", "guangdong",
-                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        addListPartition(tableName, "p6", "guangdong",
-                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
+                        addRetainedPartitions(tableName);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1472,11 +1487,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     {
                         // add new partitions
-                        LocalDateTime now = LocalDateTime.now();
-                        addListPartition(tableName, "p5", "guangdong",
-                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        addListPartition(tableName, "p6", "guangdong",
-                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
+                        addRetainedPartitions(tableName);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
