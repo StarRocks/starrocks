@@ -831,9 +831,8 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 ++lead_state.lead_ready_non_null_count;
             }
             return lead_state.lead_ready_non_null_count >= offset;
-        } else {
-            return true;
-        }
+        } 
+        return true;
     }
 
     // `lag ... IGNORE NULLS` supports streaming eviction. Once at least one non-null value has
