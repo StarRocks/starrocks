@@ -296,11 +296,15 @@ TEST(GeoTransportTest, LegacyConstantNullInOrdinaryAndMixedChunks) {
     }
 }
 
-TEST(GeoTransportTest, ConstantNullRetainsLegacyWireBytes) {
+TEST(GeoTransportTest, ConstantNullRetainsLegacyWireFormat) {
     for (size_t rows : {size_t{0}, size_t{16}}) {
         auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor().type);
         auto typed = ColumnHelper::create_column(type, true, true, rows);
         auto legacy = ColumnHelper::create_const_null_column(rows);
+        // append_nulls() leaves the physical value uninitialized. Deliberately use
+        // different bytes so this test cannot depend on allocator contents.
+        down_cast<Int8Column*>(ColumnHelper::get_data_column(typed.get()))->get_data()[0] = 0x35;
+        down_cast<Int8Column*>(ColumnHelper::get_data_column(legacy.get()))->get_data()[0] = 0x62;
         Chunk typed_chunk;
         typed_chunk.append_column(std::move(typed), 1);
         Chunk legacy_chunk;
@@ -309,8 +313,38 @@ TEST(GeoTransportTest, ConstantNullRetainsLegacyWireBytes) {
         auto legacy_wire = ProtobufChunkSerde::serialize(legacy_chunk);
         ASSERT_TRUE(typed_wire.ok()) << typed_wire.status();
         ASSERT_TRUE(legacy_wire.ok()) << legacy_wire.status();
-        EXPECT_EQ(legacy_wire->SerializeAsString(), typed_wire->SerializeAsString());
-        EXPECT_EQ(rows, decode_fixed64_le(reinterpret_cast<const uint8_t*>(typed_wire->data().data()) + 8));
+        // v1 chunk header (8), constant row count (8), null map (4+1),
+        // one-byte physical value (4+1). Only the final byte is masked by NULL.
+        ASSERT_EQ(26, typed_wire->data().size());
+        ASSERT_EQ(26, legacy_wire->data().size());
+        EXPECT_EQ(0x35, typed_wire->data().back());
+        EXPECT_EQ(0x62, legacy_wire->data().back());
+        auto comparable = *typed_wire;
+        comparable.mutable_data()->back() = legacy_wire->data().back();
+        EXPECT_EQ(legacy_wire->SerializeAsString(), comparable.SerializeAsString());
+
+        ProtobufChunkMeta meta;
+        meta.types = {type};
+        meta.is_nulls = {true};
+        meta.is_consts = {true};
+        meta.slot_id_to_index[1] = 0;
+        for (const auto* wire : {&*typed_wire, &*legacy_wire}) {
+            const auto* data = reinterpret_cast<const uint8_t*>(wire->data().data());
+            EXPECT_EQ(1, decode_fixed32_le(data));
+            EXPECT_EQ(rows, decode_fixed32_le(data + 4));
+            EXPECT_EQ(rows, decode_fixed64_le(data + 8));
+            ProtobufChunkDeserializer reader(meta);
+            int64_t consumed = 0;
+            auto restored = reader.deserialize(wire->data(), &consumed);
+            ASSERT_TRUE(restored.ok()) << restored.status();
+            EXPECT_EQ(wire->data().size(), consumed);
+            const auto& column = restored->get_column_by_slot_id(1);
+            EXPECT_TRUE(column->is_constant());
+            EXPECT_TRUE(column->is_nullable());
+            EXPECT_TRUE(column->only_null());
+            EXPECT_EQ(rows, column->size());
+            for (size_t row = 0; row < rows; ++row) EXPECT_TRUE(column->is_null(row));
+        }
     }
 }
 
