@@ -451,7 +451,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
 
         // create partitions in small batch, to avoid create too many partitions at once
-        for (List<PartitionDesc> batch : ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE)) {
+        List<List<PartitionDesc>> batches = ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE);
+        for (int i = 0; i < batches.size(); i++) {
+            List<PartitionDesc> batch = batches.get(i);
             RangePartitionDesc rangePartitionDesc =
                     new RangePartitionDesc(mv.getPartitionColumnNames(), batch);
             AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
@@ -466,7 +468,14 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                         "failed to add range partition, db: %s, cause: %s",
                         e, database.getFullName(), mv.getName(), database.getFullName(), e.getMessage());
             }
-            Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
+            // Throttle only BETWEEN batches. The interval exists so a first refresh that has to
+            // create hundreds of partitions does not push them all at the FE and BEs at once
+            // (#41256); after the final batch there is nothing left to space out, and every MV
+            // whose partitions fit in one batch would otherwise pay the full interval for nothing.
+            if (i < batches.size() - 1) {
+                Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms,
+                        TimeUnit.MILLISECONDS);
+            }
         }
     }
 }
