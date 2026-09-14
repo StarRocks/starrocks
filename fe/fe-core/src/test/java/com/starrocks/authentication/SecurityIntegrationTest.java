@@ -19,6 +19,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCodec;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.NoOpEditLog;
 import com.starrocks.qe.ConnectContext;
@@ -176,6 +177,31 @@ public class SecurityIntegrationTest {
         Assertions.assertEquals("harbor", authenticated.getUser());
         Assertions.assertEquals("oidc_flight", connectContext.getSecurityIntegration());
         Assertions.assertEquals(idToken, connectContext.getAccessControlContext().getAuthToken());
+    }
+
+    @Test
+    public void testLegacyMysqlClientDoesNotReachSecurityIntegration() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateSecurityIntegration("oidc_legacy", properties);
+
+        Config.authentication_chain = new String[] {"native", "oidc_legacy"};
+
+        // A MySQL client too old to name an auth plugin leaves getAuthPlugin() null, but it still completed the
+        // handshake and its password arrives scrambled. Selecting an integration for it would hand those bytes to
+        // a provider as a bare credential. The salt is what marks the connection as MySQL.
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setAuthDataSalt(MysqlPassword.createRandomString());
+        Assertions.assertNull(connectContext.getAccessControlContext().getAuthPlugin());
+
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
+                connectContext, "harbor", "127.0.0.1", idToken.getBytes(StandardCharsets.UTF_8)));
+        Assertions.assertNull(connectContext.getCurrentUserIdentity());
     }
 
     @Test

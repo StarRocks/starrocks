@@ -54,11 +54,11 @@ public interface AuthenticationProvider {
     }
 
     /**
-     * Whether this provider can authenticate a credential that reached the FE without the MySQL
-     * authentication plugin negotiation, that is, when {@link AccessControlContext#getAuthPlugin()} is unset.
+     * Whether this provider can authenticate a credential that reached the FE without the MySQL handshake, that
+     * is, on a connection that was never issued a salt ({@link AccessControlContext#getAuthDataSalt()} is null).
      * Endpoints such as Arrow Flight SQL, the HTTP REST API and the thrift service carry the credential as an
-     * opaque string and never negotiate a plugin name, so the authentication chain cannot match a provider by
-     * plugin name for them.
+     * opaque string and negotiate no authentication plugin, so the authentication chain cannot match a provider
+     * by plugin name for them.
      */
     default boolean supportsUnnegotiatedCredential() {
         return false;

@@ -84,6 +84,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -302,8 +303,21 @@ public abstract class BaseAction implements IAction {
     // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
+        checkUserOwnsAdminRole(currentUser, null);
+    }
+
+    /**
+     * Same check, widened by the role ids authentication already resolved. A security integration user is
+     * ephemeral and owns no stored roles, so its administrative rights exist only in the group derived ids on the
+     * context; checking the stored roles alone would deny it unconditionally.
+     */
+    protected void checkUserOwnsAdminRole(UserIdentity currentUser, Set<Long> currentRoleIds)
+            throws AccessDeniedException {
         try {
-            Set<Long> userOwnedRoles = AuthorizationMgr.getOwnedRolesByUser(currentUser);
+            Set<Long> userOwnedRoles = new HashSet<>(AuthorizationMgr.getOwnedRolesByUser(currentUser));
+            if (currentRoleIds != null) {
+                userOwnedRoles.addAll(currentRoleIds);
+            }
             if (!(currentUser.equals(UserIdentity.ROOT) ||
                     userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
                     (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&

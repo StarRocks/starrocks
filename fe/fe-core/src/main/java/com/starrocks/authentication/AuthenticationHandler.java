@@ -20,10 +20,10 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -177,21 +177,27 @@ public class AuthenticationHandler {
     /**
      * Decide whether a security integration should be tried for the credential at hand.
      * <p>
-     * A MySQL client negotiates an authentication plugin, so the integration whose type maps to that plugin is the
-     * only one worth trying. Every other endpoint (Arrow Flight SQL, the HTTP REST API, the thrift service) passes
-     * an opaque credential and leaves the plugin unset, so the integration is selected by asking the provider
-     * whether it can consume such a credential at all.
+     * A MySQL connection is identified by its salt, not by its plugin name: {@link MysqlProto#negotiate} hands out
+     * the salt at the start of the greeting, before any plugin negotiation, so every MySQL connection carries one.
+     * The plugin name is not a substitute, because a client too old to send one leaves it unset
+     * ({@code switchAuthPlugin} returns early for those) and its password still arrives scrambled by the MySQL
+     * handshake. Selecting an integration for such a connection would hand those scrambled bytes to a provider as
+     * though they were a bare credential -- an LDAP bind with unusable input, for instance.
+     * <p>
+     * So a MySQL connection selects the integration whose type maps to the negotiated plugin, which is no match at
+     * all when the client named none. Every other endpoint (Arrow Flight SQL, the HTTP REST API, the thrift
+     * service) performs no greeting and passes an opaque credential, and there the integration is selected by
+     * asking the provider whether it can consume such a credential at all.
      */
     private static boolean matchesCredential(AccessControlContext authContext,
                                              SecurityIntegration securityIntegration,
                                              AuthenticationProvider provider) {
-        String clientAuthPlugin = authContext.getAuthPlugin();
-        if (StringUtils.isEmpty(clientAuthPlugin)) {
+        if (authContext.getAuthDataSalt() == null) {
             return provider.supportsUnnegotiatedCredential();
         }
 
         return Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
-                .equalsIgnoreCase(clientAuthPlugin);
+                .equalsIgnoreCase(authContext.getAuthPlugin());
     }
 
     private static void setAuthenticationResultToContext(ConnectContext context,
