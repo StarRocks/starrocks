@@ -22,12 +22,12 @@
 #include <paimon/table/source/table_read.h>
 
 #include <algorithm>
-#include <string_view>
 #include <utility>
 
 #include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
@@ -42,14 +42,20 @@ namespace {
 // Floor for the reported footprint, kept in step with DataSourceProvider::MIN_DATA_SOURCE_MEM_BYTES.
 constexpr int64_t kMinEstimatedMemUsage = 16 * 1024 * 1024;
 
-constexpr int64_t kPaimonReadBatchSize = 10000;
-constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
-constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
-constexpr int64_t kPaimonParquetBitmapCoalesceHoleSizeLimit = 32;
-constexpr std::string_view kPaimonParquetBitmapRefiningStrategy = "coalesce";
-constexpr bool kPaimonEnablePrefetch = true;
-constexpr bool kPaimonEnableMultiThreadRowToBatch = true;
-constexpr uint32_t kPaimonRowToBatchThreadNum = 3;
+paimon::PrefetchCacheMode prefetch_cache_mode(int mode) {
+    switch (mode) {
+    case 2:
+        return paimon::PrefetchCacheMode::EXCLUDE_PREDICATE;
+    case 3:
+        return paimon::PrefetchCacheMode::EXCLUDE_BITMAP;
+    case 4:
+        return paimon::PrefetchCacheMode::EXCLUDE_BITMAP_OR_PREDICATE;
+    case 5:
+        return paimon::PrefetchCacheMode::NEVER;
+    default:
+        return paimon::PrefetchCacheMode::ALWAYS;
+    }
+}
 
 void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemStats::Snapshot& io_stats) {
     const std::string paimon_fs_section = "PaimonFileSystem";
@@ -136,20 +142,33 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
         }
     }
 
-    context_builder.AddOption(paimon::Options::READ_BATCH_SIZE, std::to_string(kPaimonReadBatchSize));
+    context_builder.AddOption(paimon::Options::READ_BATCH_SIZE, std::to_string(config::paimon_native_read_batch_size));
     // These option keys are defined in paimon-cpp's internal parquet_format_defs.h, which is not
     // part of its installed public headers, so they have to be spelled out as string literals here.
     context_builder.AddOption("parquet.read.cache-option.hole-size-limit",
-                              std::to_string(kPaimonParquetCacheHoleSizeLimit));
+                              std::to_string(config::paimon_native_parquet_cache_hole_size_limit));
     context_builder.AddOption("parquet.read.cache-option.range-size-limit",
-                              std::to_string(kPaimonParquetCacheRangeSizeLimit));
+                              std::to_string(config::paimon_native_parquet_cache_range_size_limit));
+    context_builder.AddOption("parquet.read.cache-option.lazy",
+                              config::paimon_native_parquet_cache_lazy ? "true" : "false");
+    context_builder.AddOption("parquet.read.cache-option.prefetch-limit",
+                              std::to_string(config::paimon_native_parquet_cache_prefetch_limit));
+    context_builder.AddOption("parquet.read.enable-pre-buffer",
+                              config::paimon_native_parquet_enable_pre_buffer ? "true" : "false");
+    context_builder.AddOption("parquet.read.enable-page-index-filter",
+                              config::paimon_native_parquet_enable_page_index_filter ? "true" : "false");
     context_builder.AddOption("parquet.read.bitmap.row-range-refining-strategy",
-                              std::string(kPaimonParquetBitmapRefiningStrategy));
+                              config::paimon_native_parquet_bitmap_refining_strategy.value());
     context_builder.AddOption("parquet.read.bitmap.coalesce-hole-size-limit",
-                              std::to_string(kPaimonParquetBitmapCoalesceHoleSizeLimit));
-    context_builder.EnablePrefetch(kPaimonEnablePrefetch);
-    context_builder.EnableMultiThreadRowToBatch(kPaimonEnableMultiThreadRowToBatch);
-    context_builder.SetRowToBatchThreadNumber(kPaimonRowToBatchThreadNum);
+                              std::to_string(config::paimon_native_parquet_bitmap_coalesce_hole_size_limit));
+    context_builder.AddOption("parquet.read.executor.thread-count",
+                              std::to_string(config::paimon_native_parquet_executor_thread_count));
+    context_builder.EnablePrefetch(config::paimon_native_enable_prefetch);
+    context_builder.SetPrefetchMaxParallelNum(config::paimon_native_prefetch_max_parallel_num);
+    context_builder.SetPrefetchBatchCount(config::paimon_native_prefetch_batch_count);
+    context_builder.SetPrefetchCacheMode(prefetch_cache_mode(config::paimon_native_prefetch_cache_mode));
+    context_builder.EnableMultiThreadRowToBatch(config::paimon_native_enable_multi_thread_row_to_batch);
+    context_builder.SetRowToBatchThreadNumber(config::paimon_native_row_to_batch_thread_num);
     context_builder.WithMemoryPool(_memory_pool);
     context_builder.WithFileSystem(_paimon_file_system);
 
