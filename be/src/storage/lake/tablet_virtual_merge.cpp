@@ -214,7 +214,7 @@ StatusOr<MutableTabletMetadataPtr> virtual_merge_for_read(TabletManager* tablet_
             // caches per tablet id, so a sibling's identical page would be fetched and decoded again
             // rather than reused. Union each distinct page once; identical ones contribute the same bits
             // anyway, so skipping them changes nothing but the I/O.
-            std::set<std::tuple<int64_t, uint64_t, uint64_t>> unioned_pages;
+            std::set<std::tuple<std::string, uint64_t, uint64_t>> unioned_pages;
             for (const auto& [child_index, source_id] : group.sources) {
                 const auto& child = *child_metadatas[child_index];
                 const auto& child_delvecs = child.delvec_meta().delvecs();
@@ -223,7 +223,24 @@ StatusOr<MutableTabletMetadataPtr> virtual_merge_for_read(TabletManager* tablet_
                     continue; // this child deleted nothing in that segment
                 }
                 const auto& page = it->second;
-                if (!unioned_pages.emplace(page.version(), page.offset(), page.size()).second) {
+                const auto& files = child.delvec_meta().version_to_file();
+                auto file_it = files.find(page.version());
+                if (file_it == files.end()) {
+                    return Status::Corruption(
+                            fmt::format("virtual merge: delvec page of rssid {} names version {}, which has no "
+                                        "file in tablet {}",
+                                        source_id + i, page.version(), child.id()));
+                }
+                // Identify the page by the FILE it lives in, not by its version. A version number says
+                // nothing about which bytes a page holds: one publish advances every child to the same
+                // version and each child writes its OWN delvec file for it, its own page at offset 0 --
+                // so two children that deleted the same number of rows produce pages agreeing on version,
+                // offset and size while listing different rowids, and the second was dropped as a
+                // duplicate. The name does identify the bytes, because gen_delvec_filename mints a fresh
+                // uuid per write: equal names are one object, which is exactly what an inherited page is
+                // in every child -- the case this dedup exists for. Same key as merge_delvecs in
+                // tablet_merger.cpp, which resolves the file name from the page version the same way.
+                if (!unioned_pages.emplace(file_it->second.name(), page.offset(), page.size()).second) {
                     continue; // the same physical page this rssid already took
                 }
                 DelVector page_delvec;
