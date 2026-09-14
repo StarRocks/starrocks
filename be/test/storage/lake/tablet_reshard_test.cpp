@@ -20369,6 +20369,37 @@ TEST_F(LakeTabletReshardTest, test_virtual_merge_refuses_a_child_carrying_dcg) {
     EXPECT_TRUE(alias.status().message().contains("DCG")) << alias.status();
 }
 
+// A page and the file that holds it live in two different maps: delvecs() keys the page by rssid, and
+// version_to_file() keys the file by the page's version. Metadata that kept the page but lost the file
+// entry would have the alias hand a reader a page it cannot open, so the build refuses it outright --
+// this is the branch the dedup key below reads that file entry from.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_refuses_a_delvec_page_whose_file_is_missing) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "missing_delvec_file_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    DelVector delvec;
+    const uint32_t deleted[] = {5};
+    delvec.init(/*version=*/10, deleted, std::size(deleted));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "missing_delvec.dat", delvec.save());
+    // Keep the page, drop the file it names.
+    meta_b->mutable_delvec_meta()->mutable_version_to_file()->erase(int64_t{10});
+    ASSERT_EQ(1, meta_b->delvec_meta().delvecs().count(1));
+
+    auto alias = merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion, /*read_alias=*/true);
+    ASSERT_FALSE(alias.ok());
+    EXPECT_TRUE(alias.status().is_corruption()) << alias.status();
+    EXPECT_TRUE(alias.status().message().contains("has no file in tablet")) << alias.status();
+}
+
 // virtual_merge_for_read builds only what a read needs, so what it does build has to be what a real merge
 // would have produced: the same rowsets, once each, and the same delete vectors. This is the net under it
 // being a separate implementation rather than a flag on merge_tablet -- the sidecars it skips
@@ -20453,6 +20484,60 @@ TEST_F(LakeTabletReshardTest, test_virtual_merge_rowsets_and_delvecs_match_a_rea
     EXPECT_TRUE(alias->sstable_meta().sstables().empty());
     EXPECT_TRUE(alias->dcg_meta().dcgs().empty());
     EXPECT_TRUE(alias->idg_meta().idgs().empty());
+}
+
+// Two children can hold delvec pages that agree on version, offset and size while listing different
+// rowids, so a page cannot be identified by those three alone. One publish advances every child to the
+// same version and each child writes its OWN delvec file for it, its own page at offset 0 -- so when
+// both deleted the same number of rows the sizes match too, and dropping the second as a duplicate
+// loses that child's deletions. What tells the two apart is the file the page lives in: the name
+// carries a fresh uuid per write, so different bytes never answer to the same name.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_keeps_indistinguishable_private_delvec_pages) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "dedup_key_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    // One version, one offset, one size, and -- as production always gives them -- two distinct file
+    // names. The old key read the first three and not the name, so it saw one page where there are two.
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {3};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "delvec_child_a.dat", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_by_b[] = {7};
+    delvec_b.init(/*version=*/10, deleted_by_b, std::size(deleted_by_b));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "delvec_child_b.dat", delvec_b.save());
+
+    // The premise: version, offset and size tell these two pages apart in no way at all.
+    ASSERT_EQ(delvec_a.save().size(), delvec_b.save().size()) << "the two pages must be the same size";
+    const auto& page_a = meta_a->delvec_meta().delvecs().at(1);
+    const auto& page_b = meta_b->delvec_meta().delvecs().at(1);
+    ASSERT_EQ(page_a.version(), page_b.version());
+    ASSERT_EQ(page_a.offset(), page_b.offset());
+    ASSERT_EQ(page_a.size(), page_b.size());
+    ASSERT_NE(meta_a->delvec_meta().version_to_file().at(10).name(),
+              meta_b->delvec_meta().version_to_file().at(10).name())
+            << "each child wrote its own file, so the names must differ";
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    ASSERT_EQ(1, alias->rowsets_size());
+    DelVector unioned;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, alias->rowsets(0).id(), false, io_options, &unioned));
+    ASSERT_NE(nullptr, unioned.roaring());
+    EXPECT_EQ(2, unioned.cardinality()) << "both children's deletions must survive";
+    EXPECT_TRUE(unioned.roaring()->contains(3));
+    EXPECT_TRUE(unioned.roaring()->contains(7));
 }
 
 // A child rowset written after the split exists in that child alone, and the children allocate ids
