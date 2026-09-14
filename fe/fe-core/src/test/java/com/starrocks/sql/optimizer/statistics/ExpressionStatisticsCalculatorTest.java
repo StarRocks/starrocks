@@ -210,7 +210,7 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 127, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
-        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 10, 128);
+        Assertions.assertEquals(128, columnStatistic.getDistinctValuesCount(), 0.001);
         // test year function
         callOperator = new CallOperator(FunctionSet.YEAR, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -237,7 +237,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(columnStatistic.getMaxValue(), 31, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 1, 0.001);
         // test dayofmonth function
-        callOperator = new CallOperator(FunctionSet.DAY, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        callOperator = new CallOperator(FunctionSet.DAYOFMONTH, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 31, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 1, 0.001);
@@ -340,11 +340,6 @@ public class ExpressionStatisticsCalculatorTest {
         callOperator = new CallOperator(FunctionSet.RADIANS, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 100 / 57.3, 0.001);
-        Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
-        // test rand function
-        callOperator = new CallOperator(FunctionSet.RAND, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        Assertions.assertEquals(columnStatistic.getMaxValue(), 1, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
         // test rand function
         callOperator = new CallOperator(FunctionSet.RAND, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
