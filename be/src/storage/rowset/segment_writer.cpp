@@ -455,6 +455,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         uint64_t standalone_index_size = 0;
         RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
         *index_size += _wfile->size() - index_offset + standalone_index_size;
+        _standalone_index_size += standalone_index_size;
 
         // Track vector index storage type for footer
         if (standalone_index_size > 0) {
