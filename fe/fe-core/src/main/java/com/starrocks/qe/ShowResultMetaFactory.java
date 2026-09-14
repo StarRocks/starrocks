@@ -1331,6 +1331,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
                 .addColumn(new Column("Type", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Protocol", TypeFactory.createVarcharType(32)))
                 .addColumn(new Column("IsDefault", TypeFactory.createVarcharType(8)))
                 .addColumn(new Column("Endpoint", TypeFactory.createVarcharType(512)))
                 .addColumn(new Column("Model", TypeFactory.createVarcharType(128)))

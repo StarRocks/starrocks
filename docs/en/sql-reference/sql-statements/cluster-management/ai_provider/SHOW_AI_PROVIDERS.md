@@ -11,7 +11,7 @@ Results can be filtered by name pattern or by provider type.
 ## Syntax
 
 ```SQL
-SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | text } ]
+SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 ```
 
 ## Parameters
@@ -19,14 +19,15 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | text } ]
 | Parameter        | Description                                                                 |
 | ---------------- | --------------------------------------------------------------------------- |
 | `LIKE '<pattern>'` | Only show providers whose name matches the SQL `LIKE` pattern.            |
-| `TYPE <type>`    | Only show providers of the given type (`embedding`, `rerank`, or `text`).   |
+| `TYPE <type>`    | Only show providers of the given type (`embedding`, `rerank`, or `chat`).   |
 
 ## Return columns
 
 | Column         | Description                                                          |
 | -------------- | -------------------------------------------------------------------- |
 | `Name`         | Provider name.                                                       |
-| `Type`         | Provider type (`embedding` / `rerank` / `text`).                     |
+| `Type`         | Provider type (`embedding` / `rerank` / `chat`).                     |
+| `Protocol`     | Wire protocol of the endpoint (`openai` / `anthropic` / `cohere`).   |
 | `IsDefault`    | Whether this provider is the default for its type (`true`/`false`).  |
 | `Endpoint`     | Endpoint URL.                                                        |
 | `Model`        | Model name.                                                          |

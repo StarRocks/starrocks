@@ -12,7 +12,10 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
   写入和 `query_text` 检索时计算 embedding。
 - `rerank`——Cohere 兼容的 `/rerank` 端点（Cohere / Jina / Voyage / OpenRouter / 本地 TEI），供
   `/api/context/search` 可选的 cross-encoder 第二阶段重排使用。
-- `text`——为将来的文本生成 / 推理 provider 预留。
+- `chat`——chat / completion 端点（OpenAI Chat Completions 或 Anthropic Messages）。
+
+每个 provider 还通过 `protocol` 属性声明其端点使用的**协议**。省略时按类型取默认值：`embedding` 和 `chat`
+为 `openai`，`rerank` 为 `cohere`。
 
 provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 image 中，重启和升级后凭证仍保留。
 这些设置没有 `fe.conf` 开关。
@@ -25,11 +28,12 @@ provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 i
 
 ```SQL
 CREATE AI PROVIDER [IF NOT EXISTS] <provider_name>
-TYPE { embedding | rerank | text }
+TYPE { embedding | rerank | chat }
 [ COMMENT '<comment>' ]
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
+    [, "protocol" = "{ openai | anthropic | cohere }" ]
     [, "dimensions" = "<int>" ]      -- 仅 embedding
     [, "max_documents" = "<int>" ]   -- 仅 rerank（可选）
     [, "deadline_ms" = "<int>" ]     -- 仅 rerank（可选）
@@ -43,7 +47,7 @@ PROPERTIES (
 | 参数            | 说明                                                                                                |
 | --------------- | --------------------------------------------------------------------------------------------------- |
 | `provider_name` | provider 名称。用于 `SET ... AS DEFAULT AI PROVIDER`，并显示在 `SHOW AI PROVIDERS` 中。              |
-| `TYPE`          | `embedding`、`rerank` 或 `text`。决定允许哪些属性，以及该 provider 可成为哪个类型的默认值。          |
+| `TYPE`          | `embedding`、`rerank` 或 `chat`。决定允许哪些属性，以及该 provider 可成为哪个类型的默认值。          |
 | `COMMENT`       | 可选注释。                                                                                          |
 | `PROPERTIES`    | `"key" = "value"` 形式的配置。允许的 key 取决于 `TYPE`（见下）。其它 key 会被拒绝。                  |
 
@@ -53,6 +57,7 @@ PROPERTIES (
 | --------------- | -------------- | ---- | ------------------------------------------------------------------------------------ |
 | `endpoint`      | 全部           | 是   | HTTP(S) 端点 URL，必须以 `http://` 或 `https://` 开头。                               |
 | `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`、`cohere/rerank-4-fast`）。 |
+| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
 | `dimensions`    | embedding      | 否   | embedding 向量维度（正整数）。必须与 provider 输出及向量索引维度一致。                |
 | `max_documents` | rerank         | 否   | 每次 rerank 请求发送的最大文档数（正整数；默认 1000）。                               |
 | `deadline_ms`   | rerank         | 否   | 整个 rerank 调用（含所有重试）的总时间预算（毫秒，正整数；默认 10000）。用于限制慢/不可达的 rerank 服务最多拖慢搜索多久,超过后降级为融合排序。超时不重试,仅连接失败或 HTTP 5xx 才重试。 |
@@ -85,6 +90,18 @@ PROPERTIES (
     "api_key"    = "sk-or-..."
 );
 SET cohere_rerank AS DEFAULT AI PROVIDER;   -- 成为默认 rerank provider
+```
+
+注册一个使用 Anthropic Messages 协议的 chat provider：
+
+```sql
+CREATE AI PROVIDER claude TYPE chat
+PROPERTIES (
+    "protocol" = "anthropic",
+    "endpoint" = "https://api.anthropic.com/v1/messages",
+    "model"    = "claude-sonnet-4-5",
+    "api_key"  = "sk-ant-..."
+);
 ```
 
 ## 相关文档

@@ -5,7 +5,7 @@ description: "将某个 AI provider 设为其类型的默认值。"
 
 # SET DEFAULT AI PROVIDER
 
-将某个 provider 设为**其所属类型**的默认值。注册表按类型（`embedding` / `rerank` / `text`）各自保留
+将某个 provider 设为**其所属类型**的默认值。注册表按类型（`embedding` / `rerank` / `chat`）各自保留
 一个默认值，因此把一个 embedding provider 设为默认不会影响 rerank 的默认值，反之亦然。
 
 ## 语法
