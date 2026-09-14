@@ -420,6 +420,7 @@ description: "Alphabetical d - h"
 - 单位: 计数
 - 描述: 在 BE 上执行的片段实例总数（适用于非流水线引擎）。
 
+<<<<<<< HEAD
 ## `fslib_open_cache_hits`
 
 - 单位：个
@@ -433,6 +434,14 @@ description: "Alphabetical d - h"
 - 类型：计数器
 - 标签：`fstype`（`cachefs`）
 - 描述：存算分离集群读取云原生表文件时 Data Cache 的累计未命中次数。每次读取最多涉及一个缓存块。按字节统计的指标参见 `default_cache_miss_bytes`。
+=======
+## `gtid_timestamp_ahead_of_clock_ms`
+
+- 单位: 毫秒
+- 类型: 瞬时
+- 标签: `is_leader`
+- 描述: Leader FE 上 gtid 发号器最近一条时间戳相对本机墙上时钟快多少（`max(0, lastTimestamp - now)`）。正值表示发号器快于本机时钟。切主后通常不超过 `gtid_batch_window_ms`，墙上时钟追上后回到 `0`。若长期远大于该窗口，说明曾经发出的时间戳已远快于本机时钟并已写入元数据。仅 Leader FE 上报（`is_leader="true"`）。尚未发过号，或墙上时钟已经追上时，均为 `0`。
+>>>>>>> 32dda137c26... [BugFix] Gtid may not be monotonic after leader failover (#62260)
 
 ## `hive_write_bytes`
 

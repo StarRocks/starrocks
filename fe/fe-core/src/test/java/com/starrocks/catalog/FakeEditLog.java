@@ -89,6 +89,7 @@ import com.starrocks.persist.EraseDbLog;
 import com.starrocks.persist.ErasePartitionLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.GroupProviderLog;
+import com.starrocks.persist.GtidInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.ModifyBrokerInfo;
 import com.starrocks.persist.ModifyColumnCommentLog;
@@ -209,6 +210,11 @@ public class FakeEditLog extends MockUp<EditLog> {
     @Mock
     public void logSaveTransactionId(long transactionId, WALApplier walApplier) {
         apply(walApplier, new TransactionIdInfo(transactionId));
+    }
+
+    @Mock
+    public void logSaveGtid(long batchEndGtid, WALApplier walApplier) {
+        apply(walApplier, new GtidInfo(batchEndGtid));
     }
 
     @Mock

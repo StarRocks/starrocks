@@ -2217,6 +2217,11 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
                 .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
+<<<<<<< HEAD
+=======
+                .put(SRMetaBlockID.CONTEXT_MGR, contextMgr::load)
+                .put(SRMetaBlockID.GTID_GENERATOR, gtidGenerator::load)
+>>>>>>> 32dda137c26... [BugFix] Gtid may not be monotonic after leader failover (#62260)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
@@ -2466,6 +2471,11 @@ public class GlobalStateMgr {
                 tabletReshardJobMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
                 aiProviderMgr.save(imageWriter);
+<<<<<<< HEAD
+=======
+                contextMgr.save(imageWriter);
+                gtidGenerator.save(imageWriter);
+>>>>>>> 32dda137c26... [BugFix] Gtid may not be monotonic after leader failover (#62260)
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

@@ -521,7 +521,12 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
     public static LeaderAwareGaugeMetricLong GAUGE_MAX_JOURNAL_REPLAY_LAG;
+<<<<<<< HEAD
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
+=======
+    public static LeaderAwareGaugeMetricLong GAUGE_GTID_TIMESTAMP_AHEAD_OF_CLOCK_MS;
+    public static SettableLeaderAwareGaugeMetricLong GAUGE_MAX_TABLET_COMPACTION_SCORE;
+>>>>>>> 32dda137c26... [BugFix] Gtid may not be monotonic after leader failover (#62260)
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
@@ -729,6 +734,17 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_JOURNAL_REPLAY_LAG);
+
+        GAUGE_GTID_TIMESTAMP_AHEAD_OF_CLOCK_MS = new LeaderAwareGaugeMetricLong(
+                "gtid_timestamp_ahead_of_clock_ms", MetricUnit.MILLISECONDS,
+                "gtid generator lastTimestamp minus the local wall clock, floored at 0; " +
+                "positive means the generator is ahead") {
+            @Override
+            public Long getValueLeader() {
+                return GlobalStateMgr.getCurrentState().getGtidGenerator().getTimestampAheadOfClockMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_GTID_TIMESTAMP_AHEAD_OF_CLOCK_MS);
 
         GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
                 SPM_BASELINE_COUNT_METRIC_NAME,
