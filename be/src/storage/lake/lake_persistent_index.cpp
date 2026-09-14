@@ -2076,13 +2076,24 @@ Status LakePersistentIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterat
     // Drained into `new_deletes` under this mutex as each task finishes; the tasks themselves touch
     // disjoint slots, so this is the only shared state.
     std::mutex deletes_mutex;
-    // One slot per chunk, owned here so the encoded key bytes outlive the task that reads them.
+    // One slot per chunk, owned here so the encoded key bytes outlive the task that reads them --
+    // which is only necessary while the tasks run on a pool. With no token ParallelTaskRunner::run()
+    // executes the task inline, so the slot is dead by the time run() returns.
+    const bool defer_tasks = (token != nullptr);
     std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
 
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
         auto current = segment_pk_iterator->current();
-        slots.push_back(std::make_unique<ParallelPublishSlot>());
-        auto* slot = slots.back().get();
+        // Inline mode keeps the scratch on the stack so each chunk's encoded keys, slices and old
+        // values are released at the end of its own iteration; only a deferred task needs the slot
+        // to outlive the loop body. A fresh slot per chunk either way -- the buffers inside are
+        // append-only, so a reused one would need explicit clearing.
+        ParallelPublishSlot inline_slot;
+        ParallelPublishSlot* slot = &inline_slot;
+        if (defer_tasks) {
+            slots.push_back(std::make_unique<ParallelPublishSlot>());
+            slot = slots.back().get();
+        }
 
         runner.run([this, current, slot, segment_pk_iterator, new_deletes, &deletes_mutex]() -> Status {
             ASSIGN_OR_RETURN(slot->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
@@ -2230,7 +2241,13 @@ Status LakePersistentIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rss
     ParallelTaskRunner runner(token);
     ParallelUpsertContext context(token != nullptr ? &runner : nullptr, new_deletes);
     // One slot per chunk. The slot owns the encoded key bytes the index keeps referencing until the
-    // deferred lookup has run, so they all stay alive until the join below.
+    // deferred lookup has run, so they all stay alive until the join below -- but ONLY when the
+    // lookup is actually deferred. Without a runner LakePersistentIndex::upsert resolves the old
+    // values and flushes before it returns, so nothing references the slot afterwards; keeping every
+    // chunk's would grow peak scratch from one chunk to the whole segment. SegmentPKIterator splits
+    // a lazily-loaded segment every pk_index_parallel_execution_min_rows (16384) rows, so that is
+    // hundreds of live slots for a large segment, which is exactly the memory the lazy load exists to
+    // avoid.
     std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
 
     // Every exit from this function has to join first. The deferred lookups hold pointers into
@@ -2244,8 +2261,16 @@ Status LakePersistentIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rss
     // SegmentPKChunkRef).
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
         auto current = segment_pk_iterator->current();
-        slots.push_back(std::make_unique<ParallelPublishSlot>());
-        auto* slot = slots.back().get();
+        // Keyed on defers_lookup() rather than on `token` directly, so slot lifetime cannot drift
+        // apart from who resolves the replaced rowids (see ParallelUpsertContext). A fresh slot per
+        // chunk either way -- the buffers inside are append-only, so a reused one would need
+        // explicit clearing.
+        ParallelPublishSlot inline_slot;
+        ParallelPublishSlot* slot = &inline_slot;
+        if (context.defers_lookup()) {
+            slots.push_back(std::make_unique<ParallelPublishSlot>());
+            slot = slots.back().get();
+        }
         ASSIGN_OR_RETURN(slot->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
 
         if (current.owned.empty()) {
