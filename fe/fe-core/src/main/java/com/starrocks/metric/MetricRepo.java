@@ -383,6 +383,19 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
 
+        // metadata freshness of this node. Reported by every node, and unlike max_journal_replay_lag
+        // below it is visible on the lagging node itself; it keeps growing while a single journal entry
+        // is stuck in the applier, which is precisely when the node is serving frozen metadata.
+        GaugeMetric<Long> metaReplayLagSecond = (GaugeMetric<Long>) new GaugeMetric<Long>(
+                "meta_replay_lag_second", MetricUnit.SECONDS,
+                "seconds by which the metadata replayed by this frontend lags behind the leader's clock") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getMetaReplayLagSecond();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(metaReplayLagSecond);
+
         // journal replay lag of the slowest follower/observer.
         // Leader-only: it is the only node that knows both the write frontier and, via heartbeat,
         // every other node's replayed journal id.
