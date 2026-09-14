@@ -666,7 +666,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
-            Assertions.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
+            Assertions.assertEquals(1, tableProperty.getReplicationNum().shortValue());
             Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
             Assertions.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
             Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW,
