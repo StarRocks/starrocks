@@ -248,8 +248,9 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     }
     std::optional<std::string> stats_opts = parse_jemalloc_stats_opts(requested);
     if (!stats_opts.has_value()) {
-        (*output) << "ignoring opts '" << *requested << "': expected characters from '" << kJemallocStatsOpts
-                  << "'<br>";
+        // Do not echo the rejected value: it reaches this page unescaped and would let a
+        // crafted link inject markup into the response.
+        (*output) << "ignoring opts: expected characters from '" << kJemallocStatsOpts << "'<br>";
         stats_opts = parse_jemalloc_stats_opts(std::nullopt);
     }
     std::string buf;
