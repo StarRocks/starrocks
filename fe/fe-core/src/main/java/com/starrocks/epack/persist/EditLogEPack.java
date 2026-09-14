@@ -14,7 +14,6 @@
 
 package com.starrocks.epack.persist;
 
-import com.starrocks.context.ai.AIProvider;
 import com.starrocks.epack.authorization.DbUID;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.failover.FailoverGroup;
@@ -27,9 +26,7 @@ import com.starrocks.lake.bookmark.BookmarkLogEntry;
 import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.persist.ContextOpLog;
-import com.starrocks.persist.DropAIProviderLog;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.SetDefaultAIProviderLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PolicyName;
@@ -149,22 +146,6 @@ public class EditLogEPack extends EditLog {
 
     public void logDropContextRetrievalProfile(ContextOpLog log, WALApplier walApplier) {
         logJsonObject(OperationTypeEPack.OP_DROP_CONTEXT_RETRIEVAL_PROFILE, log, walApplier);
-    }
-
-    public void logCreateAIProvider(AIProvider provider, WALApplier walApplier) {
-        logJsonObject(OperationTypeEPack.OP_CREATE_AI_PROVIDER, provider, walApplier);
-    }
-
-    public void logAlterAIProvider(AIProvider provider, WALApplier walApplier) {
-        logJsonObject(OperationTypeEPack.OP_ALTER_AI_PROVIDER, provider, walApplier);
-    }
-
-    public void logDropAIProvider(DropAIProviderLog log, WALApplier walApplier) {
-        logJsonObject(OperationTypeEPack.OP_DROP_AI_PROVIDER, log, walApplier);
-    }
-
-    public void logSetDefaultAIProvider(SetDefaultAIProviderLog log, WALApplier walApplier) {
-        logJsonObject(OperationTypeEPack.OP_SET_DEFAULT_AI_PROVIDER, log, walApplier);
     }
 
     public void logCreateMaskingPolicy(Policy policy) {
@@ -360,26 +341,6 @@ public class EditLogEPack extends EditLog {
                 }
                 case OperationTypeEPack.OP_DROP_CONTEXT_RETRIEVAL_PROFILE: {
                     globalStateMgr.getContextMgr().replayDropRetrievalProfile((ContextOpLog) journal.data());
-                    break;
-                }
-                case OperationTypeEPack.OP_CREATE_AI_PROVIDER: {
-                    AIProvider provider = (AIProvider) journal.data();
-                    globalStateMgr.getAIProviderMgr().replayCreateProvider(provider);
-                    break;
-                }
-                case OperationTypeEPack.OP_ALTER_AI_PROVIDER: {
-                    AIProvider provider = (AIProvider) journal.data();
-                    globalStateMgr.getAIProviderMgr().replayAlterProvider(provider);
-                    break;
-                }
-                case OperationTypeEPack.OP_DROP_AI_PROVIDER: {
-                    DropAIProviderLog log = (DropAIProviderLog) journal.data();
-                    globalStateMgr.getAIProviderMgr().replayDropProvider(log);
-                    break;
-                }
-                case OperationTypeEPack.OP_SET_DEFAULT_AI_PROVIDER: {
-                    SetDefaultAIProviderLog log = (SetDefaultAIProviderLog) journal.data();
-                    globalStateMgr.getAIProviderMgr().replaySetDefaultProvider(log);
                     break;
                 }
                 case OperationTypeEPack.OP_CREATE_MASKING_POLICY:

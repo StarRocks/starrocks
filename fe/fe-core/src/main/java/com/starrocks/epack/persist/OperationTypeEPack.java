@@ -125,20 +125,11 @@ public class OperationTypeEPack extends OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_CONTEXT_RETRIEVAL_PROFILE = 20731;
 
-    // AI providers (SQL-managed OpenAI-compatible embedding / rerank endpoints).
-    // Ignorable on replay: an AI provider is auxiliary external-service config, so a failed replay
-    // should log and continue rather than halt the FE.
-    @IgnorableOnReplayFailed
-    public static final short OP_CREATE_AI_PROVIDER = 20740;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_ALTER_AI_PROVIDER = 20741;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_DROP_AI_PROVIDER = 20742;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_SET_DEFAULT_AI_PROVIDER = 20743;
+    // AI providers: moved to the community OperationType, values unchanged.
+    //public static final short OP_CREATE_AI_PROVIDER = 20740;
+    //public static final short OP_ALTER_AI_PROVIDER = 20741;
+    //public static final short OP_DROP_AI_PROVIDER = 20742;
+    //public static final short OP_SET_DEFAULT_AI_PROVIDER = 20743;
 
     /**
      * Union of the community ignorable ops and the EE ones. Replay-failure skip checks must
