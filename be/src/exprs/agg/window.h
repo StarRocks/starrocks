@@ -765,9 +765,11 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         if constexpr (ignoreNulls) {
             this->data(state).target_not_null_index = INT64_MIN;
             this->data(state).non_null_count = 0;
-            this->data(state).lead_ready_current_row = INT64_MIN;
-            this->data(state).lead_ready_scan_end = 0;
-            this->data(state).lead_ready_non_null_count = 0;
+            if constexpr (!isLag) {
+                this->data(state).lead_ready_current_row = INT64_MIN;
+                this->data(state).lead_ready_scan_end = 0;
+                this->data(state).lead_ready_non_null_count = 0;
+            }
         }
     }
 
