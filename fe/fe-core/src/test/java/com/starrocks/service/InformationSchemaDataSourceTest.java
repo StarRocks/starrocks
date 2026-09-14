@@ -523,9 +523,9 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         Assertions.assertNotNull(adminRole, "root role should be present");
         Assertions.assertEquals("root", adminRole.getUser(), "User should be root");
         Assertions.assertEquals("%", adminRole.getHost(), "Host should be %");
-        Assertions.assertEquals("NO", "NO", "isGrantable should be NO");
-        Assertions.assertEquals("NO", "NO", "isDefault should be NO");
-        Assertions.assertEquals("NO", "NO", "isMandatory should be NO");
+        Assertions.assertEquals("NO", adminRole.getIs_grantable(), "isGrantable should be NO");
+        Assertions.assertEquals("NO", adminRole.getIs_default(), "isDefault should be NO");
+        Assertions.assertEquals("NO", adminRole.getIs_mandatory(), "isMandatory should be NO");
     }
 
     @Test

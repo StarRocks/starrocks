@@ -46,6 +46,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -129,11 +130,9 @@ public class TableFunctionTableTest {
         Method method = TableFunctionTable.class.getDeclaredMethod("getFileSchema", (Class<?>[]) null);
         method.setAccessible(true);
 
-        try {
-            method.invoke(t, (Object[]) null);
-        } catch (Exception e) {
-            Assertions.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
-        }
+        InvocationTargetException e = Assertions.assertThrows(InvocationTargetException.class,
+                () -> method.invoke(t, (Object[]) null));
+        Assertions.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
 
         new MockUp<RunMode>() {
             @Mock
@@ -142,12 +141,9 @@ public class TableFunctionTableTest {
             }
         };
 
-        try {
-            method.invoke(t, (Object[]) null);
-        } catch (Exception e) {
-            Assertions.assertTrue(e.getCause().getMessage().
-                    contains("Failed to send proxy request. No alive backends or compute nodes"));
-        }
+        e = Assertions.assertThrows(InvocationTargetException.class, () -> method.invoke(t, (Object[]) null));
+        Assertions.assertTrue(e.getCause().getMessage().
+                contains("Failed to send proxy request. No alive backends or compute nodes"));
 
         Backend backend = new Backend(1L, "192.168.1.1", 9050);
         backend.setBrpcPort(8050);
@@ -171,11 +167,10 @@ public class TableFunctionTableTest {
             }
         };
 
-        try {
-            method.invoke(t, (Object[]) null);
-        } catch (Exception e) {
-            Assertions.assertFalse(false);
-        }
+        // A node is alive now, so the call gets past node selection and fails inside the RPC instead.
+        e = Assertions.assertThrows(InvocationTargetException.class, () -> method.invoke(t, (Object[]) null));
+        Assertions.assertTrue(e.getCause().getMessage().contains("failed to get file schema"),
+                e.getCause().getMessage());
     }
 
     @Test
