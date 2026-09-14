@@ -21,7 +21,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class ShowAIProvidersStmt extends ShowStmt {
     private final String pattern;
-    // Optional type filter (embedding / rerank / text); empty means "all types".
+    // Optional type filter (embedding / rerank / chat); empty means "all types".
     private final String typeFilter;
 
     public ShowAIProvidersStmt(String pattern, String typeFilter, NodePosition pos) {

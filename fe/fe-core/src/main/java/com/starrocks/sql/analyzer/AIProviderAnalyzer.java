@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
@@ -33,8 +34,8 @@ import java.util.TreeSet;
 
 /**
  * Semantic validation for the unified {@code AI PROVIDER} DDL. Validation is keyed off the declared
- * {@code TYPE} (embedding / rerank / text): the common params (endpoint / model / api_key /
- * timeout_ms) apply to every type, and each type adds its own allowed keys. ALTER/DROP/SET DEFAULT
+ * {@code TYPE} (embedding / rerank / chat): the common params (endpoint / model / api_key /
+ * timeout_ms / protocol) apply to every type, and each type adds its own allowed keys. ALTER/DROP/SET DEFAULT
  * are type-agnostic (the provider is resolved by name), so they only need a name check — the manager
  * infers the type from the stored provider.
  */
@@ -44,7 +45,8 @@ public class AIProviderAnalyzer {
             AIProvider.PROPERTY_ENDPOINT,
             AIProvider.PROPERTY_MODEL,
             AIProvider.PROPERTY_API_KEY,
-            AIProvider.PROPERTY_TIMEOUT_MS);
+            AIProvider.PROPERTY_TIMEOUT_MS,
+            AIProvider.PROPERTY_PROTOCOL);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new Visitor().visit(stmt, session);
@@ -60,7 +62,7 @@ public class AIProviderAnalyzer {
                 keys.add(AIProvider.PROPERTY_MAX_DOCUMENTS);
                 keys.add(AIProvider.PROPERTY_DEADLINE_MS);
                 break;
-            case TEXT:
+            case CHAT:
             default:
                 break;
         }
@@ -77,7 +79,12 @@ public class AIProviderAnalyzer {
             validateKnownKeys(properties, type);
             requireProperty(properties, AIProvider.PROPERTY_ENDPOINT);
             requireProperty(properties, AIProvider.PROPERTY_MODEL);
+            // Every stored provider carries a protocol: fill in the type's default when the DDL omits it.
+            // Only CREATE does this; ALTER validates a protocol the user wrote but never adds one.
+            properties.putIfAbsent(AIProvider.PROPERTY_PROTOCOL, AIProviderProtocol.defaultFor(type).lower());
+            requireProperty(properties, AIProvider.PROPERTY_PROTOCOL);
             validateEndpoint(properties.get(AIProvider.PROPERTY_ENDPOINT));
+            validateProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
             validatePositiveInt(properties, AIProvider.PROPERTY_TIMEOUT_MS);
             validatePositiveInt(properties, AIProvider.PROPERTY_DIMENSIONS);
             validatePositiveInt(properties, AIProvider.PROPERTY_MAX_DOCUMENTS);
@@ -96,6 +103,10 @@ public class AIProviderAnalyzer {
             // from any type's allowlist; the manager merges and the value semantics are enforced below.
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_ENDPOINT);
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_MODEL);
+            rejectEmptyIfPresent(properties, AIProvider.PROPERTY_PROTOCOL);
+            if (properties.containsKey(AIProvider.PROPERTY_PROTOCOL)) {
+                validateProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
+            }
             if (properties.containsKey(AIProvider.PROPERTY_ENDPOINT)) {
                 validateEndpoint(properties.get(AIProvider.PROPERTY_ENDPOINT));
             }
@@ -135,6 +146,14 @@ public class AIProviderAnalyzer {
         private static AIProviderType parseType(String type) {
             try {
                 return AIProviderType.fromString(type);
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        private static void validateProtocol(String protocol) {
+            try {
+                AIProviderProtocol.fromString(protocol);
             } catch (IllegalArgumentException e) {
                 throw new SemanticException(e.getMessage());
             }

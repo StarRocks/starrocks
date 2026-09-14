@@ -3229,6 +3229,7 @@ public class ShowExecutor {
                 rows.add(Lists.newArrayList(
                         provider.getName(),
                         provider.getType().lower(),
+                        provider.getProtocol().lower(),
                         provider.getId().equals(defaultId) ? "true" : "false",
                         masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_ENDPOINT, ""),
                         masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MODEL, ""),
