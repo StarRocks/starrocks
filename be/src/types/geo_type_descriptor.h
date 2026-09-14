@@ -22,7 +22,7 @@
 
 namespace starrocks {
 
-// Normalized internal metadata, not a native SQL type. Missing wire fields become
+// Normalized semantic/storage metadata. Missing wire fields become
 // UNKNOWN / empty CRS / default subdescriptors; only parsed SRID retains presence.
 // Unrecognized Thrift enum values normalize to UNKNOWN. Protobuf conversions use
 // the generated proto2 enum accessors, without interpreting unknown fields.
