@@ -14,6 +14,8 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include <chrono>
+#include <mutex>
 #include <utility>
 
 #include "base/debug/trace.h"
@@ -23,6 +25,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
@@ -278,11 +281,16 @@ void PersistentIndexMemtable::run() {
         _flush_status = st;
     }
     TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::run:after_flush", &_flush_status);
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_cv.notify_all();
+    }
 }
 
 void PersistentIndexMemtable::cancel() {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+    _flush_cv.notify_all();
 }
 
 std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
@@ -293,6 +301,24 @@ std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable
 Status PersistentIndexMemtable::flush_status() const {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     return _flush_status;
+}
+
+Status PersistentIndexMemtable::wait_for_flush(int64_t timeout_us) {
+    std::unique_lock<std::mutex> lk(_flush_mutex);
+    auto finished = [this]() { return _sstable != nullptr || !_flush_status.ok(); };
+    if (!finished()) {
+        if (timeout_us <= 0) {
+            return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+        }
+        _flush_cv.wait_for(lk, std::chrono::microseconds(timeout_us), finished);
+    }
+    if (!_flush_status.ok()) {
+        return _flush_status;
+    }
+    if (_sstable == nullptr) {
+        return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake
