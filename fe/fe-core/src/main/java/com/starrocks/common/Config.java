@@ -766,6 +766,36 @@ public class Config extends ConfigBase {
     public static int meta_delay_toleration_second = 300;    // 5 min
 
     /**
+     * Interval, in milliseconds, at which a non-leader FE re-evaluates whether its metadata is still
+     * fresh enough to serve reads (see *meta_delay_toleration_second*). Values outside [10, 5000] are
+     * clamped, because a check that runs less often than every few seconds defeats its own purpose and
+     * would also slow down leader activation, which stops this thread.
+     * <p>
+     * The evaluation runs on a thread of its own rather than at the end of every replay cycle, because
+     * a single journal entry can keep the replayer busy for an unbounded time (an applier waiting on a
+     * database lock, a create/drop covering a very large number of tablets). While that lasts, the
+     * replayer cannot report that the metadata went stale, so the node would keep serving a frozen
+     * snapshot instead of forwarding its queries to the leader.
+     * <p>
+     * Mutable: snapshotted once per evaluation and used only to pace the checker thread, so a runtime
+     * change takes effect from the next check on.
+     */
+    @ConfField(mutable = true, comment = "Interval at which a Follower or Observer FE re-checks whether " +
+            "its metadata is fresh enough to serve reads. Clamped to [10, 5000].")
+    public static long meta_freshness_check_interval_ms = 1000L;
+
+    /**
+     * A journal entry that has been applying for longer than this many seconds is reported in the FE log
+     * as a stuck replay, together with the stack of the replayer thread, so the blocking applier can be
+     * identified without attaching a debugger. Set to 0 to disable the report.
+     * <p>
+     * Mutable: read once per check and only controls logging.
+     */
+    @ConfField(mutable = true, comment = "Report a journal entry that has been applying for longer than " +
+            "this in fe.log, with the replayer stack. Set to 0 to disable.")
+    public static long metadata_replay_stuck_warn_threshold_second = 30;
+
+    /**
      * Leader FE sync policy of bdbje.
      * If you only deploy one Follower FE, set this to 'SYNC'. If you deploy more than 3 Follower FE,
      * you can set this and the following 'replica_sync_policy' to WRITE_NO_SYNC.
@@ -977,6 +1007,11 @@ public class Config extends ConfigBase {
      * <p>
      * This is helpful when you try to stop the Leader FE for a relatively long time for some reason,
      * but still wish the non-leader FE can offer read service.
+     * <p>
+     * Scope: this only overrides the *delay* verdict, never a replay *failure*. If metadata replay
+     * threw, the node has an incomplete and possibly inconsistent metadata image rather than a merely
+     * old one, so canRead and isReady are both false regardless of this flag, and stay false until a
+     * later replay cycle succeeds. Setting this to true cannot bring such a node back into service.
      */
     @ConfField(mutable = true)
     public static boolean ignore_meta_check = false;
