@@ -22,7 +22,7 @@ SET ("key" = "value" [, ...])
 | --------------- | ----------------------------------------------------------------------------------------------- |
 | `IF EXISTS`     | Do nothing (instead of erroring) when the provider does not exist.                              |
 | `provider_name` | Name of the provider to alter.                                                                  |
-| `SET (...)`     | `"key" = "value"` pairs to merge. Allowed keys are the same as for the provider's `TYPE` (see [`CREATE AI PROVIDER`](./CREATE_AI_PROVIDER.md)). |
+| `SET (...)`     | `"key" = "value"` pairs to merge. Allowed keys are the same as for the provider's `TYPE` (see [`CREATE AI PROVIDER`](./CREATE_AI_PROVIDER.md)). `protocol` can be changed, but the new value must be valid for the provider's `TYPE`. |
 
 ## Examples
 

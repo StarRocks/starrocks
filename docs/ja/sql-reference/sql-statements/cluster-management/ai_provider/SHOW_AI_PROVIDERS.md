@@ -11,7 +11,7 @@ description: "登録済みの AI プロバイダーを一覧表示します。�
 ## 構文
 
 ```SQL
-SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | text } ]
+SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 ```
 
 ## パラメータ
@@ -19,14 +19,15 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | text } ]
 | パラメータ         | 説明                                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
 | `LIKE '<pattern>'` | 名前が SQL の `LIKE` パターンに一致するプロバイダーのみを表示します。          |
-| `TYPE <type>`      | 指定したタイプ (`embedding`、`rerank`、または `text`) のプロバイダーのみを表示します。 |
+| `TYPE <type>`      | 指定したタイプ (`embedding`、`rerank`、または `chat`) のプロバイダーのみを表示します。 |
 
 ## 戻り値の列
 
 | 列             | 説明                                                                 |
 | -------------- | -------------------------------------------------------------------- |
 | `Name`         | プロバイダーの名前。                                                  |
-| `Type`         | プロバイダーのタイプ (`embedding` / `rerank` / `text`)。              |
+| `Type`         | プロバイダーのタイプ (`embedding` / `rerank` / `chat`)。              |
+| `Protocol`     | エンドポイントのプロトコル (`openai` / `anthropic` / `cohere`)。空になることはなく、未設定の場合はタイプのデフォルトが表示されます。 |
 | `IsDefault`    | このプロバイダーがそのタイプのデフォルトかどうか (`true`/`false`)。    |
 | `Endpoint`     | エンドポイントの URL。                                                |
 | `Model`        | モデル名。                                                            |

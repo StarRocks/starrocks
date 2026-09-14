@@ -5,7 +5,8 @@ description: "查看单个 AI provider 的完整配置。"
 
 # DESC AI PROVIDER
 
-以 `Name` / `Value` 行的形式显示单个 AI provider 的完整配置，包含全部属性。`api_key` 的值以掩码显示。
+以 `Name` / `Value` 行的形式显示单个 AI provider 的完整配置，包含全部属性。输出始终包含一行 `Protocol`
+（provider 未设置时为其类型的默认协议）。`api_key` 的值以掩码显示。
 
 `DESCRIBE` 可作为 `DESC` 的同义词。
 

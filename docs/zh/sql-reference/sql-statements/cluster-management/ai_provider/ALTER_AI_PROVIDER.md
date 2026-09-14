@@ -21,7 +21,7 @@ SET ("key" = "value" [, ...])
 | --------------- | ----------------------------------------------------------------------------------------------- |
 | `IF EXISTS`     | provider 不存在时不报错，直接返回。                                                             |
 | `provider_name` | 要修改的 provider 名称。                                                                        |
-| `SET (...)`     | 要合并的 `"key" = "value"` 对。允许的 key 与该 provider 的 `TYPE` 一致（见 [`CREATE AI PROVIDER`](./CREATE_AI_PROVIDER.md)）。 |
+| `SET (...)`     | 要合并的 `"key" = "value"` 对。允许的 key 与该 provider 的 `TYPE` 一致（见 [`CREATE AI PROVIDER`](./CREATE_AI_PROVIDER.md)）。`protocol` 可以修改，但新值必须是该 provider 的 `TYPE` 所允许的。 |
 
 ## 示例
 
