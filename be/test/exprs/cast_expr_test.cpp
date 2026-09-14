@@ -2998,6 +2998,36 @@ TEST_F(VectorizedCastExprTest, const_variant_cast_to_complex_types) {
     }
 }
 
+TEST_F(VectorizedCastExprTest, variant_array_cast_has_linear_payload_size) {
+    for (uint32_t count : {1, 16, 256}) {
+        std::string payload;
+        std::vector<uint32_t> offsets;
+        for (uint32_t i = 0; i < count; ++i) {
+            payload.append("\x0c\x07", 2);
+            offsets.emplace_back(payload.size());
+        }
+        std::string array;
+        VariantEncoder::append_array_container(&array, offsets, payload);
+        auto input = VariantColumn::create();
+        input->append(VariantRowValue(VariantMetadata::kEmptyMetadata, array));
+        auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::VARIANT), input);
+        ASSERT_NE(nullptr, result);
+        const auto* arrays = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        const auto* elements =
+                down_cast<const VariantColumn*>(ColumnHelper::get_data_column(arrays->elements_column().get()));
+        ASSERT_EQ(count, elements->size());
+        size_t value_bytes = 0;
+        for (size_t i = 0; i < count; ++i) {
+            VariantRowRef element;
+            ASSERT_TRUE(elements->try_get_row_ref(i, &element));
+            EXPECT_EQ(2, element.get_value().raw().size());
+            EXPECT_EQ(7, element.get_value().get_int8().value());
+            value_bytes += element.get_value().raw().size();
+        }
+        EXPECT_EQ(payload.size(), value_bytes);
+    }
+}
+
 // Verifies root typed-only scalar variant uses fast path for same-type cast and preserves null behavior.
 TEST_F(VectorizedCastExprTest, root_typed_only_scalar_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_bigint_column({7, 0, -3}, {0, 1, 0});
