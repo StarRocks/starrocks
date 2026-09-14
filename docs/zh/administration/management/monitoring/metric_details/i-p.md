@@ -405,6 +405,12 @@ description: "Alphabetical i - p"
 - 类型：摘要
 - 描述：RPC 请求和等待流式加载管道可用性的总延迟。
 
+## `meta_replay_lag_second`
+
+- 单位：秒
+- 类型：Gauge
+- 描述：当前 FE 已回放的元数据比 Leader 的时钟落后多久。Leader FE 每 10 秒向日志中写入一个时间戳，该指标即本节点已回放的最新时间戳距今的时长。`max_journal_replay_lag` 只由 Leader 上报，而该指标由落后的节点自身上报；某条日志回放卡住期间，该值会持续增长。Leader FE 只写时间戳、不回放时间戳，因此始终上报 `0`。该值超过 `meta_delay_toleration_second` 后，该节点不再用本地元数据提供读服务，而是把查询转发给 Leader。有两种例外：一是 `ignore_meta_check` 设为 `true` 时，该节点照常提供读服务；二是该节点自上次检查以来没有回放任何日志，且与 Leader 的连接正常，此时该节点维持当前的读服务状态，因为 Leader 没有写入新日志，落后于它的时钟并不说明该节点自身有问题。第二种情况只是不把节点移出服务，并不会让已经停止提供读服务的节点重新对外服务。
+
 ## `meta_request_duration`
 
 - 单位：us

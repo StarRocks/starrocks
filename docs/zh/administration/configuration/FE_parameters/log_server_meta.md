@@ -1516,6 +1516,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Follower 和 Observer FE 上的元数据可以比 Leader FE 上的元数据落后最长时间。单位：秒。如果超过此持续时间，非 Leader FE 将停止提供服务。
 - 引入版本: -
 
+### `meta_freshness_check_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Follower 和 Observer FE 重新判断自身元数据是否仍足够新、能否继续提供读服务的时间间隔，判断标准见 `meta_delay_toleration_second`。取值会被限制在 [10, 5000] 范围内。该检查运行在独立线程上，而不是元数据回放线程上，因此当某条日志回放耗时很久时（例如回放操作正在等待数据库锁），节点仍能及时停止用陈旧的元数据提供服务。
+- 引入版本: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- 默认值: 30
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单条元数据日志的回放耗时超过该值时，会在 **fe.log** 中记录一条回放卡住的日志，并附带回放线程的堆栈，便于定位阻塞元数据回放的原因。设置为 `0` 表示关闭该日志。
+- 引入版本: v4.2
+
 ### `meta_dir`
 
 - 默认值: `StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
