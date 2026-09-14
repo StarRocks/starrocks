@@ -138,8 +138,12 @@ private:
         }
 
         Status seek_columns(ordinal_t pos) {
-            for (auto iter : _column_iterators) {
-                RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
+            for (size_t i = 0; i < _column_iterators.size(); ++i) {
+                // Seeking can read and decompress a data page, even when read_columns skips the column.
+                if (_prune_column_after_index_filter && _prune_cols.count(i)) {
+                    continue;
+                }
+                RETURN_IF_ERROR(_column_iterators[i]->seek_to_ordinal(pos));
             }
             return Status::OK();
         }
@@ -1710,10 +1714,8 @@ FieldPtr SegmentIterator::_make_field(size_t i) {
 
 Status SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
-        for (ColumnIterator* iter : to->_column_iterators) {
-            RETURN_IF_ERROR(iter->seek_to_ordinal(ordinal));
-        }
+        // A pruned column does not advance. Use the scan cursor, not an arbitrary column's cursor.
+        RETURN_IF_ERROR(to->seek_columns(_cur_rowid));
         _context->close();
     }
 
