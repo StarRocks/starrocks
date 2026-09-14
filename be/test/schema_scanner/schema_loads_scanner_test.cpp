@@ -287,7 +287,11 @@ TEST_F(SchemaLoadsScannerTest, sentinel_ms_renders_null) {
 // terminating half of that loop, which is also the whole story for an FE too old to
 // paginate: it leaves next_job_id_offset unset, _fetch_page decodes that to 0, and
 // the single response it sent must be served in full and then end the scan.
-TEST_F(SchemaLoadsScannerTest, single_page_response_drains_then_reaches_eos) {
+//
+// The row-at-a-time contract is the other half of what this pins: SchemaChunkSource
+// counts one row per get_next() call, so a scanner that drained its whole buffer in
+// one call would make the caller accumulate the entire result set into one chunk.
+TEST_F(SchemaLoadsScannerTest, single_page_response_yields_one_row_per_call_then_eos) {
     SchemaLoadsScanner scanner;
     init_scanner(scanner, "UTC");
 
@@ -297,9 +301,12 @@ TEST_F(SchemaLoadsScannerTest, single_page_response_drains_then_reaches_eos) {
 
     auto chunk = create_chunk(scanner.get_slot_descs());
     bool eos = true;
-    EXPECT_OK(scanner.get_next(&chunk, &eos));
-    EXPECT_FALSE(eos);
-    EXPECT_EQ(3, chunk->num_rows());
+    for (int expected_rows = 1; expected_rows <= 3; ++expected_rows) {
+        EXPECT_OK(scanner.get_next(&chunk, &eos));
+        EXPECT_FALSE(eos) << "row " << expected_rows;
+        EXPECT_EQ(expected_rows, chunk->num_rows())
+                << "each get_next must append exactly one row, not drain the buffer";
+    }
 
     // Page drained with no cursor to follow: end the scan instead of attempting
     // another fetch.

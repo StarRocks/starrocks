@@ -316,7 +316,7 @@ Status SchemaLoadsScanner::_fetch_page(int64_t start_job_id_offset) {
 
 Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
-    for (; _cur_idx < _result.loads.size(); _cur_idx++) {
+    if (_cur_idx < _result.loads.size()) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
             if (slot_id < 1 || slot_id > 26) {
@@ -550,6 +550,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
         }
+        _cur_idx++;
     }
     return Status::OK();
 }
