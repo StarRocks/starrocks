@@ -3191,9 +3191,6 @@ public class ShowExecutor {
             rows.add(Lists.newArrayList("IsDefault", provider.getId().equals(defaultId) ? "true" : "false"));
             java.util.Map<String, String> masked = provider.getMaskedParams();
             for (java.util.Map.Entry<String, String> entry : masked.entrySet()) {
-                if (com.starrocks.context.ai.AIProvider.PROPERTY_PROTOCOL.equals(entry.getKey())) {
-                    continue; // already shown as a fixed row above
-                }
                 rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
             }
             if (!provider.getComment().isEmpty()) {

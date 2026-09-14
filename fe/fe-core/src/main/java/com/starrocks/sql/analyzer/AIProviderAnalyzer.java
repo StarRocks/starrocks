@@ -19,7 +19,6 @@ import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt;
@@ -78,20 +77,18 @@ public class AIProviderAnalyzer {
             AIProviderType type = parseType(statement.getType());
             Map<String, String> properties = statement.getProperties();
             validateKnownKeys(properties, type);
-            if (properties.containsKey(AIProvider.PROPERTY_PROTOCOL)) {
-                AIProviderProtocol protocol = parseProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
-                checkProtocolAllowed(type, protocol);
-            }
+            // Every stored provider carries a protocol: fill in the type's default when the DDL omits it.
+            // Only CREATE does this; ALTER validates a protocol the user wrote but never adds one.
+            properties.putIfAbsent(AIProvider.PROPERTY_PROTOCOL, AIProviderProtocol.defaultFor(type).lower());
             requireProperty(properties, AIProvider.PROPERTY_ENDPOINT);
             requireProperty(properties, AIProvider.PROPERTY_MODEL);
+            requireProperty(properties, AIProvider.PROPERTY_PROTOCOL);
             validateEndpoint(properties.get(AIProvider.PROPERTY_ENDPOINT));
+            validateProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
             validatePositiveInt(properties, AIProvider.PROPERTY_TIMEOUT_MS);
             validatePositiveInt(properties, AIProvider.PROPERTY_DIMENSIONS);
             validatePositiveInt(properties, AIProvider.PROPERTY_MAX_DOCUMENTS);
             validatePositiveInt(properties, AIProvider.PROPERTY_DEADLINE_MS);
-            // Every stored provider carries a protocol: fill in the type's default when the DDL omits it.
-            // Only CREATE does this; ALTER validates a protocol the user wrote but never adds one.
-            properties.putIfAbsent(AIProvider.PROPERTY_PROTOCOL, AIProviderProtocol.defaultFor(type).lower());
             return null;
         }
 
@@ -102,21 +99,13 @@ public class AIProviderAnalyzer {
             if (properties.isEmpty()) {
                 throw new SemanticException("ALTER AI PROVIDER requires at least one property in SET (...)");
             }
-            // Resolve the stored provider so type-specific rules (allowed keys, protocol) apply to the
-            // patch. A missing provider is reported by the executor, which honours IF EXISTS, so only the
-            // type-independent checks run in that case.
-            AIProvider existing = GlobalStateMgr.getCurrentState().getAIProviderMgr().getProvider(statement.getName());
-            if (existing != null) {
-                validateKnownKeys(properties, existing.getType());
-            }
+            // Type-agnostic: we don't know the provider type at analyze time, so accept any known key
+            // from any type's allowlist; the manager merges and the value semantics are enforced below.
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_ENDPOINT);
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_MODEL);
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_PROTOCOL);
             if (properties.containsKey(AIProvider.PROPERTY_PROTOCOL)) {
-                AIProviderProtocol protocol = parseProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
-                if (existing != null) {
-                    checkProtocolAllowed(existing.getType(), protocol);
-                }
+                validateProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
             }
             if (properties.containsKey(AIProvider.PROPERTY_ENDPOINT)) {
                 validateEndpoint(properties.get(AIProvider.PROPERTY_ENDPOINT));
@@ -162,17 +151,9 @@ public class AIProviderAnalyzer {
             }
         }
 
-        private static AIProviderProtocol parseProtocol(String protocol) {
+        private void validateProtocol(String protocol) {
             try {
-                return AIProviderProtocol.fromString(protocol);
-            } catch (IllegalArgumentException e) {
-                throw new SemanticException(e.getMessage());
-            }
-        }
-
-        private static void checkProtocolAllowed(AIProviderType type, AIProviderProtocol protocol) {
-            try {
-                AIProviderProtocol.checkAllowed(type, protocol);
+                AIProviderProtocol.fromString(protocol);
             } catch (IllegalArgumentException e) {
                 throw new SemanticException(e.getMessage());
             }

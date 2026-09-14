@@ -72,28 +72,4 @@ public enum AIProviderProtocol {
                 return OPENAI;
         }
     }
-
-    /** The protocols a provider of the given type may declare. */
-    public static Set<AIProviderProtocol> allowedFor(AIProviderType type) {
-        switch (type) {
-            case RERANK:
-                return EnumSet.of(COHERE);
-            case CHAT:
-                return EnumSet.of(OPENAI, ANTHROPIC);
-            case EMBEDDING:
-            default:
-                return EnumSet.of(OPENAI);
-        }
-    }
-
-    /** @throws IllegalArgumentException if {@code protocol} is not valid for {@code type}. */
-    public static void checkAllowed(AIProviderType type, AIProviderProtocol protocol) {
-        Set<AIProviderProtocol> allowed = allowedFor(type);
-        if (!allowed.contains(protocol)) {
-            throw new IllegalArgumentException(String.format(
-                    "protocol '%s' is not supported for AI provider type %s; allowed: %s",
-                    protocol.lower(), type.lower(),
-                    allowed.stream().map(AIProviderProtocol::lower).collect(Collectors.toList())));
-        }
-    }
 }
