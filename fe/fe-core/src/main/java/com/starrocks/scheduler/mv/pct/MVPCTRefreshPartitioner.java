@@ -15,8 +15,8 @@
 package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.common.base.Strings;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
