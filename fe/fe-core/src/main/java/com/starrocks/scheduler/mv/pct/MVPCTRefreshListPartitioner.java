@@ -17,7 +17,6 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -51,7 +50,6 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
@@ -321,10 +319,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             partitionDescs.add(multiItemListPartitionDesc);
         }
 
-        // create partitions in small batch, to avoid create too many partitions at once
-        List<List<PartitionDesc>> batches = ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE);
-        for (int i = 0; i < batches.size(); i++) {
-            List<PartitionDesc> batch = batches.get(i);
+        addPartitionsInBatches(partitionDescs, batch -> {
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(mv.getPartitionColumnNames(), batch);
             AddPartitionClause addPartitionClause =
                     new AddPartitionClause(listPartitionDesc, distributionDesc, partitionProperties, false);
@@ -338,14 +333,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                         "failed to add list partition, db: %s, cause: %s",
                         e, database.getFullName(), mv.getName(), database.getFullName(), e.getMessage());
             }
-            // Throttle only BETWEEN batches. The interval exists so a first refresh that has to
-            // create hundreds of partitions does not push them all at the FE and BEs at once
-            // (#41256); after the final batch there is nothing left to space out, and every MV
-            // whose partitions fit in one batch would otherwise pay the full interval for nothing.
-            if (i < batches.size() - 1) {
-                Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms,
-                        TimeUnit.MILLISECONDS);
-            }
-        }
+        });
     }
 }
