@@ -42,6 +42,7 @@
 #include <cctype>
 #include <filesystem>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 #include "base/utility/pretty_printer.h"
@@ -221,8 +222,31 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     (*output) << "Memory tracking is not available with address sanitizer builds.";
 #else
+    // jemalloc's own opts string: every character OMITS a section -- 'g' general, 'm' merged
+    // arenas, 'd' destroyed arenas, 'a' per-arena, 'b' bins, 'l' large, 'x' mutex,
+    // 'e' extents, 'h' hpa -- except 'J', which switches the whole report to JSON. An empty
+    // string omits nothing.
+    //
+    // The default stays "a": with one arena per CPU those tables dwarf everything else on a
+    // large machine. /memz?opts=blx keeps them and drops the bin, large and mutex tables
+    // instead, which is what makes each arena's dirty and muzzy page counts readable.
+    static constexpr std::string_view kJemallocStatsOpts = "Jgmdablxeh";
+    std::string stats_opts = "a";
+    if (auto it = args.find("opts"); it != args.end()) {
+        if (it->second.find_first_not_of(kJemallocStatsOpts) != std::string::npos) {
+            (*output) << "ignoring opts '" << it->second << "': expected characters from '"
+                      << kJemallocStatsOpts << "'<br>";
+        } else {
+            stats_opts = it->second;
+        }
+    }
     std::string buf;
-    je_malloc_stats_print(malloc_stats_write_cb, &buf, "a");
+    je_malloc_stats_print(malloc_stats_write_cb, &buf, stats_opts.c_str());
+    if (buf.empty()) {
+        // malloc_stats_print() returns void and writes nothing when it fails to refresh the
+        // statistics, so an empty buffer is the only signal; the reason goes to be.out.
+        (*output) << "jemalloc produced no statistics, see be.out for a malloc_stats_print failure";
+    }
     boost::replace_all(buf, "\n", "<br>");
     (*output) << buf << "</pre>";
 #endif
