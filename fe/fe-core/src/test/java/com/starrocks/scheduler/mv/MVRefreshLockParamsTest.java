@@ -14,10 +14,15 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockParams;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -25,13 +30,18 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -39,6 +49,9 @@ import java.util.Set;
  * -1, and the database id comes from the connector. It must therefore never reach LockParams -- otherwise every
  * MV in the FE built on a JDBC base table contends on the same (0, -1) entry. Internal base tables must keep
  * their real entry, because collectBaseTableSnapshotInfos does copyOnlyForQuery on them.
+ *
+ * <p>The flip side is tested here too: because the lock does not cover external base tables, resolving one
+ * must not happen inside it -- that would be a connector RPC in the critical section buying no protection.
  */
 public class MVRefreshLockParamsTest extends MVTestBase {
 
@@ -68,6 +81,10 @@ public class MVRefreshLockParamsTest extends MVTestBase {
     }
 
     private static LockParams collectDatabases(String mvName) throws Exception {
+        return buildRefreshProcessor(mvName).collectDatabases();
+    }
+
+    private static MVRefreshProcessor buildRefreshProcessor(String mvName) throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), mvName);
@@ -88,7 +105,7 @@ public class MVRefreshLockParamsTest extends MVTestBase {
         taskRunContext.setProperties(properties);
         mvTaskRunProcessor.prepare(taskRunContext);
 
-        return mvTaskRunProcessor.getMVRefreshProcessor().collectDatabases();
+        return mvTaskRunProcessor.getMVRefreshProcessor();
     }
 
     @Test
@@ -111,5 +128,32 @@ public class MVRefreshLockParamsTest extends MVTestBase {
         Assertions.assertEquals(Set.of(internalTableId), lockParams.getTables().get(db.getId()));
         // The -1 default that external BaseTableInfos carry must never show up as a lock id.
         lockParams.getTables().values().forEach(ids -> Assertions.assertFalse(ids.contains(-1L)));
+    }
+
+    /**
+     * Pinned on the property (no FE metadata lock is held while an external base table is resolved) rather
+     * than on where the call sits in the source, so it keeps holding if the code moves. The internal base
+     * table is asserted the other way round on purpose: resolving it is a local metastore read, and keeping
+     * it inside the lock is what makes the snapshot taken right after it consistent.
+     */
+    @Test
+    public void testExternalBaseTablesAreResolvedBeforeTheLock() throws Exception {
+        Map<String, Boolean> resolvedUnderLock = Maps.newConcurrentMap();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<Table> getTableWithIdentifier(Invocation invocation, ConnectContext context,
+                                                          BaseTableInfo baseTableInfo) {
+                resolvedUnderLock.merge(baseTableInfo.getTableName(), LockHoldDepth.isUnderLock(),
+                        Boolean::logicalOr);
+                return invocation.proceed(context, baseTableInfo);
+            }
+        };
+
+        buildRefreshProcessor("lock_params_mixed_mv").collectBaseTableSnapshotInfos();
+
+        Assertions.assertEquals(Boolean.FALSE, resolvedUnderLock.get("lineitem_par"),
+                "an external base table is resolved through the connector and must not be resolved under the lock");
+        Assertions.assertEquals(Boolean.TRUE, resolvedUnderLock.get("lock_params_tbl"),
+                "an internal base table must stay resolved under the lock that protects its snapshot");
     }
 }
