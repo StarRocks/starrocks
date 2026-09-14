@@ -735,6 +735,46 @@ public class DatabaseTransactionMgrTest {
         Deencapsulation.invoke(mgr, "unprotectUpsertTransactionState", txn);
     }
 
+    // Both live races in this file have the same shape: one thread appends table ids to a running
+    // transaction without holding the DatabaseTransactionMgr lock, while another thread scans that
+    // transaction. Only the scan differs, so the threading scaffolding lives here. Returns whatever either
+    // side threw, or null if both ran clean.
+    private Throwable raceAppendAgainstScan(TransactionState txnState, long firstTableId, long lastTableId,
+                                            int scanIterations, Runnable scan) throws InterruptedException {
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicBoolean stop = new AtomicBoolean(false);
+
+        Thread appender = new Thread(() -> {
+            try {
+                start.await();
+                for (long tableId = firstTableId; tableId < lastTableId && !stop.get(); tableId++) {
+                    txnState.addTableIdIfAbsent(tableId);
+                }
+            } catch (Throwable t) {
+                failure.compareAndSet(null, t);
+            }
+        });
+        Thread scanner = new Thread(() -> {
+            try {
+                start.await();
+                for (int i = 0; i < scanIterations && !stop.get(); i++) {
+                    scan.run();
+                }
+            } catch (Throwable t) {
+                failure.compareAndSet(null, t);
+            }
+        });
+
+        appender.start();
+        scanner.start();
+        start.countDown();
+        appender.join(30_000L);
+        scanner.join(30_000L);
+        stop.set(true);
+        return failure.get();
+    }
+
     @Test
     public void testWatermarkScanToleratesConcurrentTableAttach() throws Exception {
         int savedDb = Config.max_running_txn_num_per_db;
@@ -752,43 +792,14 @@ public class DatabaseTransactionMgrTest {
                     Lists.newArrayList(watchedTable));
             TransactionState txnState = mgr.getTransactionState(7001L);
 
-            AtomicReference<Throwable> failure = new AtomicReference<>();
-            CountDownLatch start = new CountDownLatch(1);
-            AtomicBoolean stop = new AtomicBoolean(false);
-
-            Thread appender = new Thread(() -> {
-                try {
-                    start.await();
-                    for (long tableId = 2000L; tableId < 8000L && !stop.get(); tableId++) {
-                        txnState.addTableIdIfAbsent(tableId);
-                    }
-                } catch (Throwable t) {
-                    failure.compareAndSet(null, t);
-                }
-            });
             // Probe a table the transaction never touches. That is the shape that actually reproduces the
             // bug: the old predicate looped over the transaction's own list looking for a match, so an
             // absent probe walked every element and gave the appender a full iteration to invalidate. A
             // probe that matches the first element returns after a single step and almost never races.
-            Thread poller = new Thread(() -> {
-                try {
-                    start.await();
-                    for (int i = 0; i < 6000 && !stop.get(); i++) {
-                        mgr.isPreviousTransactionsFinished(9999L, Lists.newArrayList(unrelatedTable));
-                    }
-                } catch (Throwable t) {
-                    failure.compareAndSet(null, t);
-                }
-            });
+            Throwable failure = raceAppendAgainstScan(txnState, 2000L, 8000L, 6000,
+                    () -> mgr.isPreviousTransactionsFinished(9999L, Lists.newArrayList(unrelatedTable)));
 
-            appender.start();
-            poller.start();
-            start.countDown();
-            appender.join(30_000L);
-            poller.join(30_000L);
-            stop.set(true);
-
-            assertNull(failure.get(), "a concurrent table attach must not break the watermark scan");
+            assertNull(failure, "a concurrent table attach must not break the watermark scan");
             // The txn is still running and still touches the watched table, so the watermark must not have
             // moved past it. This pins the answer as well as the absence of a crash.
             assertFalse(mgr.isPreviousTransactionsFinished(9999L, Lists.newArrayList(watchedTable)));
@@ -814,39 +825,10 @@ public class DatabaseTransactionMgrTest {
                     Lists.newArrayList(hotTable));
             TransactionState txnState = mgr.getTransactionState(6001L);
 
-            AtomicReference<Throwable> failure = new AtomicReference<>();
-            CountDownLatch start = new CountDownLatch(1);
-            AtomicBoolean stop = new AtomicBoolean(false);
+            Throwable failure = raceAppendAgainstScan(txnState, 1000L, 6000L, 5000,
+                    () -> mgr.getRunningTxnNumOfTable(hotTable));
 
-            Thread appender = new Thread(() -> {
-                try {
-                    start.await();
-                    for (long tableId = 1000L; tableId < 6000L && !stop.get(); tableId++) {
-                        txnState.addTableIdIfAbsent(tableId);
-                    }
-                } catch (Throwable t) {
-                    failure.compareAndSet(null, t);
-                }
-            });
-            Thread counter = new Thread(() -> {
-                try {
-                    start.await();
-                    for (int i = 0; i < 5000 && !stop.get(); i++) {
-                        mgr.getRunningTxnNumOfTable(hotTable);
-                    }
-                } catch (Throwable t) {
-                    failure.compareAndSet(null, t);
-                }
-            });
-
-            appender.start();
-            counter.start();
-            start.countDown();
-            appender.join(30_000L);
-            counter.join(30_000L);
-            stop.set(true);
-
-            assertNull(failure.get(), "concurrent table attach must not break the per-table count");
+            assertNull(failure, "concurrent table attach must not break the per-table count");
             // The table that was there from the start is still counted, so the scan stayed correct throughout.
             assertEquals(1, mgr.getRunningTxnNumOfTable(hotTable));
         } finally {
