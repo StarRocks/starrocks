@@ -245,7 +245,7 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
     private static void normalizeProvider(AIProvider provider) {
         if (provider != null) {
             provider.setType(provider.getType());
-            provider.ensureProtocol();
+            provider.ensureProtocolExisted();
         }
     }
 

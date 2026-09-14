@@ -161,7 +161,7 @@ public class AIProvider implements Writable {
     }
 
     /** Writes the type's default protocol into the params if none is set. */
-    public void ensureProtocol() {
+    public void ensureProtocolExisted() {
         if (Strings.isNullOrEmpty(params.get(PROPERTY_PROTOCOL))) {
             params.put(PROPERTY_PROTOCOL, AIProviderProtocol.defaultFor(getType()).lower());
         }
