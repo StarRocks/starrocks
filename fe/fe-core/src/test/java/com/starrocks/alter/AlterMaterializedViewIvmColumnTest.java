@@ -25,9 +25,14 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An IVM MV's stored schema is position-aligned with its rewritten maintenance query, hidden
@@ -152,6 +157,41 @@ public class AlterMaterializedViewIvmColumnTest extends StarRocksTestBase {
             }
         } finally {
             starRocksAssert.dropMaterializedView("mv_pct_add");
+        }
+    }
+
+
+    /**
+     * ADD/DROP COLUMN resolves the define-query AST before taking the MV's write lock, so another
+     * ALTER can commit in that window. The AST is rewritten in place and serialized back into the
+     * definition, so applying a stale one would leave the physical schema holding a column the
+     * definition does not name. The statement must be refused instead.
+     *
+     * <p>Driven without threads: the definition is read once when the AST is snapshotted and once
+     * under the lock, so returning a different value the second time is exactly what a concurrent
+     * alter looks like from here. initDefineQueryParseNode reads the field directly, so mocking the
+     * getter does not disturb the parse itself.
+     */
+    @Test
+    public void testAddColumnRefusesAStaleDefineQueryAst() throws Exception {
+        createMv("mv_pct_stale_ast", "PCT");
+        try {
+            AtomicInteger reads = new AtomicInteger();
+            new MockUp<MaterializedView>() {
+                @Mock
+                public String getOriginalViewDefineSql(Invocation invocation) {
+                    String real = invocation.proceed();
+                    // first read is the pre-lock snapshot; afterwards, pretend someone else altered it
+                    return reads.getAndIncrement() == 0 ? real : real + " /* altered by someone else */";
+                }
+            };
+
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> runAlter("alter materialized view mv_pct_stale_ast add column w_total as sum(w)"));
+            Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("altered concurrently"),
+                    "expected the stale-AST guard to refuse the alter, got: " + e.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_pct_stale_ast");
         }
     }
 }
