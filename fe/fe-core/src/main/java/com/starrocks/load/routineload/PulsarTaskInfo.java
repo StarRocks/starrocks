@@ -149,8 +149,6 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         String format = routineLoadJob.getFormat();
         if (format.equalsIgnoreCase("json")) {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_JSON);
-        } else if (format.equalsIgnoreCase("avro")) {
-            tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_AVRO);
         } else if (format.equalsIgnoreCase("arrow")) {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_ARROW);
         } else {

@@ -271,6 +271,12 @@ static void BM_ArrowScanner(benchmark::State& state) {
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
 }
 
+class BenchDiscreteStreamLoadPipe : public StreamLoadPipe {
+public:
+    using StreamLoadPipe::StreamLoadPipe;
+    bool is_discrete_message_pipe() const override { return true; }
+};
+
 static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
     std::ifstream file(g_arrow_file_path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
@@ -300,7 +306,8 @@ static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
             create_scan_range(&pool, pipe_id, TFileFormatType::FORMAT_ARROW, desc_tbl, TFileType::FILE_STREAM);
 
     for (auto _ : state) {
-        std::shared_ptr<StreamLoadPipe> pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
+        std::shared_ptr<StreamLoadPipe> pipe =
+                std::make_shared<BenchDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
         exec_env.load_stream_mgr()->put(pipe_id, pipe);
 
         ByteBufferPtr bb = ByteBuffer::allocate(arrow_bytes.size());

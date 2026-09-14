@@ -857,6 +857,25 @@ public class CreateRoutineLoadStmtTest {
         Assertions.assertEquals("arrow", stmt.getFormat());
     }
 
+    @Test
+    public void testAnalyzeAvroFormatPulsar() {
+        String sql = """
+                CREATE ROUTINE LOAD routine_name ON table1
+                PROPERTIES (
+                "desired_concurrent_number" = "3",
+                "format" = "avro"
+                )
+                FROM PULSAR
+                (
+                "pulsar_service_url" = "http://pulsar:6650",
+                "pulsar_topic" = "topictest",
+                "pulsar_subscription" = "subtest"
+                );""";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assertions.assertThrows(SemanticException.class, () -> CreateRoutineLoadAnalyzer.analyze(stmt, ctx));
+    }
+
     private Map<String, String> getCustomProperties() {
         Map<String, String> customProperties = Maps.newHashMap();
         customProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "topic1");
