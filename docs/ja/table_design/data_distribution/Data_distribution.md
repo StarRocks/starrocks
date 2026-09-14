@@ -918,6 +918,7 @@ PROPERTIES (
 | --- | --- |
 | `ORDER BY` 句を持たない `ALTER TABLE ... ADD ROLLUP ...` | 普通の同期 Rollup は、ベーステーブルと Rollup テーブルの tablet が 1 対 1 で対応し行順序が一致していることを前提としますが、レンジ分散ではこれを満たせません。代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。共有データのレンジ分散テーブルでは（v4.2 以降）独立したソートキーを持つ Rollup を作成でき、この種の Rollup は複数追加できます（`ALTER TABLE` 文ごとに 1 つ）。 |
 | `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
+| `ALTER TABLE ... MERGE TABLETS`（`ORDER BY` が主キーと異なる主キーテーブル。サイズに基づく自動マージも同じ形態をスキップします） | この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE はパーティション内のデータを再分散・再バケット化するため、レンジ tablet の境界と互換性がありません。 |
 
 Rollup のような集計ユースケースには、明示的な `REFRESH` 句または `DISTRIBUTED BY` 句を伴う**非同期マテリアライズドビュー**を使用してください。例：
