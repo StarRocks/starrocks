@@ -1254,7 +1254,7 @@ TEST_F(ArrowScannerTest, TestStreamNullOrEmptyBuffer) {
     scanner->close();
 }
 
-TEST_F(ArrowScannerTest, TestStreamMalformedBufferAndCircuitBreaker) {
+TEST_F(ArrowScannerTest, TestStreamMalformedBufferFiltering) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
     auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
@@ -1318,9 +1318,11 @@ TEST_F(ArrowScannerTest, TestStreamMalformedBufferAndCircuitBreaker) {
     broker_scan_range->params = *params;
     broker_scan_range->ranges = ranges;
 
-    // Append 11 malformed buffers (invalid junk data) to trigger circuit breaker
+    // Append 15 malformed buffers — more than the old kMaxConsecutiveErrors=10
+    // to verify the scanner now processes all of them without aborting early.
+    constexpr int kNumMalformed = 15;
     std::string junk = "not_arrow_ipc_format_data";
-    for (int i = 0; i < 11; ++i) {
+    for (int i = 0; i < kNumMalformed; ++i) {
         ByteBufferPtr junk_bb = ByteBuffer::allocate_with_tracker(junk.size()).value();
         junk_bb->put_bytes(junk.data(), junk.size());
         junk_bb->flip_to_read();
@@ -1331,8 +1333,12 @@ TEST_F(ArrowScannerTest, TestStreamMalformedBufferAndCircuitBreaker) {
     auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
     ASSERT_OK(scanner->open());
 
+    // The scanner should reach EOF (not InternalError) after filtering all messages.
     auto res = scanner->get_next();
-    ASSERT_TRUE(res.status().is_internal_error());
+    ASSERT_TRUE(res.status().is_end_of_file()) << "Expected EOF, got: " << res.status();
+
+    // All 15 malformed messages should be counted as filtered rows.
+    ASSERT_EQ(counter->num_rows_filtered, kNumMalformed);
 
     scanner->close();
 }
