@@ -231,11 +231,6 @@ Status ArrowScanner::next_batch() {
 
     while (true) {
         if (_curr_file_reader == nullptr) {
-            if (_consecutive_errors >= kMaxConsecutiveErrors) {
-                LOG(ERROR) << "Arrow scanner exceeded max consecutive error threshold (" << kMaxConsecutiveErrors
-                           << ")";
-                return Status::InternalError("Arrow scanner exceeded max consecutive error threshold");
-            }
             if (_file == nullptr) {
                 auto status = open_next_reader();
                 if (!status.ok()) {
@@ -263,7 +258,6 @@ Status ArrowScanner::next_batch() {
                     }
                     _parser_buf = res.value();
                     if (_parser_buf == nullptr || _parser_buf->remaining() == 0) {
-                        _consecutive_errors = 0;
                         continue;
                     }
 
@@ -292,7 +286,6 @@ Status ArrowScanner::next_batch() {
                         }
                         _conv_ctx.report_error_message(error_msg, "", -1);
                         LOG(WARNING) << "Arrow routine load: " << error_msg;
-                        _consecutive_errors++;
                         _counter->num_rows_filtered++;
                         _parser_buf.reset();
                         _arrow_stream.reset();
@@ -315,7 +308,6 @@ Status ArrowScanner::next_batch() {
             }
             _conv_ctx.report_error_message(error_msg, "", -1);
             LOG(WARNING) << "Arrow routine load: " << error_msg;
-            _consecutive_errors++;
             _counter->num_rows_filtered++;
             _curr_file_reader.reset();
             _parser_buf.reset();
@@ -340,7 +332,6 @@ Status ArrowScanner::next_batch() {
                 conv = std::make_unique<ConvertFuncTree>();
             }
             if (is_discrete_pipe) {
-                _consecutive_errors = 0;
                 _message_boundary = true;
                 continue;
             }
@@ -348,7 +339,6 @@ Status ArrowScanner::next_batch() {
             continue;
         }
 
-        _consecutive_errors = 0;
         _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
         _last_file_scan_rows += _batch->num_rows();
         return Status::OK();

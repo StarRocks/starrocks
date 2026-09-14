@@ -90,8 +90,6 @@ private:
     ByteBufferPtr _parser_buf;
     std::shared_ptr<arrow::io::InputStream> _arrow_stream;
     std::shared_ptr<arrow::io::BufferReader> _arrow_buffer_reader;
-    int _consecutive_errors{0};
-    static constexpr int kMaxConsecutiveErrors = 10;
 };
 
 } // namespace starrocks
