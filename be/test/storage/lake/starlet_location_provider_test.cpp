@@ -99,9 +99,9 @@ TEST_F(StarletLocationProviderTest, test_get_real_location) {
 // `shutdown_staros_worker()` can retire the global worker while a lake operation is still
 // resolving a path. The lookup must report a status instead of dereferencing it. See issue #78883.
 TEST_F(StarletLocationProviderTest, test_real_location_after_worker_release) {
-    auto backup_worker = get_staros_worker();
-    auto defer = DeferOp([backup_worker] { set_staros_worker_for_test(backup_worker); });
-    set_staros_worker_for_test(nullptr);
+    auto backup_worker = g_worker;
+    auto defer = DeferOp([backup_worker] { g_worker = backup_worker; });
+    g_worker.reset();
 
     auto real_or = _provider->real_location(build_starlet_uri(12345, "/abc"));
     ASSERT_FALSE(real_or.ok());

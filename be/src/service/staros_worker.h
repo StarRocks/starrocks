@@ -147,7 +147,18 @@ private:
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
-extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
+extern std::shared_ptr<staros::starlet::Starlet> g_starlet;
+
+// Returns a strong reference, or nullptr once `shutdown_staros_worker()` has released the worker.
+// Callers must check it: an in-flight load can still reach a starlet filesystem after worker
+// teardown, and dereferencing the null worker there crashes the process instead of failing the load.
+std::shared_ptr<StarOSWorker> get_staros_worker();
+
+// Returns a strong reference, or nullptr once `shutdown_staros_worker()` has released the runtime.
+// Callers must hold the returned pointer for as long as they use it: shutdown drops the global at
+// any moment, and a raw pointer would dangle across the blocking starmgr RPCs behind these calls.
+std::shared_ptr<staros::starlet::Starlet> get_starlet();
+
 std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client);
 
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);

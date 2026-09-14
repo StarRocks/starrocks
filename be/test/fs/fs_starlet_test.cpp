@@ -27,6 +27,7 @@
 #include "service/staros_worker.h"
 #include "storage/rowset/page_io.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -454,5 +455,27 @@ TEST_P(StarletFileSystemTest, test_drop_cache) {
 
 INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,
                         ::testing::Values(std::string("s3"), std::string("cachefs")));
+
+// An in-flight load can reach a StarOS-backed filesystem after `shutdown_staros_worker()` has
+// released the global worker. Every operation must then fail with a status: dereferencing the
+// retired worker is what crashed the CN during shutdown. See issue #78883.
+//
+// Standalone rather than a StarletFileSystemTest case: nothing here talks to object storage, so it
+// must still run when the S3 credentials that fixture requires are absent.
+TEST(StarletFileSystemWorkerReleaseTest, test_operations_fail_after_worker_release) {
+    auto backup_worker = g_worker;
+    DeferOp restore_worker([&backup_worker] { g_worker = backup_worker; });
+
+    auto fs = new_fs_starlet();
+    ASSERT_NE(nullptr, fs);
+
+    g_worker.reset();
+
+    // This is the frame from the reported crash: TabletSinkSender::_write_combined_txn_log() ->
+    // ProtobufFile::save() -> StarletFileSystem::new_writable_file().
+    EXPECT_FALSE(fs->new_writable_file(WritableFileOptions(), build_starlet_uri(66601, "/txn_log")).ok());
+    EXPECT_FALSE(fs->new_random_access_file(build_starlet_uri(66601, "/txn_log")).ok());
+    EXPECT_FALSE(fs->get_file_size(build_starlet_uri(66601, "/txn_log")).ok());
+}
 
 } // namespace starrocks

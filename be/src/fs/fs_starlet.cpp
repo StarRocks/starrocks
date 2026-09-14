@@ -613,22 +613,6 @@ public:
 
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
-<<<<<<< HEAD:be/src/fs/fs_starlet.cpp
-        return g_worker->get_shard_filesystem(shard_id, _conf);
-=======
-        if (_shard_fs != nullptr) {
-            return _shard_fs;
-        }
-#ifdef BE_TEST
-        // Mirrors the hook in `new_fs_starlet(shard_id, ...)` at the bottom of this file.
-        // Tests can inject either a mock filesystem or a failure status here without
-        // having to stand up a real StarOS worker / starlet runtime.
-        absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
-        TEST_SYNC_POINT_CALLBACK("StarletFileSystem::get_shard_filesystem", &fs_st);
-        if (!absl::IsUnimplemented(fs_st.status())) {
-            return fs_st;
-        }
-#endif
         auto worker = get_staros_worker();
         if (worker == nullptr) {
             // Shutdown already released the StarOS worker while this operation was in flight.
@@ -636,7 +620,6 @@ private:
             return absl::UnavailableError(fmt::format("StarOS worker is not available, shard_id: {}", shard_id));
         }
         return worker->get_shard_filesystem(shard_id, _conf);
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/src/compute_env/staros/starlet_filesystem.cpp
     }
 
 private:
@@ -646,147 +629,6 @@ private:
 std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
 }
-<<<<<<< HEAD:be/src/fs/fs_starlet.cpp
-=======
-
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-namespace fs {
-namespace {
-
-thread_local std::shared_ptr<FileSystem> tls_fs_starlet_registry;
-
-bool match_starlet_shared(std::string_view uri) {
-    return is_starlet_uri(uri);
-}
-
-bool match_starlet_unique(std::string_view uri, const FSOptions&) {
-    return is_starlet_uri(uri);
-}
-
-StatusOr<std::shared_ptr<FileSystem>> create_starlet_shared(std::string_view) {
-    if (tls_fs_starlet_registry == nullptr) {
-        tls_fs_starlet_registry.reset(new_fs_starlet().release());
-    }
-    return tls_fs_starlet_registry;
-}
-
-StatusOr<std::unique_ptr<FileSystem>> create_starlet_unique(std::string_view, const FSOptions&) {
-    return new_fs_starlet();
-}
-
-} // namespace
-
-FileSystemProvider new_starlet_file_system_provider(int priority) {
-    return {
-            .id = "starlet",
-            .priority = priority,
-            .match_shared = match_starlet_shared,
-            .create_shared = create_starlet_shared,
-            .match_unique = match_starlet_unique,
-            .create_unique = create_starlet_unique,
-    };
-}
-
-} // namespace fs
-#endif // defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-
-// Deleter for LRU cache entries
-static void shard_fs_cache_deleter(const CacheKey& /*key*/, void* value) {
-    delete static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(value);
-}
-
-// Internal helper to get or create shard filesystem cache
-static Cache* get_shard_fs_cache() {
-    constexpr size_t kDefaultCacheCapacity = 1024 * 10;
-    static std::unique_ptr<Cache> g_shard_fs_cache(new_lru_cache(kDefaultCacheCapacity));
-    return g_shard_fs_cache.get();
-}
-
-#ifdef BE_TEST
-void TEST_clear_shard_fs_cache() {
-    get_shard_fs_cache()->prune();
-}
-#endif
-
-// Resolve a shard filesystem through the global StarOS worker. The worker is null once
-// `shutdown_staros_worker()` has retired it, which an in-flight operation can still reach; report
-// that as a status so the caller fails the operation instead of dereferencing the retired global.
-static absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem_from_worker(
-        int64_t shard_id, const staros::starlet::fslib::Configuration& conf) {
-    auto worker = get_staros_worker();
-    if (worker == nullptr) {
-        return absl::UnavailableError("StarOS worker is not available");
-    }
-    return worker->get_shard_filesystem(shard_id, conf);
-}
-
-std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) {
-    // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
-    // where each shard fs correspond to one storage volume on source cluster.
-    Cache* cache = get_shard_fs_cache();
-
-    // Build cache key from shard_id, appending "_1" suffix for raw path mode
-    // to differentiate from normal mode entries within the same cache instance.
-    std::string key_str = use_raw_path ? fmt::format("{}_1", shard_id) : std::to_string(shard_id);
-    CacheKey cache_key(key_str);
-
-    // Try cache lookup
-    Cache::Handle* handle = cache->lookup(cache_key);
-    if (handle != nullptr) {
-        auto* cached_ptr = static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(cache->value(handle));
-        std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = *cached_ptr;
-        cache->release(handle);
-        return std::make_shared<StarletFileSystem>(shard_fs);
-    }
-
-    // Cache miss - create new shard filesystem
-    staros::starlet::fslib::Configuration conf;
-    if (use_raw_path) {
-        // S3 raw path mode: use the input path as-is without normalize_path processing
-        // This is required for S3 storage type to support partitioned prefix feature
-        //
-        // The configuration is passed to StarOSWorker::build_conf_from_shard_info() which
-        // forwards it to ShardInfo::fslib_conf_from_this() as initial configuration.
-        // When cache is enabled, fslib_conf_from_this() will automatically add "cachefs."
-        // prefix to all configuration keys.
-        conf[staros::starlet::fslib::kS3UseRawPathWithScheme] = "true";
-    }
-    // For non-S3 storage types (use_raw_path=false), use default configuration
-    // Starlet will use normalize_path to combine sys.root with the relative path
-#ifdef BE_TEST
-    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
-    TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
-    if (absl::IsUnimplemented(fs_st.status())) {
-        fs_st = get_shard_filesystem_from_worker(shard_id, conf);
-    }
-#else
-    auto fs_st = get_shard_filesystem_from_worker(shard_id, conf);
-#endif
-    if (!fs_st.ok()) {
-        LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path
-                     << ", error: " << fs_st.status();
-        return nullptr;
-    }
-
-    std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = fs_st.value();
-
-    // Insert into cache
-    auto* cache_value = new std::shared_ptr<staros::starlet::fslib::FileSystem>(shard_fs);
-    handle = cache->insert(cache_key, cache_value, 1, shard_fs_cache_deleter);
-    if (handle != nullptr) {
-        cache->release(handle);
-    } else {
-        delete cache_value;
-    }
-
-    LOG(INFO) << "Created new shard filesystem, shard_id: " << shard_id
-              << ", cache_inserts: " << cache->get_insert_count() << ", use_raw_path: " << use_raw_path
-              << ", cache_memory: " << cache->get_memory_usage() << " bytes";
-
-    return std::make_shared<StarletFileSystem>(shard_fs);
-}
-
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/src/compute_env/staros/starlet_filesystem.cpp
 } // namespace starrocks
 
 #endif // USE_STAROS
