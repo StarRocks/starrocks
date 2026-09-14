@@ -77,11 +77,11 @@ public class AIProviderAnalyzer {
             AIProviderType type = parseType(statement.getType());
             Map<String, String> properties = statement.getProperties();
             validateKnownKeys(properties, type);
+            requireProperty(properties, AIProvider.PROPERTY_ENDPOINT);
+            requireProperty(properties, AIProvider.PROPERTY_MODEL);
             // Every stored provider carries a protocol: fill in the type's default when the DDL omits it.
             // Only CREATE does this; ALTER validates a protocol the user wrote but never adds one.
             properties.putIfAbsent(AIProvider.PROPERTY_PROTOCOL, AIProviderProtocol.defaultFor(type).lower());
-            requireProperty(properties, AIProvider.PROPERTY_ENDPOINT);
-            requireProperty(properties, AIProvider.PROPERTY_MODEL);
             requireProperty(properties, AIProvider.PROPERTY_PROTOCOL);
             validateEndpoint(properties.get(AIProvider.PROPERTY_ENDPOINT));
             validateProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
