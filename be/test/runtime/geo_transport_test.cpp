@@ -72,13 +72,13 @@ TEST(GeoTransportTest, ChunkRoundTripAndOwnership) {
             meta.is_consts = {column->is_constant()};
             meta.slot_id_to_index[1] = 0;
             auto context = EncodeContext::get_encode_context_shared_ptr(1, level);
-            // First and subsequent chunks must both carry their descriptor and format version.
+            // First and subsequent chunks keep the existing chunk protocol version.
             for (bool first : {true, false}) {
                 auto encoded = first ? ProtobufChunkSerde::serialize(source, context)
                                      : ProtobufChunkSerde::serialize_without_meta(source, context);
                 ASSERT_TRUE(encoded.ok()) << encoded.status();
                 context->set_encode_levels_in_pb(&*encoded);
-                EXPECT_EQ(2, decode_fixed32_le(reinterpret_cast<const uint8_t*>(encoded->data().data())));
+                EXPECT_EQ(1, decode_fixed32_le(reinterpret_cast<const uint8_t*>(encoded->data().data())));
                 ProtobufChunkDeserializer reader(meta, &*encoded, level);
                 auto decoded = reader.deserialize(encoded->data());
                 ASSERT_TRUE(decoded.ok()) << decoded.status();
@@ -86,6 +86,12 @@ TEST(GeoTransportTest, ChunkRoundTripAndOwnership) {
                 EXPECT_EQ(column->size(), out->size());
                 EXPECT_EQ(column->is_constant(), out->is_constant());
                 EXPECT_EQ(column->is_nullable(), out->is_nullable());
+                if (shape == 3) {
+                    // Constant NULL is the legacy Boolean placeholder; semantic identity is in meta.
+                    EXPECT_TRUE(out->only_null());
+                    EXPECT_EQ(type, meta.types[0]);
+                    continue;
+                }
                 const auto* restored = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(out.get()));
                 EXPECT_EQ(desc, restored->descriptor());
                 EXPECT_FALSE(restored->has_wkb_cache());
@@ -270,13 +276,64 @@ TEST(GeoTransportTest, LegacyConstantNullInOrdinaryAndMixedChunks) {
         }
         auto wire = ProtobufChunkSerde::serialize(chunk);
         ASSERT_TRUE(wire.ok()) << wire.status();
-        EXPECT_EQ(mixed ? 2 : 1, decode_fixed32_le(reinterpret_cast<const uint8_t*>(wire->data().data())));
+        EXPECT_EQ(1, decode_fixed32_le(reinterpret_cast<const uint8_t*>(wire->data().data())));
         ProtobufChunkDeserializer reader(meta);
         auto restored = reader.deserialize(wire->data());
         ASSERT_TRUE(restored.ok()) << restored.status();
         EXPECT_TRUE(restored->get_column_by_slot_id(1)->only_null());
         EXPECT_EQ(16, restored->num_rows());
     }
+}
+
+TEST(GeoTransportTest, ConstantNullRetainsLegacyWireBytes) {
+    for (size_t rows : {size_t{0}, size_t{16}}) {
+        auto geo = GeoColumn::create(descriptor());
+        geo->append_default();
+        auto typed = ConstColumn::create(NullableColumn::create(std::move(geo), NullColumn::create(1, 1)), rows);
+        auto legacy = ColumnHelper::create_const_null_column(rows);
+        Chunk typed_chunk;
+        typed_chunk.append_column(std::move(typed), 1);
+        Chunk legacy_chunk;
+        legacy_chunk.append_column(std::move(legacy), 1);
+        auto typed_wire = ProtobufChunkSerde::serialize(typed_chunk);
+        auto legacy_wire = ProtobufChunkSerde::serialize(legacy_chunk);
+        ASSERT_TRUE(typed_wire.ok()) << typed_wire.status();
+        ASSERT_TRUE(legacy_wire.ok()) << legacy_wire.status();
+        EXPECT_EQ(legacy_wire->SerializeAsString(), typed_wire->SerializeAsString());
+        EXPECT_EQ(rows, decode_fixed64_le(reinterpret_cast<const uint8_t*>(typed_wire->data().data()) + 8));
+    }
+}
+
+TEST(GeoTransportTest, SchemaReaderKeepsVersionOne) {
+    auto data = Int32Column::create();
+    data->append(42);
+    Chunk chunk;
+    chunk.append_column(std::move(data), 1);
+    auto wire = ProtobufChunkSerde::serialize_without_meta(chunk);
+    ASSERT_TRUE(wire.ok());
+    Schema schema;
+    schema.append(std::make_shared<Field>(0, "value", TYPE_INT, false));
+    auto restored = ProtobufChunkSerde::deserialize_with_schema(schema, wire->data());
+    ASSERT_TRUE(restored.ok()) << restored.status();
+    EXPECT_EQ(42, restored->columns()[0]->get(0).get_int32());
+    auto invalid = wire->data();
+    encode_fixed32_le(reinterpret_cast<uint8_t*>(invalid.data()), 2);
+    EXPECT_TRUE(ProtobufChunkSerde::deserialize_with_schema(schema, invalid).status().is_corruption());
+}
+
+TEST(GeoTransportTest, UnversionedTypedConstantNullRemainsUnchanged) {
+    auto data = Int64Column::create(1, 42);
+    auto column = ConstColumn::create(NullableColumn::create(std::move(data), NullColumn::create(1, 1)), 16);
+    std::vector<uint8_t> bytes(ColumnArraySerde::max_serialized_size(*column));
+    auto written = ColumnArraySerde::serialize(*column, bytes.data());
+    ASSERT_TRUE(written.ok()) << written.status();
+    auto restored = column->clone_empty();
+    auto read = ColumnArraySerde::deserialize(bytes.data(), *written, restored.get());
+    ASSERT_TRUE(read.ok()) << read.status();
+    EXPECT_EQ(16, restored->size());
+    EXPECT_TRUE(restored->only_null());
+    auto* values = down_cast<const Int64Column*>(ColumnHelper::get_data_column(restored.get()));
+    EXPECT_EQ(42, values->get_data()[0]);
 }
 
 TEST(GeoTransportTest, RejectsConflictingReceiverPrimitive) {
@@ -309,11 +366,10 @@ TEST(GeoTransportTest, DISABLED_TransportBenchmark) {
         const auto size = ColumnArraySerde::max_serialized_size(*column);
         std::vector<uint8_t> bytes(size);
         auto target = column->clone_empty();
-        uint32_t version = 1;
         constexpr int iterations = 1000;
         auto start = std::chrono::steady_clock::now();
         for (int i = 0; i < iterations; ++i) {
-            ASSERT_TRUE(ColumnArraySerde::serialize(*column, bytes.data(), false, 0, &version).ok());
+            ASSERT_TRUE(ColumnArraySerde::serialize(*column, bytes.data(), false, 0, true).ok());
         }
         auto serialized = std::chrono::steady_clock::now();
         for (int i = 0; i < iterations; ++i) {

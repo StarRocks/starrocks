@@ -21,7 +21,6 @@
 #include "base/container/raw_container.h"
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
-#include "column/const_column.h"
 #include "column/serde/column_array_serde.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
@@ -39,10 +38,9 @@ static int64_t extra_columns_max_serialized_size(const ChunkExtraColumnsData& ex
     return serialized_size;
 }
 
-static StatusOr<uint8_t*> serialize_extra_columns(const ChunkExtraColumnsData& extra_data, uint8_t* buff,
-                                                  uint32_t* required_version) {
+static StatusOr<uint8_t*> serialize_extra_columns(const ChunkExtraColumnsData& extra_data, uint8_t* buff) {
     for (auto& column : extra_data.columns()) {
-        ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*column, buff, false, 0, required_version));
+        ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*column, buff, false, 0, true));
     }
     return buff;
 }
@@ -117,22 +115,21 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
     }
     raw::stl_string_resize_uninitialized(serialized_data, max_serialized_size);
     auto* buff = reinterpret_cast<uint8_t*>(serialized_data->data());
-    uint32_t version = 1;
-    encode_fixed32_le(buff + 0, version);
+    encode_fixed32_le(buff + 0, 1);
     encode_fixed32_le(buff + 4, chunk.num_rows());
     buff = buff + 8;
 
     int padding_size = 0; // as streamvbyte may read up to 16 extra bytes from the input.
     if (context == nullptr) {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
-            ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, 0, &version));
+            ASSIGN_OR_RETURN(buff, ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, 0, true));
         }
     } else {
         using Serd = ColumnArraySerde;
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
             ASSIGN_OR_RETURN(buff,
-                             Serd::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i), &version));
+                             Serd::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i), true));
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
             if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
                 padding_size = context->STREAMVBYTE_PADDING_SIZE;
@@ -142,9 +139,8 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
 
     // do serialize extra data
     if (chunk_extra_data) {
-        ASSIGN_OR_RETURN(buff, serialize_extra_columns(*chunk_extra_data, buff, &version));
+        ASSIGN_OR_RETURN(buff, serialize_extra_columns(*chunk_extra_data, buff));
     }
-    encode_fixed32_le(reinterpret_cast<uint8_t*>(serialized_data->data()), version);
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
     serialized_data->resize(chunk_pb.serialized_size() + padding_size);
     chunk_pb.set_uncompressed_size(serialized_data->size());
@@ -227,9 +223,7 @@ static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, i
 
 static StatusOr<ColumnPtr> create_deserialization_column(const TypeDescriptor& type, bool nullable, bool constant) {
     try {
-        ColumnPtr column = ColumnHelper::create_column(type, nullable);
-        if (constant) column = ConstColumn::create(std::move(column), 0);
-        return column;
+        return ColumnHelper::create_column(type, nullable, constant, 0);
     } catch (const std::invalid_argument& error) {
         return Status::Corruption(error.what());
     }
@@ -241,7 +235,7 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
 
     if (buff.size() < 8) return Status::Corruption("Truncated chunk header");
     uint32_t version = decode_fixed32_le(cur);
-    if (version != 1 && version != 2) {
+    if (version != 1) {
         return Status::Corruption(fmt::format("invalid version: {}", version));
     }
     cur += 4;
