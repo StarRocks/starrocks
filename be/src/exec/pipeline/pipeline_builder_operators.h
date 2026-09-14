@@ -78,6 +78,24 @@ OpFactories maybe_interpolate_local_shuffle_exchange(PipelineBuilderContext* con
                                                      int32_t plan_node_id, OpFactories& pred_operators,
                                                      const PartitionExprsGenerator& self_partition_exprs_generator);
 
+/// Local shuffle one input of an operator whose inputs share a driver-partitioned state -- the
+/// per-driver hash set of EXCEPT/INTERSECT, or the per-driver hash table of a hash join.
+///
+/// Such inputs cannot each pick whatever partitioning suits their own source: a key has to reach the
+/// SAME driver from every input, or one input's rows never meet the other's.
+/// maybe_interpolate_local_shuffle_exchange decides per source -- it skips entirely when the source
+/// reports could_local_shuffle() == false, and it reuses the source's partition type and bucket
+/// properties when it has them -- so two inputs with different sources end up hashed by different
+/// functions, or one is repartitioned and the other is not. This ignores what the source claims and
+/// applies exactly the scheme the caller passes, so all inputs can be put on one.
+/// `part_type` and `bucket_properties` are that shared scheme; every input must be handed the same
+/// pair, together with its own corresponding key exprs.
+OpFactories interpolate_local_forced_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
+                                                      int32_t plan_node_id, OpFactories& pred_operators,
+                                                      const std::vector<ExprContext*>& partition_expr_ctxs,
+                                                      TPartitionType::type part_type,
+                                                      const std::vector<TBucketProperty>& bucket_properties);
+
 OpFactories maybe_interpolate_local_bucket_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
                                                             int32_t plan_node_id, OpFactories& pred_operators,
                                                             const std::vector<ExprContext*>& partition_expr_ctxs);

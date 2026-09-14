@@ -37,6 +37,8 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TIcebergGeoKind;
+import com.starrocks.thrift.TIcebergGeoMetadata;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.type.ArrayType;
@@ -569,6 +571,19 @@ public class IcebergApiConverter {
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
         tIcebergSchemaField.setIs_optional(nestedField.isOptional());
+        // Preserve external semantics even while SQL conversion remains UNKNOWN_TYPE.
+        // Do not infer these parameters from WKB or map these fields to VARBINARY.
+        if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
+            Types.GeographyType geography = (Types.GeographyType) nestedField.type();
+            tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
+                    .setKind(TIcebergGeoKind.GEOGRAPHY).setCrs(geography.crs() == null ? "OGC:CRS84" : geography.crs())
+                    .setEdge_algorithm(geography.algorithm() == null ? "SPHERICAL" : geography.algorithm().name()));
+        } else if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOMETRY) {
+            Types.GeometryType geometry = (Types.GeometryType) nestedField.type();
+            tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
+                    .setKind(TIcebergGeoKind.GEOMETRY).setCrs(geometry.crs() == null ? "OGC:CRS84" : geometry.crs())
+                    .setEdge_algorithm("PLANAR"));
+        }
         if (nestedField.type().isNestedType()) {
             List<TIcebergSchemaField> children = new ArrayList<>(nestedField.type().asNestedType().fields().size());
             for (Types.NestedField child : nestedField.type().asNestedType().fields()) {

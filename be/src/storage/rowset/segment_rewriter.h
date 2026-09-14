@@ -50,17 +50,60 @@ public:
                                          SegmentFileMark segment_file_mark = {},
                                          RewriteVectorIndexOptions vector_index_opts = {},
                                          std::vector<int64_t>* out_vector_index_ids = nullptr);
+    // Rewrite a cross-published partial-update segment into a file holding ONLY the rows |owned|
+    // marks as this tablet's.
+    //
+    // rewrite_partial_update above byte-copies the source's already-written columns and appends the
+    // resolved ones, so its output is rowid-identical to its source -- and therefore still holds every
+    // row the split handed to the siblings. Everything downstream then has to compensate for those
+    // rows: the resolved columns must be widened to segment length so the append has a value per
+    // source row, the segment's delete vector must mask them so reads do not serve them, and the
+    // UNSHARE compaction must rewrite the rowset later to drop them for good.
+    //
+    // This variant decodes every column instead, drops the rows |owned| excludes, and renumbers what
+    // is left, so the output is an ordinary full segment private to this tablet with no foreign rows
+    // in it at all. It costs a full re-encode rather than a copy plus append, which is why only the
+    // cross-published path uses it.
+    //
+    // |owned| and |resolved_columns| are both indexed by the rows the narrowed publish iterator
+    // EMITTED -- one entry per emitted row, owned or not -- and |emitted_rowid_base| says where that
+    // run starts in the source file. Both halves are therefore filtered by the same mask, and a source
+    // row outside the emitted run is not this tablet's either, so it goes as well.
+    // Exposed for testing: the (emitted base, mask) -> source-row selection arithmetic both
+    // owned-only rewrites share. It selects over the source rows [|source_row_base|, +|num_rows|), so
+    // a caller that reads its source in chunks passes each chunk's absolute position here and keeps
+    // handing over the whole mask -- re-slicing |owned| per chunk instead runs off its end as soon as
+    // the emitted run stops before the source does. See the definition for why rows outside the
+    // emitted run go too.
+    static Filter build_owned_selection(size_t source_row_base, size_t num_rows, uint32_t emitted_rowid_base,
+                                        const Filter& owned);
+
+    // |dest| comes back carrying the metadata of the file this produced rather than of its source:
+    // its row count and its sort-key fields, both marked authoritative by dropped_unowned_rows. The
+    // replacement metadata is otherwise copied from the source segment, and dropping rows invalidates
+    // exactly those fields -- the count outright, the sort-key bounds by leaving them too wide, and
+    // the samples by addressing rows the file no longer holds.
+    static Status rewrite_partial_update_owned_only(
+            const FileInfo& src, SegmentFileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
+            const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
+            uint32_t emitted_rowid_base, uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
+            SegmentFileMark segment_file_mark = {}, RewriteVectorIndexOptions vector_index_opts = {},
+            std::vector<int64_t>* out_vector_index_ids = nullptr);
+
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                          std::vector<uint32_t>& column_ids, MutableColumns* columns,
                                          SegmentFileMark segment_file_mark = {});
+    // A non-empty |owned| filters this rewrite the same way, so |dest| then comes back with its own
+    // row count and sort-key fields as well (see rewrite_partial_update_owned_only).
     static Status rewrite_auto_increment_lake(
-            const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
+            const FileInfo& src, SegmentFileInfo* dest, const TabletSchemaCSPtr& tschema,
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
             const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {},
-            std::vector<int64_t>* out_vector_index_ids = nullptr);
+            std::vector<int64_t>* out_vector_index_ids = nullptr, const Filter& owned = Filter{},
+            uint32_t emitted_rowid_base = 0);
 };
 
 } // namespace starrocks

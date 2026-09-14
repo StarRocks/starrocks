@@ -92,6 +92,15 @@ This topic introduces the following types of FE configurations:
 - Description: When true, the generated Log4j2 configuration appends a ".gz" postfix to rotated audit log filenames (fe.audit.log.*) so that Log4j2 will produce compressed (.gz) archived audit log files on rollover. The setting is read during FE startup in Log4jConfig.initLogging and is applied to the RollingFile appender for audit logs; it only affects rotated/archived files, not the active audit log. Because the value is initialized at startup, changing it requires restarting the FE to take effect. Use alongside audit log rotation settings (`audit_log_dir`, `audit_log_roll_interval`, `audit_roll_maxsize`, `audit_log_roll_num`).
 - Introduced in: 3.2.12
 
+### `audit_log_error_message_max_length`
+
+- Default: 1024
+- Type: Int
+- Unit: Characters
+- Is mutable: Yes
+- Description: The maximum length of the `ErrorMessage` field recorded in the audit log for a failed statement, counted in UTF-16 code units, so a character outside the Basic Multilingual Plane such as an emoji counts as two. A longer message is truncated and suffixed with `... /* truncated, audit_log_error_message_max_length=<value> */`; the suffix is not counted against the limit. Set it to `0` to stop recording error messages altogether, in which case the field is omitted from the audit record. Error messages are also omitted when `enable_sql_desensitize_in_log` is `true` or when `enable_audit_sql` is `false`, because an error message quotes the statement that failed, down to the values and the offending token.
+- Introduced in: 4.2.0
+
 ### `audit_log_json_format`
 
 - Default: false

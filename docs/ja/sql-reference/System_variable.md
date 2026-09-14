@@ -404,6 +404,33 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1024
 * **導入バージョン**: v2.5
 
+### count_distinct_implementation
+
+* **説明**: `COUNT(DISTINCT expr)` にパラメータが 1 つだけ含まれる場合の関数実装を制御します。使用できる値（大文字と小文字は区別されません）:
+  * `default`: `COUNT(DISTINCT expr)` の実装をデフォルトのままにします。オプティマイザは、クエリ形式、統計情報、およびコストに基づいて適切な集計プランを選択します。
+  * `multi_count_distinct`: `COUNT(DISTINCT expr)` の実装を `multi_distinct_count` に変更し、正確なカウントを行います。カーディナリティが低い列または中程度の列をカウントする場合、この実装によってシャッフルおよび重複排除のフェーズを 1 つ削減でき、クエリの速度を向上させられる場合があります。ただし、distinct 値を HashSet に保持するため、カーディナリティが高い列を重複排除するとメモリ使用量が過剰になり、OOM が発生する可能性があります。代表的なワークロードで事前に検証せず、この値をグローバルに設定しないでください。
+  * `ndv`: `COUNT(DISTINCT expr)` の実装を `ndv(expr)` に変更します。この関数は HyperLogLog を使用するため、メモリ使用量を抑えながら近似結果を返します。
+* **デフォルト**: `default`
+* **導入バージョン**: v3.3.6、v3.4.0
+
+:::note[`multi_distinct_count` の使用上の注意事項]
+`multi_distinct_count()` は正確な結果を返します。
+
+ほとんどのクエリでは、`COUNT(DISTINCT expr)` の使用を推奨します。オプティマイザが適切な集計プランを選択できるように、`count_distinct_implementation` を `default` に設定してください。
+
+カーディナリティが低い列または中程度の列を重複排除する場合は、`multi_distinct_count()` をテストして使用できます。この関数は 2 フェーズの集計を使用するため、シャッフルおよび重複排除のフェーズを 1 つ削減し、パフォーマンスを向上させられる場合があります。ただし、HashSet の状態保持と最終マージによってメモリ使用量が過剰になり、カーディナリティが高い列を重複排除すると OOM が発生する可能性があります。
+
+セッション全体ではなく、特定の `COUNT(DISTINCT expr)` に対してこの実装をテストする場合は、クエリヒントで `count_distinct_implementation` を設定できます。
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+この値をヒントで設定した場合、適用対象はパラメータが 1 つの `COUNT(DISTINCT)` のみに限定されます。`COUNT(DISTINCT expr1, expr2)` のような複数列の重複排除式には影響しません。
+:::
+
 ### custom_query_id (session)
 
 * **説明**: 現在のクエリに外部識別子をバインドするために使用されます。クエリ実行前に `SET SESSION custom_query_id = 'my-query-id';` のように設定できます。クエリ終了後に値はリセットされます。この値は `KILL QUERY 'my-query-id'` に渡すことができます。値は監査ログの `customQueryId` フィールドで確認できます。
@@ -1184,6 +1211,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: バイト
 * **データ型**: Int
 
+### max_array_length
+
+* **スコープ**: Session
+* **説明**: 配列関数が生成する配列に含まれる要素の最大数です。関数がこの上限を超える配列を生成した場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。この上限は配列を生成するすべての関数を対象としていますが、現時点では [array_agg](sql-functions/array-functions/array_agg.md) のみがチェックします。
+* **デフォルト**: 0
+* **タイプ**: Long
+* **導入バージョン**: v4.2
+
 ### max_pipeline_dop
 
 * **スコープ**: Session
@@ -1258,6 +1293,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: StarRocks が Hive から ORC ファイルを読み取る際に列がどのように一致するかを指定するために使用されます。デフォルト値は `false` で、ORC ファイル内の列は Hive テーブル定義内の順序位置に基づいて読み取られます。この変数が `true` に設定されている場合、列は名前に基づいて読み取られます。
 * **デフォルト**: false
 * **導入バージョン**: v3.1.10
+
+### paimon_reader_mode
+
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
+* **デフォルト**: AUTO
+* **データ型**: String
+* **導入バージョン**: v4.2
 
 ### parallel_exchange_instance_num
 

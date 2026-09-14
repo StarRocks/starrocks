@@ -403,6 +403,15 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
+    public void testTabletCountUsesCallerSuppliedTargetSizeSnapshot() {
+        // Simulate the mutable global config changing after a caller captured its positive target.
+        // The explicit snapshot must remain authoritative for this decision instead of re-reading 0.
+        Config.tablet_reshard_target_size = 0L;
+        Assertions.assertEquals(12, TabletPreSplitCoordinator.selectTabletCount(
+                new Estimates(100L * DebugUtil.GIGABYTE, 0L), 3, 10L * DebugUtil.GIGABYTE));
+    }
+
+    @Test
     public void testTabletCountRoundsUpToComputeNodeMultiple() {
         // 70 GB / 10 GB target = 7 tablets by bytes; rounded up to the next multiple
         // of 3 -> 9 (avoids an uneven 3/2/2 spread across the nodes).

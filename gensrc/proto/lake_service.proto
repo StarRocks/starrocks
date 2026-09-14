@@ -48,6 +48,30 @@ message PublishVersionRequest {
     // BE writes max(pre_metadata_bv, this_value) into new metadata to prevent stale FE values
     // from overwriting the real watermark after FE leader change.
     map<int64, int64> tablet_built_versions = 11;
+    // Lookup-order HINT for this request's |base_version| metadata reads, not a statement about what
+    // storage holds: when set, try the single partition-shared initial-metadata object (tablet id 0)
+    // before the tablet's own per-tablet key. Either order resolves the metadata, because whichever is
+    // tried first falls back to the other, so a wrong or absent value costs one extra read and never
+    // correctness.
+    //
+    // Worth hinting because a partition created with
+    // TCreateTabletReq::enable_tablet_creation_optimization -- which FE requests for `file_bundling`
+    // -- writes no per-tablet version-1 key at all, making the default order a guaranteed NotFound for
+    // every one of its tablets. Only version 1 ever has that shared object.
+    //
+    // The predicate is computed on FE because every input is FE state, and it must NOT be
+    // approximated by |enable_aggregate_publish| alone: a rollup / schema-change shadow index
+    // keeps per-tablet version-1 objects while the base index of the same physical partition owns
+    // a shared one, and both live in one storage path. Since those alter jobs publish their shadow
+    // tablets with base_version hardcoded to 1 and enable_aggregate_publish set, guessing from the
+    // table property would make a shadow tablet read the base index's metadata -- which exists, so
+    // no NotFound would surface to correct it. FE therefore also requires the physical partition to
+    // hold exactly one index.
+    //
+    // The BE applies it only to this request's base-version reads and remembers nothing, so it can
+    // never reach another index's tablets. Absent from an older FE, which simply keeps the default
+    // order.
+    optional bool prefer_shared_initial_metadata = 12;
 }
 
 // Per-tablet stats returned by the lake publish RPC. The FE also reuses this as a plain in-process

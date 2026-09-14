@@ -14,6 +14,8 @@
 
 #include "storage/lake/segment_pk_iterator.h"
 
+#include <algorithm>
+
 #include "base/debug/trace.h"
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
@@ -75,7 +77,7 @@ Status SegmentPKIterator::_load() {
     // function already returns Status, so a selection that cannot be built fails the load instead of
     // handing the caller a chunk it would process as "own every row". current() runs after the
     // consumer loop has already committed the previous chunk, so an error raised there is too late --
-    // LakePrimaryIndex::parallel_upsert checks the iterator status only after flush_memtable() has
+    // LakePersistentIndex::parallel_upsert checks the iterator status only after flush_memtable() has
     // durably written the sstable.
     if (_row_selector != nullptr) {
         ASSIGN_OR_RETURN(_owned, _row_selector->select(*_pk_column_chunk));
@@ -127,6 +129,32 @@ void SegmentPKIterator::next() {
     if (_status.ok()) {
         _current_pk_column_idx++;
     }
+}
+
+Status SegmentPKIterator::collapse_to_owned_rows() {
+    if (_owned.empty()) {
+        // No selector, so there is nothing to collapse and nothing was filtered out either.
+        return Status::OK();
+    }
+    // Only the non-lazy single-chunk shape can be collapsed: the mask and the encoded column have to
+    // describe the same rows, which they do only while the whole segment is materialized. A rewrite
+    // always runs in that mode -- should_enable_lazy_load() disables lazy load whenever a partial
+    // update is involved -- so refuse rather than renumber half a segment.
+    if (_lazy_load || _standalone_pk_column == nullptr || _pk_column_chunk == nullptr) {
+        return Status::InternalError("cannot collapse a lazily loaded primary key column to its owned rows");
+    }
+    if (_pk_column_chunk->num_rows() != _owned.size() || _standalone_pk_column->size() != _owned.size()) {
+        return Status::InternalError("the ownership mask does not describe the loaded chunk");
+    }
+    const size_t kept = _pk_column_chunk->filter(_owned);
+    (void)_standalone_pk_column->filter(_owned);
+    RETURN_ERROR_IF_FALSE(_standalone_pk_column->size() == kept, "chunk and encoded column disagree after filtering");
+    _owned.clear();
+    _physical_rowid_base = 0;
+    _current_rows = kept;
+    _begin_rowid_offsets.assign({0, kept});
+    _memory_usage = _pk_column_chunk->memory_usage() + _standalone_pk_column->memory_usage();
+    return Status::OK();
 }
 
 SegmentPKChunkRef SegmentPKIterator::current() {

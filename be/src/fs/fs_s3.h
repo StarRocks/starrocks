@@ -90,8 +90,8 @@ public:
 
     // Only use for UT
     bool find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
-                                               AWSCloudConfiguration* = nullptr) {
-        return _find_client_cache_keys_by_config_TEST(config);
+                                               AWSCloudConfiguration* cloud_config = nullptr) {
+        return _find_client_cache_keys_by_config_TEST(config, cloud_config);
     }
 
 private:

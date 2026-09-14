@@ -41,15 +41,6 @@ CONF_mBool(enable_full_sort_key_index, "true");
 // this switch (they consume the full page by presence). Default true.
 CONF_mBool(enable_full_sort_key_index_read, "true");
 
-// Maximum size in bytes of one row's encoded full sort key. Mirrors primary_key_limit_size. A load,
-// Spark push, or schema change that would admit a row with a wider sort key fails with a
-// non-retryable error, which bounds the size of the full sort key index page and the memory it
-// occupies once loaded. Compaction and post-commit segment rewrites are not checked, because a
-// failure there runs after commit and would put the tablet into an error state. The check applies
-// whenever the sort key can be encoded, independently of enable_full_sort_key_index, so that
-// admission and segment writing cannot disagree. A non-positive value disables it.
-CONF_mInt32(sort_key_limit_size, "1024");
-
 CONF_Bool(enable_transparent_data_encryption, "false");
 
 // CONF_Int32(default_num_rows_per_data_block, "1024");
@@ -58,6 +49,23 @@ CONF_mInt32(default_num_rows_per_column_file_block, "1024");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+// Gather every column's ordinal index into one run just before the footer, instead of leaving each
+// after its own column's data pages. A cold scan loads the ordinal index of every projected column
+// before it can read a data page; scattered, those cost a cache block and a round trip each, and at
+// the tail they share blocks and often the one the footer read already fetched. Nothing else moves
+// -- the short key index and the page zone maps keep the positions they have always had.
+//
+// A shared-nothing BE ignores this and keeps the original layout: there the scattered reads hit a
+// local disk. So does a partial-update rewrite, which copies an existing segment's prefix and
+// could only build a region covering the columns it appends. Vertical compaction does produce it.
+//
+// Cost: a one-column scan of a wide table pays roughly one extra remote block per segment, since
+// a hundred columns of ordinal index do not fit in the footer's block.
+//
+// Either layout is readable by any binary in either direction and the two coexist in one tablet,
+// so this can be flipped at any time without rewriting data.
+CONF_mBool(lake_enable_segment_tail_index_region, "true");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
@@ -65,8 +73,10 @@ CONF_Int32(data_page_size, "65536");
 // uncompressed trailer keeps the same size. The format is identified by the column encoding
 // recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
 // encoding fails to open the segment instead of misreading it. Only the write side is gated by
-// this config; default false.
-CONF_mBool(enable_binary_plain_delta_offset, "false");
+// this config; default true. Set it to false while any BE that does not support the encoding is
+// still serving, and before downgrading to such a version, since segments already written with
+// the encoding stay unreadable there.
+CONF_mBool(enable_binary_plain_delta_offset, "true");
 
 // whether to enable the bitmap index memory cache
 CONF_mBool(enable_bitmap_index_memory_page_cache, "true");

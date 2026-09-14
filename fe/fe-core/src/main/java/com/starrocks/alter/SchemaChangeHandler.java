@@ -79,6 +79,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
@@ -130,6 +131,7 @@ import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -1423,9 +1425,23 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (null == newColumn.getAggregationType()) {
                 Type type = newColumn.getType();
                 if (!type.canDistributedBy()) {
+                    // Reachable only for the ambiguous case below: an explicit KEY on a non-key-capable
+                    // type is already rejected by ColumnDefAnalyzer. Keep this rejection ahead of the
+                    // ambiguity check so the message never suggests KEY for a type that cannot be a key.
                     throw new DdlException(
                             "column without agg function will be treated as key column for aggregate table, " + type +
                                     " type can not be key column");
+                }
+                if (!newColumn.isKey() && !Config.allow_implicit_key_column_in_agg_add_column) {
+                    // Neither an agg function nor KEY was written. Promoting such a column to a key
+                    // column changes the table's aggregation key and rewrites existing data, so when
+                    // this is switched off, require the user to say which one they meant.
+                    throw new DdlException("Column '" + newColName + "' on aggregate table '" +
+                            olapTable.getName() + "' must specify either an aggregate function, making it a " +
+                            "value column, or the KEY keyword, making it a key column. Adding a key column " +
+                            "changes the table's aggregation key and rewrites existing data. To allow such a " +
+                            "column to be created as a key column instead, set FE config " +
+                            "allow_implicit_key_column_in_agg_add_column to true.");
                 }
                 newColumn.setIsKey(true);
             } else if (newColumn.getAggregationType() == AggregateType.SUM
@@ -2470,11 +2486,15 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void runAlterJobV2() {
-        for (AlterJobV2 alterJob : alterJobsV2.values()) {
-            if (alterJob.jobState.isFinalState()) {
-                continue;
+        runAlterJobV2(alterJobsV2.values());
+    }
+
+    @VisibleForTesting
+    void runAlterJobV2(Iterable<AlterJobV2> jobs) {
+        for (AlterJobV2 alterJob : jobs) {
+            if (!alterJob.jobState.isFinalState()) {
+                runAlterJobV2Safely(alterJob);
             }
-            alterJob.run();
         }
     }
 
@@ -3166,6 +3186,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public ShowResultSet processLakeTableAlterMeta(AlterClause alterClause, Database db, OlapTable olapTable)
             throws StarRocksException {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
+        }
         AlterJobV2 alterMetaJob = createAlterMetaJob(alterClause, db, olapTable);
         if (alterMetaJob == null) {
             return null;
@@ -4532,6 +4555,21 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable.setIndexes(indexes);
             olapTable.rebuildFullSchema();
 
+            // A schema change does not bump the partition visible version, which is what a global
+            // dict's validity is checked against, so the collected dicts stay "valid" while the new
+            // rowsets this change produces are encoded independently -- a query would then decode
+            // them against a stale dict and fail with "Dict Decode failed". SchemaChangeJobV2#onFinished
+            // invalidates every varchar column's dict for the same reason. Do it here, on the shared
+            // catalog-update path while the table write lock is held, so BOTH the leader (WAL callback)
+            // and a follower (replayFastSchemaEvolutionMetaChange, which calls this method directly and
+            // never enters the leader wrapper) invalidate the dict -- otherwise a follower that replayed
+            // the change keeps serving the stale dict and hits the same decode failure.
+            for (Column column : olapTable.getColumns()) {
+                if (column.getType().isVarchar()) {
+                    IDictManager.getInstance().removeGlobalDict(olapTable, column.getColumnId());
+                }
+            }
+
             // If modified columns are already done, inactive related mv
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable, modifiedColumns);
 
@@ -5006,6 +5044,10 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private static boolean addTouchesKeyDerivedRangeSortKey(OlapTable table, ColumnDef columnDef) {
         long baseIndexMetaId = table.getBaseIndexMetaId();
+        // Mirrors the implicit-key rule in addColumnInternal's AGG_KEYS branch. That branch now rejects
+        // the no-agg-no-KEY shape unless allow_implicit_key_column_in_agg_add_column is set, and it
+        // throws before this routing decision has any effect, so this predicate stays as-is. Keep the
+        // two in sync if either changes.
         boolean addedIsKey = columnDef.isKey()
                 || (table.getKeysType() == KeysType.AGG_KEYS && columnDef.getAggregateType() == null);
         if (!addedIsKey) {

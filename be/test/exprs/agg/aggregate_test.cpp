@@ -1265,6 +1265,97 @@ TEST_F(AggregateTest, test_percentile_cont_2) {
     ASSERT_EQ(3, result_column->get_data()[0]);
 }
 
+// Builds one merge-phase (grid) row out of `values` and merges it into `state`, exactly like a
+// partial aggregate arriving from a local aggregation. `values` may be empty, which is what a
+// local aggregation instance that saw no input row produces.
+static void merge_date_percentile_partial(const AggregateFunction* func, FunctionContext* fn_ctx,
+                                          ManagedAggrState* into, const std::vector<DateValue>& values, double rate) {
+    auto partial = ManagedAggrState::create(fn_ctx, func);
+    auto data_column = DateColumn::create();
+    for (auto v : values) {
+        data_column->append(v);
+    }
+    auto rate_column = ColumnHelper::create_const_column<TYPE_DOUBLE>(rate, 1);
+    std::vector<const Column*> raw_columns = {data_column.get(), rate_column.get()};
+    if (!values.empty()) {
+        func->update_batch_single_state(fn_ctx, data_column->size(), raw_columns.data(), partial->state());
+    }
+    MutableColumnPtr serde_column = BinaryColumn::create();
+    func->serialize_to_column(fn_ctx, partial->state(), serde_column.get());
+    func->merge(fn_ctx, serde_column.get(), into->state(), 0);
+}
+
+// The merge phase of percentile_cont builds a loser tree over the partial states. Neither the end
+// of a partial nor the tree's virtual leaf may be detected by value: for DATE, min_value() and
+// max_value() are the ordinary dates '0000-01-01' and '9999-12-31', and an empty partial consists
+// of nothing but those two sentinels. Before the fix each of the cases below made ls[0] hold the
+// virtual leaf k, and the merge loop then read grid[k]/mp[k], one past the end of both vectors.
+TEST_F(AggregateTest, test_percentile_cont_date_merge_sentinel_values) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DATE, TYPE_DATE, false);
+    const DateValue kMax = DateValue::MAX_DATE_VALUE; // '9999-12-31', == RunTimeTypeLimits<TYPE_DATE>::max_value()
+    const DateValue kMin = DateValue::MIN_DATE_VALUE; // '0000-01-01', == RunTimeTypeLimits<TYPE_DATE>::min_value()
+
+    // reverse == true (rate > 0.5): every partial's largest element equals the max sentinel.
+    {
+        auto state = ManagedAggrState::create(ctx, func);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 11), kMax}, 0.6);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {DateValue::create(2020, 1, 2), DateValue::create(2020, 1, 12), kMax}, 0.6);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {DateValue::create(2020, 1, 3), DateValue::create(2020, 1, 13), kMax}, 0.6);
+        auto result = DateColumn::create();
+        func->finalize_to_column(local_ctx.get(), state->state(), result.get());
+        // sorted: 01-01 01-02 01-03 01-11 01-12 01-13 max max max, u = 8 * 0.6 = 4.8
+        ASSERT_EQ(DateValue::create(2020, 1, 12), result->get_data()[0]);
+    }
+    // reverse == false (rate <= 0.5): every partial's smallest element equals the min sentinel.
+    {
+        auto state = ManagedAggrState::create(ctx, func);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {kMin, DateValue::create(2020, 1, 2), DateValue::create(2020, 1, 11)}, 0.4);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {kMin, DateValue::create(2020, 1, 3), DateValue::create(2020, 1, 12)}, 0.4);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(),
+                                      {kMin, DateValue::create(2020, 1, 4), DateValue::create(2020, 1, 13)}, 0.4);
+        auto result = DateColumn::create();
+        func->finalize_to_column(local_ctx.get(), state->state(), result.get());
+        // sorted: min min min 01-02 01-03 01-04 01-11 01-12 01-13, u = 8 * 0.4 = 3.2
+        ASSERT_EQ(DateValue::create(2020, 1, 2), result->get_data()[0]);
+    }
+}
+
+// A local aggregation instance that received no input row still emits one partial state, so the
+// merge phase can see a grid row with an empty payload next to non-empty ones.
+TEST_F(AggregateTest, test_percentile_cont_date_merge_empty_partial) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DATE, TYPE_DATE, false);
+
+    // The empty partial is merged first: an empty state carries rate 0, and merge() adopts the rate
+    // of whichever partial it saw last.
+    for (double rate : {0.4, 0.9}) {
+        auto state = ManagedAggrState::create(ctx, func);
+        merge_date_percentile_partial(func, local_ctx.get(), state.get(), {}, rate);
+        merge_date_percentile_partial(
+                func, local_ctx.get(), state.get(),
+                {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 2), DateValue::create(2020, 1, 3)}, rate);
+        merge_date_percentile_partial(
+                func, local_ctx.get(), state.get(),
+                {DateValue::create(2020, 1, 4), DateValue::create(2020, 1, 5), DateValue::create(2020, 1, 6)}, rate);
+        auto result = DateColumn::create();
+        func->finalize_to_column(local_ctx.get(), state->state(), result.get());
+        // sorted: 01-01 .. 01-06; rate 0.4 -> u = 2.0, rate 0.9 -> u = 4.5
+        ASSERT_EQ(rate == 0.4 ? DateValue::create(2020, 1, 3) : DateValue::create(2020, 1, 5), result->get_data()[0]);
+    }
+}
+
 TEST_F(AggregateTest, test_percentile_disc) {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
                                              TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
@@ -2822,6 +2913,212 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
     const auto& result_data_column = down_cast<const BinaryColumn&>(*nullable_elements.data_column());
 
     ASSERT_EQ(6, result_data_column.size());
+}
+
+TEST_F(AggregateTest, test_array_agg_max_array_length) {
+    const AggregateFunction* agg_function = get_aggregate_function("array_agg", TYPE_VARCHAR, TYPE_ARRAY, true);
+
+    auto data_column = BinaryColumn::create();
+    auto null_column = NullColumn::create();
+    // 4 non-null values plus 2 nulls, so the group holds 6 elements only if nulls are counted.
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        data_column->append(val);
+        null_column->append(i >= 4 ? 1 : 0);
+    }
+    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    const Column* row_column = column.get();
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, agg_function);
+        agg_function->update_batch_single_state(fn_ctx, column->size(), &row_column, state->state());
+        auto elem = BinaryColumn::create();
+        auto offsets = UInt32Column::create(0);
+        auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+        agg_function->finalize_to_column(fn_ctx, state->state(), result_column->as_mutable_raw_ptr());
+    };
+
+    // unlimited by default
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_FALSE(local_ctx->has_error());
+    }
+    // a group whose size is exactly the limit is still accepted
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(6);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_FALSE(local_ctx->has_error());
+    }
+    // nulls count towards the limit, so the 4 non-null values alone do not keep the group under it
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(5);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_TRUE(local_ctx->has_error());
+        ASSERT_NE(std::string(local_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
+}
+
+TEST_F(AggregateTest, test_array_agg_max_array_length_distinct) {
+    const AggregateFunction* agg_function = get_aggregate_function("array_agg_distinct", TYPE_INT, TYPE_ARRAY, true);
+
+    auto data_column = Int32Column::create();
+    auto null_column = NullColumn::create();
+    // 4 distinct values plus 2 nulls that collapse into one element, so DISTINCT yields 5 elements.
+    for (int i = 0; i < 6; i++) {
+        data_column->append(i % 4);
+        null_column->append(i >= 4 ? 1 : 0);
+    }
+    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    const Column* row_column = column.get();
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, agg_function);
+        agg_function->update_batch_single_state(fn_ctx, column->size(), &row_column, state->state());
+        auto elem = Int32Column::create();
+        auto offsets = UInt32Column::create(0);
+        auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+        agg_function->finalize_to_column(fn_ctx, state->state(), result_column->as_mutable_raw_ptr());
+    };
+
+    // duplicates removed by array_agg_distinct do not count towards the limit
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(5);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_FALSE(local_ctx->has_error());
+    }
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(4);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_TRUE(local_ctx->has_error());
+        ASSERT_NE(std::string(local_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
+}
+
+TEST_F(AggregateTest, test_array_aggV2_max_array_length) {
+    auto build_context = [](RuntimeState* runtime_state, ssize_t max_size) {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> fn_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+        fn_ctx->set_is_asc_order(std::vector<bool>{false});
+        fn_ctx->set_nulls_first(std::vector<bool>{true});
+        fn_ctx->set_runtime_state(runtime_state);
+        fn_ctx->set_max_array_length(max_size);
+        return fn_ctx;
+    };
+
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
+
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    char_column->append_datum("bcd");
+    char_column->append_datum(Datum());
+    char_column->append_datum("esfg");
+    char_column->append_datum("cdrdfe");
+
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+    int_column->append_datum(9);
+    int_column->append_datum(Datum());
+    int_column->append_datum(7);
+    int_column->append_datum(6);
+
+    std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
+
+    TypeDescriptor type_array_char;
+    type_array_char.type = LogicalType::TYPE_ARRAY;
+    type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, array_agg_func);
+        array_agg_func->update_batch_single_state(fn_ctx, int_column->size(), raw_columns.data(), state->state());
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
+        array_agg_func->finalize_to_column(fn_ctx, state->state(), res_array_col.get());
+    };
+
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 4);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_FALSE(fn_ctx->has_error());
+    }
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 3);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_TRUE(fn_ctx->has_error());
+        ASSERT_NE(std::string(fn_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
+}
+
+TEST_F(AggregateTest, test_array_aggV2_max_array_length_distinct) {
+    auto build_context = [](RuntimeState* runtime_state, ssize_t max_size) {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> fn_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+        fn_ctx->set_is_asc_order(std::vector<bool>{true});
+        fn_ctx->set_nulls_first(std::vector<bool>{true});
+        fn_ctx->set_is_distinct(true);
+        fn_ctx->set_runtime_state(runtime_state);
+        fn_ctx->set_max_array_length(max_size);
+        return fn_ctx;
+    };
+
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
+
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    // 6 input rows, 2 distinct values after DISTINCT.
+    char_column->append_datum("a");
+    char_column->append_datum("a");
+    char_column->append_datum("b");
+    char_column->append_datum("a");
+    char_column->append_datum("b");
+    char_column->append_datum("b");
+
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+    int_column->append_datum(1);
+    int_column->append_datum(2);
+    int_column->append_datum(3);
+    int_column->append_datum(4);
+    int_column->append_datum(5);
+    int_column->append_datum(6);
+
+    std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
+
+    TypeDescriptor type_array_char;
+    type_array_char.type = LogicalType::TYPE_ARRAY;
+    type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, array_agg_func);
+        array_agg_func->update_batch_single_state(fn_ctx, int_column->size(), raw_columns.data(), state->state());
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
+        array_agg_func->finalize_to_column(fn_ctx, state->state(), res_array_col.get());
+    };
+
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    // Pre-dedup size is 6, but DISTINCT yields 2 elements, so a limit of 2 must pass.
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 2);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_FALSE(fn_ctx->has_error());
+    }
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 1);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_TRUE(fn_ctx->has_error());
+        ASSERT_NE(std::string(fn_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
 }
 
 TEST_F(AggregateTest, test_array_agg_nullable) {

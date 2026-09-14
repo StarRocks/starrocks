@@ -456,6 +456,33 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 1024
 * **Introduced in**: v2.5
 
+### count_distinct_implementation
+
+* **Description**: Controls the function implementation when `COUNT(DISTINCT expr)` contains only one parameter. Valid values (case-insensitive):
+  * `default`: Reserves the `COUNT(DISTINCT expr)` implementation. The optimizer chooses the suitable aggregation plan based on query form, statistics, and costs.
+  * `multi_count_distinct`: Changes the `COUNT(DISTINCT expr)` implementation to `multi_distinct_count` for precise counting. For counting on low- and medium-cardinality columns, this implementation can reduce a shuffle and deduplication phase, and thereby increase the speed. However, it will reserve the distinct values in HashSet, causing excessive memory consumption and even OOM when deduplicating high-cardinality columns. Do not set this value globally without first verifying it using representative loads.
+  * `ndv`:Changes the `COUNT(DISTINCT expr)` implementation to `ndv(expr)`. This function uses HyperLogLog, which returns approximate results with lower memory overhead.
+* **Default**: `default`
+* **Introduced in**: v3.3.6、v3.4.0
+
+:::note[Usage Notes for `multi_distinct_count`]
+`multi_distinct_count()` returns precise results.
+
+For most queries, `COUNT(DISTINCT expr)` is recommended. Set `count_distinct_implementation` to `default` to allow the optimizer to choose a suitable aggregation plan.
+
+When deduplicating low- and medium-cardinality columns, you can test and use `multi_distinct_count()`. This function uses two phases of aggregation, and can reduce a shuffle and deduplication phase for better performance. However, its HashSet status and final merging can cause excessive memory consumption and even OOM when deduplicating high-cardinality columns.
+
+If you want to test this implementation on one `COUNT(DISTINCT expr)` instead of changing the whole session, you can set `count_distinct_implementation` in a query hint:
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+Setting this value with hints applies only to `COUNT(DISTINCT)` with a single parameter. It will not affect multi-column deduplication expressions such as `COUNT(DISTINCT expr1, expr2)`.
+:::
+
 ### custom_query_id (session)
 
 * **Description**: Used to bind some external identifier to a current query. Can be set using `SET SESSION custom_query_id = 'my-query-id';` before executing a query. The value is reset after query is finished. This value can be passed to `KILL QUERY 'my-query-id'`. Value can be found in audit logs as a `customQueryId` field.
@@ -1438,6 +1465,14 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Unit**: Byte
 * **Data type**: Int
 
+### max_array_length
+
+* **Scope**: Session
+* **Description**: The maximum number of elements in an array produced by an array function. If a function produces a larger array, the query fails instead of returning an oversized array. `0` or a negative value means no limit. This limit is intended for all functions that build arrays, but only [array_agg](sql-functions/array-functions/array_agg.md) enforces it so far.
+* **Default**: 0
+* **Data type**: Long
+* **Introduced in**: v4.2
+
 ### max_parallel_scan_instance_num
 
 * **Scope**: Session
@@ -1534,6 +1569,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
+
+### paimon_reader_mode
+
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Default**: AUTO
+* **Data type**: String
+* **Introduced in**: v4.2
 
 ### parallel_exchange_instance_num
 
