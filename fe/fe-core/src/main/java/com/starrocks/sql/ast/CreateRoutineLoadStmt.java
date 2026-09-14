@@ -909,6 +909,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     }
 
     private void checkPulsarProperties() throws AnalysisException {
+        if (format != null && format.equalsIgnoreCase("avro")) {
+            throw new AnalysisException("The avro format is not supported for pulsar routine load");
+        }
+
         Optional<String> optional = dataSourceProperties.keySet().stream()
                 .filter(entity -> !PULSAR_PROPERTIES_SET.contains(entity))
                 .filter(entity -> !entity.startsWith("property.")).findFirst();
