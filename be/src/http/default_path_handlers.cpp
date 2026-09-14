@@ -234,8 +234,8 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     std::string stats_opts = "a";
     if (auto it = args.find("opts"); it != args.end()) {
         if (it->second.find_first_not_of(kJemallocStatsOpts) != std::string::npos) {
-            (*output) << "ignoring opts '" << it->second << "': expected characters from '"
-                      << kJemallocStatsOpts << "'<br>";
+            (*output) << "ignoring opts '" << it->second << "': expected characters from '" << kJemallocStatsOpts
+                      << "'<br>";
         } else {
             stats_opts = it->second;
         }
