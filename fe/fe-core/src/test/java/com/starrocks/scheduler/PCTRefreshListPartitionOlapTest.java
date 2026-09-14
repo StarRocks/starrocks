@@ -1344,17 +1344,22 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
      *
      * <p>The window boundary is {@code current_date() - interval 1 month}, which the planner
      * re-evaluates on every statement, while these partitions keep whatever date they were created
-     * with. Anchoring the older partition exactly on the boundary therefore breaks whenever the
+     * with. Anchoring the older partition exactly on today's boundary therefore breaks whenever the
      * calendar day rolls over between creating it and planning the final query: it drops out of the
      * window, the MV no longer covers the query, and the plan grows a UNION against the base table.
-     * Keep one day of margin so a single rollover is harmless.
+     *
+     * <p>So anchor it on <em>tomorrow's</em> boundary instead, which is still inside today's. Add
+     * the day <em>before</em> subtracting the month, not after: month arithmetic clamps to the end
+     * of the shorter month, so the two orders disagree on every month end that is followed by a
+     * longer month. On 2026-09-30, {@code minusMonths(1).plusDays(1)} gives 2026-08-31 while the
+     * post-rollover boundary is 2026-09-01 -- still outside, and still flaky.
      */
     private void addRetainedPartitions(String tableName) {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         addListPartition(tableName, "p5", "guangdong", now.format(formatter), true);
         addListPartition(tableName, "p6", "guangdong",
-                now.minusMonths(1).plusDays(1).format(formatter), true);
+                now.plusDays(1).minusMonths(1).format(formatter), true);
     }
 
     private void testMVRefreshWithTTLCondition(String tableName) {
