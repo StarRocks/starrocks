@@ -62,7 +62,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | all            | Yes      | HTTP(S) endpoint URL. Must start with `http://` or `https://`.                                       |
 | `model`         | all            | Yes      | Model name passed in the request `model` field (e.g. `text-embedding-3-small`, `cohere/rerank-4-fast`). |
-| `protocol`      | all            | No       | Wire protocol of the endpoint. `embedding` accepts `openai`; `rerank` accepts `cohere`; `chat` accepts `openai` or `anthropic`. Defaults to `openai` (`embedding`, `chat`) or `cohere` (`rerank`) when omitted. Always shown by `SHOW AI PROVIDERS` and `DESC AI PROVIDER`. |
+| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere`. Any value may be used with any type; the type only decides the default when omitted: `openai` for `embedding` and `chat`, `cohere` for `rerank`. Always shown by `SHOW AI PROVIDERS` and `DESC AI PROVIDER`. |
 | `dimensions`    | embedding      | No       | Embedding vector dimension (positive int). Must match the provider output and the vector index dim. |
 | `max_documents` | rerank         | No       | Max documents sent per rerank request (positive int; default 1000).                                  |
 | `deadline_ms`   | rerank         | No       | Overall wall-clock budget in ms for the whole rerank call across all retry attempts (positive int; default 10000). Bounds how long a slow/unreachable reranker can stall a search before it degrades to fusion order. A timeout is never retried; only a connection failure or HTTP 5xx is. |

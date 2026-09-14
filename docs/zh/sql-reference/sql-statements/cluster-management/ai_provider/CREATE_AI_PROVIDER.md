@@ -58,7 +58,7 @@ PROPERTIES (
 | --------------- | -------------- | ---- | ------------------------------------------------------------------------------------ |
 | `endpoint`      | 全部           | 是   | HTTP(S) 端点 URL，必须以 `http://` 或 `https://` 开头。                               |
 | `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`、`cohere/rerank-4-fast`）。 |
-| `protocol`      | 全部           | 否   | 端点使用的协议。`embedding` 仅接受 `openai`；`rerank` 仅接受 `cohere`；`chat` 接受 `openai` 或 `anthropic`。省略时默认为 `openai`（`embedding`、`chat`）或 `cohere`（`rerank`）。`SHOW AI PROVIDERS` 和 `DESC AI PROVIDER` 始终显示该值。 |
+| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere`。任意类型都可以使用任意值，类型只决定省略时的默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。`SHOW AI PROVIDERS` 和 `DESC AI PROVIDER` 始终显示该值。 |
 | `dimensions`    | embedding      | 否   | embedding 向量维度（正整数）。必须与 provider 输出及向量索引维度一致。                |
 | `max_documents` | rerank         | 否   | 每次 rerank 请求发送的最大文档数（正整数；默认 1000）。                               |
 | `deadline_ms`   | rerank         | 否   | 整个 rerank 调用（含所有重试）的总时间预算（毫秒，正整数；默认 10000）。用于限制慢/不可达的 rerank 服务最多拖慢搜索多久,超过后降级为融合排序。超时不重试,仅连接失败或 HTTP 5xx 才重试。 |

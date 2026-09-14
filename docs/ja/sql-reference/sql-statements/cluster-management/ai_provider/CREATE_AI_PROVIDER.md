@@ -60,7 +60,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | すべて         | はい     | HTTP(S) エンドポイントの URL。`http://` または `https://` で始まる必要があります。                    |
 | `model`         | すべて         | はい     | リクエストの `model` フィールドに渡されるモデル名 (例: `text-embedding-3-small`、`cohere/rerank-4-fast`)。 |
-| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル。`embedding` は `openai` のみ、`rerank` は `cohere` のみ、`chat` は `openai` または `anthropic` を受け付けます。省略時のデフォルトは `openai` (`embedding`、`chat`) または `cohere` (`rerank`) です。`SHOW AI PROVIDERS` と `DESC AI PROVIDER` では常に表示されます。 |
+| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、または `cohere`。どのタイプでも任意の値を使用でき、タイプは省略時のデフォルトのみを決めます: `embedding` と `chat` は `openai`、`rerank` は `cohere`。`SHOW AI PROVIDERS` と `DESC AI PROVIDER` では常に表示されます。 |
 | `dimensions`    | embedding      | いいえ   | 埋め込みベクトルの次元数 (正の整数)。プロバイダーの出力およびベクトルインデックスの次元と一致する必要があります。 |
 | `max_documents` | rerank         | いいえ   | 1 回の rerank リクエストで送信するドキュメントの最大数 (正の整数、デフォルト 1000)。                  |
 | `deadline_ms`   | rerank         | いいえ   | すべてのリトライを含む rerank 呼び出し全体の実時間の上限 (ミリ秒、正の整数、デフォルト 10000)。応答の遅い、または到達不能なリランカーが検索をどれだけ長く停止させられるかを制限し、超過した場合はフュージョン順にフォールバックします。タイムアウトはリトライされません。リトライされるのは接続失敗または HTTP 5xx のみです。 |

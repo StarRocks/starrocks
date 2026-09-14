@@ -23,7 +23,7 @@ CREATE AI PROVIDER ai_provider_rerank_test TYPE rerank PROPERTIES ("endpoint" = 
 SHOW AI PROVIDERS LIKE 'ai_provider_rerank_test';
 DESC AI PROVIDER ai_provider_rerank_test;
 ALTER AI PROVIDER ai_provider_rerank_test SET ("protocol" = "openai");
-CREATE AI PROVIDER ai_provider_bad_test TYPE embedding PROPERTIES ("protocol" = "anthropic", "endpoint" = "https://api.openai.com/v1/embeddings", "model" = "text-embedding-3-small");
+DESC AI PROVIDER ai_provider_rerank_test;
 CREATE AI PROVIDER ai_provider_bad_test TYPE chat PROPERTIES ("protocol" = "gemini", "endpoint" = "https://x/v1", "model" = "m");
 CREATE AI PROVIDER ai_provider_bad_test TYPE "text" PROPERTIES ("endpoint" = "https://x/v1", "model" = "m");
 DROP AI PROVIDER ai_provider_chat_test;
