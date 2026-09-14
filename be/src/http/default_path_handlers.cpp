@@ -208,9 +208,10 @@ void malloc_stats_write_cb(void* opaque, const char* data) {
 
 // jemalloc's own opts string: every character OMITS a section -- 'g' general, 'm' merged
 // arenas, 'd' destroyed arenas, 'a' per-arena, 'b' bins, 'l' large, 'x' mutex, 'e' extents,
-// 'h' hpa -- except 'J', which switches the whole report to JSON. An empty string omits
-// nothing. Taken from STATS_PRINT_OPTIONS in jemalloc's include/jemalloc/internal/stats.h.
-constexpr std::string_view kJemallocStatsOpts = "Jgmdablxeh";
+// 'h' hpa. An empty string omits nothing. Taken from STATS_PRINT_OPTIONS in jemalloc's
+// include/jemalloc/internal/stats.h, minus 'J': it switches the report to JSON, and this page
+// wraps whatever it gets in HTML, so the result would parse as neither.
+constexpr std::string_view kJemallocStatsOpts = "gmdablxeh";
 
 std::optional<std::string> parse_jemalloc_stats_opts(std::optional<std::string_view> requested) {
     // The default omits the per-arena statistics: with one arena per CPU those tables dwarf
