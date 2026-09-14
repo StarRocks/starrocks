@@ -1519,7 +1519,12 @@ static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet:
 StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
         int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
         const std::unordered_map<int64_t, int64_t>& partition_versions) {
-    auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        // Shutdown already released the StarOS worker while this operation was in flight.
+        return Status::ServiceUnavailable(fmt::format("StarOS worker is not available, tablet_id: {}", tablet_id));
+    }
+    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
     if (!shard_info_or.ok()) {
         return Status::InternalError(fmt::format("fail to get shard info of tablet: {}, err: {}", tablet_id,
                                                  shard_info_or.status().message()));

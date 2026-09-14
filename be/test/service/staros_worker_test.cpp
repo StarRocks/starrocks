@@ -31,6 +31,7 @@
 #include "common/shutdown_hook.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -336,6 +337,54 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     ASSERT_FALSE(got.ok());
     EXPECT_EQ(before_total + 1, metrics->staros_shard_info_fallback_total.value());
     EXPECT_EQ(before_failed + 1, metrics->staros_shard_info_fallback_failed_total.value());
+}
+
+// `shutdown_staros_worker()` releases the starlet runtime while an in-flight load may still be
+// walking a StarOS-backed path. Every call that reaches starlet after that must report a status
+// instead of dereferencing the released runtime. See issue #78883.
+TEST_F(StarOSWorkerTest, starlet_calls_fail_after_runtime_release) {
+    auto orig_starlet = std::move(g_starlet);
+    DeferOp restore_starlet([&orig_starlet] { g_starlet = std::move(orig_starlet); });
+    ASSERT_EQ(nullptr, get_starlet());
+
+    StarOSWorker worker;
+
+    // A cache miss falls back to the remote fetch, which waits for starlet readiness. With no
+    // starlet there is nothing to wait for, so the call must give up right away rather than burn
+    // the full 5s readiness timeout.
+    MonotonicStopWatch watch;
+    watch.start();
+    EXPECT_FALSE(worker.retrieve_shard_info(987654321).ok());
+    EXPECT_LT(watch.elapsed_time(), 3L * 1000 * 1000 * 1000);
+}
+
+// `shutdown_staros_worker()` drops the process-wide starlet reference while an in-flight operation
+// may still be using it. The reference that operation already holds must keep the runtime alive: a
+// raw pointer would dangle across the blocking starmgr RPC behind `get_shard_info()`, and the
+// use-after-free lands in the same `Starlet::_mutex` that a point-in-time null check cannot
+// protect. See issue #78883.
+TEST_F(StarOSWorkerTest, retained_starlet_outlives_shutdown_release) {
+    auto worker = std::make_shared<StarOSWorker>();
+    auto orig_starlet = std::move(g_starlet);
+    DeferOp restore_starlet([&orig_starlet] { g_starlet = std::move(orig_starlet); });
+    g_starlet = std::make_shared<staros::starlet::Starlet>(worker);
+
+    // An in-flight operation resolves the runtime before shutdown retires it.
+    auto held = get_starlet();
+    ASSERT_NE(nullptr, held);
+
+    {
+        // Stands in for shutdown: stop the runtime and drop the process-wide reference. `held` is
+        // the only remaining owner, so the object must survive this scope.
+        auto retired = std::move(g_starlet);
+        ASSERT_EQ(held.get(), retired.get());
+        retired->stop();
+    }
+    ASSERT_EQ(nullptr, get_starlet());
+
+    // Touches Starlet::_mutex, the member a use-after-free would have corrupted. Under ASAN this
+    // is what fails if the retained reference stops keeping the runtime alive.
+    EXPECT_FALSE(held->is_ready());
 }
 
 } // namespace starrocks

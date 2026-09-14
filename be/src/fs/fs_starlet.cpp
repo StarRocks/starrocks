@@ -613,7 +613,13 @@ public:
 
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
-        return g_worker->get_shard_filesystem(shard_id, _conf);
+        auto worker = get_staros_worker();
+        if (worker == nullptr) {
+            // Shutdown already released the StarOS worker while this operation was in flight.
+            // Fail the operation instead of dereferencing the retired global.
+            return absl::UnavailableError(fmt::format("StarOS worker is not available, shard_id: {}", shard_id));
+        }
+        return worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
