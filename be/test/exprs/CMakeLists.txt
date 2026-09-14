@@ -103,6 +103,7 @@ set(EXPR_TEST_FILES
     udf/python/env_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp
+    unnest_variant_test.cpp
     vectorized_literal_test.cpp
 )
 if (STARROCKS_JIT_ENABLE)
