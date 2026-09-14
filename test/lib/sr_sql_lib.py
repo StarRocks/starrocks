@@ -2337,23 +2337,6 @@ class StarrocksSQLApiLib(object):
                     if plan.find(expect) <= 0:
                         return False
                 return True
-<<<<<<< HEAD
-            else:
-                mvs = []
-                for line in plan.split('\n'):
-                    if 'MaterializedView: true' in line:
-                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
-                        if mv_name:
-                            mvs.append(mv_name)
-                mvs.sort()
-                print("Hit materialized views:", ", ".join(mvs))
-                return mvs
-        return self._with_materialized_view_rewrite(check_mv)
-
-    def print_hit_materialized_views(self, query) -> str:
-        """
-        print all mv_names hit in query
-=======
             mvs = []
             for line in plan.split('\n'):
                 if 'MaterializedView: true' in line:
@@ -2385,7 +2368,6 @@ class StarrocksSQLApiLib(object):
         the optimizer may skip an eligible MV on the very first explain call. Without ``expects``
         the return value is free-form output that lands in an R file, and there is nothing to wait
         for except stability, so the original one-second settle wait is kept.
->>>>>>> 5070ffd ([UT] Poll for the MV rewrite instead of sleeping a second first (#78981))
         """
         tools.assert_true(timeout > 0, "print_hit_materialized_views: timeout must be positive, got %s" % timeout)
         tools.assert_true(interval > 0, "print_hit_materialized_views: interval must be positive, got %s" % interval)
@@ -2414,9 +2396,6 @@ class StarrocksSQLApiLib(object):
             # sort the mv_names to make the result deterministic
             ans.sort()
             return ",".join(ans)
-<<<<<<< HEAD
-        return self._with_materialized_view_rewrite(extract_mvs)
-=======
 
         if not expects:
             time.sleep(1)
@@ -2431,7 +2410,6 @@ class StarrocksSQLApiLib(object):
             if time.monotonic() >= deadline:
                 return last_result
             time.sleep(interval)
->>>>>>> 5070ffd ([UT] Poll for the MV rewrite instead of sleeping a second first (#78981))
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
