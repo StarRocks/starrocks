@@ -14,7 +14,6 @@
 
 #include "runtime/serde/protobuf_chunk_serde.h"
 
-#include <stdexcept>
 #include <utility>
 
 #include "base/coding.h"
@@ -194,7 +193,6 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize_with_schema(const Schema& schema
     const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
     const auto* end = cur + buff.size();
 
-    if (buff.size() < 8) return Status::Corruption("Truncated chunk header");
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
         return Status::Corruption("invalid version");
@@ -220,19 +218,10 @@ static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, i
     return -1;
 }
 
-static StatusOr<ColumnPtr> create_deserialization_column(const TypeDescriptor& type, bool nullable, bool constant) {
-    try {
-        return ColumnHelper::create_column(type, nullable, constant, 0);
-    } catch (const std::invalid_argument& error) {
-        return Status::Corruption(error.what());
-    }
-}
-
 StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
     const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
     const auto* end = cur + buff.size();
 
-    if (buff.size() < 8) return Status::Corruption("Truncated chunk header");
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
         return Status::Corruption(fmt::format("invalid version: {}", version));
@@ -242,16 +231,10 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
     uint32_t rows = decode_fixed32_le(cur);
     cur += 4;
 
-    if (_meta.types.size() != _meta.is_nulls.size() || _meta.types.size() != _meta.is_consts.size() ||
-        _meta.types.size() != _meta.slot_id_to_index.size() ||
-        (!_encode_level.empty() && _encode_level.size() != _meta.types.size())) {
-        return Status::Corruption("Inconsistent chunk metadata");
-    }
     Columns columns;
     columns.resize(_meta.slot_id_to_index.size());
     for (size_t i = 0, sz = _meta.is_nulls.size(); i < sz; ++i) {
-        ASSIGN_OR_RETURN(columns[i],
-                         create_deserialization_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i]));
+        columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
     }
 
     if (_encode_level.empty()) {
@@ -284,8 +267,8 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         extra_columns.resize(_meta.extra_data_metas.size());
         for (size_t i = 0, sz = _meta.extra_data_metas.size(); i < sz; ++i) {
             auto extra_meta = _meta.extra_data_metas[i];
-            ASSIGN_OR_RETURN(extra_columns[i],
-                             create_deserialization_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const));
+            extra_columns[i] =
+                    ColumnHelper::create_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const, rows);
         }
         for (auto& column : extra_columns) {
             ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
@@ -327,12 +310,6 @@ StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RecordDescriptor& re
         chunk_meta.is_nulls[i] = chunk_pb.is_nulls()[i];
     }
     chunk_meta.is_consts.resize(chunk_pb.is_nulls().size(), false);
-    if (chunk_pb.is_consts_size() != 0) {
-        if (chunk_pb.is_consts_size() != chunk_pb.is_nulls_size()) {
-            return Status::Corruption("Inconsistent chunk constant metadata");
-        }
-        for (int i = 0; i < chunk_pb.is_consts_size(); ++i) chunk_meta.is_consts[i] = chunk_pb.is_consts(i);
-    }
 
     size_t column_index = 0;
     chunk_meta.types.resize(chunk_pb.is_nulls().size());

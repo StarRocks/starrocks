@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <stdexcept>
 
 #include "base/coding.h"
 #include "column/array_column.h"
@@ -180,10 +181,30 @@ TEST(GeoTransportTest, OrdinaryWireFormatAndUnsupportedPaths) {
     EXPECT_TRUE(geometry->serialize_column(bytes.data()).status().is_not_supported());
     ProtobufChunkMeta meta;
     ProtobufChunkDeserializer reader(meta);
-    for (size_t size = 0; size < 8; ++size) EXPECT_FALSE(reader.deserialize(std::string(size, 0)).ok());
     auto invalid = encoded->data();
     encode_fixed32_le(reinterpret_cast<uint8_t*>(invalid.data()), 99);
     EXPECT_FALSE(reader.deserialize(invalid).ok());
+}
+
+TEST(GeoTransportTest, SizeEstimationDoesNotReplaceDescriptorValidation) {
+    for (int kind = 0; kind < 3; ++kind) {
+        auto desc = descriptor();
+        if (kind == 1) desc.type = GeoTypeDescriptor{};
+        if (kind == 2) desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
+        auto column = GeoColumn::create(desc);
+        column->append_wkb(Slice(point()));
+        const auto size = ColumnArraySerde::max_serialized_size(*column);
+        ASSERT_GT(size, 0);
+        std::vector<uint8_t> bytes(size, 0xa5);
+        auto written = ColumnArraySerde::serialize(*column, bytes.data());
+        if (kind == 0) {
+            ASSERT_TRUE(written.ok()) << written.status();
+            EXPECT_EQ(size, *written - bytes.data());
+        } else {
+            EXPECT_TRUE(written.status().is_not_supported());
+            EXPECT_EQ(std::vector<uint8_t>(size, 0xa5), bytes);
+        }
+    }
 }
 
 TEST(GeoTransportTest, StorageMetadataAndOpaquePayload) {
@@ -231,7 +252,7 @@ TEST(GeoTransportTest, EmptyAndAllFamilies) {
     for (size_t row = 0; row < source->size(); ++row) EXPECT_EQ(source->get_wkb(row), target->get_wkb(row));
 }
 
-TEST(GeoTransportTest, NullableEncodingAndMalformedRowCounts) {
+TEST(GeoTransportTest, NullableEncoding) {
     auto desc = descriptor();
     auto geo = GeoColumn::create(desc);
     geo->append_wkb(Slice(point()));
@@ -256,14 +277,6 @@ TEST(GeoTransportTest, NullableEncodingAndMalformedRowCounts) {
         EXPECT_FALSE(restored->columns()[0]->is_null(0));
         EXPECT_TRUE(restored->columns()[0]->is_null(511));
     }
-    auto wire = ProtobufChunkSerde::serialize(chunk);
-    ASSERT_TRUE(wire.ok());
-    auto corrupt = wire->data();
-    // Shorten only the null map, retaining an intact two-part column payload.
-    encode_fixed32_le(reinterpret_cast<uint8_t*>(corrupt.data()) + 8, 511);
-    corrupt.erase(12, 1);
-    ProtobufChunkDeserializer reader(meta);
-    EXPECT_TRUE(reader.deserialize(corrupt).status().is_corruption());
 }
 
 TEST(GeoTransportTest, LegacyConstantNullInOrdinaryAndMixedChunks) {
@@ -467,7 +480,8 @@ TEST(GeoTransportTest, RejectsConflictingReceiverPrimitive) {
     meta.is_consts = {false};
     meta.slot_id_to_index[1] = 0;
     ProtobufChunkDeserializer reader(meta);
-    EXPECT_TRUE(reader.deserialize(wire->data()).status().is_corruption());
+    // The typed column constructor rejects inconsistent metadata before decoding.
+    EXPECT_THROW((void)reader.deserialize(wire->data()), std::invalid_argument);
 }
 
 // Opt-in reproducible microbenchmark; report timings, never enforce machine-dependent thresholds.

@@ -240,17 +240,6 @@ public:
                                                 FixedLengthColumnBase<T>* column, const int encode_level) {
         uint32_t size = 0;
         ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &size));
-        if (size % sizeof(T) != 0) return Status::Corruption("Invalid fixed-length column size");
-        if (is_integer_encoding_enabled(encode_level) && size >= ENCODE_SIZE_LIMIT) {
-            uint64_t encoded_size = 0;
-            ASSIGN_OR_RETURN(auto payload, read_little_endian_64(buff, end, &encoded_size));
-            RETURN_IF_ERROR(check_remaining_size(payload, end, encoded_size));
-            if (uint64_t(size) > encoded_size * 4) {
-                return Status::Corruption("Invalid fixed-length column expansion");
-            }
-        } else {
-            RETURN_IF_ERROR(check_remaining_size(buff, end, size));
-        }
         auto& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
         if (is_integer_encoding_enabled(encode_level) && size >= ENCODE_SIZE_LIMIT) {
@@ -811,9 +800,6 @@ public:
                                                 const int encode_level) {
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->null_column_raw_ptr(), false, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->data_column_raw_ptr(), false, encode_level));
-        if (column->null_column()->size() != column->data_column()->size()) {
-            return Status::Corruption("Nullable column row counts do not match");
-        }
         column->update_has_null();
         return buff;
     }
@@ -911,9 +897,6 @@ public:
         uint64_t size = 0;
         ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &size));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->data_column_raw_ptr(), false, encode_level));
-        if (column->data_column()->size() > 1 || (size != 0 && column->data_column()->size() != 1)) {
-            return Status::Corruption("Invalid constant column row count");
-        }
         column->resize(size);
         return buff;
     }

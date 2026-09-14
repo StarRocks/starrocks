@@ -288,7 +288,6 @@ void GeoColumn::deserialize_and_append_batch_nullable(Buffer<Slice>&, size_t, Bu
 }
 
 int64_t GeoColumn::serialized_column_size() const {
-    if (!check_transport_descriptor(_descriptor).ok()) return 0;
     return 16 + _descriptor.to_protobuf().ByteSizeLong() + _data->get_immutable_bytes().size() +
            sizeof(uint32_t) * _data->get_offset().size();
 }
