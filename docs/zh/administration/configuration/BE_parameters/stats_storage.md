@@ -485,24 +485,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
 - 引入版本：v3.3.2
 
-### enable_pk_index_parallel_compaction
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用存算分离集群中主键索引的并行 Compaction。
-- 引入版本：-
-
-### enable_pk_index_parallel_execution
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用存算分离集群中主键索引操作的并行执行。开启后，系统会在发布操作期间使用线程池并发处理分段，显著提升大表的性能。
-- 引入版本：-
-
 ### enable_pk_size_tiered_compaction_strategy
 
 - 默认值：true
@@ -934,7 +916,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：百分比（0-100）
 - 是否动态：是
-- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 即并行）。
+- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控，始终走并行路径。
 - 引入版本：-
 
 ### lake_partial_update_thread_pool_max_threads
@@ -943,7 +925,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。运行时开关由 `enable_pk_index_parallel_execution` 控制。
+- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：v4.1
 
 ### lake_partial_update_thread_pool_queue_size

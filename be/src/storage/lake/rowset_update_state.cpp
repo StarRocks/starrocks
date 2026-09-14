@@ -1139,7 +1139,7 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
 //
 // Erasing a key it does not own is not merely wasted work: the child's primary index still carries
 // the ancestor entries inherited through its shared sstables (the tablet-range gate on those runs
-// only in LakePersistentIndex::merge_sstables, i.e. at sstable compaction time), so the lookup can
+// only in the index compaction manager's merge, i.e. at sstable compaction time), so the lookup can
 // SUCCEED and hand back a location in a rowset the split pruned away from this child. That rssid
 // then reaches MetaFileBuilder::update_num_del_stat, which finds no such rowset and fails the
 // publish with "unexpected segment id: <rssid> tablet id: <child>" -- permanently, since the load

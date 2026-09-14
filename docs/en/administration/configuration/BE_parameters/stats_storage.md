@@ -451,24 +451,6 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
 - Introduced in: v3.3.2
 
-### enable_pk_index_parallel_compaction
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel Compaction for Primary Key index in a shared-data cluster.
-- Introduced in: -
-
-### enable_pk_index_parallel_execution
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
-- Introduced in: -
-
 ### enable_pk_size_tiered_compaction_strategy
 
 - Default: true
@@ -943,7 +925,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: percent (0-100)
 - Is mutable: Yes
-- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true`).
+- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate so the parallel path always runs.
 - Introduced in: -
 
 ### lake_partial_update_thread_pool_max_threads
@@ -952,7 +934,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores. Runtime on/off is controlled by `enable_pk_index_parallel_execution`.
+- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores.
 - Introduced in: v4.1
 
 ### lake_partial_update_thread_pool_queue_size

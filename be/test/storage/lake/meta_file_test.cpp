@@ -2410,7 +2410,8 @@ TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst) {
     EXPECT_TRUE(orphan_names.count("reused.sst") == 0);
 }
 
-// Test that remove_compacted_sst also handles output_sstable (singular, from major_compact)
+// Test that remove_compacted_sst also handles output_sstable (singular), which only appears in
+// txn logs written before index compaction moved to the plural output_sstables field.
 TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst_singular_output) {
     const int64_t tablet_id = 10011;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);

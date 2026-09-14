@@ -669,19 +669,10 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     const auto& metadata = tablet.metadata();
     bool is_pk_table = metadata->schema().keys_type() == PRIMARY_KEYS;
 
-    // Parallel compaction only supports:
-    // 1. PK tables with enable_pk_index_parallel_execution enabled
-    // 2. Non-PK tables with size-tiered compaction strategy (no cumulative_point)
-    // For PK tables, parallel compaction requires enable_pk_index_parallel_execution because
-    // mapper files need to be stored on remote storage for multi-node access.
-    // For non-PK tables with default (base+cumulative) strategy, the cumulative_point
-    // calculation in parallel compaction is complex and error-prone, so we fallback
-    // to normal compaction.
-    if (is_pk_table && !config::enable_pk_index_parallel_execution) {
-        VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " txn=" << txn_id
-                << " fallback to normal compaction because enable_pk_index_parallel_execution is disabled";
-        return 0;
-    }
+    // Parallel compaction supports PK tables unconditionally, and non-PK tables only with the
+    // size-tiered compaction strategy (no cumulative_point). For non-PK tables with the default
+    // (base+cumulative) strategy, the cumulative_point calculation in parallel compaction is
+    // complex and error-prone, so we fallback to normal compaction.
     if (!is_pk_table && !config::enable_size_tiered_compaction_strategy) {
         VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " txn=" << txn_id
                 << " fallback to normal compaction because non-PK table with default compaction strategy";

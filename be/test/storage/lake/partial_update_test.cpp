@@ -345,7 +345,6 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
 
     ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
     ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
-    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
     int64_t upt_memory_usage_per_row = 0;
     std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
     SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row",
@@ -876,7 +875,6 @@ TEST_P(LakePartialUpdateTest, test_column_mode_dcg_update_row_vec_is_segment_abs
 
         ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
         ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
-        ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
         std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
         SyncPoint::GetInstance()->SetCallBack(
                 "ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit", [&](void* arg) {
@@ -5782,16 +5780,11 @@ TEST_P(LakePartialUpdateTest, test_parallel_column_mode_partial_update_multi_seg
     // Step 2: Perform partial column updates with multiple update segments per txn.
     // Using write_buffer_size=1 forces each write() call to flush as a separate segment,
     // creating multiple update segments that exercise parallel PK index lookup.
-    // Force parallel execution on and restore both configs via RAII so a failing
-    // ASSERT in the loop below cannot leak state into subsequent tests.
+    // Restore the config via RAII so a failing ASSERT in the loop below cannot leak
+    // state into subsequent tests.
     const int64_t old_write_buffer_size = config::write_buffer_size;
-    const bool old_enable_parallel = config::enable_pk_index_parallel_execution;
     config::write_buffer_size = 1;
-    config::enable_pk_index_parallel_execution = true;
-    DeferOp restore_cfg([&]() {
-        config::write_buffer_size = old_write_buffer_size;
-        config::enable_pk_index_parallel_execution = old_enable_parallel;
-    });
+    DeferOp restore_cfg([&]() { config::write_buffer_size = old_write_buffer_size; });
 
     for (int i = 0; i < kNumPartialUpdates; i++) {
         auto txn_id = next_id();

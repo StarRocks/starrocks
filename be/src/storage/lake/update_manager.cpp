@@ -476,8 +476,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     bool skip_early_sst_compact = false;
     const bool is_row_mode_partial_update =
             op_write.has_txn_meta() && op_write.rewrite_segments_meta_size() > 0 && op_write.rowset().num_rows() > 0;
-    const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution && is_row_mode_partial_update &&
-                                             local_segments > 1 && use_cloud_native_pk_index(*metadata);
+    const bool use_parallel_partial_update =
+            is_row_mode_partial_update && local_segments > 1 && use_cloud_native_pk_index(*metadata);
 
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
@@ -1168,12 +1168,11 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 }
 
 // Update primary index with new rows and collect rows to be deleted.
-// This method supports both serial and parallel execution modes.
 //
 // Parallel Execution:
-// When enabled (config::enable_pk_index_parallel_execution && is_cloud_native_index), this method
-// uses a thread pool to process segments concurrently, significantly improving performance
-// for large tablets during publish operations.
+// For a cloud-native index this method uses a thread pool to process segments concurrently,
+// significantly improving performance for large tablets during publish operations. A local
+// index has no parallel counterpart and runs the same code inline on the caller thread.
 //
 // Parameters:
 //   rowset_id:            Base RSSID (RowSet Segment ID) for this rowset
@@ -1185,7 +1184,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 //   is_cloud_native_index: Whether using cloud-native persistent index
 //
 // Execution Flow:
-//   1. Setup parallel execution context if enabled (allocate thread pool token)
+//   1. Setup parallel execution context for a cloud-native index (allocate thread pool token)
 //   2. For each segment:
 //      - read_only mode: Call parallel_get() to find existing rows to delete
 //      - write mode: Call parallel_upsert() to update index and find deletes
@@ -1196,11 +1195,11 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
                                  bool is_cloud_native_index) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
 
-    // Prepare parallel execution infrastructure if enabled
+    // Prepare parallel execution infrastructure
     std::unique_ptr<ThreadPoolToken> token;
 
     // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
-    if (config::enable_pk_index_parallel_execution && is_cloud_native_index) {
+    if (is_cloud_native_index) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
@@ -1367,12 +1366,9 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
-    // Obtain thread pool token for parallel execution if enabled
-    std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution) {
-        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                ThreadPool::ExecutionMode::CONCURRENT);
-    }
+    // Obtain thread pool token for parallel execution
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
 
     // The helper only writes into the delete map, so the context is a pure sink here -- it carries no
     // runner, because this path's fan-out is the local one below rather than a deferred index lookup.
@@ -1547,7 +1543,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
     const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
-    if (config::enable_pk_index_parallel_execution && params.op_write.rowset().num_rows() >= min_rows_per_task) {
+    if (params.op_write.rowset().num_rows() >= min_rows_per_task) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
@@ -1735,11 +1731,8 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePersistentIndex& index) {
         TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
-        std::unique_ptr<ThreadPoolToken> token;
-        if (config::enable_pk_index_parallel_execution) {
-            token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                    ThreadPool::ExecutionMode::CONCURRENT);
-        }
+        auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
         st.update(
                 index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment, owned_per_segment));
@@ -2482,13 +2475,10 @@ Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& me
     // error-propagation paths.
     FAIL_POINT_TRIGGER_EXECUTE(fail_execute_index_major_compaction,
                                { return Status::InternalError("injected index major compaction failure"); });
-    if (config::enable_pk_index_parallel_compaction) {
-        if (_parallel_compact_mgr == nullptr) {
-            return Status::InternalError("parallel compact manager is not initialized");
-        }
-        return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
+    if (_parallel_compact_mgr == nullptr) {
+        return Status::InternalError("parallel compact manager is not initialized");
     }
-    return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
+    return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
 }
 
 bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {

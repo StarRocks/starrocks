@@ -4869,34 +4869,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
-// Test PK table with enable_pk_index_parallel_execution disabled fallback (lines 659-663)
-TEST_F(TabletParallelCompactionManagerTest, test_try_create_parallel_tasks_pk_index_parallel_disabled) {
-    int64_t tablet_id = 10059;
-    int64_t txn_id = 20059;
-    int64_t version = 11;
-    create_pk_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
-
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, false);
-
-    TabletParallelConfig config;
-    config.set_max_parallel_per_tablet(4);
-    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
-
-    CompactRequest request;
-    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
-    request.add_tablet_ids(tablet_id);
-    CompactResponse response;
-    TestClosure closure;
-    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
-
-    auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, _thread_pool.get(), []() { return true; },
-            [](bool) {});
-
-    EXPECT_TRUE(st.ok()) << st.status();
-    EXPECT_EQ(0, st.value()) << "PK table with enable_pk_index_parallel_execution disabled should fallback";
-}
-
 // Test non-PK table with enable_size_tiered_compaction_strategy=false fallback (lines 662-666)
 TEST_F(TabletParallelCompactionManagerTest, test_try_create_parallel_tasks_non_pk_size_tiered_disabled) {
     int64_t tablet_id = 10058;
@@ -8364,14 +8336,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_index_major_compaction_failure_
         ASSERT_NE(nullptr, fp) << "failpoint " << name << " is not registered";
         fp->setMode(trigger_mode);
     };
-
-    // Take the serial branch of execute_index_major_compaction so the disarmed leg below returns OK
-    // deterministically: the parallel branch needs a LakePersistentIndexParallelCompactMgr, which
-    // TestBase only wires up when StorageEnv happens to have one. The failpoint sits ahead of this
-    // branch, so the armed leg is unaffected.
-    const bool saved_parallel = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = saved_parallel; });
 
     // Armed: the injected failure must reach the caller.
     register_completed_state(txn_id);

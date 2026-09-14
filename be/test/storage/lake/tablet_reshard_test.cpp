@@ -168,6 +168,13 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        // PK index major compaction always runs on the parallel manager, so wire in the process-wide
+        // one and point it at this fixture's tablet manager, the same way TestBase does.
+        if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+            parallel_compact_mgr != nullptr) {
+            _update_manager->set_parallel_compact_mgr(parallel_compact_mgr);
+            parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_manager.get());
+        }
 
         // These reshard tests use hand-crafted metadata with no real in-memory PK memtable, so
         // the cloud-native index flush that split/merge trigger has nothing to flush. Skip it so
@@ -2222,10 +2229,6 @@ protected:
                                             const std::vector<std::pair<int32_t, int32_t>>& initial_rows,
                                             const std::vector<std::pair<int32_t, int32_t>>& rows_after_dml,
                                             const std::vector<int32_t>& deleted_keys) {
-        const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-        config::enable_pk_index_parallel_compaction = false;
-        DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
-
         auto target = std::make_shared<TabletMetadataPB>(result.published.at(result.target_tablet_id));
         ASSERT_EQ(0, target->sstable_meta().sstables_size()) << "fallback must enter native index rebuild";
         _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
@@ -2569,14 +2572,11 @@ protected:
 
     StatusOr<RepeatedLifecycleResult> run_repeated_four_cycle_lifecycle(bool enable_tde) {
         const bool old_tde = config::enable_transparent_data_encryption;
-        const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
         const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
         config::enable_transparent_data_encryption = enable_tde;
-        config::enable_pk_index_parallel_compaction = false;
         config::lake_pk_compaction_min_input_segments = 1;
         DeferOp restore_config([&] {
             config::enable_transparent_data_encryption = old_tde;
-            config::enable_pk_index_parallel_compaction = old_parallel_compaction;
             config::lake_pk_compaction_min_input_segments = old_min_segments;
         });
         if (enable_tde) ensure_kek_in_key_cache();
@@ -3499,13 +3499,8 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_signature_detects_declaration_c
 
 TEST_F(LakeTabletReshardTest, test_range_reshard_compaction_partial_merge_rejoin) {
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
-    const bool old_parallel = config::enable_pk_index_parallel_compaction;
     config::lake_pk_compaction_min_input_segments = 1;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore([&] {
-        config::lake_pk_compaction_min_input_segments = old_min_segments;
-        config::enable_pk_index_parallel_compaction = old_parallel;
-    });
+    DeferOp restore([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
     auto source = fixed_point_source(true);
     ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(source->id(), source->version(), 10, 7777, 60));
     ASSIGN_OR_ABORT(auto compacted, compact_tablet(written->id(), written->version(), true));
@@ -3570,9 +3565,6 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_signature_normalizes_recovery_e
 }
 
 TEST_F(LakeTabletReshardTest, test_range_reshard_post_dml_cycles_are_fixed_point) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     auto source = fixed_point_source(true);
     ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(source->id(), source->version(), 10, 7777, 60));
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
@@ -3733,13 +3725,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_repeated_t
     ASSERT_GE(result.final_sst_orphans.size(), 3);
 
     const bool old_tde = config::enable_transparent_data_encryption;
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     config::enable_transparent_data_encryption = true;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_config([&] {
-        config::enable_transparent_data_encryption = old_tde;
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
-    });
+    DeferOp restore_config([&] { config::enable_transparent_data_encryption = old_tde; });
     ensure_kek_in_key_cache();
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
@@ -4856,13 +4843,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11935_falls_back_then_dml_is_exact) {
     const bool old_primary_key_recover = config::enable_primary_key_recover;
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     config::enable_primary_key_recover = true;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_config([&] {
-        config::enable_primary_key_recover = old_primary_key_recover;
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
-    });
+    DeferOp restore_config([&] { config::enable_primary_key_recover = old_primary_key_recover; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
     DeferOp restore_flush_failpoints([&] {
@@ -4924,9 +4906,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11935_falls_back_then_dml
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml_is_exact) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel_compaction([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
     DeferOp restore_flush_failpoints([&] {
@@ -5025,11 +5004,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
     };
 
     const bool old_tde = config::enable_transparent_data_encryption;
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
     DeferOp restore_config([&] {
         config::enable_transparent_data_encryption = old_tde;
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
         config::lake_pk_compaction_min_input_segments = old_min_segments;
     });
     DeferOp wait_flush_pool(
@@ -5037,7 +5014,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
     config::lake_pk_compaction_min_input_segments = 1;
-    config::enable_pk_index_parallel_compaction = false;
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
@@ -5317,9 +5293,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_uses_native
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layout_falls_back_exact) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
 
@@ -5452,14 +5425,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layo
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layout_reuses_sstables) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
-    config::enable_pk_index_parallel_compaction = false;
     config::lake_pk_compaction_min_input_segments = 1;
-    DeferOp restore_config([&] {
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
-        config::lake_pk_compaction_min_input_segments = old_min_segments;
-    });
+    DeferOp restore_config([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
 
@@ -15917,9 +15885,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_del_bearing_local_max_
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejoins_independently_remapped_delete_origins) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     const int64_t selected_id = next_id();
     const int64_t duplicate_id = next_id();
     prepare_tablet_dirs(selected_id);
@@ -16077,13 +16042,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_inherited_del_offset_o
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_transferred_inherited_del_survives_cold_load) {
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
-    const bool old_parallel = config::enable_pk_index_parallel_compaction;
     config::lake_pk_compaction_min_input_segments = 1;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore([&] {
-        config::lake_pk_compaction_min_input_segments = old_min_segments;
-        config::enable_pk_index_parallel_compaction = old_parallel;
-    });
+    DeferOp restore([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
     ASSIGN_OR_ABORT(auto initial, create_lifecycle_source(next_id(), 0, 300, 10, 100, false));
     ASSIGN_OR_ABORT(auto deleted, publish_followup_upsert_delete(initial->id(), initial->version(), 110, 1100, 10));
     ASSERT_EQ(1, deleted->rowsets(deleted->rowsets_size() - 1).del_files_size());
