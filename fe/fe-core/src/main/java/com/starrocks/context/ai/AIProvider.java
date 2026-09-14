@@ -23,7 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Persisted metadata for one external AI service provider (embedding / rerank / future text). The
+ * Persisted metadata for one external AI service provider (embedding / rerank / chat). The
  * full property bag — including the API key — lives on the FE meta journal and image, so cluster
  * upgrades that wipe the installation directory do not lose the credential.
  *
@@ -41,6 +41,9 @@ public class AIProvider implements Writable {
     public static final String PROPERTY_MODEL = "model";
     public static final String PROPERTY_TIMEOUT_MS = "timeout_ms";
     public static final String PROPERTY_API_KEY = "api_key";
+    // Wire protocol of the endpoint (see AIProviderProtocol). Always present on a normalized provider;
+    // defaults per type when the user omits it.
+    public static final String PROPERTY_PROTOCOL = "protocol";
     // Embedding-specific
     public static final String PROPERTY_DIMENSIONS = "dimensions";
     // Rerank-specific (optional): cap documents sent per rerank request
@@ -112,9 +115,7 @@ public class AIProvider implements Writable {
     }
 
     public void mergeParams(Map<String, String> patch) {
-        for (Map.Entry<String, String> e : patch.entrySet()) {
-            params.put(e.getKey(), e.getValue());
-        }
+        params.putAll(patch);
     }
 
     public String getEndpoint() {
@@ -147,6 +148,23 @@ public class AIProvider implements Writable {
 
     public String getApiKey() {
         return params.get(PROPERTY_API_KEY);
+    }
+
+    /**
+     * Never null. Falls back to the type's default protocol for records persisted before the protocol
+     * property existed (those are filled in by {@code AIProviderMgr} on load/replay, so the fallback only
+     * matters transiently).
+     */
+    public AIProviderProtocol getProtocol() {
+        String v = params.get(PROPERTY_PROTOCOL);
+        return Strings.isNullOrEmpty(v) ? AIProviderProtocol.defaultFor(getType()) : AIProviderProtocol.fromString(v);
+    }
+
+    /** Writes the type's default protocol into the params if none is set. */
+    public void ensureProtocol() {
+        if (Strings.isNullOrEmpty(params.get(PROPERTY_PROTOCOL))) {
+            params.put(PROPERTY_PROTOCOL, AIProviderProtocol.defaultFor(getType()).lower());
+        }
     }
 
     public Map<String, String> getMaskedParams() {

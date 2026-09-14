@@ -44,6 +44,13 @@ public class AIProviderAnalysisTest {
         return p;
     }
 
+    private static Map<String, String> validChat() {
+        Map<String, String> p = new LinkedHashMap<>();
+        p.put("endpoint", "https://api.anthropic.com/v1/messages");
+        p.put("model", "claude-sonnet-4-5");
+        return p;
+    }
+
     private static CreateAIProviderStmt create(String type, Map<String, String> props) {
         return new CreateAIProviderStmt(false, "p1", type, props, null, NodePosition.ZERO);
     }
@@ -64,6 +71,116 @@ public class AIProviderAnalysisTest {
     public void testCreateRejectsUnknownType() {
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(create("bogus", validEmbedding()), new ConnectContext()));
+    }
+
+    @Test
+    public void testCreateRejectsLegacyTextType() {
+        // The placeholder type was renamed to chat; the error must advertise the new name.
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(create("text", validChat()), new ConnectContext()));
+        Assertions.assertTrue(ex.getMessage().contains("chat"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateFillsDefaultProtocol() {
+        // CREATE without protocol gets the type's default written into the statement properties.
+        CreateAIProviderStmt emb = create("embedding", validEmbedding());
+        AIProviderAnalyzer.analyze(emb, new ConnectContext());
+        Assertions.assertEquals("openai", emb.getProperties().get("protocol"));
+
+        CreateAIProviderStmt rr = create("rerank", validRerank());
+        AIProviderAnalyzer.analyze(rr, new ConnectContext());
+        Assertions.assertEquals("cohere", rr.getProperties().get("protocol"));
+
+        CreateAIProviderStmt chat = create("chat", validChat());
+        AIProviderAnalyzer.analyze(chat, new ConnectContext());
+        Assertions.assertEquals("openai", chat.getProperties().get("protocol"));
+
+        // An explicit value is kept as written.
+        Map<String, String> p = validChat();
+        p.put("protocol", "anthropic");
+        CreateAIProviderStmt explicit = create("chat", p);
+        AIProviderAnalyzer.analyze(explicit, new ConnectContext());
+        Assertions.assertEquals("anthropic", explicit.getProperties().get("protocol"));
+    }
+
+    @Test
+    public void testAlterDoesNotFillProtocol() {
+        Map<String, String> p = new LinkedHashMap<>();
+        p.put("timeout_ms", "5000");
+        AlterAIProviderStmt stmt = new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO);
+        AIProviderAnalyzer.analyze(stmt, new ConnectContext());
+        Assertions.assertFalse(stmt.getProperties().containsKey("protocol"));
+    }
+
+    @Test
+    public void testCreateChatAnthropic() {
+        Map<String, String> p = validChat();
+        p.put("protocol", "anthropic");
+        AIProviderAnalyzer.analyze(create("chat", p), new ConnectContext());
+    }
+
+    @Test
+    public void testCreateRerankCohere() {
+        Map<String, String> p = validRerank();
+        p.put("protocol", "cohere");
+        AIProviderAnalyzer.analyze(create("rerank", p), new ConnectContext());
+    }
+
+    @Test
+    public void testCreateRejectsProtocolNotAllowedForType() {
+        Map<String, String> emb = validEmbedding();
+        emb.put("protocol", "anthropic");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(create("embedding", emb), new ConnectContext()));
+        Assertions.assertTrue(ex.getMessage().contains("not supported for AI provider type embedding"),
+                ex.getMessage());
+
+        Map<String, String> embCohere = validEmbedding();
+        embCohere.put("protocol", "cohere");
+        Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(create("embedding", embCohere), new ConnectContext()));
+
+        Map<String, String> rr = validRerank();
+        rr.put("protocol", "openai");
+        Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(create("rerank", rr), new ConnectContext()));
+    }
+
+    @Test
+    public void testCreateRejectsInvalidProtocol() {
+        Map<String, String> p = validChat();
+        p.put("protocol", "gemini");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(create("chat", p), new ConnectContext()));
+        Assertions.assertTrue(ex.getMessage().contains("invalid AI provider protocol"), ex.getMessage());
+
+        Map<String, String> empty = validChat();
+        empty.put("protocol", "");
+        Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(create("chat", empty), new ConnectContext()));
+    }
+
+    @Test
+    public void testAlterProtocol() {
+        // No provider named p1 is registered here, so only the type-independent checks apply; the
+        // type-aware ALTER checks are covered in AIProviderMgrTest against a stored provider.
+        Map<String, String> ok = new LinkedHashMap<>();
+        ok.put("protocol", "anthropic");
+        AIProviderAnalyzer.analyze(
+                new AlterAIProviderStmt(false, "p1", ok, NodePosition.ZERO), new ConnectContext());
+
+        Map<String, String> bad = new LinkedHashMap<>();
+        bad.put("protocol", "bogus");
+        Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(
+                        new AlterAIProviderStmt(false, "p1", bad, NodePosition.ZERO), new ConnectContext()));
+
+        Map<String, String> empty = new LinkedHashMap<>();
+        empty.put("protocol", "");
+        Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(
+                        new AlterAIProviderStmt(false, "p1", empty, NodePosition.ZERO), new ConnectContext()));
     }
 
     @Test

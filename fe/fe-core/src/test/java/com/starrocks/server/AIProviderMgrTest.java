@@ -15,8 +15,14 @@
 package com.starrocks.server;
 
 import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AIProviderAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -73,22 +79,111 @@ public class AIProviderMgrTest {
         return p;
     }
 
+    private static Map<String, String> chatProps() {
+        Map<String, String> p = new LinkedHashMap<>();
+        p.put(AIProvider.PROPERTY_ENDPOINT, "https://api.anthropic.com/v1/messages");
+        p.put(AIProvider.PROPERTY_MODEL, "claude-sonnet-4-5");
+        p.put(AIProvider.PROPERTY_PROTOCOL, "anthropic");
+        return p;
+    }
+
     @Test
     public void testPerTypeDefaultsAreIndependent() throws Exception {
         AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
         mgr.createProvider("emb", AIProviderType.EMBEDDING, embProps(), null);
         mgr.createProvider("rr", AIProviderType.RERANK, rerankProps(), null);
+        mgr.createProvider("ch", AIProviderType.CHAT, chatProps(), null);
         mgr.setDefaultProvider("emb");
         mgr.setDefaultProvider("rr");
+        mgr.setDefaultProvider("ch");
 
         Assertions.assertEquals("emb", mgr.getDefaultProvider(AIProviderType.EMBEDDING).getName());
         Assertions.assertEquals("rr", mgr.getDefaultProvider(AIProviderType.RERANK).getName());
+        Assertions.assertEquals("ch", mgr.getDefaultProvider(AIProviderType.CHAT).getName());
         Assertions.assertEquals(AIProviderType.RERANK, mgr.getProvider("rr").getType());
+        Assertions.assertEquals(AIProviderType.CHAT, mgr.getProvider("ch").getType());
         Assertions.assertEquals(1, mgr.listProviders(AIProviderType.RERANK).size());
         Assertions.assertEquals(1, mgr.listProviders(AIProviderType.EMBEDDING).size());
-        // Setting the rerank default must not disturb the embedding default.
+        Assertions.assertEquals(1, mgr.listProviders(AIProviderType.CHAT).size());
+        // Setting the rerank default must not disturb the other defaults.
         mgr.setDefaultProvider("rr");
         Assertions.assertEquals("emb", mgr.getDefaultProvider(AIProviderType.EMBEDDING).getName());
+        Assertions.assertEquals("ch", mgr.getDefaultProvider(AIProviderType.CHAT).getName());
+    }
+
+    @Test
+    public void testAlterAnalysisUsesStoredProviderType() throws Exception {
+        // The analyzer resolves the stored provider, so ALTER is checked against the real type.
+        AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        mgr.createProvider("emb", AIProviderType.EMBEDDING, embProps(), null);
+        Map<String, String> chatNoProtocol = chatProps();
+        chatNoProtocol.remove(AIProvider.PROPERTY_PROTOCOL);
+        mgr.createProvider("ch", AIProviderType.CHAT, chatNoProtocol, null);
+
+        Map<String, String> anthropic = new LinkedHashMap<>();
+        anthropic.put(AIProvider.PROPERTY_PROTOCOL, "anthropic");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(
+                        new AlterAIProviderStmt(false, "emb", anthropic, NodePosition.ZERO), new ConnectContext()));
+        Assertions.assertTrue(ex.getMessage().contains("not supported for AI provider type embedding"),
+                ex.getMessage());
+        Assertions.assertEquals(AIProviderProtocol.OPENAI, mgr.getProvider("emb").getProtocol());
+
+        AIProviderAnalyzer.analyze(
+                new AlterAIProviderStmt(false, "ch", anthropic, NodePosition.ZERO), new ConnectContext());
+        mgr.alterProvider("ch", anthropic, false);
+        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, mgr.getProvider("ch").getProtocol());
+
+        // Keys of another type are rejected on ALTER as well, now that the type is known.
+        Map<String, String> rerankKey = new LinkedHashMap<>();
+        rerankKey.put(AIProvider.PROPERTY_MAX_DOCUMENTS, "5");
+        Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(
+                        new AlterAIProviderStmt(false, "emb", rerankKey, NodePosition.ZERO), new ConnectContext()));
+        Map<String, String> unknownKey = new LinkedHashMap<>();
+        unknownKey.put("foo", "bar");
+        Assertions.assertThrows(SemanticException.class, () ->
+                AIProviderAnalyzer.analyze(
+                        new AlterAIProviderStmt(false, "emb", unknownKey, NodePosition.ZERO), new ConnectContext()));
+    }
+
+    @Test
+    public void testChatTypeRoundTrips() throws Exception {
+        AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        mgr.createProvider("ch", AIProviderType.CHAT, chatProps(), "c");
+        mgr.setDefaultProvider("ch");
+
+        String json = GsonUtils.GSON.toJson(mgr);
+        Assertions.assertTrue(json.contains("\"t\":\"CHAT\""), json);
+        AIProviderMgr restored = GsonUtils.GSON.fromJson(json, AIProviderMgr.class);
+        Assertions.assertEquals(AIProviderType.CHAT, restored.getProvider("ch").getType());
+        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, restored.getProvider("ch").getProtocol());
+        Assertions.assertEquals("ch", restored.getDefaultProvider(AIProviderType.CHAT).getName());
+    }
+
+    @Test
+    public void testLegacyRecordWithoutProtocolIsNormalized() {
+        // Records persisted before the protocol property existed: one untyped (embedding) and one rerank.
+        String legacy = "{"
+                + "\"idToProvider\":{"
+                + "\"id1\":{\"i\":\"id1\",\"n\":\"emb\","
+                + "  \"p\":{\"endpoint\":\"https://x/v1/embeddings\",\"model\":\"m\"},\"c\":\"\"},"
+                + "\"id2\":{\"i\":\"id2\",\"n\":\"rr\",\"t\":\"RERANK\","
+                + "  \"p\":{\"endpoint\":\"https://x/rerank\",\"model\":\"m\"},\"c\":\"\"}}}";
+        AIProviderMgr restored = GsonUtils.GSON.fromJson(legacy, AIProviderMgr.class);
+        Assertions.assertEquals("openai", restored.getProvider("emb").getParams().get(AIProvider.PROPERTY_PROTOCOL));
+        Assertions.assertEquals("cohere", restored.getProvider("rr").getParams().get(AIProvider.PROPERTY_PROTOCOL));
+    }
+
+    @Test
+    public void testUnknownTypeKeyIsDropped() {
+        String json = "{\"defaultByType\":{\"BOGUS\":\"id1\"},\"idToProvider\":{}}";
+        AIProviderMgr restored = GsonUtils.GSON.fromJson(json, AIProviderMgr.class);
+        for (AIProviderType t : AIProviderType.values()) {
+            Assertions.assertEquals("", restored.getDefaultProviderId(t));
+        }
+        // Re-serializing must not emit a "null" key.
+        Assertions.assertFalse(GsonUtils.GSON.toJson(restored).contains("\"null\""));
     }
 
     @Test

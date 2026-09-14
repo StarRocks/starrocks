@@ -48,9 +48,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * In-memory and persisted registry of {@link AIProvider} objects of every type (embedding / rerank /
- * future text). One registry holds them all and keeps one default <b>per type</b>, so the three (and
+ * chat). One registry holds them all and keeps one default <b>per type</b>, so the three (and
  * future) provider kinds share the same DDL, persistence and credential handling instead of each
  * duplicating the machinery.
+ *
+ * <p>Every stored provider carries a {@code protocol} param: the analyzer fills in the type's default
+ * when CREATE omits it, and {@link #normalize(AIProvider)} back-fills it on records persisted before
+ * the property existed. Value validation (allowed keys, protocol vs. type) is the analyzer's job too;
+ * this class only stores what it is given.
  *
  * <p>Persisted as image block {@link SRMetaBlockID#AI_PROVIDER_MGR} and replayed via the
  * {@code OP_*_AI_PROVIDER} edit-log ops. A provider record with no {@code type} tag and the
@@ -212,14 +217,14 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
 
     public void replayCreateProvider(AIProvider provider) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            normalizeType(provider);
+            normalize(provider);
             idToProvider.put(provider.getId(), provider);
         }
     }
 
     public void replayAlterProvider(AIProvider provider) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            normalizeType(provider);
+            normalize(provider);
             idToProvider.put(provider.getId(), provider);
         }
     }
@@ -236,10 +241,12 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    private static void normalizeType(AIProvider provider) {
+    // Fill in what older records lack: a missing type tag means EMBEDDING, and a missing protocol means
+    // the type's default protocol. Both decisions are persisted on the object so the next image carries them.
+    private static void normalize(AIProvider provider) {
         if (provider != null) {
-            // getType() already maps null -> EMBEDDING; persist that decision on the object.
             provider.setType(provider.getType());
+            provider.ensureProtocol();
         }
     }
 
@@ -269,9 +276,15 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         if (defaultProviderId == null) {
             defaultProviderId = "";
         }
-        // Tag legacy (pre-unification) providers, which were all embedding providers, as EMBEDDING.
+        // Gson maps an unknown enum key (e.g. a type this FE version does not know) to null instead of
+        // failing; drop it rather than carrying a "null" default around.
+        if (defaultByType.remove(null) != null) {
+            LOG.warn("dropped default AI provider entry with unknown type");
+        }
+        // Tag legacy (pre-unification) providers, which were all embedding providers, as EMBEDDING, and
+        // back-fill the protocol on records persisted before it existed.
         for (AIProvider p : idToProvider.values()) {
-            normalizeType(p);
+            normalize(p);
         }
         // Migrate the old single embedding default into the per-type map.
         if (!Strings.isNullOrEmpty(defaultProviderId)

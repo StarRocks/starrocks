@@ -16,8 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt;
@@ -33,10 +35,10 @@ import java.util.TreeSet;
 
 /**
  * Semantic validation for the unified {@code AI PROVIDER} DDL. Validation is keyed off the declared
- * {@code TYPE} (embedding / rerank / text): the common params (endpoint / model / api_key /
- * timeout_ms) apply to every type, and each type adds its own allowed keys. ALTER/DROP/SET DEFAULT
- * are type-agnostic (the provider is resolved by name), so they only need a name check — the manager
- * infers the type from the stored provider.
+ * {@code TYPE} (embedding / rerank / chat): the common params (endpoint / model / api_key /
+ * timeout_ms / protocol) apply to every type, and each type adds its own allowed keys. ALTER resolves
+ * the stored provider by name so the same type-specific rules apply to the patch; DROP/SET DEFAULT only
+ * need a name check.
  */
 public class AIProviderAnalyzer {
 
@@ -44,7 +46,8 @@ public class AIProviderAnalyzer {
             AIProvider.PROPERTY_ENDPOINT,
             AIProvider.PROPERTY_MODEL,
             AIProvider.PROPERTY_API_KEY,
-            AIProvider.PROPERTY_TIMEOUT_MS);
+            AIProvider.PROPERTY_TIMEOUT_MS,
+            AIProvider.PROPERTY_PROTOCOL);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new Visitor().visit(stmt, session);
@@ -60,7 +63,7 @@ public class AIProviderAnalyzer {
                 keys.add(AIProvider.PROPERTY_MAX_DOCUMENTS);
                 keys.add(AIProvider.PROPERTY_DEADLINE_MS);
                 break;
-            case TEXT:
+            case CHAT:
             default:
                 break;
         }
@@ -75,6 +78,10 @@ public class AIProviderAnalyzer {
             AIProviderType type = parseType(statement.getType());
             Map<String, String> properties = statement.getProperties();
             validateKnownKeys(properties, type);
+            if (properties.containsKey(AIProvider.PROPERTY_PROTOCOL)) {
+                AIProviderProtocol protocol = parseProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
+                checkProtocolAllowed(type, protocol);
+            }
             requireProperty(properties, AIProvider.PROPERTY_ENDPOINT);
             requireProperty(properties, AIProvider.PROPERTY_MODEL);
             validateEndpoint(properties.get(AIProvider.PROPERTY_ENDPOINT));
@@ -82,6 +89,9 @@ public class AIProviderAnalyzer {
             validatePositiveInt(properties, AIProvider.PROPERTY_DIMENSIONS);
             validatePositiveInt(properties, AIProvider.PROPERTY_MAX_DOCUMENTS);
             validatePositiveInt(properties, AIProvider.PROPERTY_DEADLINE_MS);
+            // Every stored provider carries a protocol: fill in the type's default when the DDL omits it.
+            // Only CREATE does this; ALTER validates a protocol the user wrote but never adds one.
+            properties.putIfAbsent(AIProvider.PROPERTY_PROTOCOL, AIProviderProtocol.defaultFor(type).lower());
             return null;
         }
 
@@ -92,10 +102,22 @@ public class AIProviderAnalyzer {
             if (properties.isEmpty()) {
                 throw new SemanticException("ALTER AI PROVIDER requires at least one property in SET (...)");
             }
-            // Type-agnostic: we don't know the provider type at analyze time, so accept any known key
-            // from any type's allowlist; the manager merges and the value semantics are enforced below.
+            // Resolve the stored provider so type-specific rules (allowed keys, protocol) apply to the
+            // patch. A missing provider is reported by the executor, which honours IF EXISTS, so only the
+            // type-independent checks run in that case.
+            AIProvider existing = GlobalStateMgr.getCurrentState().getAIProviderMgr().getProvider(statement.getName());
+            if (existing != null) {
+                validateKnownKeys(properties, existing.getType());
+            }
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_ENDPOINT);
             rejectEmptyIfPresent(properties, AIProvider.PROPERTY_MODEL);
+            rejectEmptyIfPresent(properties, AIProvider.PROPERTY_PROTOCOL);
+            if (properties.containsKey(AIProvider.PROPERTY_PROTOCOL)) {
+                AIProviderProtocol protocol = parseProtocol(properties.get(AIProvider.PROPERTY_PROTOCOL));
+                if (existing != null) {
+                    checkProtocolAllowed(existing.getType(), protocol);
+                }
+            }
             if (properties.containsKey(AIProvider.PROPERTY_ENDPOINT)) {
                 validateEndpoint(properties.get(AIProvider.PROPERTY_ENDPOINT));
             }
@@ -135,6 +157,22 @@ public class AIProviderAnalyzer {
         private static AIProviderType parseType(String type) {
             try {
                 return AIProviderType.fromString(type);
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        private static AIProviderProtocol parseProtocol(String protocol) {
+            try {
+                return AIProviderProtocol.fromString(protocol);
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        private static void checkProtocolAllowed(AIProviderType type, AIProviderProtocol protocol) {
+            try {
+                AIProviderProtocol.checkAllowed(type, protocol);
             } catch (IllegalArgumentException e) {
                 throw new SemanticException(e.getMessage());
             }

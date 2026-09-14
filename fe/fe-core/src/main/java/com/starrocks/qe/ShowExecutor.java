@@ -3162,6 +3162,7 @@ public class ShowExecutor {
                 rows.add(Lists.newArrayList(
                         provider.getName(),
                         provider.getType().lower(),
+                        provider.getProtocol().lower(),
                         provider.getId().equals(defaultId) ? "true" : "false",
                         masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_ENDPOINT, ""),
                         masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MODEL, ""),
@@ -3186,9 +3187,13 @@ public class ShowExecutor {
             List<List<String>> rows = Lists.newArrayList();
             rows.add(Lists.newArrayList("Name", provider.getName()));
             rows.add(Lists.newArrayList("Type", provider.getType().lower()));
+            rows.add(Lists.newArrayList("Protocol", provider.getProtocol().lower()));
             rows.add(Lists.newArrayList("IsDefault", provider.getId().equals(defaultId) ? "true" : "false"));
             java.util.Map<String, String> masked = provider.getMaskedParams();
             for (java.util.Map.Entry<String, String> entry : masked.entrySet()) {
+                if (com.starrocks.context.ai.AIProvider.PROPERTY_PROTOCOL.equals(entry.getKey())) {
+                    continue; // already shown as a fixed row above
+                }
                 rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
             }
             if (!provider.getComment().isEmpty()) {
