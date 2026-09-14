@@ -36,8 +36,14 @@ jobs:
     env:
       BRANCH:     ${{ inputs.branch || 'main' }}
       CASE_TYPES: ${{ inputs.case_types || 'all' }}
-      # AI uses the `claude` CLI on the runner (already installed + authed);
-      # no ANTHROPIC_API_KEY / anthropic SDK needed.
+      # AI uses the `claude` CLI on the runner (installed there; no
+      # ANTHROPIC_API_KEY / anthropic SDK needed), but the CLI still needs its
+      # OAuth credential injected — the host is NOT pre-authed. Without this the
+      # CLI exits 1 on every call and analyze_unstable_cases.py degrades each
+      # verdict to `uncertain`, so the run stays green while classifying nothing
+      # (observed 2026-09-14: 10/10 uncertain, root_cause "claude CLI rc=1").
+      # Same pattern as ai-sr-skills.yml on this runner label.
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     steps:
       - name: Analyze unstable cases (history-aware)
         run: |
