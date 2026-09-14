@@ -39,6 +39,9 @@
 namespace starrocks {
 namespace {
 
+// Floor for the reported footprint, kept in step with DataSourceProvider::MIN_DATA_SOURCE_MEM_BYTES.
+constexpr int64_t kMinEstimatedMemUsage = 16 * 1024 * 1024;
+
 constexpr int64_t kPaimonReadBatchSize = 10000;
 constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
 constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
@@ -234,6 +237,19 @@ void PaimonScanner::do_close(RuntimeState*) noexcept {
     _paimon_file_system.reset();
     _memory_pool.reset();
     _pool.clear();
+}
+
+int64_t PaimonScanner::estimated_mem_usage() const {
+    // The base class reports 0 here, which the adaptive IO-task limiter reads as "no observation"
+    // and keeps its pessimistic file-length guess. _memory_pool is per-scanner, so its peak is real.
+    if (_memory_pool == nullptr) {
+        return 0;
+    }
+    const auto peak = static_cast<int64_t>(_memory_pool->MaxMemoryUsage());
+    if (peak <= 0) {
+        return 0;
+    }
+    return std::max(peak, kMinEstimatedMemUsage);
 }
 
 void PaimonScanner::do_update_counter(HdfsScannerProfile* profile) {
