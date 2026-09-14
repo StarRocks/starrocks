@@ -447,7 +447,7 @@ size_t compress_neon_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selec
                 uint32_t chunk_nibbles = static_cast<uint32_t>((nibble_mask >> (g * 16)) & 0xffffu);
                 if (chunk_nibbles == 0) {
                     continue;
-                } else if (chunk_nibbles == 0x8888u) {
+                } else if (chunk_nibbles == 0xffffu) {
                     uint32x4_t v = vld1q_u32(src + start + g * 4);
                     vst1q_u32(dst + result, v);
                     result += 4;
