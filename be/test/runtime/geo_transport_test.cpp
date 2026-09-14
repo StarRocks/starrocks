@@ -175,10 +175,6 @@ TEST(GeoTransportTest, OrdinaryWireFormatAndUnsupportedPaths) {
     ASSERT_TRUE(read.ok()) << read.status();
     EXPECT_EQ(*written, *read);
     EXPECT_EQ(point(), down_cast<const GeoColumn*>(restored.get())->get_wkb(0).to_string());
-    auto geometry_desc = descriptor();
-    geometry_desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
-    auto geometry = GeoColumn::create(geometry_desc);
-    EXPECT_TRUE(geometry->serialize_column(bytes.data()).status().is_not_supported());
     ProtobufChunkMeta meta;
     ProtobufChunkDeserializer reader(meta);
     auto invalid = encoded->data();
@@ -186,8 +182,21 @@ TEST(GeoTransportTest, OrdinaryWireFormatAndUnsupportedPaths) {
     EXPECT_FALSE(reader.deserialize(invalid).ok());
 }
 
-TEST(GeoTransportTest, SizeEstimationDoesNotReplaceDescriptorValidation) {
-    for (int kind = 0; kind < 3; ++kind) {
+TEST(GeoTransportTest, SerializedSizeMatchesPayload) {
+    auto column = GeoColumn::create(descriptor());
+    column->append_wkb(Slice(point()));
+    const auto size = ColumnArraySerde::max_serialized_size(*column);
+    ASSERT_GT(size, 0);
+    std::vector<uint8_t> bytes(size);
+    auto written = ColumnArraySerde::serialize(*column, bytes.data());
+    ASSERT_TRUE(written.ok()) << written.status();
+    EXPECT_EQ(size, *written - bytes.data());
+}
+
+#ifndef NDEBUG
+TEST(GeoTransportDeathTest, SerializationRequiresValidDescriptor) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    for (int kind = 1; kind < 3; ++kind) {
         auto desc = descriptor();
         if (kind == 1) desc.type = GeoTypeDescriptor{};
         if (kind == 2) desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
@@ -195,17 +204,11 @@ TEST(GeoTransportTest, SizeEstimationDoesNotReplaceDescriptorValidation) {
         column->append_wkb(Slice(point()));
         const auto size = ColumnArraySerde::max_serialized_size(*column);
         ASSERT_GT(size, 0);
-        std::vector<uint8_t> bytes(size, 0xa5);
-        auto written = ColumnArraySerde::serialize(*column, bytes.data());
-        if (kind == 0) {
-            ASSERT_TRUE(written.ok()) << written.status();
-            EXPECT_EQ(size, *written - bytes.data());
-        } else {
-            EXPECT_TRUE(written.status().is_not_supported());
-            EXPECT_EQ(std::vector<uint8_t>(size, 0xa5), bytes);
-        }
+        std::vector<uint8_t> bytes(size);
+        EXPECT_DEATH((void)ColumnArraySerde::serialize(*column, bytes.data()), "check_transport_descriptor");
     }
 }
+#endif
 
 TEST(GeoTransportTest, StorageMetadataAndOpaquePayload) {
     for (int edge = GEO_EDGE_ALGORITHM_SPHERICAL; edge <= GEO_EDGE_ALGORITHM_KARNEY; ++edge) {

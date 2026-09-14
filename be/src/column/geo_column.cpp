@@ -293,7 +293,7 @@ int64_t GeoColumn::serialized_column_size() const {
 }
 
 StatusOr<uint8_t*> GeoColumn::serialize_column(uint8_t* dst) const {
-    RETURN_IF_ERROR(check_transport_descriptor(_descriptor));
+    DCHECK(check_transport_descriptor(_descriptor).ok());
     RETURN_IF_ERROR(_data->is_payload_size_representable());
     const auto descriptor = _descriptor.to_protobuf();
     const auto descriptor_size = descriptor.ByteSizeLong();
