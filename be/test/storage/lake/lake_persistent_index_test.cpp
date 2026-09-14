@@ -27,6 +27,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -1189,6 +1190,119 @@ TEST_F(LakePersistentIndexTest, test_memtable_flush_failure_removes_current_outp
         remove_exact_ssts(metadata->id(), retry_outputs);
         EXPECT_THAT(sst_inventory(metadata->id()), testing::ElementsAreArray(before));
     }
+}
+
+TEST_F(LakePersistentIndexTest, test_sync_flush_times_out_without_1s_poll) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    ASSERT_NE(RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool(), nullptr);
+
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+
+    const std::string key = "sync-flush-timeout";
+    const Slice key_slice(key);
+    const IndexValue value(uint64_t{1} << 32);
+    ASSERT_OK(index->insert(1, &key_slice, &value, /*version=*/1));
+
+    std::atomic<bool> hold_flush{true};
+    std::atomic<bool> flush_started{false};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        flush_started.store(true, std::memory_order_release);
+        while (hold_flush.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([&]() {
+        hold_flush.store(false, std::memory_order_release);
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::flush:after_create");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    const auto submit_start = std::chrono::steady_clock::now();
+    ASSERT_OK(index->flush_memtable(/*force=*/true));
+    const auto submit_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - submit_start)
+                    .count();
+    ASSERT_LT(submit_ms, 100) << "expected async memtable flush, submit took " << submit_ms << "ms";
+
+    const auto started_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!flush_started.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < started_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_TRUE(flush_started.load(std::memory_order_acquire));
+
+    const auto wait_start = std::chrono::steady_clock::now();
+    const Status st = index->sync_flush_all_memtables(150'000);
+    const auto wait_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - wait_start)
+                    .count();
+    EXPECT_TRUE(st.is_time_out()) << st;
+    EXPECT_LT(wait_ms, 800) << "timeout should honor remaining wait budget, not usleep(1s); took " << wait_ms << "ms";
+}
+
+TEST_F(LakePersistentIndexTest, test_sync_flush_wakes_when_async_flush_finishes) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    ASSERT_NE(RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool(), nullptr);
+
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+
+    const std::string key = "sync-flush-wake";
+    const Slice key_slice(key);
+    const IndexValue value(uint64_t{1} << 32);
+    ASSERT_OK(index->insert(1, &key_slice, &value, /*version=*/1));
+
+    std::atomic<bool> hold_flush{true};
+    std::atomic<bool> flush_started{false};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        flush_started.store(true, std::memory_order_release);
+        while (hold_flush.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([&]() {
+        hold_flush.store(false, std::memory_order_release);
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::flush:after_create");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    const auto submit_start = std::chrono::steady_clock::now();
+    ASSERT_OK(index->flush_memtable(/*force=*/true));
+    const auto submit_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - submit_start)
+                    .count();
+    ASSERT_LT(submit_ms, 100) << "expected async memtable flush, submit took " << submit_ms << "ms";
+
+    const auto started_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!flush_started.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < started_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_TRUE(flush_started.load(std::memory_order_acquire));
+
+    std::thread releaser([&]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        hold_flush.store(false, std::memory_order_release);
+    });
+    DeferOp join_releaser([&]() {
+        hold_flush.store(false, std::memory_order_release);
+        if (releaser.joinable()) {
+            releaser.join();
+        }
+    });
+    const auto wait_start = std::chrono::steady_clock::now();
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    const auto wait_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - wait_start)
+                    .count();
+    EXPECT_LT(wait_ms, 500) << "sync wait should wake on flush completion, not a 1s poll; took " << wait_ms << "ms";
 }
 
 TEST_F(LakePersistentIndexTest, test_replace) {
