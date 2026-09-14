@@ -492,6 +492,14 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - 隣接する 2 つのタブレットの合計サイズが `tablet_reshard_target_size` を**下回る**こと。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
+:::note
+
+`ORDER BY` が主キーと異なるレンジ分散の主キーテーブルでは、**MERGE はサポートされません**。この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。`ALTER TABLE ... MERGE TABLETS` とサイズに基づく自動マージはいずれも拒否され、`Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key` というエラーになります。
+
+SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。
+
+:::
+
 詳しい例については、[Tablet の分割または結合](#tablet-の分割または結合)を参照してください。
 
 ### 列の変更（列の追加/削除、列順の変更、列コメントの変更）

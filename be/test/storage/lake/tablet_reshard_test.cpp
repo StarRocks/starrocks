@@ -76,6 +76,7 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_splitter.h"
+#include "storage/lake/tablet_virtual_merge.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
@@ -111,6 +112,25 @@ inline void stamp_physical_identity_uid(RowsetMetadataPB* rowset, const std::str
     if (rowset->has_uid()) return;
     rowset->mutable_uid()->set_hi(1); // non-zero => valid even if the hash is 0
     rowset->mutable_uid()->set_lo(static_cast<int64_t>(std::hash<std::string>{}(seed)));
+}
+
+// Mirror reality for tests that build child metadata directly: cross-published / split
+// siblings carry a uid that is IDENTICAL across siblings (set at write time in the
+// shared txn log, or backfilled once at split). Derive a deterministic uid from a
+// physical-identity seed (a shared segment filename, or a shared del-file name) so two
+// siblings modeling "the same logical rowset" (same shared file) dedup at merge,
+// exactly as the pre-uid physical-identity rule did. A private (per-child) file name is
+// unique, so it yields a distinct uid and never falsely dedups. No-op if the rowset
+// already carries an explicit uid (pruned-sibling tests set their own matching uid).
+// Routes by purpose the way the two production callers do: a real MERGE goes through merge_tablet, the
+// split's read alias through virtual_merge_for_read. Tests that must hold for both stay parameterized.
+inline StatusOr<MutableTabletMetadataPtr> merge_tablet_or_read_alias(lake::TabletManager* tablet_manager,
+                                                                     const std::vector<TabletMetadataPtr>& sources,
+                                                                     const MergingTabletInfoPB& merging,
+                                                                     int64_t new_version, const TxnInfoPB& txn_info,
+                                                                     bool read_alias) {
+    return read_alias ? lake::virtual_merge_for_read(tablet_manager, sources, merging, new_version, txn_info)
+                      : lake::merge_tablet(tablet_manager, sources, merging, new_version, txn_info);
 }
 
 class LakeTabletReshardTest : public testing::Test {
@@ -809,6 +829,107 @@ protected:
         return std::make_shared<TabletMetadataPB>(*published.at(target_tablet_id));
     }
 
+    StatusOr<MutableTabletMetadataPtr> merge_tablet_directly(const std::vector<TabletMetadataPtr>& sources,
+                                                             int64_t target_tablet_id, int64_t new_version,
+                                                             bool read_alias) {
+        MergingTabletInfoPB merging;
+        for (const auto& source : sources) {
+            merging.add_old_tablet_ids(source->id());
+        }
+        merging.set_new_tablet_id(target_tablet_id);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(next_id());
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        return merge_tablet_or_read_alias(_tablet_manager.get(), sources, merging, new_version, txn_info, read_alias);
+    }
+
+    // Two children of a primary-key-range split, in the layout the production stall was found in: both
+    // inherit the SAME rowset (same uid) over the same shared segment, their tablet ranges partition the
+    // parent's, and each rowset carries its own effective range -- child A's narrower than its tablet range,
+    // because update_rowset_range intersects at every reshard while a merge unions the tablet range. The
+    // union of the two rowset ranges therefore covers only [rowset_lower_key, +inf) of the merged parent's
+    // (-inf, +inf), which is what makes a gap the alias build used to try to convert into a rowid window.
+    // A range-distributed primary-key tablet whose ORDER BY is (c1, c0): the shape whose tablet range lives
+    // in PRIMARY-KEY space (one value) while its segments are laid out in sort-key order (two columns), so
+    // no rowid interval of a segment corresponds to the range. Column unique ids and types match
+    // write_two_column_segment's, so a segment written by that helper opens with this schema.
+    void set_separate_sort_key_primary_key_schema(TabletMetadataPB* metadata, int64_t schema_id) {
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_id(schema_id);
+        schema->set_num_short_key_columns(1);
+        auto* c0 = schema->add_column();
+        c0->set_unique_id(1001);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        auto* c1 = schema->add_column();
+        c1->set_unique_id(1002);
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        c1->set_aggregation("REPLACE");
+        // ORDER BY (c1, c0): a sort key that is not the primary key.
+        schema->add_sort_key_idxes(1);
+        schema->add_sort_key_idxes(0);
+    }
+
+    std::pair<MutableTabletMetadataPtr, MutableTabletMetadataPtr> make_primary_key_range_split_children(
+            int64_t child_a, int64_t child_b, const std::string& segment_name, int split_key,
+            std::optional<int> rowset_lower_key) {
+        auto make_child = [&](int64_t tablet_id, bool is_left) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(1);
+            metadata->set_next_rowset_id(2);
+            set_separate_sort_key_primary_key_schema(metadata.get(), /*schema_id=*/9001);
+
+            auto* range = metadata->mutable_range();
+            if (is_left) {
+                *range->mutable_upper_bound() = generate_sort_key(split_key);
+                range->set_upper_bound_included(false);
+            } else {
+                *range->mutable_lower_bound() = generate_sort_key(split_key);
+                range->set_lower_bound_included(true);
+            }
+
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(1);
+            rowset->set_version(1);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(segment_name);
+            segment->set_size(100);
+            segment->set_num_rows(10);
+            // Stamped for the same reason a split stamps it: the rssid is rowset id + segment_idx, and
+            // a source without it is refused outright by a real merge.
+            segment->set_segment_idx(0);
+            segment->set_shared(true);
+            auto* rowset_range = rowset->mutable_range();
+            if (is_left) {
+                // No lower bound means this rowset claims everything below the split point, so the two
+                // contributions cover the merged range and no gap arises.
+                if (rowset_lower_key.has_value()) {
+                    *rowset_range->mutable_lower_bound() = generate_sort_key(*rowset_lower_key);
+                    rowset_range->set_lower_bound_included(true);
+                }
+                *rowset_range->mutable_upper_bound() = generate_sort_key(split_key);
+                rowset_range->set_upper_bound_included(false);
+            } else {
+                *rowset_range->mutable_lower_bound() = generate_sort_key(split_key);
+                rowset_range->set_lower_bound_included(true);
+            }
+            // Same uid on both children: one physical rowset handed to each by the split.
+            stamp_physical_identity_uid(rowset, segment_name);
+            return metadata;
+        };
+        return {make_child(child_a, /*is_left=*/true), make_child(child_b, /*is_left=*/false)};
+    }
+
     Status expect_physical_preflight_rejection(const std::vector<TabletMetadataPtr>& sources, int64_t target_tablet_id,
                                                int64_t target_version, MergePhaseCounts* counts) {
         std::vector<std::string> source_pbs;
@@ -969,11 +1090,17 @@ protected:
         rowset->set_version(1);
         rowset->set_num_rows(10 * segment_filenames.size());
         rowset->set_data_size(100 * segment_filenames.size());
+        uint32_t segment_idx = 0;
         for (const auto& segment_filename : segment_filenames) {
             auto* segment = rowset->add_segment_metas();
             segment->set_filename(segment_filename);
             segment->set_size(100);
             segment->set_num_rows(10);
+            // A split always stamps this -- apply_segment_ownership_to_new_tablet_rowset synthesizes a
+            // positional one when the source lacks it -- and a real merge now refuses a source segment
+            // without it. Setting it to the position it already had leaves every reader unchanged,
+            // since get_segment_idx falls back to exactly that when the field is absent.
+            segment->set_segment_idx(segment_idx++);
             segment->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, segment_filenames.front());
@@ -5358,9 +5485,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_read_only_skip_stays_indexless
     txn_info.set_txn_id(next_id());
     txn_info.set_commit_time(1);
     txn_info.set_gtid(1);
-    ASSIGN_OR_ABORT(auto read_only,
-                    lake::merge_tablet(_tablet_manager.get(), {left, right}, merging, left->version() + 1, txn_info,
-                                       /*skip_sstable_merge=*/true));
+    ASSIGN_OR_ABORT(auto read_only, lake::virtual_merge_for_read(_tablet_manager.get(), {left, right}, merging,
+                                                                 left->version() + 1, txn_info));
     EXPECT_EQ(0, read_only->sstable_meta().sstables_size());
     EXPECT_TRUE(read_only->orphan_files().empty());
 }
@@ -14530,7 +14656,7 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_files_skips_passthr
 
 // Read-only aliasing discards the source SST cohort, so its uint32 RSSID high
 // half does not constrain the signed packed target cursor.
-TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_accepts_sign_bit_source_watermark) {
+TEST_F(LakeTabletReshardTest, test_read_alias_accepts_sign_bit_source_watermark) {
     const int64_t source_tablet = next_id();
     const int64_t merged_tablet = next_id();
     auto source = std::make_shared<TabletMetadataPB>();
@@ -14556,8 +14682,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_accepts_sig
     TxnInfoPB txn_info;
     txn_info.set_txn_id(1);
     std::vector<TabletMetadataPtr> sources = {source};
-    auto merged = lake::merge_tablet(_tablet_manager.get(), sources, merging_info, /*new_version=*/2, txn_info,
-                                     /*skip_sstable_merge=*/true);
+    auto merged =
+            lake::virtual_merge_for_read(_tablet_manager.get(), sources, merging_info, /*new_version=*/2, txn_info);
 
     ASSERT_OK(merged.status());
     ASSERT_EQ(1, merged.value()->rowsets_size());
@@ -14584,9 +14710,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
         sync->DisableProcessing();
     });
 
-    auto run_case = [&](uint32_t rowset_id, bool primary_key, bool skip_sstable_merge, bool expect_rejection) {
-        SCOPED_TRACE(fmt::format("rowset_id={}, primary_key={}, skip_sstable_merge={}", rowset_id, primary_key,
-                                 skip_sstable_merge));
+    auto run_case = [&](uint32_t rowset_id, bool primary_key, bool read_alias, bool with_dcg, bool expect_rejection) {
+        SCOPED_TRACE(fmt::format("rowset_id={}, primary_key={}, read_alias={}, with_dcg={}", rowset_id, primary_key,
+                                 read_alias, with_dcg));
         constexpr int64_t kBaseVersion = 1;
         constexpr int64_t kNewVersion = 2;
         constexpr int kNumRows = 2;
@@ -14634,15 +14760,17 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
             stamp_physical_identity_uid(rowset, segment_name);
             (*metadata->mutable_rowset_to_schema())[rowset_id] = metadata->schema().id();
 
-            const std::string cols_name = lake::gen_cols_filename(txn_id + source_index + 1);
-            write_c1_only_cols_file(tablet_id, cols_name, kNumRows, [&](int row) {
-                return row >= lower_key && row < upper_key ? 1000 * (source_index + 1) + row : row * 10;
-            });
-            auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[rowset_id];
-            dcg.add_column_files(cols_name);
-            dcg.add_unique_column_ids()->add_column_ids(c1_uid);
-            dcg.add_versions(kBaseVersion);
-            dcg.add_shared_files(false);
+            if (with_dcg) {
+                const std::string cols_name = lake::gen_cols_filename(txn_id + source_index + 1);
+                write_c1_only_cols_file(tablet_id, cols_name, kNumRows, [&](int row) {
+                    return row >= lower_key && row < upper_key ? 1000 * (source_index + 1) + row : row * 10;
+                });
+                auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[rowset_id];
+                dcg.add_column_files(cols_name);
+                dcg.add_unique_column_ids()->add_column_ids(c1_uid);
+                dcg.add_versions(kBaseVersion);
+                dcg.add_shared_files(false);
+            }
 
             DelVector delvec;
             const uint32_t deleted_rowid = static_cast<uint32_t>(source_index);
@@ -14671,8 +14799,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
         source_flush_count = 0;
         delvec_writer_count = 0;
         dcg_output_count = 0;
-        auto merged = lake::merge_tablet(_tablet_manager.get(), {source_a, source_b}, merging_info, kNewVersion,
-                                         txn_info, skip_sstable_merge);
+        auto merged = merge_tablet_or_read_alias(_tablet_manager.get(), {source_a, source_b}, merging_info, kNewVersion,
+                                                 txn_info, /*read_alias=*/read_alias);
 
         EXPECT_EQ(source_pbs_before[0], source_a->SerializeAsString());
         EXPECT_EQ(source_pbs_before[1], source_b->SerializeAsString());
@@ -14688,6 +14816,21 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
             EXPECT_EQ(0, delvec_writer_count);
             EXPECT_EQ(0, dcg_output_count);
             EXPECT_EQ(files_before, files_after);
+        } else if (read_alias) {
+            EXPECT_OK(merged.status());
+            // The alias comes from virtual_merge_for_read, which writes its own delete-vector file and
+            // projects no sidecar at all, so none of merge_tablet's sync points above fire. Assert what
+            // the alias itself produced instead.
+            EXPECT_EQ(0, source_flush_count);
+            EXPECT_EQ(0, delvec_writer_count);
+            EXPECT_EQ(0, dcg_output_count);
+            EXPECT_FALSE((*merged)->delvec_meta().delvecs().empty())
+                    << "the alias must carry the children's delete vectors";
+            EXPECT_TRUE((*merged)->sstable_meta().sstables().empty());
+            EXPECT_TRUE((*merged)->dcg_meta().dcgs().empty());
+            // Its one output is a delete-vector file, which location_provider puts under the segment
+            // root as well, so this directory does change -- by exactly that file.
+            EXPECT_NE(files_before, files_after);
         } else {
             EXPECT_OK(merged.status());
             if (primary_key) {
@@ -14697,14 +14840,20 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
             }
             EXPECT_GT(dcg_output_count, 0);
             EXPECT_NE(files_before, files_after);
-            EXPECT_EQ(primary_key && !skip_sstable_merge ? 2 : 0, source_flush_count);
+            EXPECT_EQ(primary_key ? 2 : 0, source_flush_count);
         }
     };
 
-    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*skip_sstable_merge=*/false, /*expect_rejection=*/true);
-    run_case(/*rowset_id=*/1, /*primary_key=*/true, /*skip_sstable_merge=*/false, /*expect_rejection=*/false);
-    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*skip_sstable_merge=*/true, /*expect_rejection=*/false);
-    run_case(/*rowset_id=*/0, /*primary_key=*/false, /*skip_sstable_merge=*/false, /*expect_rejection=*/false);
+    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*read_alias=*/false, /*with_dcg=*/true,
+             /*expect_rejection=*/true);
+    run_case(/*rowset_id=*/1, /*primary_key=*/true, /*read_alias=*/false, /*with_dcg=*/true,
+             /*expect_rejection=*/false);
+    // The read alias allocates no rssid and rebuilds no index, so rowset 0 costs it nothing and is
+    // accepted -- the restriction above belongs to a real merge alone.
+    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*read_alias=*/true, /*with_dcg=*/false,
+             /*expect_rejection=*/false);
+    run_case(/*rowset_id=*/0, /*primary_key=*/false, /*read_alias=*/false, /*with_dcg=*/true,
+             /*expect_rejection=*/false);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_packs_upper_half_live_rowset_without_sst) {
@@ -20230,4 +20379,240 @@ TEST_F(LakeTabletReshardTest, test_identical_retry_cache_complete_returns_withou
     EXPECT_EQ(cached_target->SerializeAsString(), actual.at(target)->SerializeAsString());
 }
 
+// The alias renumbers the rowsets it emits, so any sidecar keyed by rssid would name the wrong segment
+// once carried over -- and nothing here projects one. build_parent_tablet_metadata already refuses a
+// child carrying DCG or IDG before the alias is built; the alias refuses it as well, rather than
+// clearing the metadata and silently serving the columns' pre-update values.
+// The alias renumbers the rowsets it emits, so any sidecar keyed by rssid would name the wrong segment
+// once carried over -- and nothing here projects one. build_parent_tablet_metadata already refuses a
+// child carrying DCG or IDG before the alias is built; the alias refuses it as well, rather than
+// clearing the metadata and silently serving the columns' pre-update values.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_refuses_a_child_carrying_dcg) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    auto meta_a = make_shared_delvec_source(child_a, {"dcg_guard_shared.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"dcg_guard_shared.dat"});
+    auto& dcg = (*meta_b->mutable_dcg_meta()->mutable_dcgs())[meta_b->rowsets(0).id()];
+    dcg.add_column_files("dcg_guard.cols");
+    dcg.add_versions(1);
+    dcg.add_shared_files(false);
+
+    auto alias = merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion, /*read_alias=*/true);
+    ASSERT_FALSE(alias.ok());
+    EXPECT_TRUE(alias.status().is_not_supported()) << alias.status();
+    EXPECT_TRUE(alias.status().message().contains("DCG")) << alias.status();
+}
+
+// virtual_merge_for_read builds only what a read needs, so what it does build has to be what a real merge
+// would have produced: the same rowsets, once each, and the same delete vectors. This is the net under it
+// being a separate implementation rather than a flag on merge_tablet -- the sidecars it skips
+// (primary-index SST, DCG, IDG) are compared by their absence.
+
+// virtual_merge_for_read builds only what a read needs, so what it does build has to be what a real merge
+// would have produced: the same rowsets, once each, and the same delete vectors. This is the net under it
+// being a separate implementation rather than a flag on merge_tablet -- the sidecars it skips
+// (primary-index SST, DCG, IDG) are compared by their absence.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_rowsets_and_delvecs_match_a_real_merge) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "differential_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+    // A real merge validates its sources before doing anything (validate_merge_inputs and
+    // validate_canonical_rowset): they need a schema whose key the range can be expressed in, tablet
+    // ranges forming a nonoverlapping contiguous cover, and each rowset's range equal to its
+    // intersection with its tablet's. Give the two children adjacent halves of an int key, which is
+    // what a split would have left behind -- and keep the sort key EQUAL to the primary key here, so
+    // the real merge this test compares against is one that can actually run.
+    for (int i = 0; i < 2; ++i) {
+        auto* meta = i == 0 ? meta_a.get() : meta_b.get();
+        set_int_primary_key_schema(meta, /*schema_id=*/4001);
+        auto* range = meta->mutable_range();
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(i * 50));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key((i + 1) * 50));
+        range->set_upper_bound_included(false);
+        meta->mutable_rowsets(0)->mutable_range()->CopyFrom(*range);
+    }
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {1, 4};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "differential_a.delvec", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_by_b[] = {7};
+    delvec_b.init(/*version=*/10, deleted_by_b, std::size(deleted_by_b));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "differential_b.delvec", delvec_b.save());
+
+    ASSIGN_OR_ABORT(auto merged, merge_tablet_directly({meta_a, meta_b}, merged_tablet, kNewVersion,
+                                                       /*read_alias=*/false));
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    ASSERT_EQ(merged->rowsets_size(), alias->rowsets_size());
+    for (int i = 0; i < merged->rowsets_size(); ++i) {
+        const auto& from_merge = merged->rowsets(i);
+        const auto& from_alias = alias->rowsets(i);
+        EXPECT_EQ(from_merge.num_rows(), from_alias.num_rows());
+        EXPECT_EQ(from_merge.uid().hi(), from_alias.uid().hi());
+        EXPECT_EQ(from_merge.uid().lo(), from_alias.uid().lo());
+        ASSERT_EQ(from_merge.segment_metas_size(), from_alias.segment_metas_size());
+        for (int seg = 0; seg < from_merge.segment_metas_size(); ++seg) {
+            EXPECT_EQ(from_merge.segment_metas(seg).filename(), from_alias.segment_metas(seg).filename());
+            EXPECT_EQ(from_merge.segment_metas(seg).shared(), from_alias.segment_metas(seg).shared());
+        }
+    }
+
+    // The delete vectors are the other half a read needs, so they must decode identically. The alias
+    // numbers its own rowsets, so each side is read at the rssid it gave the segment.
+    ASSERT_EQ(1, merged->rowsets_size());
+    LakeIOOptions io_options;
+    DelVector from_merge;
+    ASSERT_OK(
+            lake::get_del_vec(_tablet_manager.get(), *merged, merged->rowsets(0).id(), false, io_options, &from_merge));
+    DelVector from_alias;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, alias->rowsets(0).id(), false, io_options, &from_alias));
+    ASSERT_NE(nullptr, from_merge.roaring());
+    ASSERT_NE(nullptr, from_alias.roaring());
+    EXPECT_EQ(from_merge.save(), from_alias.save());
+    EXPECT_EQ(3, from_alias.cardinality());
+
+    // And the alias declares none of the sidecars it does not build.
+    EXPECT_TRUE(alias->sstable_meta().sstables().empty());
+    EXPECT_TRUE(alias->dcg_meta().dcgs().empty());
+    EXPECT_TRUE(alias->idg_meta().idgs().empty());
+}
+
+// A child rowset written after the split exists in that child alone, and the children allocate ids
+// independently -- so the alias has to re-identify one of the two and carry its delete vectors across.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_reidentifies_colliding_post_split_rowsets) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    // Both children inherit rowset 1 over the same shared segment, then each writes its own rowset 2.
+    auto meta_a = make_shared_delvec_source(child_a, {"inherited.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"inherited.dat"});
+    for (int i = 0; i < 2; ++i) {
+        auto* meta = i == 0 ? meta_a.get() : meta_b.get();
+        auto* own = meta->add_rowsets();
+        own->set_id(2);
+        own->set_version(2);
+        own->set_num_rows(5);
+        own->set_data_size(50);
+        auto* segment = own->add_segment_metas();
+        segment->set_filename(i == 0 ? "child_a_own.dat" : "child_b_own.dat");
+        segment->set_size(50);
+        stamp_physical_identity_uid(own, i == 0 ? "child_a_own.dat" : "child_b_own.dat");
+        meta->set_next_rowset_id(3);
+    }
+    // A delete vector on child B's own rowset, which must follow it to its new id.
+    DelVector own_delvec;
+    const uint32_t deleted[] = {3};
+    own_delvec.init(/*version=*/10, deleted, std::size(deleted));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/2, "child_b_own.delvec", own_delvec.save());
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    // The inherited rowset once, plus one per child's own: three, with distinct ids.
+    ASSERT_EQ(3, alias->rowsets_size());
+    std::set<uint32_t> ids;
+    std::set<std::string> segments;
+    for (const auto& rowset : alias->rowsets()) {
+        ids.insert(rowset.id());
+        for (const auto& segment : rowset.segment_metas()) {
+            segments.insert(segment.filename());
+        }
+    }
+    EXPECT_EQ(3, ids.size()) << "the children's own rowsets must not collide on an id";
+    EXPECT_EQ(std::set<std::string>({"inherited.dat", "child_a_own.dat", "child_b_own.dat"}), segments);
+    EXPECT_GE(alias->next_rowset_id(), *ids.rbegin() + 1);
+
+    // Child B's delete vector followed its rowset to whichever id it got.
+    uint32_t reidentified = 0;
+    for (const auto& rowset : alias->rowsets()) {
+        if (rowset.segment_metas_size() == 1 && rowset.segment_metas(0).filename() == "child_b_own.dat") {
+            reidentified = rowset.id();
+        }
+    }
+    ASSERT_NE(0u, reidentified);
+    DelVector carried;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, reidentified, false, io_options, &carried));
+    ASSERT_NE(nullptr, carried.roaring());
+    EXPECT_EQ(1, carried.cardinality());
+    EXPECT_TRUE(carried.roaring()->contains(3));
+}
+
+// The read-only parent alias a primary-key-range split keeps alive is not such a merge: it reproduces the
+// pre-split parent, which served every row of a shared segment exactly once. So it must build -- carrying
+// the shared rowset once and the union of the children's delete vectors -- rather than try to locate a gap
+// it has no rowid window for, which is what wedged publish on this shape.
+TEST_F(LakeTabletReshardTest, test_parent_alias_of_a_primary_key_range_split_unions_shared_delvecs) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "alias_shared.dat";
+    auto [meta_a, meta_b] = make_primary_key_range_split_children(child_a, child_b, segment_name,
+                                                                  /*split_key=*/100, /*rowset_lower_key=*/90);
+    // A real segment under the ALIAS tablet id, which is where gap synthesis would look for it: without the
+    // file this test would pass for the wrong reason (a missing segment) instead of proving the
+    // primary-key-interval-to-rowid conversion is gone.
+    write_two_column_segment(
+            alias_tablet, segment_name, /*num_rows=*/10, [](int key) { return key * 2; },
+            /*key_start=*/90);
+
+    // Each child deleted rows of the shared segment that fall in its own range; neither knows the other's.
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {3, 9};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "alias_a.delvec", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_by_b[] = {5};
+    delvec_b.init(/*version=*/10, deleted_by_b, std::size(deleted_by_b));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "alias_b.delvec", delvec_b.save());
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    // One copy of the shared rowset: the uid dedup is what keeps the alias from serving it twice.
+    ASSERT_EQ(1, alias->rowsets_size());
+    ASSERT_EQ(1, alias->rowsets(0).segment_metas_size());
+    EXPECT_EQ(segment_name, alias->rowsets(0).segment_metas(0).filename());
+    // Read-only alias: no primary index is rebuilt for it.
+    EXPECT_TRUE(alias->sstable_meta().sstables().empty());
+
+    const uint32_t target_rssid = alias->rowsets(0).id();
+    DelVector loaded;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, target_rssid, false, io_options, &loaded));
+    ASSERT_NE(nullptr, loaded.roaring());
+    // The union, and nothing more: no gap bits masking rows the pre-split parent was serving.
+    EXPECT_EQ(3, loaded.cardinality());
+    EXPECT_TRUE(loaded.roaring()->contains(3));
+    EXPECT_TRUE(loaded.roaring()->contains(5));
+    EXPECT_TRUE(loaded.roaring()->contains(9));
+}
 } // namespace starrocks

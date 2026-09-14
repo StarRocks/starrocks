@@ -627,6 +627,71 @@ public class TabletReshardJobMgrTest {
     }
 
     /**
+     * Both the MERGE TABLET statement and the auto-merge scheduler go through createTabletReshardJob,
+     * so the shape whose merge cannot be made correct -- a range-distributed primary-key table whose
+     * ORDER BY differs from the primary key -- has to be refused there, not only in the analyzer that
+     * the statement alone passes through.
+     */
+    @Test
+    public void testMergeRefusedForASeparateSortKeyPrimaryKeyRangeTable() {
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean tabletMergeUnsupported(OlapTable table) {
+                return true;
+            }
+        };
+
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        boolean savedFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            StarRocksException e = Assertions.assertThrows(StarRocksException.class,
+                    () -> mgr.createTabletReshardJob(reshardDb, reshardTable, new MergeTabletClause()));
+            Assertions.assertTrue(e.getMessage().contains("Tablet merge is not supported"), e.getMessage());
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedFlag;
+        }
+    }
+
+    /**
+     * And the auto-merge scheduler must skip that shape BEFORE the latch signature, for the same reason
+     * the feature gate does: the signature takes the table READ lock and hashes every tablet of every
+     * visible index, and this refusal is permanent -- there is nothing to latch or re-arm, so paying
+     * that walk on every statistics pass would be forever.
+     */
+    @Test
+    public void testUnsupportedMergeShapeSkipsTheLatchSignatureWalk() {
+        int[] signatureWalks = {0};
+        new MockUp<ColocateChecker>() {
+            @Mock
+            public long tableConvergenceSignature(Database db, OlapTable table, long expectedRangesSig) {
+                signatureWalks[0]++;
+                return 1L;
+            }
+        };
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean tabletMergeUnsupported(OlapTable table) {
+                return true;
+            }
+        };
+
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        long pairSize = TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
+        boolean savedFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(0, signatureWalks[0],
+                    "an unsupported merge shape must skip the read-locked signature walk entirely");
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedFlag;
+        }
+    }
+
+    /**
      * The merge feature gate must be consulted BEFORE the latch signature is computed. That signature
      * takes the table READ lock and hashes every tablet of every visible index, while the gate itself
      * lives inside createTabletReshardJob -- and `needMerge` does not consult the flag, so a table
