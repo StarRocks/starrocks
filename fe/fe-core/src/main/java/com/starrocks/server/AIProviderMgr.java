@@ -33,8 +33,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -52,10 +50,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * future) provider kinds share the same DDL, persistence and credential handling instead of each
  * duplicating the machinery.
  *
- * <p>Every stored provider carries a {@code protocol} param: the analyzer fills in the type's default
- * when CREATE omits it, and {@link #normalizeProvider(AIProvider)} back-fills it on records persisted before
- * the property existed. Value validation is the analyzer's job too; this class only stores what it is given.
- *
  * <p>Persisted as image block {@link SRMetaBlockID#AI_PROVIDER_MGR} and replayed via the
  * {@code OP_*_AI_PROVIDER} edit-log ops. A provider record with no {@code type} tag and the
  * single {@code defaultProviderId} field are read as an EMBEDDING provider / EMBEDDING default —
@@ -63,7 +57,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * mirrored back to {@code defaultProviderId} so the embedding code path can resolve it directly.
  */
 public class AIProviderMgr implements Writable, GsonPostProcessable {
-    private static final Logger LOG = LogManager.getLogger(AIProviderMgr.class);
 
     // Mirror of the EMBEDDING default id, kept so the embedding code path can resolve the default
     // without consulting defaultByType. Authoritative per-type defaults live in defaultByType.
@@ -274,11 +267,6 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         }
         if (defaultProviderId == null) {
             defaultProviderId = "";
-        }
-        // Gson maps an unknown enum key (e.g. a type this FE version does not know) to null instead of
-        // failing; drop it rather than carrying a "null" default around.
-        if (defaultByType.remove(null) != null) {
-            LOG.warn("dropped default AI provider entry with unknown type");
         }
         // Tag legacy (pre-unification) providers, which were all embedding providers, as EMBEDDING, and
         // back-fill the protocol on records persisted before it existed.

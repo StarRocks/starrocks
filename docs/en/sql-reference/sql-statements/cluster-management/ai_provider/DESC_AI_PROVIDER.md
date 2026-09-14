@@ -6,8 +6,7 @@ description: "Show the full configuration of a single AI provider."
 # DESC AI PROVIDER
 
 Shows the full configuration of a single AI provider as `Name` / `Value` rows, including every
-property. `protocol` is always listed (the type's default when the provider did not set one). The
-`api_key` value is masked.
+property. The `api_key` value is masked.
 
 `DESCRIBE` is accepted as a synonym for `DESC`.
 

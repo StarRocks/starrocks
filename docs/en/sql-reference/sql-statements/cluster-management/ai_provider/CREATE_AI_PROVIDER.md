@@ -12,9 +12,7 @@ holds providers of different **types** and keeps one default **per type**:
   embed `CONTEXT UPSERT` content and `query_text` searches.
 - `rerank` — Cohere-compatible `/rerank` endpoint (Cohere / Jina / Voyage / OpenRouter / local TEI),
   used by the optional cross-encoder second phase of `/api/context/search`.
-- `chat` — chat / completion endpoint (OpenAI Chat Completions or Anthropic Messages), used by AI
-  functions. Accepts whatever input modalities the model supports (text, images, documents) and
-  returns text.
+- `chat` — chat / completion endpoint (OpenAI Chat Completions or Anthropic Messages).
 
 Each provider also declares the wire **protocol** its endpoint speaks via the `protocol` property.
 When omitted it defaults to the protocol the type implies: `openai` for `embedding` and `chat`,
@@ -62,7 +60,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | all            | Yes      | HTTP(S) endpoint URL. Must start with `http://` or `https://`.                                       |
 | `model`         | all            | Yes      | Model name passed in the request `model` field (e.g. `text-embedding-3-small`, `cohere/rerank-4-fast`). |
-| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere`. Any value may be used with any type; the type only decides the default when omitted: `openai` for `embedding` and `chat`, `cohere` for `rerank`. Always shown by `SHOW AI PROVIDERS` and `DESC AI PROVIDER`. |
+| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`. |
 | `dimensions`    | embedding      | No       | Embedding vector dimension (positive int). Must match the provider output and the vector index dim. |
 | `max_documents` | rerank         | No       | Max documents sent per rerank request (positive int; default 1000).                                  |
 | `deadline_ms`   | rerank         | No       | Overall wall-clock budget in ms for the whole rerank call across all retry attempts (positive int; default 10000). Bounds how long a slow/unreachable reranker can stall a search before it degrades to fusion order. A timeout is never retried; only a connection failure or HTTP 5xx is. |

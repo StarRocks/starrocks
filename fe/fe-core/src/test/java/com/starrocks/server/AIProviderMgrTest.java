@@ -161,16 +161,6 @@ public class AIProviderMgrTest {
         Assertions.assertEquals("cohere", restored.getProvider("rr").getParams().get(AIProvider.PROPERTY_PROTOCOL));
     }
 
-    @Test
-    public void testUnknownTypeKeyIsDropped() {
-        String json = "{\"defaultByType\":{\"BOGUS\":\"id1\"},\"idToProvider\":{}}";
-        AIProviderMgr restored = GsonUtils.GSON.fromJson(json, AIProviderMgr.class);
-        for (AIProviderType t : AIProviderType.values()) {
-            Assertions.assertEquals("", restored.getDefaultProviderId(t));
-        }
-        // Re-serializing must not emit a "null" key.
-        Assertions.assertFalse(GsonUtils.GSON.toJson(restored).contains("\"null\""));
-    }
 
     @Test
     public void testGsonRoundTripPreservesTypesAndDefaults() throws Exception {

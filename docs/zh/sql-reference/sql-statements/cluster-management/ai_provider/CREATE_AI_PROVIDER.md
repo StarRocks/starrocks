@@ -12,8 +12,7 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
   写入和 `query_text` 检索时计算 embedding。
 - `rerank`——Cohere 兼容的 `/rerank` 端点（Cohere / Jina / Voyage / OpenRouter / 本地 TEI），供
   `/api/context/search` 可选的 cross-encoder 第二阶段重排使用。
-- `chat`——chat / completion 端点（OpenAI Chat Completions 或 Anthropic Messages），供 AI function 使用。
-  接受模型支持的任意输入模态（文本、图片、文档），输出文本。
+- `chat`——chat / completion 端点（OpenAI Chat Completions 或 Anthropic Messages）。
 
 每个 provider 还通过 `protocol` 属性声明其端点使用的**协议**。省略时按类型取默认值：`embedding` 和 `chat`
 为 `openai`，`rerank` 为 `cohere`。
@@ -58,7 +57,7 @@ PROPERTIES (
 | --------------- | -------------- | ---- | ------------------------------------------------------------------------------------ |
 | `endpoint`      | 全部           | 是   | HTTP(S) 端点 URL，必须以 `http://` 或 `https://` 开头。                               |
 | `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`、`cohere/rerank-4-fast`）。 |
-| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere`。任意类型都可以使用任意值，类型只决定省略时的默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。`SHOW AI PROVIDERS` 和 `DESC AI PROVIDER` 始终显示该值。 |
+| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
 | `dimensions`    | embedding      | 否   | embedding 向量维度（正整数）。必须与 provider 输出及向量索引维度一致。                |
 | `max_documents` | rerank         | 否   | 每次 rerank 请求发送的最大文档数（正整数；默认 1000）。                               |
 | `deadline_ms`   | rerank         | 否   | 整个 rerank 调用（含所有重试）的总时间预算（毫秒，正整数；默认 10000）。用于限制慢/不可达的 rerank 服务最多拖慢搜索多久,超过后降级为融合排序。超时不重试,仅连接失败或 HTTP 5xx 才重试。 |

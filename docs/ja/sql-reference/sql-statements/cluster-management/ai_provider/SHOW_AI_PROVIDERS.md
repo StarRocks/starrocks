@@ -27,7 +27,7 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | -------------- | -------------------------------------------------------------------- |
 | `Name`         | プロバイダーの名前。                                                  |
 | `Type`         | プロバイダーのタイプ (`embedding` / `rerank` / `chat`)。              |
-| `Protocol`     | エンドポイントのプロトコル (`openai` / `anthropic` / `cohere`)。空になることはなく、未設定の場合はタイプのデフォルトが表示されます。 |
+| `Protocol`     | エンドポイントのプロトコル (`openai` / `anthropic` / `cohere`)。      |
 | `IsDefault`    | このプロバイダーがそのタイプのデフォルトかどうか (`true`/`false`)。    |
 | `Endpoint`     | エンドポイントの URL。                                                |
 | `Model`        | モデル名。                                                            |

@@ -12,9 +12,7 @@ description: "外部 AI サービスプロバイダー (embedding または rera
   `CONTEXT UPSERT` のコンテンツや `query_text` 検索を埋め込む際に使用されます。
 - `rerank` — Cohere 互換の `/rerank` エンドポイント (Cohere / Jina / Voyage / OpenRouter / ローカル TEI)。
   `/api/context/search` のオプションであるクロスエンコーダーによる第 2 フェーズで使用されます。
-- `chat` — chat / completion エンドポイント (OpenAI Chat Completions または Anthropic Messages)。AI
-  関数が使用します。モデルが対応する任意の入力モダリティ (テキスト、画像、ドキュメント) を受け取り、
-  テキストを返します。
+- `chat` — chat / completion エンドポイント (OpenAI Chat Completions または Anthropic Messages)。
 
 各プロバイダーは `protocol` プロパティでエンドポイントが話す**プロトコル**も宣言します。省略した場合はタイプ
 が暗黙に持つプロトコルがデフォルトになります: `embedding` と `chat` は `openai`、`rerank` は `cohere` です。
@@ -60,7 +58,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | すべて         | はい     | HTTP(S) エンドポイントの URL。`http://` または `https://` で始まる必要があります。                    |
 | `model`         | すべて         | はい     | リクエストの `model` フィールドに渡されるモデル名 (例: `text-embedding-3-small`、`cohere/rerank-4-fast`)。 |
-| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、または `cohere`。どのタイプでも任意の値を使用でき、タイプは省略時のデフォルトのみを決めます: `embedding` と `chat` は `openai`、`rerank` は `cohere`。`SHOW AI PROVIDERS` と `DESC AI PROVIDER` では常に表示されます。 |
+| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、または `cohere`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`。 |
 | `dimensions`    | embedding      | いいえ   | 埋め込みベクトルの次元数 (正の整数)。プロバイダーの出力およびベクトルインデックスの次元と一致する必要があります。 |
 | `max_documents` | rerank         | いいえ   | 1 回の rerank リクエストで送信するドキュメントの最大数 (正の整数、デフォルト 1000)。                  |
 | `deadline_ms`   | rerank         | いいえ   | すべてのリトライを含む rerank 呼び出し全体の実時間の上限 (ミリ秒、正の整数、デフォルト 10000)。応答の遅い、または到達不能なリランカーが検索をどれだけ長く停止させられるかを制限し、超過した場合はフュージョン順にフォールバックします。タイムアウトはリトライされません。リトライされるのは接続失敗または HTTP 5xx のみです。 |
