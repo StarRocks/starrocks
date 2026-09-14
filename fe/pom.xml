@@ -64,7 +64,7 @@ under the License.
         <grpc.version>1.76.0</grpc.version>
         <io.netty.version>4.1.137.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
-        <aws-v2-sdk.version>2.52.0</aws-v2-sdk.version>
+        <aws-v2-sdk.version>2.52.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
         <nimbusds.version>9.37.4</nimbusds.version>
@@ -85,7 +85,7 @@ under the License.
         <lz4-java.version>1.11.1</lz4-java.version>
         <bouncycastle.version>1.84</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
-        <httpcore5.version>5.4.3</httpcore5.version>
+        <httpcore5.version>5.6.3</httpcore5.version>
     </properties>
 
     <profiles>
