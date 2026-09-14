@@ -2292,54 +2292,96 @@ class StarrocksSQLApiLib(object):
         for expect in expects:
             tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan))
 
-    def print_hit_materialized_view(self, query, *expects) -> bool:
+    def print_hit_materialized_view(self, query, *expects, timeout=10, interval=0.2) -> bool:
         """
         assert every name in ``expects`` appears in the plan for query
 
         Callers pass more than one marker to assert a shape, not a choice: ("mv1", "UNION") means
         the MV was used *and* the rewrite was a union. Returning on the first marker to appear left
         the rest of them unchecked.
-        """
-        time.sleep(1)
-        sql = "explain %s" % (query)
-        res = self.retry_execute_sql(sql, True)
-        if not res["status"]:
-            print(res)
-            return False
-        plan = str(res["result"])
-        for expect in expects:
-            if plan.find(expect) <= 0:
-                return False
-        return True
 
-    def print_hit_materialized_views(self, query) -> str:
+        With ``expects`` there is a condition to poll on, so the explain runs immediately and
+        repeats until every marker appears. Without it there is nothing to wait for except
+        stability, so the original one-second settle wait is kept.
         """
-        print all mv_names hit in query
+        tools.assert_true(timeout > 0, "print_hit_materialized_view: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "print_hit_materialized_view: interval must be positive, got %s" % interval)
+
+        def check_mv():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+                return False
+            plan = str(res["result"])
+            for expect in expects:
+                if plan.find(expect) <= 0:
+                    return False
+            return True
+
+        if not expects:
+            time.sleep(1)
+            return check_mv()
+
+        deadline = time.monotonic() + timeout
+        while True:
+            if check_mv():
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(interval)
+
+    def print_hit_materialized_views(self, query, *expects, timeout=10, interval=0.2) -> str:
         """
-        time.sleep(1)
-        sql = "explain %s" % (query)
-        res = self.retry_execute_sql(sql, True)
-        if not res["status"]:
-            print(res)
-            return ""
-        plan = res["result"]
-        if not plan:
-            return ""
-        mv_name = None
-        ans = []
-        for line in plan:
-            if len(line) != 1:
-                continue
-            content = line[0]
-            if content.find("MaterializedView: true") > 0:
-                if mv_name:
-                    ans.append(mv_name)
-                mv_name = None
-            if content.find("TABLE:") > 0:
-                mv_name = content.split("TABLE:")[1].strip()
-        # sort the mv_names to make the result deterministic
-        ans.sort()
-        return ",".join(ans)
+        print all mv_names hit in query.
+
+        If ``expects`` is provided, poll the explain until every expected mv name appears in the
+        rewrite. MV partition-version state propagates asynchronously after a refresh/insert, so
+        the optimizer may skip an eligible MV on the very first explain call. Without ``expects``
+        the return value is free-form output that lands in an R file, and there is nothing to wait
+        for except stability, so the original one-second settle wait is kept.
+        """
+        tools.assert_true(timeout > 0, "print_hit_materialized_views: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "print_hit_materialized_views: interval must be positive, got %s" % interval)
+
+        def extract_mvs():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+                return ""
+            plan = res["result"]
+            if not plan:
+                return ""
+            mv_name = None
+            ans = []
+            for line in plan:
+                if len(line) != 1:
+                    continue
+                content = line[0]
+                if content.find("MaterializedView: true") > 0:
+                    if mv_name:
+                        ans.append(mv_name)
+                    mv_name = None
+                if content.find("TABLE:") > 0:
+                    mv_name = content.split("TABLE:")[1].strip()
+            # sort the mv_names to make the result deterministic
+            ans.sort()
+            return ",".join(ans)
+
+        if not expects:
+            time.sleep(1)
+            return extract_mvs()
+
+        deadline = time.monotonic() + timeout
+        while True:
+            last_result = extract_mvs()
+            hit_set = set(last_result.split(",")) if last_result else set()
+            if all(e in hit_set for e in expects):
+                return last_result
+            if time.monotonic() >= deadline:
+                return last_result
+            time.sleep(interval)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
