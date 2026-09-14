@@ -116,14 +116,25 @@ CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
 // The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
 // process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
-// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so this config does not
-// reconfigure jemalloc at runtime; it is exported by bin/start_backend.sh and surfaced here purely
-// for observability via information_schema.be_configs. It is ignored under the jemalloc_debug and
-// check_mem_leak modes, which force their own JEMALLOC_CONF.
+// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so it is exported by
+// bin/start_backend.sh. It is ignored under the jemalloc_debug and check_mem_leak modes, which
+// force their own JEMALLOC_CONF.
+// Updating this config at runtime only re-applies the options that jemalloc itself allows to be
+// changed after init, namely dirty_decay_ms, muzzy_decay_ms and prof_active. Adding, removing or
+// changing any other option is rejected, because the corresponding `opt.*` mallctl nodes are
+// read-only; those need a restart. Note that prof_active can only be turned on when the process
+// was started with prof:true.
+// `oversize_threshold` sends every allocation of at least that many bytes to jemalloc's
+// dedicated huge arena, which is purged eagerly. Keeping the large buffers out of the
+// per-CPU arenas lets them be reused across threads and stops them from dominating the decay
+// bookkeeping of the ordinary arenas, where they otherwise drag small and medium extents into
+// being purged with them and cost a soft page fault each on the next use. It is set above
+// jemalloc's own 8MB default because the huge arena is a single shared arena, so a lower
+// threshold funnels more allocations through its lock.
 // NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
-CONF_String(jemalloc_conf,
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
-            "background_thread:true,prof:true,prof_active:false");
+CONF_mString(jemalloc_conf,
+             "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
 
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
@@ -375,15 +386,6 @@ CONF_mBool(enable_full_sort_key_index, "true");
 // go-forward rollback with no data rewrite. Tablet split / range-split compaction are NOT gated by
 // this switch (they consume the full page by presence). Default true.
 CONF_mBool(enable_full_sort_key_index_read, "true");
-
-// Maximum size in bytes of one row's encoded full sort key. Mirrors primary_key_limit_size. A load,
-// Spark push, or schema change that would admit a row with a wider sort key fails with a
-// non-retryable error, which bounds the size of the full sort key index page and the memory it
-// occupies once loaded. Compaction and post-commit segment rewrites are not checked, because a
-// failure there runs after commit and would put the tablet into an error state. The check applies
-// whenever the sort key can be encoded, independently of enable_full_sort_key_index, so that
-// admission and segment writing cannot disagree. A non-positive value disables it.
-CONF_mInt32(sort_key_limit_size, "1024");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
@@ -410,6 +412,23 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+// Gather every column's ordinal index into one run just before the footer, instead of leaving each
+// after its own column's data pages. A cold scan loads the ordinal index of every projected column
+// before it can read a data page; scattered, those cost a cache block and a round trip each, and at
+// the tail they share blocks and often the one the footer read already fetched. Nothing else moves
+// -- the short key index and the page zone maps keep the positions they have always had.
+//
+// A shared-nothing BE ignores this and keeps the original layout: there the scattered reads hit a
+// local disk. So does a partial-update rewrite, which copies an existing segment's prefix and
+// could only build a region covering the columns it appends. Vertical compaction does produce it.
+//
+// Cost: a one-column scan of a wide table pays roughly one extra remote block per segment, since
+// a hundred columns of ordinal index do not fit in the footer's block.
+//
+// Either layout is readable by any binary in either direction and the two coexist in one tablet,
+// so this can be flipped at any time without rewriting data.
+CONF_mBool(lake_enable_segment_tail_index_region, "true");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
@@ -417,8 +436,10 @@ CONF_Int32(data_page_size, "65536");
 // uncompressed trailer keeps the same size. The format is identified by the column encoding
 // recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
 // encoding fails to open the segment instead of misreading it. Only the write side is gated by
-// this config; default false.
-CONF_mBool(enable_binary_plain_delta_offset, "false");
+// this config; default true. Set it to false while any BE that does not support the encoding is
+// still serving, and before downgrading to such a version, since segments already written with
+// the encoding stay unreadable there.
+CONF_mBool(enable_binary_plain_delta_offset, "true");
 
 CONF_mBool(enable_zero_copy_from_page_cache, "true");
 
@@ -1297,14 +1318,18 @@ CONF_Bool(object_storage_endpoint_path_style_access, "false");
 // Default is -1, indicate to use the default value in sdk (1000ms)
 // Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
 CONF_Int64(object_storage_connect_timeout_ms, "-1");
-// Request timeout for object storage
-// Default is -1, indicate to use the default value in sdk.
-// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
-// below "lowSpeedLimit" for the library to consider it too slow and abort.
-// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
-// value is greater than 0 and less than 1000.
-// When it's 0, low speed limit check will be disabled.
-CONF_mInt64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage.
+//
+// 10 s by default. It is not a deadline on the request: for Curl it is the low speed time, the
+// number of milliseconds the transfer may stay below "lowSpeedLimit" (1 byte/s) before the library
+// gives up, and for the Poco client it is the socket send/receive timeout. Either way a transfer
+// that keeps making progress is never cut off, however long it runs -- only one that has stopped
+// moving entirely. Curl rounds the value down to whole seconds; 0 disables the check, and a
+// negative value leaves the client on its own default.
+//
+// Leaving it unset is what made a stalled read wait out the HTTP client's built-in default:
+// measured on shared-data cold scans, 1.3% of queries hung for ~59 s each.
+CONF_mInt64(object_storage_request_timeout_ms, "10000");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
@@ -1402,7 +1427,7 @@ CONF_String(aws_sdk_logging_trace_level, "trace");
 CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 
 // use poco client to replace default curl client
-CONF_Bool(enable_poco_client_for_aws_sdk, "true");
+CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
@@ -1485,6 +1510,28 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
+// Object-store upload thresholds, forwarded to the starlet gflags of the same name without the
+// `starlet_` prefix. For each backend, an object larger than `*_max_single_part_size` is uploaded
+// with a multipart upload instead of a single request, and `*_min_upload_part_size` is the
+// multipart part size. GCS has no part-size knob: above its threshold starlet switches to a
+// streaming upload. Defaults equal starlet's own gflag defaults, so leaving these alone changes
+// nothing.
+//
+// Memory: starlet buffers in memory up to `*_max_single_part_size` before switching to multipart,
+// then up to `*_min_upload_part_size` between part flushes, so the per-output-stream high-water
+// mark is roughly the larger of the two, multiplied by the number of concurrent output streams on
+// the node. Raising either value raises memory usage.
+//
+// Values must be greater than 0. A dynamic update to a non-positive value is rejected and nothing
+// changes. At startup a non-positive value is not applied and a warning is logged, leaving the
+// previously effective value in force: a valid value here overrides a `--fslib_*` gflag passed on
+// the BE command line, but a rejected one leaves that command-line value active while this config
+// still reports the rejected number.
+CONF_mInt64(starlet_fslib_s3_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
+CONF_mInt64(starlet_fslib_gcs_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_azure_storage_min_upload_part_size, "5242880");
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
@@ -1495,6 +1542,15 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+// Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
+// MemTracker accounting granularity. New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
+// Maximum bytes in the complete JSON response for one dump_tablet_metadata request.
+// New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_json_size_limit_bytes, "33554432");
+// Maximum number of admitted dump_tablet_metadata requests. A lower value does not cancel requests already admitted.
+// New requests fail closed when the value is non-positive.
+CONF_mInt32(lake_dump_tablet_metadata_max_concurrency, "1");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
@@ -1621,6 +1677,13 @@ CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
+// Verify sstable block checksums on cloud-native PK index reads (open, point lookup,
+// and compaction merge), so corrupted bytes (usually a bad local cache copy) fail
+// deterministically as Corruption — and get healed by the drop-corrupted-cache
+// fallback — instead of being misparsed or silently returning wrong index values.
+// Mutable so the verification can be switched off quickly if the crc32c overhead
+// ever becomes a concern on a hot read path.
+CONF_mBool(lake_pk_index_sst_verify_checksum, "true");
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 // When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is
 // verified against the CRC32C recorded in its metadata, and a mismatch fails the operation with
@@ -2391,6 +2454,21 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
 
+// AI function runtime configuration. Values are validated and published as complete runtime snapshots before use.
+// A zero request timeout leaves the live query lifecycle as the only deadline.
+CONF_mInt64(ai_function_request_timeout_ms, "600000");
+// A zero connect timeout disables the independent connection cap.
+CONF_mInt64(ai_function_connect_timeout_ms, "10000");
+CONF_mInt64(ai_function_max_response_bytes, "8388608");
+CONF_mInt32(ai_function_worker_thread_num, "16");
+CONF_mInt32(ai_function_sub_chunk_size, "64");
+CONF_mInt32(ai_function_max_retries, "3");
+CONF_mInt32(ai_function_max_retries_on_throttle, "5");
+CONF_mString(ai_function_on_error, "ignore");
+CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
+CONF_mInt32(ai_function_max_inflight, "512");
+
+// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
 CONF_Int32(llm_max_queue_size, "4096");
 
 CONF_Int32(llm_max_concurrent_queries, "8");

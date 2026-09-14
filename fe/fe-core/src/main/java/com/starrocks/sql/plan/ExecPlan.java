@@ -33,6 +33,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -87,6 +89,8 @@ public class ExecPlan {
     private long useBaseline = -1;
 
     private Set<Long> duplicatedLakeScanTableIds;
+    // Captured lazily only for plans containing an AIProject.
+    private SystemChatConfig systemChatConfig;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -123,6 +127,14 @@ public class ExecPlan {
 
     public List<ScanNode> getScanNodes() {
         return scanNodes;
+    }
+
+    SystemChatConfig getOrCreateSystemChatConfig() {
+        if (systemChatConfig == null) {
+            systemChatConfig = AIModelConfigs.systemChatSnapshot(
+                    AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+        }
+        return systemChatConfig;
     }
 
     // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one

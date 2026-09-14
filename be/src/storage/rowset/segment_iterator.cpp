@@ -3168,8 +3168,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
 
         // TODO: plan vector column in FE Planner
-        chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
-                                    _vector_index_ctx->vector_slot_id);
+        // The distance column reuses vector_column_id as its column id because the FE does not yet
+        // allocate a distinct one. The scan loop `do { _do_get_next(chunk); } while (chunk->num_rows()
+        // == 0)` re-invokes _do_get_next on the same chunk whenever a batch is fully filtered (e.g. the
+        // vector_range predicate dropped every row), and Chunk::reset() keeps the appended column in
+        // _cid_to_index. append_or_update_column tolerates that by updating the distance column in place
+        // instead of appending a duplicate.
+        chunk->append_or_update_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
+                                       _vector_index_ctx->vector_slot_id);
     } else if (_vector_index_ctx && _vector_index_ctx->use_brute_force) {
         // Brute-force fallback: compute distances from the raw vector column. It lives in `chunk` when
         // FE kept it (swapped in by _build_final_chunk), or in _dict_chunk when FE pruned it and
@@ -3533,8 +3539,10 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
 }
 
 void SegmentIterator::_compute_brute_force_distances(const Column* vector_column, Chunk* chunk) {
-    chunk->append_vector_column(_brute_force_distance_column(vector_column),
-                                _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
+    // append_or_update_column tolerates the scan loop re-emitting the distance column onto a reused
+    // chunk (see the ANN path in _do_get_next).
+    chunk->append_or_update_column(_brute_force_distance_column(vector_column),
+                                   _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
 }
 
 // Exact distance rescan over a candidate bitmap. Reached only when the HNSW filtered search returned
@@ -4024,10 +4032,15 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
     }
 
+    // The chunk source keeps delete-predicate columns out of the unused set, so they must reach the output.
+    for (ColumnId cid : delete_pred_columns) {
+        RETURN_IF(output_columns.count(cid) == 0,
+                  Status::InternalError(
+                          strings::Substitute("delete predicate column $0 is missing from the output schema", cid)));
+    }
+
     // build index map
     DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
-    DCHECK(!(output_schema().num_fields() < _schema.num_fields()) || _opts.delete_predicates.empty())
-            << "delete condition couldn't work with filter_unused_columns";
 
     // skip dict_decode column in _read_schema would not be mapping
     std::unordered_map<ColumnId, size_t> read_indexes;   // fid -> read schema index
@@ -4038,12 +4051,25 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         }
     }
 
-    // map output_schema[cid, index] to read_schema[cid index]
-    ctx->_read_index_map.resize(read_indexes.size());
-    for (size_t i = 0; i < read_indexes.size(); i++) {
-        ctx->_read_index_map[i] = read_indexes[output_schema().field(i)->id()];
-        output_indexes[output_schema().field(i)->id()] = i;
+    // |_read_index_map| is indexed by output schema position, so size and walk it by the output schema.
+    const size_t num_output_fields = output_schema().num_fields();
+    ctx->_read_index_map.reserve(num_output_fields);
+    for (size_t i = 0; i < num_output_fields; i++) {
+        const ColumnId ocid = output_schema().field(i)->id();
+        auto read_it = read_indexes.find(ocid);
+        if (read_it == read_indexes.end()) {
+            // Late-materialized output columns start here; _finish_late_materialization fills them.
+            break;
+        }
+        ctx->_read_index_map.emplace_back(read_it->second);
+        output_indexes[ocid] = i;
     }
+    // _finish_late_materialization resumes at |_read_index_map.size()|, so the walk must stop at the late tail.
+    RETURN_IF(ctx->_read_index_map.size() + num_fields - early_materialize_fields != num_output_fields,
+              Status::InternalError(strings::Substitute(
+                      "output schema is not an early-materialized prefix plus the late tail: mapped=$0 late=$1 "
+                      "output=$2",
+                      ctx->_read_index_map.size(), num_fields - early_materialize_fields, num_output_fields)));
 
     // convert the read schema index to output scheam index for subfield
     for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {

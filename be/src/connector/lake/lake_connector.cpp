@@ -15,6 +15,7 @@
 #include "connector/lake/lake_connector.h"
 
 #include <atomic>
+#include <set>
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -53,6 +54,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/predicate_parser.h"
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
 #include "storage/query/split_morsel_queue_builder.h"
@@ -502,7 +504,17 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
         _params.vector_search_option->k = vector_options.vector_limit_k;
         for (const std::string& str : vector_options.query_vector) {
-            _params.vector_search_option->query_vector.push_back(std::stof(str));
+            // std::stof throws std::out_of_range / std::invalid_argument on a value that overflows
+            // float or is not a number, and the throw is uncaught here, so a query vector element the
+            // planner produced from a wrong-typed or out-of-range literal (e.g. 1e308, which exceeds
+            // FLT_MAX) aborts the BE. Parse without throwing and reject the query cleanly instead.
+            StringParser::ParseResult parse_result;
+            float value = StringParser::string_to_float<float>(str.data(), str.size(), &parse_result);
+            if (parse_result != StringParser::PARSE_SUCCESS) {
+                return Status::InvalidArgument(
+                        fmt::format("invalid query vector element for vector search: '{}'", str));
+            }
+            _params.vector_search_option->query_vector.push_back(value);
         }
         if (_runtime_state->query_options().__isset.ann_params) {
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
@@ -535,6 +547,16 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
 
     for (const auto& cid : _non_pushdown_pred_tree.column_ids()) {
         _unused_output_column_ids.erase(cid);
+    }
+
+    // The delete filter evaluates these on the outgoing chunk, so they must survive into the output schema.
+    // An empty unused set makes every erase a no-op, so skip walking the rowset metadata entirely.
+    if (!_unused_output_column_ids.empty()) {
+        std::set<ColumnId> delete_pred_cids;
+        RETURN_IF_ERROR(lake::delete_predicate_column_ids(*_tablet.metadata(), *_tablet_schema, &delete_pred_cids));
+        for (ColumnId cid : delete_pred_cids) {
+            _unused_output_column_ids.erase(cid);
+        }
     }
 
     std::vector<ExprContext*> not_pushdown_conjuncts;

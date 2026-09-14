@@ -32,7 +32,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
-#include "storage/tablet_schema.h"
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
@@ -83,41 +82,69 @@ std::ostream& operator<<(std::ostream& out, const std::vector<int64_t>& tablet_i
     return out;
 }
 
+// The old tablets' |base_version| metadata is read once here and superseded by |new_version|, so it
+// stays out of the metacache -- except the partition-shared version-1 object, which TabletManager
+// caches on its own because every tablet of the partition reads it. |order| is FE's hint; see
+// publish_resharding_tablet().
+static StatusOr<TabletMetadataPtr> get_old_tablet_base_metadata(TabletManager* tablet_manager, int64_t tablet_id,
+                                                                int64_t base_version, InitialMetadataOrder order) {
+    return tablet_manager->get_tablet_metadata(tablet_id, base_version,
+                                               CacheOptions{.fill_meta_cache = false, .fill_data_cache = false},
+                                               /*expected_gtid=*/0, /*fs=*/nullptr, order);
+}
+
+TabletMetadataPtr lookup_exact_cached_metadata(TabletManager* tablet_manager, int64_t tablet_id, int64_t version,
+                                               int64_t gtid) {
+    if (gtid <= 0) return nullptr;
+    auto metadata = tablet_manager->metacache()->lookup_tablet_metadata(
+            tablet_manager->tablet_metadata_location(tablet_id, version));
+    if (metadata != nullptr && metadata->id() == tablet_id && metadata->version() == version &&
+        metadata->gtid() == gtid)
+        return metadata;
+    return nullptr;
+}
+
 Status handle_splitting_tablet(TabletManager* tablet_manager, const SplittingTabletInfoPB& splitting_tablet,
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
-                               std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
+                               std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                               InitialMetadataOrder base_version_order) {
     {
-        auto old_tablet_new_metadata_location =
-                tablet_manager->tablet_metadata_location(splitting_tablet.old_tablet_id(), new_version);
-        auto cached_old_tablet_new_metadata =
-                tablet_manager->metacache()->lookup_tablet_metadata(old_tablet_new_metadata_location);
-        if (cached_old_tablet_new_metadata == nullptr) {
-            goto CONTINUE_HANDLE_SPLITTING_TABLET;
-        }
-
-        new_metadatas.emplace(splitting_tablet.old_tablet_id(), std::move(cached_old_tablet_new_metadata));
+        std::unordered_map<int64_t, TabletMetadataPtr> cached_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> cached_ranges;
+        auto source = lookup_exact_cached_metadata(tablet_manager, splitting_tablet.old_tablet_id(), new_version,
+                                                   txn_info.gtid());
+        if (source == nullptr) goto CONTINUE_HANDLE_SPLITTING_TABLET;
+        cached_metadatas.emplace(splitting_tablet.old_tablet_id(), source);
         for (auto new_tablet_id : splitting_tablet.new_tablet_ids()) {
-            auto new_tablet_new_metadata_location =
-                    tablet_manager->tablet_metadata_location(new_tablet_id, new_version);
-            auto cached_new_tablet_new_metadata =
-                    tablet_manager->metacache()->lookup_tablet_metadata(new_tablet_new_metadata_location);
-            if (cached_new_tablet_new_metadata == nullptr) {
-                new_metadatas.clear();
-                tablet_ranges.clear();
-                goto CONTINUE_HANDLE_SPLITTING_TABLET;
-            }
-            tablet_ranges.emplace(new_tablet_id, cached_new_tablet_new_metadata->range());
-            new_metadatas.emplace(new_tablet_id, std::move(cached_new_tablet_new_metadata));
+            auto child = lookup_exact_cached_metadata(tablet_manager, new_tablet_id, new_version, txn_info.gtid());
+            if (child == nullptr) break;
+            cached_ranges.emplace(new_tablet_id, child->range());
+            cached_metadatas.emplace(new_tablet_id, std::move(child));
         }
-        return Status::OK();
+        bool complete = cached_metadatas.size() == static_cast<size_t>(splitting_tablet.new_tablet_ids_size() + 1);
+        if (!complete && splitting_tablet.new_tablet_ids_size() > 0 && cached_metadatas.size() == 2 &&
+            source->range().SerializeAsString() ==
+                    cached_metadatas.at(splitting_tablet.new_tablet_ids(0))->range().SerializeAsString()) {
+            complete = true;
+            for (int i = 1; i < splitting_tablet.new_tablet_ids_size(); ++i) {
+                complete &=
+                        tablet_manager->metacache()->lookup_tablet_metadata(tablet_manager->tablet_metadata_location(
+                                splitting_tablet.new_tablet_ids(i), new_version)) == nullptr;
+            }
+        }
+        if (complete) {
+            new_metadatas.swap(cached_metadatas);
+            tablet_ranges.swap(cached_ranges);
+            return Status::OK();
+        }
     }
 
 CONTINUE_HANDLE_SPLITTING_TABLET:
     g_tablet_reshard_split_total << 1;
 
-    auto old_tablet_old_metadata_or =
-            tablet_manager->get_tablet_metadata(splitting_tablet.old_tablet_id(), base_version, false);
+    auto old_tablet_old_metadata_or = get_old_tablet_base_metadata(tablet_manager, splitting_tablet.old_tablet_id(),
+                                                                   base_version, base_version_order);
     if (old_tablet_old_metadata_or.status().is_not_found()) {
         auto old_tablet_new_metadata_or =
                 tablet_manager->get_tablet_metadata(splitting_tablet.old_tablet_id(), new_version, txn_info.gtid());
@@ -177,29 +204,22 @@ CONTINUE_HANDLE_SPLITTING_TABLET:
 Status handle_merging_tablet(TabletManager* tablet_manager, const MergingTabletInfoPB& merging_tablet,
                              int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                              std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
-                             std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
+                             std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                             InitialMetadataOrder base_version_order) {
     {
+        std::unordered_map<int64_t, TabletMetadataPtr> cached_metadatas;
         for (auto old_tablet_id : merging_tablet.old_tablet_ids()) {
-            auto old_tablet_new_metadata_location =
-                    tablet_manager->tablet_metadata_location(old_tablet_id, new_version);
-            auto cached_old_tablet_new_metadata =
-                    tablet_manager->metacache()->lookup_tablet_metadata(old_tablet_new_metadata_location);
-            if (cached_old_tablet_new_metadata == nullptr) {
-                goto CONTINUE_HANDLE_MERGING_TABLET;
-            }
-            new_metadatas.emplace(old_tablet_id, std::move(cached_old_tablet_new_metadata));
+            auto metadata = lookup_exact_cached_metadata(tablet_manager, old_tablet_id, new_version, txn_info.gtid());
+            if (metadata == nullptr) goto CONTINUE_HANDLE_MERGING_TABLET;
+            cached_metadatas.emplace(old_tablet_id, std::move(metadata));
         }
-
-        auto new_tablet_new_metadata_location =
-                tablet_manager->tablet_metadata_location(merging_tablet.new_tablet_id(), new_version);
-        auto cached_new_tablet_new_metadata =
-                tablet_manager->metacache()->lookup_tablet_metadata(new_tablet_new_metadata_location);
-        if (cached_new_tablet_new_metadata == nullptr) {
-            new_metadatas.clear();
-            goto CONTINUE_HANDLE_MERGING_TABLET;
-        }
-        tablet_ranges.emplace(merging_tablet.new_tablet_id(), cached_new_tablet_new_metadata->range());
-        new_metadatas.emplace(merging_tablet.new_tablet_id(), std::move(cached_new_tablet_new_metadata));
+        auto target = lookup_exact_cached_metadata(tablet_manager, merging_tablet.new_tablet_id(), new_version,
+                                                   txn_info.gtid());
+        if (target == nullptr) goto CONTINUE_HANDLE_MERGING_TABLET;
+        cached_metadatas.emplace(merging_tablet.new_tablet_id(), std::move(target));
+        new_metadatas.swap(cached_metadatas);
+        tablet_ranges.emplace(merging_tablet.new_tablet_id(),
+                              new_metadatas.at(merging_tablet.new_tablet_id())->range());
         return Status::OK();
     }
 
@@ -210,7 +230,8 @@ CONTINUE_HANDLE_MERGING_TABLET:
     std::vector<TabletMetadataPtr> old_tablet_metadatas;
     old_tablet_metadatas.reserve(merging_tablet.old_tablet_ids_size());
     for (auto old_tablet_id : merging_tablet.old_tablet_ids()) {
-        auto old_tablet_old_metadata_or = tablet_manager->get_tablet_metadata(old_tablet_id, base_version, false);
+        auto old_tablet_old_metadata_or =
+                get_old_tablet_base_metadata(tablet_manager, old_tablet_id, base_version, base_version_order);
         if (old_tablet_old_metadata_or.status().is_not_found()) {
             new_metadatas.clear();
             for (auto retry_tablet_id : merging_tablet.old_tablet_ids()) {
@@ -269,36 +290,27 @@ CONTINUE_HANDLE_MERGING_TABLET:
 DEFINE_FAIL_POINT(tablet_reshard_after_identical_pk_flush);
 Status handle_identical_tablet(TabletManager* tablet_manager, const IdenticalTabletInfoPB& identical_tablet,
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
-                               std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas) {
+                               std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
+                               InitialMetadataOrder base_version_order) {
     {
-        auto old_tablet_new_metadata_location =
-                tablet_manager->tablet_metadata_location(identical_tablet.old_tablet_id(), new_version);
-        auto cached_old_tablet_new_metadata =
-                tablet_manager->metacache()->lookup_tablet_metadata(old_tablet_new_metadata_location);
-        if (cached_old_tablet_new_metadata == nullptr) {
-            goto CONTINUE_HANDLE_IDENTICAL_TABLET;
-        }
-
-        new_metadatas.emplace(identical_tablet.old_tablet_id(), std::move(cached_old_tablet_new_metadata));
-
-        auto new_tablet_new_metadata_location =
-                tablet_manager->tablet_metadata_location(identical_tablet.new_tablet_id(), new_version);
-        auto cached_new_tablet_new_metadata =
-                tablet_manager->metacache()->lookup_tablet_metadata(new_tablet_new_metadata_location);
-        if (cached_new_tablet_new_metadata == nullptr) {
-            new_metadatas.clear();
-            goto CONTINUE_HANDLE_IDENTICAL_TABLET;
-        }
-
-        new_metadatas.emplace(identical_tablet.new_tablet_id(), std::move(cached_new_tablet_new_metadata));
+        auto source = lookup_exact_cached_metadata(tablet_manager, identical_tablet.old_tablet_id(), new_version,
+                                                   txn_info.gtid());
+        if (source == nullptr) goto CONTINUE_HANDLE_IDENTICAL_TABLET;
+        auto target = lookup_exact_cached_metadata(tablet_manager, identical_tablet.new_tablet_id(), new_version,
+                                                   txn_info.gtid());
+        if (target == nullptr) goto CONTINUE_HANDLE_IDENTICAL_TABLET;
+        std::unordered_map<int64_t, TabletMetadataPtr> cached_metadatas{
+                {identical_tablet.old_tablet_id(), std::move(source)},
+                {identical_tablet.new_tablet_id(), std::move(target)}};
+        new_metadatas.swap(cached_metadatas);
         return Status::OK();
     }
 
 CONTINUE_HANDLE_IDENTICAL_TABLET:
     g_tablet_reshard_identical_total << 1;
 
-    auto old_tablet_old_metadata_or =
-            tablet_manager->get_tablet_metadata(identical_tablet.old_tablet_id(), base_version, false);
+    auto old_tablet_old_metadata_or = get_old_tablet_base_metadata(tablet_manager, identical_tablet.old_tablet_id(),
+                                                                   base_version, base_version_order);
     if (old_tablet_old_metadata_or.status().is_not_found()) {
         auto old_tablet_new_metadata_or =
                 tablet_manager->get_tablet_metadata(identical_tablet.old_tablet_id(), new_version, txn_info.gtid());
@@ -431,22 +443,8 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
     }
     tablet_reshard_helper::set_all_data_files_shared(txn_log);
     RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
-    // Pass this sibling's range so the stat apportionment can tell a sibling that provably owns
-    // none of the rowset's keys (a true 0, so the siblings' stats sum to the source) from one that
-    // may own them (the plain share).
-    //
-    // The classifier compares a rowset's sort_key_min/sort_key_max envelope against the range, which
-    // is sound only while the sort key IS the range key. A primary-key tablet with a separate ORDER
-    // BY has the two at the same arity in different key spaces, and the classifier's arity check
-    // cannot tell them apart -- it would compare, say, a varchar envelope against a bigint bound and
-    // could prove kNo for a sibling that does own rows. Withhold the range there: every rowset then
-    // classifies kUnknown and keeps the plain apportionment.
-    const auto base_schema = TabletSchema::create(base_tablet_metadata->schema());
-    const bool envelope_shares_the_range_key =
-            !(base_schema->keys_type() == KeysType::PRIMARY_KEYS && base_schema->has_separate_sort_key());
-    tablet_reshard_helper::update_txn_log_data_stats(
-            txn_log, publish_tablet_info.get_split_count(), publish_tablet_info.get_split_index(),
-            envelope_shares_the_range_key ? &base_tablet_metadata->range() : nullptr);
+    tablet_reshard_helper::update_txn_log_data_stats(txn_log, publish_tablet_info.get_split_count(),
+                                                     publish_tablet_info.get_split_index());
     return Status::OK();
 }
 
@@ -563,7 +561,8 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                  bool skip_write_tablet_metadata,
                                  std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
-                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
+                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                                 InitialMetadataOrder base_version_order) {
     g_tablet_reshard_total << 1;
     auto reshard_start_ts = butil::gettimeofday_us();
 
@@ -587,14 +586,16 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
 
     auto handle_status = Status::OK();
     if (resharding_tablet.has_splitting_tablet_info()) {
-        handle_status = handle_splitting_tablet(tablet_manager, resharding_tablet.splitting_tablet_info(), base_version,
-                                                new_version, txn_info, tablet_metadatas, tablet_ranges);
+        handle_status =
+                handle_splitting_tablet(tablet_manager, resharding_tablet.splitting_tablet_info(), base_version,
+                                        new_version, txn_info, tablet_metadatas, tablet_ranges, base_version_order);
     } else if (resharding_tablet.has_merging_tablet_info()) {
-        handle_status = handle_merging_tablet(tablet_manager, resharding_tablet.merging_tablet_info(), base_version,
-                                              new_version, txn_info, tablet_metadatas, tablet_ranges);
+        handle_status =
+                handle_merging_tablet(tablet_manager, resharding_tablet.merging_tablet_info(), base_version,
+                                      new_version, txn_info, tablet_metadatas, tablet_ranges, base_version_order);
     } else if (resharding_tablet.has_identical_tablet_info()) {
         handle_status = handle_identical_tablet(tablet_manager, resharding_tablet.identical_tablet_info(), base_version,
-                                                new_version, txn_info, tablet_metadatas);
+                                                new_version, txn_info, tablet_metadatas, base_version_order);
     }
 
     if (!handle_status.ok()) {
@@ -615,8 +616,7 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                 g_tablet_reshard_failed << 1;
                 return st;
             }
-            tablet_manager->metacache()->cache_aggregation_partition(
-                    tablet_manager->tablet_metadata_root_location(tablet_id), true);
+            tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
         }
         // Deliberately at the END of the body: one tablet is now switched to the new version and the
         // rest are not, which is the partial-switch state a reshard has to recover from. At the top of

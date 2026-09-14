@@ -23,6 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.options.CatalogOptions;
@@ -33,6 +34,7 @@ import org.apache.paimon.types.IntType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -97,6 +99,32 @@ public class PaimonConnectorTest {
         Assertions.assertEquals(Duration.ofHours(1), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_WRITE));
         Assertions.assertEquals(50L, options.get(CatalogOptions.CACHE_PARTITION_MAX_NUM));
         Assertions.assertEquals(Duration.ofHours(24), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_ACCESS));
+    }
+
+    @Test
+    public void testTableCacheRefreshIntervalProperty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        // mirrors iceberg_table_cache_refresh_interval_sec
+        Assertions.assertEquals(60L, connector.getTableCacheRefreshIntervalSec());
+
+        properties.put(PaimonConnector.PAIMON_TABLE_CACHE_REFRESH_INTERVAL, "0");
+        PaimonConnector off = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Assertions.assertEquals(0L, off.getTableCacheRefreshIntervalSec());
+    }
+
+    @Test
+    public void testCacheCanBeDisabled() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", Files.createTempDirectory("paimon_no_cache").toString());
+        properties.put("paimon.option.cache-enabled", "false");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+
+        Assertions.assertFalse(connector.getPaimonOptions().get(CatalogOptions.CACHE_ENABLED));
+        Assertions.assertFalse(connector.getPaimonNativeCatalog() instanceof CachingCatalog);
     }
 
     @Test

@@ -1,0 +1,14 @@
+-- name: test_nested_lambda_window
+select count(array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]])) over ();
+-- result:
+1
+-- !result
+select count(array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]])) over () order by array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) desc limit 7, 100;
+-- result:
+-- !result
+select x, count(array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]])) over () from (select 3 as x union all select 1 union all select 2) t order by x desc;
+-- result:
+3	3
+2	3
+1	3
+-- !result

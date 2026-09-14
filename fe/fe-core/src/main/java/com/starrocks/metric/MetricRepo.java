@@ -38,6 +38,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -60,10 +61,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.ThriftServer;
+import com.starrocks.common.Version;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.JournalType;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
@@ -92,6 +96,7 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
@@ -328,6 +333,9 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
+    private static final Map<JournalType, RetainedJournalState> RETAINED_JOURNAL_STATES = Map.of(
+            JournalType.FE_META, new RetainedJournalState(),
+            JournalType.STAR_MGR, new RetainedJournalState());
     public static LongCounterMetric COUNTER_IMAGE_WRITE;
     public static LongCounterMetric COUNTER_IMAGE_PUSH;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_REJECT;
@@ -468,6 +476,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
+    public static LeaderAwareGaugeMetricLong GAUGE_MAX_JOURNAL_REPLAY_LAG;
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
@@ -488,6 +497,8 @@ public final class MetricRepo {
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
+    public static GaugeMetric<Long> GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -514,7 +525,29 @@ public final class MetricRepo {
         GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
         GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
 
+        GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS = new GaugeMetric<>(
+                "thrift_server_acceptor_stall_ms", MetricUnit.MILLISECONDS,
+                "milliseconds since the thrift accept loop last made progress") {
+            @Override
+            public Long getValue() {
+                return ThriftServer.getAcceptorStallTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS);
+
+        COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_rejected_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed because its worker pool was saturated");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS);
+
         // 1. gauge
+        // build info
+        GaugeMetricImpl<Long> buildInfo = new GaugeMetricImpl<>("build_info",
+                MetricUnit.NOUNIT, "StarRocks FE build information", 1L);
+        buildInfo.addLabel(new MetricLabel("version", Version.STARROCKS_VERSION))
+                .addLabel(new MetricLabel("commit_hash", Version.STARROCKS_COMMIT_HASH));
+        STARROCKS_METRIC_REGISTER.addMetric(buildInfo);
+
         // load jobs
         LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
         for (EtlJobType jobType : EtlJobType.values()) {
@@ -612,6 +645,19 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
+
+        // journal replay lag of the slowest follower/observer.
+        // Leader-only: it is the only node that knows both the write frontier and, via heartbeat,
+        // every other node's replayed journal id.
+        GAUGE_MAX_JOURNAL_REPLAY_LAG = new LeaderAwareGaugeMetricLong(
+                "max_journal_replay_lag", MetricUnit.NOUNIT,
+                "max number of journals any alive follower/observer is behind the leader") {
+            @Override
+            public Long getValueLeader() {
+                return getMaxJournalReplayLag();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_JOURNAL_REPLAY_LAG);
 
         GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
                 SPM_BASELINE_COUNT_METRIC_NAME,
@@ -934,6 +980,9 @@ public final class MetricRepo {
         COUNTER_EDIT_LOG_SIZE_BYTES =
                 new LongCounterMetric("edit_log_size_bytes", MetricUnit.BYTES, "size of edit log");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_SIZE_BYTES);
+        for (JournalType journalType : JournalType.values()) {
+            registerEditLogRetainedMetrics(journalType);
+        }
         COUNTER_IMAGE_WRITE = new LongCounterMetric("image_write", MetricUnit.OPERATIONS, "counter of image generated");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE);
         COUNTER_IMAGE_PUSH = new LongCounterMetric("image_push", MetricUnit.OPERATIONS,
@@ -1181,6 +1230,32 @@ public final class MetricRepo {
         }
     }
 
+    /**
+     * Max number of journals that any alive follower/observer still has to replay to catch up
+     * with the leader.
+     *
+     * The leader's own journal id is the write frontier; every other node's replayed journal id
+     * arrives with its heartbeat (see Frontend#handleHbResponse). Dead nodes are skipped, because
+     * their reported id is frozen at the last successful heartbeat: counting them would pin this
+     * gauge at an ever growing value that says nothing about replay speed, and liveness is already
+     * reported separately through SHOW FRONTENDS.
+     *
+     * Returns 0 when no other node is alive, and never returns a negative value.
+     */
+    @VisibleForTesting
+    static long getMaxJournalReplayLag() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        long leaderJournalId = globalStateMgr.getMaxJournalId();
+        long maxLag = 0;
+        for (Frontend fe : globalStateMgr.getNodeMgr().getOtherFrontends()) {
+            if (!fe.isAlive()) {
+                continue;
+            }
+            maxLag = Math.max(maxLag, leaderJournalId - fe.getReplayedJournalId());
+        }
+        return maxLag;
+    }
+
     private static void initStatisticsCacheMetrics() {
         final var storage = GlobalStateMgr.getCurrentState().getStatisticStorage();
         if (storage instanceof CachedStatisticStorage cachedStatisticStorage) {
@@ -1356,6 +1431,98 @@ public final class MetricRepo {
                 stat.counterCloneTaskIntraNodeCopyDurationMs);
         cloneTaskIntraNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
         STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyDurationMs);
+    }
+
+    private static void registerEditLogRetainedMetrics(JournalType journalType) {
+        RetainedJournalState state = RETAINED_JOURNAL_STATES.get(journalType);
+        Metric<Long> count = new LeaderAwareGaugeMetricLong(
+                "edit_log_retained", MetricUnit.OPERATIONS, "number of retained edit logs") {
+            @Override
+            public Long getValueLeader() {
+                return state.getCount();
+            }
+        };
+        count.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
+        STARROCKS_METRIC_REGISTER.addMetric(count);
+
+        Metric<Long> bytes = new LeaderAwareGaugeMetricLong(
+                "edit_log_retained_bytes_estimate", MetricUnit.BYTES, "estimated retained edit log bytes") {
+            @Override
+            public Long getValueLeader() {
+                return state.getEstimatedBytes();
+            }
+        };
+        bytes.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
+        STARROCKS_METRIC_REGISTER.addMetric(bytes);
+    }
+
+    public static void initializeEditLogRetained(
+            JournalType journalType, long minJournalId, long maxJournalId) {
+        RETAINED_JOURNAL_STATES.get(journalType).initialize(minJournalId, maxJournalId);
+    }
+
+    public static void recordEditLogBatch(
+            JournalType journalType, long lastJournalId, long count, long bytes) {
+        RETAINED_JOURNAL_STATES.get(journalType).record(lastJournalId, count, bytes);
+    }
+
+    public static void updateEditLogRetainedMinJournalId(JournalType journalType, long minJournalId) {
+        RETAINED_JOURNAL_STATES.get(journalType).updateMinJournalId(minJournalId);
+    }
+
+    public static long getEditLogRetainedCount(JournalType journalType) {
+        return RETAINED_JOURNAL_STATES.get(journalType).getCount();
+    }
+
+    public static long getEditLogRetainedBytesEstimate(JournalType journalType) {
+        return RETAINED_JOURNAL_STATES.get(journalType).getEstimatedBytes();
+    }
+
+    private static final class RetainedJournalState {
+        private long minJournalId = -1L;
+        private long maxJournalId = -1L;
+        private long observedCount;
+        private long observedBytes;
+
+        private synchronized void initialize(long minJournalId, long maxJournalId) {
+            this.minJournalId = minJournalId;
+            this.maxJournalId = maxJournalId;
+            observedCount = 0L;
+            observedBytes = 0L;
+        }
+
+        private synchronized void record(long lastJournalId, long count, long bytes) {
+            if (count <= 0L) {
+                return;
+            }
+            if (minJournalId < 0L) {
+                minJournalId = lastJournalId - count + 1L;
+            }
+            maxJournalId = Math.max(maxJournalId, lastJournalId);
+            observedCount += count;
+            observedBytes += bytes;
+        }
+
+        private synchronized void updateMinJournalId(long minJournalId) {
+            this.minJournalId = minJournalId;
+        }
+
+        private synchronized long getCount() {
+            return minJournalId < 0L || maxJournalId < minJournalId
+                    ? 0L : maxJournalId - minJournalId + 1L;
+        }
+
+        private synchronized long getEstimatedBytes() {
+            long count = getCount();
+            if (count == 0L) {
+                return 0L;
+            }
+            if (observedCount == 0L) {
+                return -1L;
+            }
+            double estimate = (double) count * observedBytes / observedCount;
+            return estimate >= Long.MAX_VALUE ? Long.MAX_VALUE : Math.round(estimate);
+        }
     }
 
     // to generate the metrics related to tablets of each backend

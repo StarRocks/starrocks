@@ -93,6 +93,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.LogCleaner;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -511,6 +512,8 @@ public class GlobalStateMgr {
 
     private final StorageVolumeMgr storageVolumeMgr;
 
+    private final AIProviderMgr aiProviderMgr;
+
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
 
@@ -724,6 +727,7 @@ public class GlobalStateMgr {
                 new SystemHandler());
         this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                 Config.publish_version_max_threads, "alter-publish", false);
+        this.lakeAlterPublishExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -906,6 +910,8 @@ public class GlobalStateMgr {
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.sqlBlackList = new SqlBlackList();
         this.sqlDigestBlackList = new SqlDigestBlackList();
+
+        this.aiProviderMgr = new AIProviderMgr();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
@@ -1141,6 +1147,10 @@ public class GlobalStateMgr {
 
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
+    }
+
+    public AIProviderMgr getAIProviderMgr() {
+        return aiProviderMgr;
     }
 
     public PipeManager getPipeManager() {
@@ -1408,10 +1418,11 @@ public class GlobalStateMgr {
             if (!haProtocol.fencing()) {
                 throw new Exception("fencing failed. will exit");
             }
-            long maxJournalId = journal.getMaxJournalId();
+            Pair<Long, Long> journalIdRange = journal.getJournalIdRange();
+            long maxJournalId = journalIdRange.second;
             replayJournal(maxJournalId);
             nodeMgr.checkCurrentNodeExist();
-            journalWriter.init(maxJournalId);
+            journalWriter.init(journalIdRange.first, maxJournalId);
         } catch (Exception e) {
             // A failed activation is not rolled back: a half-done activation (lease published, WAL gate
             // open, daemons started, journal writer initialized) cannot be un-done reliably, so fail fast
@@ -2172,6 +2183,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
+                .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
@@ -2410,6 +2422,7 @@ public class GlobalStateMgr {
                 historicalNodeMgr.save(imageWriter);
                 tabletReshardJobMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
+                aiProviderMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

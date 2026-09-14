@@ -25,3 +25,18 @@ python3 build-support/check_gensrc_schema_compatibility.py --mode full --base or
 - Field-number changes, type changes, and cardinality changes fail the harness.
 - Field deletions require a checked-in waiver entry with matching signature, rationale, and owner.
 - Remove stale waivers as soon as the compatibility exception is no longer needed.
+
+## External Parquet Definitions
+
+`gensrc/thrift/parquet.thrift` remains selected in both changed and full checks.
+The checker permits only the exact append of upstream `LogicalType` alternatives
+17 (`GeometryType GEOMETRY`) and 18 (`GeographyType GEOGRAPHY`), without changing
+the pre-existing union body. This is not general Thrift union support: other union
+edits still fail closed, and parsed structs are checked independently even when
+an unsupported construct changes.
+
+The four upstream-required `BoundingBox` X/Y fields were introduced under
+field-specific `new_field_must_be_optional` waivers. Those addition waivers have
+been retired now that the comparison base contains the fields; keeping them would
+fail the stale-waiver check. The fields keep their upstream `required` cardinality,
+and the existing-field deletion, renumbering, and type checks stay active on them.

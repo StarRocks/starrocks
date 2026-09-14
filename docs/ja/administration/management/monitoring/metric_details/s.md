@@ -56,6 +56,13 @@ description: "Alphabetical s"
 - 単位: -
 - 説明: `/proc/net/snmp`によって返されるメトリクス。
 
+## `starrocks_be_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: BEノードのビルド情報。メトリクスの値は常に `1` です。
+
 ## `starrocks_be_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -182,6 +189,12 @@ description: "Alphabetical s"
 - 単位: カウント
 - タイプ: 累積値
 - 説明: `FlatJsonColumnWriter` に追加された行数（`append()` 時点でカウント、実際のフラット化の前）。
+
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 共有データモード専用。Lake tablet metadata をリモートストレージから読み取り、`NotFound` が返された試行の総数。tablet の metadata は個別の metadata ファイルか bundle metadata ファイルのいずれか一方にのみ存在し、両方に存在することはありません。いずれの読み取りもカウント対象で、vacuum が発行する bundle 読み取りも含まれます。失敗したフォールバック読み取りはそれぞれ個別にカウントされます。キャッシュミスおよび読み取り成功時には、このメトリクスは増加しません。レプリケーションでのソースクラスタ metadata の読み取り、およびリストアでのスナップショット metadata の読み取りはカウントされません。
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -337,6 +350,13 @@ description: "Alphabetical s"
 - タイプ: 累積
 - 説明: リポジトリから削除されたバックアップスナップショットの合計数。TTL による自動クリーンアップと DROP SNAPSHOT の両方を含みます。
 
+## `starrocks_fe_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: FEノードのビルド情報。メトリクスの値は常に `1` です。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -366,6 +386,12 @@ description: "Alphabetical s"
 - 単位: ms
 - タイプ: 瞬間
 - 説明: 特定のウェアハウスにおける最後のクエリまたはロードの終了時間を示します。シェアードナッシングクラスターの場合、この項目はデフォルトのウェアハウスのみを監視します。
+
+## `starrocks_fe_max_journal_replay_lag`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: 稼動中の Follower または Observer FE のうち、Leader に追いつくために再生が必要なメタデータジャーナルの最大数。Leader FE のみが報告します (`is_leader="true"`)。Leader は自身のジャーナル書き込み位置と、ハートビートで受け取る他の各ノードの再生済みジャーナル ID の両方を知る唯一のノードであるためです。稼動していない FE ノードは除外されます。最後に報告されたジャーナル ID が最後に成功したハートビートの値で止まるためです。そのようなノードは `SHOW FRONTENDS` の `Alive` 列で検出してください。他のすべてのノードが追いついている場合、他に稼動中の FE ノードがない場合、および単一 FE クラスターの場合は `0` を返します。値が大きい、または継続的に増加している場合は、少なくとも 1 つのノードでメタデータの再生が遅れていることを意味し、そのノードは古いメタデータを提供し、`meta_delay_toleration_second` を超えるとクエリを Leader に転送します。
 
 ## `starrocks_fe_memory_usage`
 

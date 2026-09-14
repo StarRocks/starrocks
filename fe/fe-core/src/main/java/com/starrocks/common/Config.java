@@ -205,6 +205,9 @@ public class Config extends ConfigBase {
     public static int audit_log_delete_count = -1;
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField(mutable = true, comment = "Max length of the error message recorded in the audit log, truncate " +
+            "messages longer than this specified limit. Set to 0 to stop recording error messages. Default: 1024")
+    public static int audit_log_error_message_max_length = 1024;
     @ConfField
     public static boolean audit_log_enable_compress = false;
 
@@ -865,6 +868,18 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
+
+    /**
+     * The amount of free space (in bytes) bdb-je tries to keep on the volume holding `meta_dir`.
+     * The same value gates FE startup: the FE refuses to start when the free space is below it.
+     * <p>
+     * The default equals the bdb-je default. Lowering it is the recovery path for an FE that cannot
+     * start on a nearly full metadata volume: it lets bdb-je open and reclaim its own reserved files.
+     * Note that bdb-je needs this headroom for its housekeeping, so a value far below the default
+     * leaves an FE that starts but may reject metadata writes. Takes effect after a restart.
+     */
+    @ConfField
+    public static long bdbje_free_disk_size = 5L * 1024 * 1024 * 1024;
 
     /**
      * Timeout seconds for doing checkpoint
@@ -1581,6 +1596,16 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int alter_table_timeout_second = 86400; // 1day
+
+    /**
+     * On an aggregate table, ALTER TABLE ... ADD COLUMN with neither an aggregate function nor the
+     * KEY keyword is ambiguous, and treating it as a key column changes the table's aggregation key
+     * and rewrites existing data. When false, such a statement is rejected and the error names both
+     * options. When true, the column becomes a key column, which is the behavior before this was
+     * introduced. Mutable, but not persisted across a restart unless set WITH PERSISTENT.
+     */
+    @ConfField(mutable = true)
+    public static boolean allow_implicit_key_column_in_agg_add_column = true;
 
     /**
      * The alter handler max worker threads
@@ -2710,6 +2735,33 @@ public class Config extends ConfigBase {
     @ConfField
     public static int low_cardinality_threshold = 255;
 
+    // Global-dictionary thrash guard.
+    // A "rolling low-cardinality" column (distinct values stay under low_cardinality_threshold at any
+    // instant but the value set keeps rotating, e.g. an id whose active set churns) never trips the
+    // cardinality blacklist, yet every load introduces values missing from the current global dict and
+    // invalidates it. Each invalidation forces a full MetaScan re-collection, wasting IO and, on
+    // shared-data, hammering the segment metadata cache lock. This guard detects a dictionary that is
+    // invalidated too often and forbids collecting it, so it stops thrashing.
+    @ConfField(mutable = true, comment = "Enable the global-dictionary thrash guard that forbids " +
+            "dictionaries which keep getting invalidated and re-collected.")
+    public static boolean enable_dict_thrash_guard = true;
+
+    @ConfField(mutable = true, comment = "Sliding time window (in seconds) used by the global-dictionary " +
+            "thrash guard to count how often a column dictionary is invalidated.")
+    public static int dict_thrash_guard_window_sec = 60;
+
+    @ConfField(mutable = true, comment = "If a column dictionary is invalidated at least this many times " +
+            "within dict_thrash_guard_window_sec, the thrash guard forbids collecting it. Set to 0 to " +
+            "disable the count check while keeping the guard enabled.")
+    public static int dict_thrash_guard_threshold = 5;
+
+    @ConfField(mutable = true, comment = "Minimum interval, in seconds, between two min/max statistics " +
+            "collections for the same column. Min/max stats are collected on demand via a [_META_] " +
+            "MetaScan that reads every segment's zone-map metadata; a frequently loaded column would " +
+            "otherwise re-scan on every load. Within the interval the min/max optimization is skipped " +
+            "rather than re-collected (a stale value is never served). Set to 0 to disable throttling.")
+    public static int min_max_stats_collect_interval_sec = 60;
+
     /**
      * The column statistic cache update interval
      */
@@ -2884,9 +2936,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String histogram_collect_bucket_ndv_mode = "none";
-
-    @ConfField(mutable = true, comment = "Whether to batch insert histogram statistics for multiple columns")
-    public static boolean enable_batch_insert_histogram_statistics = true;
 
     @ConfField(mutable = true, comment = "Maximum buffered SQL size in bytes for one histogram statistics batch insert")
     public static long histogram_batch_insert_buffer_size = 20L * 1024 * 1024;
@@ -3811,6 +3860,48 @@ public class Config extends ConfigBase {
                     "calculated as f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets), " +
                     "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
     public static double lake_balance_tablets_threshold = 0.15;
+
+    @ConfField(mutable = true, comment =
+            "Whether the tablet scheduler estimates a large colocate group's replica distribution " +
+                    "from a random sample of its tablets instead of scanning every tablet, which " +
+                    "markedly cuts the per-schedule cost in shared-data clusters. Default: true")
+    public static boolean lake_scheduler_enable_colocate_group_sample = true;
+
+    @ConfField(mutable = true, comment =
+            "A colocate group is sampled only when it holds more than this many tablets. Takes " +
+                    "effect only when lake_scheduler_enable_colocate_group_sample is true. " +
+                    "Default: 256")
+    public static int lake_scheduler_colocate_group_sample_threshold = 256;
+
+    @ConfField(mutable = true, comment =
+            "Number of tablets sampled when a colocate group exceeds " +
+                    "lake_scheduler_colocate_group_sample_threshold. Larger values reduce the " +
+                    "sampling error at a higher scan cost. Default: 128")
+    public static int lake_scheduler_colocate_group_sample_size = 128;
+
+    @ConfField(mutable = true, comment =
+            "Density guard for colocate group sampling: if more than this percentage of the sampled " +
+                    "tablets hold no replica on a candidate compute node, the group is too sparsely " +
+                    "placed for the sample to be representative, so the scheduler discards it and " +
+                    "falls back to a full scan. Lower is more conservative. Default: 40")
+    public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
+
+    @ConfField(mutable = true, comment =
+            "How long a shared-data online rewrite keeps retrying one partition's rewrite INSERT after " +
+                    "it fails, before cancelling the whole job. An online rewrite - a range sort-key " +
+                    "schema change, a range rollup, or a materialized view sort-key rewrite - rebuilds " +
+                    "data one partition per alter-scheduler tick, so a compute node restarting or " +
+                    "crashing mid-INSERT fails that one partition; retrying lets the job resume it " +
+                    "instead of discarding every partition it has already rewritten. Should exceed the " +
+                    "time a node takes to come back, and stays far below alter_table_timeout_second " +
+                    "because compaction on the table is deferred for as long as the rewrite runs. It " +
+                    "is spent only by that partition's own failed attempts, each charged for how long " +
+                    "it ran plus one alter_scheduler_interval_millisecond, so waiting on a different " +
+                    "partition does not consume it. A partition always gets at least one retry, even " +
+                    "when that attempt alone costs more than the window. Set to 0 to cancel the job on " +
+                    "the first failure. " +
+                    "Default: 600")
+    public static int lake_online_rewrite_partition_retry_timeout_second = 600;
 
     /**
      * Default lake compaction txn timeout
@@ -4808,6 +4899,24 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = true;
 
     /**
+     * Whether to use range distribution as the default distribution of an asynchronous materialized
+     * view created without an explicit DISTRIBUTED BY clause. This is the materialized view half of
+     * enable_range_distribution, split off so that a cluster can adopt range-distributed tables
+     * without changing how its materialized views are distributed.
+     * <p>
+     * The default selects range distribution only when this config and enable_range_distribution are
+     * both true, in shared-data mode. Otherwise a materialized view created without a DISTRIBUTED BY
+     * clause uses the previous default distribution behavior (incrementally refreshed -> hash over
+     * its key columns, otherwise random), even where a table would be range-distributed. Range
+     * distribution has no DISTRIBUTED BY syntax, so with this config off the INVISIBLE session
+     * variable enable_range_distribution is the only remaining way to ask for it.
+     */
+    @ConfField(mutable = true, comment = "Whether to use range distribution as the default "
+            + "materialized view distribution in shared-data mode. Takes effect only when "
+            + "enable_range_distribution is also true. Has no effect in shared-nothing mode.")
+    public static boolean enable_mv_range_distribution = false;
+
+    /**
      * The default scheduler interval for tablet reshard jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs. "
@@ -5081,4 +5190,13 @@ public class Config extends ConfigBase {
             "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
+    public static String ai_default_chat_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    public static String ai_default_chat_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    public static String ai_default_chat_provider = "";
 }

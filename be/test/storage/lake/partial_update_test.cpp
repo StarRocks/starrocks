@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <map>
 #include <random>
 
@@ -40,6 +41,7 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -283,9 +285,6 @@ TEST_P(LakePartialUpdateTest, test_write) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_segment) {
@@ -656,9 +655,6 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
                       check(version, [](int c0, int c1, int c2) { return (c0 * 4 == c1) && (c0 * 4 == c2); }));
         }
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 // Validates that column-mode partial update rejects a merge_condition when the condition column
@@ -987,9 +983,6 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
@@ -1071,9 +1064,6 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
@@ -1143,9 +1133,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
 }
 
@@ -1221,9 +1208,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
 }
 
@@ -1309,9 +1293,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
@@ -1388,9 +1369,6 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
         auto sstable_meta = new_tablet_metadata->sstable_meta();
@@ -2264,9 +2242,9 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
     // rows were displaced. All n here would mean the selector never engaged.
     EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
 
-    // The rewrite output is private (no `shared` flag) but its rowset carries the range, so reads clip
-    // it: the siblings' rows are in the file and must not come back. Every key appears exactly once --
-    // the owned ones from the rewrite, the rest still from the baseline rowset.
+    // The rewrite dropped the siblings' rows outright, so the output is private with nothing left to
+    // clip. Every key still appears exactly once -- the owned ones from the rewrite, the rest from the
+    // baseline rowset, which is what the split left holding them.
     ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
                   const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
                   return owned ? (c1 == c0 * 5 && c2 == c0 * 4) : (c1 == c0 * 3 && c2 == c0 * 4);
@@ -2300,13 +2278,308 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
     }
     seg_iter->close();
 
-    ASSERT_EQ(static_cast<size_t>(n), rows.size());
+    // This is the contract the owned-only rewrite buys: the file holds this tablet's rows and nothing
+    // else. Before it, the rewrite copied every source row and filled the siblings' unwritten columns
+    // with what "no old row" produces, so the file carried them at a default value and needed a delete
+    // vector, a withheld range and a later UNSHARE rewrite to keep them out of a read.
+    ASSERT_EQ(static_cast<size_t>(kOwnedRows), rows.size()) << "the rewrite must drop the unowned rows";
     for (int key = 0; key < n; key++) {
         const bool owned = key >= kOwnedLower && key < kOwnedUpper;
         auto it = rows.find(key);
+        if (!owned) {
+            EXPECT_EQ(rows.end(), it) << "key " << key << " belongs to a sibling and must not be here";
+            continue;
+        }
         ASSERT_NE(rows.end(), it) << "key " << key << " missing from the rewritten segment";
         EXPECT_EQ(key * 5, it->second.first) << "key " << key;
-        EXPECT_EQ(owned ? key * 4 : 10, it->second.second) << "key " << key;
+        EXPECT_EQ(key * 4, it->second.second) << "key " << key;
+    }
+}
+
+// The narrowed-emit check needs the SOURCE segment's row count, and it reads it off the txn log. A txn
+// log written by an older BE carries only the deprecated per-segment arrays, whose synthesized
+// segment_metas have no num_rows at all -- num_rows() then answers 0, the emit no longer looks short of
+// its source, the rewrite goes back to copy-and-append, and the publish stalls forever on
+// "num rows written 0 is not equal to segment num rows N". Same staging as the test above with the
+// count stripped.
+//
+// The range owns NONE of the written keys, which is the only staging that reaches the check at all: a
+// selector exists for every cross publish of a shared segment (CrossPublishRowSelector::
+// create_if_needed) and SegmentPKIterator::_load builds a mask from it for every non-empty chunk, so
+// an emit that returns rows always reports a mask and takes the ordinary masked path. Only the
+// zero-row emit -- this child owns nothing of the segment -- clears the mask, and that is the case
+// the narrowed branch exists for and the one that stalls production.
+TEST_P(LakePartialUpdateTest, test_cross_publish_narrowed_emit_reads_a_missing_row_count_off_the_file) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "column mode resolves the unmodified columns through DCGs, not this lookup";
+    }
+    const int n = kChunkSize;
+
+    // Every key this test writes is 0..n-1, so a range starting at n owns none of them and the
+    // narrowed read emits nothing.
+    make_range_distributed(_tablet_metadata.get(), n, 2 * n);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
+    auto chunk1 = generate_data(n, 0, true, 5);  // partial rows: c0 and c1 = key * 5 only
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // v2: a local full write puts every key -- this child's and its siblings' -- in the index. Not
+    // shared, so it is neither selected at publish nor clipped at read.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // v3: cross publish the partial update. What convert_txn_log_for_splitting leaves behind is the
+    // parent's segments on every child, so each has to select its own rows out of them.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+            // What an older BE's txn log looks like once its deprecated per-segment arrays are
+            // synthesized into segment_metas: a segment with no row count of its own.
+            segment_meta.clear_num_rows();
+        }
+        ASSERT_FALSE(rowset->segment_metas(0).has_num_rows());
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+
+    // Not inferred from the outcome: the publish would also succeed if the count had been there all
+    // along, so the fallback is what has to be observed. This is the only thing that distinguishes
+    // this test from the one above.
+    std::vector<size_t> rows_read_off_the_file;
+    SyncPoint::GetInstance()->SetCallBack("RowsetUpdateState::rewrite_segment:source_rows_from_file", [&](void* arg) {
+        rows_read_off_the_file.push_back(*static_cast<size_t*>(arg));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("RowsetUpdateState::rewrite_segment:source_rows_from_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+    ASSERT_FALSE(rows_read_off_the_file.empty())
+            << "the fallback must have read the source row count off the segment file";
+    for (size_t rows : rows_read_off_the_file) {
+        EXPECT_EQ(static_cast<size_t>(n), rows) << "the file holds every source row, siblings included";
+    }
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    // This child owned none of the update's rows, so none of its old rows were displaced -- a non-zero
+    // count here would mean the selector never engaged and the update was applied wholesale.
+    EXPECT_EQ(0, metadata->rowsets(0).num_dels());
+    // And the baseline rowset still serves every key at the value the full write left, which is what
+    // the publish never reaches if the row count comes back 0 and stalls it.
+    ASSERT_EQ(n, check(3, [](int c0, int c1, int c2) { return c1 == c0 * 3 && c2 == c0 * 4; }));
+}
+
+// Force row-mode partial updates to rewrite their segment in c1 order.
+static void make_sort_key_differ_from_pk(TabletMetadata* metadata) {
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->clear_sort_key_idxes();
+    schema_pb->add_sort_key_idxes(1);
+}
+
+// Verify that a condition update's losers are the only thing left in the rewritten segment's delvec:
+// the unowned rows are gone from the file, not masked in it.
+TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_condition_update_masks_unowned_rows) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "column-mode partial update is refused outright on a separate sort key";
+    }
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+    const int kOwnedRows = kOwnedUpper - kOwnedLower;
+    const int kUnownedRows = n - kOwnedRows;
+    int condition_winners = 0;
+    for (int key = kOwnedLower; key < kOwnedUpper; key++) {
+        condition_winners += key % 2 == 0;
+    }
+    const int condition_losers = kOwnedRows - condition_winners;
+    ASSERT_GT(kUnownedRows, 0) << "the sibling rows are the whole point of this test";
+    ASSERT_GT(condition_winners, 0);
+    ASSERT_GT(condition_losers, 0);
+
+    make_sort_key_differ_from_pk(_tablet_metadata.get());
+    make_range_distributed(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    ASSERT_TRUE(_tablet_schema->has_separate_sort_key())
+            << "without this the rowset range clips the rewrite and there is nothing to observe";
+
+    auto chunk0 = generate_data(n, 0, false, 3);
+    std::vector<int> keys(n);
+    std::vector<int> values(n);
+    for (int i = 0; i < n; i++) {
+        keys[i] = i;
+        values[i] = i * (i % 2 == 0 ? 5 : 2);
+    }
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c1->append_numbers(values.data(), values.size() * sizeof(int));
+    Chunk chunk1({std::move(c0), std::move(c1)}, _slot_cid_map);
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // The local baseline makes every key resolvable before the cross publish.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Cross publish a partial update whose owned even keys win and owned odd keys lose the condition.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .set_merge_condition("c1")
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        ASSERT_EQ(0, shared_log->op_write().ssts_size());
+        ASSERT_GT(shared_log->op_write().rewrite_segments_meta_size(), 0);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    EXPECT_EQ(condition_winners, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(condition_losers, metadata->rowsets(1).num_dels())
+            << "only the condition losers belong in the delvec; the unowned rows are not in the file";
+
+    ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
+                  const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
+                  const bool condition_wins = c0 % 2 == 0;
+                  return c1 == c0 * (owned && condition_wins ? 5 : 3) && c2 == c0 * 4;
+              }));
+
+    // The file holds this tablet's rows only; its delvec hides just the condition losers among them.
+    const auto& rewritten = metadata->rowsets(1);
+    ASSERT_EQ(1, rewritten.segment_metas_size());
+    EXPECT_FALSE(rewritten.segment_metas(0).shared()) << "the rewrite output is private to this tablet";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto segment_path = _tablet_mgr->segment_location(tablet_id, rewritten.segment_metas(0).filename());
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{segment_path}, /*segment_id=*/0, _tablet_schema));
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = fs;
+    opts.tablet_id = tablet_id;
+    opts.stats = &stats;
+    opts.chunk_size = 128;
+    ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
+    auto read_chunk = ChunkFactory::new_chunk(*_schema, 128);
+    std::map<int, std::pair<int, int>> rows;
+    while (true) {
+        read_chunk->reset();
+        auto st = seg_iter->get_next(read_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < read_chunk->num_rows(); i++) {
+            auto row = read_chunk->get(i);
+            rows[row[0].get_int32()] = {row[1].get_int32(), row[2].get_int32()};
+        }
+    }
+    seg_iter->close();
+
+    // Only this tablet's rows reach the file now. A condition LOSER among them is still here, at the
+    // value the load wrote, because it is the delete vector that hides it -- but a sibling's row is
+    // gone outright, so there is no default-valued copy of it left to serve.
+    ASSERT_EQ(static_cast<size_t>(kOwnedRows), rows.size()) << "the rewrite must drop the unowned rows";
+    for (int key = 0; key < n; key++) {
+        const bool owned = key >= kOwnedLower && key < kOwnedUpper;
+        auto it = rows.find(key);
+        if (!owned) {
+            EXPECT_EQ(rows.end(), it) << "key " << key << " belongs to a sibling and must not be here";
+            continue;
+        }
+        ASSERT_NE(rows.end(), it) << "key " << key << " missing from the rewritten segment";
+        EXPECT_EQ(key * (key % 2 == 0 ? 5 : 2), it->second.first) << "key " << key;
+        EXPECT_EQ(key * 4, it->second.second) << "key " << key;
     }
 }
 
@@ -2483,9 +2756,6 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
@@ -2653,9 +2923,6 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 namespace {
@@ -2982,6 +3249,131 @@ TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
     ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(md->rowsets_size(), 3);
     EXPECT_GT(md->dcg_meta().dcgs_size(), 0);
+}
+
+// A COLUMN_UPSERT_MODE load synthesizes one new-row segment per update segment and upserts each into
+// the primary index in turn, so a key that occurs in more than one of the load's own update segments
+// makes a later iteration return deletes against an earlier iteration's segment. When two later
+// iterations both hit the same earlier segment, that segment's delete vector is written twice inside
+// one publish -- and append_delvec() replaces the entry rather than merging it, so a fresh DelVector
+// drops the first write's marks and those superseded rows go live again, leaving two live rows for one
+// primary key with no error anywhere.
+//
+// The shape below is the minimal one that writes a segment's delete vector twice: twelve brand-new
+// keys in the first update segment, then the even half, then the odd half. Both later segments
+// supersede rows in the first, and neither overlaps the other.
+TEST_F(LakeColumnUpsertModeTest, column_upsert_merges_delvec_across_update_segments) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+    constexpr int kNewKeyBase = 100;
+
+    auto partial_chunk = [this](const std::vector<int>& keys, int multiplier) {
+        std::vector<int> values(keys.size());
+        for (size_t i = 0; i < keys.size(); i++) {
+            values[i] = keys[i] * multiplier;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(values.data(), values.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
+    };
+
+    std::vector<int> all_keys(kChunkSize);
+    std::vector<int> even_keys;
+    std::vector<int> odd_keys;
+    for (int i = 0; i < kChunkSize; i++) {
+        all_keys[i] = kNewKeyBase + i;
+        (i % 2 == 0 ? even_keys : odd_keys).push_back(all_keys[i]);
+    }
+
+    // Seed the table so the column-upsert load runs against real base data.
+    {
+        auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+        auto indexes = std::vector<uint32_t>(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // One column-upsert load, three update segments: all keys, then the even half, then the odd half.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (const auto& [keys, multiplier] :
+             std::vector<std::pair<std::vector<int>, int>>{{all_keys, 5}, {even_keys, 7}, {odd_keys, 9}}) {
+            auto chunk = partial_chunk(keys, multiplier);
+            std::vector<uint32_t> indexes(keys.size());
+            for (size_t i = 0; i < keys.size(); i++) indexes[i] = i;
+            ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            // Close the memtable so each batch becomes its own update segment.
+            ASSERT_OK(delta_writer->flush());
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Every key must be live exactly once, carrying the value of the last segment that wrote it:
+    // the even keys were last written by the second segment, the odd keys by the third. Without the
+    // merge, the first segment's even rows survive as well and those keys have two live rows.
+    std::map<int, std::vector<std::pair<int, int>>> rows_by_key;
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            auto cols = chunk->columns();
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                rows_by_key[cols[0]->get(i).get_int32()].emplace_back(cols[1]->get(i).get_int32(),
+                                                                      cols[2]->get(i).get_int32());
+            }
+            chunk->reset();
+        }
+    }
+
+    for (int key : all_keys) {
+        const auto& rows = rows_by_key[key];
+        ASSERT_EQ(1, rows.size()) << "primary key " << key << " has " << rows.size() << " live rows";
+        const int expected_multiplier = ((key - kNewKeyBase) % 2 == 0) ? 7 : 9;
+        EXPECT_EQ(key * expected_multiplier, rows[0].first) << "key " << key << " kept a superseded value";
+        EXPECT_EQ(10, rows[0].second) << "key " << key << " should carry c2's default";
+    }
+    EXPECT_EQ(2 * kChunkSize, rows_by_key.size());
+    size_t total_rows = 0;
+    for (const auto& [key, rows] : rows_by_key) {
+        total_rows += rows.size();
+    }
+    EXPECT_EQ(2 * kChunkSize, total_rows) << "a superseded row was resurrected";
 }
 
 TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
@@ -5736,6 +6128,43 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
     EXPECT_TRUE(st.is_internal_error()) << "got: " << st.to_string();
     EXPECT_NE(std::string::npos, st.message().find("unique id"))
             << "expected 'unique id' in message; got: " << st.message();
+}
+
+// A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
+// ownership mask -- every row it emitted is this tablet's -- so an empty mask cannot be read as "the
+// iterator emitted the whole segment". Reading it that way sends the segment down the copy-and-append
+// rewrite, which copies all of the source's written-column rows while appending only the emitted rows'
+// resolved ones; the halves then disagree ("num rows written 0 is not equal to segment num rows 300")
+// and the publish fails identically on every retry.
+TEST(RowsetUpdateStateNarrowedEmitTest, an_emit_short_of_the_segment_owns_only_what_it_emitted) {
+    Filter mask;
+    // Narrowed: the iterator emitted 120 of the segment's 300 rows.
+    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/120, /*source_rows=*/300, &mask));
+    ASSERT_EQ(120u, mask.size()) << "the mask must span exactly the rows the iterator emitted";
+    EXPECT_EQ(120, std::count(mask.begin(), mask.end(), 1)) << "every emitted row is owned";
+}
+
+// The case that actually stalls production, and the reason this answers with a bool instead of through
+// the mask's emptiness: a shared segment none of whose rows fall in this tablet's range makes the
+// iterator emit NOTHING. "Own nothing" still means filter -- keep none of the source's rows and write
+// an empty segment -- which is a different instruction from "was not narrowed at all".
+TEST(RowsetUpdateStateNarrowedEmitTest, an_empty_narrowed_emit_still_owns_only_its_nothing) {
+    Filter mask;
+    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty()) << "owning no row is an empty mask, not the absence of one";
+}
+
+TEST(RowsetUpdateStateNarrowedEmitTest, a_whole_segment_emit_keeps_the_copy_and_append_rewrite) {
+    Filter mask;
+    // Not narrowed: the copy-and-append rewrite is correct as is, and must not be given a mask.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/300, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty());
+    // An empty segment has nothing to narrow.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/0, &mask));
+    EXPECT_TRUE(mask.empty());
+    // An emit longer than its source is not a narrowing; leave it to the assertions downstream.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/301, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty());
 }
 
 } // namespace starrocks::lake

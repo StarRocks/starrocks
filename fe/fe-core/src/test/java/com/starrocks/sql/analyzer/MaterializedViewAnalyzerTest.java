@@ -557,6 +557,7 @@ public class MaterializedViewAnalyzerTest {
     @Test
     public void testCreateMVForceRange() throws Exception {
         boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        boolean oldEnableMvRangeDistribution = Config.enable_mv_range_distribution;
         Config.enable_range_distribution = false;
         try {
             // set default config for async mvs
@@ -579,15 +580,22 @@ public class MaterializedViewAnalyzerTest {
                 starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(false);
             }
 
-            // 3. Set Config to true: the config-driven default only takes effect in shared-data mode
-            // (range distribution is shared-data only), so the outcome tracks the current run mode.
+            // 3. Set Config to true: a materialized view also needs enable_mv_range_distribution,
+            // so the table-level config alone selects nothing.
             Config.enable_range_distribution = true;
             CreateMaterializedViewStatement stmt3 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+            Assertions.assertFalse(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // 4. Set both configs to true: the config-driven default only takes effect in shared-data
+            // mode (range distribution is shared-data only), so the outcome tracks the current run mode.
+            Config.enable_mv_range_distribution = true;
+            CreateMaterializedViewStatement stmt4 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
             Assertions.assertEquals(RunMode.isSharedDataMode(),
-                    stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+                    stmt4.getDistributionDesc() instanceof RangeDistributionDesc);
 
         } finally {
             Config.enable_range_distribution = oldEnableRangeDistribution;
+            Config.enable_mv_range_distribution = oldEnableMvRangeDistribution;
         }
     }
 

@@ -20,6 +20,7 @@
 #include "common/object_pool.h"
 #include "exprs/arrow_function_call.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
 #include "exprs/java_function_call_expr.h"
 #include "gen_cpp/Exprs_types.h"
@@ -107,6 +108,34 @@ TEST_F(ExprFactoryCoreTest, UnsupportedCastReturnsError) {
     ASSERT_FALSE(st.ok());
 }
 
+TEST_F(ExprFactoryCoreTest, OrdinaryFailurePreservesPresetOutputPointers) {
+    TExprNode cast_expr;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.__set_opcode(TExprOpcode::CAST);
+    cast_expr.num_children = 1;
+    cast_expr.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    cast_expr.__isset.child_type = false;
+
+    TExpr texpr;
+    texpr.nodes.emplace_back(cast_expr);
+
+    TExprNode preset_node = make_function_call_node("preset");
+    MarkerExpr preset_expr(preset_node, 404);
+    ExprContext preset_context(&preset_expr);
+    ObjectPool pool;
+    RuntimeState state;
+
+    Expr* root_expr = &preset_expr;
+    Status status = ExprFactory::create_expr_tree(&pool, texpr, &root_expr, &state);
+    ASSERT_FALSE(status.ok());
+    EXPECT_EQ(&preset_expr, root_expr);
+
+    ExprContext* context = &preset_context;
+    status = ExprFactory::create_expr_tree(&pool, texpr, &context, &state);
+    ASSERT_FALSE(status.ok());
+    EXPECT_EQ(&preset_context, context);
+}
+
 TEST_F(ExprFactoryCoreTest, SrjarFunctionCallHasPriorityOverCoreCondition) {
     reset_hook_counters();
     ExprFactory::set_non_core_create_post_hook(post_hook_handle_all);
@@ -157,6 +186,24 @@ TEST_F(ExprFactoryCoreTest, PythonFunctionCallHasPriorityOverCoreCondition) {
     ASSERT_EQ(0, g_post_hook_calls);
 
     ASSERT_NE(nullptr, dynamic_cast<ArrowFunctionCallExpr*>(root_expr));
+}
+
+TEST_F(ExprFactoryCoreTest, OrdinaryUdfNamedAICompleteUsesDeclaredBinaryType) {
+    for (TFunctionBinaryType::type binary_type : {TFunctionBinaryType::SRJAR, TFunctionBinaryType::PYTHON}) {
+        SCOPED_TRACE(binary_type);
+        TExpr texpr;
+        texpr.nodes.emplace_back(make_function_call_node("ai_complete", binary_type));
+
+        ObjectPool pool;
+        RuntimeState state;
+        Expr* root_expr = nullptr;
+        ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, texpr, &root_expr, &state).ok());
+        if (binary_type == TFunctionBinaryType::SRJAR) {
+            ASSERT_NE(nullptr, dynamic_cast<JavaFunctionCallExpr*>(root_expr));
+        } else {
+            ASSERT_NE(nullptr, dynamic_cast<ArrowFunctionCallExpr*>(root_expr));
+        }
+    }
 }
 
 TEST_F(ExprFactoryCoreTest, FunctionCallCoreConditionHasPriorityOverPostHook) {

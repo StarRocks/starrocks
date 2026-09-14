@@ -304,9 +304,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 1);
@@ -363,9 +360,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
@@ -430,9 +424,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
     ASSERT_EQ(kChunkSize * 2, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -795,9 +786,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
         EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
         version++;
         ASSERT_EQ(kChunkSize * 4, read(version));
-        if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-            check_local_persistent_index_meta(tablet_id, version);
-        }
 
         ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4);
@@ -1249,9 +1237,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
     config::vector_chunk_size = 4096;
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
@@ -1315,9 +1300,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(3 * kChunkSize, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 2);
@@ -2061,9 +2043,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
@@ -2151,9 +2130,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
-    if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        return;
-    }
     // Prepare data for writing
     std::vector<Chunk> chunks;
     int N = 10;
@@ -2212,9 +2188,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
-    if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        return;
-    }
     // Prepare data for writing
     std::vector<Chunk> chunks;
     int N = 10;
@@ -2328,17 +2301,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_index_eager_build) {
     auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     // check should_enable_pk_index_eager_build
-    if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
-    } else {
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
-        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
-        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
-        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
-    }
+    EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
+    EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
+    EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
+    EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_concurrent_compaction_and_publish) {

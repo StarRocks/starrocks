@@ -837,6 +837,78 @@ TEST_F(PersistentIndexSstableTest, test_multiget_retry_after_clear_corrupted_cac
 }
 #endif // USE_STAROS && !BUILD_FORMAT_LIB
 
+// Flip a few bytes inside the first data block (data blocks start at file offset 0),
+// keeping the file tail (filter/index blocks and footer) intact so Table::Open still
+// succeeds and the corruption is only hit when the data block itself is read.
+static void corrupt_sst_data_block(const std::string& path) {
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
+    std::string content(file_size, '\0');
+    ASSERT_OK(rf->read_at_fully(0, content.data(), file_size));
+    for (size_t i = 16; i < 24 && i < content.size(); i++) {
+        content[i] ^= 0xff;
+    }
+    WritableFileOptions opts;
+    opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(opts, path));
+    ASSERT_OK(wf->append(Slice(content)));
+    ASSERT_OK(wf->close());
+}
+
+// A data block whose bytes were tampered with must surface as Corruption via the block
+// checksum, not be misparsed (the "bad block type" failure mode) or silently return
+// wrong index values.
+TEST_F(PersistentIndexSstableTest, test_multiget_detects_corrupted_data_block) {
+    bool old_verify = config::lake_pk_index_sst_verify_checksum;
+    config::lake_pk_index_sst_verify_checksum = true;
+    const std::string path = lake::join_path(kTestDir, "multiget_corrupted_block.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    corrupt_sst_data_block(path);
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename("multiget_corrupted_block.sst");
+    sstable_pb.set_filesize(filesize);
+    ASSERT_OK(sst->init(std::move(rf), sstable_pb, nullptr));
+
+    std::string key_str = fmt::format("key_{:04d}", 0);
+    Slice key(key_str);
+    KeyIndexSet key_indexes{0};
+    std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+    KeyIndexSet found;
+    auto st = sst->multi_get(&key, key_indexes, -1, values.data(), &found);
+    ASSERT_TRUE(st.is_corruption()) << st;
+    config::lake_pk_index_sst_verify_checksum = old_verify;
+}
+
+// The tablet-split sampling path (sample_data_keys) seeks real data blocks to fetch
+// the sampled keys; a tampered data block must fail as Corruption instead of feeding
+// wrong keys into the split points. The first separator always maps to the first data
+// block (sample_keys_in_range emits index 0 unconditionally), which is the block
+// corrupt_sst_data_block tampers with, so the failure is deterministic.
+TEST_F(PersistentIndexSstableTest, test_sample_data_keys_detects_corrupted_data_block) {
+    bool old_verify = config::lake_pk_index_sst_verify_checksum;
+    config::lake_pk_index_sst_verify_checksum = true;
+    const std::string path = lake::join_path(kTestDir, "sample_corrupted_block.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    corrupt_sst_data_block(path);
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename("sample_corrupted_block.sst");
+    sstable_pb.set_filesize(filesize);
+    ASSERT_OK(sst->init(std::move(rf), sstable_pb, nullptr));
+
+    std::vector<std::string> keys;
+    auto st = sst->sample_data_keys(&keys, Slice(), Slice(), /*max_samples=*/4);
+    ASSERT_TRUE(st.is_corruption()) << st;
+    config::lake_pk_index_sst_verify_checksum = old_verify;
+}
+
 // Tombstones are stored as (rssid=UINT32_MAX, rowid=UINT32_MAX) so that the
 // 64-bit packed value equals NullIndexValue on the way out. When the owning
 // sstable has a non-zero rssid_offset (child-tablet contribution after a

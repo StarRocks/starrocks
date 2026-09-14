@@ -169,3 +169,48 @@ SELECT array_sort([101, 102, 103, 104, 105], (x, y) -> if(x > 100 and y > 100, -
 -- duplicates must not crowd the distinct values out of the sample: the leading run of equal
 -- elements compares consistently, the comparator only breaks on pairs of different values
 SELECT array_sort([7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,1,2,3,4,5], (x, y) -> if(x = y, 0, -1));
+
+-- name: test_array_sort_lambda_inconsistent_comparator_concurrent
+-- Regression test for a data race in the comparator validation. The validation verdict used
+-- to be cached in two mutable members of the ArraySortLambdaExpr. A fragment's pipeline
+-- drivers each clone their ExprContext but share the one Expr tree, so when the comparator is
+-- invalid several drivers would reach the error path at once: one assigned the cached error
+-- Status (freeing the previous one's heap state) while another read it, a double-free that
+-- corrupts the heap and crashes the BE (often later, while a fragment tears down). The fix
+-- stops caching the error and keeps only an atomic "validated OK" flag, so no heap-owning
+-- state is shared. After the fix every driver returns the same plain error, no matter the
+-- parallelism. The window is widened here with a comparator that only breaks strict weak
+-- ordering on the last (transitivity) check - so every driver grinds through the whole
+-- O(n^3) validation and they collide on the verdict - and a high pipeline_dop. This is a
+-- timing-dependent crash on a release build; the deterministic reproducer is the unit test
+-- ArraySortLambdaExprTest.invalid_comparator_rejected_concurrently, and it is caught on every
+-- run under ASan (the configuration the fuzzer uses).
+set pipeline_dop = 64;
+create table t0 (
+    k0 int,
+    c0 array<int>
+)
+duplicate key(k0)
+distributed by hash(k0) buckets 32
+properties(
+   "replication_num" = "1"
+);
+
+-- the validator samples the first 10 distinct values, so give it exactly 10
+insert into t0 select i, [1,2,3,4,5,6,7,8,9,10] from table(generate_series(1, 200000)) t(i);
+
+-- passes irreflexivity and asymmetry, violates transitivity: cmp(1,2), cmp(2,3), cmp(3,1) are
+-- all "true" (a cycle), which the validator only catches at its final, most expensive check -
+-- so every driver stays in the validation until they reach the error together.
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+
+-- a valid comparator on the same shape still sorts correctly under the same parallelism
+SELECT distinct array_sort(c0, (x, y) -> x < y) from t0;
+drop table t0;
