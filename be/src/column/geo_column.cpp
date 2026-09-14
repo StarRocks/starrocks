@@ -14,15 +14,34 @@
 
 #include "column/geo_column.h"
 
+#include <bit>
+#include <cstring>
 #include <stdexcept>
 
+#include "base/coding.h"
+#include "column/column_visitor.h"
+#include "column/column_visitor_mutable.h"
 #include "column/mysql_row_buffer.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 namespace {
 
 [[noreturn]] void unsupported(const char* operation) {
     throw std::runtime_error(std::string("GeoColumn does not support ") + operation);
+}
+
+Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
+    const auto& type = descriptor.type;
+    const auto& storage = descriptor.storage;
+    if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
+        !GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) || type.edge_algorithm == GEO_EDGE_ALGORITHM_UNKNOWN ||
+        type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.crs.size() > 65536 ||
+        storage.encoding != GEO_ENCODING_WKB || !GeoDimensionPB_IsValid(storage.dimension) ||
+        !GeoValidationStatePB_IsValid(storage.validation_state)) {
+        return Status::NotSupported("Unsupported GEOGRAPHY transport descriptor");
+    }
+    return Status::OK();
 }
 
 } // namespace
@@ -37,6 +56,16 @@ GeoColumn::GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits)
         : _descriptor(std::move(descriptor)), _limits(limits) {
     if (_descriptor.storage.encoding != GEO_ENCODING_WKB)
         throw std::invalid_argument("GeoColumn requires WKB encoding");
+}
+
+GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
+        : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{}),
+                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+    if (type.geo_type && type.geo_type->logical_type != GEO_LOGICAL_TYPE_UNKNOWN &&
+        ((type.type == TYPE_GEOGRAPHY) != (type.geo_type->logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY))) {
+        throw std::invalid_argument("GeoColumn primitive/descriptor mismatch");
+    }
+    resize(size);
 }
 
 const GeoColumn& GeoColumn::_source(const Column& src) const {
@@ -211,14 +240,12 @@ std::string GeoColumn::debug_item(size_t) const {
     unsupported("generic scalar rendering");
 }
 
-Status GeoColumn::accept(ColumnVisitor*) const {
-    // Some void-returning hash paths discard visitor Status, including for nested
-    // columns. Throw here so unsupported GEO cannot leave hash seeds unchanged.
-    unsupported("visitor");
+Status GeoColumn::accept(ColumnVisitor* visitor) const {
+    return visitor->visit(*this);
 }
 
-Status GeoColumn::accept_mutable(ColumnVisitorMutable*) {
-    unsupported("mutable visitor");
+Status GeoColumn::accept_mutable(ColumnVisitorMutable* visitor) {
+    return visitor->visit(this);
 }
 
 int GeoColumn::compare_at(size_t, size_t, const Column&, int) const {
@@ -258,6 +285,95 @@ void GeoColumn::deserialize_and_append_batch(Buffer<Slice>&, size_t) {
 }
 void GeoColumn::deserialize_and_append_batch_nullable(Buffer<Slice>&, size_t, Buffer<uint8_t>&, bool&) {
     unsupported("deserialization");
+}
+
+int64_t GeoColumn::serialized_column_size() const {
+    return 16 + _descriptor.to_protobuf().ByteSizeLong() + _data->get_immutable_bytes().size() +
+           sizeof(uint32_t) * _data->get_offset().size();
+}
+
+StatusOr<uint8_t*> GeoColumn::serialize_column(uint8_t* dst) const {
+    DCHECK(check_transport_descriptor(_descriptor).ok());
+    RETURN_IF_ERROR(_data->is_payload_size_representable());
+    const auto descriptor = _descriptor.to_protobuf();
+    const auto descriptor_size = descriptor.ByteSizeLong();
+    const auto bytes = _data->get_immutable_bytes();
+    const auto& offsets = _data->get_offset();
+    if (offsets.size() > UINT32_MAX || descriptor_size > 65536) {
+        return Status::NotSupported("GEOGRAPHY transport column exceeds format limits");
+    }
+    // Version, descriptor length, WKB bytes length, offset count; all little endian.
+    encode_fixed32_le(dst, 1);
+    encode_fixed32_le(dst + 4, descriptor_size);
+    encode_fixed32_le(dst + 8, bytes.size());
+    encode_fixed32_le(dst + 12, offsets.size());
+    dst = descriptor.SerializeWithCachedSizesToArray(dst + 16);
+    if (!bytes.empty()) memcpy(dst, bytes.data(), bytes.size());
+    dst += bytes.size();
+    if constexpr (std::endian::native == std::endian::little) {
+        if (!offsets.is_large()) {
+            memcpy(dst, offsets.small_storage().data(), offsets.size() * sizeof(uint32_t));
+            return dst + offsets.size() * sizeof(uint32_t);
+        }
+    }
+    for (size_t i = 0; i < offsets.size(); ++i, dst += sizeof(uint32_t)) {
+        encode_fixed32_le(dst, offsets[i]);
+    }
+    return dst;
+}
+
+StatusOr<const uint8_t*> GeoColumn::deserialize_column(const uint8_t* src, const uint8_t* end) {
+    if (end - src < 16) return Status::Corruption("Truncated GEOGRAPHY transport header");
+    if (decode_fixed32_le(src) != 1) return Status::NotSupported("Unsupported GEOGRAPHY transport version");
+    const uint32_t descriptor_size = decode_fixed32_le(src + 4);
+    const uint32_t bytes_size = decode_fixed32_le(src + 8);
+    const uint32_t offset_count = decode_fixed32_le(src + 12);
+    src += 16;
+    const uint64_t total_size = uint64_t(descriptor_size) + bytes_size + uint64_t(offset_count) * sizeof(uint32_t);
+    if (descriptor_size > 65536 || offset_count == 0 || total_size > static_cast<uint64_t>(end - src)) {
+        return Status::Corruption("Invalid GEOGRAPHY transport lengths");
+    }
+    GeoColumnDescPB pb;
+    if (!pb.ParseFromArray(src, descriptor_size) || !pb.has_type() || !pb.has_storage() ||
+        !pb.unknown_fields().empty() || !pb.type().unknown_fields().empty() || !pb.storage().unknown_fields().empty()) {
+        return Status::Corruption("Invalid or unsupported GEOGRAPHY transport metadata");
+    }
+    auto descriptor = GeoColumnDescriptor::from_protobuf(pb);
+    RETURN_IF_ERROR(check_transport_descriptor(descriptor));
+    // The receiving plan owns semantic identity; only storage metadata comes from the wire.
+    if (_descriptor.type != descriptor.type) {
+        return Status::Corruption("GEOGRAPHY transport descriptor does not match the receiving type");
+    }
+    const auto* bytes = src + descriptor_size;
+    const auto* offsets = bytes + bytes_size;
+    // Allocation is bounded by the already validated input span, not by an unchecked row count.
+    Buffer<uint32_t> decoded_offsets;
+    decoded_offsets.resize(offset_count);
+    if constexpr (std::endian::native == std::endian::little) {
+        memcpy(decoded_offsets.data(), offsets, uint64_t(offset_count) * sizeof(uint32_t));
+    } else {
+        for (uint32_t i = 0; i < offset_count; ++i) {
+            decoded_offsets[i] = decode_fixed32_le(offsets + uint64_t(i) * sizeof(uint32_t));
+        }
+    }
+    uint32_t previous = 0;
+    for (uint32_t i = 0; i < offset_count; ++i) {
+        const auto offset = decoded_offsets[i];
+        if ((i == 0 && offset != 0) || offset < previous || offset > bytes_size) {
+            return Status::Corruption("Invalid GEOGRAPHY transport offsets");
+        }
+        previous = offset;
+    }
+    if (previous != bytes_size) return Status::Corruption("GEOGRAPHY transport offsets do not cover payload");
+
+    // No payload allocation or destination mutation before all metadata/offset checks succeed.
+    auto& data = _data->get_bytes();
+    data.resize(bytes_size);
+    if (bytes_size != 0) memcpy(data.data(), bytes, bytes_size);
+    _data->get_offset().set_small_buffer(std::move(decoded_offsets));
+    _descriptor = std::move(descriptor);
+    clear_wkb_cache();
+    return src + total_size;
 }
 
 } // namespace starrocks
