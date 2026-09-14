@@ -41,6 +41,7 @@
 #include <boost/algorithm/string.hpp>
 #include <cctype>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string_view>
@@ -52,6 +53,7 @@
 #include "common/configbase.h"
 #include "exec/exec_env.h"
 #include "http/action/profile_utils.h"
+#include "http/utils.h"
 #include "http/web_page_handler.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/mem_tracker.h"
@@ -121,6 +123,20 @@ void print_mem_str(std::stringstream* output, const MemTracker::SimpleItem& item
 void MemTrackerWebPageHandler::handle(const RuntimeEnv& runtime_env, MemTracker* mem_tracker,
                                       const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
+
+    size_t upper_level = 2;
+    auto iter = args.find("upper_level");
+    if (iter != args.end()) {
+        int64_t requested_level = 0;
+        Status st = parse_int64_param("upper_level", iter->second, &requested_level, 0,
+                                      std::numeric_limits<int32_t>::max());
+        if (st.ok()) {
+            upper_level = static_cast<size_t>(requested_level);
+        } else {
+            (*output) << "<p><strong>Invalid upper_level.</strong> Showing " << upper_level << " levels.</p>\n";
+        }
+    }
+
     (*output) << "<table data-toggle='table' "
                  "       data-page-size='25' "
                  "       data-pagination='true' "
@@ -138,14 +154,6 @@ void MemTrackerWebPageHandler::handle(const RuntimeEnv& runtime_env, MemTracker*
                  "    data-sortable='true' "
                  ">Peak Consumption</th>";
     (*output) << "<tbody>\n";
-
-    size_t upper_level;
-    auto iter = args.find("upper_level");
-    if (iter != args.end()) {
-        upper_level = std::stol(iter->second);
-    } else {
-        upper_level = 2;
-    }
 
     MemTracker* start_mem_tracker;
     iter = args.find("type");
