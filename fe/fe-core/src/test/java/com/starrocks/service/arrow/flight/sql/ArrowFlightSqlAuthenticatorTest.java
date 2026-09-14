@@ -22,6 +22,7 @@ import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -87,21 +88,75 @@ class ArrowFlightSqlAuthenticatorTest {
     }
 
     @Test
-    void testValidateBearerToken_unknownTokenRejectedEvenWhenProxyEnabledAndClaimedFeIsValid() {
+    void testValidateBearerToken_unknownTokenForwardedWhenProxyEnabledAndClaimedFeIsDifferentAndKnown() {
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
-        // Token claims to be from a valid remote FE, but is not found in the local session cache.
-        // The "FE_HOST|UUID" prefix is caller-supplied and unauthenticated, so it must never be
-        // trusted as proof the token is valid on that host - the token must always be rejected.
+        // Token claims to belong to a different, known FE and isn't found in this FE's local
+        // cache - i.e. it's genuinely misrouted, not necessarily forged. It must be let through so
+        // it can be forwarded to that FE (see ArrowFlightSqlServiceImpl's forward*ToRemoteFE
+        // methods), which will run this exact same check against its own cache before trusting it.
         String remoteToken = "10.0.6.7|some-uuid";
         doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(remoteToken);
+        when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                        mockStatic(ArrowFlightSqlSessionManager.class, Mockito.CALLS_REAL_METHODS)) {
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.isValidFeHost("10.0.6.7")).thenReturn(true);
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + remoteToken);
+
+            CallHeaderAuthenticator.AuthResult result = authenticator.authenticate(headers);
+            assertEquals(remoteToken, result.getPeerIdentity());
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_unknownTokenRejectedWhenClaimedFeIsSelf() {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        // Token claims to be owned by this very FE (isLocalToken == true) but is missing from
+        // this FE's local cache, meaning it is forged rather than merely misrouted. This FE is
+        // the one and only authority for tokens naming itself, so it must reject outright and
+        // never forward - forwarding here would just be trusting the caller's own claim.
+        String forgedToken = "10.0.6.7|forged-uuid";
+        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(forgedToken);
+        when(sessionManager.isLocalToken(forgedToken)).thenReturn(true);
 
         try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class)) {
             mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
 
             CallHeaders headers = mock(CallHeaders.class);
-            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + remoteToken);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + forgedToken);
+
+            assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_unknownTokenRejectedWhenClaimedFeIsUnknown() {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        // Token claims to be from a host that isn't a known FE in the cluster at all. Even though
+        // it's not "local", it must never be forwarded - doing so would let a caller direct this FE
+        // to open a connection to an arbitrary/malicious host.
+        String maliciousToken = "malicious.host|some-uuid";
+        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(maliciousToken);
+        when(sessionManager.isLocalToken(maliciousToken)).thenReturn(false);
+
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                        mockStatic(ArrowFlightSqlSessionManager.class, Mockito.CALLS_REAL_METHODS)) {
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.isValidFeHost("malicious.host")).thenReturn(false);
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + maliciousToken);
 
             assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
         }
