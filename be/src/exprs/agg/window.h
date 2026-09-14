@@ -803,7 +803,8 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             // Both current_row and search_end move forward within a partition. Keep the number of
             // non-nulls in (lead_ready_current_row, lead_ready_scan_end), retract rows that leave
             // the window, and only scan newly available rows. This makes the total scan linear.
-            if (lead_state.lead_ready_current_row == INT64_MIN || current_row < lead_state.lead_ready_current_row) {
+            const auto is_cache_not_initialized = lead_state.lead_ready_current_row == INT64_MIN;
+            if (is_cache_not_initialized) { // First time after reset
                 lead_state.lead_ready_current_row = current_row;
                 lead_state.lead_ready_scan_end = current_row + 1;
                 lead_state.lead_ready_non_null_count = 0;
