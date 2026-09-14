@@ -63,8 +63,15 @@ namespace starrocks {
 
 namespace {
 
+// Both globals are read by any thread that touches a starlet-backed filesystem and are released by
+// `shutdown_staros_worker()` while such threads may still be running, so every access goes through
+// `std::atomic_load`/`std::atomic_store`/`std::atomic_exchange`. A plain read racing with the reset
+// is undefined behaviour on its own; going through the atomic accessors makes the reader observe
+// either a strong reference that keeps the object alive for the whole operation, or a null pointer
+// it must handle. `g_starlet` is a `shared_ptr` rather than a `unique_ptr` for exactly that reason:
+// a raw pointer would dangle across the blocking starmgr RPCs its callers make.
 std::shared_ptr<StarOSWorker> g_worker;
-std::unique_ptr<staros::starlet::Starlet> g_starlet;
+std::shared_ptr<staros::starlet::Starlet> g_starlet;
 
 // starlet's validator only runs through SetCommandLineOption, so apply it explicitly here.
 // Calling starlet's own predicate avoids duplicating its rule, while the typed FLAGS_ assignment
@@ -109,16 +116,22 @@ std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms,
 }
 
 std::shared_ptr<StarOSWorker> get_staros_worker() {
-    return g_worker;
+    // May return nullptr once `shutdown_staros_worker()` has run. Callers must check it: an
+    // in-flight load can still reach a starlet filesystem after worker teardown, and dereferencing
+    // the null worker there crashes the process instead of failing the load.
+    return std::atomic_load(&g_worker);
 }
 
-staros::starlet::Starlet* get_starlet() {
-    return g_starlet.get();
+std::shared_ptr<staros::starlet::Starlet> get_starlet() {
+    // May return nullptr once `shutdown_staros_worker()` has run. The returned strong reference
+    // keeps the runtime alive for the whole operation, so callers must hold it rather than cache a
+    // raw pointer across a call.
+    return std::atomic_load(&g_starlet);
 }
 
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
                         TableMetricsManager* table_metrics_mgr) {
-    if (g_starlet.get() != nullptr) {
+    if (std::atomic_load(&g_starlet) != nullptr) {
         return;
     }
 
@@ -164,23 +177,39 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
-    g_worker = std::make_shared<StarOSWorker>(table_metrics_mgr);
-    g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
-    g_starlet->init(starlet_config);
-    g_starlet->start();
+    auto worker = std::make_shared<StarOSWorker>(table_metrics_mgr);
+    auto starlet = std::make_shared<staros::starlet::Starlet>(worker);
+    // Publish the worker only after the starlet runtime exists, so a reader that observes a
+    // non-null worker never finds a null starlet behind it.
+    std::atomic_store(&g_starlet, starlet);
+    std::atomic_store(&g_worker, std::move(worker));
+    starlet->init(starlet_config);
+    starlet->start();
 }
 
 void shutdown_staros_worker() {
-    g_starlet->stop();
-    g_starlet.reset();
-    g_worker = nullptr;
+    // Retire both globals before tearing anything down, the reverse of the publish order in
+    // `init_staros_worker()`, so an operation that has not fetched them yet sees null and fails
+    // with a status instead of entering a runtime that is going away.
+    //
+    // Neither object is necessarily destroyed here. An operation that fetched them first holds a
+    // strong reference and keeps them alive until it finishes; this function only drops the
+    // process-wide one. `Starlet::stop()` is idempotent and `~Starlet()` does nothing beyond it
+    // once stopped, so a deferred destruction on the last in-flight thread is cheap and safe.
+    LOG(INFO) << "Retiring the global StarOS worker and starlet runtime, later filesystem "
+                 "operations will fail with a status ...";
+    std::atomic_store(&g_worker, std::shared_ptr<StarOSWorker>());
+    auto starlet = std::atomic_exchange(&g_starlet, std::shared_ptr<staros::starlet::Starlet>());
+    if (starlet != nullptr) {
+        starlet->stop();
+    }
 
     LOG(INFO) << "Executing starlet shutdown hooks ...";
     staros::starlet::common::ShutdownHook::shutdown();
 }
 
 void set_starlet_in_shutdown() {
-    auto* starlet = get_starlet();
+    auto starlet = get_starlet();
     if (starlet) {
         starlet->on_shutdown();
     }
@@ -188,12 +217,11 @@ void set_starlet_in_shutdown() {
 
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker) {
-    g_worker = std::move(worker);
+    std::atomic_store(&g_worker, std::move(worker));
 }
 
-std::unique_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::unique_ptr<staros::starlet::Starlet> starlet) {
-    std::swap(g_starlet, starlet);
-    return starlet;
+std::shared_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::shared_ptr<staros::starlet::Starlet> starlet) {
+    return std::atomic_exchange(&g_starlet, std::move(starlet));
 }
 #endif
 
