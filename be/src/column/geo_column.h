@@ -24,8 +24,11 @@
 
 namespace starrocks {
 
+struct TypeDescriptor;
+
 // Standalone physical column; not a VARBINARY SQL type or a TypeDescriptor attachment.
-// The descriptor is immutable. Column-to-column copies require identical descriptors;
+// Semantic metadata is immutable; transport restores storage metadata after validation.
+// Column-to-column copies require identical descriptors;
 // SQL assignment/coercion belongs to FE, not to these physical copy operations.
 // NULL is represented by NullableColumn. Empty bytes are only a default/null placeholder,
 // not an OGC EMPTY geometry. Payload ingestion preserves bytes without eager parsing.
@@ -38,6 +41,7 @@ public:
 
     // Untyped physical placeholders, not an inferred CRS or a native SQL value.
     explicit GeoColumn(size_t size = 0);
+    GeoColumn(const TypeDescriptor& type, size_t size);
     explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
     DISALLOW_COPY(GeoColumn);
 
@@ -49,6 +53,10 @@ public:
     void append_wkb(Slice wkb);
     // Batch ingestion from external buffers (must not alias this column).
     void append_wkb_batch(const Slice* values, size_t count);
+    // Whole-column transport. WKB remains opaque; no parsed cache crosses the wire.
+    int64_t serialized_column_size() const;
+    StatusOr<uint8_t*> serialize_column(uint8_t* dst) const;
+    StatusOr<const uint8_t*> deserialize_column(const uint8_t* src, const uint8_t* end);
     // Borrowed slices are read-only and follow Column lifetime rules: mutation may invalidate them.
     // Inspection returns a pointer-free value. Only a mutable column can fill the cache:
     // immutable shared columns never acquire mutable execution state through const access.
@@ -96,8 +104,7 @@ public:
     StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
     StatusOr<MutableColumnPtr> downgrade() override { return MutableColumnPtr{}; }
 
-    // No binary visitor fallback. Only GEOGRAPHY WKB MySQL output is supported;
-    // transport serde, equality, ordering and geo keys remain unsupported.
+    // Dedicated GEO visitors only; never fall back to binary equality/order/hash.
     Status accept(ColumnVisitor* visitor) const override;
     Status accept_mutable(ColumnVisitorMutable* visitor) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int hint) const override;

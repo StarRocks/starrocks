@@ -37,6 +37,10 @@ public:
     static StatusOr<uint8_t*> serialize(const Column& column, uint8_t* buff, bool sorted = false,
                                         const int encode_level = 0);
 
+    // Versioned chunk transport opts in explicitly; spill and nested serde stay unchanged.
+    static StatusOr<uint8_t*> serialize(const Column& column, uint8_t* buff, bool sorted, int encode_level,
+                                        uint32_t* required_version);
+
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, Column* column,
                                                 bool sorted = false, const int encode_level = 0);
 };
