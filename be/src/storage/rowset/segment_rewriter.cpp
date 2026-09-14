@@ -153,7 +153,11 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
         std::vector<int64_t>* out_vector_index_ids) {
     RETURN_ERROR_IF_FALSE(resolved_column_ids.size() == resolved_columns.size(),
                           "resolved column ids and columns disagree");
-    RETURN_ERROR_IF_FALSE(!owned.empty(), "owned-only rewrite needs an ownership mask");
+    // An empty mask is legitimate and means the iterator emitted nothing: every row of the source
+    // belongs to a sibling, and the output keeps none of them. build_owned_selection already answers
+    // that way (no source row falls inside a zero-length window), and the size check below still
+    // catches a caller that simply forgot to pass its mask, since its resolved columns would not be
+    // empty either.
     for (const auto& column : resolved_columns) {
         RETURN_ERROR_IF_FALSE(column->size() == owned.size(),
                               "a resolved column does not span the rows the iterator emitted");
@@ -380,7 +384,8 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
         const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
         const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts,
-        std::vector<int64_t>* out_vector_index_ids, const Filter& owned, uint32_t emitted_rowid_base) {
+        std::vector<int64_t>* out_vector_index_ids, const Filter& owned, uint32_t emitted_rowid_base,
+        bool filter_unowned) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
@@ -439,7 +444,12 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     // iterator EMITTED, starting at |emitted_rowid_base| -- a rowid-narrowed read emits a slice, not
     // the whole file -- so a source row outside that run is not this tablet's either, and the columns
     // the caller supplies are indexed like |owned| and take the same mask.
-    if (!owned.empty()) {
+    // Asked explicitly rather than inferred from |owned| being empty: a narrowed iterator that emitted
+    // NOTHING reports an empty mask and still has to filter -- keeping none of the source's rows -- while
+    // an ordinary publish reports an empty mask and must keep all of them. The two are indistinguishable
+    // from the mask alone, and reading it the second way here would pair every source row with the zero
+    // resolved rows the caller computed.
+    if (filter_unowned) {
         // The whole source arrives in one chunk here (chunk_size == num_rows above), so the window
         // starts at source row 0.
         const size_t kept_rows = read_chunk->filter(build_owned_selection(0, num_rows, emitted_rowid_base, owned));
@@ -505,10 +515,13 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
 
     record_rewrite_vector_index_ids(writer, out_vector_index_ids);
     dest->size = segment_file_size;
-    // Same duty as the owned-only rewrite above once a mask filtered rows out; num_rows already
-    // tracks what survived. With no mask this rewrite reproduces every source row in place, so the
-    // source's own count and sort-key fields still describe the output and are left alone.
-    if (!owned.empty()) {
+    // Same duty as the owned-only rewrite above once this filtered rows out; num_rows already tracks
+    // what survived. Keyed on the decision, not on the mask being non-empty: a narrowed emit that owns
+    // NONE of the source reports an empty mask and still filters, down to a zero-row file, and that
+    // file must not go on advertising the source's row count and sort-key bounds -- which is exactly
+    // what MetaFileBuilder keys off dropped_unowned_rows to prevent. Without the filtering this
+    // rewrite reproduces every source row in place, so the source's own fields still describe it.
+    if (filter_unowned) {
         writer.write_sort_key_fields_to(*dest);
         dest->num_rows = static_cast<int64_t>(num_rows);
         dest->dropped_unowned_rows = true;

@@ -102,7 +102,11 @@ public:
     // encoded column, and clearing the mask -- an empty mask means "own every row", which is now
     // true -- leaves one numbering space that every consumer already handles: the index upsert, the
     // condition merge and the delete vector all name positions in the file publish just produced.
-    Status collapse_to_owned_rows();
+    // |owned| is the mask the REWRITE actually filtered by, which is not always this iterator's own
+    // _owned: a narrowed emit reports no mask (every row it emitted is this tablet's) yet is still
+    // rewritten against a synthesized all-owned one. Collapsing by anything else leaves
+    // _physical_rowid_base pointing before rows the rewrite has already renumbered from zero.
+    Status collapse_to_owned_rows(const Filter& owned);
 
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
