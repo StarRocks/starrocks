@@ -182,44 +182,8 @@ absl::Status StarOSWorker::update_worker_info(const staros::starlet::WorkerInfo&
     return absl::OkStatus();
 }
 
-<<<<<<< HEAD
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_filesystem(ShardId id,
                                                                                       const Configuration& conf) {
-=======
-staros::starlet::fslib::ReplicationOptions StarOSWorker::get_replication_options(
-        int64_t shard_id, const std::vector<staros::ReplicaInfoLite>& replicas) {
-    staros::starlet::fslib::ReplicationOptions replication_options;
-    if (!replicas.empty()) {
-        // `shutdown_staros_worker()` releases the starlet runtime while in-flight work may still
-        // be running, so a caller that already holds the worker can reach here after that. The
-        // strong reference keeps the runtime alive across the lookups below; a null means it is
-        // already gone, so fall back to options without replicas.
-        auto starlet = get_starlet();
-        if (starlet == nullptr) {
-            LOG_EVERY_N(INFO, 1000) << "skip replication options of shard " << shard_id << ", starlet is not available";
-            return replication_options;
-        }
-        replication_options.service_id = service_id();
-        replication_options.shard_id = shard_id;
-        for (auto& replica : replicas) {
-            if (replica.worker_id() == worker_id()) {
-                continue;
-            }
-            auto replication_info = starlet->get_worker_replication_info(replica.worker_id());
-            if (replication_info.ok()) {
-                replication_options.replication_type = (*replication_info).replication_type;
-                replication_options.replicas.push_back((*replication_info).ip_port);
-            } else {
-                LOG_EVERY_N(INFO, 1000) << "get shard " << shard_id << " replica info failed, "
-                                        << replication_info.status();
-            }
-        }
-    }
-    return replication_options;
-}
-
-absl::StatusOr<FileSystemHandle> StarOSWorker::get_shard_filesystem(ShardId id, const Configuration& conf) {
->>>>>>> 8f93b8f2a61 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#62578))
     ShardInfo shard_info;
     { // shared_lock, check if the filesystem already created
         std::shared_lock l(_mtx);
@@ -490,30 +454,5 @@ absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::Fi
     return std::make_pair(value->key.lock(), value->fs);
 }
 
-<<<<<<< HEAD
-=======
-absl::Status StarOSWorker::batch_update_shard_replica_info(const std::vector<ShardId>& shard_ids) {
-    auto starlet = get_starlet();
-    if (starlet == nullptr) {
-        return absl::UnavailableError("starlet is not available");
-    }
-    return starlet->batch_update_shard_replica_info(shard_ids);
-}
-
-Status StarOSWorker::need_warmup_shard(ShardId id) const {
-    auto info_or = get_shard_info(id);
-    if (!info_or.ok()) {
-        return to_status(info_or.status());
-    }
-    auto info = std::move(info_or.value());
-    if (!need_enable_cache(info)) {
-        return Status::InvalidArgument(fmt::format("cache is not enabled for shard {}", id));
-    }
-    if (!info.replica_warmup_enabled(worker_id())) {
-        return Status::InvalidArgument(fmt::format("warm up is not enabled for shard {}", id));
-    }
-    return Status::OK();
-}
->>>>>>> 8f93b8f2a61 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#62578))
 } // namespace starrocks
 #endif // USE_STAROS

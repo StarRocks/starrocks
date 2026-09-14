@@ -582,8 +582,6 @@ TEST_F(StarOSWorkerTest, starlet_calls_fail_after_runtime_release) {
     DeferOp restore_starlet([&orig_starlet] { (void)swap_starlet_for_test(std::move(orig_starlet)); });
     ASSERT_EQ(nullptr, get_starlet());
 
-    EXPECT_FALSE(StarOSWorker::batch_update_shard_replica_info({1, 2, 3}).ok());
-
     StarOSWorker worker;
 
     // A cache miss falls back to the remote fetch, which waits for starlet readiness. With no
@@ -593,13 +591,6 @@ TEST_F(StarOSWorkerTest, starlet_calls_fail_after_runtime_release) {
     watch.start();
     EXPECT_FALSE(worker.retrieve_shard_info(987654321).ok());
     EXPECT_LT(watch.elapsed_time(), 3L * 1000 * 1000 * 1000);
-
-    // No replica address can be resolved without starlet; the options come back untouched, which
-    // makes the writer fall back to a non-replicated write instead of crashing.
-    std::vector<staros::ReplicaInfoLite> replicas(1);
-    auto options = worker.get_replication_options(10086, replicas);
-    EXPECT_EQ(0u, options.shard_id);
-    EXPECT_TRUE(options.replicas.empty());
 }
 
 // `shutdown_staros_worker()` drops the process-wide starlet reference while an in-flight operation

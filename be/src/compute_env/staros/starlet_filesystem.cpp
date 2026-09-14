@@ -670,24 +670,13 @@ private:
             return fs_st;
         }
 #endif
-<<<<<<< HEAD
-        return get_staros_worker()->get_shard_filesystem(shard_id, _conf);
-=======
         auto worker = get_staros_worker();
         if (worker == nullptr) {
             // Shutdown already released the StarOS worker while this operation was in flight.
             // Fail the operation instead of dereferencing the retired global.
             return absl::UnavailableError(fmt::format("StarOS worker is not available, shard_id: {}", shard_id));
         }
-        auto handle_or = worker->get_shard_filesystem(shard_id, _conf);
-        if (!handle_or.ok()) {
-            return handle_or.status();
-        }
-        if (replication_options) {
-            *replication_options = worker->get_replication_options(shard_id, (*handle_or).replicas);
-        }
-        return (*handle_or).file_system;
->>>>>>> 8f93b8f2a61 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#62578))
+        return worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
@@ -761,7 +750,7 @@ void TEST_clear_shard_fs_cache() {
 // Resolve a shard filesystem through the global StarOS worker. The worker is null once
 // `shutdown_staros_worker()` has retired it, which an in-flight operation can still reach; report
 // that as a status so the caller fails the operation instead of dereferencing the retired global.
-static absl::StatusOr<FileSystemHandle> get_shard_filesystem_from_worker(
+static absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem_from_worker(
         int64_t shard_id, const staros::starlet::fslib::Configuration& conf) {
     auto worker = get_staros_worker();
     if (worker == nullptr) {
