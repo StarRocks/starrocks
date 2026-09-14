@@ -23,6 +23,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.http.rest.ConnectionAction;
@@ -45,7 +46,9 @@ import com.starrocks.http.rest.v2.ComputeNodeActionV2;
 import com.starrocks.http.rest.v2.ProfileActionV2;
 import com.starrocks.http.rest.v2.QueryDetailActionV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -332,14 +335,25 @@ public class RestBaseActionTest {
     @Test
     public void testRejectedUserChangeRestoresPreviousAuthToken() throws Exception {
         TestableRestBaseAction action = new TestableRestBaseAction();
+        UserIdentity previousUser = UserIdentity.createAnalyzedUserIdentWithIp("previous_user", "%");
         HttpConnectContext connectContext = new HttpConnectContext();
         connectContext.setQualifiedUser("previous_user");
-        connectContext.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("previous_user", "%"));
+        connectContext.setCurrentUserIdentity(previousUser);
         connectContext.setAuthToken("previous-token");
+        // The rollback only runs for a registered connection whose user actually changes.
+        connectContext.setRegistered(true);
         BaseRequest request = mockExecutableRequest(basicAuth("jwt_user", "id-token"), connectContext);
         UserIdentity authenticatedUser = UserIdentity.createAnalyzedUserIdentWithIp("jwt_user", "%");
 
-        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+        ConnectScheduler scheduler = mock(ConnectScheduler.class);
+        when(scheduler.onUserChanged(any(ConnectContext.class), eq("previous_user"), eq("jwt_user")))
+                .thenReturn(Pair.create(false, "too many connections for jwt_user"));
+        ExecuteEnv executeEnv = mock(ExecuteEnv.class);
+        when(executeEnv.getScheduler()).thenReturn(scheduler);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class);
+                MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class)) {
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(executeEnv);
             mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
                             eq("jwt_user"), eq("10.4.5.6"), any(byte[].class)))
                     .thenAnswer(invocation -> {
@@ -349,18 +363,17 @@ public class RestBaseActionTest {
                         return authenticatedUser;
                     });
 
-            try {
-                action.execute(request, new BaseResponse());
-            } catch (Exception ignored) {
-                // A rejected user change surfaces as StarRocksHttpException; the rollback is what matters here.
-            }
+            Assertions.assertThrows(StarRocksHttpException.class,
+                    () -> action.execute(request, new BaseResponse()));
         }
 
-        // The rollback must move the token back with the identity: leaving one user's identity beside another
-        // user's token would send the wrong credential to a REST catalog.
-        if (!authenticatedUser.equals(connectContext.getCurrentUserIdentity())) {
-            Assertions.assertEquals("previous-token", connectContext.getAuthToken());
-        }
+        // Identity and token must roll back together. Restoring one without the other would leave the previous
+        // user's identity beside the rejected user's token, and a REST catalog call would carry the wrong
+        // credential.
+        Assertions.assertFalse(action.executed);
+        Assertions.assertEquals(previousUser, connectContext.getCurrentUserIdentity());
+        Assertions.assertEquals("previous_user", connectContext.getQualifiedUser());
+        Assertions.assertEquals("previous-token", connectContext.getAuthToken());
     }
 
     @Test
