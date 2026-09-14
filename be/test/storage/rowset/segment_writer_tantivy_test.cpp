@@ -17,7 +17,10 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "column/binary_column.h"
@@ -25,12 +28,19 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config.h"
+#include "common/object_pool.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/index/compound_index_common.h"
 #include "storage/index/compound_index_file_reader.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/olap_common.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_iterator.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -61,7 +71,7 @@ struct PathCleanup {
 
 // Build a TabletSchema with one INT key column and one or more VARCHAR value
 // columns, each with a GIN tantivy index.
-TabletSchemaCSPtr make_tantivy_schema(int num_text_cols) {
+TabletSchemaCSPtr make_tantivy_schema(int num_text_cols, const std::string& parser = "") {
     TabletSchemaPB pb;
     pb.set_keys_type(KeysType::DUP_KEYS);
     pb.set_num_short_key_columns(1);
@@ -98,6 +108,9 @@ TabletSchemaCSPtr make_tantivy_schema(int num_text_cols) {
         std::map<std::string, std::map<std::string, std::string>> props;
         props["common_properties"]["imp_lib"] = "tantivy";
         props["index_properties"] = {};
+        if (!parser.empty()) {
+            props["index_properties"]["parser"] = parser;
+        }
         props["search_properties"] = {};
         props["extra_properties"] = {};
         idx->set_index_properties(to_json(props));
@@ -107,6 +120,159 @@ TabletSchemaCSPtr make_tantivy_schema(int num_text_cols) {
 }
 
 } // namespace
+
+class TantivySegmentPrunedSeekTest : public testing::Test {
+protected:
+    void SetUp() override {
+        _old_late_ratio = config::late_materialization_ratio;
+        config::late_materialization_ratio = 0;
+        _dir = make_tempdir("tantivy_pruned_seek");
+        ASSERT_FALSE(_dir.empty());
+        _tablet_schema = make_tantivy_schema(2, "none");
+        _path = _dir + "/pruned_0.dat";
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(_path));
+        SegmentWriterOptions options;
+        options.segment_file_mark.rowset_path_prefix = _dir;
+        options.segment_file_mark.rowset_id = "pruned";
+        SegmentWriter writer(std::move(file), 0, _tablet_schema, options);
+        ASSERT_OK(writer.init());
+        auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(_tablet_schema), 256);
+        for (int32_t i = 0; i < 256; ++i) {
+            chunk->get_column_by_index(0)->append_datum(Datum(i));
+            // Sparse hits, including a nullable indexed column. v1 remains an output column.
+            chunk->get_column_by_index(1)->append_datum(i % 4 == 0 ? Datum(Slice(_term))
+                                                                   : (i % 4 == 1 ? Datum() : Datum(Slice("other"))));
+            chunk->get_column_by_index(2)->append_datum(Datum(Slice("payload" + std::to_string(i))));
+        }
+        ASSERT_OK(writer.append_chunk(*chunk));
+        uint64_t file_size = 0, index_size = 0, footer_position = 0;
+        ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    }
+
+    void TearDown() override {
+        config::late_materialization_ratio = _old_late_ratio;
+        PathCleanup cleanup{_dir};
+    }
+
+    void scan(bool prune, bool project_body, bool count_only, bool residual, bool delete_body,
+              OlapReaderStatistics* stats, bool pruned_first = false) {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_path));
+        // Reopen for each comparison: neither a cached reader nor a data page can hide a seek.
+        ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{_path}, 0, _tablet_schema));
+        ObjectPool pool;
+        auto* match = pool.add(pruned_first ? new_column_in_predicate(get_type_info(TYPE_VARCHAR), 1, {_term, "other"})
+                                            : new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 1, Slice(_term)));
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode{match});
+        if (residual) {
+            root.add_child(PredicateColumnNode{pool.add(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "64"))});
+        }
+        SegmentReadOptions options;
+        options.fs = fs;
+        options.stats = stats;
+        options.tablet_schema = _tablet_schema;
+        options.chunk_size = pruned_first ? 3 : 7;
+        options.enable_gin_filter = true;
+        options.enable_tantivy_reader_cache = false;
+        options.enable_tantivy_query_cache = false;
+        options.use_page_cache = false;
+        options.prune_column_after_index_filter = prune;
+        options.count_on_index = count_only;
+        options.pred_tree = PredicateTree::create(std::move(root));
+        if (delete_body) {
+            ConjunctivePredicates deleted;
+            deleted.add(pool.add(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 1, Slice(_term))));
+            options.delete_predicates.add(deleted);
+        }
+        auto schema = count_only ? ChunkHelper::convert_schema(_tablet_schema, {1})
+                                 : ChunkHelper::convert_schema(_tablet_schema);
+        if (pruned_first) schema = ChunkHelper::convert_schema(_tablet_schema, {1, 0, 2});
+        auto iter = new_segment_iterator(segment, schema, options);
+        ASSERT_OK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        std::unordered_set<uint32_t> unused_columns;
+        if (!project_body && !count_only) unused_columns.insert(1);
+        ASSERT_OK(iter->init_output_schema(unused_columns));
+        auto chunk = ChunkHelper::new_chunk(iter->output_schema(), options.chunk_size);
+        std::vector<int> expected_ids;
+        for (int id = residual ? 64 : 0; id < 256; ++id) {
+            if (!delete_body && (pruned_first ? id % 4 != 1 : id % 4 == 0)) expected_ids.push_back(id);
+        }
+        size_t rows = 0;
+        for (;;) {
+            auto status = iter->get_next(chunk.get());
+            if (status.is_end_of_file()) break;
+            ASSERT_OK(status);
+            if (!count_only) {
+                for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                    int id = chunk->get_column_by_index(0)->get(row).get_int32();
+                    ASSERT_LT(rows, expected_ids.size());
+                    EXPECT_EQ(expected_ids[rows], id);
+                    if (project_body) {
+                        EXPECT_EQ(_term, chunk->get_column_by_index(1)->get(row).get_slice().to_string());
+                    }
+                    EXPECT_EQ("payload" + std::to_string(id),
+                              chunk->get_column_by_index(project_body ? 2 : 1)->get(row).get_slice().to_string());
+                    ++rows;
+                }
+            } else {
+                rows += chunk->num_rows();
+            }
+            chunk->reset();
+        }
+        EXPECT_EQ(expected_ids.size(), rows);
+        EXPECT_EQ(pruned_first ? 64 : 192, stats->rows_gin_filtered);
+        iter->close();
+    }
+
+    std::string _dir;
+    std::string _path;
+    const std::string _term = "needle" + std::string(4096, 'x');
+    TabletSchemaCSPtr _tablet_schema;
+    int32_t _old_late_ratio = 0;
+};
+
+TEST_F(TantivySegmentPrunedSeekTest, FilterOnlySkipsDataPageSeeks) {
+    OlapReaderStatistics unpruned, pruned;
+    ASSERT_NO_FATAL_FAILURE(scan(false, false, false, false, false, &unpruned));
+    ASSERT_NO_FATAL_FAILURE(scan(true, false, false, false, false, &pruned));
+    EXPECT_LT(pruned.total_pages_num, unpruned.total_pages_num);
+    EXPECT_LT(pruned.uncompressed_bytes_read, unpruned.uncompressed_bytes_read);
+}
+
+TEST_F(TantivySegmentPrunedSeekTest, CountRowCarrierSkipsDataPageSeeks) {
+    OlapReaderStatistics unpruned, pruned;
+    ASSERT_NO_FATAL_FAILURE(scan(false, false, true, false, false, &unpruned));
+    ASSERT_NO_FATAL_FAILURE(scan(true, false, true, false, false, &pruned));
+    EXPECT_LT(pruned.total_pages_num, unpruned.total_pages_num);
+    EXPECT_LT(pruned.uncompressed_bytes_read, unpruned.uncompressed_bytes_read);
+}
+
+TEST_F(TantivySegmentPrunedSeekTest, ProjectedAndDeleteColumnsRemainReadable) {
+    OlapReaderStatistics projected, deleted;
+    ASSERT_NO_FATAL_FAILURE(scan(true, true, false, false, false, &projected));
+    ASSERT_NO_FATAL_FAILURE(scan(true, true, false, false, true, &deleted));
+    EXPECT_GT(projected.uncompressed_bytes_read, 0);
+    EXPECT_EQ(64, deleted.rows_del_filtered);
+}
+
+TEST_F(TantivySegmentPrunedSeekTest, ResidualPredicateAndLateMaterialization) {
+    for (int ratio : {0, 10, 1000}) {
+        SCOPED_TRACE("late_materialization_ratio=" + std::to_string(ratio));
+        config::late_materialization_ratio = ratio;
+        OlapReaderStatistics stats;
+        ASSERT_NO_FATAL_FAILURE(scan(true, false, false, true, false, &stats));
+    }
+}
+
+TEST_F(TantivySegmentPrunedSeekTest, FirstPrunedColumnSurvivesContextSwitch) {
+    // The first predicate column is index-only. Consecutive hits cross chunk boundaries,
+    // so the next read must use the position propagated by the context switch.
+    config::late_materialization_ratio = 10;
+    OlapReaderStatistics unpruned, pruned;
+    ASSERT_NO_FATAL_FAILURE(scan(false, false, false, true, false, &unpruned, true));
+    ASSERT_NO_FATAL_FAILURE(scan(true, false, false, true, false, &pruned, true));
+    EXPECT_GT(pruned.late_materialize_ns, 0);
+}
 
 // Write a segment with tantivy GIN indexes and verify a .idx compound file is produced.
 TEST(SegmentWriterTantivyTest, SingleTantivyColumn) {
