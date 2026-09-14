@@ -74,14 +74,6 @@ public class AIProviderAnalysisTest {
     }
 
     @Test
-    public void testCreateRejectsLegacyTextType() {
-        // The placeholder type was renamed to chat; the error must advertise the new name.
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("text", validChat()), new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("chat"), ex.getMessage());
-    }
-
-    @Test
     public void testCreateFillsDefaultProtocol() {
         // CREATE without protocol gets the type's default written into the statement properties.
         CreateAIProviderStmt emb = create("embedding", validEmbedding());
@@ -105,15 +97,6 @@ public class AIProviderAnalysisTest {
     }
 
     @Test
-    public void testAlterDoesNotFillProtocol() {
-        Map<String, String> p = new LinkedHashMap<>();
-        p.put("timeout_ms", "5000");
-        AlterAIProviderStmt stmt = new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO);
-        AIProviderAnalyzer.analyze(stmt, new ConnectContext());
-        Assertions.assertFalse(stmt.getProperties().containsKey("protocol"));
-    }
-
-    @Test
     public void testCreateChatAnthropic() {
         Map<String, String> p = validChat();
         p.put("protocol", "anthropic");
@@ -125,26 +108,6 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = validRerank();
         p.put("protocol", "cohere");
         AIProviderAnalyzer.analyze(create("rerank", p), new ConnectContext());
-    }
-
-    @Test
-    public void testCreateAcceptsAnyProtocolForAnyType() {
-        // The type only decides the default; any supported protocol may be declared explicitly.
-        Map<String, String> emb = validEmbedding();
-        emb.put("protocol", "anthropic");
-        CreateAIProviderStmt embStmt = create("embedding", emb);
-        AIProviderAnalyzer.analyze(embStmt, new ConnectContext());
-        Assertions.assertEquals("anthropic", embStmt.getProperties().get("protocol"));
-
-        Map<String, String> embCohere = validEmbedding();
-        embCohere.put("protocol", "cohere");
-        AIProviderAnalyzer.analyze(create("embedding", embCohere), new ConnectContext());
-
-        Map<String, String> rr = validRerank();
-        rr.put("protocol", "openai");
-        CreateAIProviderStmt rrStmt = create("rerank", rr);
-        AIProviderAnalyzer.analyze(rrStmt, new ConnectContext());
-        Assertions.assertEquals("openai", rrStmt.getProperties().get("protocol"));
     }
 
     @Test

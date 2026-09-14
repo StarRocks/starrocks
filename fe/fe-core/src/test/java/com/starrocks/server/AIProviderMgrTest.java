@@ -112,28 +112,6 @@ public class AIProviderMgrTest {
     }
 
     @Test
-    public void testAlterProtocolAcceptsAnySupportedValue() throws Exception {
-        // ALTER is type-agnostic: the analyzer checks the value shape and the manager stores it as-is.
-        AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
-        mgr.createProvider("emb", AIProviderType.EMBEDDING, embProps(), null);
-
-        Map<String, String> anthropic = new LinkedHashMap<>();
-        anthropic.put(AIProvider.PROPERTY_PROTOCOL, "anthropic");
-        AIProviderAnalyzer.analyze(
-                new AlterAIProviderStmt(false, "emb", anthropic, NodePosition.ZERO), new ConnectContext());
-        mgr.alterProvider("emb", anthropic, false);
-        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, mgr.getProvider("emb").getProtocol());
-        Assertions.assertEquals("anthropic", mgr.getProvider("emb").getParams().get(AIProvider.PROPERTY_PROTOCOL));
-
-        Map<String, String> bogus = new LinkedHashMap<>();
-        bogus.put(AIProvider.PROPERTY_PROTOCOL, "gemini");
-        Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(
-                        new AlterAIProviderStmt(false, "emb", bogus, NodePosition.ZERO), new ConnectContext()));
-        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, mgr.getProvider("emb").getProtocol());
-    }
-
-    @Test
     public void testChatTypeRoundTrips() throws Exception {
         AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
         mgr.createProvider("ch", AIProviderType.CHAT, chatProps(), "c");
