@@ -2301,7 +2301,6 @@ class StarrocksSQLApiLib(object):
         the rest of them unchecked.
         """
         time.sleep(1)
-<<<<<<< HEAD
         sql = "explain %s" % (query)
         res = self.retry_execute_sql(sql, True)
         if not res["status"]:
@@ -2309,45 +2308,9 @@ class StarrocksSQLApiLib(object):
             return False
         plan = str(res["result"])
         for expect in expects:
-            if plan.find(expect) > 0:
-                return True
-=======
-        def check_mv():
-            sql = "explain %s" % (query)
-            res = self.retry_execute_sql(sql, True)
-            if not res["status"]:
-                print(res)
+            if plan.find(expect) <= 0:
                 return False
-            plan = str(res["result"])
-            if expects:
-                for expect in expects:
-                    if plan.find(expect) <= 0:
-                        return False
-                return True
-            else:
-                mvs = []
-                for line in plan.split('\n'):
-                    if 'MaterializedView: true' in line:
-                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
-                        if mv_name:
-                            mvs.append(mv_name)
-                mvs.sort()
-                print("Hit materialized views:", ", ".join(mvs))
-                return mvs
-
-        # Retry the check several times before declaring failure. MV partition
-        # staleness state propagates asynchronously after base-table writes, so
-        # the optimizer may not pick the expected rewrite (e.g. UNION) on the
-        # first explain call right after an INSERT.
-        max_retries = 5
-        for attempt in range(max_retries):
-            result = self._with_materialized_view_rewrite(check_mv)
-            if not isinstance(result, bool) or result:
-                return result
-            if attempt < max_retries - 1:
-                time.sleep(2)
->>>>>>> 941c222 ([UT] Check every marker in print_hit_materialized_view, not just one (#78990))
-        return False
+        return True
 
     def print_hit_materialized_views(self, query) -> str:
         """
