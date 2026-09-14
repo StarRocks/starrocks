@@ -1588,6 +1588,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_running_txn_num_per_db = 1000;
 
+    /**
+     * How far ahead, in milliseconds, the gtid generator reserves a batch when the next gtid would
+     * pass the current batch end. Must be {@code >= 1}; values below 1 are treated as 1. Must also
+     * fit in the remaining 42-bit snowflake timestamp ({@code GtidGenerator.MAX_TIMESTAMP}); a
+     * larger value fails {@code nextGtid} rather than wrapping the batch end. A larger valid window
+     * writes journal less often. The side effect is that unused reservation is discarded on
+     * leader failover, so the timestamp field can jump forward by up to this window.
+     */
+    @ConfField(mutable = true)
+    public static long gtid_batch_window_ms = 5000;
+
     @ConfField(mutable = true, comment = "A comma-separated list of transaction latency metric groups to report. " +
             "Load job source types (see TransactionState.LoadJobSourceType) are categorized into logical groups " +
             "for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. " +

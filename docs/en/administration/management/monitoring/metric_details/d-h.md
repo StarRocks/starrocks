@@ -402,6 +402,13 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total fragment instances executing on a BE (for non-pipeline engine).
 
+## `gtid_timestamp_ahead_of_clock_ms`
+
+- Unit: Milliseconds
+- Type: Instantaneous
+- Labels: `is_leader`
+- Description: How far the gtid generator's last timestamp is ahead of the local wall clock on the Leader FE (`max(0, lastTimestamp - now)`). A positive value means the generator is ahead of this FE's clock. After failover this is normally at most `gtid_batch_window_ms` and falls back to `0` as wall-clock time catches up. A value that stays much larger than the window means a previously issued timestamp was far ahead of this FE's clock and has been persisted. Reported only by the Leader FE (`is_leader="true"`). Returns `0` before any gtid has been issued, and when the wall clock has caught up.
+
 ## `hive_write_bytes`
 
 - Unit: Bytes

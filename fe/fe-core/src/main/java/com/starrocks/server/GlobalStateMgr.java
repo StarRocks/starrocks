@@ -2562,6 +2562,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
                 .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
                 .put(SRMetaBlockID.CONTEXT_MGR, contextMgr::load)
+                .put(SRMetaBlockID.GTID_GENERATOR, gtidGenerator::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .put(SRMetaBlockIDEPack.LICENSE_MGR, licenseMgr::load)
@@ -2823,6 +2824,7 @@ public class GlobalStateMgr {
                 bookmarkManager.save(imageWriter);
                 aiProviderMgr.save(imageWriter);
                 contextMgr.save(imageWriter);
+                gtidGenerator.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

@@ -148,6 +148,7 @@ public class EditLogDeserializer {
             .put(OperationTypeEPack.OP_DROP_CONTEXT_RETRIEVAL_PROFILE, ContextOpLog.class)
 
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)
+            .put(OperationType.OP_SAVE_GTID, GtidInfo.class)
             .put(OperationType.OP_SAVE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)
             .put(OperationType.OP_DELETE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)
             .put(OperationType.OP_CREATE_DB_V2, CreateDbInfo.class)

@@ -186,6 +186,11 @@ public class EditLog {
                             .initTransactionId(idInfo.getTxnId() + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_GTID: {
+                    GtidInfo info = (GtidInfo) journal.data();
+                    globalStateMgr.getGtidGenerator().init(info.getBatchEndGtid());
+                    break;
+                }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                     AutoIncrementInfo info = (AutoIncrementInfo) journal.data();
@@ -1679,6 +1684,10 @@ public class EditLog {
 
     public void logSaveTransactionId(long transactionId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId), walApplier);
+    }
+
+    public void logSaveGtid(long batchEndGtid, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SAVE_GTID, new GtidInfo(batchEndGtid), walApplier);
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info, WALApplier walApplier) {

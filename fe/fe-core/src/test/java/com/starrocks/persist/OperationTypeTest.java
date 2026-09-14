@@ -188,6 +188,7 @@ public class OperationTypeTest {
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REPLACE_TEMP_PARTITION));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RESTORE_JOB_V2));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_AUTO_INCREMENT_ID));
+        Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_GTID));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_NEXTID));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SAVE_TRANSACTION_ID_V2));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_REPLICA_STATUS));

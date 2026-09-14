@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -35,6 +36,7 @@ import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.extension.ExtensionManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.TabletRepairHelper.PhysicalPartitionInfo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.PersistentIndexSstableMetaPB;
@@ -62,6 +64,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -93,6 +96,7 @@ public class TabletRepairHelperTest {
     private ComputeNode node;
     private Map<ComputeNode, Set<Long>> nodeToTablets;
     private PhysicalPartitionInfo info;
+    private EditLog originalEditLog;
 
     @BeforeAll
     public static void beforeAll() {
@@ -102,7 +106,12 @@ public class TabletRepairHelperTest {
     @BeforeEach
     public void beforeEach() {
         // Repairing tablet metadata takes a gtid, which only the leader may do.
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        gsm.setFrontendNodeType(FrontendNodeType.LEADER);
+        // nextGtid() journals the reserved batch; FakeEditLog only intercepts an existing EditLog.
+        originalEditLog = gsm.getEditLog();
+        new FakeEditLog();
+        gsm.setEditLog(new EditLog(null));
 
         nodeToTablets = Maps.newHashMap();
         node = new ComputeNode(1L, "127.0.0.1", 9050);
@@ -148,6 +157,11 @@ public class TabletRepairHelperTest {
 
         db = new Database(dbId, "db");
         db.registerTableUnlocked(table);
+    }
+
+    @AfterEach
+    public void afterEach() {
+        GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
     }
 
     @Test
