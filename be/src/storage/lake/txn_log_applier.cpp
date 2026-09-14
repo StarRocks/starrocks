@@ -72,6 +72,30 @@ bool rowset_holds_rows(const RowsetMetadataPB& rowset) {
 
 namespace {
 
+// True when the caller must drop this rowset because it references nothing at all: no segments, no
+// del files, and no delete predicate. It has no rows to read and no files to keep, and
+// range-distribution tablet merge rejects the shape outright, so recording one wedges every later
+// merge of the partition.
+//
+// Producers hand one over legitimately -- the range distribution online rewrite anchors an empty
+// op_write as op_schema_change for a zero-row shadow tablet -- so it is dropped rather than treated
+// as an error. Statistics without files are not actionable either way, but they would mean the log
+// came from a producer we do not know, so those are worth a word.
+//
+// Not rowset_holds_rows: that is false for a rowset whose segments all report zero rows, and those
+// are real files. A split child owning none of a cross-published segment's rows produces exactly
+// that, and skipping it would orphan the files for good.
+bool drop_rowset_that_references_no_data(const RowsetMetadataPB& rowset, int64_t tablet_id) {
+    if (rowset.segment_metas_size() != 0 || rowset.del_files_size() != 0 || rowset.has_delete_predicate()) {
+        return false;
+    }
+    LOG_IF(WARNING, rowset.num_rows() != 0 || rowset.data_size() != 0 || rowset.num_dels() != 0)
+            << "dropping a schema change rowset that references no data but claims num_rows=" << rowset.num_rows()
+            << " data_size=" << rowset.data_size() << " num_dels=" << rowset.num_dels() << ", tablet_id=" << tablet_id
+            << ", rowset_id=" << rowset.id();
+    return true;
+}
+
 // Non-clearing archival of the tablet's current schema before a new schema is installed: map every
 // currently-unmapped rowset to the current schema id, and record the current schema in
 // historical_schemas only if it is absent. Must be called BEFORE the caller overwrites
@@ -729,6 +753,9 @@ private:
         DCHECK_EQ(0, _metadata->rowsets_size());
         for (const auto& rowset : op_schema_change.rowsets()) {
             DCHECK(rowset.has_id());
+            if (drop_rowset_that_references_no_data(rowset, _metadata->id())) {
+                continue;
+            }
             auto new_rowset = _metadata->add_rowsets();
             new_rowset->CopyFrom(rowset);
             new_rowset->set_version(_new_version);
@@ -1351,6 +1378,9 @@ private:
         DCHECK_EQ(0, _metadata->rowsets_size());
         for (const auto& rowset : op_schema_change.rowsets()) {
             DCHECK(rowset.has_id());
+            if (drop_rowset_that_references_no_data(rowset, _metadata->id())) {
+                continue;
+            }
             auto new_rowset = _metadata->add_rowsets();
             new_rowset->CopyFrom(rowset);
             new_rowset->set_version(_new_version);
