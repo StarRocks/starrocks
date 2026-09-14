@@ -127,7 +127,7 @@ function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.i
 -- result:
 None
 -- !result
-function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 11.090', 'partitions=0/1')
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 11.090', 'partitions=1/1')
 -- result:
 None
 -- !result

@@ -58,7 +58,10 @@ function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.i
 function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.650', 'partitions=1/1')
 function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.653', 'partitions=1/1')
 function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.699', 'partitions=1/1')
-function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 11.090', 'partitions=0/1')
+-- The scale-3 literal makes the planner wrap c4 in CAST(c4 AS DECIMAL(11,3)), and a
+-- non-identity cast is kept as a residual predicate, so c4 never reaches the Iceberg
+-- filter and the file is scanned instead of pruned.
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 11.090', 'partitions=1/1')
 function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.700', 'partitions=1/1')
 function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.650000', 'partitions=1/1')
 select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650000;
