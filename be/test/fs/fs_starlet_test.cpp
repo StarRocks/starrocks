@@ -93,10 +93,18 @@ public:
 
         staros::starlet::StarletConfig starlet_config;
         starlet_config.rpc_port = config::starlet_port;
+<<<<<<< HEAD:be/test/fs/fs_starlet_test.cpp
         g_worker = std::make_shared<starrocks::StarOSWorker>();
         g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
         g_starlet->init(starlet_config);
         (void)g_worker->add_shard(shard_info);
+=======
+        auto worker = std::make_shared<starrocks::StarOSWorker>();
+        set_staros_worker_for_test(worker);
+        (void)swap_starlet_for_test(std::make_shared<staros::starlet::Starlet>(worker));
+        get_starlet()->init(starlet_config);
+        (void)worker->add_shard(shard_info);
+>>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/test/compute_env/staros/starlet_filesystem_test.cpp
 
         // Expect a clean root directory before testing
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
@@ -927,6 +935,38 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_different_shard_ids) {
     auto fs4 = new_fs_starlet(22222, true);
     ASSERT_NE(nullptr, fs4);
     EXPECT_EQ(2, callback_count);
+}
+
+// An in-flight load can reach a StarOS-backed filesystem after `shutdown_staros_worker()` has
+// released the global worker. Every operation must then fail with a status: dereferencing the
+// retired worker is what crashed the CN during shutdown. See issue #78883.
+TEST_F(NewFsStarletTest, test_operations_fail_after_worker_release) {
+    auto backup_worker = get_staros_worker();
+    DeferOp restore_worker([&] { set_staros_worker_for_test(backup_worker); });
+
+    // The parameterless factory returns a StarletFileSystem with `_shard_fs == nullptr`, so every
+    // operation resolves the shard through the global worker.
+    auto fs = new_fs_starlet();
+    ASSERT_NE(nullptr, fs);
+
+    set_staros_worker_for_test(nullptr);
+
+    // This is the frame from the reported crash: TabletManager::put_combined_txn_log() ->
+    // ProtobufFile::save() -> StarletFileSystem::new_writable_file().
+    EXPECT_FALSE(fs->new_writable_file(WritableFileOptions(), "staros://66601/txn_log").ok());
+    EXPECT_FALSE(fs->new_random_access_file("staros://66601/txn_log").ok());
+    EXPECT_FALSE(fs->get_file_size("staros://66601/txn_log").ok());
+}
+
+// The shard filesystem factory must degrade to a null filesystem rather than dereference the
+// retired worker when it is called after `shutdown_staros_worker()`.
+TEST_F(NewFsStarletTest, test_new_fs_starlet_returns_null_after_worker_release) {
+    auto backup_worker = get_staros_worker();
+    DeferOp restore_worker([&] { set_staros_worker_for_test(backup_worker); });
+    set_staros_worker_for_test(nullptr);
+
+    EXPECT_EQ(nullptr, new_fs_starlet(66602, false));
+    EXPECT_EQ(nullptr, new_fs_starlet(66603, true));
 }
 
 } // namespace starrocks
