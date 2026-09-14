@@ -22,10 +22,13 @@
 #include <string>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "common/config_memory_allocator_fwd.h"
+#include "common/config_update_registry.h"
 #include "common/configbase.h"
 #include "fmt/format.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/prof/heap_prof.h"
 
 namespace starrocks {
 
@@ -35,7 +38,7 @@ namespace {
 // contains what the test itself changed.
 std::string make_conf(std::string_view dirty_decay_ms, std::string_view muzzy_decay_ms, std::string_view prof_active) {
     return fmt::format(
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:{},dirty_decay_ms:{},metadata_thp:auto,"
+            "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:{},dirty_decay_ms:{},metadata_thp:auto,"
             "background_thread:true,prof:true,prof_active:{}",
             muzzy_decay_ms, dirty_decay_ms, prof_active);
 }
@@ -47,11 +50,13 @@ std::string startup_conf() {
 constexpr const char* kJemallocConfEnv = "JEMALLOC_CONF";
 constexpr const char* kJemallocConfName = "jemalloc_conf";
 
+#ifndef __APPLE__
 bool prof_enabled_at_startup() {
     bool enabled = false;
     size_t size = sizeof(enabled);
     return je_mallctl("opt.prof", &enabled, &size, nullptr, 0) == 0 && enabled;
 }
+#endif
 
 ssize_t read_default_decay_ms(bool dirty) {
     ssize_t decay_ms = 0;
@@ -175,7 +180,7 @@ TEST_F(JemallocConfUpdaterTest, reject_immutable_option) {
 
     // Changed.
     Status st = updater.update(
-            "percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+            "percpu_arena:disabled,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
     EXPECT_TRUE(st.is_not_supported()) << st;
     EXPECT_TRUE(st.message().find("percpu_arena") != std::string::npos) << st;
@@ -187,14 +192,14 @@ TEST_F(JemallocConfUpdaterTest, reject_immutable_option) {
 
     // Removed.
     st = updater.update(
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+            "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
             "metadata_thp:auto,background_thread:true,prof:true");
     EXPECT_TRUE(st.is_not_supported()) << st;
     EXPECT_TRUE(st.message().find("prof_active (removed)") != std::string::npos) << st;
 
     // A mutable option changed together with an immutable one is rejected as well.
     st = updater.update(
-            "percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:6000,"
+            "percpu_arena:disabled,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:6000,"
             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
     EXPECT_TRUE(st.is_not_supported()) << st;
 
@@ -222,7 +227,7 @@ TEST_F(JemallocConfUpdaterTest, update_without_change_is_a_noop) {
     // The option order does not matter either.
     ASSERT_OK(
             updater.update("prof_active:false,prof:true,background_thread:true,metadata_thp:auto,"
-                           "dirty_decay_ms:5000,muzzy_decay_ms:5000,oversize_threshold:0,percpu_arena:percpu"));
+                           "dirty_decay_ms:5000,muzzy_decay_ms:5000,oversize_threshold:134217728,percpu_arena:percpu"));
     EXPECT_EQ("5000", updater.applied_options()["muzzy_decay_ms"]);
 }
 
@@ -230,9 +235,10 @@ TEST_F(JemallocConfUpdaterTest, update_without_change_is_a_noop) {
 // arena at index narenas_auto and puts it on eager purge on purpose, and the arenas created
 // through `arenas.create` sit above that, so neither may be retuned from here.
 //
-// This process has no huge arena (`oversize_threshold:0`), but a manually created arena is
-// on the same side of narenas_auto, so it stands in for one: if the walk stopped at
-// `arenas.narenas` it would reach this arena too.
+// A manually created arena stands in for the huge one here: it sits on the same side of
+// narenas_auto, so if the walk stopped at `arenas.narenas` it would reach this arena too.
+// The test binary inherits no JEMALLOC_CONF, so whether a huge arena exists at all depends
+// on jemalloc's own `oversize_threshold` default; the assertion below holds either way.
 TEST_F(JemallocConfUpdaterTest, decay_ms_skips_the_arenas_above_narenas_auto) {
     unsigned manual_arena = 0;
     size_t size = sizeof(manual_arena);
@@ -297,6 +303,72 @@ TEST_F(JemallocConfUpdaterTest, apply_prof_active) {
         EXPECT_TRUE(st.message().find("prof:true") != std::string::npos) << st;
     }
 #endif
+}
+
+TEST_F(JemallocConfUpdaterTest, serialize_round_trip) {
+    ASSIGN_OR_ABORT(auto options, parse_jemalloc_conf(startup_conf()));
+    // The rendering is normalized rather than byte identical: options come back in map order.
+    ASSIGN_OR_ABORT(auto reparsed, parse_jemalloc_conf(serialize_jemalloc_conf(options)));
+    EXPECT_EQ(options, reparsed);
+
+    EXPECT_EQ("a:1,b:2", serialize_jemalloc_conf({{"b", "2"}, {"a", "1"}}));
+    EXPECT_EQ("", serialize_jemalloc_conf({}));
+}
+
+TEST_F(JemallocConfUpdaterTest, conf_with_prof_active) {
+    ASSIGN_OR_ABORT(std::string on, jemalloc_conf_with_prof_active(startup_conf(), true));
+    ASSIGN_OR_ABORT(auto options, parse_jemalloc_conf(on));
+    EXPECT_EQ("true", options["prof_active"]);
+    // Only that one option moves.
+    EXPECT_EQ("5000", options["dirty_decay_ms"]);
+    EXPECT_EQ("percpu", options["percpu_arena"]);
+
+    ASSIGN_OR_ABORT(std::string off, jemalloc_conf_with_prof_active(on, false));
+    ASSIGN_OR_ABORT(options, parse_jemalloc_conf(off));
+    EXPECT_EQ("false", options["prof_active"]);
+
+    // The option is inserted when it is missing, which is the state --jemalloc_debug starts the
+    // BE in: `junk:true,tcache:false,prof:true` arms profiling without naming prof_active.
+    ASSIGN_OR_ABORT(std::string from_debug_conf,
+                    jemalloc_conf_with_prof_active("junk:true,tcache:false,prof:true", true));
+    ASSIGN_OR_ABORT(options, parse_jemalloc_conf(from_debug_conf));
+    EXPECT_EQ("true", options["prof_active"]);
+    EXPECT_EQ("true", options["prof"]);
+    EXPECT_EQ("false", options["tcache"]);
+
+    // Only an unparsable conf fails here.
+    EXPECT_TRUE(jemalloc_conf_with_prof_active("dirty_decay_ms", true).status().is_invalid_argument());
+}
+
+// set_prof_active_via_config() must reach JemallocConfUpdater through the config hook, so that
+// toggling profiling from `ADMIN EXECUTE` and editing information_schema.be_configs share one
+// code path -- including the rollback the registry performs when applying fails.
+TEST_F(JemallocConfUpdaterTest, set_prof_active_via_config_goes_through_the_hook) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->register_callback(kJemallocConfName,
+                                [] { return JemallocConfUpdater::instance().update(config::jemalloc_conf.value()); });
+    registry->set_ready();
+    DeferOp reset([registry] { registry->TEST_reset(); });
+
+    ASSERT_OK(config::set_config(kJemallocConfName, startup_conf()));
+    JemallocConfUpdater::instance().init(startup_conf());
+
+    Status st = set_prof_active_via_config(true);
+    ASSIGN_OR_ABORT(auto options, parse_jemalloc_conf(config::jemalloc_conf.value()));
+#ifndef __APPLE__
+    if (prof_enabled_at_startup()) {
+        ASSERT_OK(st);
+        EXPECT_EQ("true", options["prof_active"]);
+        EXPECT_TRUE(HeapProf::getInstance().has_enable());
+        ASSERT_OK(set_prof_active_via_config(false));
+        EXPECT_FALSE(HeapProf::getInstance().has_enable());
+        return;
+    }
+#endif
+    // Without prof:true at startup the apply is refused, and the registry has to put the
+    // config value back rather than leave it advertising a setting that never landed.
+    EXPECT_TRUE(st.is_not_supported()) << st;
+    EXPECT_EQ("false", options["prof_active"]);
 }
 
 } // namespace starrocks

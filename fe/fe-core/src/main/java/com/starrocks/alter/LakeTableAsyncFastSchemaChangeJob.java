@@ -419,21 +419,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @Override
     public boolean isExpire() {
         boolean expiredByTime = super.isExpire();
-        boolean expiredByHistorySchema = true;
-        if (historySchema != null && !historySchema.isExpired()) {
-            try {
-                expiredByHistorySchema = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId, Lists.newArrayList(tableId));
-            } catch (Exception e) {
-                // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
-                // so could clean the history schema safely
-            }
-            if (expiredByHistorySchema) {
-                historySchema.setExpire();
-                LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
-                        jobId, tableName, historySchema.getHistoryTxnIdThreshold());
-            }
-        }
+        boolean expiredByHistorySchema = expireHistorySchema(historySchema);
         return expiredByTime && expiredByHistorySchema;
     }
 
@@ -441,6 +427,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         return schemaInfos.stream().map(IndexSchemaInfo::getSchemaInfo).collect(Collectors.toList());
     }
 
+    @Override
     public Optional<OlapTableHistorySchema> getHistorySchema() {
         return Optional.ofNullable(historySchema);
     }

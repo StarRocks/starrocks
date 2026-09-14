@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -1094,6 +1095,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             String functionName = functionCallExpr.getFunctionName().toLowerCase();
             List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
             if (PARTITION_FUNCTIONS.contains(functionName)) {
+                // A partition function with no arguments (e.g. RANGE(substr(k)) parsed with an
+                // empty arg list) must surface a clean "unsupported expression" error instead of
+                // a raw IndexOutOfBoundsException from paramsExpr.get(0) below.
+                if (paramsExpr.isEmpty()) {
+                    throw new ParsingException(
+                            PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
+                }
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
@@ -4972,6 +4980,65 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new ModifyStorageVolumePropertiesClause(getCaseSensitivePropertyList(context.propertyList()), createPos(context));
     }
 
+    // ---------------------------------------- AI Provider Statement ---------------------------------------
+    @Override
+    public ParseNode visitCreateAIProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.CreateAIProviderStatementContext context) {
+        String name = ((Identifier) visit(context.aiProviderName)).getValue();
+        String type = ((Identifier) visit(context.providerType)).getValue();
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
+        String comment = context.comment() == null
+                ? null
+                : ((StringLiteral) visit(context.comment().string())).getStringValue();
+        return new com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt(
+                context.IF() != null, name, type, properties, comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterAIProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.AlterAIProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        Map<String, String> properties = getCaseSensitivePropertyList(context.propertyList());
+        return new com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt(
+                context.IF() != null, name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropAIProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropAIProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new com.starrocks.sql.ast.aiprovider.DropAIProviderStmt(
+                context.IF() != null, name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowAIProvidersStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowAIProvidersStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            pattern = ((StringLiteral) visit(context.pattern)).getValue();
+        }
+        String typeFilter = null;
+        if (context.providerType != null) {
+            typeFilter = ((Identifier) visit(context.providerType)).getValue();
+        }
+        return new com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt(pattern, typeFilter, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDescAIProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.DescAIProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new com.starrocks.sql.ast.aiprovider.DescAIProviderStmt(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitSetDefaultAIProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.SetDefaultAIProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt(name, createPos(context));
+    }
+
     // ----------------------------------------------- FailPoint Statement -----------------------------------------------------
 
     @Override
@@ -5491,6 +5558,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         return new AddColumnsClause(columnDefs, rollupName, getCaseSensitiveProperties(context.properties()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterTableDictColumnsClause(
+            com.starrocks.sql.parser.StarRocksParser.AlterTableDictColumnsClauseContext context) {
+        boolean enable = context.ENABLE() != null;
+        java.util.List<String> columns = new java.util.ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext id : context.identifier()) {
+            columns.add(getIdentifierName(id));
+        }
+        return new AlterTableDictColumnsClause(enable, columns, createPos(context));
     }
 
     @Override

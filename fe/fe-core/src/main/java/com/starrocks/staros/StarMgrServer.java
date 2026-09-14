@@ -168,6 +168,11 @@ public class StarMgrServer {
         com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
         com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
         com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+        com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
 
         grpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(Config.starmgr_grpc_server_max_worker_threads,
                         Integer.MAX_VALUE, "starmgr-grpc-default-executor", true);
@@ -184,6 +189,11 @@ public class StarMgrServer {
             com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
             com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
             com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+            com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                    Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
             ThreadPoolManager.setFixedThreadPoolSize(grpcExecutor, Config.starmgr_grpc_server_max_worker_threads);
         });
         // set the following config, in order to provide a customized worker group definition

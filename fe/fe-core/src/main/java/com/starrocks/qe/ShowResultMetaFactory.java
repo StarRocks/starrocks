@@ -1326,6 +1326,32 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     }
 
     @Override
+    public ShowResultSetMetaData visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("IsDefault", TypeFactory.createVarcharType(8)))
+                .addColumn(new Column("Endpoint", TypeFactory.createVarcharType(512)))
+                .addColumn(new Column("Model", TypeFactory.createVarcharType(128)))
+                .addColumn(new Column("Dimensions", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("MaxDocuments", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("TimeoutMs", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("ApiKey", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(1024)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Value", TypeFactory.createVarcharType(1024)))
+                .build();
+    }
+
+    @Override
     public ShowResultSetMetaData visitShowFailPointStatement(ShowFailPointStatement statement, Void context) {
         // TriggerCount / PausedThreads are appended AFTER Host on purpose: the QA harness parses
         // this result positionally, so inserting them earlier would shift the existing columns.

@@ -23,6 +23,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
@@ -256,6 +257,22 @@ public class TabletReshardJobMgrTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+
+        // In shared-data mode the singleton TabletReshardJobMgr is started as a leader daemon and
+        // ticks every tablet_reshard_job_scheduler_interval_ms (10ms), running the very code these
+        // cases drive by hand: it drains reshardCandidates, creates jobs into tabletReshardJobs and
+        // calls createTabletReshardJob -- which several cases replace with a counting MockUp that a
+        // class-level MockUp also applies to the singleton. So the daemon thread would race the test
+        // thread and land its effects between a `before` read and the assertion, exactly like the
+        // ColocateChecker race stubbed out in SplitTabletJobColocateTest (#73662). Quiesce it once
+        // here so every tick in this class is an explicit runAfterCatalogReadyForTest() call.
+        TabletReshardJobMgr sharedMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        Assertions.assertTrue(sharedMgr.isRunning(),
+                "the reshard daemon must be up before it is stopped; otherwise a later start() would "
+                        + "clear the stop request and resurrect the racing tick");
+        sharedMgr.setStop();
+        LeaderDaemon.awaitQuiesced(List.<LeaderDaemon>of(sharedMgr), 30_000L);
+
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         Config.enable_range_distribution = true;

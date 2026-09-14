@@ -59,6 +59,7 @@ set(EXPR_TEST_FILES
     map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
+    multi_unnest_core_test.cpp
     ngram_search_test.cpp
     percentile_functions_test.cpp
     condition_expr_core_test.cpp
@@ -101,6 +102,7 @@ set(EXPR_TEST_FILES
     subfield_expr_test.cpp
     udf/python/env_test.cpp
     unary_function_test.cpp
+    unnest_core_test.cpp
     vectorized_literal_test.cpp
 )
 if (STARROCKS_JIT_ENABLE)

@@ -1,4 +1,4 @@
--- name: test_global_dict_with_union
+-- name: test_global_dict_with_union @sequential
 CREATE TABLE test_table_1 (
     id INT,
     value VARCHAR(10)

@@ -292,8 +292,8 @@ public:
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
         ASSIGN_OR_ABORT(auto* entry, _update_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard));
         CHECK_EQ(2, entry->get_ref());
-        CHECK_OK(entry->value().sync_flush_persistent_index(10'000'000));
-        CHECK_OK(entry->value().commit(metadata, &builder));
+        CHECK_OK(entry->value().sync_flush_all_memtables(10'000'000));
+        CHECK_OK(entry->value().commit(&builder));
         write_guard.reset();
         _update_mgr->release_primary_index_cache(entry);
         _update_mgr->unlock_shard_pk_index_shard(metadata->id());
@@ -3566,6 +3566,57 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     config::pk_index_parallel_execution_min_rows = old_pk_index_parallel_execution_min_rows;
     config::l0_max_mem_usage = old_l0_max_mem_usage;
     config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
+}
+
+// The serial half of parallel_upsert, over a segment that splits into more than one chunk.
+//
+// Every other serial-mode publish test writes kChunkSize (12) rows, which SegmentPKIterator emits as a
+// single chunk, so the loop body only ever ran once and nothing covered what happens to a chunk's
+// scratch once the next one starts. With no thread-pool token each upsert resolves its replaced rowids
+// and flushes before returning, so the slot is dead by then and is released per chunk; if anything
+// still referenced it the encoded-key Slices would dangle, which shows up here as a wrong delete map
+// (a row count other than kRows) or, under ASAN, as a use-after-free.
+//
+// The segment iterator reads DEFAULT_CHUNK_SIZE (4096) rows per get_next and breaks out of its
+// accumulate loop as soon as it has pk_index_parallel_execution_min_rows, so 4096 below makes each
+// chunk exactly 4096 rows and kRows makes three of them. Republishing the SAME keys three times means
+// every row of the previous version must be found and marked deleted -- work that is only correct if
+// each chunk's lookup completed inline.
+TEST_P(LakePrimaryKeyPublishTest, test_serial_multi_chunk_upsert) {
+    ConfigResetGuard<bool> serial(&config::enable_pk_index_parallel_execution, false);
+    ConfigResetGuard<int64_t> min_rows(&config::pk_index_parallel_execution_min_rows, 4096);
+    constexpr int64_t kRows = 3 * 4096;
+
+    auto tablet_id = _tablet_metadata->id();
+    auto [chunk0, indexes] = gen_data_and_index(kRows, 0, true, true);
+    int64_t version = 1;
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    EXPECT_EQ(kRows, read_rows(tablet_id, version));
+    // Each republish shadows the whole previous rowset, so every rowset but the last is fully deleted.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(3, metadata->rowsets_size());
+    EXPECT_EQ(kRows, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(kRows, metadata->rowsets(1).num_dels());
+    EXPECT_EQ(0, metadata->rowsets(2).num_dels());
 }
 
 // experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the

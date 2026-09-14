@@ -102,10 +102,9 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     // ExplicitTxnStateItem, and the transaction state is recorded in TransactionState.
     private final Map<Long, ExplicitTxnState> explicitTxnStateMap = Maps.newConcurrentMap();
 
-    // Serializes the registration of explicit transaction states. `explicitTxnStateMap` itself is concurrent, but
-    // `BEGIN WITH LABEL` has to verify that the label is unused and publish the new state as a single atomic step:
-    // without this lock two concurrent sessions can both pass the uniqueness check before either of them publishes,
-    // and both `BEGIN` succeed with the same label.
+    // Serializes the lifecycle of explicit transaction states. `explicitTxnStateMap` itself is concurrent, but label
+    // checks, planning reservations, database registration, reshard watermarks, and removal must be atomic with
+    // respect to each other.
     private final Object explicitTxnStateLock = new Object();
 
     private final GlobalStateMgr globalStateMgr;
@@ -193,12 +192,111 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
+    /**
+     * Whether an explicit transaction older than {@code endTransactionId} is still running and is not yet
+     * visible to {@link #isPreviousTransactionsFinished}.
+     *
+     * <p>That method scans only {@code DatabaseTransactionMgr.idToRunningTransactionState}. A multi-statement
+     * Stream Load is absent from it for the duration of its first sub-task: {@code TransactionStmtExecutor
+     * .loadData(long, long, ...)} upserts the transaction into the DatabaseTransactionMgr only after the
+     * sub-task has produced its item, whereas {@code OlapTableSink.getTOlapTableSink} plans that sub-task's
+     * sink — binding it to a schema id — before it. (The DML flavour of {@code loadData} upserts before the
+     * load, so it has no such window.) A caller that releases state guarded by a transaction watermark would
+     * therefore drop it while a load is already bound.
+     *
+     * <p>Deliberately not scoped to a table: inside the window the transaction has neither a dbId nor a table
+     * list ({@code addTableIdList} / {@code addModifiedTableId} both run after the upsert), so scoping by
+     * either would reintroduce the race it exists to close. Transactions already carrying a dbId are covered
+     * by the DatabaseTransactionMgr scan, so only {@code dbId == 0} — never assigned — and this database
+     * are considered.
+     */
+    public boolean hasRunningExplicitTransactionBefore(long endTransactionId, long dbId) {
+        for (ExplicitTxnState explicitTxnState : explicitTxnStateMap.values()) {
+            TransactionState txnState = explicitTxnState.getTransactionState();
+            if (txnState == null || !txnState.isRunning()) {
+                continue;
+            }
+            if (txnState.getTransactionId() > endTransactionId) {
+                continue;
+            }
+            if (txnState.getDbId() == 0 || txnState.getDbId() == dbId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public ExplicitTxnState getExplicitTxnState(long txnId) {
         return explicitTxnStateMap.get(txnId);
     }
 
     public void clearExplicitTxnState(long txnId) {
-        explicitTxnStateMap.remove(txnId);
+        synchronized (explicitTxnStateLock) {
+            explicitTxnStateMap.remove(txnId);
+        }
+    }
+
+    @Nullable
+    public TransactionState reserveExplicitTransactionLayout(long txnId, long dbId, long tableId) {
+        synchronized (explicitTxnStateLock) {
+            ExplicitTxnState explicit = explicitTxnStateMap.get(txnId);
+            if (explicit == null || explicit.getTransactionState() == null) {
+                return null;
+            }
+            TransactionState state = explicit.getTransactionState();
+            if (state.getDbId() != 0 && state.getDbId() != dbId) {
+                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
+            }
+            explicit.reservePlanningLayout(dbId, tableId);
+            return state;
+        }
+    }
+
+    public TransactionState registerExplicitTransactionState(long txnId, long dbId) throws StarRocksException {
+        synchronized (explicitTxnStateLock) {
+            ExplicitTxnState explicit = explicitTxnStateMap.get(txnId);
+            if (explicit == null || explicit.getTransactionState() == null) {
+                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
+            }
+            TransactionState state = explicit.getTransactionState();
+            if (state.getDbId() != 0 && state.getDbId() != dbId) {
+                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
+            }
+            DatabaseTransactionMgr dbTxnMgr = getDatabaseTransactionMgr(dbId);
+            TransactionState registered = dbTxnMgr.getTransactionState(txnId);
+            if (registered == null) {
+                long originalDbId = state.getDbId();
+                state.setDbId(dbId);
+                try {
+                    dbTxnMgr.upsertTransactionState(state);
+                } catch (StarRocksException | RuntimeException e) {
+                    state.setDbId(originalDbId);
+                    throw e;
+                }
+                registered = state;
+            }
+            explicit.retainPlanningLayoutsForDatabase(dbId);
+            return registered;
+        }
+    }
+
+    public ExplicitTxnState activateExplicitTransactionTable(long txnId, long dbId, long tableId)
+            throws StarRocksException {
+        synchronized (explicitTxnStateLock) {
+            ExplicitTxnState explicit = explicitTxnStateMap.get(txnId);
+            if (explicit == null || explicit.getTransactionState() == null) {
+                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
+            }
+            TransactionState state = explicit.getTransactionState();
+            if (state.getDbId() != 0 && state.getDbId() != dbId) {
+                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
+            }
+            if (state.getDbId() != dbId) {
+                throw new TransactionNotFoundException(txnId);
+            }
+            getDatabaseTransactionMgr(dbId).activateTransactionTable(txnId, tableId);
+            return explicit;
+        }
     }
 
     /**
@@ -849,6 +947,32 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
+    public boolean isPreviousTransactionsFinishedForReshard(
+            long endTransactionId, long dbId, List<Long> tableIdList,
+            Set<Long> excludeTransactionIds) throws AnalysisException {
+        synchronized (explicitTxnStateLock) {
+            DatabaseTransactionMgr dbTxnMgr = getDatabaseTransactionMgr(dbId);
+            if (!dbTxnMgr.isPreviousTransactionsFinished(
+                    endTransactionId, tableIdList, excludeTransactionIds)) {
+                return false;
+            }
+            long now = System.currentTimeMillis();
+            for (Map.Entry<Long, ExplicitTxnState> entry : explicitTxnStateMap.entrySet()) {
+                TransactionState state = entry.getValue().getTransactionState();
+                if (state == null || !state.isRunning() || entry.getKey() > endTransactionId
+                        || excludeTransactionIds.contains(entry.getKey())
+                        || !entry.getValue().hasPlanningLayoutReservation(dbId, tableIdList)) {
+                    continue;
+                }
+                LOG.debug("Explicit txn {} with age {} ms reserves db {} tables {} below reshard watermark {}",
+                        entry.getKey(), now - state.getPrepareTime(), dbId,
+                        entry.getValue().getPlanningLayoutTables(dbId), endTransactionId);
+                return false;
+            }
+            return true;
+        }
+    }
+
     /**
      * The txn cleaner will run at a fixed interval and try to delete expired and timeout txns:
      * expired: txn is in VISIBLE or ABORTED, and is expired.
@@ -862,10 +986,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         // Clean up orphaned explicit transaction states:
         // 1. txnState == null: orphaned entry (e.g., state lost after FE leader switch)
         // 2. txnState != null && isTimeout: BEGIN executed but no DML followed, timed out
-        explicitTxnStateMap.entrySet().removeIf(entry -> {
-            TransactionState txnState = entry.getValue().getTransactionState();
-            return txnState == null || txnState.isTimeout(currentMillis);
-        });
+        synchronized (explicitTxnStateLock) {
+            explicitTxnStateMap.entrySet().removeIf(entry -> {
+                TransactionState txnState = entry.getValue().getTransactionState();
+                return txnState == null || txnState.isTimeout(currentMillis);
+            });
+        }
     }
 
     public void removeExpiredTxns() {

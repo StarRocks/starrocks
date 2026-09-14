@@ -4672,6 +4672,10 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
             splitConsumeFragment.setQueryGlobalDicts(splitProduceFragment.getQueryGlobalDicts());
             splitConsumeFragment.setQueryGlobalDictExprs(splitProduceFragment.getQueryGlobalDictExprs());
+            // plus what the exchange replaced by this consumer carried for the fragment above it
+            splitConsumeFragment.mergeQueryGlobalDicts(consumerOperator.getGlobalDicts());
+            splitConsumeFragment.mergeQueryDictExprs(
+                    getGlobalDictsExprs(consumerOperator.getGlobalDictsExpr(), context));
             splitConsumeFragment.setLoadGlobalDicts(splitProduceFragment.getLoadGlobalDicts());
 
             if (consumerOperator.hasLimit()) {

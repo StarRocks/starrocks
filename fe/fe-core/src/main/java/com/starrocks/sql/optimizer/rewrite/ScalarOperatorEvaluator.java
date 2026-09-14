@@ -31,7 +31,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.PrimitiveType;
@@ -225,9 +224,10 @@ public enum ScalarOperatorEvaluator {
     }
 
     public boolean isMonotonicFunction(CallOperator call) {
-        if (call instanceof CastOperator) {
-            return true;
-        }
+        // A cast used to be declared monotonic here unconditionally, which is wrong: crossing between
+        // strings and numbers reorders values. Casts are decided by OperatorFunctionChecker's
+        // visitCastOperator, which knows which type pairs keep the order; one arriving here has no
+        // invoker to look up and comes out non-monotonic, which is the safe answer.
         FunctionSignature signature;
         if (call.getFunction() != null) {
             Function fn = call.getFunction();

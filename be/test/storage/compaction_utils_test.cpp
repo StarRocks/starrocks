@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <vector>
 
 namespace starrocks {
@@ -78,6 +79,39 @@ TEST(CompactionUtilsTest, test_get_segment_max_rows) {
     max_segment_file_size = 0;
     segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 0, 0);
     ASSERT_EQ(2147483647, segment_max_rows);
+}
+
+// Corrupted statistics must never make the divisor zero (SIGFPE in a compaction thread).
+TEST(CompactionUtilsTest, test_get_segment_max_rows_negative_inputs) {
+    const int64_t max_segment_file_size = 1024 * 1024 * 1024;
+
+    // input_rowsets_size / (input_row_num + 1) == -1  =>  divisor 0 before the fix.
+    uint32_t segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 9, -10);
+    ASSERT_EQ(1073741824, segment_max_rows);
+    segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 41802, -41803);
+    ASSERT_EQ(1073741824, segment_max_rows);
+
+    // input_row_num + 1 == 0  =>  divisor 0 before the fix.
+    segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, -1, 100);
+    ASSERT_EQ(1073741824, segment_max_rows);
+
+    // INT64_MIN / -1 overflows (also SIGFPE) before the fix.
+    segment_max_rows =
+            CompactionUtils::get_segment_max_rows(max_segment_file_size, -2, std::numeric_limits<int64_t>::min());
+    ASSERT_EQ(1073741824, segment_max_rows);
+
+    // input_row_num + 1 must not overflow.
+    segment_max_rows =
+            CompactionUtils::get_segment_max_rows(max_segment_file_size, std::numeric_limits<int64_t>::max(), 100);
+    ASSERT_EQ(1073741824, segment_max_rows);
+
+    // A negative size with a sane row count degrades to the no-estimate answer, not a crash.
+    segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 100, -1);
+    ASSERT_EQ(1073741824, segment_max_rows);
+
+    // Sane inputs are unaffected.
+    segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 10000, 100 * 10000);
+    ASSERT_EQ(10737418, segment_max_rows);
 }
 
 TEST(CompactionUtilsTest, test_split_column_into_groups) {
