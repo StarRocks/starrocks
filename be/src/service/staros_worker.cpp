@@ -82,10 +82,31 @@ void apply_positive_int64_starlet_flag(const char* be_config, const char* flag_n
     flag = value;
 }
 
+// Both globals are read by any thread that touches a starlet-backed filesystem and are released by
+// `shutdown_staros_worker()` while such threads may still be running, so every access goes through
+// `std::atomic_load`/`std::atomic_store`/`std::atomic_exchange`. A plain read racing with the reset
+// is undefined behaviour on its own; going through the atomic accessors makes the reader observe
+// either a strong reference that keeps the object alive for the whole operation, or a null pointer
+// it must handle. `g_starlet` is a `shared_ptr` rather than a `unique_ptr` for exactly that reason:
+// a raw pointer would dangle across the blocking starmgr RPCs its callers make.
+std::shared_ptr<StarOSWorker> g_worker;
+std::shared_ptr<staros::starlet::Starlet> g_starlet;
+
 } // namespace
 
-std::shared_ptr<StarOSWorker> g_worker;
-std::unique_ptr<staros::starlet::Starlet> g_starlet;
+std::shared_ptr<StarOSWorker> get_staros_worker() {
+    // May return nullptr once `shutdown_staros_worker()` has run. Callers must check it: an
+    // in-flight load can still reach a starlet filesystem after worker teardown, and dereferencing
+    // the null worker there crashes the process instead of failing the load.
+    return std::atomic_load(&g_worker);
+}
+
+std::shared_ptr<staros::starlet::Starlet> get_starlet() {
+    // May return nullptr once `shutdown_staros_worker()` has run. The returned strong reference
+    // keeps the runtime alive for the whole operation, so callers must hold it rather than cache a
+    // raw pointer across a call.
+    return std::atomic_load(&g_starlet);
+}
 
 namespace fslib = staros::starlet::fslib;
 
@@ -327,16 +348,12 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
-<<<<<<< HEAD:be/src/service/staros_worker.cpp
-    auto cond = []() { return g_starlet->is_ready(); };
-=======
     // A null starlet means the runtime was already released by `shutdown_staros_worker()`. Treat
     // that as "stop waiting" so a late call fails immediately instead of burning the full timeout.
     auto cond = []() {
         auto starlet = get_starlet();
         return starlet == nullptr || starlet->is_ready();
     };
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/src/compute_env/staros/staros_worker.cpp
     auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
     if (!ret) {
         return absl::UnavailableError("starlet is still not ready!");
@@ -352,13 +369,8 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     // Count every actual starmgr RPC issued from this fallback path. A high rate signals that
     // FE-side task/node selection is scheduling work on a BE whose local cache does not have
     // the shard (the FE did not push it in time, or the placement was wrong).
-<<<<<<< HEAD:be/src/service/staros_worker.cpp
     StarRocksMetrics::instance()->staros_shard_info_fallback_total.increment(1);
-    auto info_or = g_starlet->get_shard_info(id);
-=======
-    StarOSWorkerMetrics::instance()->staros_shard_info_fallback_total.increment(1);
     auto info_or = starlet->get_shard_info(id);
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/src/compute_env/staros/staros_worker.cpp
     if (!info_or.ok()) {
         StarRocksMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
     }
@@ -483,8 +495,9 @@ std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configura
 std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& key,
                                                            const std::shared_ptr<FileSystem>& fs) {
     std::shared_ptr<std::string> fs_cache_key(new std::string(key), [](std::string* key) {
-        if (g_worker) {
-            g_worker->erase_fs_cache(*key);
+        auto worker = get_staros_worker();
+        if (worker) {
+            worker->erase_fs_cache(*key);
         }
         delete key;
     });
@@ -574,7 +587,7 @@ Status to_status(const absl::Status& absl_status) {
 }
 
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache) {
-    if (g_starlet.get() != nullptr) {
+    if (std::atomic_load(&g_starlet) != nullptr) {
         return;
     }
 
@@ -620,16 +633,32 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
-    g_worker = std::make_shared<StarOSWorker>();
-    g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
-    g_starlet->init(starlet_config);
-    g_starlet->start();
+    auto worker = std::make_shared<StarOSWorker>();
+    auto starlet = std::make_shared<staros::starlet::Starlet>(worker);
+    // Publish the worker only after the starlet runtime exists, so a reader that observes a
+    // non-null worker never finds a null starlet behind it.
+    std::atomic_store(&g_starlet, starlet);
+    std::atomic_store(&g_worker, std::move(worker));
+    starlet->init(starlet_config);
+    starlet->start();
 }
 
 void shutdown_staros_worker() {
-    g_starlet->stop();
-    g_starlet.reset();
-    g_worker = nullptr;
+    // Retire both globals before tearing anything down, the reverse of the publish order in
+    // `init_staros_worker()`, so an operation that has not fetched them yet sees null and fails
+    // with a status instead of entering a runtime that is going away.
+    //
+    // Neither object is necessarily destroyed here. An operation that fetched them first holds a
+    // strong reference and keeps them alive until it finishes; this function only drops the
+    // process-wide one. `Starlet::stop()` is idempotent and `~Starlet()` does nothing beyond it
+    // once stopped, so a deferred destruction on the last in-flight thread is cheap and safe.
+    LOG(INFO) << "Retiring the global StarOS worker and starlet runtime, later filesystem "
+                 "operations will fail with a status ...";
+    std::atomic_store(&g_worker, std::shared_ptr<StarOSWorker>());
+    auto starlet = std::atomic_exchange(&g_starlet, std::shared_ptr<staros::starlet::Starlet>());
+    if (starlet != nullptr) {
+        starlet->stop();
+    }
 
     LOG(INFO) << "Executing starlet shutdown hooks ...";
     staros::starlet::common::ShutdownHook::shutdown();
@@ -654,11 +683,21 @@ void update_staros_starcache() {
 }
 
 void set_starlet_in_shutdown() {
-    auto* starlet = g_starlet.get();
+    auto starlet = get_starlet();
     if (starlet) {
         starlet->on_shutdown();
     }
 }
+
+#ifdef BE_TEST
+void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker) {
+    std::atomic_store(&g_worker, std::move(worker));
+}
+
+std::shared_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::shared_ptr<staros::starlet::Starlet> starlet) {
+    return std::atomic_exchange(&g_starlet, std::move(starlet));
+}
+#endif
 
 } // namespace starrocks
 #endif // USE_STAROS

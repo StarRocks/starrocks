@@ -668,9 +668,6 @@ private:
             return fs_st;
         }
 #endif
-<<<<<<< HEAD:be/src/fs/fs_starlet.cpp
-        return g_worker->get_shard_filesystem(shard_id, _conf);
-=======
         auto worker = get_staros_worker();
         if (worker == nullptr) {
             // Shutdown already released the StarOS worker while this operation was in flight.
@@ -678,7 +675,6 @@ private:
             return absl::UnavailableError(fmt::format("StarOS worker is not available, shard_id: {}", shard_id));
         }
         return worker->get_shard_filesystem(shard_id, _conf);
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/src/compute_env/staros/starlet_filesystem.cpp
     }
 
 private:
@@ -757,17 +753,10 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) 
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
     TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
     if (absl::IsUnimplemented(fs_st.status())) {
-<<<<<<< HEAD:be/src/fs/fs_starlet.cpp
-        fs_st = g_worker->get_shard_filesystem(shard_id, conf);
-    }
-#else
-    auto fs_st = g_worker->get_shard_filesystem(shard_id, conf);
-=======
         fs_st = get_shard_filesystem_from_worker(shard_id, conf);
     }
 #else
     auto fs_st = get_shard_filesystem_from_worker(shard_id, conf);
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/src/compute_env/staros/starlet_filesystem.cpp
 #endif
     if (!fs_st.ok()) {
         LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path

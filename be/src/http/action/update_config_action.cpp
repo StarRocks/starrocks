@@ -503,8 +503,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("starlet_filesystem_instance_cache_capacity", [&]() -> Status {
             LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
                       << config::starlet_filesystem_instance_cache_capacity;
-            if (g_worker) {
-                g_worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
+            auto worker = get_staros_worker();
+            if (worker) {
+                worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
             }
             return Status::OK();
         });

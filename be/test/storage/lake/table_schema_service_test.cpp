@@ -367,7 +367,7 @@ protected:
     void setup_skip_construct_initial_metadata() {
         SyncPoint::GetInstance()->SetCallBack("TabletManager::construct_initial_metadata", [](void* arg) {
             // Return NOT_FOUND to simulate tablet not existing, because construct_initial_metadata
-            // requires g_worker (StarOS) which is unavailable in unit tests.
+            // requires the StarOS worker, which is unavailable in unit tests.
             *static_cast<Status*>(arg) = Status::NotFound("skipped by test");
         });
     }

@@ -34,21 +34,13 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD:be/test/service/staros_worker_test.cpp
 #include "common/config.h"
-=======
-#include "base/concurrency/stopwatch.hpp"
-#include "base/testutil/scoped_updater.h"
-#include "base/utility/defer_op.h"
-#include "common/config_metrics_fwd.h"
-#include "common/config_staros_worker_fwd.h"
-#include "common/configbase.h"
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/test/compute_env/staros/staros_worker_test.cpp
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "testutil/scoped_updater.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
+#include "util/stopwatch.hpp"
 #include "util/table_metrics.h"
 
 DECLARE_int64(fslib_s3_max_single_part_size);
@@ -298,7 +290,7 @@ TEST_F(StarOSWorkerTest, test_fs_cache) {
     auto cache_key = StarOSWorker::get_cache_key(schema, conf);
 
     auto worker = std::make_shared<StarOSWorker>();
-    g_worker = worker;
+    set_staros_worker_for_test(worker);
 
     EXPECT_TRUE(worker->add_shard(shard_info).ok());
 
@@ -357,7 +349,7 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     auto cache_key = StarOSWorker::get_cache_key(schema, conf);
 
     auto worker = std::make_shared<StarOSWorker>();
-    g_worker = worker;
+    set_staros_worker_for_test(worker);
 
     EXPECT_TRUE(worker->add_shard(shard_info).ok());
 
@@ -459,39 +451,36 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     ASSERT_NE(server, nullptr);
     ASSERT_GT(port, 0);
 
-    // Save original g_starlet and set up a temporary one pointing at our mock.
+    // Save original Starlet and set up a temporary one pointing at our mock.
     // Use DeferOp to guarantee cleanup on all exit paths (including ASSERT_* failures).
-    auto orig_starlet = std::move(g_starlet);
+    auto orig_starlet = swap_starlet_for_test(nullptr);
     DeferOp restore_starlet([&orig_starlet, &server] {
-        if (g_starlet) {
-            g_starlet->stop();
+        auto starlet = swap_starlet_for_test(nullptr);
+        if (starlet) {
+            starlet->stop();
         }
-        g_starlet = std::move(orig_starlet);
+        (void)swap_starlet_for_test(std::move(orig_starlet));
         server->Shutdown();
     });
 
     auto worker = std::make_shared<StarOSWorker>();
-<<<<<<< HEAD:be/test/service/staros_worker_test.cpp
-    g_starlet = std::make_unique<staros::starlet::Starlet>(worker);
-=======
     auto starlet = std::make_shared<staros::starlet::Starlet>(worker);
     auto* starlet_ptr = starlet.get();
     (void)swap_starlet_for_test(std::move(starlet));
->>>>>>> c0a0d07 ([BugFix] Stop dereferencing the StarOS worker after shutdown retires it (#79058)):be/test/compute_env/staros/staros_worker_test.cpp
     staros::starlet::StarletConfig config;
     config.rpc_port = 0;
     config.heartbeat_interval = 10;
-    g_starlet->init(config);
-    g_starlet->start();
-    g_starlet->set_star_mgr_addr("127.0.0.1:" + std::to_string(port));
-    ASSERT_TRUE(g_starlet->is_ready());
+    starlet_ptr->init(config);
+    starlet_ptr->start();
+    starlet_ptr->set_star_mgr_addr("127.0.0.1:" + std::to_string(port));
+    ASSERT_TRUE(starlet_ptr->is_ready());
 
     auto* metrics = StarRocksMetrics::instance();
     int64_t before_total = metrics->staros_shard_info_fallback_total.value();
     int64_t before_failed = metrics->staros_shard_info_fallback_failed_total.value();
 
     // Shard 99 is not in the local cache, so retrieve_shard_info triggers the real
-    // _fetch_shard_info_from_remote -> g_starlet->get_shard_info() -> mock starmgr -> error.
+    // _fetch_shard_info_from_remote -> Starlet get_shard_info() -> mock starmgr -> error.
     auto got = worker->retrieve_shard_info(99);
     ASSERT_FALSE(got.ok());
     EXPECT_EQ(before_total + 1, metrics->staros_shard_info_fallback_total.value());
