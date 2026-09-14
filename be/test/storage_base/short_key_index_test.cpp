@@ -193,4 +193,40 @@ TEST_F(ShortKeyIndexTest, parse_rejects_out_of_range_offset) {
     ASSERT_TRUE(st.is_corruption());
 }
 
+// footer.num_items(), key_bytes() and offset_bytes() are uint32_t values read straight from a
+// persisted page footer. num_items = UINT32_MAX overflows num_items + 1 back to 0, which used to
+// leave _offsets empty while the parse loop below still wrote into _offsets[0] and
+// _offsets[num_items]: a heap out-of-bounds write. Reject the shape before it can wrap.
+TEST_F(ShortKeyIndexTest, parse_rejects_num_items_overflow) {
+    ShortKeyFooterPB footer;
+    footer.set_num_items(UINT32_MAX);
+    footer.set_key_bytes(0);
+    footer.set_offset_bytes(1);
+
+    std::string buf(1, '\0'); // single zero byte: decodes as offset varint 0
+
+    ShortKeyIndexDecoder decoder;
+    Status st = decoder.parse(buf, footer);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_corruption());
+}
+
+// key_bytes + offset_bytes is also read straight from the footer and used to be summed as
+// uint32_t: key_bytes = UINT32_MAX with offset_bytes = 1 wraps the sum to 0, so an empty body
+// passed the size check and Slice(body.data, key_bytes) then claimed ~4GB out of a zero-byte
+// buffer. Do the sum in 64-bit so it cannot wrap before it is checked against body.size.
+TEST_F(ShortKeyIndexTest, parse_rejects_key_offset_bytes_overflow) {
+    ShortKeyFooterPB footer;
+    footer.set_num_items(1);
+    footer.set_key_bytes(UINT32_MAX);
+    footer.set_offset_bytes(1);
+
+    std::string buf; // empty body
+
+    ShortKeyIndexDecoder decoder;
+    Status st = decoder.parse(buf, footer);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_corruption());
+}
+
 } // namespace starrocks
