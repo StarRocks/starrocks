@@ -2194,17 +2194,32 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private static ColumnStatistic estimateWindowCall(CallOperator call, Statistics inputStatistics,
                                                       List<ScalarOperator> partitionExpressions) {
-        if (!partitionExpressions.isEmpty() || !FunctionSet.ROW_NUMBER.equals(call.getFnName())) {
+        if (!FunctionSet.ROW_NUMBER.equals(call.getFnName())) {
             return ExpressionStatisticCalculator.calculate(call, inputStatistics);
         }
         double rowCount = inputStatistics.getOutputRowCount();
         return ColumnStatistic.builder()
                 .setMinValue(1)
                 .setMaxValue(rowCount)
-                .setDistinctValuesCount(rowCount)
+                .setDistinctValuesCount(estimateRowsPerPartition(partitionExpressions, inputStatistics, rowCount))
                 .setNullsFraction(0)
                 .setAverageRowSize(call.getType().getTypeSize())
                 .build();
+    }
+
+    // The window partitions are the groups a GROUP BY on the partition columns would produce, so the average
+    // partition size follows from that group count. Assumes partitions are evenly sized.
+    private static double estimateRowsPerPartition(List<ScalarOperator> partitionExpressions,
+                                                   Statistics inputStatistics, double rowCount) {
+        if (partitionExpressions.isEmpty() || !partitionExpressions.stream().allMatch(ScalarOperator::isColumnRef)) {
+            return rowCount;
+        }
+
+        List<ColumnRefOperator> partitionColumns = partitionExpressions.stream()
+                .map(ScalarOperator::<ColumnRefOperator>cast)
+                .collect(Collectors.toList());
+        double partitionCount = computeGroupByStatistics(partitionColumns, inputStatistics, new HashMap<>());
+        return rowCount / Math.max(1, partitionCount);
     }
 
     public Statistics estimateStatistics(List<ScalarOperator> predicateList, Statistics statistics) {
