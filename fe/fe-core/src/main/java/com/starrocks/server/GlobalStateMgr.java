@@ -342,10 +342,6 @@ public class GlobalStateMgr {
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
-<<<<<<< HEAD
-    private Daemon replayer;
-    private Daemon timePrinter;
-=======
     // volatile: read by the meta freshness checker thread to dump a stuck replayer's stack
     private volatile Daemon replayer;
     // Owns the canRead/isReady verdict while this node is a non-leader, see MetaFreshnessChecker.
@@ -353,8 +349,7 @@ public class GlobalStateMgr {
     // Replay progress published by the replayer thread and consumed by the checker thread. Never null,
     // because replayJournalInner() also runs on the leader catch-up and checkpoint paths.
     private final MetaReplayProgress metaReplayProgress = new MetaReplayProgress();
-    private LeaderDaemon timePrinter;
->>>>>>> 3f8e64f ([BugFix] Stop stale reads while a journal is stuck (#79041))
+    private Daemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
@@ -1342,10 +1337,7 @@ public class GlobalStateMgr {
     }
 
     private void transferToLeader() {
-<<<<<<< HEAD
         FrontendNodeType oldType = feType;
-        // stop replayer
-=======
         // Stop the meta freshness checker before the replayer: while this node is a non-leader it is the
         // writer of canRead/isReady, and leader activation below publishes those itself. Its evaluate()
         // is already a no-op at this point (isInTransferringToLeader is set), so a checker that outlives
@@ -1365,11 +1357,7 @@ public class GlobalStateMgr {
             metaFreshnessChecker = null;
         }
 
-        // stop replayer. Bound the join so a stuck replay applier (e.g. one pinned on a lock it cannot
-        // acquire) cannot hang leader activation on the single state-change thread forever; if it does
-        // not stop in time, terminate for a clean restart rather than wedge with a bdbje master that
-        // never activates.
->>>>>>> 3f8e64f ([BugFix] Stop stale reads while a journal is stuck (#79041))
+        // stop replayer
         if (replayer != null) {
             replayer.setStop();
             try {
