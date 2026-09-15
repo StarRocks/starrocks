@@ -122,6 +122,17 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 If some pods cannot start after a long period of time, you can use `kubectl logs -n starrocks <pod_name>` to view the log information or use `kubectl -n starrocks describe pod <pod_name>` to view the event information to locate the problem.
 :::
 
+### Collect CN core dumps
+
+The CN container entrypoint can monitor, compress, and upload core dumps. Configure the following environment variables on the CN container:
+
+| Variable | Accepted values and default | Description |
+| -------- | --------------------------- | ----------- |
+| `COREDUMP_ENABLED` | Set to `true` to enable. Any other value, including an unset value, disables collection. | Starts the core dump uploader. After the CN exits because of `SIGABRT` (exit status `134`) or `SIGSEGV` (exit status `139`), the entrypoint restarts the CN so the uploader remains alive. |
+| `CN_RESTART_WAIT_SECONDS` | A positive integer. Default: `5`. | Number of seconds to wait before restarting the CN after a supported crash. This setting is used only when `COREDUMP_ENABLED=true`. |
+
+Core dump collection requires `inotifywait`, `pigz`, and `rclone` in the container image. The standard, non-minimal Ubuntu BE/CN image includes these commands. The minimal Ubuntu image and the UBI image do not include them. If collection is enabled and a required command is missing, the CN refuses to start and reports the missing commands in the container log.
+
 ## Manage StarRocks Cluster
 
 ### Access StarRocks Cluster
