@@ -566,89 +566,97 @@ Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk) {
 
 StatusOr<ChunkPtr> ArrowScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
-    ChunkPtr chunk;
-    if (batch_is_exhausted()) {
-        while (true) {
-            Status status = next_batch();
-            if (_scanner_eof) {
+    while (true) {
+        ChunkPtr chunk;
+        if (batch_is_exhausted()) {
+            while (true) {
+                Status status = next_batch();
+                if (_scanner_eof) {
+                    return status;
+                }
+                if (status.ok()) {
+                    break;
+                }
+                if (status.is_end_of_file()) {
+                    _curr_file_reader.reset();
+                    _file.reset();
+                    continue;
+                }
                 return status;
             }
-            if (status.ok()) {
-                break;
-            }
-            if (status.is_end_of_file()) {
-                _curr_file_reader.reset();
-                _file.reset();
+        }
+        auto init_st = initialize_src_chunk(&chunk);
+        if (!init_st.ok()) {
+            if (_is_discrete_pipe) {
+                filter_current_discrete_message("initialization failed: " + init_st.to_string());
                 continue;
             }
-            return status;
+            return init_st;
         }
-    }
-    auto init_st = initialize_src_chunk(&chunk);
-    if (!init_st.ok()) {
-        if (_is_discrete_pipe) {
-            filter_current_discrete_message("initialization failed: " + init_st.to_string());
-            return get_next();
-        }
-        return init_st;
-    }
-    while (!_scanner_eof) {
-        auto append_st = append_batch_to_src_chunk(&chunk);
-        if (!append_st.ok()) {
-            if (_is_discrete_pipe) {
-                filter_current_discrete_message("append batch failed: " + append_st.to_string());
-                return get_next();
+        bool chunk_error = false;
+        while (!_scanner_eof) {
+            auto append_st = append_batch_to_src_chunk(&chunk);
+            if (!append_st.ok()) {
+                if (_is_discrete_pipe) {
+                    filter_current_discrete_message("append batch failed: " + append_st.to_string());
+                    chunk_error = true;
+                    break;
+                }
+                return append_st;
             }
-            return append_st;
-        }
-        if (chunk_is_full()) {
-            break;
-        }
-        // Snapshot the current file index before fetching the next batch.  If
-        // next_batch() opens a new file (i.e. _next_file advances), break here
-        // so that finalize_src_chunk() can stamp all rows in this chunk with the
-        // correct per-file path/partition values.  Mixing rows from two files in
-        // one chunk would cause finalize_src_chunk() to apply the second file's
-        // columns_from_path to every row, corrupting partition metadata for the
-        // rows that came from the first file.
-        const int file_before = _next_file;
-        auto status = next_batch();
-        if (status.ok()) {
-            if (_next_file != file_before || _message_boundary) {
-                _message_boundary = false;
-                // A new file or stream message was opened; finalize the current chunk
-                // before processing the new file/message in the next get_next() call.
+            if (chunk_is_full()) {
                 break;
+            }
+            // Snapshot the current file index before fetching the next batch.  If
+            // next_batch() opens a new file (i.e. _next_file advances), break here
+            // so that finalize_src_chunk() can stamp all rows in this chunk with the
+            // correct per-file path/partition values.  Mixing rows from two files in
+            // one chunk would cause finalize_src_chunk() to apply the second file's
+            // columns_from_path to every row, corrupting partition metadata for the
+            // rows that came from the first file.
+            const int file_before = _next_file;
+            auto status = next_batch();
+            if (status.ok()) {
+                if (_next_file != file_before || _message_boundary) {
+                    _message_boundary = false;
+                    // A new file or stream message was opened; finalize the current chunk
+                    // before processing the new file/message in the next get_next() call.
+                    break;
+                }
+                continue;
+            }
+            if (!status.is_end_of_file()) {
+                return status;
+            }
+
+            _curr_file_reader.reset();
+            _file.reset();
+            if (chunk->num_rows() > 0) {
+                break;
+            }
+            RETURN_IF_ERROR(next_batch());
+            auto next_init_st = initialize_src_chunk(&chunk);
+            if (!next_init_st.ok()) {
+                if (_is_discrete_pipe) {
+                    filter_current_discrete_message("initialization failed: " + next_init_st.to_string());
+                    chunk_error = true;
+                    break;
+                }
+                return next_init_st;
+            }
+        }
+        if (chunk_error) {
+            continue;
+        }
+        RETURN_IF_ERROR(finalize_src_chunk(&chunk));
+        if (chunk->is_empty()) {
+            if (_scanner_eof) {
+                return Status::EndOfFile("EOF");
             }
             continue;
         }
-        if (!status.is_end_of_file()) {
-            return status;
-        }
-
-        _curr_file_reader.reset();
-        _file.reset();
-        if (chunk->num_rows() > 0) {
-            break;
-        }
-        RETURN_IF_ERROR(next_batch());
-        auto next_init_st = initialize_src_chunk(&chunk);
-        if (!next_init_st.ok()) {
-            if (_is_discrete_pipe) {
-                filter_current_discrete_message("initialization failed: " + next_init_st.to_string());
-                return get_next();
-            }
-            return next_init_st;
-        }
+        return std::move(chunk);
     }
-    RETURN_IF_ERROR(finalize_src_chunk(&chunk));
-    if (chunk->is_empty()) {
-        if (_scanner_eof) {
-            return Status::EndOfFile("EOF");
-        }
-        return get_next();
-    }
-    return std::move(chunk);
 }
 
 Status ArrowScanner::get_schema(std::vector<SlotDescriptor>* schema) {
