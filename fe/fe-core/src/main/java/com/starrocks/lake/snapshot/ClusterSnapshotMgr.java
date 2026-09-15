@@ -66,6 +66,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     protected ClusterSnapshotJobScheduler clusterSnapshotJobScheduler;
 
+    // In-memory rate limiter for the unusable-credential skip in canScheduleNextJob (not @SerializedName, so
+    // not persisted); it keeps that skip's volume lookup and warning to at most once per snapshot interval.
+    protected volatile long lastUnusableCredentialSkipMs = 0;
+
     public ClusterSnapshotMgr() {
     }
 
@@ -217,6 +221,14 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 - lastAutomatedJobStartTimeMs < getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L) {
             return false;
         }
+        // The scheduler ticks every 10ms and does not advance lastAutomatedJobStartTimeMs when the check
+        // below skips a round, so the interval guard above stops throttling once a stuck volume's interval
+        // has elapsed. Gate the lookup and its warning behind their own once-per-interval cooldown so an
+        // unusable credential warns (and re-reads the file store) at most once per interval, not ~100x/s.
+        if (System.currentTimeMillis() - lastUnusableCredentialSkipMs
+                < getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L) {
+            return false;
+        }
         // ADMIN SET AUTOMATED SNAPSHOT ON refuses a volume whose credential cannot be used, but a
         // cluster that was already snapshotting when it upgraded restores the configured name
         // straight from the image or the replayed log and never passes through that check. Without
@@ -225,6 +237,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .getStorageVolumeByName(storageVolumeName);
             if (sv != null && !sv.isCredentialUsable()) {
+                lastUnusableCredentialSkipMs = System.currentTimeMillis();
                 LOG.warn("Skipping the automated cluster snapshot: storage volume {} has a credential " +
                         "that cannot be used, so no new restore point is being produced.", storageVolumeName);
                 return false;
@@ -237,6 +250,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             LOG.warn("Could not check the automated snapshot storage volume {} before scheduling",
                     storageVolumeName, e);
         }
+        // Reached when the volume is usable (or the lookup failed and we defer to the job's own error
+        // path); clear the cooldown so a later breakage warns immediately instead of after an interval.
+        lastUnusableCredentialSkipMs = 0;
         return true;
     }
 

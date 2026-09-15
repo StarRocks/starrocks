@@ -435,6 +435,32 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testAutomatedSnapshotSkipIsRateLimitedForUnusableCredential() {
+        setAutomatedSnapshotOn(false);
+        try {
+            ClusterSnapshotMgr mgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotInterval(120);
+            long pastInterval = System.currentTimeMillis() - 120_000L - 1;
+
+            // Pretend the previous round just skipped an unusable credential. Even though the snapshot
+            // interval has elapsed, the cooldown must short-circuit this round before the volume lookup and
+            // its warning, instead of re-checking (and warning) on every 10ms scheduler tick.
+            Deencapsulation.setField(mgr, "lastUnusableCredentialSkipMs", System.currentTimeMillis());
+            Assertions.assertFalse(mgr.canScheduleNextJob(pastInterval));
+
+            // Once the cooldown has itself elapsed the round proceeds again, and reaching a schedulable
+            // volume clears the cooldown so a later breakage warns immediately rather than after an interval.
+            Deencapsulation.setField(mgr, "lastUnusableCredentialSkipMs",
+                    System.currentTimeMillis() - 120_000L - 1);
+            Assertions.assertTrue(mgr.canScheduleNextJob(pastInterval));
+            long cooldownAfterUsable = Deencapsulation.getField(mgr, "lastUnusableCredentialSkipMs");
+            Assertions.assertEquals(0L, cooldownAfterUsable);
+        } finally {
+            setAutomatedSnapshotOff(false);
+        }
+    }
+
+    @Test
     public void testAlterIntervalThroughExecutor() throws Exception {
         setAutomatedSnapshotOn(false);
         AdminAlterAutomatedSnapshotIntervalStmt stmt = (AdminAlterAutomatedSnapshotIntervalStmt)
