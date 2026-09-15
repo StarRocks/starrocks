@@ -552,19 +552,36 @@ public class AlterJobMgr {
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
             newMvRefreshScheme.setMoment(moment);
 
+<<<<<<< HEAD
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(
                             log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+=======
+            if (log.getLastRefreshTime() != null) {
+                newMvRefreshScheme.setLastRefreshTime(log.getLastRefreshTime());
+            } else {
+                // Both maps, the way the leader maxes over every refreshed base table. Max with the current
+                // value too: the maps get cleared and pruned, so a derivation alone can regress.
+                long derived = Math.max(
+                        MvUtils.getMaxTablePartitionInfoRefreshTime(
+                                asyncRefreshContext.getBaseTableVisibleVersionMap().values()),
+                        MvUtils.getMaxTablePartitionInfoRefreshTime(
+                                asyncRefreshContext.getBaseTableInfoVisibleVersionMap().values()));
+                newMvRefreshScheme.setLastRefreshTime(
+                        Math.max(oldRefreshScheme.getLastRefreshTime(), derived));
+            }
+>>>>>>> 11750b79fe7 ([BugFix] Log MV lastRefreshTime instead of recomputing it on replay (#61299))
             newMvRefreshScheme.setLastFreshnessConfirmedAt(log.getLastFreshnessConfirmedAt());
 
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                            "interval step to {}, timeunit to {}, id: {}, maxChangedTableRefreshTime:{}",
+                            "interval step to {}, timeunit to {}, id: {}, lastRefreshTime:{}",
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
-                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(), maxChangedTableRefreshTime);
+                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(),
+                    newMvRefreshScheme.getLastRefreshTime());
 
             // trigger timeless info event since mv refresh scheme has changed
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
