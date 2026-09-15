@@ -2286,7 +2286,10 @@ TEST_F(ArrowScannerTest, TestStreamPulsarMessageMetaExtractionWithSourceId) {
     query_options.query_type = TQueryType::LOAD;
     TQueryGlobals query_globals;
     query_globals.time_zone = "UTC";
+    LoadPathMgr load_path_mgr({(_tmp_root_dir / "pulsar_load_path").string()});
+    ASSERT_OK(load_path_mgr.init());
     RuntimeServices runtime_services;
+    runtime_services.load_path_mgr = &load_path_mgr;
     runtime_services.load_stream_mgr = &load_stream_mgr;
     QueryExecutionServices query_execution_services;
     query_execution_services.runtime = &runtime_services;
@@ -2338,6 +2341,15 @@ TEST_F(ArrowScannerTest, TestStreamPulsarMessageMetaExtractionWithSourceId) {
     msg_meta->set_message_id("100:2:0");
 
     EXPECT_OK(pipe->append(std::move(junk_bb)));
+
+    // Non-partitioned Pulsar topics have a message ID but no partition number.
+    ByteBufferPtr nonpartitioned_bb =
+            ByteBuffer::allocate_with_tracker(junk.size(), 0, ByteBufferMetaType::PULSAR).value();
+    nonpartitioned_bb->put_bytes(junk.data(), junk.size());
+    nonpartitioned_bb->flip_to_read();
+    auto* nonpartitioned_meta = static_cast<StreamMessageMeta*>(nonpartitioned_bb->meta());
+    nonpartitioned_meta->set_message_id("200:3:-1");
+    EXPECT_OK(pipe->append(std::move(nonpartitioned_bb)));
     EXPECT_OK(pipe->finish());
 
     auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
@@ -2345,9 +2357,17 @@ TEST_F(ArrowScannerTest, TestStreamPulsarMessageMetaExtractionWithSourceId) {
 
     auto res = scanner->get_next();
     ASSERT_TRUE(res.status().is_end_of_file());
-    ASSERT_EQ(1, counter->num_rows_filtered);
+    ASSERT_EQ(2, counter->num_rows_filtered);
 
     scanner->close();
+
+    std::ifstream error_file(load_path_mgr.get_load_error_absolute_path(state->get_error_log_file_path()));
+    ASSERT_TRUE(error_file.is_open());
+    std::stringstream error_buffer;
+    error_buffer << error_file.rdbuf();
+    const std::string errors = error_buffer.str();
+    ASSERT_NE(std::string::npos, errors.find("100:2:0"));
+    ASSERT_NE(std::string::npos, errors.find("200:3:-1"));
 }
 
 TEST_F(ArrowScannerTest, TestStreamIterativeEmptyChunkSkipping) {
