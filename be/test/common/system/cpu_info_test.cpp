@@ -55,4 +55,38 @@ TEST_F(CpuInfoTest, test_fail_cpu_flags_check) {
     GTEST_SKIP() << "avx2 is not supported, skip the test!";
 #endif
 }
+
+TEST_F(CpuInfoTest, ArmHardwareFlags) {
+#if defined(__aarch64__)
+    // On aarch64, NEON is mandatory
+    EXPECT_TRUE(CpuInfo::is_supported(CpuInfo::ARM_NEON));
+#endif
+    EXPECT_EQ(int64_t(1 << 9), int64_t(CpuInfo::ARM_NEON));
+    EXPECT_EQ(int64_t(1 << 10), int64_t(CpuInfo::ARM_CRC32));
+    EXPECT_EQ(int64_t(1 << 11), int64_t(CpuInfo::ARM_PMULL));
+}
+
+TEST_F(CpuInfoTest, test_arm_fail_cpu_flags_check) {
+#if defined(__aarch64__) && defined(__ARM_NEON)
+    int64_t* flags = CpuInfo::TEST_mutable_hardware_flags();
+    EXPECT_TRUE(*flags & CpuInfo::ARM_NEON);
+    // clear ARM_NEON flag, simulate that the platform doesn't support NEON
+    *flags &= ~CpuInfo::ARM_NEON;
+    EXPECT_FALSE(*flags & CpuInfo::ARM_NEON);
+    EXPECT_FALSE(CpuInfo::is_supported(CpuInfo::ARM_NEON));
+    auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
+    bool found_neon = false;
+    for (const auto& f : unsupported_flags) {
+        if (f == "asimd") {
+            found_neon = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_neon);
+    // restore the flag
+    *flags |= CpuInfo::ARM_NEON;
+#else
+    GTEST_SKIP() << "aarch64 NEON is not supported, skip the test!";
+#endif
+}
 } // namespace starrocks
