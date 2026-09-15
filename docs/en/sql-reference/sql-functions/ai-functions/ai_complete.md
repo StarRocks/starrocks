@@ -59,6 +59,8 @@ Returns a nullable VARCHAR containing `choices[0].message.content` from a succes
 The function is non-deterministic. The same arguments can return different text or fail differently as provider state,
 model behavior, and runtime conditions change.
 
+For AI query optimization, see [Reducing AI input rows](ai_functions.mdx#reducing-ai-input-rows).
+
 ## Configuration
 
 ### FE SYSTEM model configuration
