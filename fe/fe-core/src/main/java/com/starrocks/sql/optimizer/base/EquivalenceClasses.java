@@ -96,13 +96,23 @@ public class EquivalenceClasses implements Cloneable {
         return columnToEquivalenceClass.get(column);
     }
 
+    public Set<ColumnRefOperator> getEquivalenceClassByEquivalentColumn(ColumnRefOperator column) {
+        Set<ColumnRefOperator> direct = columnToEquivalenceClass.get(column);
+        if (direct != null) {
+            return direct;
+        }
+        Optional<ColumnRefOperator> opt = columnToEquivalenceClass.keySet()
+                .stream().filter(x -> ScalarOperator.isEquivalent(x, column)).findFirst();
+        return opt.map(columnToEquivalenceClass::get).orElse(null);
+    }
+
     public boolean containsKey(ColumnRefOperator column) {
         return columnToEquivalenceClass.containsKey(column);
     }
 
     public List<Set<ColumnRefOperator>> getEquivalenceClasses() {
         // Remove redundant equal classes, eg:
-        // a,b are equal calsses:
+        // a,b are equal classes:
         // cacheColumnToEquivalenceClass:
         // a -> set(a, b)
         // b -> set(a, b)
@@ -144,16 +154,6 @@ public class EquivalenceClasses implements Cloneable {
 
     public boolean containsRedundantKey(ColumnRefOperator column) {
         return redundantColumnToEquivalenceClass.containsKey(column);
-    }
-
-    public boolean containsEquivalentKey(ColumnRefOperator column) {
-        Optional<ColumnRefOperator> opt = redundantColumnToEquivalenceClass.keySet()
-                .stream().filter(x -> ScalarOperator.isEquivalent(x, column)).findFirst();
-        if (!opt.isPresent()) {
-            return false;
-        }
-        Set<ColumnRefOperator> refOperators = redundantColumnToEquivalenceClass.get(opt.get());
-        return refOperators.size() > 1;
     }
 
     public void deleteRedundantKey(ColumnRefOperator column) {
