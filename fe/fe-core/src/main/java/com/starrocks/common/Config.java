@@ -4046,6 +4046,27 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
 
+<<<<<<< HEAD
+=======
+    /**
+     *  max load record count will be returned when BE/CN call GetLoads
+     *  a page is cut at a job boundary, so a single job's rows are never split across pages.
+     */
+    @ConfField(mutable = true)
+    public static int max_get_loads_result_count = 10000;
+
+    @ConfField(mutable = true, comment = "Whether to collect and expose the per-partition LAST_ACCESS_TIME " +
+            "(the last time a partition was scanned by a user query) in SHOW PARTITIONS and " +
+            "information_schema.partitions_meta. When disabled, the access time is neither recorded nor aggregated " +
+            "across FEs and the LAST_ACCESS_TIME column shows NULL.")
+    public static boolean enable_collect_partition_access_time = false;
+
+    @ConfField(mutable = true, comment = "Interval in seconds at which each FE flushes its own collected " +
+            "per-partition LAST_ACCESS_TIME to the internal _statistics_.partition_access_time table for " +
+            "durability across restart/failover. Only effective when enable_collect_partition_access_time is true.")
+    public static int partition_access_time_flush_interval_sec = 600;
+
+>>>>>>> cee637e ([BugFix] Paginate the getLoads RPC by job id (#78898))
     @ConfField(mutable = false)
     public static int max_spm_cache_baseline_size = 200;
 

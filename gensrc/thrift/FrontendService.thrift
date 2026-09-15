@@ -542,6 +542,35 @@ struct TGetLoadsParams {
     3: optional i64 txn_id
     4: optional string label
     5: optional string load_type
+<<<<<<< HEAD
+=======
+    6: optional string table_name
+    7: optional string user
+    8: optional string state
+    // Legacy wall-clock-string bounds. BE writes them in whatever zone its session
+    // is in (no zone marker on the wire) and FE parses them in TimeUtils.TIME_ZONE
+    // (Asia/Shanghai). They are kept for cross-version compatibility only; new
+    // code should rely on the *_ms fields below, which are unambiguous UTC epoch ms.
+    9:  optional string load_start_time_from
+    10: optional string load_start_time_to
+    11: optional string load_finish_time_from
+    12: optional string load_finish_time_to
+    13: optional string create_time_from
+    14: optional string create_time_to
+    // UTC epoch milliseconds. Preferred by new FE; set by new BE alongside the
+    // legacy string fields. Lets FE filter without round-tripping through a
+    // wall-clock string in some implicit zone.
+    15: optional i64 load_start_time_from_ms
+    16: optional i64 load_start_time_to_ms
+    17: optional i64 load_finish_time_from_ms
+    18: optional i64 load_finish_time_to_ms
+    19: optional i64 create_time_from_ms
+    20: optional i64 create_time_to_ms
+    // Only return loads whose job id >= this value. Setting the field is how a caller
+    // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
+    // result set unpaged when it is absent, so an old BE keeps its previous behavior.
+    21: optional i64 start_job_id_offset
+>>>>>>> cee637e ([BugFix] Paginate the getLoads RPC by job id (#78898))
 }
 
 struct TTrackingLoadInfo {
@@ -594,6 +623,8 @@ struct TLoadInfo {
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+    // max job id in loads + 1, if set to 0 or absent, it means reaches end
+    2: optional i64 next_job_id_offset
 }
 
 struct TRoutineLoadJobInfo {
