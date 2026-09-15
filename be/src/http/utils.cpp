@@ -38,8 +38,10 @@
 #include <sys/stat.h>
 
 #include "base/path/path_util.h"
+#include "base/string/string_parser.hpp"
 #include "common/logging.h"
 #include "common/status.h"
+#include "fmt/format.h"
 #include "fs/fs.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
@@ -151,6 +153,21 @@ void do_dir_response(const std::string& dir_path, HttpRequest* req) {
     }
 
     HttpChannel::send_reply(req, result.str());
+}
+
+Status parse_int64_param(const std::string& name, const std::string& value, int64_t* result, int64_t min, int64_t max) {
+    StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+    int64_t parsed = StringParser::string_to_int<int64_t>(value.data(), value.length(), &parse_result);
+    if (parse_result == StringParser::PARSE_FAILURE) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid parameter {}. The value must be an integer, but is {}", name, value));
+    }
+    if (parse_result != StringParser::PARSE_SUCCESS || parsed < min || parsed > max) {
+        return Status::InvalidArgument(fmt::format(
+                "Invalid parameter {}. The value must be between {} and {}, but is {}", name, min, max, value));
+    }
+    *result = parsed;
+    return Status::OK();
 }
 
 } // namespace starrocks
