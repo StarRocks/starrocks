@@ -75,6 +75,7 @@ public enum PrimitiveType {
 
     JSON("JSON", 16),
     VARIANT("VARIANT", 16),
+    FILE("FILE", 16),
 
     FUNCTION("FUNCTION", 8),
 
@@ -400,6 +401,7 @@ public enum PrimitiveType {
                 break;
             case JSON:
             case VARIANT:
+            case FILE:
                 typeSize = 1024;
                 break;
             default:
@@ -469,6 +471,10 @@ public enum PrimitiveType {
 
     public boolean isVariantType() {
         return this == VARIANT;
+    }
+
+    public boolean isFileType() {
+        return this == FILE;
     }
 
     public boolean isFunctionType() {

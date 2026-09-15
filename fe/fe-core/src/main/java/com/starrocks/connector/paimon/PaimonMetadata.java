@@ -234,7 +234,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
             boolean partitionLegacyName = getPartitionLegacyName(paimonTable);
             for (org.apache.paimon.partition.Partition partition : partitions) {
-                String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
+                String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType,
+                        /* onlyValue */ false);
                 String[] partitionValues =
                         Arrays.stream(partitionPath.split("/")).map(part -> part.split("=")[1]).toArray(String[]::new);
                 Partition srPartition =
