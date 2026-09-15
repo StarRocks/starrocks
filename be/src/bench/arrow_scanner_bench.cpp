@@ -24,16 +24,18 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "connector/file/scanner/arrow_scanner.h"
 #include "connector/file/scanner/json_scanner.h"
-#include "exec/exec_env.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -291,39 +293,63 @@ static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
         return;
     }
 
+    LoadStreamMgr load_stream_mgr;
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
     ObjectPool pool;
     TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
     TQueryGlobals query_globals;
-    ExecEnv exec_env;
-    auto* runtime_state = pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, &exec_env));
+    query_globals.time_zone = "UTC";
+    auto* runtime_state =
+            pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, &query_execution_services, nullptr));
     runtime_state->init_instance_mem_tracker();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 
     auto* desc_tbl = create_descriptor_table(runtime_state, &pool);
     runtime_state->set_desc_tbl(desc_tbl);
 
-    std::string pipe_id = "bench_arrow_routine_load_pipe";
-    auto* scan_range =
-            create_scan_range(&pool, pipe_id, TFileFormatType::FORMAT_ARROW, desc_tbl, TFileType::FILE_STREAM);
+    const auto pipe_id = UniqueId::gen_uid();
+    auto* scan_range = create_scan_range(&pool, "bench_arrow_routine_load_pipe", TFileFormatType::FORMAT_ARROW,
+                                         desc_tbl, TFileType::FILE_STREAM);
+    scan_range->ranges[0].__set_load_id(pipe_id.to_thrift());
 
     for (auto _ : state) {
         std::shared_ptr<StreamLoadPipe> pipe =
                 std::make_shared<BenchDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
-        exec_env.load_stream_mgr()->put(pipe_id, pipe);
+        Status st = load_stream_mgr.put(pipe_id, pipe);
+        if (!st.ok()) {
+            state.SkipWithError(st.to_string().c_str());
+            break;
+        }
+        DeferOp remove_pipe([&]() { load_stream_mgr.remove(pipe_id); });
 
-        ByteBufferPtr bb = ByteBuffer::allocate(arrow_bytes.size());
+        auto buffer = ByteBuffer::allocate_with_tracker(arrow_bytes.size());
+        if (!buffer.ok()) {
+            state.SkipWithError(buffer.status().to_string().c_str());
+            break;
+        }
+        auto bb = std::move(buffer).value();
         bb->put_bytes(arrow_bytes.data(), arrow_bytes.size());
-        bb->flip();
-        (void)pipe->append(bb);
-        (void)pipe->finish();
+        bb->flip_to_read();
+        st = pipe->append(std::move(bb));
+        if (st.ok()) {
+            st = pipe->finish();
+        }
+        if (!st.ok()) {
+            state.SkipWithError(st.to_string().c_str());
+            break;
+        }
 
         auto profile = pool.add(new RuntimeProfile("arrow_routine_load_bench_prof"));
         auto counter = pool.add(new ScannerCounter());
         auto scanner = std::make_unique<ArrowScanner>(runtime_state, profile, *scan_range, counter);
 
-        Status st = scanner->open();
+        st = scanner->open();
         if (!st.ok()) {
             state.SkipWithError(("Failed to open ArrowScanner for pipe: " + st.to_string()).c_str());
-            exec_env.load_stream_mgr()->remove(pipe_id);
             break;
         }
 
@@ -343,7 +369,10 @@ static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
             }
         }
         scanner->close();
-        exec_env.load_stream_mgr()->remove(pipe_id);
+        if (total_rows != kNumRows) {
+            state.SkipWithError("Arrow pipe benchmark did not ingest every input row");
+            break;
+        }
         benchmark::DoNotOptimize(total_rows);
     }
 

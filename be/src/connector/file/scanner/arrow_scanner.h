@@ -58,7 +58,7 @@ private:
     Status open_next_reader();
     Status next_batch();
     Status validate_batch_schema(const std::shared_ptr<arrow::RecordBatch>& batch);
-    void filter_current_discrete_message(const std::string& reason);
+    void filter_current_discrete_message(const std::string& reason, int64_t pending_rows = 0);
     Status initialize_src_chunk(ChunkPtr* chunk);
     Status append_batch_to_src_chunk(ChunkPtr* chunk);
     bool chunk_is_full();
