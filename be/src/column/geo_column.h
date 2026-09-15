@@ -53,6 +53,7 @@ public:
     void append_wkb(Slice wkb);
     // Batch ingestion from external buffers (must not alias this column).
     void append_wkb_batch(const Slice* values, size_t count);
+    void append_wkb_column(const BinaryColumn& source);
     // Whole-column transport. WKB remains opaque; no parsed cache crosses the wire.
     int64_t serialized_column_size() const;
     StatusOr<uint8_t*> serialize_column(uint8_t* dst) const;

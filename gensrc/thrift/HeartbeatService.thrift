@@ -20,6 +20,10 @@ include "Types.thrift"
 
 const i64 IS_SET_DEFAULT_ROWSET_TO_BETA_BIT = 0x01;
 
+const i64 NATIVE_GEOGRAPHY_TRANSPORT = 0x01;
+const i64 NATIVE_GEOGRAPHY_MYSQL_OUTPUT = 0x02;
+const i64 NATIVE_GEOGRAPHY_ICEBERG_READ = 0x04;
+
 struct TMasterInfo {
     1: required Types.TNetworkAddress network_address
     2: optional Types.TClusterId cluster_id     //deprecated
@@ -52,6 +56,8 @@ struct TBackendInfo {
     10: optional i64 mem_limit_bytes
 
     11: optional Types.TPort arrow_flight_port
+    // Missing on older nodes: no native GEO capabilities.
+    12: optional i64 native_geo_capabilities
 }
 
 struct THeartbeatResult {

@@ -5295,4 +5295,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
     public static String ai_default_embedding_provider = "";
+
+    @ConfField(mutable = true, comment = "Allow native GEOGRAPHY CN transport after capability checks")
+    public static boolean enable_native_geography_transport = false;
+
+    @ConfField(mutable = true, comment = "Allow native GEOGRAPHY raw WKB MySQL output")
+    public static boolean enable_native_geography_mysql_output = false;
+
+    @ConfField(mutable = true, comment = "Allow native Iceberg GEOGRAPHY reads when transport, output and nodes support them")
+    public static boolean enable_native_geography_iceberg_read = false;
 }

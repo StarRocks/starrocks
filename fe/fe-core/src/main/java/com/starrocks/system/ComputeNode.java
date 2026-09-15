@@ -58,6 +58,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private String host;
     @SerializedName("version")
     private String version;
+    @SerializedName("nativeGeoCapabilities")
+    private volatile long nativeGeoCapabilities;
 
     @SerializedName("heartbeatPort")
     private int heartbeatPort; // heartbeat
@@ -226,6 +228,10 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
     public String getVersion() {
         return version;
+    }
+
+    public long getNativeGeoCapabilities() {
+        return nativeGeoCapabilities;
     }
 
     public int getBePort() {
@@ -555,6 +561,11 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             if (!this.version.equals(hbResponse.getVersion())) {
                 isChanged = true;
                 this.version = hbResponse.getVersion();
+            }
+
+            if (nativeGeoCapabilities != hbResponse.getNativeGeoCapabilities()) {
+                nativeGeoCapabilities = hbResponse.getNativeGeoCapabilities();
+                isChanged = true;
             }
 
             if (this.bePort != hbResponse.getBePort()) {
