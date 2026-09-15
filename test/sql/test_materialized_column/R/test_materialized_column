@@ -558,10 +558,10 @@ DROP DATABASE test_add_multiple_column;
 -- result:
 -- !result
 -- name: test_materialized_column_update
-CREATE DATABASE test_update;
+CREATE DATABASE test_update_${uuid0};
 -- result:
 -- !result
-USE test_update;
+USE test_update_${uuid0};
 -- result:
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
@@ -637,7 +637,11 @@ SELECT * FROM t;
 -- result:
 1	2	400	400
 -- !result
-DROP DATABASE test_update;
+function: wait_db_transaction_finish("test_update_${uuid0}", 60)
+-- result:
+None
+-- !result
+DROP DATABASE test_update_${uuid0};
 -- result:
 -- !result
 -- name: test_schema_change_for_add_optimization
