@@ -37,12 +37,16 @@ import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.MockedFrontend;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -104,6 +108,19 @@ public class StorageVolumeTest {
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
+    }
+
+    @BeforeEach
+    public void setUp() {
+        // validateCredentialIsPersistable only runs in shared-data mode (a shared-nothing volume is stored
+        // whole in the JSON edit log), so the persistability rejection tests here need shared-data; the
+        // process default is shared-nothing. Tests that assert shared-nothing behaviour re-mock this.
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
     }
 
     @Test
@@ -817,6 +834,37 @@ public class StorageVolumeTest {
 
         Assertions.assertThrows(SemanticException.class, () ->
                 new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"), storageParams, true, ""));
+    }
+
+    @Test
+    public void testSharedNothingAcceptsCredentialNotBackedByFileStore() throws Exception {
+        // In shared-nothing mode the volume is persisted whole in the JSON edit log and its credential is sent
+        // to the BE straight from the cloud configuration, so a managed identity that an AZBLOB file store
+        // could not carry must still be accepted at CREATE rather than rejected by the file-store round-trip.
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+        Assertions.assertDoesNotThrow(() ->
+                new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"), storageParams, true, ""));
+    }
+
+    @Test
+    public void testReloadOfEmptyAuthHdfsVolumeDoesNotCrash() throws Exception {
+        // gsonPostProcess must rebuild with the same strict factory chain as CREATE. An HDFS volume created
+        // with no hadoop.security.authentication is usable via the strict chain's terminal fallback; the
+        // non-strict chain returns null for it and would NPE on image load / edit-log replay.
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://nn/path"),
+                new HashMap<>(), true, "");
+        Assertions.assertTrue(sv.isCredentialUsable());
+        Assertions.assertDoesNotThrow(sv::gsonPostProcess);
+        Assertions.assertTrue(sv.isCredentialUsable());
     }
 
     @Test

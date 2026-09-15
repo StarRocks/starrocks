@@ -38,6 +38,7 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -403,6 +404,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
      * properties - the AZBLOB container - would look lost and reject perfectly storable credentials.
      */
     private void validateCredentialIsPersistable(CloudConfiguration configuration, Map<String, String> params) {
+        // Only shared-data volumes persist their credential through FileStoreInfo. A shared-nothing volume is
+        // stored whole in the JSON edit log and sent to the BE straight from the cloud configuration, so the
+        // file-store round-trip does not apply there and would wrongly reject credentials it keeps losslessly.
+        if (!RunMode.isSharedDataMode()) {
+            return;
+        }
         Map<String, String> restored = getParamsFromFileStoreInfo(configuration.toFileStoreInfo());
         preprocessAuthenticationIfNeeded(restored);
         CloudConfiguration restoredConfiguration =
@@ -699,7 +706,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     private void preprocessAuthenticationIfNeeded(Map<String, String> params) {
-        if (svt == StorageVolumeType.AZBLOB) {
+        // A well-formed AZBLOB volume always has a location, but this now also runs on the copy constructor
+        // and gsonPostProcess (reload); guard against an empty list so a malformed persisted volume degrades
+        // to an unusable-but-droppable one instead of throwing IndexOutOfBounds during load.
+        if (svt == StorageVolumeType.AZBLOB && !locations.isEmpty()) {
             String container = locations.get(0).split("/")[0];
             params.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, container);
         }
@@ -713,7 +723,11 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         // act on after each FE restart.
         Map<String, String> configurationParams = new HashMap<>(params);
         preprocessAuthenticationIfNeeded(configurationParams);
-        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
+        // Build with the strict factory chain, exactly as the constructors do. The non-strict chain has no
+        // terminal HDFS fallback and returns null for e.g. an HDFS volume with empty authentication, which the
+        // isValidCloudConfiguration call below would then dereference - an NPE that fails FE start / follower
+        // replay. Strict mode keeps the reloaded credentialUsable consistent with what CREATE computed.
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
         credentialUsable = isValidCloudConfiguration(svt, cloudConfiguration);
     }
 }
