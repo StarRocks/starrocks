@@ -780,33 +780,6 @@ This topic introduces the following types of FE configurations:
 - Introduced in: v4.0
 
 
-### `enable_native_geography_transport`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes (no restart required)
-- Description: Allows CN transport for native Iceberg GEOGRAPHY queries. This switch does not enable native reads by itself.
-- Introduced in: -
-
-### `enable_native_geography_mysql_output`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes (no restart required)
-- Description: Allows raw WKB output through the MySQL protocol for native Iceberg GEOGRAPHY queries. This switch does not enable native reads by itself.
-- Introduced in: -
-
-### `enable_native_geography_iceberg_read`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes (no restart required)
-- Description: Allows top-level Iceberg GEOGRAPHY columns with CRS84 spherical semantics to use the native type. Both transport and MySQL output switches must also be enabled. Otherwise these columns remain unsupported; ordinary columns remain queryable. Already planned native queries are checked again against current gates before dispatch. Native queries with spill or non-MySQL output are rejected. GEOMETRY, nested native GEO, writes, constructors, and compute functions are not enabled.
-- Introduced in: -
-
 ### `enable_iceberg_commit_queue`
 
 - Default: true
