@@ -353,6 +353,8 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
                 << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                 << ", rowset_id: " << rowset->rowset_id() << ", version: " << rowset->version();
     }
+    // The overwrite txn ends here; a stale in-flight entry would double-count its bytes.
+    tablet->remove_in_writing_data_size(transaction_id);
     tablet->erase_committed_rowset(rowset);
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
@@ -390,8 +392,11 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
             StorageMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
         }
+        // A failed commit leaves the rowset invisible, so delete_txn can still release the entry.
+        tablet->remove_in_writing_data_size(transaction_id);
     } else {
         auto st = tablet->add_inc_rowset(rowset, version);
+        // add_inc_rowset already made the rowset visible, so delete_txn would refuse to release the entry.
         tablet->remove_in_writing_data_size(transaction_id);
         if (!st.ok() && !st.is_already_exist()) {
             // TODO: rollback saved rowset if error?
@@ -569,8 +574,11 @@ Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransac
                         fmt::format("Fail to delete txn because rowset is already published. tablet_id: {}, txn_id: {}",
                                     tablet_info.tablet_id, transaction_id));
             } else {
-                TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+                // Match the incarnation the txn belongs to: a same-id replacement has its own live accounting.
+                TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, tablet_uid);
                 if (tablet != nullptr) {
+                    // This txn is discarded before publish, so nothing else will release its in-flight bytes.
+                    tablet->remove_in_writing_data_size(transaction_id);
                     tablet->erase_committed_rowset(load_info.rowset);
                 }
                 (void)RowsetMetaManager::remove(meta, tablet_uid, load_info.rowset->rowset_id());
