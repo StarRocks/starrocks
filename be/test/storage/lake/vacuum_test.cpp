@@ -4504,10 +4504,55 @@ TEST_P(LakeVacuumTest, test_incremental_grace_blocked) {
     ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     // Nothing proposed; every version retained.
     EXPECT_GE(response.vacuum_state().to_delete_low(), response.vacuum_state().to_delete_high());
+    // The tablet anchored (read real versions) but every one is still within grace: this is a GENUINE
+    // grace block, so the FE must wait -- grace_blocked is set. (Contrast the never-anchored case below.)
+    EXPECT_TRUE(response.vacuum_state().grace_blocked());
     EXPECT_EQ(0, response.vacuumed_files());
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 3)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 4)));
+}
+
+// A never-anchored tablet -- its first version sits ABOVE the partition retain floor (a non-base index
+// added late, or a cross-generation tablet) -- has no metadata at or below the floor, so a fresh walk
+// anchors nothing. It is DRAINED, not grace-blocked: the round must still propose the OTHER tablets'
+// garbage and report grace_blocked=false. Regression for the bug where grace_blocked was derived from
+// nothing_to_delete, so a never-anchored tablet reported grace_blocked=true and livelocked the FE forever
+// (the pass never advances -> the sibling tablet's real garbage is orphaned below the raised floor).
+TEST_P(LakeVacuumTest, test_incremental_never_anchored_not_grace_blocked) {
+    // Tablet A: real garbage chain v2 -> v3 -> v4 below the retain floor, all older than the grace timestamp.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 2, "prev_garbage_version": 0, "commit_time": 1002 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 3, "prev_garbage_version": 2, "commit_time": 1003 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 4, "prev_garbage_version": 3, "commit_time": 1004 })DEL")));
+    // Tablet B: never-anchored -- its only metadata (v5) sits ABOVE the retain floor 4, so v4 and below
+    // are all NotFound and the fresh walk anchors nothing.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30007, "version": 5, "prev_garbage_version": 0, "commit_time": 1005 })DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(4);
+    // Grace boundary above A's commit times -> A's versions below the floor are all deletable.
+    request.set_grace_timestamp(4000000000);
+    request.set_max_versions_per_round(100);
+    auto* a = request.add_tablet_infos();
+    a->set_tablet_id(30006);
+    a->set_min_version(1);
+    auto* b = request.add_tablet_infos();
+    b->set_tablet_id(30007);
+    b->set_min_version(1);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    const auto& state = response.vacuum_state();
+    // B is drained, not grace-blocked: it does not zero the round.
+    EXPECT_FALSE(state.grace_blocked());
+    // A's garbage below the retain floor is proposed; the high end is the floor.
+    EXPECT_LT(state.to_delete_low(), state.to_delete_high());
+    EXPECT_EQ(4, state.to_delete_high());
 }
 
 // End-to-end drain: a long chain under a small per-round budget takes several propose/commit rounds

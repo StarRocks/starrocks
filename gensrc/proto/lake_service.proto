@@ -486,6 +486,14 @@ message VacuumStatePB {
     // metadata survives for every tablet throughout the pass. The two coincide when tablets are
     // version-synchronized (the normal case). In a VacuumResponse, set only on a fresh round.
     optional int64 pass_start_version = 4;
+    // Set in a VacuumResponse when to_delete_low/high are empty (0/0), to tell the FE WHY this node
+    // proposed nothing: true means a tablet is still within the grace window (garbage not yet eligible),
+    // so the whole partition round must WAIT (not complete, not advance the floor); false means the
+    // node's tablets are drained / never-anchored (chain bottom reached), so the FE may IGNORE this node
+    // and aggregate the other nodes' non-empty proposals instead of zeroing the round. Without this,
+    // any empty node zeroes the aggregate and completes the pass, orphaning another node's real backlog
+    // below the raised floor. Unset on a non-empty proposal and in a VacuumRequest.
+    optional bool grace_blocked = 5;
 }
 
 message VacuumRequest {
