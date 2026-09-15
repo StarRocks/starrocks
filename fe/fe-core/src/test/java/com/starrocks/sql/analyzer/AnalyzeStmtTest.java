@@ -1016,4 +1016,17 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals("delete from histogram_statistics where table_id in (100)", histogramSql);
     }
 
+    @Test
+    public void testStatisticSQLBuilderDropColumnSqls() {
+        List<String> columns = List.of("c_str", "o'brien");
+        Assertions.assertEquals(
+                "DELETE FROM table_statistic_v1 WHERE TABLE_ID = 10004 AND COLUMN_NAME IN ('c_str', 'o''brien')",
+                StatisticSQLBuilder.buildDropColumnStatisticsSQL(10004L, columns, StatsConstants.AnalyzeType.SAMPLE));
+        Assertions.assertEquals(
+                "DELETE FROM column_statistics WHERE TABLE_ID = 10004 AND COLUMN_NAME IN ('c_str', 'o''brien')",
+                StatisticSQLBuilder.buildDropColumnStatisticsSQL(10004L, columns, StatsConstants.AnalyzeType.FULL));
+        Assertions.assertThrows(IllegalStateException.class, () ->
+                StatisticSQLBuilder.buildDropColumnStatisticsSQL(10004L, List.of(), StatsConstants.AnalyzeType.FULL));
+    }
+
 }
