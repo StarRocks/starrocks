@@ -185,7 +185,13 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         opts.meta->set_unique_id(i);
         opts.meta->set_type(_flat_types[i]);
         if (_flat_types[i] == TYPE_VARCHAR) {
-            opts.meta->set_length(config::olap_string_max_length);
+            // Flat JSON VARCHAR leaves are ordinary string values extracted from JSON.
+            // They are not the same as the generic scalar VARCHAR limit, and JSON itself
+            // enforces a larger bound at parse time. Keep the child-column metadata aligned
+            // with the JSON value ceiling instead of the generic 1MB VARCHAR cap.
+            opts.meta->set_length(kJSONLengthLimit);
+        } else if (_flat_types[i] == TYPE_JSON) {
+            opts.meta->set_length(kJSONLengthLimit);
         } else {
             DCHECK_NE(_flat_types[i], TYPE_CHAR);
             // set length for non-string type (e.g. int, double, date, etc.
