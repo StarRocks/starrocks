@@ -55,10 +55,14 @@ public:
 
     // Invokes cb once per row. `path` is used for error reporting only; `length` is the file
     // size in bytes. `stats` may be null when the caller does not collect scanner stats.
+    // `encryption_info` carries the delete file's OWN Parquet Modular Encryption key material,
+    // or nullptr for a plaintext file. It cannot be inherited from the data file: each file in an
+    // encrypted Iceberg table has its own per-file key. Non-owning; must outlive the call.
     static Status read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
                             const std::string& format, // "parquet" | "orc"
                             int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
-                            FormatScannerStats* stats, const RowCallback& cb);
+                            FormatScannerStats* stats, const TParquetEncryptionInfo* encryption_info,
+                            const RowCallback& cb);
 };
 
 class IcebergDeleteBuilder {

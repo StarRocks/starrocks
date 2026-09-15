@@ -110,6 +110,36 @@ protected:
         ASSERT_OK(writer.close().io_status);
     }
 
+    // Writes the same 2-column position-delete file with Parquet Modular Encryption on, and hands
+    // back the per-file DEK and AAD prefix that BE generated -- the material FE would recover from
+    // the Iceberg file's key_metadata and put on the delete-file descriptor.
+    void write_encrypted_parquet_delete_file(MemoryFileSystem& fs, const std::string& path,
+                                             const std::vector<std::pair<std::string, int64_t>>& rows,
+                                             std::string* out_dek, std::string* out_aad_prefix) {
+        std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                               TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+        auto writer_options = std::make_shared<ParquetWriterOptions>();
+        writer_options->column_ids = {FileColumnId{IcebergDeleteFileMeta::get_delete_file_path_slot().id(), {}},
+                                      FileColumnId{IcebergDeleteFileMeta::get_delete_file_pos_slot().id(), {}}};
+        writer_options->encryption_enabled = true;
+        writer_options->encryption_algorithm = "AES_GCM_V1";
+        writer_options->encryption_dek_length = 16;
+        ASSIGN_OR_ABORT(auto writable_file, fs.new_writable_file(path));
+        auto output_stream = std::make_shared<parquet::ParquetOutputStream>(std::move(writable_file));
+        ParquetFileWriter writer(path, std::move(output_stream), {"file_path", "pos"}, type_descs,
+                                 std::move(column_evaluators), TCompressionType::NO_COMPRESSION,
+                                 std::move(writer_options), [] {}, {false, false});
+        ASSERT_OK(writer.init());
+        auto chunk = make_delete_rows_chunk(rows);
+        ASSERT_OK(writer.write(chunk.get()));
+        auto result = writer.close();
+        ASSERT_OK(result.io_status);
+        ASSERT_FALSE(result.encryption_dek.empty());
+        *out_dek = result.encryption_dek;
+        *out_aad_prefix = result.encryption_aad_prefix;
+    }
+
     // Writes a 2-column (file_path, pos) orc position-delete file under _tmp_dir (default fs).
     void write_orc_delete_file(const std::string& path, const std::vector<std::pair<std::string, int64_t>>& rows) {
         std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
@@ -207,6 +237,7 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsVisitsAllRows) {
     std::vector<std::pair<std::string, int64_t>> rows;
     ASSERT_OK(IcebergPositionDeleteReader::read_rows(
             file.get(), _parquet_delete_path, delete_file_size, "parquet", 4096, "UTC", FormatScannerOptions{}, nullptr,
+            /*encryption_info=*/nullptr,
             [&](const Slice& file_path, int64_t pos) { rows.emplace_back(file_path.to_string(), pos); }));
 
     const std::vector<std::pair<std::string, int64_t>> expected{{"dataA", 1}, {"dataB", 2}, {"dataA", 3}};
@@ -221,8 +252,46 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsRejectsUnknownFormat) {
 
     auto status = IcebergPositionDeleteReader::read_rows(file.get(), _parquet_delete_path, delete_file_size, "avro",
                                                          4096, "UTC", FormatScannerOptions{}, nullptr,
-                                                         [](const Slice&, int64_t) {});
+                                                         /*encryption_info=*/nullptr, [](const Slice&, int64_t) {});
     EXPECT_FALSE(status.ok());
+}
+
+TEST_F(IcebergDeleteBuilderTest, TestReadRowsEncryptedPositionDeleteFile) {
+    // A position-delete file in an encrypted Iceberg table is itself encrypted and carries its own
+    // per-file key -- it cannot reuse the data file's. Before the delete path forwarded key
+    // material, reading one failed with "no decryption key was provided by the planner".
+    const std::vector<std::pair<std::string, int64_t>> rows{{"dataA", 1}, {"dataB", 2}, {"dataA", 3}};
+    std::string dek;
+    std::string aad_prefix;
+    write_encrypted_parquet_delete_file(_fs, _parquet_delete_path, rows, &dek, &aad_prefix);
+
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, _fs.get_file_size(_parquet_delete_path));
+
+    TParquetEncryptionInfo enc_info;
+    enc_info.__set_file_dek(dek);
+    if (!aad_prefix.empty()) {
+        enc_info.__set_aad_prefix(aad_prefix);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_parquet_delete_path));
+        std::vector<std::pair<std::string, int64_t>> read_back;
+        ASSERT_OK(IcebergPositionDeleteReader::read_rows(
+                file.get(), _parquet_delete_path, delete_file_size, "parquet", 4096, "UTC", FormatScannerOptions{},
+                nullptr, &enc_info,
+                [&](const Slice& file_path, int64_t pos) { read_back.emplace_back(file_path.to_string(), pos); }));
+        EXPECT_EQ(rows, read_back);
+    }
+
+    // Without the key the file must not be readable. This is what makes the case above meaningful:
+    // it proves the rows came back because the key was used, not because the file was plaintext.
+    {
+        ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_parquet_delete_path));
+        auto status = IcebergPositionDeleteReader::read_rows(file.get(), _parquet_delete_path, delete_file_size,
+                                                             "parquet", 4096, "UTC", FormatScannerOptions{}, nullptr,
+                                                             /*encryption_info=*/nullptr, [](const Slice&, int64_t) {});
+        EXPECT_FALSE(status.ok());
+    }
 }
 
 } // namespace starrocks::formats

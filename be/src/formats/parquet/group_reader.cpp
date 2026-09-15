@@ -58,6 +58,7 @@ namespace starrocks::parquet {
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                          int64_t row_group_first_row)
         : _row_group_first_row(row_group_first_row), _skip_rows_ctx(std::move(skip_rows_ctx)), _param(param) {
+    _row_group_number = row_group_number;
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
     _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
     _variant = std::make_unique<VariantProjectionHandler>(this, _param, _row_group_metadata);
@@ -583,10 +584,14 @@ Status GroupReader::_create_column_readers() {
     opts.stats = _param.stats;
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata;
+    opts.row_group_ordinal = _row_group_number;
     opts.first_row_index = _row_group_first_row;
     opts.modification_time = _param.modification_time;
     opts.file_size = _param.file_size;
     opts.datacache_options = _param.datacache_options;
+    // PME: the per-file DEK is not cached with the footer, so it has to reach the decryptor
+    // from the scan range on every scan.
+    opts.parquet_encryption_info = _param.scan_ctx->parquet_encryption_info;
 
     // Setup variant handler (idempotent: no-op when no variant virtual columns exist).
     RETURN_IF_ERROR(_variant->setup_readers());

@@ -949,7 +949,7 @@ build_arrow() {
     # so disable jemalloc here and use SystemAllocator.
     #
     # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
-    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DPARQUET_REQUIRE_ENCRYPTION=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
@@ -998,6 +998,22 @@ build_arrow() {
     # copy zstd headers
     mkdir -p ${TP_INSTALL_DIR}/include/zstd
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
+
+    # Expose parquet-cpp's internal encryption headers. Arrow does not install these
+    # (only the high-level FileEncryption/DecryptionProperties are public), but BE
+    # needs the low-level InternalFileDecryptor/Decryptor to decrypt Parquet Modular
+    # Encryption footers and pages inside StarRocks' own reader (Iceberg encrypted
+    # tables) while keeping all reader optimizations. The symbols are already in
+    # libparquet.a; only the headers are missing.
+    mkdir -p ${TP_INSTALL_DIR}/include/parquet/encryption
+    for h in internal_file_decryptor.h internal_file_encryptor.h encryption_internal.h; do
+        src_hdr="$TP_SOURCE_DIR/$ARROW_SOURCE/cpp/src/parquet/encryption/$h"
+        if [ -f "$src_hdr" ]; then
+            cp -f "$src_hdr" ${TP_INSTALL_DIR}/include/parquet/encryption/
+        else
+            echo "WARNING: parquet internal encryption header not found: $src_hdr"
+        fi
+    done
 
     restore_compile_flags
 }
