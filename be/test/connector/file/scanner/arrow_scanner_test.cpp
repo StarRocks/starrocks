@@ -1935,7 +1935,7 @@ TEST_F(ArrowScannerTest, TestLocalFileEmptyIpcStream) {
 // the conversion expressions belonging to a preceding, unfinished chunk.
 TEST_F(ArrowScannerTest, TestStreamSchemaInvalidMultiBatchAccounting) {
     for (auto [leading_valid_message, trailing_valid_message] :
-         {std::pair{false, true}, std::pair{true, false}, std::pair{true, true}}) {
+         {std::pair{false, false}, std::pair{false, true}, std::pair{true, false}, std::pair{true, true}}) {
         SCOPED_TRACE(::testing::Message()
                      << "leading=" << leading_valid_message << " trailing=" << trailing_valid_message);
         auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
