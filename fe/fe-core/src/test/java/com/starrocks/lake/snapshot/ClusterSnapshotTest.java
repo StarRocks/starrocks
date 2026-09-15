@@ -461,6 +461,22 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testNextSnapshotTimeReflectsUnusableCredentialCooldown() {
+        setAutomatedSnapshotOn(false);
+        try {
+            ClusterSnapshotMgr mgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotInterval(120);
+            long skip = System.currentTimeMillis();
+            Deencapsulation.setField(mgr, "lastUnusableCredentialSkipMs", skip);
+            // During the cooldown the next attempt is skip + interval; SHOW must not report a time in the past.
+            Assertions.assertTrue(mgr.getNextAutomatedSnapshotTimeMs() >= skip + 120_000L,
+                    "next=" + mgr.getNextAutomatedSnapshotTimeMs());
+        } finally {
+            setAutomatedSnapshotOff(false);
+        }
+    }
+
+    @Test
     public void testAlterIntervalThroughExecutor() throws Exception {
         setAutomatedSnapshotOn(false);
         AdminAlterAutomatedSnapshotIntervalStmt stmt = (AdminAlterAutomatedSnapshotIntervalStmt)

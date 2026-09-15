@@ -162,10 +162,14 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 lastStartTimeMs = lastFinishedJob.getCreatedTimeMs();
             }
         }
-        if (lastStartTimeMs <= 0L) {
+        // A round skipped for an unusable credential pushes the next attempt to lastUnusableCredentialSkipMs +
+        // interval (see canScheduleNextJob), so fold that timestamp in; otherwise SHOW would report a next-run
+        // time already in the past for the whole cooldown even though no attempt happens until then.
+        long baselineMs = Math.max(lastStartTimeMs, lastUnusableCredentialSkipMs);
+        if (baselineMs <= 0L) {
             return -1L;
         }
-        return lastStartTimeMs + intervalSeconds * 1000L;
+        return baselineMs + intervalSeconds * 1000L;
     }
 
     public List<List<String>> getAutomatedSnapshotShowResult() {
