@@ -83,6 +83,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 查询引擎
 
+### `arrow_flight_proxy_backpressure_timeout_ms`
+
+- 默认值：300000
+- 类型：Int
+- 单位：毫秒
+- 取值范围：[1, 2147483647]
+- 是否可以动态配置：是
+- 描述：Arrow Flight 代理每次连续等待下游客户端就绪的最长时间，适用于远程 BE 和 FE 结果流。超时后，代理会取消上游流并返回 gRPC `DEADLINE_EXCEEDED`（Arrow Flight `TIMED_OUT`）。该配置不限制查询或传输的总时长，也不包括读取上游数据的时间。修改仅对新流生效，已有流继续使用启动时读取的值。零或负值会以 `INTERNAL` 拒绝新代理流，而不是禁用超时。
+
 ### `ai_default_chat_endpoint`
 
 - 默认值: 空字符串

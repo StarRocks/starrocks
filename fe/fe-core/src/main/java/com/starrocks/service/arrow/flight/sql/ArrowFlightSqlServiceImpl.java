@@ -87,6 +87,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
@@ -115,6 +117,11 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private static final ExecutorService EXECUTOR = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.arrow_max_service_task_threads_num, "arrow-flight-executor", true);
+
+    // Unlike the general service executor, result streams must never be silently discarded on saturation.
+    private static final ExecutorService RESULT_EXECUTOR = ThreadPoolManager.newDaemonThreadPool(
+            0, Config.arrow_max_service_task_threads_num, 60, TimeUnit.SECONDS, new SynchronousQueue<>(),
+            new ThreadPoolExecutor.AbortPolicy(), "arrow-flight-result-proxy", true);
 
     public ArrowFlightSqlServiceImpl(final ArrowFlightSqlSessionManager sessionManager, final Location feEndpoint) {
         this.sessionManager = sessionManager;
@@ -587,56 +594,16 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                                 String bearerToken,
                                                 String targetType,
                                                 ServerStreamListener listener) {
-        FlightStream stream = null;
         String nodeKey = host + ":" + port;
-
-        try {
+        ArrowFlightSqlResultProxy.start(RESULT_EXECUTOR, () -> {
             FlightClient client = getOrCreateClient(nodeKey, host, port);
             FlightSql.TicketStatementQuery ticketStatement = FlightSql.TicketStatementQuery.newBuilder()
                     .setStatementHandle(ticketHandle)
                     .build();
             Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
 
-            stream = getStreamWithRetry(client, ticket, nodeKey, host, port, bearerToken);
-            final FlightStream streamToCancel = stream;
-
-            listener.setOnCancelHandler(() -> {
-                try {
-                    streamToCancel.cancel("Client cancelled request", null);
-                } catch (Exception e) {
-                    LOG.warn("[ARROW] Error cancelling {} stream", targetType, e);
-                }
-            });
-
-            VectorSchemaRoot root = stream.getRoot();
-            listener.start(root);
-            while (stream.next()) {
-                listener.putNext();
-            }
-            listener.completed();
-        } catch (Exception e) {
-            LOG.warn("[ARROW] Error proxying result from {} {}:{}", targetType, host, port, e);
-
-            if (stream != null) {
-                try {
-                    stream.cancel("Error during streaming", e);
-                } catch (Exception cancelStreamEx) {
-                    LOG.warn("[ARROW] Error cancelling {} stream", targetType, cancelStreamEx);
-                }
-            }
-
-            listener.error(CallStatus.INTERNAL
-                    .withDescription("Failed to proxy result from " + targetType + ": " + e.getMessage())
-                    .toRuntimeException());
-        } finally {
-            try {
-                if (stream != null) {
-                    stream.close();
-                }
-            } catch (Exception e) {
-                LOG.warn("[ARROW] Error closing {} stream", targetType, e);
-            }
-        }
+            return getStreamWithRetry(client, ticket, nodeKey, host, port, bearerToken);
+        }, listener, targetType, nodeKey, Config.arrow_flight_proxy_backpressure_timeout_ms);
     }
 
     private FlightClient getOrCreateClient(String key, String host, int port) throws Exception {
