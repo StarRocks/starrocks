@@ -165,6 +165,14 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
+### lake_vacuum_enable_task_timeout
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether Vacuum tasks honor the timeout carried in the request (`VacuumRequest.timeout_ms`) and abort themselves once it elapses. Set this item to `false` to let Vacuum tasks always run to completion no matter how long the FE caller waits.
+
 ### lake_vacuum_min_batch_delete_size
 
 - Default: 200
