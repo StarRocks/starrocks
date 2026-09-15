@@ -258,6 +258,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                              fn.binary_type, state->func_version());
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(return_type), false, false};
+            _agg_fn_types[i].is_result_non_nullable = func->is_result_non_nullable();
             // count(*) no input column, we manually resize it to 1 to process count(*)
             // like other agg function.
             _agg_intput_columns[i].resize(1);
@@ -327,6 +328,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             }
             _agg_functions[i] = func;
             _agg_fn_types[i] = {return_type, is_input_nullable, desc.nodes[0].is_nullable};
+            _agg_fn_types[i].is_result_non_nullable = func->is_result_non_nullable();
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
@@ -1495,8 +1497,15 @@ void Analytor::_init_window_result_columns() {
     const auto chunk_size = _current_chunk_size();
     _result_window_columns.resize(_agg_fn_types.size());
     for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
+        // Materialize the result column with the function's window-result nullability (see
+        // FunctionTypes::is_result_nullable): a frame can be empty, so it is nullable when the input OR the
+        // declared result is nullable, unless the aggregate declares is_result_non_nullable(). An always-non-null
+        // aggregate such as bitmap_union_count() consumes a nullable input yet never emits a NULL, so this builds
+        // a non-null column for it; a downstream GROUP BY/DISTINCT that keys on the column then sees the type the
+        // plan promised. get_values() writes straight into the non-null column (see the non-nullable-dst fast path
+        // in NullableAggregateFunctionBase::get_values).
         _result_window_columns[i] =
-                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
+                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].is_result_nullable());
         // Binary column cound't call resize method like Numeric Column,
         // so we only reserve it.
         if (_agg_functions[i]->get_name().ends_with("fused_multi_distinct")) {
