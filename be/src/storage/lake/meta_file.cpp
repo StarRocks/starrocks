@@ -1706,6 +1706,13 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
             [[maybe_unused]] int delta = 1;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
         }
+        // A copied page is never decoded, so get_del_vec's checksum verification never runs over these
+        // bytes -- fold the chunks the copy already holds into a running crc32c instead, which costs one
+        // more pass over bytes in hand and no extra read. Verify under exactly the condition get_del_vec
+        // does: a page whose crc32c_gen_version is not its version carries no live checksum, so there is
+        // nothing to compare against.
+        const bool verify_crc = raw.page.has_crc32c() && raw.page.crc32c_gen_version() == raw.page.version();
+        uint32_t copied_crc = 0;
         uint64_t copied = 0;
         buffer.resize(kDelvecIoChunkSize);
         while (copied < raw.page.size()) {
@@ -1721,8 +1728,39 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
                 RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
                                                               buffer.data(), static_cast<int64_t>(chunk_size)));
             }
+            if (verify_crc) {
+                copied_crc = crc32c::Extend(copied_crc, buffer.data(), chunk_size);
+            }
             RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(buffer.data(), chunk_size)));
             copied += chunk_size;
+        }
+        if (verify_crc && copied_crc != crc32c::Unmask(raw.page.crc32c())) {
+            // Same report get_del_vec makes for a page it decodes, and it carries the same ABA caveat: a
+            // page last written by a version that did not maintain the checksum can mismatch without being
+            // corrupt, which is what enable_strict_delvec_crc_check lets an operator ride out. Under that
+            // knob the copy still goes through carrying the SOURCE's crc32c, so the mismatch stays visible
+            // to whoever reads the output rather than being laundered into a freshly computed checksum.
+            LOG(ERROR) << fmt::format(
+                    "delvec crc32c mismatch while copying page, tabletid {}, delvecfile {}, offset {}, size {}, "
+                    "expect crc32c {}, actual crc32c {}",
+                    raw.tablet_id, raw.delvec_file.name(), raw.page.offset(), raw.page.size(),
+                    crc32c::Unmask(raw.page.crc32c()), copied_crc);
+            if (config::enable_strict_delvec_crc_check) {
+                // The destination is append-only and these bytes are already in it, so this copy cannot be
+                // repaired in place. Drop the source's local cache -- a corrupted cached block is the
+                // likeliest culprit, exactly as in get_del_vec -- and fail, so the caller's retry rebuilds
+                // the output reading through to remote storage.
+                const std::string source_path = tablet_mgr->delvec_location(raw.tablet_id, raw.delvec_file.name());
+                if (auto drop_status = drop_corrupted_delvec_file_cache(source_path); !drop_status.ok()) {
+                    VLOG(2) << "skip clearing corrupted cache for " << source_path << ": " << drop_status;
+                } else {
+                    LOG(INFO) << "cleared corrupted cache for " << source_path
+                              << ", the next attempt re-reads the delvec page";
+                }
+                return Status::Corruption(
+                        fmt::format("delvec crc32c mismatch while copying page. expect crc32c {}, actual {}",
+                                    crc32c::Unmask(raw.page.crc32c()), copied_crc));
+            }
         }
     }
 
