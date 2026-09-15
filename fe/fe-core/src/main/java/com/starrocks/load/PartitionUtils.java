@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -51,10 +52,61 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PartitionUtils {
     private static final Logger LOG = LogManager.getLogger(PartitionUtils.class);
+
+    // Keep a job error message bounded when many loads are running concurrently.
+    private static final int MAX_REPORTED_CONFLICTING_TXNS = 5;
+
+    /**
+     * Find the running transactions that may write to the given partition.
+     * <p>
+     * Jobs that replace a partition with a rewritten one (optimize, merge partition, insert overwrite)
+     * must call this while holding the table write lock, right before the replacement: replacing a
+     * partition that has concurrent ingestion silently discards the loaded rows, because the tablets of
+     * the source partition are force deleted while the load transaction still reports success.
+     *
+     * @return ids of the conflicting transactions, empty if this partition has no concurrent ingestion
+     */
+    public static List<Long> getConflictingIngestionTxnIds(long dbId, long tableId, Partition partition) {
+        Set<Long> physicalPartitionIds = partition.getSubPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toSet());
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getConflictingTxnIds(dbId, tableId, physicalPartitionIds);
+    }
+
+    /**
+     * Whether the given partition has a transaction that is committed but not published yet.
+     * <p>
+     * Used to gate the rewritten temp partition before it takes over: swapping it in while its own rewrite
+     * is not published yet would briefly expose a partition without the rewritten rows. Unlike a source
+     * partition, a temp partition survives the swap, so a pending publish still lands on it and no row is
+     * lost, which is why in flight transactions are not considered here.
+     */
+    public static boolean hasCommittedNotVisibleTxn(long dbId, long tableId, Partition partition) {
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        return partition.getSubPartitions().stream()
+                .anyMatch(physicalPartition -> transactionMgr.existCommittedTxns(dbId, tableId, physicalPartition.getId()));
+    }
+
+    /**
+     * Render conflicting transaction ids for a job error message, so that the blocking loads are visible
+     * in `SHOW ALTER TABLE OPTIMIZE` without having to dig through the FE log. The list is truncated to
+     * keep the persisted error message bounded when many loads run concurrently.
+     */
+    public static String formatConflictingTxnIds(List<Long> conflictingTxnIds) {
+        if (conflictingTxnIds.isEmpty()) {
+            return "";
+        }
+        String txnIds = conflictingTxnIds.stream().limit(MAX_REPORTED_CONFLICTING_TXNS)
+                .map(String::valueOf).collect(Collectors.joining(", "));
+        String suffix = conflictingTxnIds.size() > MAX_REPORTED_CONFLICTING_TXNS
+                ? ", ... " + conflictingTxnIds.size() + " in total" : "";
+        return " (txn: " + txnIds + suffix + ")";
+    }
 
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
