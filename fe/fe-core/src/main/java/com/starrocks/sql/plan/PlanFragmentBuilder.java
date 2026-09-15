@@ -145,6 +145,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -1208,6 +1209,16 @@ public class PlanFragmentBuilder {
             }
         }
     
+        /**
+         * A RANGE partition is an interval in the lexicographic order of the partition key tuple, so its
+         * endpoints bound the columns one at a time: the leading column lies within
+         * [lower[0], upper[0]], and column i is bounded by its own endpoint values only while every
+         * column before it is pinned to a single value (lower[j] == upper[j] for all j < i). Inside
+         * p = [(10, 10), (20, 20)) the second column can take any value at all - (11, 0) and (19, 25)
+         * both belong to p - and describing it as [10, 20] lets BE prune tablets that hold matching
+         * rows. The walk therefore stops at the first column that spans an interval; the columns
+         * behind it get no range, whether or not a predicate refers to them.
+         */
         private List<TKeyRange> computeRangePartitionKeyRanges(PartitionInfo partitionInfo, Partition partition,
                                                                List<Column> partitionCols,
                                                                Collection<Column> usedPartitionCols, long limit) {
@@ -1218,52 +1229,80 @@ public class PlanFragmentBuilder {
             }
 
             boolean isNullPartition = keyRange.lowerEndpoint().isMinValue();
-            long partitionValues = 1;
             List<TKeyRange> result = Lists.newArrayList();
     
             for (int i = 0; i < partitionCols.size(); i++) {
                 Column col = partitionCols.get(i);
-                if (!usedPartitionCols.contains(col)) {
-                    continue;
-                }
-    
-                TKeyRange kr = new TKeyRange();
-                long rangeSize;
-
-                if (col.getType().isDate()) {
-                    LiteralExpr lowerExpr = keyRange.lowerEndpoint().getKeys().get(i);
-                    LiteralExpr upperExpr = keyRange.upperEndpoint().getKeys().get(i);
-                    if (!(lowerExpr instanceof DateLiteral lower) || !(upperExpr instanceof DateLiteral upper)) {
-                        continue;
-                    }
-                    kr.setBegin_key(lower.getYear() * 10000 + lower.getMonth() * 100 + lower.getDay());
-                    kr.setEnd_key(upper.getYear() * 10000 + upper.getMonth() * 100 + upper.getDay());
-                    rangeSize = upper.toLocalDateTime().toLocalDate().toEpochDay()
-                            - lower.toLocalDateTime().toLocalDate().toEpochDay();
-                } else if (col.getType().isIntegerType()) {
-                    long lowerVal = keyRange.lowerEndpoint().getKeys().get(i).getLongValue();
-                    long upperVal = keyRange.upperEndpoint().getKeys().get(i).getLongValue();
-                    kr.setBegin_key(lowerVal);
-                    kr.setEnd_key(upperVal);
-                    rangeSize = upperVal - lowerVal;
-                } else {
-                    continue;
-                }
-
-                if (rangeSize <= 0 || wouldOverflowOrExceedLimit(partitionValues, rangeSize, limit)) {
+                LiteralExpr lowerExpr = keyRange.lowerEndpoint().getKeys().get(i);
+                LiteralExpr upperExpr = keyRange.upperEndpoint().getKeys().get(i);
+                if (lowerExpr instanceof MaxLiteral || upperExpr instanceof MaxLiteral) {
+                    // An open endpoint bounds nothing, here or in any column after it.
                     break;
                 }
-                partitionValues *= rangeSize;
-    
-                kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
-                // BE indexes the tuple's slots by col_name, which is the column id, so name the range by
-                // the id as well: a renamed partition column would otherwise be skipped and its
-                // scan ranges never pruned.
-                kr.setColumn_name(col.getColumnId().getId());
-                if (isNullPartition) {
-                    kr.setHas_null(true);
+
+                // A column is pinned when both endpoints agree on it, so the interval is carried by the
+                // columns after it. The NULL partition's lower endpoint is the type minimum standing in
+                // for NULL, and NULL is a value of its own: a leading key that may be NULL pins nothing.
+                boolean pinned = !isNullPartition && PartitionKey.compareLiteralExpr(lowerExpr, upperExpr) == 0;
+
+                long beginKey;
+                long endKey;
+                if (col.getType().isDate() && lowerExpr instanceof DateLiteral lower
+                        && upperExpr instanceof DateLiteral upper) {
+                    beginKey = lower.getYear() * 10000 + lower.getMonth() * 100 + lower.getDay();
+                    endKey = upper.getYear() * 10000 + upper.getMonth() * 100 + upper.getDay();
+                    if (!pinned) {
+                        long width = upper.toLocalDateTime().toLocalDate().toEpochDay()
+                                - lower.toLocalDateTime().toLocalDate().toEpochDay();
+                        if (width < 0 || width > limit) {
+                            break;
+                        }
+                    }
+                } else if (col.getType().isIntegerType()) {
+                    beginKey = lowerExpr.getLongValue();
+                    endKey = upperExpr.getLongValue();
+                    // BE materializes the range as `for (int64_t v = begin; v <= end; v++)`, which
+                    // never terminates once the end is the int64 maximum, so a BIGINT partition that
+                    // reaches it cannot be described here at all - pinned or not.
+                    if (endKey == Long.MAX_VALUE) {
+                        if (pinned) {
+                            continue;
+                        }
+                        break;
+                    }
+                    // BE enumerates [begin, end] inclusively; the half-open width is what the values
+                    // limit has always been compared against. A negative width is a long overflow.
+                    long width = endKey - beginKey;
+                    if (!pinned && (width < 0 || width > limit)) {
+                        break;
+                    }
+                } else if (pinned) {
+                    // A pinned column of a type BE cannot enumerate sends nothing, but the columns
+                    // behind it are still bounded.
+                    continue;
+                } else {
+                    break;
                 }
-                result.add(kr);
+
+                if (usedPartitionCols.contains(col)) {
+                    TKeyRange kr = new TKeyRange();
+                    kr.setBegin_key(beginKey);
+                    kr.setEnd_key(endKey);
+                    kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
+                    // BE indexes the tuple's slots by col_name, which is the column id, so name the range by
+                    // the id as well: a renamed partition column would otherwise be skipped and its
+                    // scan ranges never pruned.
+                    kr.setColumn_name(col.getColumnId().getId());
+                    if (isNullPartition) {
+                        kr.setHas_null(true);
+                    }
+                    result.add(kr);
+                }
+
+                if (!pinned) {
+                    // This column spans an interval, so the columns after it are unbounded.
+                    break;
+                }
             }
 
             return result;
