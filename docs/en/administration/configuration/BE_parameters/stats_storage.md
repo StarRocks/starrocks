@@ -1117,6 +1117,15 @@ This topic introduces the following types of BE configurations:
 - Description: The expiration time of snapshot files.
 - Introduced in: -
 
+### sort_key_max_samples_per_tablet
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of sort key samples taken from one tablet when computing tablet split boundaries. Samples come from a segment's short key index when that index already encodes the whole sort key, and otherwise from a bounded number of the segment's data pages, so this value also bounds that read amplification. The default matches the FE configuration `tablet_reshard_max_split_count`, because splitting a tablet into K ranges requires K-1 interior boundary points. Setting this to `0` disables sampling, and split boundaries are then derived only from each segment's minimum and maximum sort key, which is coarser but still correct.
+- Introduced in: -
+
 ### stale_memtable_flush_time_sec
 
 - Default: 0

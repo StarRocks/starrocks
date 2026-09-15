@@ -388,6 +388,20 @@ Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
     return res.status();
 }
 
+StatusOr<std::unique_ptr<RandomAccessFile>> Segment::new_segment_read_file(const LakeIOOptions& lake_io_opts) {
+    // Apply the segment file's encryption info + bundling offset (like _open/_load_index) so reads land at
+    // the right offset on bundled/encrypted segments. Don't cache into _encryption_info here (OnceFlag owns it).
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size};
+    if (_encryption_info) {
+        file_opts.encryption_info = *_encryption_info;
+    } else if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        file_opts.encryption_info = std::move(info);
+    }
+    return _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info);
+}
+
 Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,

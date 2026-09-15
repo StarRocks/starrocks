@@ -23,15 +23,20 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
+#include "storage/rowset/segment.h"
+#include "storage/sort_key_sampler.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_map.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 
 extern bvar::Adder<int64_t> g_tablet_reshard_split_fallback_total;
 extern bvar::Adder<int64_t> g_tablet_reshard_split_external_boundaries_fallback_total;
@@ -42,23 +47,49 @@ namespace starrocks::lake {
 
 using google::protobuf::RepeatedPtrField;
 
-Status SegmentSplitInfo::load_sort_key_samples(const SegmentMetadataPB& segment_meta) {
-    if (segment_meta.sort_key_samples_size() == 0 || !segment_meta.has_sort_key_sample_row_interval()) {
+Status SegmentSplitInfo::load_samples(Segment& segment, const Schema& schema, const TabletSchemaCSPtr& segment_schema,
+                                      const std::vector<uint32_t>& sort_key_idxes, int64_t target,
+                                      int64_t data_page_target, bool fill_data_cache) {
+    // Track the path taken in a declared local and emit through a scope guard, so that every one of
+    // the three exits is traced -- including the coarse fall-through, which is the one an operator
+    // most needs to see and the one a trace at a single return point would miss.
+    enum class SampledVia { kNone, kShortKeyIndex, kDataPage };
+    SampledVia sampled_via = SampledVia::kNone;
+    DeferOp trace([&] {
+        VLOG(2) << "sort key sampling: segment=" << segment.file_info().path << " path="
+                << (sampled_via == SampledVia::kShortKeyIndex
+                            ? "short_key_index"
+                            : (sampled_via == SampledVia::kDataPage ? "data_page" : "none"))
+                << " target=" << target << " data_page_target=" << data_page_target
+                << " samples=" << sort_key_samples.size() << " row_interval=" << sort_key_sample_row_interval;
+    });
+
+    if (short_key_index_encodes_full_sort_key(schema, sort_key_idxes, segment_schema->num_short_key_columns())) {
+        // num_rows is this SegmentSplitInfo's own count, from SegmentMetadataPB -- the same value
+        // the consumer will use, which is why the sampler needs it to verify the geometry identity
+        // and the carrier.
+        ASSIGN_OR_RETURN(auto from_index, sample_sort_key_from_short_key_index(segment, schema, sort_key_idxes, min_key,
+                                                                               max_key, num_rows, target));
+        if (!from_index.samples.empty()) {
+            sort_key_samples = std::move(from_index.samples);
+            sort_key_sample_row_interval = from_index.row_interval;
+            sampled_via = SampledVia::kShortKeyIndex;
+            return Status::OK();
+        }
+        // Empty means this index produced nothing usable -- untrustworthy geometry, a failed guard,
+        // or a segment of fewer than two blocks. Fall through: path B samples at ROW granularity, so
+        // it can still divide a sub-block segment that path A cannot see inside.
+    }
+    if (data_page_target <= 0) {
         return Status::OK();
     }
-    const int64_t row_interval = segment_meta.sort_key_sample_row_interval();
-    const int64_t num_samples = segment_meta.sort_key_samples_size();
-    // Overflow-safe validity: sort_key_samples.size() * row_interval < num_rows.
-    if (!(row_interval > 0 && num_rows > 0 && num_samples <= (num_rows - 1) / row_interval)) {
-        return Status::OK(); // Invalid metadata -- fall through with empty samples.
-    }
-    sort_key_sample_row_interval = row_interval;
-    sort_key_samples.reserve(num_samples);
-    for (const auto& sample_pb : segment_meta.sort_key_samples()) {
-        VariantTuple sample;
-        RETURN_IF_ERROR(sample.from_proto(sample_pb));
-        DCHECK(sort_key_samples.empty() || sort_key_samples.back().compare(sample) <= 0);
-        sort_key_samples.push_back(std::move(sample));
+    ASSIGN_OR_RETURN(auto from_data,
+                     sample_sort_key_from_segment_data(segment, segment_schema, sort_key_idxes, num_rows, min_key,
+                                                       max_key, data_page_target, fill_data_cache));
+    sort_key_samples = std::move(from_data.samples);
+    sort_key_sample_row_interval = from_data.row_interval;
+    if (!sort_key_samples.empty()) {
+        sampled_via = SampledVia::kDataPage;
     }
     return Status::OK();
 }
@@ -796,21 +827,185 @@ void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& ancho
 // non-empty" — the data-driven and external-boundaries callers have different
 // semantics on empty (one errors, the other treats it as a no-op fast path) and
 // own that check.
-Status build_segments_from_rowsets_impl(const RepeatedPtrField<RowsetMetadataPB>& rowsets,
-                                        const TabletSchema& tablet_schema, std::vector<SegmentSplitInfo>* segments) {
+// Returns true iff any of |rowset|'s segments has a nonzero entry in either budget, i.e. this
+// rowset has something to sample and is therefore worth opening. |flat_index| is the running index
+// of this rowset's FIRST segment in the tablet-wide per-segment budget vectors.
+bool rowset_wants_samples(const std::vector<int64_t>& budget, const std::vector<int64_t>& data_page_budget,
+                          size_t flat_index, const RowsetMetadataPB& rowset) {
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+        const size_t index = flat_index + static_cast<size_t>(i);
+        // Both vectors were filled by walking the same metadata this loop walks, so they are the
+        // same length; bail out rather than index out of bounds if that ever stops holding.
+        if (index >= budget.size() || index >= data_page_budget.size()) return false;
+        if (budget[index] > 0 || data_page_budget[index] > 0) return true;
+    }
+    return false;
+}
+
+// Resolving a rowset's schema goes through GlobalTabletSchemaMap::emplace, which DCHECK-aborts on an
+// invalid schema id, and synthetic reshard metadata often leaves schema().id() unset. Checked before
+// the Rowset is constructed so such metadata degrades to coarse boundaries instead of aborting.
+bool rowset_schema_resolves_to_valid_id(const TabletMetadataPB& tablet_metadata, uint32_t rowset_id) {
+    const auto& rowset_to_schema = tablet_metadata.rowset_to_schema();
+    if (rowset_to_schema.empty() || rowset_to_schema.find(rowset_id) == rowset_to_schema.end()) {
+        // The ctor emplaces tablet_metadata.schema() in this branch.
+        return tablet_metadata.schema().id() != TabletSchema::invalid_id();
+    }
+    // The ctor emplaces historical_schemas().at(schema_id); a missing entry would itself
+    // CHECK-fail in the ctor, so treat it as unsafe here too.
+    const auto schema_id = rowset_to_schema.at(rowset_id);
+    const auto it = tablet_metadata.historical_schemas().find(schema_id);
+    if (it == tablet_metadata.historical_schemas().end()) return false;
+    return it->second.id() != TabletSchema::invalid_id();
+}
+
+Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                                        const TabletSchema& tablet_schema, int64_t split_width,
+                                        int64_t data_page_split_width, std::vector<SegmentSplitInfo>* segments) {
     ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(tablet_schema));
-    for (const auto& rowset : rowsets) {
-        for (const auto& segment_meta : rowset.segment_metas()) {
+
+    // Protobuf-only pre-pass: the allocation needs row counts, not schemas, so no segment is opened
+    // to compute it.
+    //
+    // Read the PER-SEGMENT num_rows, never the rowset's. Partial compaction splices
+    // SegmentMetadataPB entries out of a rowset while separately adjusting the rowset total, so on
+    // that path the rowset count legitimately differs from the sum of its segments'. Using it here
+    // would mis-weight every partially compacted tablet.
+    //
+    // Weight each segment by the rows that can land inside THIS tablet's range, not by its physical
+    // row count. A tablet produced by an earlier split keeps every segment of a rowset that
+    // per-segment pruning had to leave alone, and that includes segments lying wholly inside a
+    // sibling's range. calculate_range_split_boundaries discards those segments' candidates against
+    // the tablet range, so their proportional share of the cap buys boundaries nothing can use: a
+    // small in-range segment beside a large out-of-range one rounds to a zero budget, the tablet is
+    // left with no interior candidate at all, and get_tablet_split_ranges_impl refuses the split as
+    // "Not enough split ranges available".
+    //
+    // Sound only where the segment's stored sort-key bounds and the tablet range speak the same key
+    // space at the same arity, which the arity equality below enforces: a segment written before a
+    // metadata-only trailing sort-key ADD stores a narrower tuple, which VariantTuple::compare
+    // orders BELOW its padded form, so testing it against a current-arity range would exclude a
+    // segment that does hold in-range rows. Anything this test cannot decide -- an unbounded
+    // tablet, a missing or unparseable bound, a mismatched arity -- keeps the segment's full weight,
+    // i.e. exactly the behaviour of not doing this at all.
+    TabletRange weighting_range;
+    size_t weighting_range_arity = 0;
+    bool weight_by_range = false;
+    if (weighting_range.from_proto(tablet_metadata->range()).ok() && !weighting_range.is_all()) {
+        const size_t lower_arity = weighting_range.is_minimum() ? 0 : weighting_range.lower_bound().size();
+        const size_t upper_arity = weighting_range.is_maximum() ? 0 : weighting_range.upper_bound().size();
+        weighting_range_arity = std::max(lower_arity, upper_arity);
+        // Both bounds, where present, must agree -- otherwise "the range's arity" names two things.
+        weight_by_range =
+                weighting_range_arity > 0 && (lower_arity == 0 || upper_arity == 0 || lower_arity == upper_arity);
+    }
+    const auto sample_weight_of = [&](const SegmentMetadataPB& segment_meta) -> int64_t {
+        if (!weight_by_range || !segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
+            return segment_meta.num_rows();
+        }
+        VariantTuple segment_min;
+        VariantTuple segment_max;
+        if (!segment_min.from_proto(segment_meta.sort_key_min()).ok() ||
+            !segment_max.from_proto(segment_meta.sort_key_max()).ok() || segment_min.size() != weighting_range_arity ||
+            segment_max.size() != weighting_range_arity) {
+            return segment_meta.num_rows();
+        }
+        // A segment spans the inclusive interval [min, max] -- the same range
+        // compute_rowset_segment_ownership builds for the pruning decision.
+        const TabletRange segment_range(std::move(segment_min), std::move(segment_max),
+                                        /*lower_bound_included=*/true, /*upper_bound_included=*/true);
+        auto intersection = segment_range.intersect(weighting_range);
+        if (intersection.ok() && intersection.value().is_empty()) {
+            return 0;
+        }
+        return segment_meta.num_rows();
+    };
+
+    std::vector<int64_t> segment_num_rows;
+    for (const auto& rowset_meta : tablet_metadata->rowsets()) {
+        for (const auto& segment_meta : rowset_meta.segment_metas()) {
+            segment_num_rows.push_back(sample_weight_of(segment_meta));
+        }
+    }
+    const auto sample_budget = allocate_sort_key_sample_budget(segment_num_rows, split_width);
+    const auto data_page_budget = data_page_split_width > 0
+                                          ? allocate_sort_key_sample_budget(segment_num_rows, data_page_split_width)
+                                          : std::vector<int64_t>(segment_num_rows.size(), 0);
+
+    // Running index of the current segment across all rowsets, i.e. the index into both budgets.
+    size_t flat_index = 0;
+    for (int rowset_index = 0; rowset_index < tablet_metadata->rowsets_size(); ++rowset_index) {
+        const auto& rowset = tablet_metadata->rowsets(rowset_index);
+        const size_t rowset_flat_index = flat_index;
+        flat_index += static_cast<size_t>(rowset.segment_metas_size());
+        // Two cheap protobuf-only gates, evaluated BEFORE opening anything, so a tablet whose
+        // sampling cap is 0, or whose every segment lies outside the tablet's own range, performs
+        // zero segment opens and every segment below is coarse.
+        const bool may_load = tablet_manager != nullptr &&
+                              rowset_wants_samples(sample_budget, data_page_budget, rowset_flat_index, rowset) &&
+                              rowset_schema_resolves_to_valid_id(*tablet_metadata, rowset.id());
+        TabletSchemaPtr historical_schema;
+        Schema rowset_schema;
+        std::vector<uint32_t> sort_key_idxes;
+        bool counted_rowset_open = false;
+        for (int meta_pos = 0; meta_pos < rowset.segment_metas_size(); ++meta_pos) {
+            const auto& segment_meta = rowset.segment_metas(meta_pos);
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
             segment.num_rows = segment_meta.num_rows();
             segment.data_size = segment_meta.size();
-            RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+
+            const size_t index = rowset_flat_index + static_cast<size_t>(meta_pos);
+            const int64_t short_key_target = index < sample_budget.size() ? sample_budget[index] : 0;
+            const int64_t data_page_target = index < data_page_budget.size() ? data_page_budget[index] : 0;
+            if (may_load && (short_key_target > 0 || data_page_target > 0)) {
+                if (historical_schema == nullptr) {
+                    // A rowset written under an older schema must decode with its own.
+                    historical_schema = Rowset(tablet_manager, tablet_metadata, rowset_index, 0).tablet_schema();
+                    if (historical_schema != nullptr) {
+                        rowset_schema = ChunkHelper::convert_schema(historical_schema);
+                        const auto& idxes = historical_schema->sort_key_idxes();
+                        // Both the Schema above and the sort_key_idxes must come from THIS
+                        // TabletSchema object: the data-page sampler rejects a sort_key_idxes that
+                        // is not its segment_schema's own, silently and with empty samples.
+                        sort_key_idxes.assign(idxes.begin(), idxes.end());
+                    }
+                }
+                FileInfo file_info{
+                        .path = tablet_manager->segment_location(tablet_metadata->id(), segment_meta.filename())};
+                if (segment_meta.has_size()) file_info.size = segment_meta.size();
+                if (segment_meta.has_bundle_file_offset()) {
+                    file_info.bundle_file_offset = segment_meta.bundle_file_offset();
+                }
+                if (segment_meta.has_encryption_meta()) file_info.encryption_meta = segment_meta.encryption_meta();
+                const int segment_id = segment_meta.has_segment_idx() ? segment_meta.segment_idx() : meta_pos;
+                auto opened = tablet_manager->load_segment(file_info, segment_id, LakeIOOptions{},
+                                                           /*fill_meta_cache=*/false, historical_schema);
+                // Sampling only ever ADDS precision: a segment that fails to open, whose short key
+                // index fails to parse, or whose historical schema does not resolve degrades to its
+                // coarse [min, max] range -- never to a failing split.
+                if (opened.ok() && historical_schema != nullptr) {
+                    if (!counted_rowset_open) {
+                        note_sort_key_sampling_rowset_opened();
+                        counted_rowset_open = true;
+                    }
+                    // load_index() is what parses the short key index page the free sampling path
+                    // reads; failing it leaves this segment coarse.
+                    if (opened.value()->load_index().ok()) {
+                        RETURN_IF_ERROR(segment.load_samples(*opened.value(), rowset_schema, historical_schema,
+                                                             sort_key_idxes, short_key_target, data_page_target,
+                                                             // Tablet split never reads this data
+                                                             // again, and sparse pages would evict
+                                                             // useful entries.
+                                                             /*fill_data_cache=*/false));
+                    }
+                }
+            }
             // Lift every tuple this segment contributes onto the tablet's current sort key. Runs
-            // after load_sort_key_samples so its sample-vs-[min_key, max_key] validation still
-            // compares tuples of one arity (the segment's own).
+            // after the sampler above so its sample-vs-[min_key, max_key] validation still compares
+            // tuples of one arity (the segment's own).
             projection.project(&segment.min_key);
             projection.project(&segment.max_key);
             for (auto& sample : segment.sort_key_samples) {
@@ -864,7 +1059,9 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     }
 
     std::vector<SegmentSplitInfo> segments;
-    RETURN_IF_ERROR(build_segments_from_rowsets_impl(tablet_metadata->rowsets(), *tablet_schema, &segments));
+    RETURN_IF_ERROR(build_segments_from_rowsets_impl(tablet_manager, tablet_metadata, *tablet_schema,
+                                                     /*split_width=*/split_count,
+                                                     /*data_page_split_width=*/split_count, &segments));
     if (segments.empty()) {
         return Status::InvalidArgument("No segments found in tablet metadata");
     }
@@ -1160,7 +1357,9 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     //    here is corruption (we already short-circuited the empty-rowsets case
     //    at step 4); external boundaries uses a distinct error message vs the data-driven path.
     std::vector<SegmentSplitInfo> segments;
-    RETURN_IF_ERROR(build_segments_from_rowsets(old_tablet_metadata, &segments));
+    RETURN_IF_ERROR(build_segments_from_rowsets(tablet_manager, old_tablet_metadata,
+                                                /*split_width=*/static_cast<int64_t>(parsed.size()),
+                                                /*data_page_split_width=*/0, &segments));
     if (segments.empty()) {
         return Status::InvalidArgument("rowsets present but no segments derived (possibly corrupt metadata)");
     }
@@ -1544,9 +1743,12 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
 } // namespace
 
 // Resolves the sort key itself, for callers that need nothing else from it.
-Status build_segments_from_rowsets(const TabletMetadataPtr& tablet_metadata, std::vector<SegmentSplitInfo>* segments) {
+Status build_segments_from_rowsets(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                                   int64_t split_width, int64_t data_page_split_width,
+                                   std::vector<SegmentSplitInfo>* segments) {
     ASSIGN_OR_RETURN(const auto tablet_schema, materialize_sort_key_schema(tablet_metadata->schema()));
-    return build_segments_from_rowsets_impl(tablet_metadata->rowsets(), *tablet_schema, segments);
+    return build_segments_from_rowsets_impl(tablet_manager, tablet_metadata, *tablet_schema, split_width,
+                                            data_page_split_width, segments);
 }
 
 // Public wrapper for the anon-namespace implementation. Exposed via

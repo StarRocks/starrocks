@@ -162,6 +162,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    sort_key_sampler.cpp
     union_iterator.cpp
     unique_iterator.cpp
     column_aggregate_func.cpp

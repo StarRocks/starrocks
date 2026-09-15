@@ -193,6 +193,11 @@ public:
 
     const FileInfo& file_info() const { return _segment_file_info; }
 
+    // Open a file handle over this segment's data file with encryption + bundling applied. Anything
+    // that reads segment data directly must use this; a raw new_random_access_file misreads bundled
+    // or encrypted segments.
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_segment_read_file(const LakeIOOptions& lake_io_opts = {});
+
     uint32_t num_rows() const { return _num_rows; }
 
     // Load and decode short key index.

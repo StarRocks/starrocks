@@ -1099,6 +1099,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：快照文件清理的间隔。
 - 引入版本：-
 
+### sort_key_max_samples_per_tablet
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：计算 Tablet 拆分边界时，从单个 Tablet 中采集的排序键样本数量上限。当 Segment 的 Short Key 索引已经完整编码了整个排序键时，样本来自该索引；否则来自该 Segment 数据页的有限次读取，因此该值也限制了这部分读放大。默认值与 FE 参数 `tablet_reshard_max_split_count` 保持一致，因为将一个 Tablet 拆分为 K 个 Range 需要 K-1 个内部边界点。将该值设置为 `0` 会禁用采样，此时拆分边界仅根据每个 Segment 的最小值和最大值排序键推导，精度较低但仍然正确。
+- 引入版本：-
+
 ### stale_memtable_flush_time_sec
 
 - 默认值：0

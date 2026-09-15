@@ -286,26 +286,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
     }
 
-    // Sort-key sampler one-shot init: arm only on the first key-columns pass.
-    // The vertical writer (general_tablet_writer.cpp) re-enters this init() for
-    // each non-key column group on the same SegmentWriter; we must preserve the
-    // previously armed state and the already-collected samples. Use the
-    // `has_key` parameter rather than the `_has_key` member so the check is
-    // independent of assignment ordering above.
-    //
-    // The vertical writer's invariant (general_tablet_writer.cpp:247) requires
-    // the first write_columns() call to have is_key=true, so _num_rows_written
-    // must be 0 here when has_key first becomes true. The DCHECK makes this
-    // contract crash-loud in debug/test builds; in release we fall back to
-    // leaving the sampler disabled instead of sampling mid-stream.
-    if (has_key && !_sort_column_indexes.empty() && _sort_key_sample_row_interval == 0) {
-        DCHECK_EQ(_num_rows_written, 0) << "sampler arm requires fresh writer";
-        const int64_t row_interval = config::segment_sort_key_sample_row_interval;
-        if (_num_rows_written == 0 && row_interval > 0) {
-            _sort_key_sample_row_interval = row_interval;
-            _next_sort_key_sample_row_index = row_interval;
-        }
-    }
     const auto& column = _tablet_schema->columns().back();
     if (column.name() == Schema::FULL_ROW_COLUMN) {
         std::vector<ColumnId> cids(_tablet_schema->num_columns() - 1);
@@ -323,8 +303,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
     file_info.sort_key_min = _sort_key_min;
     file_info.sort_key_max = _sort_key_max;
-    file_info.sort_key_samples = std::move(_sort_key_samples);
-    file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
 }
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,
@@ -496,15 +474,6 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
                 std::string encoded_key;
                 encoded_key = tuple.short_key_encode(keys, _sort_column_indexes, 0);
                 RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
-            }
-            // Sort-key sample: take one tuple every _sort_key_sample_row_interval
-            // rows. Samples are at 0-indexed rows interval, 2*interval, 3*interval,
-            // ... so samples[k] is the key at row (k+1) * interval. The producer
-            // invariant samples.size() * interval < num_rows holds strictly
-            // because the last sample lands at row N*interval (< num_rows).
-            if (_sort_key_sample_row_interval > 0 && _num_rows_written == _next_sort_key_sample_row_index) {
-                _sort_key_samples.emplace_back(chunk.get(i, _sort_column_indexes));
-                _next_sort_key_sample_row_index += _sort_key_sample_row_interval;
             }
             ++_num_rows_written;
         }

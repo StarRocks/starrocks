@@ -33,12 +33,6 @@ void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta);
 struct SegmentFileInfo : public FileInfo {
     VariantTuple sort_key_min;
     VariantTuple sort_key_max;
-    // Equal-row-interval samples of the sort key (NON-DECREASING) collected by
-    // SegmentWriter. May be empty for small segments (num_rows <= interval) or
-    // segments where sampling was not armed. Always paired with
-    // sort_key_sample_row_interval: samples.empty() <=> sort_key_sample_row_interval == 0.
-    std::vector<VariantTuple> sort_key_samples;
-    int64_t sort_key_sample_row_interval = 0;
     int64_t num_rows = 0;
 
     // Serialize this segment's full per-segment metadata into |segment_meta|: the file attributes
@@ -47,6 +41,11 @@ struct SegmentFileInfo : public FileInfo {
     // cannot forget it): a contiguous positional index at write time, or a sparse one after
     // compaction/merge.
     void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
+
+    // Writes the sort-key fields, and CLEARS the deprecated metadata samples rather than leaving
+    // whatever |segment_meta| already held: nothing maintains those samples any more, so a target
+    // reused from another segment must not carry them forward.
+    void sort_key_fields_to_proto(SegmentMetadataPB* segment_meta) const;
 };
 
 } // namespace starrocks
