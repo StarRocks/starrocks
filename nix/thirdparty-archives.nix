@@ -578,6 +578,7 @@ let
       "lzo-2.10.tar.gz"
       "datasketches-cpp-4.0.0.tar.gz"
       "libfiu-1.1.tar.gz"
+      "libdeflate-1.26.zip"
       "llvm-project-18.1.8.src.tar.xz"
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
@@ -647,6 +648,7 @@ let
       "lzo-2.10.tar.gz"
       "datasketches-cpp-4.0.0.tar.gz"
       "libfiu-1.1.tar.gz"
+      "libdeflate-1.26.zip"
       "llvm-project-18.1.8.src.tar.xz"
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
@@ -790,6 +792,7 @@ let
       "LZO2"
       "DATASKETCHES"
       "FIU"
+      "LIBDEFLATE"
       "LLVM"
       "ABSL"
       "CARES"
@@ -859,6 +862,7 @@ let
       "LZO2"
       "DATASKETCHES"
       "FIU"
+      "LIBDEFLATE"
       "LLVM"
       "ABSL"
       "CARES"
@@ -946,8 +950,8 @@ let
       "xxhash"
       "blake3"
       "benchgen"
-      "breakpad"
       "libdeflate"
+      "breakpad"
     ];
     "aarch64-linux" = [
       "libevent"
@@ -1017,6 +1021,7 @@ let
       "xxhash"
       "blake3"
       "benchgen"
+      "libdeflate"
     ];
     "aarch64-darwin" = [
       "libevent"
@@ -1086,6 +1091,7 @@ let
       "xxhash"
       "blake3"
       "benchgen"
+      "libdeflate"
     ];
   };
 
