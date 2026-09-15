@@ -817,6 +817,40 @@ TEST_F(TimeFunctionsTest, yearsDiffTest) {
             ASSERT_EQ(-1, v->get_data()[k]);
         }
     }
+
+    {
+        // timestamps that share a year are less than one year apart in either direction
+        Columns columns;
+
+        auto tc1 = TimestampColumn::create();
+        auto tc2 = TimestampColumn::create();
+        tc1->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 12, 31, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 31, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 31, 23, 59, 59));
+        // a partial year is still truncated toward zero
+        tc1->append(TimestampValue::create(2023, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc2->append(TimestampValue::create(2023, 1, 1, 0, 0, 0));
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        ColumnPtr result = TimeFunctions::years_diff(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+        ASSERT_EQ(0, v->get_data()[1]);
+        ASSERT_EQ(0, v->get_data()[2]);
+        ASSERT_EQ(0, v->get_data()[3]);
+        ASSERT_EQ(1, v->get_data()[4]);
+        ASSERT_EQ(-1, v->get_data()[5]);
+    }
 }
 
 TEST_F(TimeFunctionsTest, monthsDiffTest) {
@@ -864,6 +898,40 @@ TEST_F(TimeFunctionsTest, monthsDiffTest) {
         for (int k = 0; k < 20; ++k) {
             ASSERT_EQ(13, v->get_data()[k]);
         }
+    }
+
+    {
+        // timestamps that share a month are less than one month apart in either direction
+        Columns columns;
+
+        auto tc1 = TimestampColumn::create();
+        auto tc2 = TimestampColumn::create();
+        tc1->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 2, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 2, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 31, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 31, 23, 59, 59));
+        tc1->append(TimestampValue::create(2021, 1, 31, 23, 59, 59));
+        tc2->append(TimestampValue::create(2021, 1, 31, 0, 0, 0));
+        // a partial month is still truncated toward zero
+        tc1->append(TimestampValue::create(2021, 3, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 15, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 15, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 3, 1, 0, 0, 0));
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        ColumnPtr result = TimeFunctions::months_diff(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+        ASSERT_EQ(0, v->get_data()[1]);
+        ASSERT_EQ(0, v->get_data()[2]);
+        ASSERT_EQ(0, v->get_data()[3]);
+        ASSERT_EQ(1, v->get_data()[4]);
+        ASSERT_EQ(-1, v->get_data()[5]);
     }
 }
 
