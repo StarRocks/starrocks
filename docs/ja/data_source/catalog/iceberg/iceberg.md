@@ -559,6 +559,21 @@ AWS S3 用の `StorageCredentialParams`:
 - 必須: いいえ
 - 説明: IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
 
+###### aws.s3.sse.type
+
+- 必須: いいえ
+- 説明: Iceberg テーブルのオブジェクトに使用される S3 サーバーサイド暗号化 (Server-Side Encryption) のタイプです。有効な値: `none` (デフォルト) および `sse-c` (顧客提供キーによるサーバーサイド暗号化、SSE-C)。テーブルのデータファイルおよびメタデータファイルが SSE-C で暗号化されている場合は、`sse-c` に設定してください。v4.1 以降でサポートされます。
+
+###### aws.s3.sse.customer_key
+
+- 必須: いいえ
+- 説明: オブジェクトの暗号化に使用される base64 エンコードされた 256 ビットの AES キーです。`aws.s3.sse.type` が `sse-c` の場合に必須です。オブジェクトの書き込み時に使用されたものと同じキーである必要があります。そうでない場合、読み取りは失敗します。この値は `SHOW CREATE CATALOG` ではマスクされます。
+
+###### aws.s3.sse.customer_key_md5
+
+- 必須: いいえ
+- 説明: 顧客キーの base64 エンコードされた MD5 ダイジェストです。任意。省略した場合、StarRocks は `aws.s3.sse.customer_key` から計算します。
+
 AWS S3 へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [AWS S3 へのアクセス認証パラメーター](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 </TabItem>

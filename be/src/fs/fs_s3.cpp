@@ -472,6 +472,33 @@ static int64_t read_ahead_size_from_options(const FSOptions& options) {
     return read_ahead_size;
 }
 
+// Reads the SSE-C customer key from the cloud configuration and enables it on the input stream, so every
+// GetObject/HeadObject carries the customer key headers. No-op unless AWS SSE-C is configured. Read directly
+// from the property bag to avoid re-parsing the whole cloud configuration on each file open.
+static void apply_sse_c_from_options(io::S3InputStream* input_stream, const FSOptions& options) {
+    const THdfsProperties* hdfs_properties = FSOptionsHelper::hdfs_properties(options);
+    const TCloudConfiguration* cloud_configuration = nullptr;
+    if (options.cloud_configuration != nullptr) {
+        cloud_configuration = options.cloud_configuration;
+    } else if (hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) {
+        cloud_configuration = &hdfs_properties->cloud_configuration;
+    }
+    if (cloud_configuration == nullptr || !cloud_configuration->__isset.cloud_properties) {
+        return;
+    }
+    const auto& properties = cloud_configuration->cloud_properties;
+    auto type_itr = properties.find(AWS_S3_SSE_TYPE);
+    if (type_itr == properties.end() || type_itr->second != "sse-c") {
+        return;
+    }
+    auto key_itr = properties.find(AWS_S3_SSE_KEY);
+    if (key_itr == properties.end() || key_itr->second.empty()) {
+        return;
+    }
+    auto md5_itr = properties.find(AWS_S3_SSE_KEY_MD5);
+    input_stream->set_sse_customer_key(key_itr->second, md5_itr != properties.end() ? md5_itr->second : std::string());
+}
+
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                  const std::string& path) {
     S3URI uri;
@@ -482,6 +509,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     auto read_ahead_size = read_ahead_size_from_options(_options);
     auto input_stream =
             std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
+    apply_sse_c_from_options(input_stream.get(), _options);
     return RandomAccessFile::from(std::move(input_stream), path, false, opts.encryption_info);
 }
 
@@ -495,6 +523,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     auto read_ahead_size = read_ahead_size_from_options(_options);
     auto input_stream =
             std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
+    apply_sse_c_from_options(input_stream.get(), _options);
     if (file_info.size.has_value()) {
         input_stream->set_size(file_info.size.value());
     }
@@ -511,6 +540,7 @@ StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(cons
     auto read_ahead_size = read_ahead_size_from_options(_options);
     auto input_stream =
             std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
+    apply_sse_c_from_options(input_stream.get(), _options);
 
     return SequentialFile::from(std::move(input_stream), path, opts.encryption_info);
 }

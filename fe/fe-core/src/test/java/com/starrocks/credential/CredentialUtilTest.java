@@ -54,6 +54,17 @@ public class CredentialUtilTest {
     }
 
     @Test
+    public void testMaskSseCCustomerKey() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AWS_S3_SSE_KEY, "0123456789abcdef0123456789abcdef");
+        // The MD5 is a digest, not the key, so it is intentionally not masked.
+        properties.put(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5, "abcdefgh");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("01******ef", properties.get(CloudConfigurationConstants.AWS_S3_SSE_KEY));
+        Assertions.assertEquals("abcdefgh", properties.get(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5));
+    }
+
+    @Test
     public void testMaskIcebergRestCatalogCredential() {
         Map<String, String> properties = new HashMap<>();
         String key = IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
