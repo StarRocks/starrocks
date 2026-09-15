@@ -98,4 +98,27 @@ public class NetUtilsTest {
         assertThat(NetUtils.isPortUsing("203.0.113.1", 65535)).isFalse();
         assertThat(connectCalled.get()).isTrue();
     }
+
+    @Test
+    public void testResolveHostInfoFromHostPortNormalizesIPv6() throws Exception {
+        // IPv6 address with mixed case should be normalized to lowercase
+        String[] result = NetUtils.resolveHostInfoFromHostPort("FD00:1234::1:9030");
+        assertThat(result[0]).isEqualTo("fd00:1234::1");
+        assertThat(result[1]).isEqualTo("9030");
+
+        // Bracketed IPv6 address
+        result = NetUtils.resolveHostInfoFromHostPort("[FD00:1234::1]:9030");
+        assertThat(result[0]).isEqualTo("fd00:1234::1");
+        assertThat(result[1]).isEqualTo("9030");
+
+        // Already lowercase IPv6 should remain unchanged
+        result = NetUtils.resolveHostInfoFromHostPort("fe80::1:9030");
+        assertThat(result[0]).isEqualTo("fe80::1");
+        assertThat(result[1]).isEqualTo("9030");
+
+        // Regular IPv4 host:port should not be affected
+        result = NetUtils.resolveHostInfoFromHostPort("192.168.1.1:9030");
+        assertThat(result[0]).isEqualTo("192.168.1.1");
+        assertThat(result[1]).isEqualTo("9030");
+    }
 }
