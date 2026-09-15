@@ -17,6 +17,7 @@ package com.starrocks.sql;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -84,6 +85,12 @@ public class PrepareStmtPlanner {
                     return planAndCacheExecPlan(executeStmt, stmt, session, prepareStmtContext);
                 } else {
                     ExecPlan execPlan = prepareStmtContext.getExecPlan();
+
+                    // the limit is snapshotted at plan build time; the cached plan cannot serve a session that set one
+                    if (session.getSessionVariable().getSqlSelectLimit() != SessionVariable.DEFAULT_SELECT_LIMIT) {
+                        rejectRebind(executeStmt, "sql_select_limit is not the default");
+                        return planAndCacheExecPlan(executeStmt, stmt, session, prepareStmtContext);
+                    }
 
                     // a rejected rebind leaves the cached predicate untouched; the full planning below then
                     // decides whether to replace the cached plan or drop it

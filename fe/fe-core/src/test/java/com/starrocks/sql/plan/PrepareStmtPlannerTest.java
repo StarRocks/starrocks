@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -387,6 +388,30 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
     }
 
     @Test
+    public void testSelectLimitSetAfterCachingForcesFullPlanning() throws Exception {
+        String sql = "select v from pq_dup3 where k1 = ? and k2 = ? and k3 = ?";
+        PreparedQuery prepared = prepare(sql);
+        execute(prepared, List.of(intLit(1), intLit(2), intLit(3)));
+        Assertions.assertTrue(prepared.context().isCached());
+
+        long oldLimit = connectContext.getSessionVariable().getSqlSelectLimit();
+        connectContext.getSessionVariable().setSqlSelectLimit(1);
+        try {
+            ExecPlan second = execute(prepared, List.of(intLit(4), intLit(5), intLit(6)));
+            ExecPlan fresh = execute(prepare(sql), List.of(intLit(4), intLit(5), intLit(6)));
+
+            Assertions.assertAll(
+                    () -> Assertions.assertFalse(prepared.context().isCached()),
+                    () -> Assertions.assertEquals(Map.of("k1", "4", "k2", "5", "k3", "6"), scanBindings(second)),
+                    // the behaviour under review: the plan handed back bounds the result to the session limit
+                    () -> Assertions.assertEquals(1L, physicalLimit(second)),
+                    () -> Assertions.assertEquals(physicalLimit(fresh), physicalLimit(second)));
+        } finally {
+            connectContext.getSessionVariable().setSqlSelectLimit(oldLimit);
+        }
+    }
+
+    @Test
     public void testWindowFunctionKeepsThePlanOutOfTheCache() throws Exception {
         PreparedQuery prepared =
                 prepare("select v, row_number() over () from pq_dup3 where k1 = ? and k2 = ? and k3 = ?");
@@ -634,6 +659,24 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
             }
         }
         return null;
+    }
+
+    // wherever the optimizer left the limit (merged into the scan or standalone), DEFAULT_LIMIT if none carries one
+    private static long physicalLimit(OptExpression root) {
+        if (root.getOp().hasLimit()) {
+            return root.getOp().getLimit();
+        }
+        for (OptExpression input : root.getInputs()) {
+            long limit = physicalLimit(input);
+            if (limit != Operator.DEFAULT_LIMIT) {
+                return limit;
+            }
+        }
+        return Operator.DEFAULT_LIMIT;
+    }
+
+    private static long physicalLimit(ExecPlan plan) {
+        return physicalLimit(plan.getPhysicalPlan());
     }
 
     private static void assertStaysCached(String sql, List<Expr> firstParams, List<Expr> secondParams)
