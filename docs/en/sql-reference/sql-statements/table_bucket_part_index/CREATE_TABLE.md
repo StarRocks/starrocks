@@ -623,6 +623,83 @@ PROPERTIES (
 )
 ```
 
+### Per-column ZSTD compression
+
+For a table whose Engine type is `olap`, you can compress selected large text or
+JSON columns with ZSTD while the rest of the table keeps its own codec. This is
+aimed at columns whose rows repeat each other heavily -- conversation history,
+templated payloads -- where ZSTD pays off far more than on the table as a whole.
+
+The following limits apply:
+
+- Only CHAR, VARCHAR, STRING and JSON columns can be nominated.
+- Only value columns can be nominated; key columns are rejected.
+- A column may appear only once in the list.
+- The nominated columns are compressed with ZSTD, overriding the table-level `compression` for those columns. Every other column is untouched.
+
+```SQL
+PROPERTIES (
+    "zstd_compression_columns"="v1,v2"
+)
+```
+
+A column may also carry its own data page size, written after the column name:
+
+```SQL
+PROPERTIES (
+    "zstd_compression_columns"="v1:1m, v2:256k, v3"
+)
+```
+
+The page is the unit of decompression, so what a larger page buys depends on how
+big the column's rows are relative to it. A column whose rows are larger than a
+page loses all cross-row redundancy at the default 64 KB and can compress several
+times better with a large page. A column holding hundreds of rows per page already
+has that redundancy inside the page and gains almost nothing, while every point
+lookup would decompress the whole larger page. That is why the size is set per
+column. Columns written without a size keep the BE default (`data_page_size`).
+Accepted sizes range from 4 KB to 1 MB. The ceiling is where a point lookup still
+costs a bounded amount: a 1 MB page reads a single row in roughly a tenth of a
+millisecond, and past that the bill grows faster than the ratio does.
+
+Whether the internal dictionary is actually built for a column is decided by the
+data, not by the property:
+
+- The column has to end up plain-encoded. StarRocks picks the encoding from the
+  data, and a column with few distinct values is dictionary-encoded instead, which
+  already compresses it far better than anything here would. Setting the property
+  on such a column has no effect.
+- A CHAR/VARCHAR/STRING column holding 256 rows or fewer is dictionary-encoded
+  outright, so very small tables never get an internal dictionary either. JSON
+  columns have no such row floor -- they are plain-encoded to begin with.
+- The column has to fill more than nine data pages in one segment. The first page
+  is what the dictionary is sampled from and the next eight measure whether it
+  pays; all nine are written without it, and the dictionary is used from the tenth
+  page on. A column that ends before that never uses one, which is the right answer
+  for it: the dictionary costs a page of its own and cannot pay for itself over a
+  handful of pages.
+- Those eight pages have to come out clearly smaller with the dictionary than
+  without it -- by default at least a tenth smaller, see
+  `zstd_compression_dict_min_gain`. Otherwise the dictionary is dropped and the
+  rest of the column is written without it.
+
+None of this is an error and none of it changes what the column is compressed
+with: the nominated columns are still ZSTD. `zstd_compression_dict_pages_written`
+counts the column writers that ended up with a dictionary (a flat JSON column has one writer per flattened sub-column).
+`zstd_compression_dict_build_fallback` counts only the writers that ATTEMPTED one and were turned
+down -- the build failed, or the completed trial found it did not pay. The cases above where a
+dictionary is never attempted at all, because the column is dictionary-encoded or ends before the
+trial finishes, increment neither counter, so the two do not add up to the number of nominated
+columns.
+
+The property can also be changed later with
+`ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. This is a schema
+change: it rewrites every tablet, so the existing data is re-encoded to the new
+setting as well, and it costs what any other schema change on a table that size
+costs. Follow it with `SHOW ALTER TABLE COLUMN`. The table stays readable
+throughout, and so do segments written either way, because each segment records
+how it was written.
+
 ### Colocate Join
 
 If you want to use Colocate Join attributes, specify it in `properties`.
