@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Notes:
+# COREDUMP_ENABLED=true enables coredump collection and restarts the CN process after a crash.
+
 HOST_TYPE=${HOST_TYPE:-"IP"}
 FE_QUERY_PORT=${FE_QUERY_PORT:-9030}
 PROBE_TIMEOUT=60
@@ -9,7 +12,7 @@ MY_SELF=
 MY_IP=`hostname -i`
 MY_HOSTNAME=`hostname -f`
 STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
-STARROCKS_HOME=${STARROCKS_ROOT}/cn
+export STARROCKS_HOME=${STARROCKS_ROOT}/cn
 CN_CONFIG=$STARROCKS_HOME/conf/cn.conf
 
 
@@ -157,19 +160,35 @@ trap exit_clean SIGTERM
 
 log_stderr "run start_cn.sh"
 
+if [[ "$COREDUMP_ENABLED" == "true" ]]; then
+    # Start an inotifywait loop daemon to monitor core dump generation.
+    $STARROCKS_ROOT/upload_coredump.sh &
+fi
+
 addition_args=
 if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     # env var `LOG_CONSOLE=1` can be added to enable logging to console
     addition_args="--logconsole"
 fi
-$STARROCKS_HOME/bin/start_cn.sh $addition_args
-ret=$?
 
-if [[ $ret -eq 0 || $ret -eq 137 ]] ; then
-    # The reason why we need to sleep here is to avoid the pod being killed by k8s before the preStop hook is exited.
-    # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
-    sleep 5
-fi
+while true; do
+    $STARROCKS_HOME/bin/start_cn.sh $addition_args
+    ret=$?
 
-# keep the same return code from start_cn.sh
-exit $ret
+    if [[ "$COREDUMP_ENABLED" == "true" && ($ret -eq 134 || $ret -eq 139) ]]; then
+        log_stderr "starrocks_be CN process exited with status: $ret"
+        sleep_interval=${CN_RESTART_WAIT_SECONDS:-5}
+        log_stderr "Restarting the CN process after $sleep_interval seconds ..."
+        sleep $sleep_interval
+        continue
+    fi
+
+    if [[ $ret -eq 0 || $ret -eq 137 ]] ; then
+        # The reason why we need to sleep here is to avoid the pod being killed by k8s before the preStop hook is exited.
+        # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
+        sleep 5
+    fi
+
+    # Keep the same return code from start_cn.sh.
+    exit $ret
+done
