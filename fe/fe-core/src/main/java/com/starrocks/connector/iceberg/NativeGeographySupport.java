@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.scheduler.dag.JobSpec;
@@ -27,14 +26,9 @@ import com.starrocks.type.Type;
 import com.starrocks.type.UnknownType;
 import org.apache.iceberg.types.Types;
 
-/** Native Iceberg exposure and dispatch use the same policy, including for reused plans. */
+/** Supported native Iceberg GEOGRAPHY semantics and execution paths. */
 public final class NativeGeographySupport {
     private NativeGeographySupport() {
-    }
-
-    static boolean gatesEnabled() {
-        return Config.enable_native_geography_iceberg_read && Config.enable_native_geography_transport
-                && Config.enable_native_geography_mysql_output;
     }
 
     static Type geographyType(Types.GeographyType source) {
@@ -57,9 +51,6 @@ public final class NativeGeographySupport {
                 .noneMatch(type -> type.isSetScalar_type()
                         && type.getScalar_type().getType() == TPrimitiveType.GEOGRAPHY)) {
             return;
-        }
-        if (!gatesEnabled()) {
-            throw new StarRocksException("Native Iceberg GEOGRAPHY requires enabled read, transport and output gates");
         }
         if (spillEnabled || !job.isQueryType() || job.getFragments().stream().noneMatch(fragment ->
                 fragment.getSink() instanceof ResultSink sink && sink.getSinkType() == TResultSinkType.MYSQL_PROTOCAL)) {

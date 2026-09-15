@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.PlanFragment;
@@ -27,6 +26,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TSlotDescriptor;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeSerializer;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.EdgeAlgorithm;
@@ -38,60 +38,42 @@ import java.util.List;
 
 public class NativeGeographySupportTest {
     @Test
-    public void testGatesAndReusedPlan() throws Exception {
-        boolean read = Config.enable_native_geography_iceberg_read;
-        boolean transport = Config.enable_native_geography_transport;
-        boolean output = Config.enable_native_geography_mysql_output;
-        try {
-            var type = NativeGeographySupport.geographyType(Types.GeographyType.crs84());
-            var slot = new TSlotDescriptor().setIsMaterialized(true).setSlotType(TypeSerializer.toThrift(type));
-            var descriptors = new TDescriptorTable().setSlotDescriptors(List.of(slot));
-            var fragment = new PlanFragment(new PlanFragmentId(0), null, DataPartition.UNPARTITIONED);
-            fragment.setSink(new ResultSink(new PlanNodeId(0), TResultSinkType.MYSQL_PROTOCAL));
-            JobSpec job = new JobSpec.Builder().descTable(descriptors).fragments(List.of(fragment))
-                    .queryOptions(new TQueryOptions().setQuery_type(TQueryType.SELECT)).build();
-            for (int mask = 0; mask < 8; ++mask) {
-                Config.enable_native_geography_iceberg_read = (mask & 1) != 0;
-                Config.enable_native_geography_transport = (mask & 2) != 0;
-                Config.enable_native_geography_mysql_output = (mask & 4) != 0;
-                Assertions.assertEquals(mask == 7, NativeGeographySupport.gatesEnabled());
-                var columns = IcebergApiConverter.toFullSchemas(new Schema(
-                        Types.NestedField.optional(1, "geo", Types.GeographyType.crs84()),
-                        Types.NestedField.optional(2, "id", Types.IntegerType.get())));
-                Assertions.assertEquals(mask != 7, columns.get(0).getType().isUnknown());
-                Assertions.assertTrue(columns.get(1).getType().isIntegerType());
-                if (mask != 7) {
-                    Assertions.assertThrows(StarRocksException.class,
-                            () -> NativeGeographySupport.validateExecution(job, false));
-                } else {
-                    NativeGeographySupport.validateExecution(job, false);
-                }
+    public void testNativeGeographyIsExposedWithoutConfiguration() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "geo", Types.GeographyType.crs84()),
+                Types.NestedField.required(2, "required_geo", Types.GeographyType.crs84()),
+                Types.NestedField.optional(3, "id", Types.IntegerType.get()));
+        var columns = IcebergApiConverter.toFullSchemas(schema);
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY, columns.get(0).getType().getPrimitiveType());
+        Assertions.assertTrue(columns.get(0).isAllowNull());
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY, columns.get(1).getType().getPrimitiveType());
+        Assertions.assertFalse(columns.get(1).isAllowNull());
+        Assertions.assertTrue(columns.get(2).getType().isIntegerType());
+    }
+
+    @Test
+    public void testExecutionRestrictions() throws Exception {
+        var type = NativeGeographySupport.geographyType(Types.GeographyType.crs84());
+        var slot = new TSlotDescriptor().setIsMaterialized(true).setSlotType(TypeSerializer.toThrift(type));
+        var descriptors = new TDescriptorTable().setSlotDescriptors(List.of(slot));
+        var fragment = new PlanFragment(new PlanFragmentId(0), null, DataPartition.UNPARTITIONED);
+        fragment.setSink(new ResultSink(new PlanNodeId(0), TResultSinkType.MYSQL_PROTOCAL));
+        JobSpec job = new JobSpec.Builder().descTable(descriptors).fragments(List.of(fragment))
+                .queryOptions(new TQueryOptions().setQuery_type(TQueryType.SELECT)).build();
+        NativeGeographySupport.validateExecution(job, false);
+        Assertions.assertThrows(StarRocksException.class,
+                () -> NativeGeographySupport.validateExecution(job, true));
+        for (TResultSinkType sink : TResultSinkType.values()) {
+            if (sink == TResultSinkType.MYSQL_PROTOCAL) {
+                continue;
             }
+            fragment.setSink(new ResultSink(new PlanNodeId(0), sink));
             Assertions.assertThrows(StarRocksException.class,
-                    () -> NativeGeographySupport.validateExecution(job, true));
-            for (TResultSinkType sink : TResultSinkType.values()) {
-                if (sink == TResultSinkType.MYSQL_PROTOCAL) {
-                    continue;
-                }
-                fragment.setSink(new ResultSink(new PlanNodeId(0), sink));
-                Assertions.assertThrows(StarRocksException.class,
-                        () -> NativeGeographySupport.validateExecution(job, false));
-            }
-            fragment.setSink(new ResultSink(new PlanNodeId(0), TResultSinkType.MYSQL_PROTOCAL));
-            Config.enable_native_geography_iceberg_read = false;
-            Schema schema = new Schema(Types.NestedField.optional(1, "geo", Types.GeographyType.crs84()),
-                    Types.NestedField.optional(2, "id", Types.IntegerType.get()));
-            var columns = IcebergApiConverter.toFullSchemas(schema);
-            Assertions.assertTrue(columns.get(0).getType().isUnknown());
-            Assertions.assertTrue(columns.get(1).getType().isIntegerType());
-            // Unmaterialized GEO metadata must not block a query of ordinary columns.
-            slot.setIsMaterialized(false);
-            NativeGeographySupport.validateExecution(job, false);
-        } finally {
-            Config.enable_native_geography_iceberg_read = read;
-            Config.enable_native_geography_transport = transport;
-            Config.enable_native_geography_mysql_output = output;
+                    () -> NativeGeographySupport.validateExecution(job, false));
         }
+        // Unmaterialized GEO metadata must not block a query of ordinary columns.
+        slot.setIsMaterialized(false);
+        NativeGeographySupport.validateExecution(job, true);
     }
 
     @Test

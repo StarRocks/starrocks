@@ -14,7 +14,6 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -43,46 +42,26 @@ import java.util.List;
 
 public class CoordinatorPreprocessorNativeGeographyTest {
     @Test
-    public void testPrepareExecRechecksGeographyGatesAndSpill() throws Exception {
-        boolean read = Config.enable_native_geography_iceberg_read;
-        boolean transport = Config.enable_native_geography_transport;
-        boolean output = Config.enable_native_geography_mysql_output;
-        try {
-            ConnectContext context = new ConnectContext();
-            var type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                    new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                            GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
-                            "OGC:CRS84", 4326));
-            var slot = new TSlotDescriptor().setIsMaterialized(true).setSlotType(TypeSerializer.toThrift(type));
-            CoordinatorPreprocessor preprocessor = newPreprocessor(context,
-                    new TDescriptorTable().setSlotDescriptors(List.of(slot)));
-            for (int mask = 0; mask < 8; ++mask) {
-                Config.enable_native_geography_iceberg_read = (mask & 1) != 0;
-                Config.enable_native_geography_transport = (mask & 2) != 0;
-                Config.enable_native_geography_mysql_output = (mask & 4) != 0;
-                if (mask == 7) {
-                    Assertions.assertDoesNotThrow(preprocessor::prepareExec);
-                } else {
-                    StarRocksException error = Assertions.assertThrows(StarRocksException.class, preprocessor::prepareExec);
-                    Assertions.assertTrue(error.getMessage().contains("enabled read, transport and output gates"));
-                }
-            }
-            context.getSessionVariable().setEnableSpill(true);
-            StarRocksException error = Assertions.assertThrows(StarRocksException.class, preprocessor::prepareExec);
-            Assertions.assertTrue(error.getMessage().contains("without spill"));
-            context.getSessionVariable().setEnableSpill(false);
-            Assertions.assertDoesNotThrow(preprocessor::prepareExec);
+    public void testPrepareExecRechecksGeographySpill() {
+        ConnectContext context = new ConnectContext();
+        var type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                        GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                        "OGC:CRS84", 4326));
+        var slot = new TSlotDescriptor().setIsMaterialized(true).setSlotType(TypeSerializer.toThrift(type));
+        CoordinatorPreprocessor preprocessor = newPreprocessor(context,
+                new TDescriptorTable().setSlotDescriptors(List.of(slot)));
+        Assertions.assertDoesNotThrow(preprocessor::prepareExec);
+        context.getSessionVariable().setEnableSpill(true);
+        StarRocksException error = Assertions.assertThrows(StarRocksException.class, preprocessor::prepareExec);
+        Assertions.assertTrue(error.getMessage().contains("without spill"));
+        context.getSessionVariable().setEnableSpill(false);
+        Assertions.assertDoesNotThrow(preprocessor::prepareExec);
 
-            Config.enable_native_geography_iceberg_read = false;
-            Assertions.assertThrows(StarRocksException.class, preprocessor::prepareExec);
-            // A query that does not materialize the GEO column must still prepare successfully.
-            slot.setIsMaterialized(false);
-            Assertions.assertDoesNotThrow(preprocessor::prepareExec);
-        } finally {
-            Config.enable_native_geography_iceberg_read = read;
-            Config.enable_native_geography_transport = transport;
-            Config.enable_native_geography_mysql_output = output;
-        }
+        // A query that does not materialize the GEO column must still prepare with spill.
+        context.getSessionVariable().setEnableSpill(true);
+        slot.setIsMaterialized(false);
+        Assertions.assertDoesNotThrow(preprocessor::prepareExec);
     }
 
     @Test

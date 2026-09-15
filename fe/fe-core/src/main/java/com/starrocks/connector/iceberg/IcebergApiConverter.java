@@ -362,14 +362,11 @@ public class IcebergApiConverter {
             throw new StarRocksConnectorException(e.getMessage());
         }
 
-        boolean nativeGeography = columns.stream().anyMatch(field ->
-                field.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY)
-                && NativeGeographySupport.gatesEnabled();
         for (Types.NestedField field : columns) {
             Type srType;
             try {
                 srType = fromIcebergType(field.type());
-                if (nativeGeography && field.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
+                if (field.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
                     srType = NativeGeographySupport.geographyType((Types.GeographyType) field.type());
                 }
             } catch (InternalError | Exception e) {

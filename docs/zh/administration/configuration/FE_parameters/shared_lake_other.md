@@ -789,33 +789,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：存算分离集群中，Tablet 修复时获取 Tablet 元数据的版本扫描最大批次大小。批次大小从 5 开始，每次翻倍增长，直到达到此最大值。较大的值允许单次批量获取更多版本，通过跨版本文件存在性缓存提高修复效率。如果设置的值小于 5，运行时会自动调整为 5。
 - 引入版本：v3.5.16, v4.0.9
 
-### `enable_native_geography_transport`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes（无需重启）
-- 描述: 允许原生 Iceberg GEOGRAPHY 查询在 CN 之间传输数据。仅启用此配置不会启用原生读取。
-- 引入版本: -
-
-### `enable_native_geography_mysql_output`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes（无需重启）
-- 描述: 允许原生 Iceberg GEOGRAPHY 查询通过 MySQL 协议输出原始 WKB 字节。仅启用此配置不会启用原生读取。
-- 引入版本: -
-
-### `enable_native_geography_iceberg_read`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes（无需重启）
-- 描述: 允许具有 CRS84 球面语义的顶层 Iceberg GEOGRAPHY 列使用原生类型。传输和 MySQL 输出配置也必须启用。否则这些列仍不受支持，但普通列仍可查询。已生成的原生查询计划在下发前会再次检查当前配置。启用 Spill 或使用非 MySQL 输出的原生查询将被拒绝。此配置不会启用 GEOMETRY、嵌套原生 GEO、写入、构造函数或计算函数。
-- 引入版本: -
-
 ### `enable_iceberg_commit_queue`
 
 - 默认值: true
