@@ -234,6 +234,49 @@ TEST_F(ConfigTest, test_string_enum_case_insensitive) {
     }
 }
 
+TEST_F(ConfigTest, test_string_enum_empty_value) {
+    // An empty entry in the declaration declares the empty string as an accepted value.
+    CONF_String_enum(cfg_optional_mode, "", ",enabled");
+    // Repeating a value verbatim is tolerated.
+    CONF_String_enum(cfg_repeated, "on", "on,on,off");
+
+    // The empty default is accepted.
+    {
+        std::stringstream ss;
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("", cfg_optional_mode);
+        EXPECT_EQ("on", cfg_repeated);
+    }
+    // So is an explicitly empty assignment.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_optional_mode =
+           cfg_repeated = OFF
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("", cfg_optional_mode);
+        EXPECT_EQ("off", cfg_repeated);
+    }
+    // A non-empty value still has to match an enum.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_optional_mode = Enabled
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("enabled", cfg_optional_mode);
+    }
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_optional_mode = disabled
+           )DEL";
+        EXPECT_FALSE(config::init(ss));
+        EXPECT_EQ("", cfg_optional_mode);
+    }
+}
+
 TEST_F(ConfigTest, test_invalid_default_value) {
     CONF_Int32(cfg_int32, "false");
     ASSERT_FALSE(config::init(nullptr));

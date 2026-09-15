@@ -156,11 +156,11 @@ public:
         std::vector<std::string> parts = strings::Split(enums_, ",");
         for (auto& part : parts) {
             StripWhiteSpace(&part);
-            if (part.empty()) {
-                continue;
-            }
-            auto [it, ok] = _enums.emplace(normalize(part), part);
-            if (!ok) {
+            // An empty part declares the empty string as an accepted value, e.g. ",enabled".
+            auto [it, inserted] = _enums.emplace(normalize(part), part);
+            // A value repeated verbatim is harmless, but two values that only differ in case cannot
+            // both be matched, so the declaration is rejected outright.
+            if (!inserted && it->second != part) {
                 std::cerr << fmt::format("Config '{}' declares enum values '{}' and '{}' that differ only in case\n",
                                          name, it->second, part);
                 std::abort();
