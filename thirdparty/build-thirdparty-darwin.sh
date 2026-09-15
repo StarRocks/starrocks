@@ -348,10 +348,28 @@ setup_build_environment() {
         export BUILD_SYSTEM="${BUILD_SYSTEM:-make}"
     fi
 
+    if [[ "${MACHINE_TYPE}" == "aarch64" && -z "${THIRD_PARTY_BUILD_WITH_ARM_CRC}" ]]; then
+        THIRD_PARTY_BUILD_WITH_ARM_CRC=ON
+        if [[ "$(sysctl -n hw.optional.armv8_crc32 2>/dev/null)" == "0" ]]; then
+            THIRD_PARTY_BUILD_WITH_ARM_CRC=OFF
+        fi
+    fi
+
+    export TP_TARGET_ARCH_FLAGS=""
+    if [[ "${MACHINE_TYPE}" == "aarch64" && "${THIRD_PARTY_BUILD_WITH_ARM_CRC}" == "ON" ]]; then
+        export TP_TARGET_ARCH_FLAGS="-march=armv8-a+crc"
+    fi
+
     export FILE_PREFIX_MAP_OPTION="-ffile-prefix-map=${TP_SOURCE_DIR}=. -ffile-prefix-map=${TP_INSTALL_DIR}=."
     export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR}"
     export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC -g ${FILE_PREFIX_MAP_OPTION}"
     export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g -stdlib=libc++ ${FILE_PREFIX_MAP_OPTION}"
+
+    if [[ -n "${TP_TARGET_ARCH_FLAGS}" ]]; then
+        export GLOBAL_CFLAGS="$(append_flags "${GLOBAL_CFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
+        export GLOBAL_CXXFLAGS="$(append_flags "${GLOBAL_CXXFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
+    fi
+
     export CPPFLAGS="${GLOBAL_CPPFLAGS}"
     export CFLAGS="${GLOBAL_CFLAGS}"
     export CXXFLAGS="${GLOBAL_CXXFLAGS}"
@@ -540,7 +558,7 @@ build_boost() {
         runtime-link=static \
         threading=multi \
         variant=release \
-        cxxflags="-std=c++11 -fPIC -O3 -I${TP_INCLUDE_DIR} -stdlib=libc++ -D_LIBCPP_HAS_NO_HASH_MEMORY=1" \
+        cxxflags="$(append_flags "-std=c++11 -fPIC -O3 -I${TP_INCLUDE_DIR} -stdlib=libc++ -D_LIBCPP_HAS_NO_HASH_MEMORY=1" "${TP_TARGET_ARCH_FLAGS}")" \
         linkflags="-L${TP_INSTALL_DIR}/lib -stdlib=libc++" \
         --prefix="${TP_INSTALL_DIR}" \
         --layout=system \
@@ -1050,8 +1068,8 @@ build_icu() {
         unset CPPFLAGS
         unset CXXFLAGS
         unset CFLAGS
-        export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
-        export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
+        export CXXFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
         ./runConfigureICU macOS --prefix="${TP_INSTALL_DIR}" --enable-static --disable-shared
         make -j"${PARALLEL}"
         make install
@@ -1580,7 +1598,7 @@ build_openssl() {
 
     unset CXXFLAGS
     unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
 
     LDFLAGS="-L${TP_INSTALL_DIR}/lib" \
         LIBDIR="lib" \
@@ -1673,6 +1691,7 @@ build_snappy() {
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_INCLUDEDIR=include/snappy \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS}" \
         -DSNAPPY_BUILD_TESTS=OFF \
         -DSNAPPY_BUILD_BENCHMARKS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -2006,7 +2025,10 @@ build_arrow() {
 
     local arrow_simd_level="DEFAULT"
     local arrow_runtime_simd_level="SSE4_2"
-    if [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        arrow_simd_level="NEON"
+        arrow_runtime_simd_level="NEON"
+    elif [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
         arrow_simd_level="AVX2"
         arrow_runtime_simd_level="AVX2"
     fi
@@ -2792,7 +2814,8 @@ build_jemalloc() {
     check_if_source_exist "${JEMALLOC_SOURCE}"
     cd "${TP_SOURCE_DIR}/${JEMALLOC_SOURCE}"
     local addition_opts=" --with-lg-page=16"
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    local jemalloc_cflags="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")"
+    CFLAGS="${jemalloc_cflags}" \
         ./configure --prefix="${TP_INSTALL_DIR}/jemalloc" --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl ${addition_opts}
     make -j"${PARALLEL}"
     make install
@@ -2804,7 +2827,7 @@ build_jemalloc() {
         ln -sfn libjemalloc.2.dylib "${TP_INSTALL_DIR}/jemalloc/lib/libjemalloc.dylib"
     fi
 
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    CFLAGS="${jemalloc_cflags}" \
         ./configure --prefix="${TP_INSTALL_DIR}/jemalloc-debug" --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --disable-cxx --disable-libdl ${addition_opts}
     make -j"${PARALLEL}"
     make install
