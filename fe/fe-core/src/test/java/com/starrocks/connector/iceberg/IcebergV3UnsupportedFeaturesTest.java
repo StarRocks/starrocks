@@ -208,7 +208,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     public void testToFullSchemasDegradesToUnknownForUnsupportedType() {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw,
         // so that queries not involving the column still work.
-        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeographyType.crs84());
+        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeometryType.crs84());
         Schema schema = new Schema(field);
 
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
