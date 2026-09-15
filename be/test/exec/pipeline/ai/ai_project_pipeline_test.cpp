@@ -467,7 +467,7 @@ public:
 
         auto success = AITaskSuccess::create("result-" + task.prompt, {});
         ASSERT_TRUE(success.ok()) << success.status();
-        task.callback(std::move(success).value());
+        task.callback(std::move(success).value(), {.task_count = 1, .request_count = 1});
     }
 
 private:
@@ -482,13 +482,14 @@ public:
     StatusOr<std::unique_ptr<AIProjectTaskHandle>> submit(AIProjectTaskRequest request,
                                                           AITaskCallback&& callback) override {
         return _delegate->submit(
-                std::move(request), [this, callback = std::move(callback)](AITaskResult result) mutable {
+                std::move(request), [this, callback = std::move(callback)](
+                                            AITaskResult result, const AIExecutionStatistics& statistics) mutable {
                     if (const auto* cancelled = std::get_if<AILifecycleCancelled>(&result); cancelled != nullptr) {
                         lifecycle_reasons.emplace_back(cancelled->reason);
                     } else if (std::holds_alternative<AISanitizedRowFailure>(result)) {
                         ++sanitized_failures;
                     }
-                    callback(std::move(result));
+                    callback(std::move(result), statistics);
                 });
     }
 
@@ -1152,7 +1153,7 @@ TEST_F(AIProjectPipelineTest, DispatcherSnapshotsConfigAndSeparatesLiveQueryFrom
                         .model = kModelSentinel,
                         .prompt = "deadline-prompt",
                 },
-                [&](AITaskResult result) { results.emplace_back(std::move(result)); });
+                [&](AITaskResult result, const AIExecutionStatistics&) { results.emplace_back(std::move(result)); });
         ASSERT_TRUE(handle_or.ok()) << handle_or.status();
         auto handle = std::move(handle_or).value();
 
@@ -1214,11 +1215,22 @@ TEST_F(AIProjectPipelineTest, QueryCancellationRemainsLifecycleCancelledAndDoesN
                     .model = kModelSentinel,
                     .prompt = "cancel-prompt",
             },
-            [&](AITaskResult result) { results.emplace_back(std::move(result)); });
+            [&](AITaskResult result, const AIExecutionStatistics& statistics) {
+                const auto query_statistics = _query_context->query_runtime_state().ai_statistics();
+                EXPECT_EQ(1, statistics.task_count);
+                EXPECT_EQ(1, statistics.request_count);
+                EXPECT_EQ(statistics.task_count, query_statistics.task_count);
+                EXPECT_EQ(statistics.request_count, query_statistics.request_count)
+                        << "query statistics must be visible before the downstream callback can publish output";
+                EXPECT_EQ(0, query_statistics.error_count);
+                results.emplace_back(std::move(result));
+            });
     ASSERT_TRUE(handle_or.ok()) << handle_or.status();
     auto handle = std::move(handle_or).value();
     _control.run_until_idle();
     ASSERT_EQ(1, _http.pending_count());
+    EXPECT_TRUE(_query_context->query_runtime_state().ai_statistics().empty())
+            << "in-flight tasks only update process-wide metrics";
 
     _query_context->cancel(Status::Cancelled("test query cancellation"), true);
     EXPECT_EQ(AILifecycleState::CANCELLED,

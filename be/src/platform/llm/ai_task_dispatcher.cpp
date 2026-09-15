@@ -77,11 +77,12 @@ void clear_lifecycle_probe(const AIMemoryContext& memory, AIQueryLifecycleProbe*
     }
 }
 
-void invoke_task_callback_noexcept(const AIMemoryContext& memory, AITaskCallback* callback,
-                                   AITaskResult result) noexcept {
+void invoke_task_callback_noexcept(const AIMemoryContext& memory, AITaskCallback* callback, AITaskResult result,
+                                   AIExecutionStatistics statistics = {}) noexcept {
+    statistics.add({.task_count = 1, .error_count = std::holds_alternative<AISanitizedRowFailure>(result) ? 1 : 0});
     try {
         if (*callback) {
-            (*callback)(std::move(result));
+            (*callback)(std::move(result), statistics);
         }
     } catch (...) {
         LOG(WARNING) << "AI task callback threw an exception";
@@ -748,6 +749,10 @@ private:
                 auto state = shared_from_this();
                 callback = [state](AIHttpResult result) mutable { state->_on_transport(std::move(result)); };
             });
+            {
+                std::lock_guard lock(_mutex);
+                _attempt_start_ns = _core->clock->monotonic_now_ns();
+            }
             Status status = _core->http->submit(std::move(*request), std::move(callback));
             if (status.ok()) {
                 submit_result = HttpSubmitResult::ACCEPTED;
@@ -778,6 +783,7 @@ private:
             {
                 std::lock_guard lock(_mutex);
                 if (!_grant.has_value()) return;
+                _statistics.add({.request_count = 1, .retry_count = retry_attempt ? 1 : 0});
                 committed_grant.emplace(std::move(*_grant));
                 _grant.reset();
             }
@@ -789,6 +795,7 @@ private:
                     _grant.emplace(std::move(*committed_grant));
                     _phase = AITaskPhase::IN_FLIGHT;
                 } else if (_phase == AITaskPhase::COMPLETED_PENDING_SUBMIT_RESULT) {
+                    _statistics.add({.http_time_ns = _inline_http_time_ns});
                     inline_result.emplace(std::move(*_inline_result));
                     _inline_result.reset();
                     _phase = AITaskPhase::AWAITING_CLASSIFICATION;
@@ -829,15 +836,18 @@ private:
     }
 
     void _on_transport(AIHttpResult result) {
+        const int64_t completed_at_ns = _core->clock->monotonic_now_ns();
         std::optional<AIAdmissionGrant> completed_grant;
         {
             std::lock_guard lock(_mutex);
             if (_phase == AITaskPhase::FIRING) {
+                _inline_http_time_ns = std::max<int64_t>(0, completed_at_ns - _attempt_start_ns);
                 _inline_result.emplace(std::move(result));
                 _phase = AITaskPhase::COMPLETED_PENDING_SUBMIT_RESULT;
                 return;
             }
             if (_phase != AITaskPhase::IN_FLIGHT || !_grant.has_value()) return;
+            _statistics.add({.http_time_ns = std::max<int64_t>(0, completed_at_ns - _attempt_start_ns)});
             completed_grant.emplace(std::move(*_grant));
             _grant.reset();
             _phase = AITaskPhase::AWAITING_CLASSIFICATION;
@@ -850,6 +860,29 @@ private:
 
     void _handoff(AIHttpResult result, AIBucketResolutionGuard guard);
     void _classify(AIHttpResult result, AIBucketResolutionGuard guard);
+
+    void _record_timeout() {
+        _core->metrics->record_timeout();
+        std::lock_guard lock(_mutex);
+        _statistics.add({.timeout_count = 1});
+    }
+
+    void _record_usage(const AIProviderParseResult& result) {
+        const AIProviderUsage& usage =
+                std::visit([](const auto& parsed) -> const AIProviderUsage& { return parsed.usage; }, result);
+        AIExecutionStatistics statistics;
+        const auto record = [](const std::optional<int64_t>& value, int64_t* tokens, int64_t* count) {
+            if (value.has_value() && *value >= 0) {
+                *tokens = *value;
+                *count = 1;
+            }
+        };
+        record(usage.prompt_tokens, &statistics.prompt_tokens, &statistics.prompt_usage_count);
+        record(usage.completion_tokens, &statistics.completion_tokens, &statistics.completion_usage_count);
+        record(usage.total_tokens, &statistics.total_tokens, &statistics.total_usage_count);
+        std::lock_guard lock(_mutex);
+        _statistics.add(statistics);
+    }
 
     bool _try_compute_retry_eligible_at(int64_t effective_deadline_ns, size_t retry_ordinal,
                                         std::optional<std::string_view> retry_after,
@@ -984,6 +1017,7 @@ private:
         const bool cancelled = _observe_lifecycle().state == AILifecycleState::CANCELLED;
         AIMemoryContext memory = _memory;
         AITaskCallback callback;
+        AIExecutionStatistics statistics;
         bool replace_with_cancellation = false;
         bool should_publish = false;
         auto transition = [&] {
@@ -993,6 +1027,7 @@ private:
             _ticket.reset();
             replace_with_cancellation = cancelled;
             callback = std::move(_callback);
+            statistics = _statistics;
             AITaskCallback().swap(_callback);
             should_publish = true;
             TEST_SYNC_POINT_CALLBACK("AITaskState::_publish:callback_moved:in_physical_scope", &memory);
@@ -1012,7 +1047,7 @@ private:
             result = AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED};
         }
         _request_template.release();
-        invoke_task_callback_noexcept(memory, &callback, std::move(result));
+        invoke_task_callback_noexcept(memory, &callback, std::move(result), statistics);
     }
 
     struct CompletionEnvelope {
@@ -1117,6 +1152,9 @@ private:
     AITaskPhase _phase = AITaskPhase::INITIAL;
     uint64_t _admission_generation = 0;
     size_t _retry_ordinal = 0;
+    int64_t _attempt_start_ns = 0;
+    int64_t _inline_http_time_ns = 0;
+    AIExecutionStatistics _statistics;
     std::optional<AIAdmissionTicket> _ticket;
     std::optional<AIAdmissionGrant> _grant;
     std::optional<AIHttpResult> _inline_result;
@@ -1178,7 +1216,7 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
     const AILifecycleObservation lifecycle = _observe_lifecycle();
     if (lifecycle.state != AILifecycleState::ACTIVE) {
         if (lifecycle.state == AILifecycleState::DEADLINE_EXCEEDED) {
-            _core->metrics->record_timeout();
+            _record_timeout();
         }
         guard.resolve_without_cooldown();
         if (std::optional<AITaskResult> failure = _lifecycle_failure(lifecycle); failure.has_value()) {
@@ -1193,7 +1231,7 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
             DCHECK(false) << "transport cancellation must be classified before the task deadline";
             return;
         case AIHttpNoResponseCode::DEADLINE:
-            _core->metrics->record_timeout();
+            _record_timeout();
             guard.resolve_without_cooldown();
             _publish(AILifecycleCancelled{.reason = AILifecycleReason::DEADLINE});
             return;
@@ -1201,7 +1239,7 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
             DCHECK(false) << "transport shutdown must be classified before the task deadline";
             return;
         case AIHttpNoResponseCode::TIMEOUT:
-            _core->metrics->record_timeout();
+            _record_timeout();
             _retry_or_finish(classify_ai_no_response(no_response->code), std::nullopt, std::move(guard),
                              AISanitizedFailureClass::TRANSPORT);
             return;
@@ -1246,7 +1284,7 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
             const AILifecycleObservation after_parse = _observe_lifecycle();
             if (after_parse.state != AILifecycleState::ACTIVE) {
                 if (after_parse.state == AILifecycleState::DEADLINE_EXCEEDED) {
-                    _core->metrics->record_timeout();
+                    _record_timeout();
                 }
                 guard.resolve_without_cooldown();
                 if (std::optional<AITaskResult> failure = _lifecycle_failure(after_parse); failure.has_value()) {
@@ -1258,11 +1296,12 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
             _publish(AISanitizedRowFailure{.failure_class = AISanitizedFailureClass::LOCAL_RESOURCE});
             return;
         }
+        _record_usage(provider_result);
         const AILifecycleObservation after_parse = _observe_lifecycle();
         if (after_parse.state != AILifecycleState::ACTIVE) {
             clear_provider_result();
             if (after_parse.state == AILifecycleState::DEADLINE_EXCEEDED) {
-                _core->metrics->record_timeout();
+                _record_timeout();
             }
             guard.resolve_without_cooldown();
             if (std::optional<AITaskResult> failure = _lifecycle_failure(after_parse); failure.has_value()) {
@@ -1299,7 +1338,7 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
         const AILifecycleObservation before_success = _observe_lifecycle();
         if (before_success.state != AILifecycleState::ACTIVE) {
             if (before_success.state == AILifecycleState::DEADLINE_EXCEEDED) {
-                _core->metrics->record_timeout();
+                _record_timeout();
             }
             if (std::optional<AITaskResult> failure = _lifecycle_failure(before_success); failure.has_value()) {
                 _publish(std::move(*failure));

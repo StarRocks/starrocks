@@ -32,6 +32,21 @@ Status invalid_request() {
     return Status::InvalidArgument("AI provider request is invalid");
 }
 
+AIProviderUsage parse_usage(const rapidjson::Value& document) {
+    const auto usage = document.FindMember("usage");
+    if (usage == document.MemberEnd() || !usage->value.IsObject()) return {};
+    const auto token_count = [&](const char* name) -> std::optional<int64_t> {
+        const auto member = usage->value.FindMember(name);
+        if (member == usage->value.MemberEnd() || !member->value.IsInt64() || member->value.GetInt64() < 0) {
+            return std::nullopt;
+        }
+        return member->value.GetInt64();
+    };
+    return {.prompt_tokens = token_count("prompt_tokens"),
+            .completion_tokens = token_count("completion_tokens"),
+            .total_tokens = token_count("total_tokens")};
+}
+
 rapidjson::Type json_type(AIProviderOptionKind kind) {
     switch (kind) {
     case AIProviderOptionKind::NULL_VALUE:
@@ -184,28 +199,30 @@ AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view 
         return AIProviderMalformed{};
     }
 
+    const AIProviderUsage usage = parse_usage(document);
     const auto nested_error = document.FindMember("error");
     if (nested_error != document.MemberEnd() && nested_error->value.IsObject()) {
-        return AIProviderStructuredError{.code = classify_error(nested_error->value)};
+        return AIProviderStructuredError{.code = classify_error(nested_error->value), .usage = usage};
     }
     if (document.HasMember("code") || document.HasMember("type")) {
-        return AIProviderStructuredError{.code = classify_error(document)};
+        return AIProviderStructuredError{.code = classify_error(document), .usage = usage};
     }
 
     const auto choices = document.FindMember("choices");
     if (choices == document.MemberEnd() || !choices->value.IsArray() || choices->value.Empty() ||
         !choices->value[0].IsObject()) {
-        return AIProviderMalformed{};
+        return AIProviderMalformed{.usage = usage};
     }
     const auto message = choices->value[0].FindMember("message");
     if (message == choices->value[0].MemberEnd() || !message->value.IsObject()) {
-        return AIProviderMalformed{};
+        return AIProviderMalformed{.usage = usage};
     }
     const auto content = message->value.FindMember("content");
     if (content == message->value.MemberEnd() || !content->value.IsString()) {
-        return AIProviderMalformed{};
+        return AIProviderMalformed{.usage = usage};
     }
-    return AIProviderSuccess{.content = std::string(content->value.GetString(), content->value.GetStringLength())};
+    return AIProviderSuccess{.content = std::string(content->value.GetString(), content->value.GetStringLength()),
+                             .usage = usage};
 }
 
 } // namespace starrocks
