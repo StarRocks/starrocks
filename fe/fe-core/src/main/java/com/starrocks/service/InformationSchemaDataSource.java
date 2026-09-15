@@ -121,13 +121,7 @@ public class InformationSchemaDataSource {
         }
 
         ConnectContext context = new ConnectContext();
-        if (authInfo.isSetCurrent_user_ident()) {
-            UserIdentityUtils.setAuthInfoFromThrift(context, authInfo.getCurrent_user_ident());
-        } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
-        }
+        UserIdentityUtils.setAuthInfoFromThrift(context, authInfo);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
@@ -232,6 +226,10 @@ public class InformationSchemaDataSource {
             ConnectContext context = new ConnectContext();
             context.setCurrentUserIdentity(authContext.getCurrentUserIdentity());
             context.setCurrentRoleIds(authContext.getCurrentRoleIds());
+            // Carried over with the identity and the roles: the per-table authorization below hands these
+            // to the external access controller, and dropping them here would deny every group-granted
+            // table even though the database-level pass above already accepted the same groups.
+            context.setGroups(authContext.getGroups());
             return context;
         }
     }
