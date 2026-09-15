@@ -1,0 +1,44 @@
+-- name: test_range_partition_prune_plateau
+-- The partition expression decides how a range predicate maps onto the partition column, and the
+-- mapping is only as strict as the expression's order is. The time zone is pinned because both the
+-- partition a row lands on and the constant the predicate maps to go through from_unixtime_ms().
+set time_zone = 'Asia/Shanghai';
+CREATE TABLE t_unix_ms (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime_ms(dt))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- 1609689600000 and 1609689600500 are half a second apart; from_unixtime_ms() divides by 1000, so
+-- both land on the same partition value and the expression is monotonic without being strictly
+-- increasing.
+insert into t_unix_ms values (1609430400000,1),(1609689600000,4),(1609689600500,5),(1609776000000,6);
+select count(*) from t_unix_ms;
+-- the row at 1609689600000 satisfies the predicate and lives on the partition the constant maps to,
+-- so a strict bound must not prune that partition away
+function: assert_explain_contains('select dt from t_unix_ms where dt < 1609689600500', 'partitions=2/9')
+select dt, id from t_unix_ms where dt < 1609689600500 order by id;
+-- a constant on a whole second sits on no plateau and keeps the tighter bound
+select dt, id from t_unix_ms where dt < 1609689600000 order by id;
+function: assert_explain_contains('select dt from t_unix_ms where dt < 1609689600000', 'partitions=1/9')
+-- equality maps soundly through any expression, plateau or not
+select dt, id from t_unix_ms where dt = 1609689600500;
+
+-- from_unixtime() on seconds is strictly increasing -- one second maps to one datetime -- so its
+-- range predicates keep the strict bound and the pruning #78024 had cost them.
+CREATE TABLE t_unix_s (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime(dt))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_unix_s values (1609430400,1),(1609516800,2),(1609603200,3),(1609689600,4),(1609776000,5);
+select dt, id from t_unix_s where dt < 1609689600 order by id;
+function: assert_explain_contains('select dt from t_unix_s where dt < 1609689600', 'partitions=3/9')
+select dt, id from t_unix_s where dt = 1609689600;
