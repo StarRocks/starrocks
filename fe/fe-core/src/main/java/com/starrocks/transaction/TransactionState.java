@@ -996,8 +996,53 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return tableIdList;
     }
 
-    public void addTableIdList(Long tableId) {
+    public synchronized void addTableIdList(Long tableId) {
         this.tableIdList.add(tableId);
+    }
+
+    // Append tableId unless it is already present, as one indivisible step.
+    //
+    // The table list is a plain ArrayList that is appended to from the statement execution path without
+    // holding any DatabaseTransactionMgr lock, so a check-then-append written at the call site races with
+    // itself and, worse, leaves readers looking at a list that is being resized underneath them. A reader
+    // can observe the new size against the old backing array and index past its end. This method and
+    // containsTableId share the transaction's monitor so mutation and inspection cannot interleave.
+    public synchronized void addTableIdIfAbsent(long tableId) {
+        if (!tableIdList.contains(tableId)) {
+            // Delegate rather than appending inline. The monitor is reentrant, so this stays one atomic
+            // step, and every append still funnels through the single addTableIdList entry point.
+            addTableIdList(tableId);
+        }
+    }
+
+    // Membership test that is safe against a concurrent append. Prefer this over getTableIdList().contains
+    // in any reader that can observe a transaction while it is still attaching tables, which means any
+    // reader scanning the running set: an explicit BEGIN...COMMIT transaction is registered as running
+    // before its first statement attaches a table. getTableIdList() itself still hands out the live list,
+    // so a reader that walks it is on its own.
+    public synchronized boolean containsTableId(long tableId) {
+        return tableIdList.contains(tableId);
+    }
+
+    // True when this transaction touches any table in candidateTableIds. Evaluated under the same monitor
+    // as the appenders, so the whole test sees one consistent list rather than one that can grow underneath
+    // it. Walking the live list instead would be worse than inaccurate: an iterator over an ArrayList is
+    // fail fast and throws ConcurrentModificationException on a concurrent append, failing a caller that
+    // has nothing to do with the transaction being appended to.
+    //
+    // An empty list on either side counts as intersecting, preserving the conservative answer this
+    // predicate has always given. A transaction whose tables are not known yet must never be treated as
+    // unrelated, because that is exactly the transaction a watermark caller must still wait for.
+    public synchronized boolean intersectsTableIds(List<Long> candidateTableIds) {
+        if (tableIdList.isEmpty() || candidateTableIds == null || candidateTableIds.isEmpty()) {
+            return true;
+        }
+        for (Long candidate : candidateTableIds) {
+            if (tableIdList.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Map<Long, TableCommitInfo> getIdToTableCommitInfos() {
