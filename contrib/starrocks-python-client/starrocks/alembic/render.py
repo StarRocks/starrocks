@@ -17,6 +17,7 @@ from typing import Any
 
 from alembic.autogenerate import renderers
 from alembic.autogenerate.api import AutogenContext
+from alembic.autogenerate.render import _render_column
 from sqlalchemy.types import TypeEngine
 
 from .ops import (
@@ -29,6 +30,7 @@ from .ops import (
     CreateViewOp,
     DropMaterializedViewOp,
     DropViewOp,
+    StarRocksAlterColumnsOp,
 )
 
 
@@ -303,3 +305,29 @@ def _render_alter_table_properties(autogen_context: AutogenContext, op: AlterTab
         args.append(f"schema={op.schema!r}")
 
     return _render_op_call(autogen_context, "alter_table_properties", args)
+
+
+@renderers.dispatch_for(StarRocksAlterColumnsOp)
+def _render_starrocks_alter_columns(autogen_context: AutogenContext, op: StarRocksAlterColumnsOp) -> str:
+    """Render a StarRocksAlterColumnsOp as a single op.starrocks_alter_columns(...) call.
+
+    Added columns are rendered with Alembic's standard column renderer (so
+    StarRocks types and their imports are handled just like op.add_column).
+    Dropped columns are rendered as bare column names; the downgrade of the
+    same migration is produced independently by the rewriter, so the runtime
+    reverse of dropped columns is not needed here.
+    """
+    args = [f"{op.table_name!r}"]
+
+    if op.adds:
+        adds_repr = ", ".join(_render_column(col, autogen_context) for col in op.adds)
+        args.append(f"adds=[{adds_repr}]")
+    if op.drops:
+        drops_repr = ", ".join(f"sa.Column({c.name!r})" for c in op.drops)
+        args.append(f"drops=[{drops_repr}]")
+    if op.schema:
+        args.append(f"schema={op.schema!r}")
+
+    call = _render_op_call(autogen_context, "starrocks_alter_columns", args)
+    logger.debug("render starrocks_alter_columns: %s", call)
+    return call
