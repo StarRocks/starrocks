@@ -1,0 +1,56 @@
+-- The MV side of lifecycle/schema_evolution: a column ALTER on the MV itself used to be accepted
+-- silently and then fail every later refresh with `column count N vs N+1`, because it appends the
+-- visible column but never the __AGG_STATE_* column the IVM rewrite derives for the new aggregate.
+-- mv_fast_schema_change_mode = force is covered in AlterMaterializedViewIvmColumnTest, not here: it
+-- is a cluster-wide FE config and cases run concurrently, so setting it here leaks into other cases.
+-- name: test_ivm_mv_add_column_rejected @cloud
+CREATE TABLE mvcol_add (k INT, v BIGINT, w BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO mvcol_add VALUES (1,10,100),(2,20,200);
+CREATE MATERIALIZED VIEW mv_mvcol_add
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS sv FROM mvcol_add GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_mvcol_add WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_mvcol_add ADD COLUMN sw AS SUM(w);
+INSERT INTO mvcol_add VALUES (3,30,300);
+REFRESH MATERIALIZED VIEW mv_mvcol_add WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_mvcol_add';
+SELECT k, sv FROM mv_mvcol_add ORDER BY k;
+
+-- name: test_ivm_mv_drop_column_rejected @cloud
+CREATE TABLE mvcol_drop (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO mvcol_drop VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_mvcol_drop
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS sv FROM mvcol_drop GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_mvcol_drop WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_mvcol_drop DROP COLUMN sv;
+INSERT INTO mvcol_drop VALUES (3,30);
+REFRESH MATERIALIZED VIEW mv_mvcol_drop WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_mvcol_drop';
+SELECT k, sv FROM mv_mvcol_drop ORDER BY k;
+
+-- A PCT MV must not be caught by the IVM gate. The ALTER is [UC] because the pre-existing fast
+-- schema evolution rule compares the base column's creation time against partition visible times,
+-- which flips between runs here -- observed both refused and accepted. The deterministic assertion
+-- that the gate does not fire lives in AlterMaterializedViewIvmColumnTest.
+-- name: test_pct_mv_not_caught_by_ivm_gate @cloud
+CREATE TABLE mvcol_pct (k INT, v BIGINT, w BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO mvcol_pct VALUES (1,10,100),(2,20,200);
+CREATE MATERIALIZED VIEW mv_mvcol_pct
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "PCT")
+AS SELECT k, SUM(v) AS sv FROM mvcol_pct GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_mvcol_pct WITH SYNC MODE;
+[UC]ALTER MATERIALIZED VIEW mv_mvcol_pct ADD COLUMN sw AS SUM(w);
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_mvcol_pct';
