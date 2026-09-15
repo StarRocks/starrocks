@@ -993,6 +993,31 @@ build_bitshuffle() {
     sync_lib64_links
 }
 
+# alp (Adaptive Lossless floating-Point compression, cwida/ALP), used by the
+# ALP_ENCODING column encoding for FLOAT/DOUBLE data pages. Portable C++17
+# sources, no arch-specific build needed (x86_64 and arm64 both use the
+# scalar falp kernels).
+build_alp() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libalp.a" && -f "${TP_INCLUDE_DIR}/alp/alp.hpp" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${ALP_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${ALP_SOURCE}"
+
+    rm -f libalp.a ./*.o
+    local alp_src
+    for alp_src in falp fastlanes_ffor fastlanes_unffor fastlanes_generated_ffor fastlanes_generated_unffor; do
+        "${CXX}" -std=c++17 -O3 -DNDEBUG -fPIC -w -Iinclude -c "src/${alp_src}.cpp" -o "${alp_src}.o"
+    done
+    "${AR}" rcs libalp.a falp.o fastlanes_ffor.o fastlanes_unffor.o fastlanes_generated_ffor.o fastlanes_generated_unffor.o
+
+    mkdir -p "${TP_INSTALL_DIR}/lib" "${TP_INCLUDE_DIR}/alp"
+    cp libalp.a "${TP_INSTALL_DIR}/lib/"
+    cp -R include/. "${TP_INCLUDE_DIR}/alp/"
+    sync_lib64_links
+}
+
 build_datasketches() {
     if [[ -d "${TP_INCLUDE_DIR}/datasketches" && -f "${TP_INCLUDE_DIR}/datasketches/hll.hpp" ]]; then
         return 0
@@ -3076,6 +3101,9 @@ for package in "${packages[@]}"; do
             ;;
         bitshuffle)
             build_bitshuffle
+            ;;
+        alp)
+            build_alp
             ;;
         croaringbitmap)
             build_croaringbitmap
