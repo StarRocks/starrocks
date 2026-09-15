@@ -272,8 +272,9 @@ public class JsonPathRewriteRule extends TransformationRule {
             LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
 
             // Skip the JSON-path pushdown when two subfields of the same JSON column collide
-            // case-insensitively (e.g. 'Campaign' vs 'campaign'); see hasCaseCollidingJsonSubfields.
-            if (hasCaseCollidingJsonSubfields(new ArrayList<>(project.getColumnRefMap().values()), columnRefFactory,
+            // case-insensitively ('Campaign' vs 'campaign'), or read at two different types;
+            // see hasUnsupportedJsonSubfieldCollision.
+            if (hasUnsupportedJsonSubfieldCollision(new ArrayList<>(project.getColumnRefMap().values()), columnRefFactory,
                     null)) {
                 return optExpr;
             }
@@ -340,7 +341,8 @@ public class JsonPathRewriteRule extends TransformationRule {
             LogicalScanOperator scanOperator = (LogicalScanOperator) optExpr.getOp();
 
             // Skip the JSON-path pushdown when two subfields of the same JSON column collide
-            // case-insensitively (e.g. 'Campaign' vs 'campaign'); see hasCaseCollidingJsonSubfields.
+            // case-insensitively ('Campaign' vs 'campaign'), or read at two different types;
+            // see hasUnsupportedJsonSubfieldCollision.
             List<ScalarOperator> jsonRoots = new ArrayList<>();
             if (scanOperator.getPredicate() != null) {
                 jsonRoots.add(scanOperator.getPredicate());
@@ -348,7 +350,7 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (scanOperator.getProjection() != null) {
                 jsonRoots.addAll(scanOperator.getProjection().getColumnRefMap().values());
             }
-            if (hasCaseCollidingJsonSubfields(jsonRoots, columnRefFactory, scanOperator.getTable())) {
+            if (hasUnsupportedJsonSubfieldCollision(jsonRoots, columnRefFactory, scanOperator.getTable())) {
                 return optExpr;
             }
 
@@ -421,9 +423,11 @@ public class JsonPathRewriteRule extends TransformationRule {
     }
 
     /**
-     * Returns true if any JSON column referenced by {@code roots} has two subfields whose access
-     * paths differ only by case, e.g. {@code get_json_string(c,'Campaign')} and
-     * {@code get_json_string(c,'campaign')}.
+     * Returns true if the JSON subfield reads in {@code roots} collide in a way the pushdown cannot
+     * express, in which case the caller must skip the rewrite for that scan. Two shapes qualify.
+     *
+     * <p><b>Case-differing paths.</b> Two subfields whose access paths differ only by case, e.g.
+     * {@code get_json_string(c,'Campaign')} and {@code get_json_string(c,'campaign')}.
      *
      * <p>JSON object keys are case-sensitive, so these are two distinct fields with distinct values.
      * The pushdown, however, materializes each as an extended {@link Column} whose name is the
@@ -434,14 +438,29 @@ public class JsonPathRewriteRule extends TransformationRule {
      * the query read the JSON column whole (identical to running with cbo_json_v2_rewrite=false),
      * which is correct — only the (rare) colliding query loses the subfield-pushdown optimization.
      *
+     * <p><b>One path read at two types.</b> {@code sum(coalesce(get_json_int(j,'$.v'),0))} next to
+     * {@code sum(coalesce(get_json_double(j,'$.v'),0))} in one scan. A scan keeps one {@code pathMap}
+     * entry per path, so the second read finds the first one's column ref under a different type and
+     * {@link JsonPathRewriteContext#getOrCreateColumn} throws. That exception is caught in
+     * {@link #transform}, which would be safe if nothing had happened yet — and by then something has:
+     * the rewrite runs through {@code ScalarOperatorRewriter}, which splices its results into the
+     * scalar tree in place with {@code setChild()}. The read that was rewritten first therefore keeps
+     * its extended column ref, while {@code setColRefToColumnMetaMap()} — placed after the loop that
+     * throws — never runs. Planning then dies in the statistics calculator with
+     * "missing statistic of col: N: j.v". Both reads must be materialized into the scan to reach
+     * this: bare subfields under an aggregate stay above it and never share a {@code pathMap}, which
+     * is why only scalar-wrapped reads ({@code length}, {@code upper}, {@code coalesce}) trip it.
+     *
      * <p>This is a side-effect-free pre-pass: it must run before any extended column is created,
      * because a partially-applied rewrite leaves dangling column refs that break later stages.
      */
-    private static boolean hasCaseCollidingJsonSubfields(List<ScalarOperator> roots, ColumnRefFactory factory,
-                                                         Table scanTable) {
+    private static boolean hasUnsupportedJsonSubfieldCollision(List<ScalarOperator> roots, ColumnRefFactory factory,
+                                                               Table scanTable) {
         // key: case-folded extended-column name -> the actual (case-sensitive) name that first claimed it.
         // Used for collisions WITHIN this scan; cross-scan collisions are caught against the table below.
         Map<String, String> claimed = Maps.newHashMap();
+        // key: extended-column name -> the value type the first read of that path asked for.
+        Map<String, Type> claimedTypes = Maps.newHashMap();
         Deque<ScalarOperator> stack = new ArrayDeque<>();
         for (ScalarOperator root : roots) {
             if (root != null) {
@@ -493,6 +512,18 @@ public class JsonPathRewriteRule extends TransformationRule {
             Table targetTable = scanTable != null ? scanTable : tableAndColumn.first;
             Column existing = targetTable.getColumn(name);
             if (existing != null && !existing.getName().equals(name)) {
+                return true;
+            }
+            // (c) one path read at two types within this scan. getOrCreateColumn() throws
+            // IllegalArgumentException on the second type and transform()'s catch-all swallows it, but the
+            // rewrite is not side-effect-free by then: ScalarOperatorRewriter splices its results into the
+            // scalar tree in place through setChild(), so whichever read was rewritten first keeps pointing
+            // at the synthesized extended column while setColRefToColumnMetaMap() -- which sits after the
+            // loop that throws -- never runs. The scan is then left carrying a column ref it does not know
+            // about, and StatisticsCalculator.computeOlapScanNode() kills the statement with
+            // "missing statistic of col: N: j.v".
+            Type priorType = claimedTypes.putIfAbsent(name, call.getType());
+            if (priorType != null && !priorType.equals(call.getType())) {
                 return true;
             }
         }
