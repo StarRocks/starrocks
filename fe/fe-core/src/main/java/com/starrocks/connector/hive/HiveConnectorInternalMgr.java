@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
@@ -163,6 +164,9 @@ public class HiveConnectorInternalMgr {
         if (pullRemoteFileExecutor == null) {
             pullRemoteFileExecutor = Executors.newFixedThreadPool(loadRemoteFileMetadataThreadNum,
                     new ThreadFactoryBuilder().setNameFormat("pull-hive-remote-files-%d").build());
+            pullRemoteFileExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                    loadRemoteFileMetadataThreadNum, Integer.MAX_VALUE,
+                    "pull-hive-remote-files", true);
         }
 
         return pullRemoteFileExecutor;
