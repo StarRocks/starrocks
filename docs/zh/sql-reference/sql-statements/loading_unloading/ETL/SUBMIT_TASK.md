@@ -21,6 +21,7 @@ import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_wareh
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)（从 v3.0 开始支持）
 - [INSERT](../INSERT.md)（从 v3.0 开始支持）
 - [CACHE SELECT](../../../../data_source/data_cache/block_cache_warmup.md)（从 v3.3 开始支持）
+- [UPDATE](../../table_bucket_part_index/UPDATE.md)（从 v4.2 开始支持）
 
 您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
 
@@ -65,7 +66,7 @@ AS insert into t2 select * from t1;
 | task_name          | 是      | 任务名称。                                                                                   |
 | schedule_start     | 否      | 定时任务的开始时间。                                                                           |
 | schedule_interval  | 否      | 定时任务的执行间隔，最小间隔为 10 秒。                                                           |
-| etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../INSERT.md) |
+| etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、[INSERT](../INSERT.md) 和 [UPDATE](../../table_bucket_part_index/UPDATE.md) 创建异步任务。 |
 
 ## 返回值
 
@@ -160,4 +161,15 @@ PROPERTIES (
     "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
+```
+
+示例七：为 UPDATE 语句创建异步任务，该语句根据 Staging 表更新主键表。任务将以五分钟为间隔定期执行：
+
+```SQL
+SUBMIT TASK etl_update
+SCHEDULE EVERY(INTERVAL 5 MINUTE)
+AS
+UPDATE target_tbl SET v1 = src.v1
+FROM staging_tbl src
+WHERE target_tbl.pk = src.pk;
 ```

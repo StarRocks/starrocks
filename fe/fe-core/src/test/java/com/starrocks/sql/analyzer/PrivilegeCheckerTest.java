@@ -1254,6 +1254,19 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                     "Access denied;");
         }
 
+        // check SUBMIT TASK AS UPDATE: UPDATE on the target table
+        verifyGrantRevoke(
+                "submit task as update db1.tbl1 set k4 = 2 where k3 = 1",
+                "grant update on db1.tbl1 to test",
+                "revoke update on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on TABLE tbl1 for this operation");
+        verifyGrantRevokeFail(
+                "submit task as update db1.tbl1 set k4 = s.k4 from db1.tbl2 s where db1.tbl1.k1 = s.k1",
+                "grant update on db1.tbl1 to test",
+                "revoke update on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on TABLE tbl1 for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl2 for this operation");
+
         // check drop non-existed table
         statement = UtFrameUtils.parseStmtWithNewParser(
                 "drop table if exists db1.tbl_not_exist1", ctx);
