@@ -122,14 +122,35 @@ public class BlockingCallValidator {
      *                  "lock-held time grouped by transport" an aggregatable metric.
      */
     public static void validateNotUnderLock(String transport) {
+        validateNotUnderLock(transport, null);
+    }
+
+    /**
+     * As above, naming the catalog whose latency the lock is about to be bound to.
+     *
+     * @param catalog the catalog being contacted, or null where the transport is not per-catalog -- thrift
+     *                RPC to a BE, lake publish, kafka. It is what makes "lock-held time grouped by catalog"
+     *                answerable, which is the number that turns a slow-lock incident from "the metastore was
+     *                flaky" into a named catalog.
+     */
+    public static void validateNotUnderLock(String transport, String catalog) {
+        if (!LockHoldDepth.isUnderLock()) {
+            return;
+        }
+
+        // Recorded before the mode is consulted, and regardless of it. This is what LockManager's slow-lock
+        // trace reads to name the call an owner is stuck in, and that attribution must not vanish because
+        // someone switched the check off -- the same argument LockHoldDepth makes for its own counter.
+        BlockingCallUnderLock.started(transport, catalog);
+
         Mode mode = LockInvariantViolations.currentBlockingCallMode();
-        if (mode == Mode.OFF || !LockHoldDepth.isUnderLock()) {
+        if (mode == Mode.OFF) {
             return;
         }
 
         String callSite = callerOfTheGuard();
-        String detail = "about to contact " + transport + " while holding " + LockHoldDepth.current()
-                + " FE metadata lock(s)";
+        String detail = "about to contact " + transport + (catalog == null ? "" : " (catalog " + catalog + ")")
+                + " while holding " + LockHoldDepth.current() + " FE metadata lock(s)";
         LockInvariantViolations.reportAtSite(KIND_BLOCKING_CALL_UNDER_LOCK, detail, REMEDY, mode, callSite);
     }
 

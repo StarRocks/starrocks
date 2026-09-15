@@ -522,6 +522,18 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
+            // Attribution, so the line answers "what is this holder waiting on" without anyone reading the
+            // stack -- and so the same question can be aggregated (held time by transport, by catalog),
+            // which a stack cannot be. See BlockingCallUnderLock for what exactly the record means: the last
+            // external call this holder started while under lock, which is why the age is reported with it.
+            BlockingCallUnderLock.Record blockingCall = BlockingCallUnderLock.of(locker.getThreadId());
+            if (blockingCall != null) {
+                readerInfo.addProperty("blockingCall", blockingCall.getTransport());
+                if (blockingCall.getCatalog() != null) {
+                    readerInfo.addProperty("catalog", blockingCall.getCatalog());
+                }
+                readerInfo.addProperty("blockingCallAgeMs", nowMs - blockingCall.getStartTimeMs());
+            }
             if (captureStack) {
                 readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                         locker.getLockerThread(), 0, Short.MAX_VALUE));

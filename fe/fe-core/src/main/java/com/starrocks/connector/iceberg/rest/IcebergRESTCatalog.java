@@ -140,7 +140,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         // initialize() below performs a GET /v1/config against the REST service, and an OAuth
         // exchange when configured, so construction is itself a remote call -- reached before any
         // of the guarded catalog actions, on the first resolve of a replayed connector.
-        BlockingCallValidator.validateNotUnderLock("iceberg-rest");
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest", catalogName);
         try {
             RESTSessionCatalog restCatalog = new RESTSessionCatalog();
             configureHadoopConf(restCatalog, conf);
@@ -477,7 +477,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private <T> T withAuthRecovery(Supplier<T> action) {
         // Wraps the REST calls; runWithAuthRecovery delegates here too. Reached only on a cache
         // miss, because CachingIcebergCatalog sits in front of this delegate.
-        BlockingCallValidator.validateNotUnderLock("iceberg-rest");
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest", catalogName);
         try {
             return action.get();
         } catch (RuntimeException e) {

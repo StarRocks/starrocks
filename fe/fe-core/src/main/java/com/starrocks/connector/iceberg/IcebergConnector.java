@@ -131,7 +131,7 @@ public class IcebergConnector implements Connector {
             // and once the catalog exists it returns a field. Only the build contacts anything --
             // REST does GET /v1/config, hive connects to HMS, glue builds an AWS client -- and it
             // is deliberately lazy so an unreachable metastore cannot stop the FE from starting.
-            BlockingCallValidator.validateNotUnderLock("iceberg-catalog");
+            BlockingCallValidator.validateNotUnderLock("iceberg-catalog", catalogName);
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
 
             if (icebergCatalogProperties.isEnableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {

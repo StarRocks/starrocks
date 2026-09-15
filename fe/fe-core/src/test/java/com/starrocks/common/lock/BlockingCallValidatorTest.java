@@ -14,6 +14,7 @@
 package com.starrocks.common.lock;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.BlockingCallUnderLock;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
@@ -281,5 +282,75 @@ public class BlockingCallValidatorTest {
         } finally {
             LockTestUtils.restoreBlockingCallValidation();
         }
+    }
+
+    // --------------- the attribution record the slow-lock trace reads ---------------
+
+    /**
+     * What LockManager's slow-lock trace turns into its {@code blockingCall} field. It has to be readable
+     * from another thread -- the trace runs on a waiter and reports on the owners -- and it has to be gone
+     * once the thread leaves its outermost critical section, so a pooled thread does not carry an old call
+     * into the next lock it takes.
+     */
+    @Test
+    public void testBlockingCallIsRecordedAndClearedOnRelease() {
+        long threadId = Thread.currentThread().getId();
+        Assertions.assertNull(BlockingCallUnderLock.of(threadId), "nothing recorded outside a critical section");
+
+        long before = System.currentTimeMillis();
+        Locker locker = new Locker();
+        locker.lockDatabase(INTERNAL_DB_ID, LockType.READ);
+        try {
+            FakeBlockingTransport.contact();
+            BlockingCallUnderLock.Record record = BlockingCallUnderLock.of(threadId);
+            Assertions.assertNotNull(record);
+            Assertions.assertEquals(FakeBlockingTransport.TAG, record.getTransport());
+            Assertions.assertNull(record.getCatalog(), "no catalog was named, so none may be invented");
+            Assertions.assertTrue(record.getStartTimeMs() >= before);
+        } finally {
+            locker.unLockDatabase(INTERNAL_DB_ID, LockType.READ);
+        }
+
+        Assertions.assertNull(BlockingCallUnderLock.of(threadId),
+                "the record must not outlive the critical section it was made in");
+    }
+
+    @Test
+    public void testCatalogIsRecordedWhenTheTransportKnowsIt() {
+        long threadId = Thread.currentThread().getId();
+        Locker locker = new Locker();
+        locker.lockDatabase(INTERNAL_DB_ID, LockType.READ);
+        try {
+            FakeBlockingTransport.contact("hive_cat");
+            Assertions.assertEquals("hive_cat", BlockingCallUnderLock.of(threadId).getCatalog());
+        } finally {
+            locker.unLockDatabase(INTERNAL_DB_ID, LockType.READ);
+        }
+    }
+
+    /**
+     * Attribution is not part of the check, so switching the check off must not take it away: the field is
+     * what makes a slow-lock report nameable, and someone who silenced the warnings has if anything more
+     * need of it.
+     */
+    @Test
+    public void testRecordIsKeptEvenWhenTheCheckIsOff() {
+        Config.lock_blocking_call_validation_mode = "off";
+        long threadId = Thread.currentThread().getId();
+        Locker locker = new Locker();
+        locker.lockDatabase(INTERNAL_DB_ID, LockType.READ);
+        try {
+            FakeBlockingTransport.contact();
+            Assertions.assertEquals(0, LockInvariantViolations.totalViolations());
+            Assertions.assertNotNull(BlockingCallUnderLock.of(threadId));
+        } finally {
+            locker.unLockDatabase(INTERNAL_DB_ID, LockType.READ);
+        }
+    }
+
+    @Test
+    public void testNothingIsRecordedOutsideACriticalSection() {
+        FakeBlockingTransport.contact("hive_cat");
+        Assertions.assertNull(BlockingCallUnderLock.of(Thread.currentThread().getId()));
     }
 }

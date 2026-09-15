@@ -34,6 +34,11 @@ public class FakeBlockingTransport {
         BlockingCallValidator.validateNotUnderLock(TAG);
     }
 
+    /** The guarded entry point of a transport that knows which catalog it is contacting. */
+    public static void contact(String catalog) {
+        BlockingCallValidator.validateNotUnderLock(TAG, catalog);
+    }
+
     /** An extra frame of the transport's own, as a real one has between its overloads. */
     public static void contactThroughOwnOverload() {
         contact();

@@ -415,6 +415,7 @@ public class SnapshotRestoreJob extends AbstractJob {
 
         Locker locker = new Locker();
         locker.lockDatabase(targetDatabase.getId(), LockType.WRITE);
+        OlapTable restoredTable = null;
         try {
             if (!targetDatabase.isExist()) {
                 throw new StarRocksException(String.format("Database '%s' has been dropped",
@@ -437,8 +438,16 @@ public class SnapshotRestoreJob extends AbstractJob {
 
             tableForRestore.onCreate(targetDatabase);
             registerTabletsInInvertedIndex(targetDatabase, tableForRestore);
+            restoredTable = tableForRestore;
         } finally {
             locker.unLockDatabase(targetDatabase.getId(), LockType.WRITE);
+        }
+
+        if (restoredTable != null) {
+            // The other half of table creation, deliberately outside the database write lock: for a
+            // materialized view it resolves every base table through the connector. See
+            // Table#onCreateAfterUnlock.
+            restoredTable.onCreateAfterUnlock(targetDatabase);
         }
     }
 

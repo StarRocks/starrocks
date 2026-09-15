@@ -76,6 +76,11 @@ public final class LockHoldDepth {
         if (depth[0] > 0) {
             depth[0]--;
         }
+        if (depth[0] == 0) {
+            // Leaving the outermost critical section: whatever external call this thread made while inside
+            // it is no longer anyone's slow lock, and the thread may go back to a pool.
+            BlockingCallUnderLock.clearForCurrentThread();
+        }
     }
 
     /** Number of metadata locks held by the current thread. */
@@ -94,5 +99,6 @@ public final class LockHoldDepth {
      */
     public static void reset() {
         DEPTH.get()[0] = 0;
+        BlockingCallUnderLock.clearForCurrentThread();
     }
 }

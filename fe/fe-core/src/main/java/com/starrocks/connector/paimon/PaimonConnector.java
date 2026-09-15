@@ -187,7 +187,7 @@ public class PaimonConnector implements Connector {
         if (paimonNativeCatalog == null) {
             // Inside the null check for the same reason as iceberg: a hit returns a field, only
             // the build contacts the metastore or the warehouse path's file system.
-            BlockingCallValidator.validateNotUnderLock("paimon");
+            BlockingCallValidator.validateNotUnderLock("paimon", catalogName);
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
             CatalogContext context = CatalogContext.create(getPaimonOptions(), configuration);
