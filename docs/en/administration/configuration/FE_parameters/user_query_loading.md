@@ -54,6 +54,15 @@ This topic introduces the following types of FE configurations:
 
 ## User, role, and privilege
 
+### `execute_as_external_user_allowed_groups`
+
+- Default: (empty)
+- Type: String[]
+- Unit: -
+- Is mutable: Yes
+- Description: The groups whose members can be the target of an [EXECUTE AS](../../../sql-reference/sql-statements/account-management/EXECUTE_AS.md) statement without having been created with CREATE USER first. If there are multiple, separate them with commas. Such a target becomes an ephemeral user identity that owns no privileges of its own, so its authorization comes entirely from the roles mapped to the groups the [group providers](../../user_privs/group_provider.md) report for it. Impersonating an unregistered user still requires the IMPERSONATE privilege on it, which in practice means `GRANT IMPERSONATE ON ALL USERS`, because a per-user grant cannot name a user that does not exist. Such a target must also be written as `user` or `'user'@'%'`. Empty (the default) disables the feature: EXECUTE AS then fails with `cannot find user` for anyone who was not created.
+- Introduced in: v4.2.0
+
 ### `enable_task_info_mask_credential`
 
 - Default: true
