@@ -141,6 +141,26 @@ public class LocalMetaStoreTest {
     }
 
     @Test
+    public void testVersionEpochAssignedWhenCreatingPartitions() throws Exception {
+        String tableName = "t_version_epoch_ut";
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test." + tableName + "(k1 int)"
+                    + " DISTRIBUTED BY RANDOM BUCKETS 3 PROPERTIES('replication_num' = '1')");
+
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), tableName);
+        Partition partition = table.getPartitions().iterator().next();
+        Assertions.assertTrue(partition.getDefaultPhysicalPartition().getVersionEpoch() > 0);
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        localMetastore.addSubPartitions(db, table, partition, 1, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(2, partition.getSubPartitions().size());
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            Assertions.assertTrue(physicalPartition.getVersionEpoch() > 0);
+        }
+    }
+
+    @Test
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
                     GlobalStateMgr.getCurrentState().getRecycleBin(),
