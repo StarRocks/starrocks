@@ -25,6 +25,7 @@ import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchArrowSchemaRequest;
 import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetCsvSplitsResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
@@ -179,6 +180,19 @@ public class PBackendServiceWithMetricsTest {
         };
 
         Future<PGetFileSchemaResult> result = pBackendServiceWithMetrics.getFileSchema(new PGetFileSchemaRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testGetCsvSplits() throws Exception {
+        new Expectations() {
+            {
+                pBackendService.getCsvSplits((PGetCsvSplitsRequest) any);
+                result = CompletableFuture.completedFuture(new PGetCsvSplitsResult());
+            }
+        };
+
+        Future<PGetCsvSplitsResult> result = pBackendServiceWithMetrics.getCsvSplits(new PGetCsvSplitsRequest());
         assertNotNull(result);
     }
 

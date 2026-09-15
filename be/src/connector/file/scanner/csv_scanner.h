@@ -41,6 +41,19 @@ public:
 
     Status get_schema(std::vector<SlotDescriptor>* schema) override;
 
+    // Reports the offsets at which records begin in the range's single file, thinned so that
+    // consecutive offsets are at least |split_size| bytes apart, always beginning with 0. Feeding
+    // these back as range start offsets is what lets a file be cut up without landing inside an
+    // enclosed field.
+    //
+    // The file is read from offset 0, because whether a byte sits inside an enclosed field depends
+    // on every byte before it and cannot be resolved locally. Only framing is done - no fields are
+    // parsed, no chunks are built - so the pass runs at the speed of the reads behind it.
+    //
+    // open() is neither required nor appropriate here: this needs no slot descriptors, and open()
+    // would reject a range that has none.
+    Status get_split_offsets(int64_t split_size, std::vector<int64_t>* offsets);
+
     void close() override;
 
     // For test
