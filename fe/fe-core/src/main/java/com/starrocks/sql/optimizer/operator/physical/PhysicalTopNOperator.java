@@ -148,7 +148,8 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced, perPipeline);
+        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced, perPipeline,
+                partitionByColumns, partitionLimit, preAggCall);
     }
 
     @Override
