@@ -137,6 +137,10 @@ public:
     // only nullable aggregate can support nullable immediate input.
     bool support_nullable_immediate_input() const override { return true; }
 
+    // Delegate to the wrapped function: it is the nested aggregate (e.g. bitmap_union_count) that declares
+    // whether it ever emits a NULL, not this generic nullable wrapper.
+    bool is_result_non_nullable() const override { return nested_function->is_result_non_nullable(); }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
@@ -261,7 +265,14 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
-        DCHECK(dst->is_nullable());
+        if (!dst->is_nullable()) {
+            // The analytic executor materializes a non-nullable result column for an aggregate that declares
+            // is_result_non_nullable() (e.g. bitmap_union_count), which never emits a NULL. Write the nested
+            // values straight into the non-nullable column (mirrors finalize_to_column and
+            // CountNullableAggregateFunction::get_values).
+            nested_function->get_values(ctx, this->data(state).nested_state(), dst, start, end);
+            return;
+        }
         auto* nullable_column = down_cast<NullableColumn*>(dst);
         // binary column couldn't call resize method like Numeric Column
         // for non-slice type, null column data has been reset to zero in AnalyticNode
