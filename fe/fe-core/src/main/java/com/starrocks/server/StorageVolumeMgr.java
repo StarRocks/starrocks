@@ -246,6 +246,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 validateParams(copied.getType(), params);
             }
             applyChangesToVolume(copied, sv.getId(), svType, locations, comment, params, enabled);
+            // Checked on the result rather than on the volume we started from, so an ALTER that
+            // supplies a working credential repairs the volume, while one that only touches the
+            // comment or the enabled flag is refused instead of trying to write back a volume whose
+            // credential can no longer be turned into a file store.
+            checkCredentialUsable(copied);
             updateInternalNoLock(copied);
         }
     }
@@ -344,6 +349,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 locationChangedStorageVolumeId = newStorageVolume.getId();
             }
 
+            // Same reason as in updateStorageVolume: when the type is unchanged this reuses the old
+            // volume's credential, which a restore of a volume stored with an unusable one would
+            // otherwise try to write back.
+            checkCredentialUsable(newStorageVolume);
             replaceInternalNoLock(newStorageVolume);
         }
 
@@ -361,11 +370,27 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         setDefaultStorageVolume(stmt.getName());
     }
 
+    /**
+     * A volume whose stored credential can no longer be turned into a usable configuration is kept
+     * readable so it can be inspected and dropped, but nothing may be stored through it. Callers
+     * about to hand data to a volume have to reject it explicitly, otherwise the failure surfaces
+     * much later, once the volume is already recorded as the location of a database or a table.
+     */
+    protected static void checkCredentialUsable(StorageVolume sv) throws DdlException {
+        if (!sv.isCredentialUsable()) {
+            throw new DdlException(String.format("Storage volume %s has a credential that cannot be used, " +
+                            "it can only be described, dropped, or repaired by an ALTER that sets a working credential",
+                    sv.getName()));
+        }
+    }
+
     public void setDefaultStorageVolume(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(svName);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svName);
             Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svName);
+            Preconditions.checkState(sv.isCredentialUsable(),
+                    "Storage volume '%s' has a credential that cannot be used", svName);
             SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
             GlobalStateMgr.getCurrentState().getEditLog()
                     .logSetDefaultStorageVolume(log, wal -> this.defaultStorageVolumeId = sv.getId());
@@ -617,7 +642,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     protected abstract void updateTableStorageInfo(String storageVolumeId) throws DdlException;
 
     public abstract long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
-            throws MetaNotFoundException;
+            throws MetaNotFoundException, DdlException;
 
     public abstract boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId);
 }
