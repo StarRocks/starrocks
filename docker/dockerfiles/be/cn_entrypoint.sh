@@ -2,6 +2,7 @@
 
 # Notes:
 # COREDUMP_ENABLED=true enables coredump collection and restarts the CN process after a crash.
+# CN_RESTART_WAIT_SECONDS sets the restart delay in seconds and defaults to 5.
 
 HOST_TYPE=${HOST_TYPE:-"IP"}
 FE_QUERY_PORT=${FE_QUERY_PORT:-9030}
@@ -19,6 +20,32 @@ CN_CONFIG=$STARROCKS_HOME/conf/cn.conf
 log_stderr()
 {
     echo "[`date`] $@" >&2
+}
+
+check_coredump_configuration()
+{
+    if [[ "$COREDUMP_ENABLED" != "true" ]]; then
+        return 0
+    fi
+
+    local missing_dependencies=()
+    for dependency in inotifywait pigz rclone; do
+        if ! command -v "$dependency" >/dev/null 2>&1; then
+            missing_dependencies+=("$dependency")
+        fi
+    done
+
+    if [[ ${#missing_dependencies[@]} -ne 0 ]]; then
+        log_stderr "COREDUMP_ENABLED=true requires these commands: ${missing_dependencies[*]}"
+        return 1
+    fi
+
+    if [[ ! "$CN_RESTART_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+        log_stderr "CN_RESTART_WAIT_SECONDS must be a positive integer, got: $CN_RESTART_WAIT_SECONDS"
+        return 1
+    fi
+
+    return 0
 }
 
 update_conf_from_configmap()
@@ -153,6 +180,9 @@ if [[ "x$svc_name" == "x" ]] ; then
     exit 1
 fi
 
+CN_RESTART_WAIT_SECONDS=${CN_RESTART_WAIT_SECONDS:-5}
+check_coredump_configuration || exit $?
+
 update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
@@ -162,7 +192,7 @@ log_stderr "run start_cn.sh"
 
 if [[ "$COREDUMP_ENABLED" == "true" ]]; then
     # Start an inotifywait loop daemon to monitor core dump generation.
-    $STARROCKS_ROOT/upload_coredump.sh &
+    "$STARROCKS_ROOT/upload_coredump.sh" &
 fi
 
 addition_args=
@@ -177,9 +207,8 @@ while true; do
 
     if [[ "$COREDUMP_ENABLED" == "true" && ($ret -eq 134 || $ret -eq 139) ]]; then
         log_stderr "starrocks_be CN process exited with status: $ret"
-        sleep_interval=${CN_RESTART_WAIT_SECONDS:-5}
-        log_stderr "Restarting the CN process after $sleep_interval seconds ..."
-        sleep $sleep_interval
+        log_stderr "Restarting the CN process after $CN_RESTART_WAIT_SECONDS seconds ..."
+        sleep "$CN_RESTART_WAIT_SECONDS"
         continue
     fi
 
