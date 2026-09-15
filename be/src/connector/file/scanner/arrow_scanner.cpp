@@ -19,6 +19,7 @@
 #include <arrow/io/memory.h>
 #include <arrow/ipc/reader.h>
 #include <arrow/status.h>
+#include <arrow/type.h>
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
@@ -116,6 +117,15 @@ ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const T
         const std::string& col_name = ctx->current_column_name;
         std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
                                                     col_name.empty() ? "null" : col_name, raw_data);
+        if (ctx->consumer_partition != -1) {
+            error_msg += strings::Substitute(", partition = $0", ctx->consumer_partition);
+            if (ctx->consumer_offset != -1) {
+                error_msg += strings::Substitute(", offset = $0", ctx->consumer_offset);
+            }
+            if (!ctx->consumer_message_id.empty()) {
+                error_msg += strings::Substitute(", message_id = $0", ctx->consumer_message_id);
+            }
+        }
         LoadPathStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
         auto* writer = LoadPathStateHelper::rejected_record_writer(state);
@@ -130,6 +140,19 @@ ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const T
                               rapidjson::Value(ctx->current_file.c_str(),
                                                static_cast<rapidjson::SizeType>(ctx->current_file.size()), alloc),
                               alloc);
+            if (ctx->consumer_partition != -1) {
+                src_doc.AddMember("partition", rapidjson::Value(ctx->consumer_partition), alloc);
+                if (ctx->consumer_offset != -1) {
+                    src_doc.AddMember("offset", rapidjson::Value(ctx->consumer_offset), alloc);
+                }
+                if (!ctx->consumer_message_id.empty()) {
+                    src_doc.AddMember(
+                            "message_id",
+                            rapidjson::Value(ctx->consumer_message_id.c_str(),
+                                             static_cast<rapidjson::SizeType>(ctx->consumer_message_id.size()), alloc),
+                            alloc);
+                }
+            }
             if (ctx->current_batch_first_row_in_file >= 0 && row_offset_in_array >= 0) {
                 int64_t row_in_file = ctx->current_batch_first_row_in_file + row_offset_in_array;
                 src_doc.AddMember("row_in_file", rapidjson::Value(row_in_file), alloc);
@@ -198,8 +221,8 @@ Status ArrowScanner::open_next_reader() {
 
     auto* stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     auto* pipe = stream_file ? stream_file->pipe().get() : nullptr;
-    const bool is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
-    if (is_discrete_pipe) {
+    _is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
+    if (_is_discrete_pipe) {
         // Delay opening reader until next_batch() for discrete buffers (Kafka/Pulsar Routine Load)
         _curr_file_reader = nullptr;
     } else {
@@ -227,7 +250,22 @@ Status ArrowScanner::next_batch() {
 
     auto* stream_file = _file ? dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get()) : nullptr;
     auto* pipe = stream_file ? stream_file->pipe().get() : nullptr;
-    bool is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
+    _is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
+    bool is_discrete_pipe = _is_discrete_pipe;
+
+    auto format_source_info = [this]() {
+        std::string info;
+        if (_conv_ctx.consumer_partition != -1) {
+            info += " at partition=" + std::to_string(_conv_ctx.consumer_partition);
+            if (_conv_ctx.consumer_offset != -1) {
+                info += " offset=" + std::to_string(_conv_ctx.consumer_offset);
+            }
+            if (!_conv_ctx.consumer_message_id.empty()) {
+                info += " message_id=" + _conv_ctx.consumer_message_id;
+            }
+        }
+        return info;
+    };
 
     while (true) {
         if (_curr_file_reader == nullptr) {
@@ -241,7 +279,8 @@ Status ArrowScanner::next_batch() {
                 }
                 stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
                 pipe = stream_file ? stream_file->pipe().get() : nullptr;
-                is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
+                _is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
+                is_discrete_pipe = _is_discrete_pipe;
             }
 
             if (_curr_file_reader == nullptr) {
@@ -270,6 +309,7 @@ Status ArrowScanner::next_batch() {
                             auto msg_meta = static_cast<const StreamMessageMeta*>(meta);
                             _conv_ctx.consumer_partition = msg_meta->partition();
                             _conv_ctx.consumer_offset = msg_meta->offset();
+                            _conv_ctx.consumer_message_id = msg_meta->message_id();
                         }
                     }
 
@@ -279,16 +319,16 @@ Status ArrowScanner::next_batch() {
 
                     auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(_arrow_stream);
                     if (!reader_res.ok()) {
-                        std::string error_msg = "Arrow IPC parse error: " + reader_res.status().ToString();
-                        if (_conv_ctx.consumer_partition != -1) {
-                            error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition) +
-                                         " offset=" + std::to_string(_conv_ctx.consumer_offset);
-                        }
+                        std::string error_msg =
+                                "Arrow IPC parse error: " + reader_res.status().ToString() + format_source_info();
                         _conv_ctx.report_error_message(error_msg, "", -1);
                         LOG(WARNING) << "Arrow routine load: " << error_msg;
                         _counter->num_rows_filtered++;
                         _parser_buf.reset();
                         _arrow_stream.reset();
+                        _conv_ctx.consumer_partition = -1;
+                        _conv_ctx.consumer_offset = -1;
+                        _conv_ctx.consumer_message_id.clear();
                         continue;
                     }
                     _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
@@ -301,11 +341,7 @@ Status ArrowScanner::next_batch() {
 
         arrow::Status status = _curr_file_reader->ReadNext(&_batch);
         if (!status.ok()) {
-            std::string error_msg = "ReadNext batch failed, reason: " + status.ToString();
-            if (_conv_ctx.consumer_partition != -1) {
-                error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition) +
-                             " offset=" + std::to_string(_conv_ctx.consumer_offset);
-            }
+            std::string error_msg = "ReadNext batch failed, reason: " + status.ToString() + format_source_info();
             _conv_ctx.report_error_message(error_msg, "", -1);
             LOG(WARNING) << "Arrow routine load: " << error_msg;
             _counter->num_rows_filtered++;
@@ -318,6 +354,9 @@ Status ArrowScanner::next_batch() {
                 for (auto& conv : _conv_funcs) {
                     conv = std::make_unique<ConvertFuncTree>();
                 }
+                _conv_ctx.consumer_partition = -1;
+                _conv_ctx.consumer_offset = -1;
+                _conv_ctx.consumer_message_id.clear();
                 _message_boundary = true;
                 continue;
             }
@@ -332,6 +371,9 @@ Status ArrowScanner::next_batch() {
                 conv = std::make_unique<ConvertFuncTree>();
             }
             if (is_discrete_pipe) {
+                _conv_ctx.consumer_partition = -1;
+                _conv_ctx.consumer_offset = -1;
+                _conv_ctx.consumer_message_id.clear();
                 _message_boundary = true;
                 continue;
             }
@@ -339,10 +381,82 @@ Status ArrowScanner::next_batch() {
             continue;
         }
 
+        if (is_discrete_pipe) {
+            auto schema_st = validate_batch_schema(_batch);
+            if (!schema_st.ok()) {
+                filter_current_discrete_message("schema mismatch: " + schema_st.to_string());
+                continue;
+            }
+        }
+
         _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
         _last_file_scan_rows += _batch->num_rows();
         return Status::OK();
     }
+}
+
+Status ArrowScanner::validate_batch_schema(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    ObjectPool dummy_pool;
+    for (auto i = 0; i < _num_of_columns_from_file; ++i) {
+        SlotDescriptor* slot_desc = _src_slot_descriptors[i];
+        if (slot_desc == nullptr) {
+            continue;
+        }
+        auto array_ptr = batch->GetColumnByName(std::string(slot_desc->col_name()));
+        if (array_ptr == nullptr) {
+            if (!slot_desc->is_nullable()) {
+                return Status::InvalidArgument(strings::Substitute(
+                        "column $0 is non-nullable but missing in Arrow message", slot_desc->col_name()));
+            }
+        } else {
+            auto arrow_id = array_ptr->type()->id();
+            const auto& lt = slot_desc->type().type;
+            if ((arrow_id == arrow::Type::STRUCT || arrow_id == arrow::Type::MAP || arrow_id == arrow::Type::LIST ||
+                 arrow_id == arrow::Type::LARGE_LIST || arrow_id == arrow::Type::FIXED_SIZE_LIST) &&
+                !slot_desc->type().is_complex_type() && lt != TYPE_JSON && lt != TYPE_VARCHAR && lt != TYPE_CHAR) {
+                return Status::InvalidArgument(
+                        strings::Substitute("column $0 of type $1 cannot be mapped from complex Arrow type $2",
+                                            slot_desc->col_name(), type_to_string(lt), array_ptr->type()->name()));
+            }
+            MutableColumnPtr dummy_column;
+            ConvertFuncTree dummy_conv;
+            Expr* dummy_expr = nullptr;
+            RETURN_IF_ERROR(create_arrow_column(array_ptr->type().get(), slot_desc, &dummy_column, &dummy_conv,
+                                                &dummy_expr, dummy_pool, _strict_mode));
+        }
+    }
+    return Status::OK();
+}
+
+void ArrowScanner::filter_current_discrete_message(const std::string& reason) {
+    std::string error_msg = "Arrow routine load: " + reason;
+    if (_conv_ctx.consumer_partition != -1) {
+        error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition);
+        if (_conv_ctx.consumer_offset != -1) {
+            error_msg += " offset=" + std::to_string(_conv_ctx.consumer_offset);
+        }
+        if (!_conv_ctx.consumer_message_id.empty()) {
+            error_msg += " message_id=" + _conv_ctx.consumer_message_id;
+        }
+    }
+    _conv_ctx.report_error_message(error_msg, "", -1);
+    LOG(WARNING) << error_msg;
+    int64_t filtered = _batch != nullptr && _batch->num_rows() > 0 ? _batch->num_rows() : 1;
+    _counter->num_rows_filtered += filtered;
+    _batch.reset();
+    _batch_start_idx = 0;
+    _chunk_start_idx = 0;
+    _curr_file_reader.reset();
+    _parser_buf.reset();
+    _arrow_stream.reset();
+    for (auto& conv : _conv_funcs) {
+        conv = std::make_unique<ConvertFuncTree>();
+    }
+    _pool.clear();
+    _conv_ctx.consumer_partition = -1;
+    _conv_ctx.consumer_offset = -1;
+    _conv_ctx.consumer_message_id.clear();
+    _message_boundary = true;
 }
 
 Status ArrowScanner::initialize_src_chunk(ChunkPtr* chunk) {
@@ -470,9 +584,23 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
             return status;
         }
     }
-    RETURN_IF_ERROR(initialize_src_chunk(&chunk));
+    auto init_st = initialize_src_chunk(&chunk);
+    if (!init_st.ok()) {
+        if (_is_discrete_pipe) {
+            filter_current_discrete_message("initialization failed: " + init_st.to_string());
+            return get_next();
+        }
+        return init_st;
+    }
     while (!_scanner_eof) {
-        RETURN_IF_ERROR(append_batch_to_src_chunk(&chunk));
+        auto append_st = append_batch_to_src_chunk(&chunk);
+        if (!append_st.ok()) {
+            if (_is_discrete_pipe) {
+                filter_current_discrete_message("append batch failed: " + append_st.to_string());
+                return get_next();
+            }
+            return append_st;
+        }
         if (chunk_is_full()) {
             break;
         }
@@ -504,9 +632,22 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
             break;
         }
         RETURN_IF_ERROR(next_batch());
-        RETURN_IF_ERROR(initialize_src_chunk(&chunk));
+        auto next_init_st = initialize_src_chunk(&chunk);
+        if (!next_init_st.ok()) {
+            if (_is_discrete_pipe) {
+                filter_current_discrete_message("initialization failed: " + next_init_st.to_string());
+                return get_next();
+            }
+            return next_init_st;
+        }
     }
     RETURN_IF_ERROR(finalize_src_chunk(&chunk));
+    if (chunk->is_empty()) {
+        if (_scanner_eof) {
+            return Status::EndOfFile("EOF");
+        }
+        return get_next();
+    }
     return std::move(chunk);
 }
 

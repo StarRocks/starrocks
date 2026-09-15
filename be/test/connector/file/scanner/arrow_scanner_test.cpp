@@ -1931,4 +1931,356 @@ TEST_F(ArrowScannerTest, TestLocalFileEmptyIpcStream) {
     scanner->close();
 }
 
+TEST_F(ArrowScannerTest, TestStreamSchemaInvalidMissingNonNullableColumnFiltered) {
+    LoadStreamMgr load_stream_mgr;
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
+    ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+
+    SlotTypeDescInfoArray src_slot_infos;
+    // c0_int is non-nullable; c1_str is nullable.
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), false);
+    src_slot_infos.emplace_back("c1_str", TypeDescriptor::create_varchar_type(32), true);
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_ARROW;
+    range.file_type = TFileType::FILE_STREAM;
+    range.__set_load_id(load_id.to_thrift());
+    ranges.emplace_back(range);
+
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
+    TQueryGlobals query_globals;
+    query_globals.time_zone = "UTC";
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    RuntimeState* state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), query_options, query_globals, &query_execution_services, nullptr));
+
+    DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+    state->set_db("test_db");
+    state->set_load_label("test_label");
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->strict_mode = true;
+    params->__isset.strict_mode = true;
+    std::vector<TupleDescriptor*> tuples;
+    desc_tbl->get_tuple_descs(&tuples);
+    params->src_tuple_id = 0;
+    params->dest_tuple_id = tuples.size() - 1;
+    const auto* src_tuple = desc_tbl->get_tuple_descriptor(params->src_tuple_id);
+    const auto* dst_tuple = desc_tbl->get_tuple_descriptor(params->dest_tuple_id);
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        auto& src_slot = src_tuple->slots()[i];
+        auto& dst_slot = dst_tuple->slots()[i];
+        params->expr_of_dest_slot[dst_slot->id()] =
+                create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+        params->dest_sid_to_src_sid_without_trans[dst_slot->id()] = src_slot->id();
+    }
+    params->__isset.dest_sid_to_src_sid_without_trans = true;
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        params->src_slot_ids.emplace_back(i);
+    }
+
+    RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+    ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+
+    TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    // Message 1: Missing the non-nullable c0_int column (only contains c1_str).
+    {
+        arrow::StringBuilder str_builder;
+        ASSERT_ARROW_OK(str_builder.AppendValues({"bad_msg"}));
+        std::shared_ptr<arrow::Array> str_array;
+        ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+        auto schema_bad = arrow::schema({arrow::field("c1_str", arrow::utf8())});
+        auto batch_bad = arrow::RecordBatch::Make(schema_bad, 1, {str_array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema_bad).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch_bad));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes((const char*)buf->data(), buf->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+
+    // Message 2: Contains both c0_int and c1_str (valid).
+    {
+        arrow::Int32Builder int_builder;
+        ASSERT_ARROW_OK(int_builder.AppendValues({100}));
+        std::shared_ptr<arrow::Array> int_array;
+        ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+
+        arrow::StringBuilder str_builder;
+        ASSERT_ARROW_OK(str_builder.AppendValues({"good_msg"}));
+        std::shared_ptr<arrow::Array> str_array;
+        ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+        auto schema_good =
+                arrow::schema({arrow::field("c0_int", arrow::int32()), arrow::field("c1_str", arrow::utf8())});
+        auto batch_good = arrow::RecordBatch::Make(schema_good, 1, {int_array, str_array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema_good).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch_good));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes((const char*)buf->data(), buf->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    // Scanner should filter the first message and return the valid second message.
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(100, chunk->columns()[0]->get(0).get_int32());
+    ASSERT_EQ("good_msg", chunk->columns()[1]->get(0).get_slice());
+
+    // Filtered count should record the bad message.
+    ASSERT_EQ(1, counter->num_rows_filtered);
+
+    auto res_eof = scanner->get_next();
+    ASSERT_TRUE(res_eof.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamSchemaInvalidIncompatibleTypeFiltered) {
+    LoadStreamMgr load_stream_mgr;
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
+    ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_ARROW;
+    range.file_type = TFileType::FILE_STREAM;
+    range.__set_load_id(load_id.to_thrift());
+    ranges.emplace_back(range);
+
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
+    TQueryGlobals query_globals;
+    query_globals.time_zone = "UTC";
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    RuntimeState* state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), query_options, query_globals, &query_execution_services, nullptr));
+
+    DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+    state->set_db("test_db");
+    state->set_load_label("test_label");
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->strict_mode = true;
+    params->__isset.strict_mode = true;
+    std::vector<TupleDescriptor*> tuples;
+    desc_tbl->get_tuple_descs(&tuples);
+    params->src_tuple_id = 0;
+    params->dest_tuple_id = tuples.size() - 1;
+    const auto* src_tuple = desc_tbl->get_tuple_descriptor(params->src_tuple_id);
+    const auto* dst_tuple = desc_tbl->get_tuple_descriptor(params->dest_tuple_id);
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        auto& src_slot = src_tuple->slots()[i];
+        auto& dst_slot = dst_tuple->slots()[i];
+        params->expr_of_dest_slot[dst_slot->id()] =
+                create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+        params->dest_sid_to_src_sid_without_trans[dst_slot->id()] = src_slot->id();
+    }
+    params->__isset.dest_sid_to_src_sid_without_trans = true;
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        params->src_slot_ids.emplace_back(i);
+    }
+
+    RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+    ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+
+    TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    // Message 1: c0_int is provided as a Struct type (unusable schema for INT).
+    {
+        arrow::Int32Builder inner_builder;
+        ASSERT_ARROW_OK(inner_builder.AppendValues({999}));
+        std::shared_ptr<arrow::Array> inner_array;
+        ASSERT_ARROW_OK(inner_builder.Finish(&inner_array));
+
+        auto struct_type = arrow::struct_({arrow::field("sub_f", arrow::int32())});
+        auto struct_array = std::make_shared<arrow::StructArray>(struct_type, 1, arrow::ArrayVector{inner_array});
+        auto schema_bad = arrow::schema({arrow::field("c0_int", struct_type)});
+        auto batch_bad = arrow::RecordBatch::Make(schema_bad, 1, {struct_array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema_bad).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch_bad));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes((const char*)buf->data(), buf->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+
+    // Message 2: c0_int is valid INT32.
+    {
+        arrow::Int32Builder int_builder;
+        ASSERT_ARROW_OK(int_builder.AppendValues({200}));
+        std::shared_ptr<arrow::Array> int_array;
+        ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+
+        auto schema_good = arrow::schema({arrow::field("c0_int", arrow::int32())});
+        auto batch_good = arrow::RecordBatch::Make(schema_good, 1, {int_array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema_good).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch_good));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes((const char*)buf->data(), buf->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(200, chunk->columns()[0]->get(0).get_int32());
+
+    ASSERT_EQ(1, counter->num_rows_filtered);
+
+    auto res_eof = scanner->get_next();
+    ASSERT_TRUE(res_eof.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamPulsarMessageMetaExtractionWithSourceId) {
+    LoadStreamMgr load_stream_mgr;
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
+    ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_ARROW;
+    range.file_type = TFileType::FILE_STREAM;
+    range.__set_load_id(load_id.to_thrift());
+    ranges.emplace_back(range);
+
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
+    TQueryGlobals query_globals;
+    query_globals.time_zone = "UTC";
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    RuntimeState* state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), query_options, query_globals, &query_execution_services, nullptr));
+
+    DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+    state->set_db("test_db");
+    state->set_load_label("test_label");
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->strict_mode = true;
+    params->__isset.strict_mode = true;
+    std::vector<TupleDescriptor*> tuples;
+    desc_tbl->get_tuple_descs(&tuples);
+    params->src_tuple_id = 0;
+    params->dest_tuple_id = tuples.size() - 1;
+    const auto* src_tuple = desc_tbl->get_tuple_descriptor(params->src_tuple_id);
+    const auto* dst_tuple = desc_tbl->get_tuple_descriptor(params->dest_tuple_id);
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        auto& src_slot = src_tuple->slots()[i];
+        auto& dst_slot = dst_tuple->slots()[i];
+        params->expr_of_dest_slot[dst_slot->id()] =
+                create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+        params->dest_sid_to_src_sid_without_trans[dst_slot->id()] = src_slot->id();
+    }
+    params->__isset.dest_sid_to_src_sid_without_trans = true;
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        params->src_slot_ids.emplace_back(i);
+    }
+
+    RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+    ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+
+    TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    std::string junk = "invalid_arrow_stream_data_for_pulsar";
+    ByteBufferPtr junk_bb = ByteBuffer::allocate_with_tracker(junk.size(), 0, ByteBufferMetaType::PULSAR).value();
+    junk_bb->put_bytes(junk.data(), junk.size());
+    junk_bb->flip_to_read();
+
+    auto* msg_meta = static_cast<StreamMessageMeta*>(junk_bb->meta());
+    msg_meta->set_partition(7);
+    msg_meta->set_message_id("100:2:0");
+
+    EXPECT_OK(pipe->append(std::move(junk_bb)));
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    auto res = scanner->get_next();
+    ASSERT_TRUE(res.status().is_end_of_file());
+    ASSERT_EQ(1, counter->num_rows_filtered);
+
+    scanner->close();
+}
+
 } // namespace starrocks

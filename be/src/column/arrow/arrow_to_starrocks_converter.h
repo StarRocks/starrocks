@@ -75,6 +75,7 @@ struct ArrowConvertContext {
     // --- Routine Load Arrow Stream fields ---
     int64_t consumer_partition = -1;
     int64_t consumer_offset = -1;
+    std::string consumer_message_id;
 
     void set_current_column(std::string_view column_name, const TypeDescriptor& type) {
         current_column_name = std::string(column_name);
