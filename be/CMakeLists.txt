@@ -554,6 +554,7 @@ include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
 # connector ModuleBootstrap pulls (guarded by the same options) ahead of it.
 set (DIRECT_CONNECTOR_LINK_LIBS
     Connector
+    ConnectorADBC
     ConnectorLake
     ConnectorFile
     ConnectorHive
@@ -697,6 +698,7 @@ set(STARROCKS_DEPENDENCIES
     arrow_testing
     arrow_flight
     arrow_flight_sql
+    adbc_driver_manager
     gRPC::grpc
     gRPC::grpc++
     parquet

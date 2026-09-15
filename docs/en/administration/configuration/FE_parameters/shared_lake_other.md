@@ -829,6 +829,15 @@ This topic introduces the following types of FE configurations:
 
 ## Other
 
+### `adbc_jni_library_path`
+
+- Default: `${STARROCKS_HOME}/lib/adbc_driver_jni`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The directory that contains the StarRocks-built `libadbc_driver_jni` native library used by ADBC catalogs. The FE package includes this library in the default directory. The setting takes effect after the FE restarts.
+- Introduced in: -
+
 ### `agent_task_resend_wait_time_ms`
 
 - Default: 5000
@@ -1610,4 +1619,3 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
-

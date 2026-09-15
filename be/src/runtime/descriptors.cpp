@@ -358,6 +358,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::JDBC_TABLE:
             desc = ALLOC_DESC(JDBCTableDescriptor, tdesc, mr);
             break;
+        case TTableType::ADBC_TABLE:
+            desc = ALLOC_DESC(ADBCTableDescriptor, tdesc, mr);
+            break;
         case TTableType::ODPS_TABLE:
             desc = ALLOC_DESC(OdpsTableDescriptor, tdesc, pool, mr);
             break;

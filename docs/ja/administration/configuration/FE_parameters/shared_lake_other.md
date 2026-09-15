@@ -833,6 +833,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## その他
 
+### `adbc_jni_library_path`
+
+- デフォルト：`${STARROCKS_HOME}/lib/adbc_driver_jni`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：ADBC カタログが使用する、StarRocks によってビルドされた `libadbc_driver_jni` ネイティブライブラリを含むディレクトリ。FE パッケージには、このライブラリがデフォルトのディレクトリに含まれます。この設定は FE の再起動後に有効になります。
+- 導入時期：-
+
 ### `agent_task_resend_wait_time_ms`
 
 - デフォルト：5000

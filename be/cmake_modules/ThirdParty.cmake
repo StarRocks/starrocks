@@ -584,3 +584,11 @@ list(GET LIB_JVM 0 LIB_JVM_PATH)
 set_target_properties(jvm PROPERTIES IMPORTED_LOCATION "${LIB_JVM_PATH}")
 include_directories(${JAVA_HOME}/include)
 include_directories(${JAVA_PLATFORM_INCLUDE_DIR})
+
+# ADBC Driver Manager is statically linked into starrocks_be. External ADBC
+# drivers remain dynamically loaded by the Driver Manager at runtime.
+add_library(adbc_driver_manager STATIC IMPORTED GLOBAL)
+set_target_properties(adbc_driver_manager PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libadbc_driver_manager.a)
+set_target_properties(adbc_driver_manager PROPERTIES
+    INTERFACE_LINK_LIBRARIES "${CMAKE_DL_LIBS}")

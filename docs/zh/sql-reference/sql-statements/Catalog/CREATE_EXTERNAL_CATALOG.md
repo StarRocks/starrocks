@@ -14,6 +14,7 @@ description: "CREATE EXTERNAL CATALOG 用于创建 External Catalog；支持 Hiv
 - [Hudi catalog](../../../data_source/catalog/hudi_catalog.md)：用于查询 Apache Hudi 集群中的数据。
 - [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)：用于查询 Delta Lake 中的数据。
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)：用于查询 JDBC 数据源中的数据。
+- [ADBC catalog](../../../data_source/catalog/adbc_catalog.md)：用于通过原生 ADBC 驱动程序查询 Arrow Flight SQL 服务。
 - [Elasticsearch catalog](../../../data_source/catalog/elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。该特性自 3.1 版本起支持。
 - [Paimon catalog](../../../data_source/catalog/paimon_catalog.md)：用于查询 Apache Paimon 中的数据。该特性自 3.1 版本起支持。
 - [Fluss catalog](../../../data_source/catalog/fluss_catalog.md)：用于查询 Apache Fluss 中的数据。
@@ -38,7 +39,7 @@ PROPERTIES ("key"="value", ...)
 | ------------ | ---- | ------------------------------------------------------------ |
 | catalog_name | 是   | External catalog 的名称，命名要求参见[系统限制](../../System_limit.md)。 |
 | comment      | 否   | External catalog 的描述。 |
-| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg/iceberg.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)、[JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md) 和 [Fluss catalog](../../../data_source/catalog/fluss_catalog.md)。 |
+| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg/iceberg.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)、[JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md)、[ADBC Catalog](../../../data_source/catalog/adbc_catalog.md) 和 [Fluss catalog](../../../data_source/catalog/fluss_catalog.md)。 |
 
 ## 示例
 
