@@ -1089,6 +1089,7 @@ TEST_F(LakeDataSourceTest, bm25_phase1_failure_publishes_stats_counters) {
     EXPECT_GT(stats_build->value(), 0);
     EXPECT_NE(profile->get_counter("BM25StatsIOTime"), nullptr);
     // Nothing was ever scored, so the scoring subtree stays absent.
+    EXPECT_EQ(nullptr, profile->get_counter("BM25"));
     EXPECT_EQ(nullptr, profile->get_counter("BM25Score"));
 }
 

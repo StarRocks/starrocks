@@ -1,0 +1,76 @@
+-- name: test_bm25_score_scalar_filter @cloud
+-- A scalar conjunct beside the full-text predicate used to be evaluated only in the read loop, i.e. after
+-- the per-segment top-k truncation. A row that won a slot by score and then failed the conjunct left a hole,
+-- so the query returned fewer rows than the LIMIT asked for. The BE now folds such conjuncts into the scan
+-- range before scoring, so the truncation only ever sees final survivors.
+-- score() is enabled by default; the GIN index feature still needs its FE config.
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+create database bm25_${uuid0};
+use bm25_${uuid0};
+
+CREATE TABLE docs (
+    id INT NOT NULL,
+    content VARCHAR(65533) NOT NULL,
+    status INT NOT NULL,
+    INDEX idx_content (content) USING GIN ("imp_lib" = "builtin", "parser" = "english", "index_options" = "docs_and_freqs")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Every row contains 'fox' exactly once and shorter documents score higher (BM25 length normalization), so
+-- the ranking for 'fox' is strictly id 1 > 2 > 3 > 4 > 5, with no ties to make the expected output
+-- ambiguous. The two best scorers deliberately carry a status the queries below reject: that is what makes
+-- these cases fail loudly if the truncation happens before the conjunct is applied.
+-- Two inserts so the tablet carries more than one segment: the per-segment top-k is merged above the
+-- scan, which is where an early truncation in one segment shows up as a missing row overall. Phase-1 stats
+-- are tablet-wide, so splitting the load does not change any score below.
+insert into docs values
+  (1, 'fox',                     500),
+  (2, 'fox jumps',               500);
+insert into docs values
+  (3, 'fox jumps over',          200),
+  (4, 'fox jumps over lazy',     200),
+  (5, 'fox jumps over lazy dog', 200);
+
+-- Baseline with no conjunct: the top-3 is 1, 2, 3.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 3;
+
+-- The core case. The two best scorers fail `status = 200`, so the answer is 3, 4, 5 -- three rows. Before
+-- the fix the segment top-k was 1, 2, 3, the read loop then removed 1 and 2, and this returned a single row.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 ORDER BY score() DESC LIMIT 3;
+
+-- Fewer survivors than the limit is not an error: two rows carry status 500.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 500 ORDER BY score() DESC LIMIT 3;
+
+-- No survivor at all returns no row.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 999 ORDER BY score() DESC LIMIT 3;
+
+-- A conjunct that rejects nothing must leave the ranking exactly as the baseline above.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status > 0 ORDER BY score() DESC LIMIT 3;
+
+-- Several conjuncts are folded together, not one at a time: status 200 and id > 3 leaves 4 and 5.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 AND id > 3 ORDER BY score() DESC LIMIT 2;
+
+-- Ascending order does not push the limit into the scan at all, so this exercises the score-all path with a
+-- conjunct present. Among 3, 4, 5 the lowest scorers are 5 then 4.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 ORDER BY score() ASC LIMIT 2;
+
+-- MATCH_ALL takes the same path: the candidate gate is the only thing enforcing the conjunction, so folding
+-- a conjunct into the scan range must not disturb it. Every row holds both terms, so the status filter
+-- leaves 3, 4, 5 and the top-2 is 3, 4.
+SELECT id FROM docs WHERE content MATCH_ALL 'fox jumps' AND status = 200 ORDER BY score() DESC LIMIT 2;
+
+-- A LIMIT wider than the surviving set: the truncation cannot drop anyone, so this is the reference
+-- answer the core case above must agree with, rank order included.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 ORDER BY score() DESC LIMIT 100;
+
+-- A delete stacks with the conjunct: both folds have to happen before the ranking. Removing row 3 leaves
+-- 4 and 5 as the status-200 survivors.
+DELETE FROM docs WHERE id = 3;
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 ORDER BY score() DESC LIMIT 2;
+
+-- Sanity: the four live rows still match.
+SELECT count(*) FROM docs WHERE content MATCH_ANY 'fox';
+
+drop database bm25_${uuid0};

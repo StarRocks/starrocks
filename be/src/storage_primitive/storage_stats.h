@@ -138,6 +138,15 @@ struct OlapReaderStatistics {
 
     int64_t gin_index_filter_ns = 0;
     int64_t rows_gin_filtered = 0;
+    // BM25 scalar residual pre-fold: the conjuncts sitting beside the full-text predicate are evaluated
+    // into the scan range before scoring, so the per-segment top-k truncation only ever sees rows that can
+    // actually be returned (see SegmentIterator::_prefold_scalar_residual).
+    int64_t bm25_prefold_ns = 0;
+    int64_t rows_bm25_prefold_filtered = 0;
+    // Segments where the limit could not be honoured because something surviving could still drop a chosen
+    // row, so scoring fell back to every matched row. Steady state is 0; a non-zero value is the signal
+    // that a query shape is missing the pruning it looks like it should get.
+    int64_t bm25_segments_topk_not_pushed = 0;
     int64_t gin_prefix_filter_ns = 0;
     int64_t gin_ngram_filter_dict_ns = 0;
     int64_t gin_predicate_filter_dict_ns = 0;

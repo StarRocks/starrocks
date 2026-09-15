@@ -415,8 +415,9 @@ public class BM25IndexTest extends PlanTestBase {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Top-k pushdown: the LIMIT reaches the scored scan only when MATCH is the whole filter and the
-    // order is DESC (mirrors OSS StarRocks #75952's under-return gating).
+    // Top-k pushdown: the LIMIT reaches the scored scan whenever the order is DESC. It is a hint -- the
+    // BE re-checks per segment that nothing surviving can drop a chosen row, and scores every matched row
+    // when it cannot honour it.
     // ---------------------------------------------------------------------------------------------
 
     @Test
@@ -427,12 +428,16 @@ public class BM25IndexTest extends PlanTestBase {
     }
 
     @Test
-    public void testTopKNotPushedWithResidualPredicate() throws Exception {
-        // A post-scan scalar filter could drop rows after the top-k, so the limit must NOT be pushed;
-        // the BE scores every matched row and the TopN above applies the limit.
+    public void testTopKPushedWithResidualPredicate() throws Exception {
+        // A scalar conjunct beside the MATCH no longer disqualifies the pushdown. It used to: the read loop
+        // applies it only after the per-segment top-k truncation, so a row that won a slot by score and
+        // then failed it left a hole and the result could fall below the limit. The BE now folds such
+        // conjuncts into the scan range before scoring, so the truncation sees final survivors.
         String plan = getVerboseExplain("select id, score() from test.test_bm25 "
                 + "where content MATCH_ANY 'starrocks' and category = 'news' order by score() desc limit 10");
-        assertContains(plan, "TopK: 0");
+        assertContains(plan, "TopK: 10");
+        // The conjunct still travels with the plan; folding it is a BE-side scan decision, not a rewrite.
+        assertContains(plan, "category");
     }
 
     @Test

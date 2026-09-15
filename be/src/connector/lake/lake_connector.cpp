@@ -1625,7 +1625,21 @@ void LakeDataSource::_update_bm25_counter() {
     const auto& stats = _reader->stats();
     _update_bm25_phase1_counter(stats);
 
-    auto* score = ADD_CHILD_TIMER(_runtime_profile, "BM25Score", "SegmentInit");
+    // Phase-2 is the pre-fold plus the scoring pass; both run inside segment init, so they share one root
+    // that carries their sum -- a parent timer whose window contains its children (mirrors VectorIndex).
+    // Phase-1 and Phase-3 run in other stages and stay where they are.
+    auto* bm25 = ADD_CHILD_TIMER(_runtime_profile, "BM25", "SegmentInit");
+    COUNTER_UPDATE(bm25, stats.bm25_prefold_ns + stats.bm25_scoring_ns);
+
+    auto* prefold = ADD_CHILD_TIMER(_runtime_profile, "BM25ScalarPrefold", "BM25");
+    COUNTER_UPDATE(prefold, stats.bm25_prefold_ns);
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25ScalarPrefoldRows", TUnit::UNIT, "BM25ScalarPrefold"),
+                   stats.rows_bm25_prefold_filtered);
+    // The diagnostic: a non-zero value means a query shape lost the pruning its limit asked for.
+    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25TopkNotPushedSegments", TUnit::UNIT, "BM25ScalarPrefold"),
+                   stats.bm25_segments_topk_not_pushed);
+
+    auto* score = ADD_CHILD_TIMER(_runtime_profile, "BM25Score", "BM25");
     COUNTER_UPDATE(score, stats.bm25_scoring_ns);
     COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25IndexOpen", "BM25Score"), stats.bm25_index_open_ns);
     COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25PostingScan", "BM25Score"), stats.bm25_posting_scan_ns);

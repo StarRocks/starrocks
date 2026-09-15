@@ -492,6 +492,9 @@ private:
     // -- no global-dict-code wrapping, no dict/raw mismatch. Runs for a vector (ANN) or BM25 top-k query
     // (whenever _del_predicate_preapplied is set).
     Status _apply_del_predicate();
+    // Evaluate the scalar conjuncts beside a BM25 full-text predicate into an exact bitmap and fold them
+    // into _scan_range, then erase just those from the tree. See the definition for why.
+    Status _prefold_scalar_residual();
 
     Status _init_inverted_index_iterators();
 
@@ -1142,6 +1145,10 @@ Status SegmentIterator::_init_scan_range_and_context() {
     // id2distance_map -- otherwise the distance lookup during read fails ("not found row id in distance
     // map"). For non-vector scans it is a cheap no-op early-return.
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    // Fold the scalar conjuncts sitting beside a BM25 full-text predicate into the scan range. Must run
+    // before _init_column_predicates copies the tree into the read-loop halves, and after
+    // _rewrite_predicates so the predicates are dict-code typed like the read context.
+    RETURN_IF_ERROR(_prefold_scalar_residual());
     if (_opts.read_state_cache.scan_range == nullptr) {
         RETURN_IF_ERROR(_apply_data_sampling());
     }
@@ -1357,6 +1364,17 @@ Status SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
 // is missing at runtime), turns it off and -- only for the trust path -- sets up the brute-force
 // fallback (refine recomputes above the scan). Runs before _init_column_iterators so any column the
 // fallback adds to _schema is read in the same pass.
+// A row this iterator emits can still be dropped above it: by a predicate the scan could not push into
+// pred_tree (the chunk source / scanner evaluates those per chunk), by a filtering operator placed above
+// the scan, or by a join runtime filter. Any rank truncation inside the iterator -- ANN top-k, BM25 top-k
+// -- then returns fewer rows than the limit asked for.
+static bool post_iterator_filtering_possible(const SegmentReadOptions& opts) {
+    const bool has_runtime_filter =
+            opts.enable_join_runtime_filter_pushdown &&
+            (!opts.runtime_filter_preds.empty() || opts.runtime_range_pruner.has_runtime_filters());
+    return opts.has_predicate_above_iterator || has_runtime_filter;
+}
+
 Status SegmentIterator::_init_ann_reader() {
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
@@ -1429,11 +1447,8 @@ Status SegmentIterator::_init_ann_reader() {
         // physical plan and accept that evaluating those predicates later may return fewer than k
         // rows. A residual additionally needs index filtered-search support; no residual is a plain
         // top-k.
-        const bool has_runtime_filter =
-                _opts.enable_join_runtime_filter_pushdown &&
-                (!_opts.runtime_filter_preds.empty() || _opts.runtime_range_pruner.has_runtime_filters());
-        const bool must_fallback_for_post_ann_filter = config::enable_vector_index_topk_underfill_fallback &&
-                                                       (_opts.has_predicate_above_iterator || has_runtime_filter);
+        const bool must_fallback_for_post_ann_filter =
+                config::enable_vector_index_topk_underfill_fallback && post_iterator_filtering_possible(_opts);
         if (must_fallback_for_post_ann_filter ||
             (!_opts.pred_tree.empty() && !_vector_index_ctx->ann_reader->supports_efficient_filtered_search())) {
             RETURN_IF_ERROR(_setup_brute_force_fallback(*tablet_index_meta));
@@ -1788,6 +1803,43 @@ StatusOr<roaring::Roaring> SegmentIterator::_narrow_scan_range_by_residual() {
     // Every surviving row already passed the whole tree. (Predicates are owned at the reader level.)
     _opts.pred_tree = PredicateTree();
     return matched;
+}
+
+// Fold the scalar conjuncts sitting beside a BM25 full-text predicate into the scan range before scoring,
+// the same shape the ANN PRE path uses: evaluate the residual into an exact bitmap, intersect it into
+// _scan_range and drop the tree, so every surviving row satisfies the whole predicate and the per-segment
+// top-k truncation cannot leave a hole. Not folding is always safe -- the gate in _apply_bm25_scoring then
+// refuses to truncate and the query scores every matched row, as it does today.
+Status SegmentIterator::_prefold_scalar_residual() {
+    if (_bm25_ctx == nullptr || _bm25_ctx->topk <= 0 || _scan_range.empty() || _opts.pred_tree.empty()) {
+        return Status::OK();
+    }
+    // evaluate_pred_tree_to_bitmap drops index-only predicates only where they sit under the root AND. One
+    // buried in an OR is evaluated instead, against a column the rewriter may read as dict codes while the
+    // predicate stayed original-typed. Leave that shape to the read loop. Deliberately conservative: an OR
+    // whose every leaf is index-only would be dropped whole and would be safe to fold around, but telling
+    // the two apart needs another visitor for a shape that barely occurs.
+    for (const auto& [cid, preds] : _opts.pred_tree.get_non_immediate_column_predicate_map()) {
+        for (const ColumnPredicate* pred : preds) {
+            if (pred->is_index_filter_only()) {
+                return Status::OK();
+            }
+        }
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->bm25_prefold_ns);
+    auto matched_or = _evaluate_residual_to_bitmap(range2roaring(_scan_range));
+    if (!matched_or.ok()) {
+        // Nothing has been mutated yet. Reached above all by a MATCH the index did not consume: evaluating
+        // one always fails (MatchExpr::evaluate_checked), which is exactly the case that must not truncate.
+        LOG(WARNING) << "BM25 scalar residual pre-fold skipped, falling back to score-all: " << matched_or.status();
+        return Status::OK();
+    }
+    const size_t prev_span = _scan_range.span_size();
+    _scan_range = roaring2range(matched_or.value());
+    _opts.stats->rows_bm25_prefold_filtered += static_cast<int64_t>(prev_span - _scan_range.span_size());
+    // Every survivor passed the whole tree; index-only predicates the read loop discards go with it.
+    _opts.pred_tree = PredicateTree();
+    return Status::OK();
 }
 
 Status SegmentIterator::_apply_del_predicate() {
@@ -3471,15 +3523,19 @@ Status SegmentIterator::_apply_bm25_scoring() {
         RETURN_IF_ERROR(reader->lookup_term_ordinals(index_opts, term_slices, &ordinals));
     }
 
-    // _scan_range already excludes deleted rows: for a top-k pushdown _apply_del_predicate folded the delete
-    // survivors in before _rewrite_predicates (so WAND ranks live rows only and the LIMIT holds real
-    // survivors), and PK delete vectors were applied earlier. A score-all query (topk == 0) does not narrow,
-    // so it needs no pre-apply -- the read loop's per-chunk filter still removes deleted rows.
-    // Top-k pushdown also requires the MATCH filter to have narrowed _scan_range. With enable_gin_filter off,
-    // _apply_inverted_index skipped the index and left MATCH residual (evaluated per-chunk), so a MATCH_ALL row
-    // matching only some terms could take a top-k slot and then be dropped -> under-return. Fall back to score-
-    // all there and let the residual MATCH + coordinator TopN pick the top-k.
-    const bool topk_pushdown = _bm25_ctx->topk > 0 && _opts.enable_gin_filter;
+    // Narrowing by rank is only sound when nothing can drop a chosen row afterwards, so every source of
+    // later filtering has to be accounted for here. enable_gin_filter says _scan_range is the match set
+    // (with it off the index is skipped and MATCH stays residual, so a partially matching row could take a
+    // slot and then be dropped); an empty tree says the pre-fold folded every residual into _scan_range,
+    // deletes included (_apply_del_predicate ran before _rewrite_predicates); the last clause covers what
+    // this iterator never sees -- predicates evaluated above it, and join runtime filters.
+    const bool topk_pushdown = _bm25_ctx->topk > 0 && _opts.enable_gin_filter && _opts.pred_tree.empty() &&
+                               !post_iterator_filtering_possible(_opts);
+    if (_bm25_ctx->topk > 0 && !topk_pushdown) {
+        // The limit was pushed but this segment cannot honour it. Steady state is zero; a non-zero count is
+        // how a query shape that silently lost its pruning becomes visible.
+        ++_opts.stats->bm25_segments_topk_not_pushed;
+    }
 
     // Pushdown on: block-max WAND skips rows that cannot enter this segment's top-k. Otherwise (score-all --
     // projected score() without LIMIT, or the gin-off fallback): plain TAAT scorer over every matched row.

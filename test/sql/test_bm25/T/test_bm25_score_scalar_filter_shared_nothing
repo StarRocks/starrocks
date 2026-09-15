@@ -1,0 +1,54 @@
+-- name: test_bm25_score_scalar_filter_shared_nothing
+-- Same contract as test_bm25_score_scalar_filter, on the shared-nothing (local) scan path. The scalar
+-- conjunct pre-fold lives in SegmentIterator, which both paths share, but the two TabletReaders that feed
+-- it are separate code, so the local path gets its own coverage.
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+create database bm25_${uuid0};
+use bm25_${uuid0};
+
+CREATE TABLE docs (
+    id INT NOT NULL,
+    content VARCHAR(65533) NOT NULL,
+    status INT NOT NULL,
+    INDEX idx_content (content) USING GIN ("imp_lib" = "builtin", "parser" = "english", "index_options" = "docs_and_freqs")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Strictly decreasing scores for 'fox' (id 1 > 2 > 3 > 4 > 5); the two best scorers fail `status = 200`.
+-- Two inserts so the tablet carries more than one segment: the per-segment top-k is merged above the
+-- scan, which is where an early truncation in one segment shows up as a missing row overall. Phase-1 stats
+-- are tablet-wide, so splitting the load does not change any score below.
+insert into docs values
+  (1, 'fox',                     500),
+  (2, 'fox jumps',               500);
+insert into docs values
+  (3, 'fox jumps over',          200),
+  (4, 'fox jumps over lazy',     200),
+  (5, 'fox jumps over lazy dog', 200);
+
+-- Baseline with no conjunct.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 3;
+
+-- The core case: three rows, not one.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 ORDER BY score() DESC LIMIT 3;
+
+-- Fewer survivors than the limit.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 500 ORDER BY score() DESC LIMIT 3;
+
+-- No survivor.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 999 ORDER BY score() DESC LIMIT 3;
+
+-- A conjunct that rejects nothing.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status > 0 ORDER BY score() DESC LIMIT 3;
+
+-- Ascending order is never pushed into the scan, so this runs the score-all path with a conjunct present;
+-- among 3, 4, 5 the lowest scorers are 5 then 4.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 ORDER BY score() ASC LIMIT 2;
+
+-- A LIMIT wider than the surviving set: the truncation cannot drop anyone, so this is the reference
+-- answer the core case above must agree with, rank order included.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' AND status = 200 ORDER BY score() DESC LIMIT 100;
+
+drop database bm25_${uuid0};

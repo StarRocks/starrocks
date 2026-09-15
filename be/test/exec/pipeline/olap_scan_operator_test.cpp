@@ -264,9 +264,10 @@ TEST_F(OlapScanOperatorTest, sample_counters_report_their_own_statistic) {
 }
 
 // The BM25 group is published only for a scoring scan, and every parent is load-bearing: the two ratio
-// pairs must sit under BM25Score to be read together, BM25StatsBuild under the scan root because Phase-1
-// runs before the first segment, and BM25ScoreColumn under the scan root rather than SegmentRead, whose
-// timer is already stamped when Phase-3 materializes the column.
+// pairs must sit under BM25Score to be read together; BM25 groups the two segment-init phases (pre-fold and
+// scoring) and carries their sum; BM25StatsBuild hangs off the scan root because Phase-1 runs before the
+// first segment, and BM25ScoreColumn off IOTaskExecTime rather than SegmentRead, whose timer is already
+// stamped when Phase-3 materializes the column.
 TEST_F(OlapScanOperatorTest, pipeline_chunk_source_publishes_bm25_counters) {
     OlapScanNode scan_node(&_object_pool, _tnode, *_tbl);
     auto scan_ctx_factory =
@@ -286,6 +287,9 @@ TEST_F(OlapScanOperatorTest, pipeline_chunk_source_publishes_bm25_counters) {
     stats.bm25_stats_build_ns = 71;
     stats.bm25_stats_io_ns = 61;
     stats.bm25_scoring_ns = 51;
+    stats.bm25_prefold_ns = 11;
+    stats.rows_bm25_prefold_filtered = 700;
+    stats.bm25_segments_topk_not_pushed = 2;
     stats.bm25_index_open_ns = 41;
     stats.bm25_posting_scan_ns = 31;
     stats.bm25_candidate_rows = 900;
@@ -297,7 +301,9 @@ TEST_F(OlapScanOperatorTest, pipeline_chunk_source_publishes_bm25_counters) {
     // Without a search option the group is absent entirely, so a non-BM25 scan's profile is unchanged.
     olap_chunk_source->_update_bm25_counter(stats);
     EXPECT_EQ(profile->_counter_map.count("BM25StatsBuild"), 0);
+    EXPECT_EQ(profile->_counter_map.count("BM25"), 0);
     EXPECT_EQ(profile->_counter_map.count("BM25Score"), 0);
+    EXPECT_EQ(profile->_counter_map.count("BM25ScalarPrefold"), 0);
     EXPECT_EQ(profile->_counter_map.count("BM25ScoreColumn"), 0);
 
     auto option = std::make_shared<BM25SearchOption>();
@@ -308,7 +314,12 @@ TEST_F(OlapScanOperatorTest, pipeline_chunk_source_publishes_bm25_counters) {
 
     expect_child_counter(profile, "BM25StatsBuild", RuntimeProfile::ROOT_COUNTER.c_str(), 71);
     expect_child_counter(profile, "BM25StatsIOTime", "BM25StatsBuild", 61);
-    expect_child_counter(profile, "BM25Score", "SegmentInit", 51);
+    // The root carries pre-fold + scoring, so its window contains both children.
+    expect_child_counter(profile, "BM25", "SegmentInit", 62);
+    expect_child_counter(profile, "BM25ScalarPrefold", "BM25", 11);
+    expect_child_counter(profile, "BM25ScalarPrefoldRows", "BM25ScalarPrefold", 700);
+    expect_child_counter(profile, "BM25TopkNotPushedSegments", "BM25ScalarPrefold", 2);
+    expect_child_counter(profile, "BM25Score", "BM25", 51);
     expect_child_counter(profile, "BM25IndexOpen", "BM25Score", 41);
     expect_child_counter(profile, "BM25PostingScan", "BM25Score", 31);
     expect_child_counter(profile, "BM25CandidateRows", "BM25Score", 900);

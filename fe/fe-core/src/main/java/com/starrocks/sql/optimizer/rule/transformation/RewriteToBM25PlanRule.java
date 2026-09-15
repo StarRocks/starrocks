@@ -124,13 +124,18 @@ public class RewriteToBM25PlanRule extends TransformationRule {
         opts.setB(context.getSessionVariable().getBm25B());
 
         // Top-k pushdown: push LIMIT (+OFFSET) into the scored scan so the BE keeps only the top-k rows by
-        // score instead of scoring/returning every matched row. Only safe when ORDER BY score() is DESC
-        // (the bounded top-k keeps the highest scores) AND MATCH is the entire scan predicate -- a post-scan
-        // scalar filter (e.g. `MATCH 'x' AND status=200`) would drop rows after the top-k and could shrink
-        // the result below the limit (under-return). Otherwise leave topk=0: the BE scores every matched row
-        // and the TopN above applies the limit.
-        if (!topNOp.getOrderByElements().get(0).isAscending()
-                && scanOp.getPredicate() instanceof MatchExprOperator) {
+        // score instead of scoring/returning every matched row. Requires ORDER BY score() DESC, since a
+        // bounded top-k keeps the highest scores; the analyzer has already established that the WHERE
+        // clause holds exactly one MATCH, as a top-level conjunct.
+        //
+        // A scalar conjunct beside the MATCH (e.g. `MATCH 'x' AND status = 200`) used to disqualify the
+        // pushdown, because the read loop applies it only after the per-segment top-k truncation, so a row
+        // that won a slot by score and then failed it left a hole and the result could fall below the
+        // limit. The BE now folds such conjuncts into the scan range before scoring, so the truncation sees
+        // final survivors. The limit is therefore a hint: the BE re-checks, per segment, that nothing left
+        // can drop a chosen row and falls back to scoring every matched row when it cannot honour it. That
+        // check has to live there anyway -- the FE cannot know which predicates the BE is able to fold.
+        if (!topNOp.getOrderByElements().get(0).isAscending()) {
             opts.setTopk(topNOp.getLimit() + Math.max(0L, topNOp.getOffset()));
         }
 
