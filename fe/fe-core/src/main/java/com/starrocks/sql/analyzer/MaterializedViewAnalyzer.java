@@ -680,8 +680,10 @@ public class MaterializedViewAnalyzer {
                                     indexDef.getPos());
                         }
                     }
+                    // Test-only reproduction of the pre-#69462 materialized-view
+                    // metadata path. Index properties are intentionally omitted.
                     indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
-                            indexDef.getComment(), indexDef.getProperties()));
+                            indexDef.getComment()));
                     indexMultiMap.put(indexDef.getIndexName().toLowerCase(), 1);
                     colMultiMap.put(String.join(",", indexDef.getColumns()), 1);
                 }
