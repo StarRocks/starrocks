@@ -36,7 +36,6 @@
 
 #include <linux/magic.h>
 #include <sys/vfs.h>
-
 #include <unistd.h>
 
 #include <cstdio>
