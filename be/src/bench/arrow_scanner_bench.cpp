@@ -354,6 +354,7 @@ static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
         }
 
         int64_t total_rows = 0;
+        bool scanner_failed = false;
         while (true) {
             auto res = scanner->get_next();
             if (res.status().is_end_of_file()) {
@@ -361,6 +362,7 @@ static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
             }
             if (!res.ok()) {
                 state.SkipWithError(("Failed to scan chunk from pipe: " + res.status().to_string()).c_str());
+                scanner_failed = true;
                 break;
             }
             auto chunk = res.value();
@@ -369,6 +371,9 @@ static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
             }
         }
         scanner->close();
+        if (scanner_failed) {
+            break;
+        }
         if (total_rows != kNumRows) {
             state.SkipWithError("Arrow pipe benchmark did not ingest every input row");
             break;
