@@ -1237,6 +1237,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: StarRocks 集群中允许的最大并发 Broker Load 作业数。此参数仅对 Broker Load 有效。此参数的值必须小于 `max_running_txn_num_per_db` 的值。从 v2.5 开始，默认值从 `10` 更改为 `5`。
 - 引入版本: -
 
+### `max_get_loads_result_count`
+
+- 默认值: 10000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: BE 或 CN 扫描 `information_schema.loads` 时，FE 单次响应返回的最大导入记录数。当匹配的记录数超过此值时，FE 返回一页数据和一个游标，BE 或 CN 继续请求下一页直至读完所有记录；查询结果不受影响，仅改变一次扫描背后的 RPC 往返次数。分页在作业边界处切分，因此同一个导入作业的多行不会被拆到两页中，单页行数可能略微超过此值。增大此值可减少往返次数，但会增大单次响应，有超出 BE 侧 RPC 客户端消息大小上限的风险；减小此值可限制单次响应大小，代价是往返次数增多。分页仅在 BE 或 CN 版本足够新、会发送游标时生效；较旧的 BE 或 CN 仍会在单次响应中收到全部结果。
+- 引入版本: -
+
 ### `max_load_initial_open_partition_number`
 
 - 默认值: 4096
