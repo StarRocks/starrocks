@@ -79,7 +79,7 @@ description: "Alphabetical s"
 ## `sort_key_sampling_short_key_index_fallback_total`
 
 - 单位: 计数
-- 描述: 已进入 Short Key Index 采样路径、随后放弃该 Segment 并退回到其粗粒度 `[min, max]` 区间的累计次数：索引页无法解析、几何信息与 Segment 自身行数交叉校验不通过、采样值超出 Segment 声明的边界，或 Segment 的索引块少于两个。请注意该指标**不**统计的情形：若 Schema 的 Short Key Index 无法完整编码排序键（例如 VARCHAR 排序键），则根本不会进入该路径，此类表的该指标保持为 0，相应 Segment 体现在 `sort_key_sampling_data_page_segments_total` 中。
+- 描述: 进入 Short Key Index 采样路径后放弃该 Segment 的累计次数，原因包括：几何信息与 Segment 自身行数交叉校验不通过、索引项解码失败、采样值乱序或超出 Segment 声明的边界。放弃并不意味着该 Segment 就此没有采样：只要它分到了数据页预算，接下来会改走数据页采样，只有预算为 0 或数据页采样同样一无所获时，才退回到粗粒度 `[min, max]` 区间。该指标**不**统计两种情形：一是索引块少于两个的 Segment，它直接离开该路径而不计数，改由数据页按行粒度采样；二是 Short Key Index 无法完整编码排序键的 Schema（例如 VARCHAR 排序键），这类表根本不会进入该路径，指标恒为 0，相应 Segment 体现在 `sort_key_sampling_data_page_segments_total` 中。
 
 ## `sort_key_sampling_short_key_index_latency`
 
