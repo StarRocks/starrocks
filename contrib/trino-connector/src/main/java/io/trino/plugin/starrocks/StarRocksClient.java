@@ -111,6 +111,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -219,17 +220,7 @@ public class StarRocksClient
         this.jsonType = typeManager.getType(new TypeDescriptor(StandardTypes.JSON));
         this.statisticsEnabled = requireNonNull(statisticsConfig, "statisticsConfig is null").isEnabled();
 
-        this.connectorExpressionRewriter = JdbcConnectorExpressionRewriterBuilder.newBuilder()
-                .addStandardRules(this::quoted)
-                // REAL predicate pushdown is disabled in toColumnMapping because comparisons may be inexact.
-                .withTypeClass("numeric_type", ImmutableSet.of("tinyint", "smallint", "integer", "bigint", "decimal", "double"))
-                .map("$equal(left: numeric_type, right: numeric_type)").to("left = right")
-                .map("$not_equal(left: numeric_type, right: numeric_type)").to("left <> right")
-                .map("$less_than(left: numeric_type, right: numeric_type)").to("left < right")
-                .map("$less_than_or_equal(left: numeric_type, right: numeric_type)").to("left <= right")
-                .map("$greater_than(left: numeric_type, right: numeric_type)").to("left > right")
-                .map("$greater_than_or_equal(left: numeric_type, right: numeric_type)").to("left >= right")
-                .build();
+        this.connectorExpressionRewriter = createConnectorExpressionRewriter(this::quoted);
 
         JdbcTypeHandle bigintTypeHandle = new JdbcTypeHandle(Types.BIGINT, Optional.of("bigint"), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
         this.aggregateFunctionRewriter = new AggregateFunctionRewriter<>(
@@ -246,6 +237,23 @@ public class StarRocksClient
                         .add(new ImplementVarianceSamp())
                         .add(new ImplementVariancePop())
                         .build());
+    }
+
+    static ConnectorExpressionRewriter<ParameterizedExpression> createConnectorExpressionRewriter(Function<String, String> identifierQuote)
+    {
+        return JdbcConnectorExpressionRewriterBuilder.newBuilder()
+                .addStandardRules(identifierQuote)
+                // REAL predicate pushdown is disabled in toColumnMapping because comparisons may be inexact.
+                .withTypeClass("safe_comparison_type", ImmutableSet.of(
+                        "tinyint", "smallint", "integer", "bigint", "decimal", "double",
+                        "boolean", "date", "time", "timestamp", "varbinary"))
+                .map("$equal(left: safe_comparison_type, right: safe_comparison_type)").to("left = right")
+                .map("$not_equal(left: safe_comparison_type, right: safe_comparison_type)").to("left <> right")
+                .map("$less_than(left: safe_comparison_type, right: safe_comparison_type)").to("left < right")
+                .map("$less_than_or_equal(left: safe_comparison_type, right: safe_comparison_type)").to("left <= right")
+                .map("$greater_than(left: safe_comparison_type, right: safe_comparison_type)").to("left > right")
+                .map("$greater_than_or_equal(left: safe_comparison_type, right: safe_comparison_type)").to("left >= right")
+                .build();
     }
 
     @Override
