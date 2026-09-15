@@ -1129,6 +1129,64 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testFinishTransactionBatchResetsTabletCommitInfos() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        List<TransactionState> states = List.of(masterDbTransMgr.getTransactionState(txnId6),
+                masterDbTransMgr.getTransactionState(txnId7), masterDbTransMgr.getTransactionState(txnId8));
+        // committed txns still carry the tablet commit infos reported at commit time
+        for (TransactionState state : states) {
+            Assertions.assertFalse(state.getTabletCommitInfos().isEmpty());
+        }
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        TransactionStateBatch latestStateBatch = masterTransMgr.finishTransactionBatch(
+                GlobalStateMgrTestUtil.testDbId1, new TransactionStateBatch(states), null);
+
+        // the states kept by the txn manager after the batch is visible must not pin the tablet commit infos
+        for (long txnId : List.of(txnId6, txnId7, txnId8)) {
+            TransactionState retained = masterDbTransMgr.getTransactionState(txnId);
+            assertEquals(TransactionStatus.VISIBLE, retained.getTransactionStatus());
+            Assertions.assertNull(retained.getTabletCommitInfos());
+        }
+        for (TransactionState state : latestStateBatch.getTransactionStates()) {
+            Assertions.assertNull(state.getTabletCommitInfos());
+        }
+    }
+
+    @Test
+    public void testFinishTransactionBatchOnDroppedDbResetsTabletCommitInfos() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long droppedDbId = 987654321L;
+        long txnId = 123456789L;
+        TransactionState txn = new TransactionState(droppedDbId, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                txnId, "dropped_db_batch_txn", UUIDUtil.genTUniqueId(),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "be1"),
+                -1, 60 * 1000L);
+        txn.setTransactionStatus(TransactionStatus.COMMITTED);
+        txn.setTabletCommitInfos(buildTabletCommitInfoList());
+
+        TransactionStateBatch latestStateBatch =
+                masterDbTransMgr.finishTransactionBatch(new TransactionStateBatch(List.of(txn)), null);
+
+        TransactionState retained = masterDbTransMgr.getTransactionState(txnId);
+        Assertions.assertSame(latestStateBatch.getTransactionStates().get(0), retained);
+        assertEquals(TransactionStatus.ABORTED, retained.getTransactionStatus());
+        Assertions.assertNull(retained.getTabletCommitInfos());
+    }
+
+    @Test
     public void testFinishTransactionBatchEditLogException() throws StarRocksException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);

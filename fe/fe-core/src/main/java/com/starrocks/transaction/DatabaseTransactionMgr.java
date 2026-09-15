@@ -2539,9 +2539,10 @@ public class DatabaseTransactionMgr {
     public TransactionStateBatch finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
         Database db = globalStateMgr.getLocalMetastore().getDb(stateBatch.getDbId());
         if (db == null) {
+            TransactionStateBatch copiedStateBatch;
             stateBatch.writeLock();
             try {
-                TransactionStateBatch copiedStateBatch = new TransactionStateBatch(stateBatch);
+                copiedStateBatch = new TransactionStateBatch(stateBatch);
                 copiedStateBatch.setTransactionStatus(TransactionStatus.ABORTED);
                 LOG.warn("db is dropped during transaction batch, abort transaction {}", copiedStateBatch);
 
@@ -2553,10 +2554,11 @@ public class DatabaseTransactionMgr {
                         writeUnlock();
                     }
                 });
-                return copiedStateBatch;
             } finally {
                 stateBatch.writeUnlock();
             }
+            resetTransactionStateBatchTabletCommitInfos(copiedStateBatch);
+            return copiedStateBatch;
         }
 
         Locker locker = new Locker();
@@ -2594,6 +2596,11 @@ public class DatabaseTransactionMgr {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), new ArrayList<>(tableIds), LockType.WRITE);
         }
+
+        // The copied states are what the txn manager keeps until the label cleaner drops them.
+        // Publish is done with the tablet commit infos once the batch is visible, so release them
+        // the same way finishTransaction() does instead of holding them for every finished txn.
+        resetTransactionStateBatchTabletCommitInfos(copiedStateBatch);
 
         // do after transaction finish in batch
         for (TransactionState transactionState : copiedStateBatch.getTransactionStates()) {
@@ -2691,6 +2698,17 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             transactionState.resetTabletCommitInfos();
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void resetTransactionStateBatchTabletCommitInfos(TransactionStateBatch stateBatch) {
+        writeLock();
+        try {
+            for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+                transactionState.resetTabletCommitInfos();
+            }
         } finally {
             writeUnlock();
         }
