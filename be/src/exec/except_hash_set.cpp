@@ -36,13 +36,13 @@ Status ExceptHashSet<HashSet>::BufferState::init(RuntimeState* state) {
 }
 
 template <typename HashSet>
-void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunk,
-                                       const std::vector<ExprContext*>& exprs, MemPool* pool,
-                                       BufferState* buffer_state) {
+Status ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunk,
+                                         const std::vector<ExprContext*>& exprs, MemPool* pool,
+                                         BufferState* buffer_state) {
     size_t chunk_size = chunk->num_rows();
     buffer_state->slice_sizes.assign(state->chunk_size(), 0);
 
-    size_t cur_max_one_row_size = _get_max_serialize_size(chunk, exprs);
+    ASSIGN_OR_RETURN(size_t cur_max_one_row_size, _get_max_serialize_size(chunk, exprs));
     // The trigger is hoisted out of the growth check on purpose: a narrow key never widens the
     // stride, so testing it inside would leave the failpoint unable to fire at all.
     bool force_by_rows = false;
@@ -64,7 +64,7 @@ void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chun
         buffer_state->buffer = buffer_state->mem_pool.allocate(batch_allocate_size);
     }
 
-    _serialize_columns(chunk, exprs, chunk_size, buffer_state);
+    RETURN_IF_ERROR(_serialize_columns(chunk, exprs, chunk_size, buffer_state));
 
     for (size_t i = 0; i < chunk_size; ++i) {
         ExceptSliceFlag key(buffer_state->buffer + i * buffer_state->max_one_row_size, buffer_state->slice_sizes[i]);
@@ -74,14 +74,15 @@ void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chun
             ctor(pos, key.slice.size);
         });
     }
+    return Status::OK();
 }
 
 // There may be additional virtual function overhead, but the bottleneck of this branch is serialization.
 template <typename HashSet>
-ALWAYS_NOINLINE void ExceptHashSet<HashSet>::_build_set_by_rows(const ChunkPtr& chunk,
-                                                                const std::vector<ExprContext*>& exprs, MemPool* pool,
-                                                                size_t chunk_size, BufferState* buffer_state) {
-    Columns key_columns = _evaluate_key_columns(chunk, exprs);
+ALWAYS_NOINLINE Status ExceptHashSet<HashSet>::_build_set_by_rows(const ChunkPtr& chunk,
+                                                                  const std::vector<ExprContext*>& exprs, MemPool* pool,
+                                                                  size_t chunk_size, BufferState* buffer_state) {
+    ASSIGN_OR_RETURN(Columns key_columns, _evaluate_key_columns(chunk, exprs));
     for (size_t i = 0; i < chunk_size; ++i) {
         ExceptSliceFlag key(buffer_state->buffer, _serialize_one_row(key_columns, i, buffer_state));
         _hash_set->lazy_emplace(key, [&](const auto& ctor) {
@@ -90,6 +91,7 @@ ALWAYS_NOINLINE void ExceptHashSet<HashSet>::_build_set_by_rows(const ChunkPtr& 
             ctor(pos, key.slice.size);
         });
     }
+    return Status::OK();
 }
 
 template <typename HashSet>
@@ -104,7 +106,7 @@ Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const Ch
     size_t chunk_size = chunk->num_rows();
     buffer_state->slice_sizes.assign(state->chunk_size(), 0);
 
-    size_t cur_max_one_row_size = _get_max_serialize_size(chunk, exprs);
+    ASSIGN_OR_RETURN(size_t cur_max_one_row_size, _get_max_serialize_size(chunk, exprs));
     // The trigger is hoisted out of the growth check on purpose: a narrow key never widens the
     // stride, so testing it inside would leave the failpoint unable to fire at all.
     bool force_by_rows = false;
@@ -123,8 +125,7 @@ Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const Ch
                 return Status::InternalError("Mem usage has exceed the limit of BE");
             }
             RETURN_IF_LIMIT_EXCEEDED(state, "Except, while probe hash table.");
-            _erase_duplicate_row_by_rows(chunk, exprs, chunk_size, buffer_state);
-            return Status::OK();
+            return _erase_duplicate_row_by_rows(chunk, exprs, chunk_size, buffer_state);
         }
         buffer_state->max_one_row_size = cur_max_one_row_size;
         buffer_state->mem_pool.clear();
@@ -135,7 +136,7 @@ Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const Ch
         RETURN_IF_LIMIT_EXCEEDED(state, "Except, while probe hash table.");
     }
 
-    _serialize_columns(chunk, exprs, chunk_size, buffer_state);
+    RETURN_IF_ERROR(_serialize_columns(chunk, exprs, chunk_size, buffer_state));
 
     for (size_t i = 0; i < chunk_size; ++i) {
         ExceptSliceFlag key(buffer_state->buffer + i * buffer_state->max_one_row_size, buffer_state->slice_sizes[i]);
@@ -149,11 +150,11 @@ Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const Ch
 }
 
 template <typename HashSet>
-ALWAYS_NOINLINE void ExceptHashSet<HashSet>::_erase_duplicate_row_by_rows(const ChunkPtr& chunk,
-                                                                          const std::vector<ExprContext*>& exprs,
-                                                                          size_t chunk_size,
-                                                                          BufferState* buffer_state) {
-    Columns key_columns = _evaluate_key_columns(chunk, exprs);
+ALWAYS_NOINLINE Status ExceptHashSet<HashSet>::_erase_duplicate_row_by_rows(const ChunkPtr& chunk,
+                                                                            const std::vector<ExprContext*>& exprs,
+                                                                            size_t chunk_size,
+                                                                            BufferState* buffer_state) {
+    ASSIGN_OR_RETURN(Columns key_columns, _evaluate_key_columns(chunk, exprs));
     for (size_t i = 0; i < chunk_size; ++i) {
         ExceptSliceFlag key(buffer_state->buffer, _serialize_one_row(key_columns, i, buffer_state));
         auto iter = _hash_set->find(key);
@@ -161,6 +162,7 @@ ALWAYS_NOINLINE void ExceptHashSet<HashSet>::_erase_duplicate_row_by_rows(const 
             iter->deleted = true;
         }
     }
+    return Status::OK();
 }
 
 template <typename HashSet>
@@ -194,10 +196,11 @@ int64_t ExceptHashSet<HashSet>::mem_usage(BufferState* buffer_state) {
 }
 
 template <typename HashSet>
-size_t ExceptHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs) {
+StatusOr<size_t> ExceptHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunk,
+                                                                 const std::vector<ExprContext*>& exprs) {
     size_t max_size = 0;
     for (auto expr : exprs) {
-        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
+        ASSIGN_OR_RETURN(ColumnPtr key_column, expr->evaluate(chunk.get()));
         max_size += key_column->max_one_element_serialize_size();
         if (!key_column->is_nullable()) {
             max_size += sizeof(bool);
@@ -207,11 +210,13 @@ size_t ExceptHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunk, co
 }
 
 template <typename HashSet>
-Columns ExceptHashSet<HashSet>::_evaluate_key_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs) {
+StatusOr<Columns> ExceptHashSet<HashSet>::_evaluate_key_columns(const ChunkPtr& chunk,
+                                                                const std::vector<ExprContext*>& exprs) {
     Columns key_columns;
     key_columns.reserve(exprs.size());
     for (auto expr : exprs) {
-        key_columns.emplace_back(EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get()));
+        ASSIGN_OR_RETURN(auto key_column, expr->evaluate(chunk.get()));
+        key_columns.emplace_back(std::move(key_column));
     }
     return key_columns;
 }
@@ -235,10 +240,10 @@ size_t ExceptHashSet<HashSet>::_serialize_one_row(const Columns& key_columns, si
 }
 
 template <typename HashSet>
-void ExceptHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
-                                                size_t chunk_size, BufferState* buffer_state) {
+Status ExceptHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
+                                                  size_t chunk_size, BufferState* buffer_state) {
     for (auto expr : exprs) {
-        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
+        ASSIGN_OR_RETURN(ColumnPtr key_column, expr->evaluate(chunk.get()));
 
         // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {
@@ -249,6 +254,7 @@ void ExceptHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunk, const std
                                                         buffer_state->max_one_row_size, nullptr, false);
         }
     }
+    return Status::OK();
 }
 
 template class ExceptHashSet<phmap::flat_hash_set<ExceptSliceFlag, ExceptSliceFlagHash, ExceptSliceFlagEqual>>;

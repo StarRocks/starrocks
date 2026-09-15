@@ -66,8 +66,8 @@ public:
 
     bool empty() { return _hash_set->empty(); }
 
-    void build_set(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
-                   MemPool* pool);
+    Status build_set(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
+                     MemPool* pool);
 
     Status refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
                                 int hit_times);
@@ -77,9 +77,9 @@ public:
     int64_t mem_usage() const;
 
 private:
-    void _serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs, size_t chunk_size);
+    Status _serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs, size_t chunk_size);
 
-    size_t _get_max_serialize_size(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs);
+    StatusOr<size_t> _get_max_serialize_size(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs);
 
     // Serializing a whole chunk at once needs max_one_row_size * chunk_size bytes, which one very wide
     // row blows up out of all proportion to the data: a single ARRAY<ARRAY<BIGINT>> of 5M sub-arrays
@@ -89,15 +89,15 @@ private:
     static constexpr size_t kMaxBatchSerializeSize = std::numeric_limits<int32_t>::max();
 
     // Evaluates the key exprs once for the whole chunk; the caller then walks rows.
-    Columns _evaluate_key_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs);
+    StatusOr<Columns> _evaluate_key_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs);
     // Serializes row `idx` into _buffer and returns its length. Byte-for-byte identical to what
     // _serialize_columns writes for that row, so the two paths may be mixed across chunks.
     size_t _serialize_one_row(const Columns& key_columns, size_t idx);
 
-    void _build_set_by_rows(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs, MemPool* pool,
-                            size_t chunk_size);
-    void _refine_intersect_row_by_rows(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
-                                       size_t chunk_size, int hit_times);
+    Status _build_set_by_rows(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs, MemPool* pool,
+                              size_t chunk_size);
+    Status _refine_intersect_row_by_rows(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
+                                         size_t chunk_size, int hit_times);
 
     std::unique_ptr<HashSet> _hash_set;
 

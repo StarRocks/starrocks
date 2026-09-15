@@ -49,7 +49,8 @@ struct SortedRun {
         DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
     }
 
-    SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs);
+    // Evaluates |exprs| over |ichunk| to build the order-by columns, so it can fail.
+    static StatusOr<SortedRun> create(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs);
 
     void set_range(size_t start, size_t end) {
         DCHECK_LE(range.first, range.second);
@@ -233,14 +234,19 @@ public:
     Status consume_all(const ChunkConsumer& output);
     std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
 
+    // as_chunk_cursor() hands out a ChunkProvider, whose bool return cannot carry a Status, so an
+    // evaluation failure is latched here for the owning cascade to pick up.
+    Status status() const { return _status; }
+
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
     // merge two runs
     StatusOr<ChunkUniquePtr> merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2);
 
-    bool move_cursor();
+    StatusOr<bool> move_cursor();
 
+    Status _status;
     SortDescs _sort_desc;
     SortedRun _left_run;
     SortedRun _right_run;
@@ -263,11 +269,15 @@ public:
     Status init(const SortDescs& sort_desc, std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors);
     bool is_data_ready();
     bool is_eos();
-    ChunkUniquePtr try_get_next();
+    StatusOr<ChunkUniquePtr> try_get_next();
     Status consume_all(const ChunkConsumer& consumer);
     Status consume_all_with_limit(const ChunkConsumer& consumer, size_t limit);
 
 private:
+    // Only the root cursor returns a StatusOr; every inner level reports through the bool-returning
+    // provider adapter, so their latched failures have to be collected explicitly.
+    Status _collect_merger_status() const;
+
     std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
     std::unique_ptr<SimpleChunkSortCursor> _root_cursor;
 };

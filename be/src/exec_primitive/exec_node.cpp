@@ -225,15 +225,16 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
     }
 }
 
-void ExecNode::eval_join_runtime_filters(Chunk* chunk) {
-    if (chunk == nullptr) return;
-    _runtime_filter_collector.evaluate(chunk);
+Status ExecNode::eval_join_runtime_filters(Chunk* chunk) {
+    if (chunk == nullptr) return Status::OK();
+    RETURN_IF_ERROR(_runtime_filter_collector.evaluate(chunk));
     eval_filter_null_values(chunk);
+    return Status::OK();
 }
 
-void ExecNode::eval_join_runtime_filters(ChunkPtr* chunk) {
-    if (chunk == nullptr) return;
-    eval_join_runtime_filters(chunk->get());
+Status ExecNode::eval_join_runtime_filters(ChunkPtr* chunk) {
+    if (chunk == nullptr) return Status::OK();
+    return eval_join_runtime_filters(chunk->get());
 }
 
 void ExecNode::eval_filter_null_values(Chunk* chunk) {
