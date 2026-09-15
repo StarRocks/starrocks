@@ -795,7 +795,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes（无需重启）
-- 描述: 在检查节点能力后，允许原生 Iceberg GEOGRAPHY 查询在 CN 之间传输数据。仅启用此配置不会启用原生读取。
+- 描述: 允许原生 Iceberg GEOGRAPHY 查询在 CN 之间传输数据。仅启用此配置不会启用原生读取。
 - 引入版本: -
 
 ### `enable_native_geography_mysql_output`
@@ -813,7 +813,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes（无需重启）
-- 描述: 允许具有 CRS84 球面语义的顶层 Iceberg GEOGRAPHY 列使用原生类型。传输和 MySQL 输出配置也必须启用，且可用执行节点必须声明支持所有必需的能力。否则这些列仍不受支持，但普通列仍可查询。已生成的原生查询计划在下发前会再次检查当前配置和所选节点。启用 Spill 或使用非 MySQL 输出的原生查询将被拒绝。此配置不会启用 GEOMETRY、嵌套原生 GEO、写入、构造函数或计算函数。
+- 描述: 允许具有 CRS84 球面语义的顶层 Iceberg GEOGRAPHY 列使用原生类型。传输和 MySQL 输出配置也必须启用。否则这些列仍不受支持，但普通列仍可查询。已生成的原生查询计划在下发前会再次检查当前配置。启用 Spill 或使用非 MySQL 输出的原生查询将被拒绝。此配置不会启用 GEOMETRY、嵌套原生 GEO、写入、构造函数或计算函数。
 - 引入版本: -
 
 ### `enable_iceberg_commit_queue`

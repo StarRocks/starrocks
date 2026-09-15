@@ -31,17 +31,6 @@ import java.io.IOException;
 
 public class BackendHbResponseTest {
     @Test
-    public void testNativeGeoCapabilitiesCompatibility() {
-        BackendHbResponse response = new BackendHbResponse();
-        Assertions.assertEquals(0, response.getNativeGeoCapabilities());
-        response.setNativeGeoCapabilities(7);
-        BackendHbResponse restored = GsonUtils.GSON.fromJson(
-                GsonUtils.GSON.toJson(response), BackendHbResponse.class);
-        Assertions.assertEquals(7, restored.getNativeGeoCapabilities());
-        Assertions.assertEquals(0, GsonUtils.GSON.fromJson("{}", BackendHbResponse.class).getNativeGeoCapabilities());
-    }
-
-    @Test
     public void testSerializeHbResponse() {
         int beId = 1;
         int bePort = 59000;

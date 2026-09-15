@@ -374,8 +374,6 @@ public class HeartbeatMgr extends LeaderDaemon {
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }
-                    backendHbResponse.setNativeGeoCapabilities(tBackendInfo.isSetNative_geo_capabilities()
-                            ? tBackendInfo.getNative_geo_capabilities() : 0);
                     return backendHbResponse;
                 } else {
                     return new BackendHbResponse(computeNodeId, result.getStatus().getStatus_code(),

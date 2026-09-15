@@ -226,7 +226,7 @@ public class CoordinatorPreprocessor {
     public void prepareExec() throws StarRocksException {
         resetExec();
         computeFragmentInstances();
-        NativeGeographySupport.validateExecution(jobSpec, executionDAG.getInstances(),
+        NativeGeographySupport.validateExecution(jobSpec,
                 connectContext.getSessionVariable().isEnableSpill());
         traceInstance();
     }
