@@ -1,0 +1,117 @@
+-- name: test_runtime_filter_monotonic_expr
+create table rf_expr_probe_${uuid0} (
+    id int not null,
+    c_bigint bigint null,
+    c_date date null
+)
+duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table rf_expr_build_${uuid0} (
+    id int not null,
+    k_slot bigint null,
+    k_subtract bigint null,
+    k_multiply bigint null,
+    k_divide bigint null,
+    k_nested bigint null,
+    k_negative bigint null,
+    k_year smallint null
+)
+duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into rf_expr_probe_${uuid0}
+select g,
+       cast(g as bigint),
+       date_add('2000-01-01', interval g year)
+from table(generate_series(1, 20)) t(g);
+-- result:
+-- !result
+insert into rf_expr_probe_${uuid0} values (21, null, null);
+-- result:
+-- !result
+insert into rf_expr_build_${uuid0} values
+    (1, 10, 9, 20, 5, 22, -10, 2010),
+    (2, 14, 13, 28, 7, 30, -14, 2014),
+    (3, null, null, null, null, null, null, null);
+-- result:
+-- !result
+select typeof(c_bigint - 1),
+       typeof(c_bigint * 2),
+       typeof(c_bigint div 2),
+       typeof((c_bigint + 1) * 2),
+       typeof(c_bigint * -1),
+       typeof(year(c_date))
+from rf_expr_probe_${uuid0}
+where id = 1;
+-- result:
+bigint	bigint	bigint	bigint	bigint	smallint
+-- !result
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint = b.k_slot
+order by p.id, b.id;
+-- result:
+10	1
+14	2
+-- !result
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint - 1 = b.k_subtract
+order by p.id, b.id;
+-- result:
+10	1
+14	2
+-- !result
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint * 2 = b.k_multiply
+order by p.id, b.id;
+-- result:
+10	1
+14	2
+-- !result
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint div 2 = b.k_divide
+order by p.id, b.id;
+-- result:
+10	1
+11	1
+14	2
+15	2
+-- !result
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on (p.c_bigint + 1) * 2 = b.k_nested
+order by p.id, b.id;
+-- result:
+10	1
+14	2
+-- !result
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint * -1 = b.k_negative
+order by p.id, b.id;
+-- result:
+10	1
+14	2
+-- !result
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on year(p.c_date) = b.k_year
+order by p.id, b.id;
+-- result:
+10	1
+14	2
+-- !result
+drop table rf_expr_probe_${uuid0};
+-- result:
+-- !result
+drop table rf_expr_build_${uuid0};
+-- result:
+-- !result
