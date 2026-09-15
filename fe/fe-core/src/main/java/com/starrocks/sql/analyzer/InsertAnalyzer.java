@@ -63,7 +63,10 @@ import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.NullType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
@@ -566,6 +569,7 @@ public class InsertAnalyzer {
             // Keep original column name (BE is case-sensitive) and nullable property
             newCol.setName(oldCol.getName());
             newCol.setIsAllowNull(oldCol.isAllowNull());
+            preserveWiderInferredStringLength(oldCol, newCol);
             newFileColumns.put(oldCol.getName(), newCol);
         }
 
@@ -721,7 +725,33 @@ public class InsertAnalyzer {
         // Keep original column name (BE is case-sensitive) and nullable property
         newCol.setName(oldCol.getName());
         newCol.setIsAllowNull(oldCol.isAllowNull());
+        preserveWiderInferredStringLength(oldCol, newCol);
         fileColumns.put(oldCol.getName(), newCol);
+    }
+
+    /**
+     * Type push-down deep-copies the target column onto the FILES() scan schema so CSV/Parquet
+     * inference can use the sink type (e.g. TINYINT instead of inferred BIGINT). For strings that
+     * also copies the target length, so INSERT INTO t(STRING) rewrote a VARCHAR(1048576) FILES()
+     * slot to VARCHAR(65533). The BE scanner then rejected values that DESC/SELECT FROM FILES()
+     * accepted. Keep the wider inferred length; the INSERT sink still enforces the target type.
+     */
+    private static void preserveWiderInferredStringLength(Column fileCol, Column pushedCol) {
+        Type fileType = fileCol.getType();
+        Type pushedType = pushedCol.getType();
+        if (!fileType.isStringType() || !pushedType.isStringType()
+                || !fileType.isScalarType() || !pushedType.isScalarType()) {
+            return;
+        }
+        int fileLen = ((ScalarType) fileType).getLength();
+        int pushedLen = ((ScalarType) pushedType).getLength();
+        if (fileLen < 0) {
+            fileLen = StringType.MAX_STRING_LENGTH;
+        }
+        if (pushedLen < 0 || fileLen <= pushedLen) {
+            return;
+        }
+        pushedCol.setType(TypeFactory.createVarcharType(fileLen));
     }
 
     /**

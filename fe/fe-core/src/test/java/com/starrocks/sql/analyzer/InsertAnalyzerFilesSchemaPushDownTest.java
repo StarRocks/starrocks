@@ -9,6 +9,8 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,12 @@ public class InsertAnalyzerFilesSchemaPushDownTest extends PlanTestBase {
         starRocksAssert.withTable(
                 "CREATE TABLE t_sink (x BIGINT, y VARCHAR(64)) " +
                 "DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        starRocksAssert.withTable(
+                "CREATE TABLE t_files_str (col_int INT, col_string STRING) " +
+                "DISTRIBUTED BY HASH(col_int) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        starRocksAssert.withTable(
+                "CREATE TABLE t_files_tiny (col_int TINYINT, col_string STRING) " +
+                "DISTRIBUTED BY HASH(col_int) BUCKETS 1 PROPERTIES('replication_num'='1')");
     }
 
     @Test
@@ -96,5 +104,40 @@ public class InsertAnalyzerFilesSchemaPushDownTest extends PlanTestBase {
         assertInstanceOf(SemanticException.class, e.getCause());
         assertTrue(e.getMessage().contains("'enable_push_down_schema'")
                 && e.getMessage().contains("'schema'"));
+    }
+
+    @Test
+    public void testInsertPushDownDoesNotShrinkInferredVarcharLength() throws Exception {
+        // fake:// infers col_string as wildcard VARCHAR; STRING on the sink is VARCHAR(65533).
+        // Push-down must not shrink the FILES() slot to 65533 (issue #78208).
+        String sql = "INSERT INTO t_files_str SELECT * FROM FILES(" +
+                "  'path' = 'fake://bucket/wide.csv'," +
+                "  'format' = 'csv')";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        SelectRelation selectRelation = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+        FileTableFunctionRelation fileRelation = (FileTableFunctionRelation) selectRelation.getRelation();
+        TableFunctionTable fileTable = (TableFunctionTable) fileRelation.getTable();
+
+        ScalarType fileStringType = (ScalarType) fileTable.getColumn("col_string").getType();
+        assertEquals(PrimitiveType.VARCHAR, fileStringType.getPrimitiveType());
+        assertEquals(StringType.MAX_STRING_LENGTH, fileStringType.getLength(),
+                "FILES() varchar length must stay the inferred width, not the STRING sink's 65533");
+    }
+
+    @Test
+    public void testInsertPushDownStillNarrowsIntegerTypes() throws Exception {
+        String sql = "INSERT INTO t_files_tiny SELECT * FROM FILES(" +
+                "  'path' = 'fake://bucket/wide.csv'," +
+                "  'format' = 'csv')";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        SelectRelation selectRelation = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+        FileTableFunctionRelation fileRelation = (FileTableFunctionRelation) selectRelation.getRelation();
+        TableFunctionTable fileTable = (TableFunctionTable) fileRelation.getTable();
+
+        assertEquals(PrimitiveType.TINYINT,
+                fileTable.getColumn("col_int").getType().getPrimitiveType(),
+                "Integer type push-down must still rewrite inferred INT to TINYINT");
+        ScalarType fileStringType = (ScalarType) fileTable.getColumn("col_string").getType();
+        assertEquals(StringType.MAX_STRING_LENGTH, fileStringType.getLength());
     }
 }
