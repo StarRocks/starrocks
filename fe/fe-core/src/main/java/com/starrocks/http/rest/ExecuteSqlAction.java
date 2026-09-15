@@ -47,6 +47,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.QueryState;
@@ -120,7 +121,23 @@ public class ExecuteSqlAction extends RestBaseAction {
             context.setKeepAlive(true);
         }
 
+        boolean pendingHeld = false;
+        boolean admitted = false;
         try {
+            // Occupy the context before the HTTP admission counter: otherwise closeAllIdleConnection
+            // can claim cleanup on this keep-alive between tryStartHttpRequest() and COM_QUERY.
+            if (!context.tryIncPendingTask()) {
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE,
+                        "FE is in graceful shutdown, no longer accepting new requests");
+            }
+            pendingHeld = true;
+            if (!GracefulExitFlag.tryStartHttpRequest()) {
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE,
+                        "FE is in graceful shutdown, no longer accepting new requests");
+            }
+            admitted = true;
+            context.setCommand(MysqlCommand.COM_QUERY);
+            context.setStartTime();
             changeCatalogAndDB(catalogName, databaseName, context);
             try {
                 SqlRequest requestBody = validatePostBody(request.getContent(), context);
@@ -152,19 +169,34 @@ public class ExecuteSqlAction extends RestBaseAction {
                 throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, e.getMessage());
             } finally {
                 ConnectContext.remove();
+                // Restore the idle state if the request failed before processOnce() completed (it ends
+                // by setting COM_SLEEP + endTime). Leaving COM_QUERY here would make the drain's
+                // closeAllIdleConnection() skip this keep-alive channel forever.
+                if (context.getCommand() == MysqlCommand.COM_QUERY) {
+                    context.setCommand(MysqlCommand.COM_SLEEP);
+                    context.setEndTime();
+                }
             }
 
             // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
             finalize(request, response, parsedStmt, context);
-
-            if (GracefulExitFlag.isGracefulExit()) {
-                context.getNettyChannel().close();
-            }
         } catch (StarRocksHttpException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
             response.getContent().append(failResult.toJson());
+            // Rejected HTTP SQL after the accept window must drop keep-alive: writeResponse() only
+            // closes after flush when keep-alive is disabled.
+            if (SERVICE_UNAVAILABLE.equals(e.getCode()) && GracefulExitFlag.isHttpRejecting()) {
+                response.setForceCloseConnection(true);
+            }
             writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
+        } finally {
+            if (admitted) {
+                context.finishAdmittedHttpRequest();
+            }
+            if (pendingHeld) {
+                context.decPendingTask();
+            }
         }
     }
 
@@ -240,7 +272,8 @@ public class ExecuteSqlAction extends RestBaseAction {
             return;
         }
 
-        // now register this request in connectScheduler
+        // Admission is tryStartHttpRequest() at the action entry; registration is not a second
+        // reject point. An already-counted request must still register so drain can see it.
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         try {
             context.setConnectionId(connectScheduler.getNextConnectionId());

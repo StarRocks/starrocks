@@ -47,7 +47,9 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpMetricRegistry;
+import com.starrocks.http.HttpServerHandler;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.transaction.BypassWriteTransactionHandler;
 import com.starrocks.http.rest.transaction.MultiStatementTransactionHandler;
@@ -64,6 +66,7 @@ import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
@@ -212,16 +215,49 @@ public class TransactionLoadAction extends RestBaseAction {
     }
 
     @Override
+    public boolean supportAsyncHandler() {
+        // Await lastHttpWrite off the Netty event loop. Same as ExecuteSqlAction.
+        return true;
+    }
+
+    @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         OpMetrics opMetrics = null;
         long startTime = System.currentTimeMillis();
+        HttpConnectContext context = request.getConnectContext();
+        HttpConnectContext sqlKeepAlive = HttpServerHandler.getChannelSqlConnectContext(request.getContext());
+        boolean requestPending = false;
+        boolean keepAlivePending = false;
+        boolean admitted = false;
         try {
-            if (redirectToLeader(request, response)) {
-                return;
+            if (context != null) {
+                if (!context.tryIncPendingTask()) {
+                    rejectNewHttpRequest(request, response);
+                    return;
+                }
+                requestPending = true;
+            }
+            if (sqlKeepAlive != null && sqlKeepAlive != context) {
+                if (!sqlKeepAlive.tryIncPendingTask()) {
+                    rejectNewHttpRequest(request, response);
+                    return;
+                }
+                keepAlivePending = true;
             }
             TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
                     .orElseThrow(() -> new StarRocksException(
                             "Unknown transaction operation: " + request.getSingleParameter(TXN_OP_KEY)));
+            boolean allowWhenRejecting = txnOperation == TransactionOperation.TXN_PREPARE
+                    || txnOperation == TransactionOperation.TXN_COMMIT
+                    || txnOperation == TransactionOperation.TXN_ROLLBACK;
+            if (!GracefulExitFlag.tryStartHttpRequest(allowWhenRejecting)) {
+                rejectNewHttpRequest(request, response);
+                return;
+            }
+            admitted = true;
+            if (redirectToLeader(request, response)) {
+                return;
+            }
             opMetrics = opMetricsMap.get(txnOperation);
             if (opMetrics != null) {
                 opMetrics.opRunningNum.increase(1L);
@@ -244,7 +280,28 @@ public class TransactionLoadAction extends RestBaseAction {
                 opMetrics.opRunningNum.increase(-1L);
                 opMetrics.opLatencyMs.update(System.currentTimeMillis() - startTime);
             }
+            if (admitted) {
+                if (context != null) {
+                    context.finishAdmittedHttpRequest();
+                } else {
+                    GracefulExitFlag.finishHttpRequest();
+                }
+            }
+            if (keepAlivePending) {
+                sqlKeepAlive.decPendingTask();
+            }
+            if (requestPending) {
+                context.decPendingTask();
+            }
         }
+    }
+
+    private void rejectNewHttpRequest(BaseRequest request, BaseResponse response) {
+        response.setForceCloseConnection(true);
+        TransactionResult resp = new TransactionResult();
+        resp.status = ActionStatus.FAILED;
+        resp.msg = "FE is in graceful shutdown, no longer accepting new requests";
+        sendResult(request, response, HttpResponseStatus.SERVICE_UNAVAILABLE, resp);
     }
 
     protected void executeTransaction(BaseRequest request, BaseResponse response) throws StarRocksException {

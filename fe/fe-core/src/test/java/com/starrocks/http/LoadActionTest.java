@@ -17,6 +17,7 @@ package com.starrocks.http;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ProcResult;
@@ -26,6 +27,7 @@ import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
@@ -64,6 +66,7 @@ import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -71,6 +74,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -254,9 +259,24 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         }
 
         {
-            // HTTP/1.1, no 'Expect: 100-Continue'. responds HTTP 200 with error msg
+            // HTTP/1.1, no 'Expect: 100-Continue' (e.g. stripped by an L7 proxy like nginx).
+            // The missing header is tolerated: responds HTTP 307 (FE redirects without reading body).
             HttpPut put = buildPutRequest(256, false);
             put.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
+            try (CloseableHttpResponse response = client.execute(put)) {
+                Assertions.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                        response.getStatusLine().getStatusCode());
+                // The server indicates that the connection should be closed.
+                Assertions.assertEquals(HttpHeaderValues.CLOSE.toString(),
+                        response.getFirstHeader(HttpHeaderNames.CONNECTION.toString()).getValue());
+            }
+        }
+
+        {
+            // HTTP/1.1, present but wrong 'Expect' value. responds HTTP 200 with error msg
+            HttpPut put = buildPutRequest(256, false);
+            put.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
+            put.setHeader("Expect", "nonsense");
             try (CloseableHttpResponse response = client.execute(put)) {
                 Assertions.assertEquals(HttpResponseStatus.OK.code(),
                         response.getStatusLine().getStatusCode());
@@ -586,6 +606,31 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         Request request = buildRequest(headers);
         try (Response response = noRedirectClient.newCall(request).execute()) {
             assertEquals(307, response.code());
+        }
+    }
+
+    @Test
+    public void testRejectsNewRequestAfterAcceptWindowElapsed() throws Exception {
+        GracefulExitFlag.markGracefulExit();
+        long acceptWindowNanos = TimeUnit.NANOSECONDS.convert(
+                Config.graceful_exit_http_accept_window_ms, TimeUnit.MILLISECONDS);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(System.nanoTime() - acceptWindowNanos - 1L);
+        try {
+            Request request = buildRequest(new HashMap<>());
+            try (Response response = noRedirectClient.newCall(request).execute()) {
+                assertEquals(503, response.code());
+                String body = response.body() != null ? response.body().string() : "";
+                assertTrue(body.contains("no longer accepting new requests"));
+                assertEquals("close", response.header("Connection"));
+            }
+        } finally {
+            Field flagField = GracefulExitFlag.class.getDeclaredField("GRACEFUL_EXIT");
+            flagField.setAccessible(true);
+            ((AtomicBoolean) flagField.get(null)).set(false);
+            ((AtomicLong) beginField.get(null)).set(0L);
+            GracefulExitFlag.resetHttpAdmissionState();
         }
     }
 }

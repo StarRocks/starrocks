@@ -33,8 +33,12 @@ package com.starrocks.http;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TResultSinkFormatType;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import org.apache.logging.log4j.LogManager;
@@ -66,6 +70,10 @@ public class HttpConnectContext extends ConnectContext {
     private String remoteAddress;
 
     private boolean isKeepAlive;
+
+    // Last HTTP write (LastHttpContent or FullHttpResponse). Awaited before
+    // finishHttpRequest/close so drain cannot observe active==0 while bytes remain.
+    private volatile ChannelFuture lastHttpWrite;
 
     // right now only support json type
     private TResultSinkFormatType resultSinkFormatType;
@@ -138,12 +146,61 @@ public class HttpConnectContext extends ConnectContext {
         isKeepAlive = keepAlive;
     }
 
+    public void setLastHttpWrite(ChannelFuture lastHttpWrite) {
+        this.lastHttpWrite = lastHttpWrite;
+    }
+
+    public void awaitLastHttpWrite() {
+        ChannelFuture f = lastHttpWrite;
+        if (f != null) {
+            f.awaitUninterruptibly();
+        }
+    }
+
+    // Wait for this request's final HTTP write, then drop the admission count.
+    // Close the channel only after that write completes, and only when rejecting.
+    // If called on the Netty event loop, defer via listener to avoid deadlock.
+    public void finishAdmittedHttpRequest() {
+        ChannelFuture f = lastHttpWrite;
+        if (f != null) {
+            Channel ch = f.channel();
+            if (ch != null && ch.eventLoop() != null && ch.eventLoop().inEventLoop()) {
+                f.addListener(future -> completeAdmittedHttpRequest());
+                return;
+            }
+            f.awaitUninterruptibly();
+        }
+        completeAdmittedHttpRequest();
+    }
+
+    private void completeAdmittedHttpRequest() {
+        if (GracefulExitFlag.isHttpRejecting()) {
+            ChannelHandlerContext ch = nettyChannel;
+            if (ch != null && ch.channel().isActive()) {
+                ch.close();
+            }
+        }
+        GracefulExitFlag.finishHttpRequest();
+    }
+
     public boolean isOnlyOutputResultRaw() {
         return onlyOutputResultRaw;
     }
 
     public void setOnlyOutputResultRaw(boolean onlyOutputResultRaw) {
         this.onlyOutputResultRaw = onlyOutputResultRaw;
+    }
+
+    @Override
+    public synchronized void cleanup() {
+        try {
+            super.cleanup();
+        } finally {
+            if (nettyChannel != null) {
+                nettyChannel.close();
+            }
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
+        }
     }
 
     @Override

@@ -66,12 +66,18 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     protected HttpRequest request = null;
     private final ActionController controller;
     private final Executor executor;
-    private BaseAction action = null;
 
     public HttpServerHandler(ActionController controller, Executor executor) {
         super();
         this.controller = controller;
         this.executor = executor;
+    }
+
+    public static HttpConnectContext getChannelSqlConnectContext(ChannelHandlerContext ctx) {
+        if (ctx == null || ctx.channel() == null) {
+            return null;
+        }
+        return ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
     }
 
     @Override
@@ -99,29 +105,27 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             }
 
             BaseRequest req = new BaseRequest(ctx, request);
-            action = getAction(req);
-            if (action.isSqlAction()) {
+            BaseAction selectedAction = getAction(req);
+            if (selectedAction.isSqlAction()) {
                 req.setConnectContext(ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get());
             } else {
                 req.setConnectContext(new HttpConnectContext());
             }
 
-            if (action != null) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("action: {} ", action.getClass().getName());
-                }
-                if (action.supportAsyncHandler()) {
-                    handleActionAsync(req);
-                } else {
-                    handleActionSync(req);
-                }
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("action: {} ", selectedAction.getClass().getName());
+            }
+            if (selectedAction.supportAsyncHandler()) {
+                handleActionAsync(selectedAction, req);
+            } else {
+                handleActionSync(selectedAction, req);
             }
         } finally {
             ReferenceCountUtil.release(msg);
         }
     }
 
-    private void handleActionSync(BaseRequest request) {
+    private void handleActionSync(BaseAction action, BaseRequest request) {
         RequestHandlingWatch watch = new RequestHandlingWatch(request, false);
         try {
             action.handleRequest(request);
@@ -132,7 +136,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private void handleActionAsync(BaseRequest request) {
+    private void handleActionAsync(BaseAction action, BaseRequest request) {
         RequestHandlingWatch watch = new RequestHandlingWatch(request, true);
         try {
             executor.execute(() -> {
