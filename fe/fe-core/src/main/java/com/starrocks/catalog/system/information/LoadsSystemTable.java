@@ -106,7 +106,7 @@ public class LoadsSystemTable {
                 // Cut the page at a job boundary so one job's rows never straddle two pages.
                 if (paged && loads.size() >= Config.max_get_loads_result_count) {
                     result.setNext_job_id_offset(candidate.id() + 1);
-                    LOG.info("getLoads page is full, returned rows: {}, next_job_id_offset: {}",
+                    LOG.debug("getLoads page is full, returned rows: {}, next_job_id_offset: {}",
                             loads.size(), candidate.id() + 1);
                     break;
                 }
