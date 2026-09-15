@@ -39,6 +39,7 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
@@ -653,6 +654,459 @@ TEST_F(BitShufflePageTest, TestReadByRowids) {
     ASSERT_EQ(0, column->get(0).get_int32());
     ASSERT_EQ(50, column->get(1).get_int32());
     ASSERT_EQ(99, column->get(2).get_int32());
+}
+
+TEST_F(BitShufflePageTest, test_read_by_rowids_large_batch_and_nullable) {
+    constexpr size_t size = 16384;
+    auto ints = std::make_unique<int32_t[]>(size);
+    for (int i = 0; i < size; ++i) {
+        ints[i] = i * 13 + 5;
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 512 * 1024;
+    BitshufflePageBuilder<TYPE_INT> page_builder(options);
+
+    size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
+    ASSERT_EQ(size, added);
+    OwnedSlice s = page_builder.finish()->build();
+
+    Slice encoded_data = s.slice();
+    starrocks::PageFooterPB footer;
+    footer.set_type(starrocks::DATA_PAGE);
+    starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
+    data_page_footer->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+    Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
+    ASSERT_TRUE(st.ok());
+
+    BitShufflePageDecoder<TYPE_INT> page_decoder(encoded_data);
+    st = page_decoder.init();
+    ASSERT_TRUE(st.ok());
+
+    // 1. Test non-nullable column with scattered rowids
+    {
+        std::vector<rowid_t> rowids;
+        rowids.reserve(2048);
+        for (rowid_t r = 0; r < size; r += 7) {
+            rowids.push_back(r);
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(rowids.size(), count);
+        ASSERT_EQ(rowids.size(), column->size());
+
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_EQ(ints[rowids[i]], column->get(i).get_int32()) << "mismatch at index " << i;
+        }
+    }
+
+    // 2. Test nullable column with scattered rowids
+    {
+        std::vector<rowid_t> rowids;
+        rowids.reserve(1024);
+        for (rowid_t r = 3; r < size; r += 11) {
+            rowids.push_back(r);
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, true);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(rowids.size(), count);
+        ASSERT_EQ(rowids.size(), column->size());
+
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_FALSE(column->is_null(i));
+            ASSERT_EQ(ints[rowids[i]], column->get(i).get_int32()) << "nullable mismatch at index " << i;
+        }
+    }
+
+    // 3. Test out-of-page bounds truncation
+    {
+        std::vector<rowid_t> rowids = {10, 20, static_cast<rowid_t>(size - 1), static_cast<rowid_t>(size + 100),
+                                       static_cast<rowid_t>(size + 200)};
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(3, count);
+        ASSERT_EQ(3, column->size());
+        ASSERT_EQ(ints[10], column->get(0).get_int32());
+        ASSERT_EQ(ints[20], column->get(1).get_int32());
+        ASSERT_EQ(ints[size - 1], column->get(2).get_int32());
+    }
+}
+
+TEST_F(BitShufflePageTest, test_read_by_rowids_date_and_datetime) {
+    const size_t size = 4096;
+
+    // 1. Test TYPE_DATE with large batch (> 1024 rowids)
+    {
+        std::vector<int32_t> dates(size);
+        for (int i = 0; i < size; ++i) {
+            dates[i] = 10000 + i;
+        }
+
+        PageBuilderOptions options;
+        options.data_page_size = 64 * 1024;
+        BitshufflePageBuilder<TYPE_DATE> page_builder(options);
+        size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(dates.data()), size);
+        ASSERT_EQ(size, added);
+        OwnedSlice s = page_builder.finish()->build();
+
+        Slice encoded_data = s.slice();
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+        starrocks::PageFooterPB footer;
+        footer.set_type(starrocks::DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
+        ASSERT_TRUE(st.ok());
+
+        BitShufflePageDecoder<TYPE_DATE> page_decoder(encoded_data);
+        st = page_decoder.init();
+        ASSERT_TRUE(st.ok());
+
+        std::vector<rowid_t> rowids;
+        rowids.reserve(2048);
+        for (rowid_t r = 0; r < size; r += 2) {
+            rowids.push_back(r);
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_DATE, false);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(rowids.size(), count);
+        ASSERT_EQ(rowids.size(), column->size());
+
+        const auto values = GetStorageContainer<TYPE_DATE>::get_data(column);
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_EQ(dates[rowids[i]], values[i].julian()) << "date mismatch at index " << i;
+        }
+    }
+
+    // 2. Test TYPE_DATETIME with large batch (> 1024 rowids) and nullable
+    {
+        std::vector<int64_t> datetimes(size);
+        for (int i = 0; i < size; ++i) {
+            datetimes[i] = 20260913000000LL + i;
+        }
+
+        PageBuilderOptions options;
+        options.data_page_size = 64 * 1024;
+        BitshufflePageBuilder<TYPE_DATETIME> page_builder(options);
+        size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(datetimes.data()), size);
+        ASSERT_EQ(size, added);
+        OwnedSlice s = page_builder.finish()->build();
+
+        Slice encoded_data = s.slice();
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+        starrocks::PageFooterPB footer;
+        footer.set_type(starrocks::DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
+        ASSERT_TRUE(st.ok());
+
+        BitShufflePageDecoder<TYPE_DATETIME> page_decoder(encoded_data);
+        st = page_decoder.init();
+        ASSERT_TRUE(st.ok());
+
+        std::vector<rowid_t> rowids;
+        rowids.reserve(2048);
+        for (rowid_t r = 1; r < size; r += 2) {
+            rowids.push_back(r);
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_DATETIME, true);
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(rowids.size(), count);
+        ASSERT_EQ(rowids.size(), column->size());
+
+        const auto values = GetStorageContainer<TYPE_DATETIME>::get_data(column);
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_FALSE(column->is_null(i));
+            ASSERT_EQ(datetimes[rowids[i]], values[i].timestamp()) << "datetime mismatch at index " << i;
+        }
+    }
+}
+
+TEST_F(BitShufflePageTest, test_read_by_rowids_edge_cases_and_fallback) {
+    // 1. Setup INT page
+    constexpr size_t size = 4096;
+    auto ints = std::make_unique<int32_t[]>(size);
+    for (int i = 0; i < size; ++i) {
+        ints[i] = i * 7 + 3;
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 64 * 1024;
+    BitshufflePageBuilder<TYPE_INT> page_builder(options);
+    size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
+    ASSERT_EQ(size, added);
+    OwnedSlice s = page_builder.finish()->build();
+
+    Slice encoded_data = s.slice();
+    starrocks::PageFooterPB footer;
+    footer.set_type(starrocks::DATA_PAGE);
+    footer.mutable_data_page_footer()->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+    Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
+    ASSERT_TRUE(st.ok());
+
+    BitShufflePageDecoder<TYPE_INT> page_decoder(encoded_data);
+    st = page_decoder.init();
+    ASSERT_TRUE(st.ok());
+
+    // 1. count = 0: asserts st.ok() and returns immediately
+    {
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+        size_t count = 0;
+        st = page_decoder.read_by_rowids(0, nullptr, &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(0, count);
+        ASSERT_EQ(0, column->size());
+    }
+
+    // 2. rowids containing an out-of-bounds ordinal (ord >= _num_elements)
+    // tests: if (read_count < total) data_col->resize(orig_size + read_count);
+    {
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+        column->append_datum(Datum(int32_t(111)));
+        column->append_datum(Datum(int32_t(222)));
+        size_t orig_size = column->size();
+        ASSERT_EQ(2, orig_size);
+
+        std::vector<rowid_t> rowids = {5, 10, static_cast<rowid_t>(size), static_cast<rowid_t>(size + 10)};
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(2, count);
+        ASSERT_EQ(orig_size + 2, column->size());
+        ASSERT_EQ(111, column->get(0).get_int32());
+        ASSERT_EQ(222, column->get(1).get_int32());
+        ASSERT_EQ(ints[5], column->get(2).get_int32());
+        ASSERT_EQ(ints[10], column->get(3).get_int32());
+    }
+    {
+        auto column = ChunkFactory::column_from_field_type(TYPE_INT, true);
+        column->append_datum(Datum(int32_t(333)));
+        size_t orig_size = column->size();
+
+        std::vector<rowid_t> rowids = {20, 30, static_cast<rowid_t>(size + 5)};
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(2, count);
+        ASSERT_EQ(orig_size + 2, column->size());
+        ASSERT_EQ(333, column->get(0).get_int32());
+        ASSERT_FALSE(column->is_null(1));
+        ASSERT_EQ(ints[20], column->get(1).get_int32());
+        ASSERT_FALSE(column->is_null(2));
+        ASSERT_EQ(ints[30], column->get(2).get_int32());
+    }
+
+    // 3. Setup TYPE_BOOLEAN page
+    constexpr size_t bool_size = 4096;
+    auto bools = std::make_unique<uint8_t[]>(bool_size);
+    for (size_t i = 0; i < bool_size; ++i) {
+        bools[i] = static_cast<uint8_t>(i % 2);
+    }
+
+    PageBuilderOptions bool_options;
+    bool_options.data_page_size = 64 * 1024;
+    BitshufflePageBuilder<TYPE_BOOLEAN> bool_page_builder(bool_options);
+    size_t bool_added = bool_page_builder.add(bools.get(), bool_size);
+    ASSERT_EQ(bool_size, bool_added);
+    OwnedSlice bool_s = bool_page_builder.finish()->build();
+
+    Slice bool_encoded_data = bool_s.slice();
+    starrocks::PageFooterPB bool_footer;
+    bool_footer.set_type(starrocks::DATA_PAGE);
+    bool_footer.mutable_data_page_footer()->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> bool_page = nullptr;
+    st = StoragePageDecoder::decode_page(&bool_footer, 0, starrocks::BIT_SHUFFLE, &bool_page, &bool_encoded_data);
+    ASSERT_TRUE(st.ok());
+
+    BitShufflePageDecoder<TYPE_BOOLEAN> bool_decoder(bool_encoded_data);
+    st = bool_decoder.init();
+    ASSERT_TRUE(st.ok());
+
+    // 3a. TYPE_BOOLEAN small batch (total = 32 < 1024) to exercise stack_buf fallback
+    {
+        constexpr size_t kSmallCount = 32;
+        std::vector<rowid_t> rowids;
+        rowids.reserve(kSmallCount);
+        for (size_t i = 0; i < kSmallCount; ++i) {
+            rowids.push_back(static_cast<rowid_t>(i * 3));
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_BOOLEAN, false);
+        size_t count = rowids.size();
+        st = bool_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(kSmallCount, count);
+        ASSERT_EQ(kSmallCount, column->size());
+
+        const auto values = GetStorageContainer<TYPE_BOOLEAN>::get_data(column);
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_EQ(bools[rowids[i]], values[i]) << "boolean mismatch at index " << i;
+        }
+    }
+
+    // 4. TYPE_BOOLEAN large batch (total = 2048 > 1024) to exercise heap_buf fallback
+    {
+        constexpr size_t kLargeCount = 2048;
+        std::vector<rowid_t> rowids;
+        rowids.reserve(kLargeCount);
+        for (size_t i = 0; i < kLargeCount; ++i) {
+            rowids.push_back(static_cast<rowid_t>(i));
+        }
+
+        auto column = ChunkFactory::column_from_field_type(TYPE_BOOLEAN, false);
+        size_t count = rowids.size();
+        st = bool_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(kLargeCount, count);
+        ASSERT_EQ(kLargeCount, column->size());
+
+        const auto values = GetStorageContainer<TYPE_BOOLEAN>::get_data(column);
+        for (size_t i = 0; i < count; ++i) {
+            ASSERT_EQ(bools[rowids[i]], values[i]) << "boolean large batch mismatch at index " << i;
+        }
+    }
+
+    // 4b. Fallback path with out-of-bounds rowids
+    {
+        std::vector<rowid_t> rowids = {0, 1, static_cast<rowid_t>(bool_size), static_cast<rowid_t>(bool_size + 10)};
+        auto column = ChunkFactory::column_from_field_type(TYPE_BOOLEAN, false);
+        size_t count = rowids.size();
+        st = bool_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(2, count);
+        ASSERT_EQ(2, column->size());
+        const auto values = GetStorageContainer<TYPE_BOOLEAN>::get_data(column);
+        ASSERT_EQ(bools[0], values[0]);
+        ASSERT_EQ(bools[1], values[1]);
+    }
+
+    // 4c. Fallback path where all rowids are out-of-bounds (read_count == 0)
+    {
+        std::vector<rowid_t> rowids = {static_cast<rowid_t>(bool_size + 1)};
+        auto column = ChunkFactory::column_from_field_type(TYPE_BOOLEAN, false);
+        size_t count = rowids.size();
+        st = bool_decoder.read_by_rowids(0, rowids.data(), &count, column.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(0, count);
+        ASSERT_EQ(0, column->size());
+    }
+
+    // 5. ConstColumn destination (non-nullable and nullable) - must reject with Status::NotSupported
+    {
+        auto base_col = ChunkFactory::column_from_field_type(TYPE_INT, false);
+        base_col->append_datum(Datum(int32_t(100)));
+        auto const_col = ConstColumn::create(std::move(base_col), 1);
+        ASSERT_TRUE(const_col->is_constant());
+        ASSERT_FALSE(const_col->is_nullable());
+        std::vector<rowid_t> rowids = {0, 1, 2};
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, const_col.get());
+        ASSERT_TRUE(st.is_not_supported()) << st.to_string();
+    }
+    {
+        // ConstColumn wrapping a nullable inner column with non-null data.
+        // ConstColumn::ConstColumn() unwraps the NullableColumn wrapper when
+        // size > 0 and the first element is non-null, so is_nullable() returns
+        // false here. The key invariant is that is_constant() == true causes
+        // read_by_rowids to reject the column with NotSupported.
+        auto base_null_col = ChunkFactory::column_from_field_type(TYPE_INT, true);
+        base_null_col->append_datum(Datum(int32_t(100)));
+        auto const_null_col = ConstColumn::create(std::move(base_null_col), 1);
+        ASSERT_TRUE(const_null_col->is_constant());
+        ASSERT_FALSE(const_null_col->is_nullable());
+        std::vector<rowid_t> rowids = {0, 1, 2};
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, const_null_col.get());
+        ASSERT_TRUE(st.is_not_supported()) << st.to_string();
+    }
+}
+
+TEST_F(BitShufflePageTest, test_read_by_rowids_adaptive_nullable_column) {
+    std::vector<int32_t> ints = {10, 20, 30, 40, 50, 60, 70, 80};
+    size_t ints_size = ints.size();
+    PageBuilderOptions builder_options;
+    BitshufflePageBuilder<TYPE_INT> page_builder(builder_options);
+    page_builder.add(reinterpret_cast<const uint8_t*>(ints.data()), ints_size);
+    OwnedSlice owned_slice = page_builder.finish()->build();
+
+    Slice encoded_data = owned_slice.slice();
+    starrocks::PageFooterPB footer;
+    footer.set_type(starrocks::DATA_PAGE);
+    footer.mutable_data_page_footer()->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+    Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
+    ASSERT_TRUE(st.ok());
+
+    BitShufflePageDecoder<TYPE_INT> page_decoder(encoded_data);
+    st = page_decoder.init();
+    ASSERT_TRUE(st.ok());
+
+    // 1. AdaptiveNullableColumn starting in kUninitialized state
+    {
+        auto col = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_EQ(AdaptiveNullableColumn::State::kUninitialized, col->state());
+        ASSERT_EQ(0, col->size());
+
+        std::vector<rowid_t> rowids = {1, 3, 5};
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, col.get());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(3, count);
+        ASSERT_EQ(3, col->size());
+        ASSERT_EQ(AdaptiveNullableColumn::State::kMaterialized, col->state());
+        ASSERT_FALSE(col->has_null());
+
+        auto* nullable = down_cast<NullableColumn*>(static_cast<Column*>(col.get()));
+        auto* data_col = down_cast<Int32Column*>(nullable->data_column_raw_ptr());
+        ASSERT_EQ(ints[1], data_col->get_data()[0]);
+        ASSERT_EQ(ints[3], data_col->get_data()[1]);
+        ASSERT_EQ(ints[5], data_col->get_data()[2]);
+        for (size_t i = 0; i < 3; ++i) {
+            ASSERT_FALSE(nullable->is_null(i));
+        }
+    }
+
+    // 2. AdaptiveNullableColumn starting in kNull state
+    {
+        auto col = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(col->append_nulls(2));
+        ASSERT_EQ(AdaptiveNullableColumn::State::kNull, col->state());
+        ASSERT_EQ(2, col->size());
+
+        std::vector<rowid_t> rowids = {0, 4};
+        size_t count = rowids.size();
+        st = page_decoder.read_by_rowids(0, rowids.data(), &count, col.get());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(2, count);
+        ASSERT_EQ(4, col->size());
+        ASSERT_EQ(AdaptiveNullableColumn::State::kMaterialized, col->state());
+        ASSERT_TRUE(col->has_null());
+
+        ASSERT_TRUE(col->is_null(0));
+        ASSERT_TRUE(col->is_null(1));
+        ASSERT_FALSE(col->is_null(2));
+        ASSERT_FALSE(col->is_null(3));
+
+        auto* nullable = down_cast<NullableColumn*>(static_cast<Column*>(col.get()));
+        auto* data_col = down_cast<Int32Column*>(nullable->data_column_raw_ptr());
+        ASSERT_EQ(ints[0], data_col->get_data()[2]);
+        ASSERT_EQ(ints[4], data_col->get_data()[3]);
+    }
 }
 
 } // namespace starrocks
