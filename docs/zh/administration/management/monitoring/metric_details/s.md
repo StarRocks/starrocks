@@ -46,6 +46,46 @@ description: "Alphabetical s"
 - 单位: 计数
 - 描述: 小文件缓存的数量。
 
+## `sort_key_sampling_data_page_fallback_total`
+
+- 单位: 计数
+- 描述: 从数据页采样排序键时放弃某个 Segment、退回到该 Segment 粗粒度 `[min, max]` 区间的累计次数：Schema 不符合预期、`sort_key_idxes` 与 Segment 自身的 Schema 不一致、页读取失败、读取行数不足，或采样值超出 Segment 声明的边界。采样采用失败即退化（fail-open）策略，因此该指标上升不会导致分裂失败，但意味着 Tablet 分裂与范围分裂 Compaction 使用的边界比预期更粗。
+
+## `sort_key_sampling_data_page_latency`
+
+- 单位: us
+- 描述: 从数据页采样单个 Segment 排序键所花费的时间，以 bvar 延迟序列发布（平均值、分位数、最大值、qps 与计数）。统计所有通过采样预算检查的尝试，包括随后退回粗粒度区间的尝试，因此持续失败即退化的慢 Tablet 在此依然可见。
+
+## `sort_key_sampling_data_page_segments_total`
+
+- 单位: 计数
+- 描述: 采样确定走数据页路径的 Segment 累计数量。该计数在采样几何确定之后、首次读取之前累加，因此随后读取失败并退化的 Segment 同样计入——该指标的目的是显示"未走"免费的 Short Key Index 路径。若要了解实际付出的 I/O，请查看 `sort_key_sampling_read_bytes_total`。
+
+## `sort_key_sampling_read_bytes_total`
+
+- 单位: 字节
+- 描述: 采样排序键时从 Segment 数据页读取的累计压缩字节数。取自页读取器自身的统计，因此只统计真实发生的传输，包括随后退化的那些尝试。这是观察分裂点采样 I/O 开销的指标。
+
+## `sort_key_sampling_rowsets_opened_total`
+
+- 单位: 计数
+- 描述: 为采样而打开 Segment 文件的 Rowset 累计数量。打开操作以该 Rowset 至少有一个 Segment 具有非零采样预算为前提，因此只有真正尝试采样时该指标才会上升。请与 `sort_key_sampling_samples_total` 对照阅读：打开了 Rowset 却没有产生样本，说明采样预算没有落到被读取的那些 Segment 上。
+
+## `sort_key_sampling_samples_total`
+
+- 单位: 计数
+- 描述: 两条采样路径共同产生的排序键样本累计数量。若该指标上升而 `sort_key_sampling_data_page_segments_total` 未上升，说明样本来自免费的 Short Key Index 路径。
+
+## `sort_key_sampling_short_key_index_fallback_total`
+
+- 单位: 计数
+- 描述: 已进入 Short Key Index 采样路径、随后放弃该 Segment 并退回到其粗粒度 `[min, max]` 区间的累计次数：索引页无法解析、几何信息与 Segment 自身行数交叉校验不通过、采样值超出 Segment 声明的边界，或 Segment 的索引块少于两个。请注意该指标**不**统计的情形：若 Schema 的 Short Key Index 无法完整编码排序键（例如 VARCHAR 排序键），则根本不会进入该路径，此类表的该指标保持为 0，相应 Segment 体现在 `sort_key_sampling_data_page_segments_total` 中。
+
+## `sort_key_sampling_short_key_index_latency`
+
+- 单位: us
+- 描述: 从 Short Key Index 采样单个 Segment 排序键所花费的时间，以 bvar 延迟序列发布（平均值、分位数、最大值、qps 与计数）。该路径不读取任何数据页，因此其取值应远低于 `sort_key_sampling_data_page_latency`。
+
 ## `spill_disk_bytes_used`
 
 - 单位: 字节

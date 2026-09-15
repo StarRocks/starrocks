@@ -18,6 +18,7 @@
 
 #include <filesystem>
 #include <future>
+#include <optional>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
@@ -40,6 +41,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/sort_key_sampler.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
@@ -229,8 +231,7 @@ protected:
     }
 
     // Writes a real segment (key column c0 = start_key..start_key+num_rows-1, value column c1 constant 0)
-    // for |tablet_id| at |segment_name|, under |schema_pb| and the writer-time value of
-    // config::enable_full_sort_key_index. Returns the file size.
+    // for |tablet_id| at |segment_name|, under |schema_pb|. Returns the file size.
     uint64_t write_int_key_segment(int64_t tablet_id, const TabletSchemaPB& schema_pb, const std::string& segment_name,
                                    int64_t num_rows, int32_t start_key = 0) {
         auto tablet_schema = TabletSchema::create(schema_pb);
@@ -261,12 +262,212 @@ protected:
         return file_size;
     }
 
+    // ================================================================================
+    // Range-split sampling fixture
+    //
+    // A tablet whose written key layout is known exactly, so a subtask's row count can be measured
+    // against ground truth instead of against the split algorithm's own per-range estimate.
+    // ================================================================================
+
+    // (k VARCHAR, v INT), DUP_KEYS, sort key = k. VARCHAR is deliberate: it is what forces sampling
+    // onto the data-page path, because short_key_index_encodes_full_sort_key() rejects the schema on
+    // TYPE -- sort_key_fixed_encode_size(TYPE_VARCHAR) falls into its `default: return 0` arm.
+    // That holds at ANY index_length, so the value below does not
+    // select the path and raising it would change nothing; it is set only because a real VARCHAR key
+    // carries a truncated short key, and 4 is narrower than the 6-digit keys this fixture writes.
+    static TabletSchemaPB varchar_sort_key_schema_pb() {
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_id(next_id());
+        pb.set_num_short_key_columns(1);
+        pb.set_num_rows_per_row_block(65535);
+        auto* k = pb.add_column();
+        k->set_unique_id(1);
+        k->set_name("k");
+        k->set_type("VARCHAR");
+        k->set_is_key(true);
+        k->set_is_nullable(false);
+        k->set_length(32);
+        k->set_index_length(4);
+        auto* v = pb.add_column();
+        v->set_unique_id(2);
+        v->set_name("v");
+        v->set_type("INT");
+        v->set_is_key(false);
+        v->set_is_nullable(false);
+        v->set_aggregation("NONE");
+        pb.add_sort_key_idxes(0);
+        return pb;
+    }
+
+    // Zero-padded so byte order == numeric order. That is what lets a VARCHAR range bound be read
+    // back as the integer key it denotes, and it keeps each written run non-decreasing so the
+    // sampler's monotonicity validation sees a well-formed segment.
+    static std::string encode_varchar_key(int64_t key) { return fmt::format("{:06d}", key); }
+
+    static TuplePB make_varchar_tuple(int64_t key) {
+        TuplePB tuple;
+        auto* v = tuple.add_values();
+        TypeDescriptor type_desc = TypeDescriptor::create_varchar_type(32);
+        v->mutable_type()->CopyFrom(type_desc.to_protobuf());
+        v->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        v->set_value(encode_varchar_key(key));
+        return tuple;
+    }
+
+    // Writes a real segment holding the ascending key run [start_key, start_key + num_rows) under
+    // |schema_pb| (key column k, value column v constant 0). Returns the file size.
+    uint64_t write_varchar_key_segment(int64_t tablet_id, const TabletSchemaPB& schema_pb,
+                                       const std::string& segment_name, int64_t num_rows, int64_t start_key) {
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        std::string path = _lp->segment_location(tablet_id, segment_name);
+        std::string dir = std::filesystem::path(path).parent_path().string();
+        CHECK_OK(fs::create_directories(dir));
+        auto fs = FileSystemFactory::CreateSharedFromString(path);
+        WritableFileOptions opts;
+        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+        auto wfile = fs.value()->new_writable_file(opts, path);
+        CHECK_OK(wfile.status());
+
+        SegmentWriterOptions writer_opts;
+        SegmentWriter writer(std::move(wfile.value()), /*segment_id=*/0, tablet_schema, writer_opts);
+        CHECK_OK(writer.init());
+
+        auto chunk_schema = ChunkHelper::convert_schema(tablet_schema);
+        auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+        auto cols = chunk->columns();
+        // The Slices below point into this vector, which must therefore outlive append_chunk.
+        std::vector<std::string> encoded;
+        encoded.reserve(num_rows);
+        for (int64_t i = 0; i < num_rows; ++i) {
+            encoded.push_back(encode_varchar_key(start_key + i));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(Slice(encoded.back())));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+        }
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+        return file_size;
+    }
+
+    // Builds a tablet of |num_rowsets| rowsets, one real segment each, and returns Rowsets over it.
+    //
+    // Segment s holds the dense key run [s * rows_each / 2, s * rows_each / 2 + rows_each), so
+    // consecutive segments overlap over half their key span -- the shape a set of rowsets awaiting
+    // compaction has, and one the coarse [min, max] model cannot divide evenly: with only the
+    // segments' 2*N endpoints as boundary candidates, and each segment's rows spread EQUALLY over
+    // the candidate ranges it overlaps rather than by width (distribute_to_ranges), the outer
+    // subtasks come out ~50% off even though every key run is perfectly uniform.
+    //
+    // Records the layout in _written_key_runs so written_rows_in_group() can reconstruct ground
+    // truth, and the tablet id in _sampling_tablet_id.
+    std::vector<RowsetPtr> build_rowsets_with_varchar_sort_key(int num_rowsets, int64_t rows_each) {
+        const int64_t tablet_id = next_id();
+        const auto schema_pb = varchar_sort_key_schema_pb();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(num_rowsets + 1);
+        *metadata->mutable_schema() = schema_pb;
+
+        _written_key_runs.clear();
+        const int64_t shift = rows_each / 2;
+        for (int s = 0; s < num_rowsets; ++s) {
+            const int64_t start_key = s * shift;
+            const std::string name = fmt::format("varchar_seg_{}.dat", s);
+            write_varchar_key_segment(tablet_id, schema_pb, name, rows_each, start_key);
+            _written_key_runs.emplace_back(start_key, rows_each);
+
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(s);
+            rowset->set_overlapped(false);
+            rowset->set_num_rows(rows_each);
+            // Recorded rather than measured from disk: the split algorithm reads only these sizes,
+            // and pinning them is what lets kBytesPerSubtask be a constant (see its comment).
+            rowset->set_data_size(kSampledRowsetDataSize);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(name);
+            segment_meta->set_size(kSampledRowsetDataSize);
+            segment_meta->set_num_rows(rows_each);
+            // The sampler rejects any sample outside [sort_key_min, sort_key_max], so these must be
+            // the segment's real first and last key -- not a rounded envelope.
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_varchar_tuple(start_key));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_varchar_tuple(start_key + rows_each - 1));
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, metadata->version()));
+        auto meta = tablet.metadata();
+        std::vector<RowsetPtr> rowsets;
+        for (int i = 0; i < meta->rowsets_size(); ++i) {
+            rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
+        }
+        _sampling_tablet_id = tablet_id;
+        return rowsets;
+    }
+
+    // The integer key a subtask range bound denotes, or nullopt when the bound is absent
+    // (unbounded). The key space IS the integers [0, ...): the fixture stores them zero-padded.
+    static std::optional<int64_t> decode_varchar_bound(const VariantTuple& bound) {
+        if (bound.empty()) {
+            return std::nullopt;
+        }
+        CHECK_EQ(1u, bound.size());
+        return std::stoll(bound[0].value().get_slice().to_string());
+    }
+
+    // Rows the FIXTURE actually wrote into |group|'s key range -- arithmetic over the written runs,
+    // never a second reading of the algorithm's own estimate. SubtaskGroup::total_bytes comes from
+    // RangeSplitResult::range_data_sizes, which the greedy loop optimises directly, so a spread
+    // assertion over THAT is satisfied by construction and would pass with no samples at all.
+    //
+    // Reads range_lower_inclusive / range_upper_inclusive rather than assuming the [lower, upper)
+    // convention _create_range_split_groups writes today. This helper IS the ground truth of the
+    // evenness tests, so if that convention ever changed, an assumption here would mis-measure
+    // silently instead of failing. The key space is the integers, so an exclusive bound is just the
+    // adjacent one.
+    int64_t written_rows_in_group(const SubtaskGroup& group) const {
+        auto lower = decode_varchar_bound(group.range_lower_bound);
+        auto upper = decode_varchar_bound(group.range_upper_bound);
+        if (lower.has_value() && !group.range_lower_inclusive) {
+            lower = *lower + 1;
+        }
+        if (upper.has_value() && group.range_upper_inclusive) {
+            upper = *upper + 1;
+        }
+        int64_t rows = 0;
+        for (const auto& [start, count] : _written_key_runs) {
+            const int64_t lo = lower.has_value() ? std::max(*lower, start) : start;
+            const int64_t hi = upper.has_value() ? std::min(*upper, start + count) : start + count;
+            rows += std::max<int64_t>(0, hi - lo);
+        }
+        return rows;
+    }
+
+    // Each rowset's RECORDED data_size. Pinned in the metadata instead of measured from the file so
+    // that kBytesPerSubtask can be a constant; nothing on the read path consults it.
+    static constexpr int64_t kSampledRowsetDataSize = 1000000;
+    // One rowset's worth, so ceil(total_bytes / kBytesPerSubtask) == the rowset count. With
+    // max_parallel equal to that count, target_subtasks is the count AND the greedy loop's target
+    // is total/count rather than this cap -- calculate_range_split_boundaries uses
+    // min(total / actual_split_count, target_value_per_split), so a smaller value here would make
+    // it place every boundary inside the first few candidate ranges.
+    static constexpr int64_t kBytesPerSubtask = kSampledRowsetDataSize;
+    // Subtasks _create_range_split_groups produced for
+    // build_rowsets_with_varchar_sort_key(4, 25'000) at max_parallel 4 BEFORE sampling was wired
+    // in, i.e. from coarse [min, max] bounds alone. Pinned so a change in compaction parallelism
+    // cannot ride along unnoticed with a change in boundary quality.
+    static constexpr size_t kExpectedSubtaskCount = 4;
+
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::unique_ptr<TabletParallelCompactionManager> _manager;
     std::unique_ptr<ThreadPool> _thread_pool;
     // Constructed before SetUp() and destroyed after TearDown(), so every test in this fixture sees
     // the pinned values and no other suite inherits them.
     CompactionPolicyConfigPin _config_pin;
+    int64_t _sampling_tablet_id = 0;
+    // (first key, rows) of every segment build_rowsets_with_varchar_sort_key wrote.
+    std::vector<std::pair<int64_t, int64_t>> _written_key_runs;
 };
 
 TEST_F(TabletParallelCompactionManagerTest, test_get_tablet_state_not_exist) {
@@ -4883,7 +5084,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        // 2 is the smallest width that enables sampling at all: allocate_sort_key_sample_budget
+        // returns an all-zero budget below it. These segments have no file on disk, so every one of
+        // them falls back to its coarse [min, max] range regardless.
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(3, result.value().size());
         EXPECT_EQ(200, result.value()[0].num_rows);
@@ -4919,7 +5123,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(3, result.value().size());
         for (const auto& bound : result.value()) {
@@ -4958,7 +5162,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(2, result.value().size());
         EXPECT_EQ(1000, result.value()[0].data_size); // 100/400 * 4000
@@ -4966,34 +5170,33 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
     }
 }
 
-// _collect_segment_key_bounds full sort key index integration: mirrors
-// tablet_splitter's build_segments_from_rowsets per-segment source selection --
-// has_full_sort_key_index_page() + ensure_full_sort_key_index_usable() ->
-// load_samples_from_short_key_index; else deprecated_sort_key_samples (metadata) ->
-// load_sort_key_samples; else coarse [min, max]. The Rowset objects here are already
-// constructed (unlike
-// build_segments_from_rowsets, which may construct one from synthetic reshard
-// metadata), so there is no schema-id-resolution abort risk to guard against in
-// this path -- opening a rowset's segments can only ever gain precision or, on
-// failure, silently fall back to the pre-existing metadata/coarse behavior.
-TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full_sort_key_index) {
-    // Case 1: a full-key segment (config::enable_full_sort_key_index = true at write
-    // time) with NO metadata samples yields samples decoded from its short key index --
-    // 250 rows, sampled every 100 rows -> [100, 200] -- identical to what an equivalent
-    // legacy segment yields from deprecated_sort_key_samples metadata (Case 2 below).
+// _collect_segment_key_bounds sampling integration: every segment goes through
+// SegmentSplitInfo::load_samples, which reads the segment's short key index when that index
+// already encodes the whole sort key and otherwise its data pages, and leaves the segment's coarse
+// [min, max] range in place when neither can produce trustworthy samples. The Rowset objects here
+// are already constructed (unlike build_segments_from_rowsets, which may construct one from
+// synthetic reshard metadata), so there is no schema-id-resolution abort risk to guard against in
+// this path -- opening a rowset's segments can only ever gain precision or, on failure, silently
+// fall back to the coarse range.
+TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_sampling) {
+    // Case 1: a segment whose sort key the short key index covers is sampled from that index --
+    // 250 rows over 100-row blocks -> [100, 200] at a 100-row interval -- with no data-page I/O.
     {
-        const bool old_enable = config::enable_full_sort_key_index;
-        config::enable_full_sort_key_index = true;
-        DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
-
         int64_t tablet_id = next_id();
         auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
         metadata->set_id(tablet_id);
         metadata->set_version(2);
+        // generate_simple_tablet_metadata leaves index_length unset, and SeekTuple::short_key_encode
+        // writes a key's bytes only when Field::short_key_length() > 0 -- so without this the index
+        // holds marker-only entries no decoder can read back, and sampling would silently degrade
+        // to the data-page path. Set locally rather than in the shared helper: flipping every test
+        // in the repo onto the covered path is its own change.
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4);
 
         const int64_t num_rows = 250;
-        const std::string seg_name = "seg_full_key.dat";
+        const std::string seg_name = "seg_covered_key.dat";
         const uint64_t seg_size = write_int_key_segment(tablet_id, metadata->schema(), seg_name, num_rows);
+        const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
 
         auto* rowset = metadata->add_rowsets();
         rowset->set_id(0);
@@ -5014,20 +5217,22 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full
         std::vector<RowsetPtr> rowsets;
         rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(1, result.value().size());
         ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
         EXPECT_EQ(100, result.value()[0].sort_key_samples[0][0].value().get_int32());
         EXPECT_EQ(200, result.value()[0].sort_key_samples[1][0].value().get_int32());
         EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+        // Which path produced them, asserted rather than assumed: both publish through the same
+        // carrier, so the samples alone cannot tell the free index path from the paid data-page one.
+        EXPECT_EQ(data_page_segments_before, sort_key_sampling_data_page_segments_count())
+                << "a covered sort key must not read data pages";
     }
 
-    // Case 2: a legacy segment -- deprecated_sort_key_samples present in metadata --
-    // keeps sourcing from that metadata, matching Case 1's values exactly (proving the
-    // two source paths are interchangeable for callers), and does so WITHOUT opening the
-    // segment file at all (the sample-less perf gate skips the loader since the segment
-    // already carries metadata samples).
+    // Case 2: metadata sort-key samples (deprecated_sort_key_samples) are no longer a source. This
+    // segment carries them and has no file on disk, so it comes back coarse -- where the previous
+    // metadata-driven code returned [100, 200] at a 100-row interval.
     {
         int64_t tablet_id = next_id();
         auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
@@ -5040,7 +5245,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full
         rowset->set_num_rows(250);
         rowset->set_data_size(2500);
         auto* segment_meta = rowset->add_segment_metas();
-        segment_meta->set_filename("seg_never_written.dat"); // never written -- proves the loader is skipped
+        // Never written to disk: the budget is nonzero so the open IS attempted, load_segments
+        // fails, and the &&-chain leaves this segment coarse.
+        segment_meta->set_filename("seg_never_written.dat");
         segment_meta->set_size(2500);
         segment_meta->set_num_rows(250);
         segment_meta->set_deprecated_sort_key_sample_row_interval(100);
@@ -5056,23 +5263,19 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full
         std::vector<RowsetPtr> rowsets;
         rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(1, result.value().size());
-        ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
-        EXPECT_EQ(100, result.value()[0].sort_key_samples[0][0].value().get_int32());
-        EXPECT_EQ(200, result.value()[0].sort_key_samples[1][0].value().get_int32());
-        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+        EXPECT_TRUE(result.value()[0].sort_key_samples.empty());
+        EXPECT_EQ(0, result.value()[0].sort_key_sample_row_interval);
+        EXPECT_EQ(0, result.value()[0].min_key[0].value().get_int32());
+        EXPECT_EQ(249, result.value()[0].max_key[0].value().get_int32());
     }
 
-    // Case 3: a sample-less segment whose file is missing (Rowset::LoadedSegment::segment
-    // == nullptr, via experimental_lake_ignore_lost_segment=true) degrades to coarse
-    // bounds WITHOUT crashing, while a sibling real full-key segment in the SAME rowset
-    // still gets its samples decoded from the index.
+    // Case 3: a segment whose file is missing (Rowset::LoadedSegment::segment == nullptr, via
+    // experimental_lake_ignore_lost_segment=true) degrades to coarse bounds WITHOUT crashing,
+    // while a sibling real segment in the SAME rowset is still sampled.
     {
-        const bool old_enable_full_key = config::enable_full_sort_key_index;
-        config::enable_full_sort_key_index = true;
-        DeferOp restore_full_key([&] { config::enable_full_sort_key_index = old_enable_full_key; });
         const bool old_ignore_lost = config::experimental_lake_ignore_lost_segment;
         config::experimental_lake_ignore_lost_segment = true;
         DeferOp restore_ignore_lost([&] { config::experimental_lake_ignore_lost_segment = old_ignore_lost; });
@@ -5081,6 +5284,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full
         auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
         metadata->set_id(tablet_id);
         metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
 
         const int64_t num_rows = 250;
         const std::string present_seg_name = "seg_present.dat";
@@ -5097,6 +5301,13 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full
         sm_present->set_filename(present_seg_name);
         sm_present->set_size(present_seg_size);
         sm_present->set_num_rows(num_rows);
+        // Load-bearing, not decoration: with the bounds unset, every !min_key.empty() /
+        // !max_key.empty() guard in sample_sort_key_from_short_key_index is skipped -- including the
+        // entry-0 == sort_key_min comparison the sampler calls the check that "empirically subsumes
+        // every static assumption the predicate makes". Without them this case would establish "the
+        // sibling segment is still sampled" with the only cross-source verification switched off.
+        sm_present->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        sm_present->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
 
         // Never written to disk; with experimental_lake_ignore_lost_segment=true this
         // becomes a null LoadedSegment placeholder instead of a hard load error.
@@ -5114,11 +5325,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full
         std::vector<RowsetPtr> rowsets;
         rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(2, result.value().size());
 
-        // segments[0]: the real, present full-key segment -- still gets samples.
+        // segments[0]: the real, present segment -- still gets samples.
         ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
         EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
 
@@ -5129,6 +5340,308 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full
         EXPECT_EQ(1000, result.value()[1].min_key[0].value().get_int32());
         EXPECT_EQ(1009, result.value()[1].max_key[0].value().get_int32());
     }
+
+    // Case 4: the per-segment budget must be indexed by the segment's position across ALL rowsets
+    // (rowset_flat_index + meta_pos), not by the rowset's. Every other case here puts one segment
+    // in its own rowset, where those two are the same number; this one puts two segments of very
+    // UNEQUAL row counts in a single rowset, and squeezes the tablet-wide cap so the budget
+    // actually binds -- feeding the second segment the first's share collapses it from 9 samples
+    // at a 200-row interval to 1 at a 1,900-row interval.
+    {
+        const auto old_cap = config::sort_key_max_samples_per_tablet;
+        config::sort_key_max_samples_per_tablet = 12;
+        DeferOp restore_cap([&] { config::sort_key_max_samples_per_tablet = old_cap; });
+
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
+
+        // 12 samples apportioned over 200 + 2000 rows gives the small segment 1 and the large one
+        // 10. At 100-row blocks the small segment offers 1 index candidate (stride 1, 1 sample) and
+        // the large one 19 (stride ceil(19/10) = 2, 9 samples at a 2 * 100 = 200-row interval).
+        const std::string small_name = "seg_budget_small.dat";
+        const std::string large_name = "seg_budget_large.dat";
+        write_int_key_segment(tablet_id, metadata->schema(), small_name, /*num_rows=*/200, /*start_key=*/0);
+        write_int_key_segment(tablet_id, metadata->schema(), large_name, /*num_rows=*/2000, /*start_key=*/1000);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(2200);
+        rowset->set_data_size(22000);
+
+        auto* sm_small = rowset->add_segment_metas();
+        sm_small->set_filename(small_name);
+        sm_small->set_size(2000);
+        sm_small->set_num_rows(200);
+        sm_small->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        sm_small->mutable_sort_key_max()->CopyFrom(make_int_tuple(199));
+
+        auto* sm_large = rowset->add_segment_metas();
+        sm_large->set_filename(large_name);
+        sm_large->set_size(20000);
+        sm_large->set_num_rows(2000);
+        sm_large->mutable_sort_key_min()->CopyFrom(make_int_tuple(1000));
+        sm_large->mutable_sort_key_max()->CopyFrom(make_int_tuple(2999));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(2, result.value().size());
+
+        EXPECT_EQ(1u, result.value()[0].sort_key_samples.size());
+        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+
+        ASSERT_EQ(9u, result.value()[1].sort_key_samples.size());
+        EXPECT_EQ(200, result.value()[1].sort_key_sample_row_interval);
+        // The first sample of the large segment is the key 200 rows into its own run.
+        EXPECT_EQ(1200, result.value()[1].sort_key_samples[0][0].value().get_int32());
+    }
+
+    // Case 5: under partial-segment compaction, Rowset::load_segments hands back only
+    // [next_compaction_offset, +limit); a segment outside that window can never be sampled, so it
+    // must take no share of the cap. Three equal 2,000-row segments with the window at [1, 3) and
+    // the cap squeezed to 12: the two in-window segments are entitled to 6 samples each, which at
+    // 19 index candidates is a stride of 4 -> 4 samples at a 400-row interval. Counting the
+    // out-of-window segment would apportion 12 over 6,000 rows instead of 4,000, giving each of
+    // them 4 -> a stride of 5 -> 3 samples at a 500-row interval.
+    {
+        const auto old_cap = config::sort_key_max_samples_per_tablet;
+        config::sort_key_max_samples_per_tablet = 12;
+        DeferOp restore_cap([&] { config::sort_key_max_samples_per_tablet = old_cap; });
+
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
+
+        constexpr int64_t kRowsPerSegment = 2000;
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        // Load-bearing: the Rowset(tablet_mgr, tablet_metadata, rowset_index, compaction_segment_limit)
+        // ctor drops compaction_segment_limit unless the rowset is overlapped
+        // (storage/lake/rowset.cpp), so without this partial_segments_compaction() is false and
+        // there is no window to test.
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(3 * kRowsPerSegment);
+        rowset->set_data_size(30000);
+        // Segments 1 and 2 are the compaction window; segment 0 is already compacted.
+        rowset->set_next_compaction_offset(1);
+
+        for (int i = 0; i < 3; ++i) {
+            const int64_t start_key = i * 10000;
+            const std::string name = fmt::format("seg_window_{}.dat", i);
+            write_int_key_segment(tablet_id, metadata->schema(), name, kRowsPerSegment,
+                                  static_cast<int32_t>(start_key));
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(name);
+            sm->set_size(10000);
+            sm->set_num_rows(kRowsPerSegment);
+            sm->mutable_sort_key_min()->CopyFrom(make_int_tuple(static_cast<int32_t>(start_key)));
+            sm->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(start_key + kRowsPerSegment - 1)));
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, /*compaction_segment_limit=*/2));
+        ASSERT_TRUE(rowsets[0]->partial_segments_compaction());
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(3, result.value().size());
+
+        // Out of window: load_segments never returned it, so it stays coarse.
+        EXPECT_TRUE(result.value()[0].sort_key_samples.empty());
+        EXPECT_EQ(0, result.value()[0].sort_key_sample_row_interval);
+
+        for (int i = 1; i < 3; ++i) {
+            SCOPED_TRACE(fmt::format("in-window segment meta_pos={}", i));
+            EXPECT_EQ(4u, result.value()[i].sort_key_samples.size());
+            EXPECT_EQ(400, result.value()[i].sort_key_sample_row_interval);
+        }
+    }
+
+    // Case 6: the perf gate. A zero sampling cap must open no rowset at all -- the samples that do
+    // not get taken are already covered above, but the I/O that is not performed is only visible
+    // through the rowsets-opened counter, which is why that counter exists.
+    {
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
+
+        const int64_t num_rows = 250;
+        const std::string seg_name = "seg_gate.dat";
+        const uint64_t seg_size = write_int_key_segment(tablet_id, metadata->schema(), seg_name, num_rows);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(seg_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(seg_name);
+        segment_meta->set_size(seg_size);
+        segment_meta->set_num_rows(num_rows);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        {
+            const auto old_cap = config::sort_key_max_samples_per_tablet;
+            config::sort_key_max_samples_per_tablet = 0;
+            DeferOp restore_cap([&] { config::sort_key_max_samples_per_tablet = old_cap; });
+
+            const int64_t opened_before = sort_key_sampling_rowsets_opened_count();
+            auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+            ASSERT_TRUE(result.ok());
+            ASSERT_EQ(1, result.value().size());
+            EXPECT_TRUE(result.value()[0].sort_key_samples.empty());
+            EXPECT_EQ(opened_before, sort_key_sampling_rowsets_opened_count())
+                    << "a zero sampling cap must not open a single rowset";
+        }
+
+        // Same rowset, same call, non-zero cap: this is what proves the assertion above is about
+        // the gate and not about the fixture being unsampleable.
+        const int64_t opened_before = sort_key_sampling_rowsets_opened_count();
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(1, result.value().size());
+        EXPECT_FALSE(result.value()[0].sort_key_samples.empty());
+        EXPECT_EQ(opened_before + 1, sort_key_sampling_rowsets_opened_count());
+    }
+}
+
+// How far a subtask's WRITTEN row count may sit from a perfectly even share. Sampling divides this
+// fixture's four overlapping 25,000-row segments at a granularity of ~760 rows (32 samples per
+// segment at a 758-row stride), i.e. ~3% of a subtask, so 0.25 leaves ample headroom -- while
+// still being far tighter than the ~50% skew coarse [min, max] bounds alone produce here.
+constexpr double kSubtaskEvennessTolerance = 0.25;
+
+// target_subtasks = max(2, min(max_parallel, ceil(total_bytes / max_bytes_per_subtask))) caps the
+// output width, and sampling does not touch any term of it: it only refines WHERE the boundaries
+// between those subtasks fall. The cap is what this pins.
+//
+// What is observable from here is groups.size(), which is min(target_subtasks, boundaries + 1) --
+// so "never exceeds the cap" is the general law, while the EQ below holds only for THIS fixture,
+// where the coarse path already produced enough boundaries to reach the cap (measured at 4 both
+// before and after sampling was wired in). It is deliberately not asserted as a general invariant:
+// on a layout whose coarse bounds yield fewer boundaries than the cap, sampling legitimately RAISES
+// the count, and an EQ asserted as a law there would fail a correct change.
+TEST_F(TabletParallelCompactionManagerTest, subtask_count_stays_at_the_target_for_this_fixture) {
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, /*rows_each=*/25000);
+    auto groups =
+            _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/4, kBytesPerSubtask);
+    // The LE is implied by the EQ below, so deleting it alone leaves the suite green. It is kept
+    // deliberately: the EQ is scoped to this fixture's boundary count (see the comment above), while
+    // the LE is the general law that must still hold if the EQ is ever relaxed for another layout.
+    EXPECT_LE(groups.size(), kExpectedSubtaskCount) << "sampling must never raise the width above target_subtasks";
+    EXPECT_EQ(kExpectedSubtaskCount, groups.size());
+}
+
+// Sampled boundaries must divide the tablet to within kSubtaskEvennessTolerance of even, measured
+// against the rows the fixture actually wrote. Coarse [min, max] bounds alone put ~37,500 rows in
+// the first subtask and ~12,500 in the last on this layout (see
+// build_rowsets_with_varchar_sort_key); that skew is what this asserts is gone.
+TEST_F(TabletParallelCompactionManagerTest, range_split_subtasks_are_balanced_with_sampling) {
+    constexpr int64_t kRowsEach = 25000;
+    constexpr int64_t kTotalRows = 4 * kRowsEach;
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, kRowsEach);
+
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    auto groups =
+            _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/4, kBytesPerSubtask);
+    ASSERT_EQ(kExpectedSubtaskCount, groups.size());
+
+    // Which sampler path ran, asserted rather than assumed: both paths publish through the same
+    // carrier, so the boundaries alone cannot tell them apart. A VARCHAR sort key is truncated in
+    // the short key index, so all four segments must be sampled from their data pages.
+    EXPECT_EQ(4, sort_key_sampling_data_page_segments_count() - data_page_segments_before);
+
+    const double ideal = static_cast<double>(kTotalRows) / kExpectedSubtaskCount;
+    int64_t total = 0;
+    for (size_t i = 0; i < groups.size(); ++i) {
+        SCOPED_TRACE(fmt::format("subtask={}", i));
+        const int64_t rows = written_rows_in_group(groups[i]);
+        total += rows;
+        EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * kSubtaskEvennessTolerance);
+    }
+    EXPECT_EQ(kTotalRows, total) << "the emitted subtask ranges must tile every written row";
+}
+
+// The width requested from the sampler must be floored at 2. Both terms of target_subtasks --
+// max_parallel and ceil(total_bytes / max_bytes_per_subtask) -- can be 1 while target_subtasks is
+// still 2, and allocate_sort_key_sample_budget returns an all-zero budget below a width of 2, so
+// without the floor those two subtasks would be cut from coarse [min, max] bounds.
+//
+// This is a DEFENSIVE floor, not a reachable production state: _create_range_split_groups has one
+// caller (_create_subtask_groups), which already returns early on max_parallel <= 1, so production
+// never reaches this function with a width-1 request. The floor is asserted here because it is
+// otherwise unobservable -- at the max_parallel = 4 the other tests use, max(2, 4) == 4 -- and
+// removing it would then be invisible.
+TEST_F(TabletParallelCompactionManagerTest, requested_width_is_floored_at_two) {
+    constexpr int64_t kRowsEach = 25000;
+    constexpr int64_t kTotalRows = 4 * kRowsEach;
+    // Two rowsets' worth, so ceil(total_bytes / this) == 2 == the floored subtask count, which
+    // keeps the greedy loop's target at total/2 rather than at this cap.
+    constexpr int64_t kBytesPerHalf = 2 * kBytesPerSubtask;
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, kRowsEach);
+
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    auto groups = _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/1, kBytesPerHalf);
+    ASSERT_EQ(2u, groups.size());
+    EXPECT_EQ(4, sort_key_sampling_data_page_segments_count() - data_page_segments_before)
+            << "a width-1 request must still be floored to 2, which funds sampling";
+
+    // Tighter than kSubtaskEvennessTolerance on purpose: at 0.25 a two-way split of this layout is
+    // within tolerance even from coarse bounds alone (62,498 / 37,502), so a looser bound here
+    // would assert nothing.
+    const double ideal = static_cast<double>(kTotalRows) / 2;
+    for (size_t i = 0; i < groups.size(); ++i) {
+        SCOPED_TRACE(fmt::format("subtask={}", i));
+        EXPECT_NEAR(static_cast<double>(written_rows_in_group(groups[i])), ideal, ideal * 0.10);
+    }
+}
+
+// The sample budget must be requested at the width this call can actually produce, not at
+// max_parallel, which is a user-set table property. Here max_parallel is 64 but the data is only
+// two and a half subtasks' worth, so target_subtasks is 3 and the budget must be 3 * 32 samples --
+// budgeting at max_parallel would ask for min(1024, 64 * 32) = 1024, better than ten times what a
+// 3-way split can use, in synchronous data-page reads before any subtask starts.
+TEST_F(TabletParallelCompactionManagerTest, requested_width_tracks_the_achievable_width) {
+    // ceil(4 * kSampledRowsetDataSize / this) == 3, and 3 < max_parallel, so the byte bound is what
+    // decides the width.
+    constexpr int64_t kBytesPerThird = 3 * kSampledRowsetDataSize / 2;
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, /*rows_each=*/25000);
+
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    auto groups =
+            _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/64, kBytesPerThird);
+    ASSERT_EQ(3u, groups.size());
+
+    const int64_t samples = sort_key_sampling_samples_count() - samples_before;
+    EXPECT_GT(samples, 0) << "the width must still fund sampling, not merely be small";
+    EXPECT_LE(samples, 3 * kSortKeySamplesPerSplit)
+            << "budgeted at max_parallel (64) this would be min(1024, 2048) samples, not 3 * 32";
 }
 
 TEST_F(TabletParallelCompactionManagerTest, test_calculate_range_split_boundaries) {

@@ -45,6 +45,7 @@
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
+#include "storage/sort_key_sampler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
 
@@ -2706,43 +2707,93 @@ bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<Row
     return true;
 }
 
-// Returns true if at least one segment in |rowset_meta| lacks metadata sort-key samples
-// (deprecated_sort_key_samples), i.e. a segment whose short key index the loader below
-// could open to gain precision. Mirrors tablet_splitter.cpp's build_segments_from_rowsets
-// gate: a rowset whose every segment already carries samples needs no segment I/O, since
-// the metadata-only path yields the identical SegmentSplitInfo.
-static bool rowset_has_sampleless_segment(const RowsetMetadataPB& rowset_meta) {
-    for (const auto& segment_meta : rowset_meta.segment_metas()) {
-        if (segment_meta.deprecated_sort_key_samples_size() == 0) return true;
+// Returns true iff any of |rowset_meta|'s segments has a nonzero entry in |budget|, i.e. this
+// rowset has something to sample and is therefore worth opening. |flat_index| is the running index
+// of this rowset's FIRST segment in the tablet-wide per-segment budget vector. A rowset with no
+// segments returns false (nothing to open).
+//
+// Mirrors tablet_splitter.cpp's rowset_wants_samples; this path has a single budget because one
+// allocation funds both sampler paths (see _collect_segment_key_bounds).
+static bool rowset_wants_samples(const std::vector<int64_t>& budget, size_t flat_index,
+                                 const RowsetMetadataPB& rowset_meta) {
+    for (int i = 0; i < rowset_meta.segment_metas_size(); ++i) {
+        const size_t index = flat_index + static_cast<size_t>(i);
+        // budget was filled by walking the same metadata this loop walks, so it is long enough;
+        // bail out rather than index out of bounds if that ever stops holding.
+        if (index >= budget.size()) return false;
+        if (budget[index] > 0) return true;
     }
     return false;
 }
 
 StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collect_segment_key_bounds(
-        const std::vector<RowsetPtr>& rowsets) {
+        const std::vector<RowsetPtr>& rowsets, int64_t split_width) {
+    // Protobuf-only pre-pass: the allocation needs row counts, not schemas, so no segment is opened
+    // to compute it. Read the PER-SEGMENT num_rows, never the rowset's -- partial compaction splices
+    // SegmentMetadataPB entries out of a rowset while adjusting the rowset total separately, so on
+    // that path the two legitimately disagree and the rowset count would mis-weight every segment.
+    //
+    // Only the segments Rowset::load_segments will actually hand back can be sampled: under
+    // partial-segment compaction it trims its result to
+    // [next_compaction_offset, next_compaction_offset + num_segments()), so an out-of-window entry
+    // is counted as ZERO rows here. Giving it a proportional share would
+    // spend part of the cap on a segment that is never opened, leaving the segments actually being
+    // compacted with a diluted budget and dropping some of them to coarse boundaries. Zeroed rather
+    // than omitted, because this vector has to stay parallel to the flat_index walk below, and
+    // allocate_sort_key_sample_budget already reads a zero row count as "skip, budget 0".
+    //
+    // Pre-computing the whole vector, rather than decrementing a running budget inside the loop, is
+    // what makes the distribution proportional instead of first-come-first-served.
+    std::vector<int64_t> segment_num_rows;
+    for (const auto& rowset : rowsets) {
+        const auto& rowset_meta = rowset->metadata();
+        const int32_t num_segments = rowset_meta.segment_metas_size();
+        int32_t window_start = 0;
+        int32_t window_end = num_segments;
+        if (rowset->partial_segments_compaction()) {
+            window_start = std::min(num_segments, static_cast<int32_t>(rowset_meta.next_compaction_offset()));
+            window_end = std::min(num_segments, window_start + static_cast<int32_t>(rowset->num_segments()));
+        }
+        for (int32_t i = 0; i < num_segments; ++i) {
+            const bool in_window = i >= window_start && i < window_end;
+            segment_num_rows.push_back(in_window ? rowset_meta.segment_metas(i).num_rows() : 0);
+        }
+    }
+    // ONE allocation, spent on both sampler paths: unlike tablet split, range-split compaction is
+    // about to read every one of these segments in full, so the data-page path costs it nothing it
+    // was not already going to pay and needs no separate, smaller budget.
+    const auto budget = allocate_sort_key_sample_budget(segment_num_rows, split_width);
+
     std::vector<SegmentSplitInfo> segments;
+    // Running index of the current segment across all rowsets, i.e. the index into |budget|.
+    size_t flat_index = 0;
 
     for (const auto& rowset : rowsets) {
         const auto& rowset_meta = rowset->metadata();
         int32_t num_segments = rowset_meta.segment_metas_size();
         int64_t rowset_data_size = rowset->data_size();
         int64_t rowset_num_rows = rowset->num_rows();
+        const size_t rowset_flat_index = flat_index;
+        flat_index += static_cast<size_t>(num_segments);
 
         // Opportunistically open this rowset's segments (already-constructed Rowset --
         // no schema-resolution risk, unlike tablet_splitter's synthetic-metadata callers)
-        // to read a full-key segment's short key index directly via
-        // SegmentSplitInfo::load_samples_from_short_key_index, gated by
-        // rowset_has_sampleless_segment so a legacy rowset performs zero segment I/O.
-        // A segment whose LoadedSegment is null (skipped/ignored/lost), or whose files
-        // fail to load, or that is not a full-key segment, falls back to
-        // load_sort_key_samples (deprecated_sort_key_samples) exactly as before.
+        // and sample each one's sort key, gated by rowset_wants_samples so a tablet whose
+        // sampling cap is 0 performs zero segment I/O.
         std::unordered_map<int32_t, Segment*> opened_by_meta_pos;
         std::vector<Rowset::LoadedSegment> loaded_segments; // keeps the Segments alive for this rowset's scope
         Schema rowset_schema;
         std::vector<uint32_t> sort_key_idxes;
-        if (rowset_has_sampleless_segment(rowset_meta) &&
+        // The Schema above and the sort_key_idxes must BOTH come from this TabletSchema object: the
+        // data-page sampler rejects a sort_key_idxes that is not its segment_schema's own --
+        // silently, with empty samples -- because a divergent argument would publish split
+        // boundaries in the wrong column order. nullptr => this rowset is not sampled at all.
+        TabletSchemaCSPtr rowset_tablet_schema;
+        if (rowset_wants_samples(budget, rowset_flat_index, rowset_meta) &&
             rowset->load_segments(&loaded_segments, /*fill_cache=*/false).ok()) {
+            note_sort_key_sampling_rowset_opened();
             if (auto tablet_schema = rowset->tablet_schema(); tablet_schema != nullptr) {
+                rowset_tablet_schema = tablet_schema;
                 rowset_schema = ChunkHelper::convert_schema(tablet_schema);
                 const auto& idxes = tablet_schema->sort_key_idxes();
                 sort_key_idxes.assign(idxes.begin(), idxes.end());
@@ -2770,21 +2821,16 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
             if (auto it = opened_by_meta_pos.find(meta_pos); it != opened_by_meta_pos.end()) {
                 opened_segment = it->second;
             }
-            // Presence + usability (NOT read-config-gated): range-split compaction always consumes the
-            // full page when it exists and validates. ensure_full_sort_key_index_usable() lazily
-            // reads/validates it.
-            if (opened_segment != nullptr && opened_segment->load_index().ok() &&
-                opened_segment->has_full_sort_key_index_page() && opened_segment->ensure_full_sort_key_index_usable()) {
-                ASSIGN_OR_RETURN(const bool loaded, segment.load_samples_from_short_key_index(
-                                                            *opened_segment, rowset_schema, sort_key_idxes));
-                // Data-safe fallback: a full page whose decoded samples fail runtime validation yields
-                // false with empty samples -- load_sort_key_samples is a no-op when no metadata samples
-                // are present, leaving the coarse [min, max] path downstream.
-                if (!loaded) {
-                    RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
-                }
-            } else {
-                RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            // load_index() is what parses the short key index page the free sampling path reads;
+            // failing it (or failing to open the segment at all) leaves this segment coarse.
+            if (rowset_tablet_schema != nullptr && opened_segment != nullptr && opened_segment->load_index().ok()) {
+                const size_t index = rowset_flat_index + static_cast<size_t>(meta_pos);
+                const int64_t target = index < budget.size() ? budget[index] : 0;
+                RETURN_IF_ERROR(segment.load_samples(*opened_segment, rowset_schema, rowset_tablet_schema,
+                                                     sort_key_idxes, target, /*data_page_target=*/target,
+                                                     // This compaction is about to read all of this
+                                                     // data anyway, so warming the cache is free.
+                                                     /*fill_data_cache=*/true));
             }
             segments.push_back(std::move(segment));
         }
@@ -2809,8 +2855,41 @@ OlapTuple TabletParallelCompactionManager::_variant_tuple_to_olap_tuple(const Va
 
 std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_range_split_groups(
         int64_t tablet_id, const std::vector<RowsetPtr>& rowsets, int32_t max_parallel, int64_t max_bytes_per_subtask) {
-    // Collect segment key bounds
-    auto segments_or = _collect_segment_key_bounds(rowsets);
+    // Sample for the width this call can actually produce, not for max_parallel. target_subtasks
+    // below is max(2, min(max_parallel, ceil(total_bytes / max_bytes_per_subtask))), and max_parallel
+    // is a user-set table property: at max_parallel = 64 over two and a half subtasks' worth of
+    // data, budgeting at max_parallel would buy 1024 samples for a 3-way split that can use about
+    // 96 -- roughly ten times the data-page reads, taken synchronously here before any subtask
+    // starts.
+    //
+    // These are the same bytes target_subtasks is computed from, up to the per-segment
+    // integer-division remainder (_collect_segment_key_bounds apportions each rowset's data_size
+    // across its segments), and they are protobuf reads: no segment is opened to obtain them.
+    // data_size comes from object storage, so accumulate in __int128 -- the style
+    // allocate_sort_key_sample_budget uses for the row counts it likewise does not get to trust.
+    __int128 total_rowset_bytes = 0;
+    for (const auto& rowset : rowsets) {
+        total_rowset_bytes += std::max<int64_t>(0, rowset->data_size());
+    }
+    // A non-positive max_bytes_per_subtask must not be divided by -- the division below would be
+    // undefined -- so max_parallel is left as the only bound available here. Note that
+    // target_subtasks itself does NOT survive such an input: at zero its own division is a
+    // divide-by-zero, and at a negative value its min() goes negative and max(2, ...) clamps it to
+    // 2. Production never reaches either, because create_parallel_tasks rejects max_bytes <= 0 with
+    // InvalidArgument before any of this runs. This guard therefore keeps THIS line defined; it does
+    // not make the surrounding computation total.
+    int64_t achievable_width = max_parallel;
+    if (max_bytes_per_subtask > 0) {
+        const __int128 by_bytes = (total_rowset_bytes + max_bytes_per_subtask - 1) / max_bytes_per_subtask;
+        achievable_width = static_cast<int64_t>(std::min<__int128>(achievable_width, by_bytes));
+    }
+    // The floor mirrors target_subtasks' own max(2, ...) and is what keeps split_width >= 2, below
+    // which allocate_sort_key_sample_budget returns an all-zero budget and every segment falls back
+    // to its coarse [min, max] range.
+    const int64_t split_width = std::max<int64_t>(2, achievable_width);
+
+    // Collect segment key bounds.
+    auto segments_or = _collect_segment_key_bounds(rowsets, split_width);
     if (!segments_or.ok() || segments_or.value().empty()) {
         VLOG(1) << "Range split: tablet=" << tablet_id << " failed to collect segment key bounds, fallback";
         return {};
