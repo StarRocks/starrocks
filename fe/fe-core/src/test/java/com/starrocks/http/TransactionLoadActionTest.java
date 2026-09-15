@@ -16,11 +16,13 @@ package com.starrocks.http;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
@@ -28,14 +30,19 @@ import com.starrocks.http.rest.TransactionLoadCoordinatorMgr;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.load.streamload.StreamLoadMgr;
+import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
@@ -49,6 +56,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -60,6 +68,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import okhttp3.Credentials;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -2218,6 +2227,98 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private Request newRequest(TransactionOperation operation) throws Exception {
         return newRequest(operation, (uriBuilder, reqBuilder) -> {
         });
+    }
+
+    @Test
+    public void transactionLoadWithoutInsertPrivilegeDeniedTest() throws Exception {
+        String user = "http_nopriv";
+        String password = "nopriv_pass123";
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        // The base http test harness records expectations on the GlobalStateMgr instance and
+        // shadows unrecorded methods with default values, so return the EditLog that the
+        // persist-test harness installed and let createUser journal the new user.
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        UtFrameUtils.setUpForPersistTest();
+        try {
+            EditLog editLog = Deencapsulation.getField(currentState, "editLog");
+            new Expectations(currentState) {
+                {
+                    currentState.getEditLog();
+                    minTimes = 0;
+                    result = editLog;
+                }
+            };
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef(user, "%", false, NodePosition.ZERO),
+                    false,
+                    new UserAuthOption(null, password, true, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+        } finally {
+            UtFrameUtils.tearDownForPersisTest();
+        }
+
+        String auth = Credentials.basic(user, password);
+        String label = "nopriv_label_" + System.currentTimeMillis();
+
+        // BEGIN/LOAD address a concrete table, so INSERT on that table is required.
+        try (Response response = networkClient.newCall(newRequest(TransactionOperation.TXN_BEGIN, auth,
+                (uriBuilder, reqBuilder) -> {
+                    reqBuilder.addHeader(DB_KEY, DB_NAME);
+                    reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                    reqBuilder.addHeader(LABEL_KEY, label);
+                })).execute()) {
+            assertEquals(HttpResponseStatus.UNAUTHORIZED.code(), response.code());
+        }
+
+        // PREPARE/COMMIT/ROLLBACK address the loading state of the database, so INSERT on the db is required.
+        for (TransactionOperation op : List.of(TransactionOperation.TXN_PREPARE, TransactionOperation.TXN_COMMIT,
+                TransactionOperation.TXN_ROLLBACK)) {
+            try (Response response = networkClient.newCall(newRequest(op, auth,
+                    (uriBuilder, reqBuilder) -> {
+                        reqBuilder.addHeader(DB_KEY, DB_NAME);
+                        reqBuilder.addHeader(LABEL_KEY, label);
+                    })).execute()) {
+                assertEquals(HttpResponseStatus.UNAUTHORIZED.code(), response.code());
+            }
+        }
+
+        // A user holding INSERT on the table keeps working.
+        try (Response response = networkClient.newCall(newRequest(TransactionOperation.TXN_BEGIN, rootAuth,
+                (uriBuilder, reqBuilder) -> {
+                    reqBuilder.addHeader(DB_KEY, DB_NAME);
+                    reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                    reqBuilder.addHeader(LABEL_KEY, label + "_root");
+                })).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+        }
+    }
+
+    private Request newRequest(TransactionOperation txnOpt, String auth,
+                               BiConsumer<URIBuilder, Request.Builder> consumer) throws Exception {
+        URIBuilder uriBuilder = new URIBuilder(toUri(txnOpt));
+        Request.Builder reqBuilder = new Request.Builder()
+                .addHeader(AUTH_KEY, auth)
+                .method(HttpMethod.POST.name(), new RequestBody() {
+                    @Nullable
+                    @Override
+                    public MediaType contentType() {
+                        return JSON;
+                    }
+
+                    @Override
+                    public void writeTo(@NotNull BufferedSink sink) throws IOException {
+
+                    }
+                });
+
+        if (null != consumer) {
+            consumer.accept(uriBuilder, reqBuilder);
+        }
+
+        return reqBuilder
+                .url(uriBuilder.build().toURL())
+                .build();
     }
 
     private Request newRequest(TransactionOperation txnOpt,
