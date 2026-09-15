@@ -29,8 +29,8 @@
 #include <iostream>
 #include <map>
 #include <optional>
-#include <set>
 
+#include "gutil/strings/ascii_ctype.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
@@ -152,30 +152,44 @@ class EnumField : public FieldImpl<T> {
 public:
     EnumField(const char* type, const char* name, void* storage, const char* defval, bool valmutable,
               std::string enums_)
-            : FieldImpl<T>(type, name, storage, defval, valmutable), raw_enum_values(std::move(enums_)) {}
-
-    bool parse_value(const std::string& valstr) override {
-        if (enums.empty()) {
-            std::vector<std::string> parts = strings::Split(raw_enum_values, ",");
-            for (auto& part : parts) {
-                StripWhiteSpace(&part);
-                if (!Base::parse_value(part)) {
-                    return false;
-                }
-                auto v = *reinterpret_cast<T*>(Field::_storage);
-                enums.emplace(std::move(v));
+            : FieldImpl<T>(type, name, storage, defval, valmutable) {
+        std::vector<std::string> parts = strings::Split(enums_, ",");
+        for (auto& part : parts) {
+            StripWhiteSpace(&part);
+            if (part.empty()) {
+                continue;
+            }
+            auto [it, ok] = _enums.emplace(normalize(part), part);
+            if (!ok) {
+                std::cerr << fmt::format("Config '{}' declares enum values '{}' and '{}' that differ only in case\n",
+                                         name, it->second, part);
+                std::abort();
             }
         }
-        if (!Base::parse_value(valstr)) {
+    }
+
+    // Values are matched case-insensitively, but what gets written to the config variable is always
+    // the spelling declared in the CONF_*_enum macro, so consumers can keep comparing it exactly.
+    bool parse_value(const std::string& valstr) override {
+        auto it = _enums.find(normalize(valstr));
+        if (it == _enums.end()) {
+            // Reject before assigning, so a rejected value never lands in the config variable.
             return false;
         }
-        auto value = *reinterpret_cast<T*>(Field::_storage);
-        return enums.find(value) != enums.end();
+        return Base::parse_value(it->second);
     }
 
 private:
-    std::set<T> enums;
-    std::string raw_enum_values;
+    static std::string normalize(const std::string& value) {
+        std::string normalized = value;
+        for (auto& c : normalized) {
+            c = ascii_tolower(c);
+        }
+        return normalized;
+    }
+
+    // Normalized spelling -> the spelling declared in the CONF_*_enum macro.
+    std::map<std::string, std::string> _enums;
 };
 
 #define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME) \
