@@ -6282,6 +6282,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitQueryNoWith(com.starrocks.sql.parser.StarRocksParser.QueryNoWithContext context) {
+        // The body comes first: "?" slots are numbered in visit order and clients bind them in textual order.
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryPrimary());
         List<OrderByElement> orderByElements = new ArrayList<>();
         if (context.ORDER() != null) {
             orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
@@ -6292,7 +6294,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             limitElement = (LimitElement) visit(context.limitElement());
         }
 
-        QueryRelation queryRelation = (QueryRelation) visit(context.queryPrimary());
         queryRelation.setOrderBy(orderByElements);
         queryRelation.setLimit(limitElement);
         return queryRelation;

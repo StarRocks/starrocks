@@ -22,8 +22,11 @@ import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
@@ -114,6 +117,48 @@ public class PreparedStmtTest{
         StatementBase statement = SqlParser.parse(prepareSql, ctx.getSessionVariable()).get(0);
         StmtExecutor executor = new StmtExecutor(ctx, statement);
         Assertions.assertFalse(executor.isForwardToLeader());
+    }
+
+    // Clients bind "?" in textual order, so ORDER BY must not be numbered ahead of the WHERE clause.
+    @Test
+    public void testParameterSlotsFollowTextualOrder() throws Exception {
+        String sql = "PREPARE stmt FROM select ?, c0 from demo.prepare_stmt where c1 = ? order by c0 + ? limit 5";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SelectRelation select = (SelectRelation) ((QueryStatement) stmt.getInnerStmt()).getQueryRelation();
+        Assertions.assertEquals(3, stmt.getParameters().size());
+        Assertions.assertEquals(0, ((Parameter) select.getSelectList().getItems().get(0).getExpr()).getSlotId());
+        Assertions.assertEquals(1, ((Parameter) select.getWhereClause().getChild(1)).getSlotId());
+        Assertions.assertEquals(2, ((Parameter) select.getOrderBy().get(0).getExpr().getChild(1)).getSlotId());
+    }
+
+    // The same ordering has to hold through a derived table, where visitQueryNoWith recurses.
+    @Test
+    public void testParameterSlotsFollowTextualOrderThroughDerivedTable() throws Exception {
+        String sql = "PREPARE stmt FROM select c0 from (select c0 from demo.prepare_stmt where c1 = ?"
+                + " order by c0 + ? limit 5) t where c0 = ? order by c0 + ? limit 5";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SelectRelation outer = (SelectRelation) ((QueryStatement) stmt.getInnerStmt()).getQueryRelation();
+        SelectRelation inner = (SelectRelation) ((SubqueryRelation) outer.getRelation()).getQueryStatement()
+                .getQueryRelation();
+        Assertions.assertEquals(4, stmt.getParameters().size());
+        Assertions.assertEquals(0, ((Parameter) inner.getWhereClause().getChild(1)).getSlotId());
+        Assertions.assertEquals(1, ((Parameter) inner.getOrderBy().get(0).getExpr().getChild(1)).getSlotId());
+        Assertions.assertEquals(2, ((Parameter) outer.getWhereClause().getChild(1)).getSlotId());
+        Assertions.assertEquals(3, ((Parameter) outer.getOrderBy().get(0).getExpr().getChild(1)).getSlotId());
+    }
+
+    // A set operation visits its branches left to right; the ORDER BY of the union follows both.
+    @Test
+    public void testParameterSlotsFollowTextualOrderAcrossUnion() throws Exception {
+        String sql = "PREPARE stmt FROM select c0 from demo.prepare_stmt where c1 = ?"
+                + " union all select c0 from demo.prepare_stmt where c2 = ? order by 1 limit 5";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetOperationRelation union = (SetOperationRelation) ((QueryStatement) stmt.getInnerStmt()).getQueryRelation();
+        SelectRelation left = (SelectRelation) union.getRelations().get(0);
+        SelectRelation right = (SelectRelation) union.getRelations().get(1);
+        Assertions.assertEquals(2, stmt.getParameters().size());
+        Assertions.assertEquals(0, ((Parameter) left.getWhereClause().getChild(1)).getSlotId());
+        Assertions.assertEquals(1, ((Parameter) right.getWhereClause().getChild(1)).getSlotId());
     }
 
     @Test
