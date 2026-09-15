@@ -687,6 +687,37 @@ public class StorageVolumeTest {
     }
 
     @Test
+    public void testS3RejectsAccessKeyAssumeRoleBecauseTheRoleIsNotStored() {
+        // Access key + secret key + iam_role_arn uses the keys to assume the role, but AwsSimpleCredentialInfo
+        // stores only the two keys, so the role is dropped and the volume would read back authenticating as the
+        // base principal instead of the assumed role.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
+        storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
+        storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains(AWS_S3_IAM_ROLE_ARN), e.getMessage());
+    }
+
+    @Test
+    public void testS3InstanceProfileAssumeRoleRemainsStorable() throws DdlException {
+        // The instance-profile assume-role form keeps the role in AwsAssumeIamRoleCredentialInfo, so it
+        // round-trips and must not be caught by the access-key/role guard above.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
+        storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
+        storageParams.put(AWS_S3_EXTERNAL_ID, "external_id");
+        StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"), storageParams, true, "");
+    }
+
+    @Test
     public void testUnusableVolumeRefusesToBeWrittenBackAsAnotherType() throws DdlException {
         // The factory chain falls through the cloud providers to the HDFS one, which accepts any
         // properties, so an AZBLOB volume whose credential cannot be rebuilt serialises to an HDFS

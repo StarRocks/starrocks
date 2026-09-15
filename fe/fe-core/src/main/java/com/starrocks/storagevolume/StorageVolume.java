@@ -416,6 +416,19 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     "Storage params contain a credential that cannot be stored for a %s storage volume, " +
                             "storing it would drop %s", svt, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN));
         }
+        if (svt == StorageVolumeType.S3
+                && isCredentialPropertySet(params, CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN)
+                && !isCredentialPropertySet(restored, CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN)) {
+            // Access key + secret key + iam_role_arn uses the keys to assume the role, but that lands in the
+            // AwsSimpleCredentialInfo branch of AwsCloudCredential#toFileStoreInfo (see its "assumeRole with
+            // AK/SK" TODO), which stores only the two keys. The role is dropped on persist, so the volume
+            // would read back and authenticate as the base principal instead of the assumed role. The check is
+            // on the round-trip, not the params, so the instance-profile and web-identity assume-role forms -
+            // which keep the role on read-back - are left untouched: restored still carries iam_role_arn there.
+            throw new SemanticException(String.format(
+                    "Storage params contain a credential that cannot be stored for a %s storage volume, " +
+                            "storing it would drop %s", svt, CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN));
+        }
         if (svt != StorageVolumeType.AZBLOB && svt != StorageVolumeType.ADLS2) {
             return;
         }
