@@ -98,14 +98,14 @@ public class PreSplitFlowTest {
             stubEligibleTarget(targets, database, table);
             stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_FILES,
                     () -> false, mock(ConnectContext.class));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
@@ -161,7 +161,7 @@ public class PreSplitFlowTest {
             stubEligibleTarget(targets, database, table);
             stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
@@ -169,7 +169,7 @@ public class PreSplitFlowTest {
                     PreSplitPartitionScope.fromInsert(insertStmt));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
         }
     }
 
@@ -203,7 +203,7 @@ public class PreSplitFlowTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
         }
     }
 
@@ -372,7 +372,7 @@ public class PreSplitFlowTest {
                     () -> false, mock(ConnectContext.class));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
@@ -432,7 +432,7 @@ public class PreSplitFlowTest {
             stubEligibleTarget(targets, database, table);
             DefaultPreSplitPipeline pipeline = stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Submitted(preparedJob));
 
             PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
@@ -461,7 +461,7 @@ public class PreSplitFlowTest {
                     LoadKind.INSERT_FROM_FILES, () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
                     any(), any(), any(), any(), any()), never());
         }
@@ -484,14 +484,14 @@ public class PreSplitFlowTest {
             stubEligibleTargetWithRollup(targets, database, table);
             stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED));
 
             PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
                     LoadKind.INSERT_FROM_TABLE, () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
         }
     }
 
