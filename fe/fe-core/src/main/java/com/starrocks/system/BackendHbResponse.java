@@ -64,8 +64,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private long memLimitBytes;
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;
-    @SerializedName(value = "nativeGeoCapabilities")
-    private long nativeGeoCapabilities;
 
     @SerializedName(value = "statusCode")
     private TStatusCode statusCode = TStatusCode.OK;
@@ -111,14 +109,6 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public long getRebootTime() {
         return rebootTime;
-    }
-
-    public long getNativeGeoCapabilities() {
-        return nativeGeoCapabilities;
-    }
-
-    public void setNativeGeoCapabilities(long nativeGeoCapabilities) {
-        this.nativeGeoCapabilities = nativeGeoCapabilities;
     }
 
     public void setRebootTime(long rebootTime) {

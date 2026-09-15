@@ -17,11 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.ResultSink;
-import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.HeartbeatServiceConstants;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.GeoTypeDescriptor;
@@ -31,36 +27,14 @@ import com.starrocks.type.Type;
 import com.starrocks.type.UnknownType;
 import org.apache.iceberg.types.Types;
 
-import java.util.Collection;
-import java.util.stream.Stream;
-
 /** Native Iceberg exposure and dispatch use the same policy, including for reused plans. */
 public final class NativeGeographySupport {
-    private static final long REQUIRED_CAPABILITIES = HeartbeatServiceConstants.NATIVE_GEOGRAPHY_TRANSPORT
-            | HeartbeatServiceConstants.NATIVE_GEOGRAPHY_MYSQL_OUTPUT
-            | HeartbeatServiceConstants.NATIVE_GEOGRAPHY_ICEBERG_READ;
-
     private NativeGeographySupport() {
     }
 
     static boolean gatesEnabled() {
         return Config.enable_native_geography_iceberg_read && Config.enable_native_geography_transport
                 && Config.enable_native_geography_mysql_output;
-    }
-
-    static boolean supportsRead(ComputeNode node) {
-        return node.isAvailable() && (node.getNativeGeoCapabilities() & REQUIRED_CAPABILITIES) == REQUIRED_CAPABILITIES;
-    }
-
-    static boolean canExposeNativeType() {
-        if (!gatesEnabled()) {
-            return false;
-        }
-        var cluster = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        var backends = cluster.getAvailableBackends();
-        var computeNodes = cluster.getAvailableComputeNodes();
-        return (!backends.isEmpty() || !computeNodes.isEmpty())
-                && Stream.concat(backends.stream(), computeNodes.stream()).allMatch(NativeGeographySupport::supportsRead);
     }
 
     static Type geographyType(Types.GeographyType source) {
@@ -74,7 +48,7 @@ public final class NativeGeographySupport {
                         "OGC:CRS84", 4326));
     }
 
-    public static void validateExecution(JobSpec job, Collection<FragmentInstance> instances, boolean spillEnabled)
+    public static void validateExecution(JobSpec job, boolean spillEnabled)
             throws StarRocksException {
         var descriptors = job.getDescTable();
         if (descriptors == null || !descriptors.isSetSlotDescriptors()
@@ -84,10 +58,8 @@ public final class NativeGeographySupport {
                         && type.getScalar_type().getType() == TPrimitiveType.GEOGRAPHY)) {
             return;
         }
-        if (!gatesEnabled() || instances.isEmpty()
-                || instances.stream().anyMatch(instance -> !supportsRead(instance.getWorker()))) {
-            throw new StarRocksException("Native Iceberg GEOGRAPHY requires enabled read, transport and output gates "
-                    + "and compatible execution nodes; replan the query after changing capabilities");
+        if (!gatesEnabled()) {
+            throw new StarRocksException("Native Iceberg GEOGRAPHY requires enabled read, transport and output gates");
         }
         if (spillEnabled || !job.isQueryType() || job.getFragments().stream().noneMatch(fragment ->
                 fragment.getSink() instanceof ResultSink sink && sink.getSinkType() == TResultSinkType.MYSQL_PROTOCAL)) {

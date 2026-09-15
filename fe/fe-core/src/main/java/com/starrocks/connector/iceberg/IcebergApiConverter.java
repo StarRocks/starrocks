@@ -364,7 +364,7 @@ public class IcebergApiConverter {
 
         boolean nativeGeography = columns.stream().anyMatch(field ->
                 field.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY)
-                && NativeGeographySupport.canExposeNativeType();
+                && NativeGeographySupport.gatesEnabled();
         for (Types.NestedField field : columns) {
             Type srType;
             try {
