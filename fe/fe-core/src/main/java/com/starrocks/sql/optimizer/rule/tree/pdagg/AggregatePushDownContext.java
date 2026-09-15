@@ -21,6 +21,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -60,6 +61,12 @@ public class AggregatePushDownContext {
     public int rootToLeafPathIndex = 0;
 
     public boolean hasWindow = false;
+
+    // Columns referenced by operators above the pushed-down aggregate (the original aggregate, projections and
+    // joins between it and the scan). The pushed-down aggregate must keep producing these columns, but only
+    // these: adding any other column (e.g. a predicate column the MV does not expose) would make its grouping
+    // keys unmappable to the MV and lose an otherwise valid rewrite.
+    public final ColumnRefSet requiredUpperColumns = new ColumnRefSet();
 
     // record push down path
     // the index of children which should push down

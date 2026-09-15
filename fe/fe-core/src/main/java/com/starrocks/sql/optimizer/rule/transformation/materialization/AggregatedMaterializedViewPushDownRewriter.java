@@ -164,6 +164,9 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             if (canNotPushDown(optExpression, context)) {
                 return visit(optExpression, context);
             }
+            // join predicates/projections keep referencing their input columns after the push down.
+            context.requiredUpperColumns.union(((LogicalJoinOperator) optExpression.getOp())
+                    .getRequiredChildInputColumns());
             return context;
         }
 
@@ -189,6 +192,13 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
 
             context = new AggregatePushDownContext();
             context.setAggregator(queryColumnRefFactory, aggOp);
+            // Only grouping keys and the having predicate must survive the pushed-down aggregate: aggregate
+            // arguments are consumed by it and remapped to its partial result, so they are not required above
+            // it and must not become grouping keys (an mv that stores only the aggregate would stop matching).
+            context.requiredUpperColumns.union(new ColumnRefSet(aggOp.getGroupingKeys()));
+            if (aggOp.getPredicate() != null) {
+                context.requiredUpperColumns.union(aggOp.getPredicate().getUsedColumns());
+            }
             return context;
         }
 
@@ -202,6 +212,9 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
 
             LogicalProjectOperator projectOp = optExpression.getOp().cast();
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOp.getColumnRefMap();
+            // Columns the projection reads are exactly the columns produced below it, i.e. what the
+            // pushed-down aggregate may have to output for upper operators.
+            context.requiredUpperColumns.union(getReferencedColumnRef(columnRefMap.values()));
             if (columnRefMap.entrySet().stream().allMatch(e -> e.getValue().equals(e.getKey()))) {
                 return context;
             }
@@ -430,6 +443,9 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             childContext.origAggregator = context.origAggregator;
             childContext.pushPaths.addAll(context.pushPaths);
             childContext.pushPaths.add(child);
+            // the pushed-down aggregate is created below this join, so the child must know which columns the
+            // operators above it still reference.
+            childContext.requiredUpperColumns.union(context.requiredUpperColumns);
             return childContext;
         }
 
@@ -448,13 +464,33 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                 return AggRewriteInfo.NOT_REWRITE;
             }
 
+            LogicalScanOperator scanOp = optExpression.getOp().cast();
+            ColumnRefSet scanOutputColRefSet = new ColumnRefSet(scanOp.getOutputColumns());
+
+            // Query predicates (e.g. partition predicates consumed by partition pruning) may not reside in
+            // LogicalFilterOperator or the scan's predicate, so their columns are invisible to PreVisitor.
+            // Add them into group bys so that the pushed-down aggregate can still output them for upper
+            // operators (e.g. join projection references pt to compute DATE_FORMAT(pt)).
+            // All predicate kinds of the split are covered: equal, range (a constant-list `IN` is classified
+            // as a range predicate) and residual. Candidates are restricted to the columns which are both
+            // exposed by this scan and still referenced above the pushed-down aggregate: the pushed-down
+            // aggregate is created directly on the scan and is rewritten by the mv, so it can only produce
+            // those columns, and a column that no upper operator references must stay out of the grouping
+            // keys, otherwise its missing mv mapping makes an otherwise usable mv unrewritable.
+            if (mvRewriteContext.getQueryPredicateSplit() != null) {
+                addPredicateColumnsIntoGroupBys(
+                        mvRewriteContext.getQueryPredicateSplit().getRangePredicates(), scanOutputColRefSet, ctx);
+                addPredicateColumnsIntoGroupBys(
+                        mvRewriteContext.getQueryPredicateSplit().getEqualPredicates(), scanOutputColRefSet, ctx);
+                addPredicateColumnsIntoGroupBys(
+                        mvRewriteContext.getQueryPredicateSplit().getResidualPredicates(), scanOutputColRefSet, ctx);
+            }
+
             // build group bys
             List<ColumnRefOperator> groupByUsedColRefs = ctx.groupBys.values().stream()
                     .map(ScalarOperator::getUsedColumns)
                     .flatMap(colSet -> colSet.getStream().map(queryColumnRefFactory::getColumnRef)).distinct()
                     .collect(Collectors.toList());
-            LogicalScanOperator scanOp = optExpression.getOp().cast();
-            ColumnRefSet scanOutputColRefSet = new ColumnRefSet(scanOp.getOutputColumns());
             if (!scanOutputColRefSet.containsAll(new ColumnRefSet(groupByUsedColRefs))) {
                 logMVRewrite(mvRewriteContext, "Scan node's output columns {} not contains group bys {}",
                         scanOutputColRefSet, groupByUsedColRefs);
@@ -608,6 +644,17 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         ColumnRefSet refSet = new ColumnRefSet();
         operators.stream().map(ScalarOperator::getUsedColumns).forEach(refSet::union);
         return refSet;
+    }
+
+    private void addPredicateColumnsIntoGroupBys(ScalarOperator predicate, ColumnRefSet scanOutputColRefSet,
+                                                 AggregatePushDownContext ctx) {
+        if (predicate == null) {
+            return;
+        }
+        predicate.getUsedColumns().getStream().map(queryColumnRefFactory::getColumnRef)
+                .filter(scanOutputColRefSet::contains)
+                .filter(ctx.requiredUpperColumns::contains)
+                .forEach(v -> ctx.groupBys.put(v, v));
     }
 
     // process each child to gather and merge AggRewriteInfo
