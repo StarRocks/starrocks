@@ -270,6 +270,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: int
 * **引入版本**: v3.5.3
 
+### cbo_cte_force_reuse_inlined_node_count
+
+* **描述**: 会话级阈值。当内联某个公用表表达式（CTE）会导致其标量表达式膨胀时，让优化器自动改为物化该 CTE 而不是内联。在 RelationTransformer.buildCTEAnchorAndProducer 中，对于本应被内联的 CTE，规划器会预估其内联**展开后**的输出表达式大小——递归展开它引用的每一个未物化 CTE（级联），而已物化的 CTE 或基表列各记为一个节点。如果该预估的内联节点数大于此阈值且阈值大于 `0`，则强制物化该 CTE。这样可以把深层嵌套 CTE 链的 `Expression too complex` 报错转化为一次有界的物化，且无需手动添加 `[materialized]` hint。该值应设置为小于 `max_scalar_operator_flat_children`。将该值设置为 `0` 可禁用此优化。
+* **范围**: Session
+* **默认值**: `0`
+* **数据类型**: int
+* **引入版本**: -
+
 ### cbo_cte_reuse
 
 * **描述**: 控制优化器是否可以通过重用 Common Table Expression (CTE) 重写 multi-distinct 聚合查询（CBO 的 CTE‑reuse 重写）。启用时，Planner ）可能会为多列 DISTINCT、偏斜聚合或当统计信息表明 CTE 重写更高效时选择基于 CTE 的重写；此配置项也会尊重 `prefer_cte_rewrite` hint。禁用时，不允许基于 CTE 的重写，Planner 将尝试 multi-function 重写；如果查询需要 CTE（例如，多列 DISTINCT 或 multi-function 重写无法处理的函数），Planner 将抛出错误。注意：只有在 Pipeline Engine 打开时 CTE 重用才生效。
