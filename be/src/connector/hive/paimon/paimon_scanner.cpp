@@ -22,12 +22,14 @@
 #include <paimon/table/source/table_read.h>
 
 #include <algorithm>
+#include <limits>
 #include <string_view>
 #include <utility>
 
 #include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_paimon_fwd.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
@@ -39,14 +41,12 @@
 namespace starrocks {
 namespace {
 
-constexpr int64_t kPaimonReadBatchSize = 10000;
-constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
-constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
 constexpr int64_t kPaimonParquetBitmapCoalesceHoleSizeLimit = 32;
 constexpr std::string_view kPaimonParquetBitmapRefiningStrategy = "coalesce";
-constexpr bool kPaimonEnablePrefetch = true;
 constexpr bool kPaimonEnableMultiThreadRowToBatch = true;
 constexpr uint32_t kPaimonRowToBatchThreadNum = 3;
+constexpr uint32_t kPaimonPrefetchMaxParallelNum = 3;
+constexpr uint32_t kPaimonPrefetchBatchCount = 600;
 
 void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemStats::Snapshot& io_stats) {
     const std::string paimon_fs_section = "PaimonFileSystem";
@@ -77,6 +77,14 @@ void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemSta
 PaimonScanner::~PaimonScanner() = default;
 
 Status PaimonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
+    return Status::OK();
+}
+
+Status PaimonScanner::validate_read_batch_size(int64_t batch_size) {
+    if (batch_size <= 0 || batch_size > std::numeric_limits<int32_t>::max()) {
+        return Status::InvalidArgument(fmt::format("paimon_native_read_batch_size must be in [1, {}], got {}",
+                                                   std::numeric_limits<int32_t>::max(), batch_size));
+    }
     return Status::OK();
 }
 
@@ -133,18 +141,27 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
         }
     }
 
-    context_builder.AddOption(paimon::Options::READ_BATCH_SIZE, std::to_string(kPaimonReadBatchSize));
+    const int64_t read_batch_size = config::paimon_native_read_batch_size;
+    RETURN_IF_ERROR(validate_read_batch_size(read_batch_size));
+    context_builder.AddOption(paimon::Options::READ_BATCH_SIZE, std::to_string(read_batch_size));
     // These option keys are defined in paimon-cpp's internal parquet_format_defs.h, which is not
     // part of its installed public headers, so they have to be spelled out as string literals here.
     context_builder.AddOption("parquet.read.cache-option.hole-size-limit",
-                              std::to_string(kPaimonParquetCacheHoleSizeLimit));
+                              std::to_string(config::paimon_native_parquet_cache_hole_size_limit));
     context_builder.AddOption("parquet.read.cache-option.range-size-limit",
-                              std::to_string(kPaimonParquetCacheRangeSizeLimit));
+                              std::to_string(config::paimon_native_parquet_cache_range_size_limit));
+    context_builder.AddOption("parquet.read.enable-pre-buffer",
+                              config::paimon_native_parquet_enable_pre_buffer ? "true" : "false");
     context_builder.AddOption("parquet.read.bitmap.row-range-refining-strategy",
                               std::string(kPaimonParquetBitmapRefiningStrategy));
     context_builder.AddOption("parquet.read.bitmap.coalesce-hole-size-limit",
                               std::to_string(kPaimonParquetBitmapCoalesceHoleSizeLimit));
-    context_builder.EnablePrefetch(kPaimonEnablePrefetch);
+    context_builder.AddOption("parquet.read.executor.thread-count",
+                              std::to_string(config::paimon_native_parquet_executor_thread_count));
+    context_builder.EnablePrefetch(config::paimon_native_enable_prefetch);
+    context_builder.SetPrefetchMaxParallelNum(kPaimonPrefetchMaxParallelNum);
+    context_builder.SetPrefetchBatchCount(kPaimonPrefetchBatchCount);
+    context_builder.SetPrefetchCacheMode(paimon::PrefetchCacheMode::ALWAYS);
     context_builder.EnableMultiThreadRowToBatch(kPaimonEnableMultiThreadRowToBatch);
     context_builder.SetRowToBatchThreadNumber(kPaimonRowToBatchThreadNum);
     context_builder.WithMemoryPool(_memory_pool);

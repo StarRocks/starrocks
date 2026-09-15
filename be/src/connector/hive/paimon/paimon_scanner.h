@@ -41,6 +41,9 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     void do_update_counter(HdfsScannerProfile* profile) override;
 
+    // paimon-cpp treats a non-positive batch size as EOF and reads nothing, so reject it up front.
+    static Status validate_read_batch_size(int64_t batch_size);
+
 private:
     Status _next_arrow_record_batch();
     Status _append_arrow_record_batch_to_chunk(ChunkPtr& chunk);

@@ -298,6 +298,60 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of cached client instances retained for each remote host by BE-wide client caches. This single setting is used when creating BackendServiceClientCache, FrontendServiceClientCache, and BrokerServiceClientCache during ExecEnv initialization, so it limits the number of client stubs/connections kept per host across those caches. Raising this value reduces reconnects and stub creation overhead at the cost of increased memory and file-descriptor usage; lowering it saves resources but may increase connection churn. The value is read at startup and cannot be changed at runtime. Currently one shared setting controls all client cache types; separate per-cache configuration may be introduced later.
 - Introduced in: v3.2.0
 
+### paimon_native_enable_prefetch
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the Paimon native reader (paimon-cpp) prefetches ahead of the current batch. Prefetching makes paimon-cpp seek back to reposition the reader, which rebuilds the underlying batch reader without marking it initialized, so every row group is read from storage twice. Leave it disabled unless you are diagnosing that path.
+- Introduced in: -
+
+### paimon_native_parquet_cache_hole_size_limit
+
+- Default: 1048576
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The largest gap between two required Parquet ranges that the Paimon native reader still merges into one read. A larger value trades read amplification for fewer requests. The default matches `io_coalesce_read_max_distance_size` used by the StarRocks native Parquet reader; paimon-cpp's own default is far smaller and produces many small requests on object storage.
+- Introduced in: -
+
+### paimon_native_parquet_cache_range_size_limit
+
+- Default: 33554432
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of a single coalesced read issued by the Paimon native reader. Lowering it reduces the peak memory a scanner holds per split, at the cost of more requests.
+- Introduced in: -
+
+### paimon_native_parquet_enable_pre_buffer
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the Paimon native reader lets Arrow pre-buffer column chunks before decoding. Disabling it lowers the memory a scanner holds, which matters when many scan nodes in one query compete for the connector scan budget.
+- Introduced in: -
+
+### paimon_native_parquet_executor_thread_count
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The Arrow CPU thread pool size the Paimon native reader requests for Parquet decoding. This setting is process-wide inside Arrow, so a non-zero value pins every paimon-cpp reader in the BE to that many threads and also affects other Arrow users. The default `0` leaves the pool untouched and lets parallelism come from the StarRocks scanner instead.
+- Introduced in: -
+
+### paimon_native_read_batch_size
+
+- Default: 10000
+- Type: Long
+- Unit: Rows
+- Is mutable: Yes
+- Description: The number of rows the Paimon native reader requests per batch. Larger batches amortize per-batch overhead but raise the memory a scanner holds per split. The value must be between `1` and `2147483647`; a scanner fails to open with an error otherwise.
+- Introduced in: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - Default: 10000

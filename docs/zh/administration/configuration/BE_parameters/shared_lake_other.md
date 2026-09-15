@@ -295,6 +295,60 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 范围内的客户端缓存为每个远程主机保留的最大缓存 client 实例数。提高此值可以减少重连和 stub 创建开销，但会增加内存和文件描述符使用；降低它则节省资源但可能增加连接 churn。该值在启动时读取，运行时无法更改。目前一个共享设置控制所有客户端缓存类型；将来可能会引入每种缓存的独立配置。
 - 引入版本：v3.2.0
 
+### paimon_native_enable_prefetch
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否动态配置: 是
+- 描述: Paimon native reader（paimon-cpp）是否在当前批次之外提前预读。预读会让 paimon-cpp 回退定位 reader，进而重建底层 batch reader 且不标记为已初始化，导致每个 row group 从存储读取两次。除排查该路径外请保持关闭。
+- 引入版本: -
+
+### paimon_native_parquet_cache_hole_size_limit
+
+- 默认值: 1048576
+- 类型: Long
+- 单位: Bytes
+- 是否动态配置: 是
+- 描述: Paimon native reader 将两个必需的 Parquet 读取范围合并为一次读取时允许的最大间隔。值越大，请求次数越少，但读放大越多。默认值与 StarRocks 原生 Parquet reader 使用的 `io_coalesce_read_max_distance_size` 一致；paimon-cpp 自身的默认值远小于此，会在对象存储上产生大量小请求。
+- 引入版本: -
+
+### paimon_native_parquet_cache_range_size_limit
+
+- 默认值: 33554432
+- 类型: Long
+- 单位: Bytes
+- 是否动态配置: 是
+- 描述: Paimon native reader 单次合并读取的最大字节数。降低该值可以减少每个 scanner 在单个 split 上持有的峰值内存，代价是请求次数增加。
+- 引入版本: -
+
+### paimon_native_parquet_enable_pre_buffer
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否动态配置: 是
+- 描述: Paimon native reader 是否允许 Arrow 在解码前预先缓冲 column chunk。关闭后可以降低 scanner 持有的内存，在一个查询中有多个 scan 节点争抢 connector scan 内存预算时尤为重要。
+- 引入版本: -
+
+### paimon_native_parquet_executor_thread_count
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否动态配置: 是
+- 描述: Paimon native reader 为 Parquet 解码申请的 Arrow CPU 线程池大小。该设置在 Arrow 内部是进程级的，非零值会把 BE 中所有 paimon-cpp reader 固定为该线程数，并影响其他使用 Arrow 的组件。默认值 `0` 表示不修改线程池，并发由 StarRocks scanner 提供。
+- 引入版本: -
+
+### paimon_native_read_batch_size
+
+- 默认值: 10000
+- 类型: Long
+- 单位: Rows
+- 是否动态配置: 是
+- 描述: Paimon native reader 每批请求的行数。批次越大，单批开销摊得越薄，但每个 scanner 在单个 split 上持有的内存越多。取值范围为 `1` 到 `2147483647`，否则 scanner 打开时报错。
+- 引入版本: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - 默认值：10000

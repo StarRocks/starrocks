@@ -1022,6 +1022,17 @@
         "lz4_expected_compression_ratio",
         "lz4_expected_compression_speed_mbps"
       ]
+    },
+    {
+      "path": "be/src/common/config_paimon_fwd.h",
+      "configs": [
+        "paimon_native_read_batch_size",
+        "paimon_native_parquet_cache_hole_size_limit",
+        "paimon_native_parquet_cache_range_size_limit",
+        "paimon_native_parquet_enable_pre_buffer",
+        "paimon_native_parquet_executor_thread_count",
+        "paimon_native_enable_prefetch"
+      ]
     }
   ]
 }

@@ -2189,6 +2189,17 @@ CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
 
+// paimon-cpp read knobs for paimon_reader_mode = NATIVE.
+CONF_mInt64(paimon_native_read_batch_size, "10000");
+// Arrow IO coalescing: merge page ranges whose gap is under hole_size, stop merging past range_size.
+CONF_mInt64(paimon_native_parquet_cache_hole_size_limit, "1048576");
+CONF_mInt64(paimon_native_parquet_cache_range_size_limit, "33554432");
+CONF_mBool(paimon_native_parquet_enable_pre_buffer, "true");
+// Non-zero resizes the process-wide Arrow CPU pool shared by every paimon-cpp reader in the BE.
+CONF_mInt32(paimon_native_parquet_executor_thread_count, "0");
+// Off because paimon-cpp 0.3.0 rereads every row group on the prefetch path.
+CONF_mBool(paimon_native_enable_prefetch, "false");
+
 // default not to build the empty index
 CONF_mInt32(config_tenann_default_build_threshold, "0");
 

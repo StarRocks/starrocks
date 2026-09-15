@@ -289,6 +289,60 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。v3.4 以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
 - 導入バージョン: v2.5
 
+### paimon_native_enable_prefetch
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: Paimon native reader（paimon-cpp）が現在のバッチより先を先読みするかどうか。先読みを有効にすると paimon-cpp が reader の位置を戻すためにシークし、内部の batch reader が初期化済みとしてマークされずに再構築されるため、すべての row group がストレージから 2 回読み取られます。この経路を調査する場合を除き、無効のままにしてください。
+- 導入バージョン: -
+
+### paimon_native_parquet_cache_hole_size_limit
+
+- デフォルト: 1048576
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: Yes
+- 説明: Paimon native reader が 2 つの必要な Parquet 読み取り範囲を 1 回の読み取りに統合する際に許容する最大の間隔。値を大きくするとリクエスト数は減りますが読み取りの増幅が大きくなります。デフォルト値は StarRocks ネイティブ Parquet reader が使用する `io_coalesce_read_max_distance_size` と同じです。paimon-cpp 自体のデフォルト値はこれよりはるかに小さく、オブジェクトストレージ上で多数の小さなリクエストを発生させます。
+- 導入バージョン: -
+
+### paimon_native_parquet_cache_range_size_limit
+
+- デフォルト: 33554432
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: Yes
+- 説明: Paimon native reader が発行する 1 回の統合読み取りの最大サイズ。値を小さくすると、scanner が 1 つの split で保持するピークメモリが減りますが、リクエスト数は増えます。
+- 導入バージョン: -
+
+### paimon_native_parquet_enable_pre_buffer
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: Paimon native reader がデコード前に Arrow による column chunk の事前バッファリングを許可するかどうか。無効にすると scanner が保持するメモリが減ります。1 つのクエリ内で複数の scan ノードが connector scan のメモリ予算を争う場合に重要です。
+- 導入バージョン: -
+
+### paimon_native_parquet_executor_thread_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: Paimon native reader が Parquet のデコード用に要求する Arrow CPU スレッドプールのサイズ。この設定は Arrow 内部でプロセス全体に適用されるため、0 以外の値を指定すると BE 内のすべての paimon-cpp reader がそのスレッド数に固定され、Arrow を使用する他のコンポーネントにも影響します。デフォルトの `0` はプールを変更せず、並列性は StarRocks の scanner に任せます。
+- 導入バージョン: -
+
+### paimon_native_read_batch_size
+
+- デフォルト: 10000
+- タイプ: Long
+- 単位: Rows
+- 変更可能: Yes
+- 説明: Paimon native reader が 1 バッチあたりに要求する行数。バッチが大きいほどバッチごとのオーバーヘッドは償却されますが、scanner が 1 つの split で保持するメモリは増えます。値は `1` から `2147483647` の範囲でなければならず、それ以外の場合は scanner のオープン時にエラーになります。
+- 導入バージョン: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - デフォルト: 10000
