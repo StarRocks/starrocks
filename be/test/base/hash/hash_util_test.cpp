@@ -42,10 +42,12 @@ struct HashCombineTag {
 
 namespace {
 
-bool sse42_available() {
-#ifdef __SSE4_2__
+bool hardware_crc_available() {
+#if defined(__SSE4_2__)
     base::CPU cpu;
     return cpu.has_sse42();
+#elif defined(__aarch64__)
+    return true;
 #else
     return false;
 #endif
@@ -140,7 +142,7 @@ TEST(HashUtilTest, Hash32Selection) {
 
     const uint32_t hash_value = HashUtil::hash(data.data(), static_cast<int32_t>(data.size()), seed);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(hash_value, HashUtil::crc_hash(data.data(), static_cast<int32_t>(data.size()), seed));
     } else {
         EXPECT_EQ(hash_value, HashUtil::fnv_hash(data.data(), static_cast<int32_t>(data.size()), seed));
@@ -153,7 +155,7 @@ TEST(HashUtilTest, Hash64Selection) {
 
     const uint64_t hash_value = HashUtil::hash64(data.data(), static_cast<int32_t>(data.size()), seed);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(hash_value, HashUtil::crc_hash64(data.data(), static_cast<int32_t>(data.size()), seed));
     } else {
         EXPECT_EQ(hash_value, HashUtil::hash64_fallback(data.data(), static_cast<int32_t>(data.size()), seed));
@@ -168,7 +170,7 @@ TEST(HashUtilTest, CrcHashSelection) {
     const uint32_t crc32_value = HashUtil::crc_hash(data.data(), static_cast<int32_t>(data.size()), seed32);
     const uint64_t crc64_value = HashUtil::crc_hash64(data.data(), static_cast<int32_t>(data.size()), seed64);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(crc32_value, HashUtil::hash(data.data(), static_cast<int32_t>(data.size()), seed32));
         EXPECT_EQ(crc64_value, HashUtil::hash64(data.data(), static_cast<int32_t>(data.size()), seed64));
     } else {
@@ -237,6 +239,99 @@ TEST(HashUtilTest, CrcHashUnalignedInput) {
 
     EXPECT_EQ(HashUtil::crc_hash(unaligned, len, seed32), HashUtil::crc_hash(aligned.data(), len, seed32));
     EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(aligned.data(), len, seed64));
+}
+
+TEST(HashUtilTest, CrcHashDeterministicVectors) {
+    if (!hardware_crc_available()) {
+        GTEST_SKIP() << "Hardware CRC-32C is not available on this CPU/build; skipping hardware vector checks";
+    }
+
+    const std::string_view text = "StarRocks ARM64 CRC-32C Acceleration Engine.";
+    ASSERT_EQ(text.size(), 44);
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+
+    // Fixed lengths verifying: 0 (empty), 1, 3, 4, 7, 8, 15, 16, 32, 44
+    const std::vector<int32_t> lengths = {0, 1, 3, 4, 7, 8, 15, 16, 32, 44};
+
+    // Hard-coded expected values generated on x86_64 SSE4.2 and verified on ARM64 ACLE.
+    // If any of these fail, cross-platform hash compatibility is broken.
+    // clang-format off
+    static constexpr uint32_t expected_h32[] = {
+            0x9DC5811Cu, // len=0
+            0x0762B488u, // len=1
+            0x60B1116Du, // len=3
+            0xB850D0CCu, // len=4
+            0xDF66F24Bu, // len=7
+            0x070CBFDAu, // len=8
+            0xB9E88345u, // len=15
+            0x3BB249D7u, // len=16
+            0x21184402u, // len=32
+            0x708E853Bu  // len=44
+    };
+    static constexpr uint64_t expected_h64[] = {
+            0xCDEF90AB56781234ULL, // len=0
+            0x16D4FFC656781234ULL, // len=1
+            0xA0C3871BFB864D51ULL, // len=3
+            0x74BCDAD856781234ULL, // len=4
+            0x34294B1097D2C486ULL, // len=7
+            0x7175EAE90A011154ULL, // len=8
+            0x67214794B55D5F37ULL, // len=15
+            0xDB7328D2A86E8C3CULL, // len=16
+            0xD7229F1598122DE0ULL, // len=32
+            0x54E2C29FAFDEACB0ULL  // len=44
+    };
+    // clang-format on
+
+    for (size_t i = 0; i < lengths.size(); ++i) {
+        const int32_t len = lengths[i];
+        EXPECT_EQ(HashUtil::crc_hash(text.data(), len, seed32), expected_h32[i]) << "crc_hash mismatch for len=" << len;
+        EXPECT_EQ(HashUtil::crc_hash64(text.data(), len, seed64), expected_h64[i])
+                << "crc_hash64 mismatch for len=" << len;
+    }
+}
+
+TEST(HashUtilTest, ZeroLengthDispatch) {
+    const char dummy = 'x';
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+
+    // Zero-length hashing through the public dispatch path (hash/hash64) must
+    // produce the same result as the CRC path for zero-length input.
+    const uint32_t h32_dispatch = HashUtil::hash(&dummy, 0, seed32);
+    const uint64_t h64_dispatch = HashUtil::hash64(&dummy, 0, seed64);
+    const uint32_t h32_crc = HashUtil::crc_hash(&dummy, 0, seed32);
+    const uint64_t h64_crc = HashUtil::crc_hash64(&dummy, 0, seed64);
+
+    if (hardware_crc_available()) {
+        EXPECT_EQ(h32_dispatch, h32_crc);
+        EXPECT_EQ(h64_dispatch, h64_crc);
+    }
+    // On all platforms, zero-length hash must be deterministic.
+    EXPECT_EQ(h32_dispatch, HashUtil::hash(&dummy, 0, seed32));
+    EXPECT_EQ(h64_dispatch, HashUtil::hash64(&dummy, 0, seed64));
+}
+
+TEST(HashUtilTest, CrcHashUnalignedAllSizes) {
+    alignas(16) std::array<uint8_t, 64> raw_buf{};
+    for (size_t i = 0; i < raw_buf.size(); ++i) {
+        raw_buf[i] = static_cast<uint8_t>((i * 31 + 17) & 0xff);
+    }
+
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+
+    for (int32_t len = 1; len <= 48; ++len) {
+        for (int32_t offset = 1; offset <= 7; ++offset) {
+            const uint8_t* unaligned = raw_buf.data() + offset;
+            std::vector<uint8_t> aligned(unaligned, unaligned + len);
+
+            EXPECT_EQ(HashUtil::crc_hash(unaligned, len, seed32), HashUtil::crc_hash(aligned.data(), len, seed32))
+                    << "Failed crc_hash for len=" << len << ", offset=" << offset;
+            EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(aligned.data(), len, seed64))
+                    << "Failed crc_hash64 for len=" << len << ", offset=" << offset;
+        }
+    }
 }
 
 #if (defined(__x86_64__) && defined(__SSE4_2__)) || defined(__aarch64__)
