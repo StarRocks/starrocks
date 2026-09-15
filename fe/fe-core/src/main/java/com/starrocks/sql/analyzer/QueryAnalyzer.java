@@ -1985,6 +1985,26 @@ public class QueryAnalyzer {
             if (names != null && !names.isEmpty()) {
                 namesArray = names.toArray(String[]::new);
             }
+
+            if (session.getSessionVariable().getSqlDialect().equalsIgnoreCase("trino") && namesArray == null &&
+                    node.getFunctionName().getFunction().equalsIgnoreCase(FunctionSet.UNNEST)) {
+                List<Expr> expandedArgs = new ArrayList<>();
+                for (Expr arg : args) {
+                    if (arg.getType().isMapType()) {
+                        FunctionCallExpr mapKeys = new FunctionCallExpr(FunctionSet.MAP_KEYS, Lists.newArrayList(arg));
+                        FunctionCallExpr mapValues = new FunctionCallExpr(FunctionSet.MAP_VALUES, Lists.newArrayList(arg));
+                        analyzeExpression(mapKeys, analyzeState, scope);
+                        analyzeExpression(mapValues, analyzeState, scope);
+                        expandedArgs.add(mapKeys);
+                        expandedArgs.add(mapValues);
+                    } else {
+                        expandedArgs.add(arg);
+                    }
+                }
+                args = expandedArgs;
+                argTypes = args.stream().map(Expr::getType).toArray(Type[]::new);
+            }
+
             Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
@@ -2008,10 +2028,10 @@ public class QueryAnalyzer {
             if (namesArray != null) {
                 Preconditions.checkState(fn.hasNamedArg());
                 childExpressions = reorderNamedArgAndAppendDefaults(node.getFunctionParams(), fn);
-            } else if (node.getFunctionParams().exprs().size() < fn.getNumArgs()) {
+            } else if (args.size() < fn.getNumArgs()) {
                 childExpressions = appendPositionalDefaultArgExprs(node.getFunctionParams(), fn);
             } else {
-                childExpressions = node.getFunctionParams().exprs();
+                childExpressions = args;
             }
             Preconditions.checkState(childExpressions.size() == fn.getNumArgs());
 
