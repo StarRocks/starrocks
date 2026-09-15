@@ -31,6 +31,10 @@ Shared-data Dashboard includes the following categories of monitoring metrics:
 
 - Description: The number of Public Version tasks in the queue.
 
+#### Memory Gate Rejections
+
+- Description: The number of publish tasks rejected by the shared-data publish memory gate (`lake_publish_mem_rejected`), and the number of tablet reshard metadata builds rejected by the same backstop (`tablet_reshard_mem_rejected`). A rejection is a retryable `ResourceBusy` throttle rather than a failure, so a rising count means publishes are being deferred to protect the node from an out-of-memory condition, not that they are failing. Tune with `lake_publish_memory_limit_percent` and `lake_publish_process_memory_urgent_pct`.
+
 ### Metadata
 
 #### Get Tablet Metadata
