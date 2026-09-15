@@ -344,8 +344,14 @@ protected:
     // Write a real Segment file with num_rows rows: c0 = [0..num_rows), c1 = source_value_of(c0).
     // Returns the segment file size on disk. The file is placed under
     // tablet_id's segment directory as |segment_name|.
+    // |readable_short_key_index| gives the key column an index_length so the short key index really
+    // holds key bytes. It defaults to OFF because the existing merge and rowid-range tests were
+    // written against this fixture's marker-only index entries and assert results derived from
+    // them; only a test that needs the sort key sampler to read the index back turns it on.
     uint64_t write_two_column_segment(int64_t tablet_id, const std::string& segment_name, int num_rows,
-                                      const std::function<int(int)>& source_value_of) {
+                                      const std::function<int(int)>& source_value_of, int key_start = 0,
+                                      const std::function<int(int)>& key_of = {},
+                                      bool readable_short_key_index = false) {
         TabletSchemaPB schema_pb;
         schema_pb.set_keys_type(PRIMARY_KEYS);
         schema_pb.set_id(2001);
@@ -357,6 +363,13 @@ protected:
         c0->set_type("INT");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        if (readable_short_key_index) {
+            // index_length is load-bearing, not decoration: SeekTuple::short_key_encode writes the
+            // key bytes only when Field::short_key_length() > 0, so leaving it unset produces
+            // marker-only index entries that the sort key sampler cannot read back.
+            c0->set_length(4);
+            c0->set_index_length(4);
+        }
         auto* c1 = schema_pb.add_column();
         c1->set_unique_id(1002);
         c1->set_name("c1");
@@ -380,8 +393,8 @@ protected:
         auto col1 = Int32Column::create();
         std::vector<int> v0(num_rows), v1(num_rows);
         for (int i = 0; i < num_rows; ++i) {
-            v0[i] = i;
-            v1[i] = source_value_of(i);
+            v0[i] = key_of ? key_of(i) : key_start + i;
+            v1[i] = source_value_of(v0[i]);
         }
         col0->append_numbers(v0.data(), v0.size() * sizeof(int));
         col1->append_numbers(v1.data(), v1.size() * sizeof(int));
@@ -1427,8 +1440,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
     metadata.set_id(tablet_id);
     metadata.set_version(2);
 
-    // Single segment with 2 sort-key samples -> 4 boundary points -> 3
-    // candidate ranges. Requesting 8 splits cannot be satisfied.
+    // A single segment with no backing file on disk, so the sort key sampler cannot open it and
+    // every boundary candidate comes from the coarse [min, max] pair -> 1 candidate range.
+    // Requesting 8 splits cannot be satisfied.
     auto* rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
     {
@@ -1438,9 +1452,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
         sm->set_num_rows(300);
-        sm->set_sort_key_sample_row_interval(100);
-        sm->add_sort_key_samples()->CopyFrom(generate_sort_key(100));
-        sm->add_sort_key_samples()->CopyFrom(generate_sort_key(200));
     }
     rowset_meta_pb->set_num_rows(300);
     rowset_meta_pb->set_data_size(1024);
@@ -2088,12 +2099,18 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
 // level-3 == original parent — the property a multi-level reshard must
 // guarantee for downstream consumers (get_tablet_stats, planner, vacuum).
 //
-// Setup uses sampled segments (sort_key_samples populated) so segment-level
-// boundary candidates are dense enough for 3 successive splits to find
-// candidates inside ever-narrowing tablet ranges.
+// Setup writes REAL segments so the sort key sampler can derive boundary candidates from them,
+// dense enough for 3 successive splits to find candidates inside ever-narrowing tablet ranges. A
+// synthetic metadata-only rowset would leave every segment at its coarse [min, max] pair, which
+// cannot be subdivided at all.
 TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_conservation) {
-    auto add_sampled_rowset = [](TabletMetadataPB* md, int64_t rs_id, int min_v, int max_v, int num_rows, int data_size,
-                                 int num_dels, int interval) {
+    auto add_sampled_rowset = [this](TabletMetadataPB* md, int64_t tablet_id, int64_t rs_id, int min_v, int max_v,
+                                     int num_rows, int data_size, int num_dels) {
+        const std::string seg_name = fmt::format("rs_{}_0.dat", rs_id);
+        // Keys [min_v, min_v + num_rows), i.e. exactly the [min_v, max_v] the metadata declares.
+        write_two_column_segment(
+                tablet_id, seg_name, num_rows, [](int i) { return i; }, /*key_start=*/min_v,
+                /*key_of=*/{}, /*readable_short_key_index=*/true);
         auto* rs = md->add_rowsets();
         rs->set_id(rs_id);
         rs->set_overlapped(true);
@@ -2101,15 +2118,14 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
         rs->set_data_size(data_size);
         rs->set_num_dels(num_dels);
         auto* sm = rs->add_segment_metas();
-        sm->set_filename(fmt::format("rs_{}_0.dat", rs_id));
+        sm->set_filename(seg_name);
+        // Deliberately the declared data_size, not the file's real size: these tests assert
+        // conservation of the numbers the parent metadata records, and keeping them makes the
+        // arithmetic below unchanged by this fixture switching to real segments.
         sm->set_size(data_size);
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
         sm->set_num_rows(num_rows);
-        sm->set_sort_key_sample_row_interval(interval);
-        for (int v = min_v + interval; v < max_v; v += interval) {
-            sm->add_sort_key_samples()->CopyFrom(generate_sort_key(v));
-        }
     };
 
     auto verify_per_rowset_conservation = [](const TabletMetadataPB& parent_md, const std::vector<int64_t>& child_ids,
@@ -2153,16 +2169,21 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
     TabletMetadataPB metadata;
     metadata.set_id(tablet_id);
     metadata.set_version(base_version_l0);
-    set_primary_key_schema(&metadata, 1);
+    // The two-column c0/c1 PK schema write_two_column_segment writes with, so the segments below
+    // open and decode with the tablet's own schema. A valid, non-zero schema id is also required:
+    // build_segments_from_rowsets only opens a rowset's segment files when its schema resolves to a
+    // valid registered id.
+    set_two_column_pk_schema(&metadata, /*schema_id=*/1);
     add_historical_schema(&metadata, 1);
 
-    // 2 rowsets covering [0,1499] with samples every 100 rows. Combined ~2000
-    // rows / 16000 bytes / 42 dels. Sample density gives every ~100 keys a
-    // boundary candidate, plenty to drive 3 levels of splitting.
-    add_sampled_rowset(&metadata, /*rs_id=*/2, /*min=*/0, /*max=*/999, /*num_rows=*/1000,
-                       /*data_size=*/10000, /*num_dels=*/30, /*interval=*/100);
-    add_sampled_rowset(&metadata, /*rs_id=*/3, /*min=*/500, /*max=*/1499, /*num_rows=*/1000,
-                       /*data_size=*/6000, /*num_dels=*/12, /*interval=*/100);
+    // 2 rowsets covering [0,1499]. Combined ~2000 rows / 16000 bytes / 42 dels. At the writer's
+    // BE_TEST block size of 100 rows, each 1000-row segment offers 9 short-key-index entries, so
+    // the sampler places a boundary candidate every ~100 keys -- plenty to drive 3 levels of
+    // splitting.
+    add_sampled_rowset(&metadata, tablet_id, /*rs_id=*/2, /*min=*/0, /*max=*/999, /*num_rows=*/1000,
+                       /*data_size=*/10000, /*num_dels=*/30);
+    add_sampled_rowset(&metadata, tablet_id, /*rs_id=*/3, /*min=*/500, /*max=*/1499, /*num_rows=*/1000,
+                       /*data_size=*/6000, /*num_dels=*/12);
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
