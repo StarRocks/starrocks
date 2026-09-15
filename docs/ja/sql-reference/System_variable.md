@@ -772,6 +772,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: boolean
 * **導入バージョン**: v3.2.0
 
+### enable_olap_incremental_scan_ranges
+
+* **説明**: クラウドネイティブテーブルの OLAP スキャンの Scan Range を、デプロイ時に一括ではなく、実行中のフラグメントインスタンスへバッチ（増分）で配信するかどうか。バッチサイズは `connector_incremental_scan_ranges_size` を再利用します。共有データクラスタで、Colocate・Bucket Shuffle・Replicated Join を含まない単純スキャンに対してのみ有効です。外部（コネクタ）スキャンの同じ動作を制御する `enable_connector_incremental_scan_ranges` とは独立しています。
+* **デフォルト**: false
+* **導入バージョン**: -
+
 ### enable_parallel_merge
 
 * **説明**: ソートの Parallel Merge を有効にするかどうか。この機能を有効にすると、ソートのマージフェーズでマージ操作に複数のスレッドが使用されます。
