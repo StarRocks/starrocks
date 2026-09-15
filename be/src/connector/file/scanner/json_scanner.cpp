@@ -33,6 +33,8 @@
 #include "connector/file/scanner/stream_source_meta.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "formats/json/json_parser.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
@@ -67,6 +69,7 @@ Status JsonScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
     RETURN_IF_ERROR(_construct_json_types());
     RETURN_IF_ERROR(_construct_cast_exprs());
+    RETURN_IF_ERROR(_construct_default_exprs_for_absent_key());
 
     if (_scan_range.ranges.empty()) {
         return Status::OK();
@@ -126,6 +129,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
 }
 
 void JsonScanner::close() {
+    ExprExecutor::close(_default_expr_ctxs, _state);
     FileScanner::close();
 }
 
@@ -172,6 +176,68 @@ Status JsonScanner::_construct_cast_exprs() {
         }
 
         _cast_exprs[column_pos] = cast;
+    }
+
+    return Status::OK();
+}
+
+// A column named in the load's column list normally stores NULL when a row has no key for it,
+// which overrides whatever DEFAULT the column declares. When the load asked for the other
+// behavior, the FE sends that column's default expression and it is evaluated here instead.
+//
+// The value has to land in the source chunk column, whose type is the JSON reading type and not
+// the table's type, so a DATETIME default has to arrive as text exactly as a parsed key would.
+// The same cast machinery the scanner already uses for that mapping does the conversion.
+Status JsonScanner::_construct_default_exprs_for_absent_key() {
+    if (_params.default_expr_of_src_slot.empty()) {
+        return Status::OK();
+    }
+
+    size_t slot_size = _src_slot_descriptors.size();
+    for (size_t column_pos = 0; column_pos < slot_size; ++column_pos) {
+        auto slot_desc = _src_slot_descriptors[column_pos];
+        if (slot_desc == nullptr) {
+            continue;
+        }
+        auto it = _params.default_expr_of_src_slot.find(slot_desc->id());
+        if (it == _params.default_expr_of_src_slot.end()) {
+            continue;
+        }
+
+        ExprContext* ctx = nullptr;
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_state->obj_pool(), it->second, &ctx, _state));
+        if (ctx == nullptr || ctx->root() == nullptr) {
+            // An empty expression tree yields no context. This FE never sends one, but a malformed
+            // plan should leave the column at today's NULL rather than crash the BE.
+            continue;
+        }
+
+        Expr* root = ctx->root();
+        const TypeDescriptor& to_type = _json_types[column_pos];
+        if (!to_type.is_assignable(root->type())) {
+            Expr* cast = VectorizedCastExprFactory::from_type(root->type(), to_type, root, &_pool);
+            if (cast == nullptr) {
+                return Status::InternalError(strings::Substitute(
+                        "Not support cast the default value of column $0 from STARROCKS($1) to STARROCKS($2).",
+                        slot_desc->col_name(), root->type().debug_string(), to_type.debug_string()));
+            }
+            ctx = _pool.add(new ExprContext(cast));
+        }
+        RETURN_IF_ERROR(ctx->prepare(_state));
+        RETURN_IF_ERROR(ctx->open(_state));
+        _default_expr_ctxs.emplace_back(ctx);
+
+        DefaultOnAbsent entry;
+        entry.ctx = ctx;
+        if (ctx->root()->is_constant()) {
+            // Evaluate once and keep the one row result. The fill runs inside the row loop, so a
+            // per row evaluation would allocate a chunk and a column for every absent key, and the
+            // motivating workload has most columns absent on most rows. Only uuid() and
+            // uuid_numeric() report themselves as not constant, and those are the ones that have
+            // to vary per row anyway.
+            ASSIGN_OR_RETURN(entry.constant_value, ctx->evaluate(nullptr));
+        }
+        _default_expr_for_absent_key.emplace(slot_desc->id(), std::move(entry));
     }
 
     return Status::OK();
@@ -283,6 +349,50 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
     return cast_chunk;
 }
 
+// Writes this column's default when the row had no key for it, and a null when the column has no
+// default registered, which is every column unless the load asked otherwise.
+//
+// A constant default was evaluated once at open. Anything else, which in practice means uuid() and
+// uuid_numeric(), is evaluated here per absent key, because those have to differ per row. A
+// default that does not convert into the column's type evaluates to null, which in a non strict
+// load leaves today's behavior in place; a strict load rejects the row, the same as it would for a
+// value that failed to convert.
+//
+// The source chunk holds adaptive nullable columns while a chunk is being read, and they are only
+// materialized afterwards, so the fill has to go through a method the adaptive column overrides.
+// append_datum is one; writing straight to the underlying data and null columns is not, and it
+// skips the adaptive size bookkeeping, which slides later values onto the wrong rows.
+Status JsonReader::_fill_default_or_null(SlotId slot_id, Column* column) {
+    if (_default_expr_for_absent_key == nullptr) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+    auto it = _default_expr_for_absent_key->find(slot_id);
+    if (it == _default_expr_for_absent_key->end()) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+
+    const ColumnPtr& cached = it->second.constant_value;
+    if (cached != nullptr) {
+        if (cached->empty()) {
+            column->append_nulls(1);
+        } else {
+            column->append_datum(cached->get(0));
+        }
+        return Status::OK();
+    }
+
+    // Evaluating against no chunk yields exactly one value, which is the one row being filled.
+    ASSIGN_OR_RETURN(ColumnPtr value, it->second.ctx->evaluate(nullptr));
+    if (value == nullptr || value->empty()) {
+        column->append_nulls(1);
+        return Status::OK();
+    }
+    column->append_datum(value->get(0));
+    return Status::OK();
+}
+
 JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner,
                        std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs,
                        std::vector<TypeDescriptor> type_descs, const TBrokerRangeDesc& range_desc)
@@ -296,6 +406,7 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _range_desc(range_desc),
           _envelope_type(range_desc.__isset.envelope ? range_desc.envelope : TEnvelopeType::NONE) {
     _meta_col_by_slot_id = build_stream_source_meta_columns(_scanner->_scan_range.params.stream_source_meta_columns);
+    _default_expr_for_absent_key = &_scanner->_default_expr_for_absent_key;
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
         const auto& desc = _slot_descs[i];
@@ -307,6 +418,7 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
         } else if (auto m = _meta_col_by_slot_id.find(desc->id()); m != _meta_col_by_slot_id.end()) {
             _meta_col_by_index.emplace(index, m->second);
         }
+        _dense_index_to_slot_id.push_back(desc->id());
         index++;
         _slot_desc_dict.emplace(desc->col_name(), desc);
         _type_desc_dict.emplace(desc->col_name(), _type_descs[i]);
@@ -626,6 +738,8 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             } else if (auto it = _meta_col_by_index.find(i); it != _meta_col_by_index.end()) {
                 // Fill from meta (NULL when the buffer carries none).
                 RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, meta, column));
+            } else if (i < static_cast<int>(_dense_index_to_slot_id.size())) {
+                RETURN_IF_ERROR(_fill_default_or_null(_dense_index_to_slot_id[i], column));
             } else {
                 column->append_nulls(1);
             }
@@ -666,6 +780,9 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         }
         size_t jp = i - meta_count;
         if (jp >= jsonpath_size) {
+            // Fewer jsonpaths than slots is a property of the load, not of this row, so this column
+            // is absent from every row. Filling a default here would turn it into a constant column
+            // for the whole load, which is not what "this row had no key" means.
             if (column_name.compare("__op") == 0) {
                 // special treatment for __op column, fill default value rather than null.
                 // For Debezium CDC format, use the op from the CDC envelope.
@@ -712,6 +829,10 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                         column->append_datum(Datum(op_val));
                     }
                 } else {
+                    // Deliberately not filled from the column's DEFAULT. extract_from_object
+                    // reports a key that is present with a null value and a key that is absent as
+                    // the same not found status, so filling here would overwrite an explicitly
+                    // supplied null, which is the one thing this option must never do.
                     column->append_nulls(1);
                 }
             } else {
