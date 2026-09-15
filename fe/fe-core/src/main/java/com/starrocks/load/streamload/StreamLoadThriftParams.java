@@ -198,4 +198,10 @@ public class StreamLoadThriftParams implements StreamLoadParams {
     public Optional<TEnvelopeType> getEnvelope() throws StarRocksException {
         return request.isSetEnvelope() ? Optional.of(request.getEnvelope()) : Optional.empty();
     }
+
+    @Override
+    public Optional<Boolean> getFillDefaultOnAbsentKey() {
+        return request.isSetFill_default_on_absent_key()
+                ? Optional.of(request.isFill_default_on_absent_key()) : Optional.empty();
+    }
 }
