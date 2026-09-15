@@ -272,7 +272,10 @@ public enum ScalarOperatorEvaluator {
                 FunctionSet.TO_DATETIME
         );
 
-        if (SUPPORTED.contains(invoker.getSignature().getName().toLowerCase()) && operator.getChildren().size() == 2) {
+        // The format is the second argument for every name in SUPPORTED. from_unixtime() also takes a
+        // third -- the time zone -- and the format still has to be checked there: a three-argument
+        // call used to skip this block entirely and come out monotonic whatever its format said.
+        if (SUPPORTED.contains(invoker.getSignature().getName().toLowerCase()) && operator.getChildren().size() >= 2) {
             String pattern = operator.getChild(1).toString();
             if (pattern.isEmpty()) {
                 return true;
