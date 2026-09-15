@@ -49,6 +49,7 @@ import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.common.AIProviderBindings;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.type.IntegerType;
@@ -453,7 +454,7 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             job.setTmpPartitionIds(temporaryPartitionIds);
             job.setSourcePartitionNames(sourcePartitionNames);
             this.runner = new InsertOverwriteJobRunner(job, context, mock(StmtExecutor.class),
-                    new Estimates(ESTIMATED_BYTES, ESTIMATED_ROWS));
+                    new Estimates(ESTIMATED_BYTES, ESTIMATED_ROWS), AIProviderBindings.EMPTY);
         }
 
         /**

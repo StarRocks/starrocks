@@ -9,7 +9,7 @@ Registers an external AI service provider in the cluster. A single, unified AI-p
 holds providers of different **types** and keeps one default **per type**:
 
 - `embedding` — OpenAI-compatible `/v1/embeddings` endpoint, used by the semantic-context module to
-  embed `CONTEXT UPSERT` content and `query_text` searches.
+  embed `CONTEXT UPSERT` content and `query_text` searches, and by [ai_custom_embedding](../../../sql-functions/scalar-functions/ai_custom_functions.md).
 - `rerank` — Cohere-compatible `/rerank` endpoint (Cohere / Jina / Voyage / OpenRouter / local TEI),
   used by the optional cross-encoder second phase of `/api/context/search`.
 - `chat` — chat / completion endpoint (OpenAI Chat Completions or Anthropic Messages).
@@ -17,6 +17,8 @@ holds providers of different **types** and keeps one default **per type**:
 Each provider also declares the wire **protocol** its endpoint speaks via the `protocol` property.
 When omitted it defaults to the protocol the type implies: `openai` for `embedding` and `chat`,
 `cohere` for `rerank`.
+
+[ai_custom_query](../../../sql-functions/scalar-functions/ai_custom_functions.md) and [ai_custom_embedding](../../../sql-functions/scalar-functions/ai_custom_functions.md) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
 
 The provider object — including the `api_key` property — is persisted on the FE metadata journal and
 image, so cluster restarts and upgrades retain the credential. There is no `fe.conf` knob for these

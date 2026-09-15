@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.common.AIProviderBindings;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
@@ -120,6 +121,8 @@ public class InsertOverwriteJobRunner {
     // without sampling reads no data, so it has no sample to learn the input size from and takes it
     // from here.
     private final Estimates outputEstimates;
+    // Keep the statement's original Provider snapshot when replanning for temporary partitions.
+    private final AIProviderBindings aiProviderBindings;
 
     // execution stat
     private long createPartitionElapse;
@@ -131,11 +134,11 @@ public class InsertOverwriteJobRunner {
     private static final long COMMIT_TABLE_STATE_POLL_INTERVAL_MS = 500L;
 
     public InsertOverwriteJobRunner(InsertOverwriteJob job, ConnectContext context, StmtExecutor stmtExecutor) {
-        this(job, context, stmtExecutor, Estimates.ZERO);
+        this(job, context, stmtExecutor, Estimates.ZERO, AIProviderBindings.EMPTY);
     }
 
     public InsertOverwriteJobRunner(InsertOverwriteJob job, ConnectContext context, StmtExecutor stmtExecutor,
-                                    Estimates outputEstimates) {
+                                    Estimates outputEstimates, AIProviderBindings aiProviderBindings) {
         this.job = job;
         this.context = context;
         this.stmtExecutor = stmtExecutor;
@@ -144,6 +147,7 @@ public class InsertOverwriteJobRunner {
         this.tableId = job.getTargetTableId();
         this.postfix = "_" + job.getJobId();
         this.outputEstimates = outputEstimates;
+        this.aiProviderBindings = aiProviderBindings;
         this.createPartitionElapse = 0;
         this.insertElapse = 0;
     }
@@ -156,6 +160,7 @@ public class InsertOverwriteJobRunner {
         this.postfix = "_" + job.getJobId();
         // Replay has no plan to estimate from, and it never loads data, so there is nothing to size.
         this.outputEstimates = Estimates.ZERO;
+        this.aiProviderBindings = AIProviderBindings.EMPTY;
         this.createPartitionElapse = 0;
         this.insertElapse = 0;
     }
@@ -475,7 +480,7 @@ public class InsertOverwriteJobRunner {
             if (job.isDynamicOverwrite() && job.getTxnId() > 0) {
                 insertStmt.setTxnId(job.getTxnId());
             }
-            ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
+            ExecPlan newPlan = StatementPlanner.plan(insertStmt, context, aiProviderBindings);
             // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
             // InsertOverwriteJobRunner.
             // InsertOverWriteJob is executed as below:

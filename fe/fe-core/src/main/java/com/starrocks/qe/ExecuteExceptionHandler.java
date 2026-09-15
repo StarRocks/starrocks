@@ -306,7 +306,8 @@ public class ExecuteExceptionHandler {
 
     private static void rebuildExecPlan(Exception e, RetryContext context) throws Exception {
         try {
-            context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
+            context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext,
+                    context.execPlan.getAIProviderBindings());
         } catch (Exception e1) {
             // encounter exception when re-plan, just log the new error but throw the original cause.
             if (LOG.isDebugEnabled()) {

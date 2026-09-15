@@ -89,7 +89,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a fragment, or control characters. When the port is omitted, HTTPS uses its default port. An explicitly specified port must be in the range 1 through 65535. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
+- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a query string, a fragment, or control characters. When the port is omitted, HTTPS uses its default port. An explicitly specified port must be in the range 1 through 65535. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
 - Introduced in: -
 
 ### `ai_default_chat_model`
@@ -109,6 +109,34 @@ This topic introduces the following types of FE configurations:
 - Valid values: `openai_compatible`
 - Is mutable: Yes
 - Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible`; an empty value or any additional characters, including control characters, cause analysis to fail. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Introduced in: -
+
+### `ai_default_embedding_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Complete HTTPS POST URL for SYSTEM `ai_embed` calls. Required independently of the chat endpoint. It must contain a host, with no user information, query string, fragment, or control characters; an explicit port must be 1 through 65535. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot. Every executing BE must bind `AI_FUNCTION_EMBEDDING_ENDPOINT` to exactly this URL and provision `AI_FUNCTION_EMBEDDING_API_KEY` locally. Changing either BE environment variable requires restarting that BE. Credentials are not FE configuration and are not sent in plans. See [ai_embed](../../../sql-reference/sql-functions/scalar-functions/ai_embed.md).
+- Introduced in: -
+
+### `ai_default_embedding_model`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Default model for SYSTEM `ai_embed` calls without an explicit model. Must be nonblank for those calls and must not contain C0 control characters or DEL. It may remain empty when every embedding call supplies a model. There is no fallback to the chat default model. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
+- Introduced in: -
+
+### `ai_default_embedding_provider`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Valid values: `openai_compatible`
+- Is mutable: Yes
+- Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible`; the empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
 - Introduced in: -
 
 ### `brpc_send_plan_fragment_timeout_ms`

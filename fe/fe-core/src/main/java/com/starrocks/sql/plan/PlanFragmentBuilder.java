@@ -148,6 +148,7 @@ import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.common.AIProviderBindings;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -288,8 +289,17 @@ public class PlanFragmentBuilder {
                                               List<String> colNames,
                                               TResultSinkType resultSinkType,
                                               boolean hasOutputFragment, boolean isShortCircuit) {
+        return createPhysicalPlan(plan, connectContext, outputColumns, columnRefFactory, colNames, resultSinkType,
+                hasOutputFragment, isShortCircuit, AIProviderBindings.EMPTY);
+    }
+
+    public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
+                                              List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
+                                              List<String> colNames, TResultSinkType resultSinkType,
+                                              boolean hasOutputFragment, boolean isShortCircuit,
+                                              AIProviderBindings aiProviderBindings) {
         UKFKConstraintsCollector.collectColumnConstraints(plan);
-        ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns, isShortCircuit);
+        ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns, isShortCircuit, aiProviderBindings);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
                 outputColumns, hasOutputFragment);
         execPlan.setPlanCount(plan.getPlanCount());
@@ -751,7 +761,7 @@ public class PlanFragmentBuilder {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperatorMap.entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
-                                commonSubOperatorMap));
+                                commonSubOperatorMap, context.getAIProviderBindings()));
 
                 commonExprMap.put(new SlotId(entry.getKey().getId()), expr);
 
@@ -766,7 +776,8 @@ public class PlanFragmentBuilder {
             Map<SlotId, Expr> projectMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), columnRefMap));
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), columnRefMap,
+                                context.getAIProviderBindings()));
 
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
 
@@ -783,7 +794,7 @@ public class PlanFragmentBuilder {
             if (aiProject) {
                 projectNode = new AIProjectNode(context.getNextNodeId(), tupleDescriptor,
                         inputFragment.getPlanRoot(), projectMap, commonExprMap,
-                        context.getOrCreateSystemChatConfig());
+                        context.getOrCreateAIModelConfigs(projectMap.values()));
             } else {
                 projectNode = new ProjectNode(context.getNextNodeId(), tupleDescriptor,
                         inputFragment.getPlanRoot(), projectMap, commonExprMap);

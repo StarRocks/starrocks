@@ -1609,10 +1609,20 @@ struct TAIEndpointConfig {
   1: optional string endpoint
   2: optional string model
   3: optional string provider
+  // Field 4 is reserved for a discarded pre-release protocol.
+  5: optional string api_key
+  6: optional i64 timeout_ms
+  7: optional i32 dimensions
 }
 
 struct TAIModelConfiguration {
   1: optional TAIEndpointConfig chat
+  2: optional TAIEndpointConfig text_embedding
+  // Missing source is accepted only for legacy SYSTEM configurations.
+  3: optional Types.TAIModelSource source
+  // Field 4 is reserved for a discarded pre-release protocol.
+  // Stable UUID from the FE Provider registry; required for PROVIDER configurations.
+  5: optional string provider_id
 }
 
 struct TAIProjectNode {

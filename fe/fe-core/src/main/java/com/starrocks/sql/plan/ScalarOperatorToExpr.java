@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.sql.common.AIProviderBindings;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
@@ -130,16 +131,23 @@ public class ScalarOperatorToExpr {
     public static class FormatterContext {
         private final Map<ColumnRefOperator, Expr> colRefToExpr;
         private final Map<ColumnRefOperator, ScalarOperator> projectOperatorMap;
+        private final AIProviderBindings aiProviderBindings;
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef) {
-            this.colRefToExpr = variableToSlotRef;
-            this.projectOperatorMap = new HashMap<>();
+            this(variableToSlotRef, new HashMap<>(), AIProviderBindings.EMPTY);
         }
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef,
                                 Map<ColumnRefOperator, ScalarOperator> projectOperatorMap) {
+            this(variableToSlotRef, projectOperatorMap, AIProviderBindings.EMPTY);
+        }
+
+        public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef,
+                                Map<ColumnRefOperator, ScalarOperator> projectOperatorMap,
+                                AIProviderBindings aiProviderBindings) {
             this.colRefToExpr = variableToSlotRef;
             this.projectOperatorMap = projectOperatorMap;
+            this.aiProviderBindings = aiProviderBindings;
         }
     }
 
@@ -573,7 +581,7 @@ public class ScalarOperatorToExpr {
                     } else if (call.getFunction().isAi()) {
                         callExpr = new FunctionCallExpr(call.getFnName(),
                                 new FunctionParams(call.isDistinct(), arg),
-                                AIModelConfigs.SYSTEM_CHAT_CONFIG_ID);
+                                AIModelConfigs.configId(call.getFunction(), arg, context.aiProviderBindings));
                     } else {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }

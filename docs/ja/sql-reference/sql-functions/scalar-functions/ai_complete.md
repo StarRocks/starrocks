@@ -129,6 +129,10 @@ NULL プロンプトはプロバイダーリクエストを送信しません。
 SELECT ai_complete(CAST(NULL AS VARCHAR)) AS answer;
 ```
 
+## 関連する関数
+
+タスク別のチャット補助関数は [AI テキスト関数](ai_functions.md)、テキスト埋め込みは [ai_embed](ai_embed.md)、登録済みプロバイダーによる呼び出しは [AI プロバイダー関数](ai_custom_functions.md)を参照してください。既存の `ai_complete` の 4 つの形式と SYSTEM チャットルーティングは変更されません。デフォルト AI プロバイダーを設定しても `ai_complete` のルーティングは変わらず、明示的な `model` 引数はリモートモデル名を選択します。
+
 ## キーワード
 
 AI_COMPLETE, AI, LLM

@@ -72,6 +72,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -100,6 +101,16 @@ public class AIProjectPlanTest extends PlanTestBase {
         Config.ai_default_chat_endpoint = oldEndpoint;
         Config.ai_default_chat_model = oldModel;
         Config.ai_default_chat_provider = oldProvider;
+    }
+
+    @Test
+    public void testAITranslateNullSourceLanguagePreservesInvocation() throws Exception {
+        for (String arguments : List.of("'hello', NULL, 'zh'", "'explicit-model', 'hello', NULL, 'zh'")) {
+            ExecPlan plan = getExecPlan("select ai_translate(" + arguments + ")");
+            TAIProjectNode node = findOnlyAIProjectThriftNode(plan).getAi_project_node();
+            Assertions.assertEquals("ai_translate",
+                    findOnlyAIExpression(node.getSlot_map()).getNodes().get(0).getFn().getName().getFunction_name());
+        }
     }
 
     @Test
@@ -248,6 +259,33 @@ public class AIProjectPlanTest extends PlanTestBase {
             Config.ai_default_chat_model = configuredModel;
             Config.ai_default_chat_provider = configuredProvider;
         }
+    }
+
+    @Test
+    public void testOrdinaryPlansDoNotAllocateAIModelConfigurationCache() throws Exception {
+        Field cache = ExecPlan.class.getDeclaredField("aiModelConfigs");
+        cache.setAccessible(true);
+        Assertions.assertNull(cache.get(new ExecPlan()));
+        Assertions.assertNull(cache.get(getExecPlan("select 1")));
+        Assertions.assertNull(cache.get(getExecPlan("select k1 from t7")));
+    }
+
+    @Test
+    public void testAIPlansInitializeAndRetainModelConfigurationCache() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_complete(k1) from t7");
+        Field cache = ExecPlan.class.getDeclaredField("aiModelConfigs");
+        cache.setAccessible(true);
+        Object capturedCache = cache.get(plan);
+        Assertions.assertNotNull(capturedCache);
+
+        AIProjectNode node = findOnlyAIProjectNode(plan);
+        Map<String, AIModelConfigs.ModelConfig> first = plan.getOrCreateAIModelConfigs(node.getSlotMap().values());
+        Map<String, AIModelConfigs.ModelConfig> second = plan.getOrCreateAIModelConfigs(node.getSlotMap().values());
+        Assertions.assertSame(capturedCache, cache.get(plan));
+        Assertions.assertEquals(Set.of(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID), first.keySet());
+        Assertions.assertSame(first.get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID),
+                second.get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID));
+        Assertions.assertThrows(UnsupportedOperationException.class, first::clear);
     }
 
     @Test

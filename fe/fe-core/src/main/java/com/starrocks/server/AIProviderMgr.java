@@ -36,6 +36,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -140,6 +141,20 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
     public AIProvider getProvider(String name) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return getProviderByNameNoLock(name);
+        }
+    }
+
+    /** Captures one consistent, detached metadata snapshot for a query's named providers. */
+    public Map<String, AIProvider> getProvidersByNames(Collection<String> names) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            Map<String, AIProvider> providers = new HashMap<>();
+            for (String name : names) {
+                AIProvider provider = getProviderByNameNoLock(name);
+                if (provider != null) {
+                    providers.put(name, new AIProvider(provider));
+                }
+            }
+            return providers;
         }
     }
 
