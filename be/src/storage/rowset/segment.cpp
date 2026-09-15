@@ -400,8 +400,9 @@ Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
 
         Status st = _load_index(lake_io_opts);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(),
-                                     _short_key_index_mem_usage());
+            const auto index_mem_usage = _short_key_index_mem_usage();
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), index_mem_usage);
+            _loaded_key_index_mem_usage.store(index_mem_usage, std::memory_order_relaxed);
             update_cache_size();
         } else {
             _reset();
@@ -560,6 +561,7 @@ Status Segment::_load_full_sort_key_index() {
     _full_sk_index_decoder = std::move(decoder);
     int64_t full_index_mem = _full_sk_index_handle.mem_usage() + _full_sk_index_decoder->mem_usage();
     MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), full_index_mem);
+    _loaded_key_index_mem_usage.fetch_add(full_index_mem, std::memory_order_relaxed);
     update_cache_size();
     return Status::OK();
 }
@@ -841,8 +843,7 @@ void Segment::turn_off_batch_update_cache_size() {
                 // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
                 // their cache entries would never get the post-open memory cost, defeating
                 // metacache capacity control.
-                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
-                                                           reinterpret_cast<intptr_t>(this));
+                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
             }
         }
     }
@@ -853,12 +854,14 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
-                                                       reinterpret_cast<intptr_t>(this));
+            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);
         }
+    } else {
+        // Only used by share-nothing rowsets. The last reader release consumes this flag.
+        _lazy_mem_update.store(true, std::memory_order_release);
     }
 }
 
@@ -867,7 +870,8 @@ size_t Segment::mem_usage() const {
         // just report the basic info memory usage if not opened yet
         return _basic_info_mem_usage();
     }
-    return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
+    return _basic_info_mem_usage() + _loaded_key_index_mem_usage.load(std::memory_order_relaxed) +
+           _column_index_mem_usage();
 }
 
 StatusOr<int64_t> Segment::get_data_size() const {

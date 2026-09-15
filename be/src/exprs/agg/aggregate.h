@@ -190,6 +190,16 @@ public:
     // this information should be updated as well.
     virtual void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const {}
 
+    // For window functions evaluated in streaming mode whose look-back is bounded but data-dependent.
+    // Returns the earliest input row position, in the analytor's local column coordinates, that this function may still
+    // read for subsequent rows. The analytor may evict any buffered row strictly before the minimum such position across
+    // all its functions.
+    // Returns std::nullopt when the function imposes no retention requirement beyond the operator's frame-based bound.
+    virtual std::optional<int64_t> get_min_retained_position(FunctionContext* ctx,
+                                                             ConstAggDataPtr __restrict state) const {
+        return std::nullopt;
+    }
+
     virtual std::string get_name() const = 0;
 
     // State management methods:

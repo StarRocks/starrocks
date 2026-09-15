@@ -16,6 +16,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
@@ -84,7 +85,7 @@ public class InsertOverwriteJobManagerTest {
         insertOverwriteJobManager.deregisterOverwriteJob(1100L);
         Assertions.assertEquals(0, insertOverwriteJobManager.getJobNum());
 
-        insertOverwriteJobManager.executeJob(context, stmtExecutor, insertOverwriteJob);
+        insertOverwriteJobManager.executeJob(context, stmtExecutor, insertOverwriteJob, Estimates.ZERO);
 
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob);
         Assertions.assertEquals(1, insertOverwriteJobManager.getJobNum());

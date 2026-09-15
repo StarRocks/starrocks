@@ -92,6 +92,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当为 true 时，生成的 Log4j2 配置会将 ".gz" 后缀附加到轮转的审计日志文件名 (fe.audit.log.*) 中，以便 Log4j2 在轮转时生成压缩的 (.gz) 归档审计日志文件。此设置在 FE 启动期间在 Log4jConfig.initLogging 中读取，并应用于审计日志的 RollingFile appender；它仅影响轮转/归档文件，而不影响活动审计日志。由于该值在启动时初始化，因此更改它需要重启 FE 才能生效。与审计日志轮转设置 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) 一起使用。
 - 引入版本: 3.2.12
 
+### `audit_log_error_message_max_length`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: 字符
+- 是否可变: Yes
+- 描述: 语句执行失败时，审计日志中 `ErrorMessage` 字段记录的最大长度，按 UTF-16 code unit 计算，因此基本多文种平面之外的字符（例如 emoji）按两个计。超长的错误信息会被截断，并追加 `... /* truncated, audit_log_error_message_max_length=<value> */`，该后缀本身不计入上限。设置为 `0` 表示不再记录错误信息，此时审计记录中不会出现该字段。当 `enable_sql_desensitize_in_log` 为 `true`，或 `enable_audit_sql` 为 `false` 时，同样不记录错误信息，因为错误信息会引用导致语句失败的具体值和出错的 token。
+- 引入版本: 4.2.0
+
 ### `audit_log_json_format`
 
 - 默认值: false
@@ -1518,11 +1527,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_collect_partition_access_time`
 
-- 默认值: true
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否采集并展示每个分区的 `LAST_ACCESS_TIME`（分区最近一次被用户查询扫描的时间），展示在 `SHOW PARTITIONS` 和 `information_schema.partitions_meta` 中。禁用后，访问时间既不会被记录，也不会跨 FE 聚合，`LAST_ACCESS_TIME` 列显示为 `NULL`。此项不影响 `LAST_UPDATE_TIME`。
+- 引入版本: v4.2.0
+
+### `partition_access_time_flush_interval_sec`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 每个 FE 将各自采集到的每个分区的 `LAST_ACCESS_TIME` 刷新到内部表 `_statistics_.partition_access_time` 的时间间隔，用于在 FE 重启或 Failover 后保证数据持久化。仅当 `enable_collect_partition_access_time` 为 `true` 时生效。
 - 引入版本: v4.2.0
 
 ### `enable_show_materialized_views_include_all_task_runs`
@@ -1677,6 +1695,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: Follower 和 Observer FE 上的元数据可以比 Leader FE 上的元数据落后最长时间。单位：秒。如果超过此持续时间，非 Leader FE 将停止提供服务。
 - 引入版本: -
+
+### `meta_freshness_check_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Follower 和 Observer FE 重新判断自身元数据是否仍足够新、能否继续提供读服务的时间间隔，判断标准见 `meta_delay_toleration_second`。取值会被限制在 [10, 5000] 范围内。该检查运行在独立线程上，而不是元数据回放线程上，因此当某条日志回放耗时很久时（例如回放操作正在等待数据库锁），节点仍能及时停止用陈旧的元数据提供服务。
+- 引入版本: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- 默认值: 30
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单条元数据日志的回放耗时超过该值时，会在 **fe.log** 中记录一条回放卡住的日志，并附带回放线程的堆栈，便于定位阻塞元数据回放的原因。设置为 `0` 表示关闭该日志。
+- 引入版本: v4.2
 
 ### `meta_dir`
 

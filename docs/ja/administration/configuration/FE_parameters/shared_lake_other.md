@@ -150,6 +150,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Data Lake Storage Gen2 アカウントのエンドポイント。例: `https://test.dfs.core.windows.net`。
 - 導入時期：v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- デフォルト：Empty string
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID の OAuth 2.0 トークンエンドポイント。v3.5.19、v4.0.12、v4.1.2 より前は、この項目は `azure_adls2_oauth2_oauth2_client_endpoint` という名前でした。旧名称は現在もエイリアスとして受け付けられます。
+- 導入時期：v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - デフォルト：Empty string
@@ -249,6 +258,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Blob Storage にアクセスするためにネイティブ SDK を使用するかどうか。これにより、マネージド ID およびサービスプリンシパルでの認証が可能になります。この項目が `false` に設定されている場合、共有キーと SAS トークンでの認証のみが許可されます。
 - 導入時期：v3.4.4
 
+### `s3_use_native_sdk_for_glob`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：S3 および S3 互換オブジェクトストア (`s3`、`s3a`、`s3n`、`oss`、`cosn`、`ks3`、`obs`、`tos`) について、FILES() テーブル関数内の glob パスの解決にネイティブ AWS S3 SDK を使用するかどうか。この項目が `true` に設定されている場合、ワイルドカードの最長リテラルプレフィックスが S3 `ListObjectsV2` にプッシュダウンされ、Hadoop `globStatus` で親プレフィックス全体を列挙する必要がなくなります。プレフィックス配下のオブジェクトが多く、一致するものが少ない場合はこちらのほうが大幅に高速です。`false` に設定すると Hadoop `globStatus` の経路にフォールバックします。
+- 導入時期：v4.1.4
+
 ### `cloud_native_hdfs_url`
 
 - デフォルト：Empty string
@@ -293,6 +311,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：StarRocks が FE 設定ファイルで指定されたオブジェクトストレージ関連プロパティを使用して、組み込みストレージボリュームを作成することを許可するかどうか。デフォルト値は v3.4.1 以降 `true` から `false` に変更されました。
 - 導入時期：v3.1.0
+
+### `failpoint_pause_timeout_second`
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: はい
+- 説明: failpoint の一時停止 (pause) モードのフォールバックタイムアウト。`ADMIN ENABLE FAILPOINT ... WITH PAUSE` で一時停止したスレッドは、`ADMIN DISABLE FAILPOINT` が実行されなくてもこの秒数の経過後に自動的に再開し、その failpoint は解除されます。これにより、解除し忘れてもノードの再起動が必要になることはありません。1 未満の値は 1 に丸められます。この値は failpoint を有効化するリクエストとともに BE/CN にも送信されるため、FE と BE の一時停止は同じタイムアウトを共有します。障害注入テスト専用です。FE は `--failpoint` を付けて起動する必要があり、BE 側の failpoint にはさらに `ENABLE_FAULT_INJECTION=ON` でコンパイルした BE が必要です。
+- 導入バージョン: v4.2.0
 
 ### `gcp_gcs_impersonation_service_account`
 
@@ -356,6 +383,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：HdfsFsManager が管理する未使用のキャッシュ HDFS/ObjectStore FileSystem の Time-to-live (秒単位)。FileSystemExpirationChecker (60 秒ごとに実行) はこの値を使用して各 HdfsFs.isExpired(...) を呼び出します。期限切れになるとマネージャーは基盤となる FileSystem を閉じ、キャッシュから削除します。アクセサーメソッド (例: `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`) は最終アクセス時刻を更新するため、有効期限は非アクティブに基づいています。値が小さいとアイドルリソースの保持は減りますが、再オープンオーバーヘッドが増加します。値が大きいとハンドルが長く保持され、より多くのリソースを消費する可能性があります。
 - 導入時期：v3.2.0
+
+### `enable_lake_add_index_fast_path`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データテーブルに対する ADD INDEX および DROP INDEX の変更を、シャドウインデックスを作成しないメタデータのみの高速パスで処理するかどうか。`false` に設定すると、通常のスキーマ変更の経路にフォールバックします。この項目はセーフティバルブとして用意されており、高速パスがサポートされるデフォルトです。
 
 ### `lake_autovacuum_grace_period_minutes`
 
@@ -570,6 +605,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - Description:
 - 導入時期：-
+
+### `lake_scheduler_enable_colocate_group_sample`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：tablet スケジューラが大規模な colocate group のレプリカ分布を、group 内の全 tablet を走査する代わりに tablet のサンプリングによって推定するかどうか。colocate group に属する tablet をスケジュールする際、スケジューラは新しいレプリカの配置先を決めるために group 全体に対して Compute Node ごとのレプリカヒストグラムを構築します。数万個の tablet を含む group では、この全走査がスケジューリングコストの大部分を占めますが、正常な colocate group は均一に配置されており、その中のどの tablet も同じシグナルを返します。この項目が `true` に設定されている場合、スケジューラは `lake_scheduler_colocate_group_sample_threshold` を超える group について `lake_scheduler_colocate_group_sample_size` 個の tablet をランダムに抽出し、サンプリングした Compute Node ごとの件数を group 全体のサイズに線形にスケールアップします。正常で完全に配置された colocate group は全 tablet が同じ Compute Node 上にあるため、サンプルは真の分布を正確に再現します。リバランス中の group では誤差が生じますが、その誤差は有界であり、最悪でも準最適 (不正ではない) な配置になるだけで、バックグラウンドの tablet バランサーが後から調整します。サンプリングの対象は colocate group のみです。常に全 tablet を走査するには `false` に設定します。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- デフォルト：256
+- タイプ：Int
+- 単位：Count
+- 変更可能：Yes
+- 説明：colocate group がサンプリングの対象になるために超えている必要がある tablet 数。このサイズ以下の group は常に全走査されます。全走査のコストがもともと低く、サンプリングは誤差を増やすだけだからです。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- デフォルト：128
+- タイプ：Int
+- 単位：Count
+- 変更可能：Yes
+- 説明：colocate group が `lake_scheduler_colocate_group_sample_threshold` を超えたときにサンプリングされる tablet の数。サンプル数を増やすとリバランス中で偏った group に対する推定誤差は小さくなりますが、スケジューリング判断ごとのコストが増えるため、配置精度とスケジューリング遅延のトレードオフになります。この値は `lake_scheduler_colocate_group_sample_threshold` より十分に小さく保つべきです。そうでないと全走査に対する削減効果がほとんどなくなります。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- デフォルト：40
+- タイプ：Int
+- 単位：Percent
+- 変更可能：Yes
+- 説明：colocate group サンプリングの密度ガードで、許容される空サンプルの最大割合をパーセントで表します。抽出された tablet が候補 Compute Node 上にレプリカを持たない場合 (まだ配置されていない、またはその Compute Node 上にない場合)、その抽出は空サンプルとみなされます。空サンプルの割合がこのパーセンテージを超える場合、その group は配置が疎すぎてサンプルが真の分布を表せない (group が空の状態から一括で埋められている最中に起こります) ため、スケジューラはサンプルを破棄して全走査にフォールバックします。言い換えると、抽出された tablet の少なくとも (100 - この値)% が候補 Compute Node 上に配置されている場合にのみサンプルが信頼されます。したがって値が小さいほど保守的になり、サンプリングを行うためにより密な group が必要になります。安定して完全に配置された group は空サンプルがほぼ 0% になり、この値にかかわらず常に高速なサンプリング経路を通るため、この項目は一括充填中の過渡期のみを制御します。フォールバックを完全に無効にするには `100` に設定します。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
+### `lake_online_rewrite_partition_retry_timeout_second`
+
+- デフォルト：600
+- タイプ：Int
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：共有データモードの Range 分散テーブルに対するオンライン再書き込みが、あるパーティションの再書き込み `INSERT` の失敗後にそのパーティションを再試行し続ける時間の上限で、これを超えるとジョブ全体をキャンセルします。オンライン再書き込み（Range ソートキーのスキーマ変更、Range ロールアップ、またはマテリアライズドビューのソートキー再書き込み）は Alter スケジューラの 1 ティックごとに 1 パーティションずつデータを再構築するため、いずれかの `INSERT` の実行中に Compute Node が再起動またはクラッシュすると、そのパーティションだけが失敗します。この時間内であれば、ジョブは後続のティックで失敗したパーティションのみを再実行し、すでに再書き込みが完了した全パーティションをそのまま保持します。この時間を使い切ると、ジョブはキャンセルされ、直近の再書き込みエラーが報告されます。この時間は、そのパーティション自身の失敗した再試行によってのみ消費されます。各失敗は「その試行が実際に実行された時間 + 1 回の `alter_scheduler_interval_millisecond`」として計上され、ある試行の計上によってこの時間に達した時点でジョブは取り消されます。パーティションには必ず 1 回は再試行が与えられます。単一の試行だけでこの時間を超える場合でも同様です。そうでなければ、本来この時間より長く実行される再書き込みが、最初の一時的な失敗で取り消されてしまいます。パーティションが失敗ではなく待機に費やす時間——たとえば再書き込みを実行できる Compute Node が存在しない場合や、再書き込みが `COMMITTED` 済みで publish を待っている場合——はこの時間を消費せず、ジョブが別のパーティションを処理している時間も消費しません。そうした待機は代わりに `alter_table_timeout_second` によって制限されます。この値は Compute Node が復旧するまでにかかる時間より大きく設定してください。また、オンライン再書き込みが実行されている間はテーブルのコンパクションが延期されるため、`alter_table_timeout_second` よりも十分小さく保ってください。`0` に設定すると、最初の失敗でジョブをキャンセルします。
+- 導入時期：v4.2.0
 
 ## データレイク
 
@@ -842,6 +922,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：LDAP オブジェクトでユーザーを識別する属性の名前。
 - 導入時期：-
 
+### `backup_clean_check_interval_seconds`
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: Yes
+- 説明: Leader FE が期限切れのバックアップスナップショットを探す間隔。`enable_backup_snapshot_auto_clean` が `true` の場合のみ有効です。変更は次回のラウンドから反映され、再起動は不要です。
+- 導入バージョン: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 自動クリーンアップが 1 つのスナップショットに対して連続で何回失敗したら、そのスナップショットを対象から外すか。カウントされるのは自動クリーンアップ自身の失敗のみです。カウントはメモリ上にのみ保持されるため、FE の再起動、Leader の切り替え、またはこの値を大きくすると再試行が再開されます。DROP SNAPSHOT はこの値に関係なくスナップショットを削除します。
+- 導入バージョン: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - デフォルト：86400 * 1000
@@ -850,6 +948,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：バックアップジョブのタイムアウト期間。この値を超えると、バックアップジョブは失敗します。
 - 導入時期：-
+
+### `enable_backup_snapshot_auto_clean`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 期限切れのバックアップスナップショットをリポジトリから自動的に削除するかどうか。リポジトリ内の job info ファイルに、作成元クラスタとして本クラスタが記録されており、かつ有効期限を過ぎている場合にのみ削除されます。他のクラスタが作成したスナップショット、本機能の導入前に作成されたスナップショット、および保持ポリシーを読み取れないスナップショットが自動的に削除されることはありません。[BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md) の `ttl` プロパティを参照してください。
+- 導入バージョン: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 

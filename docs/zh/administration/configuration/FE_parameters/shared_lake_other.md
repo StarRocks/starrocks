@@ -150,6 +150,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Azure Data Lake Storage Gen2 账户的 endpoint，例如 `https://test.dfs.core.windows.net`。
 - 引入版本: v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 用于授权 Azure Data Lake Storage Gen2 请求的托管标识的 OAuth 2.0 令牌 endpoint。在 v3.5.19、v4.0.12 和 v4.1.2 之前，该配置项名为 `azure_adls2_oauth2_oauth2_client_endpoint`。旧名称仍作为别名保留。
+- 引入版本: v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - 默认值: 空字符串
@@ -249,6 +258,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否使用原生 SDK 访问 Azure Blob Storage，从而允许使用托管标识和服务主体进行身份验证。如果此项设置为 `false`，则仅允许使用共享密钥和 SAS Token 进行身份验证。
 - 引入版本: v3.4.4
 
+### `s3_use_native_sdk_for_glob`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 对于 S3 及兼容 S3 协议的对象存储（`s3`、`s3a`、`s3n`、`oss`、`cosn`、`ks3`、`obs` 和 `tos`），是否使用原生 AWS S3 SDK 解析 FILES() 表函数中的通配符路径。设置为 `true` 时，通配符前最长的字面前缀会被下推到 S3 `ListObjectsV2`，而不是通过 Hadoop `globStatus` 列举整个父前缀。当前缀下对象很多但匹配项很少时，前者要快得多。设置为 `false` 时回退到 Hadoop `globStatus` 路径。
+- 引入版本: v4.1.4
+
 ### `cloud_native_hdfs_url`
 
 - 默认值: 空字符串
@@ -293,6 +311,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 是否允许 StarRocks 使用 FE 配置文件中指定的对象存储相关属性创建内置存储卷。从 v3.4.1 开始，默认值从 `true` 更改为 `false`。
 - 引入版本: v3.1.0
+
+### `failpoint_pause_timeout_second`
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：failpoint 挂起（pause）模式的兜底超时。通过 `ADMIN ENABLE FAILPOINT ... WITH PAUSE` 挂起的线程，即使一直没有执行 `ADMIN DISABLE FAILPOINT`，也会在该秒数后自动放行，并解除该 failpoint，因此后续线程不会再次被挂起，避免遗漏放行导致节点必须重启才能恢复。小于 1 的取值会被归一为 1。该值同时随挂起请求下发给 BE/CN，因此 FE 与 BE 侧的挂起共用同一个超时。仅用于故障注入测试：FE 需以 `--failpoint` 启动，BE 侧 failpoint 还需使用 `ENABLE_FAULT_INJECTION=ON` 编译的 BE。
+- 引入版本：v4.2.0
 
 ### `gcp_gcs_impersonation_service_account`
 
@@ -356,6 +383,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 由 HdfsFsManager 管理的未使用的缓存 HDFS/ObjectStore FileSystem 的存活时间（秒）。FileSystemExpirationChecker（每 60 秒运行一次）使用此值调用每个 HdfsFs.isExpired(...)；过期时，管理器关闭底层 FileSystem 并将其从缓存中删除。访问器方法（例如 `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`）更新最后访问时间戳，因此过期基于不活动。较低的值会减少空闲资源占用，但会增加重新打开的开销；较高的值会保持句柄更长时间，并可能消耗更多资源。
 - 引入版本: v3.2.0
+
+### `enable_lake_add_index_fast_path`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离表上的 ADD INDEX 和 DROP INDEX 变更是否走仅修改元数据的快速路径（不创建影子索引）。设置为 `false` 时回退到常规的 Schema Change 路径。该项作为安全开关提供，快速路径是受支持的默认行为。
 
 ### `lake_autovacuum_grace_period_minutes`
 
@@ -570,6 +605,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述:
 - 引入版本: -
+
+### `lake_scheduler_enable_colocate_group_sample`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Tablet 调度器是否通过抽样 Tablet 来估算大型 Colocate Group 的副本分布，而不是扫描该 Group 中的全部 Tablet。调度一个属于 Colocate Group 的 Tablet 时，调度器需要在整个 Group 上构建各 Compute Node 的副本直方图，以决定新副本的落点。对于包含数万个 Tablet 的 Group，这次全量扫描会成为调度开销的主要来源，而健康的 Colocate Group 本身分布均匀，其中每个 Tablet 给出的信号都相同。当该配置项设置为 `true` 时，对于 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 的 Group，调度器改为随机抽取 `lake_scheduler_colocate_group_sample_size` 个 Tablet，并将抽样得到的各 Compute Node 计数按 Group 实际大小等比放大。健康且已完全放置的 Colocate Group，其全部 Tablet 位于相同的 Compute Node 上，因此抽样结果与真实分布完全一致；正在均衡中的 Group 会引入有界误差，最坏情况下只会产生次优（而非非法）的放置，后续由后台 Tablet 均衡流程修正。抽样仅适用于 Colocate Group。设置为 `false` 表示始终扫描全部 Tablet。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- 默认值: 256
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: Colocate Group 的 Tablet 数超过该值后才会被抽样。Tablet 数不超过该值的 Group 始终全量扫描，因为此时全量扫描本身开销很低，抽样只会额外引入误差。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- 默认值: 128
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: 当 Colocate Group 的 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 时，抽样的 Tablet 数量。抽样数越大，对分布倾斜（正在均衡中）的 Group 估算误差越小，但每次调度决策的开销也越高，即以调度延迟换取放置精度。该值应明显小于 `lake_scheduler_colocate_group_sample_threshold`，否则抽样相比全量扫描节省有限。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- 默认值: 40
+- 类型: Int
+- 单位: 百分比
+- 是否可变: Yes
+- 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_online_rewrite_partition_retry_timeout_second`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 存算分离模式下 Range 分布表的在线数据重写在某个分区的重写 `INSERT` 失败后，持续重试该分区的时长上限，超过该时长才取消整个作业。在线数据重写（Range 排序键 Schema Change、Range Rollup、物化视图排序键重写）按 Alter 调度周期逐个分区重建数据，因此某个 Compute Node 在 `INSERT` 执行期间重启或崩溃时，只会导致该分区失败。在该时长内，作业只会在后续调度周期重跑失败的那个分区，并保留已经重写完成的所有分区；该时长耗尽后，作业被取消并报告最后一次重写错误。该时长只会被该分区自身失败的重试尝试消耗：每次失败按「该次尝试实际运行的时长 + 一个 `alter_scheduler_interval_millisecond`」计入，一旦某次尝试的计入使其达到该时长，作业立即取消。每个分区至少会获得一次重试，即使单次尝试的开销已超过整个时长——否则一个本就需要运行更久的重写会在首次瞬时故障时即被取消。分区因等待而非失败所消耗的时间——例如没有可用的 Compute Node 执行重写，或重写已 `COMMITTED` 但仍在等待 publish——不会消耗该时长，作业处理其他分区所花的时间同样不会；此类等待由 `alter_table_timeout_second` 限制。该值应大于 Compute Node 恢复可用所需的时间，同时应远小于 `alter_table_timeout_second`，因为在线数据重写运行期间该表的 Compaction 会被推迟。设置为 `0` 表示首次失败即取消作业。
+- 引入版本: v4.2.0
 
 ## 数据湖
 
@@ -838,6 +918,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在 LDAP 对象中标识用户的属性名称。
 - 引入版本: -
 
+### `backup_clean_check_interval_seconds`
+
+- 默认值: 3600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: Leader FE 扫描到期备份快照的周期。仅在 `enable_backup_snapshot_auto_clean` 为 `true` 时生效。修改后从下一轮开始生效，无需重启。
+- 引入版本: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- 默认值: 3
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 自动清理在同一个快照上连续失败多少次后不再重试。只统计自动清理自身的失败次数。计数保存在内存中，因此重启 FE、切换 Leader 或调大该值都会恢复重试。DROP SNAPSHOT 不受该值约束。
+- 引入版本: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - 默认值: 86400 * 1000
@@ -846,6 +944,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 备份作业的超时时长。如果超过此值，备份作业将失败。
 - 引入版本: -
+
+### `enable_backup_snapshot_auto_clean`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否自动删除仓库中已到期的备份快照。只有当远端 job info 文件中记录的创建集群是本集群、且到期时间已过时，该快照才会被删除。其他集群创建的快照、本特性引入之前创建的快照，以及保留策略读取失败的快照都不会被自动删除。参见 [BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md) 的 `ttl` 属性。
+- 引入版本: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 

@@ -36,6 +36,24 @@ import java.util.Map;
 public class SessionVariableTest {
 
     @Test
+    public void testPaimonReaderMode() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.AUTO, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertEquals("AUTO",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "auto"));
+        Assertions.assertEquals("JNI",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "jNi"));
+        String nativeMode = VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "native");
+        Assertions.assertEquals("NATIVE", nativeMode);
+        sessionVariable.setPaimonReaderMode(nativeMode);
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.NATIVE, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertThrows(DdlException.class,
+                () -> VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "invalid"));
+    }
+
+    @Test
     public void testNonDefaultVariables() {
         SessionVariable sessionVariable = new SessionVariable();
         Map<String, SessionVariable.NonDefaultValue> nonDefaultVariables = sessionVariable.getNonDefaultVariables();

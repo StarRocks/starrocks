@@ -71,6 +71,10 @@ public class MetaReplayState {
     public synchronized void setOutOfDate(long currentTime, long synchronizedTime) {
         this.delayTime = currentTime - synchronizedTime;
         state = MetaState.OUT_OF_DATE;
+        // OUT_OF_DATE means the metadata is merely old, not that replay failed, so any exception
+        // reported earlier has been recovered from by now. Leaving it set would keep a resolved
+        // failure visible in /api/_meta_replay_state for the whole catch-up.
+        throwable = null;
     }
 
     public synchronized void setTransferToUnknown() {

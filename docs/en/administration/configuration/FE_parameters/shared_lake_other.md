@@ -149,6 +149,15 @@ This topic introduces the following types of FE configurations:
 - Description: The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
 - Introduced in: v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth 2.0 token endpoint of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. Before v3.5.19, v4.0.12, and v4.1.2, this item was named `azure_adls2_oauth2_oauth2_client_endpoint`. The former name is still accepted as an alias.
+- Introduced in: v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - Default: Empty string
@@ -248,6 +257,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
 - Introduced in: v3.4.4
 
+### `s3_use_native_sdk_for_glob`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native AWS S3 SDK to resolve glob paths in the FILES() table function for S3 and S3-compatible object stores (`s3`, `s3a`, `s3n`, `oss`, `cosn`, `ks3`, `obs`, and `tos`). When this item is set to `true`, the longest literal prefix of a wildcard is pushed down to S3 `ListObjectsV2` instead of listing the whole parent prefix through Hadoop `globStatus`, which is much faster when the prefix holds many objects but few of them match. Set this item to `false` to fall back to the Hadoop `globStatus` path.
+- Introduced in: v4.1.4
+
 ### `cloud_native_hdfs_url`
 
 - Default: Empty string
@@ -292,6 +310,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
 - Introduced in: v3.1.0
+
+### `failpoint_pause_timeout_second`
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Safety net for the failpoint pause mode. A thread parked at a failpoint armed with `ADMIN ENABLE FAILPOINT ... WITH PAUSE` resumes automatically after this many seconds even if `ADMIN DISABLE FAILPOINT` is never issued, and the failpoint is disarmed so later threads are not parked again. A forgotten pause therefore cannot block a node until it is restarted. Values below 1 are clamped to 1. The value is also sent to BEs/CNs with the arming request, so a frontend pause and a backend pause share the same timeout. Only relevant for fault-injection testing: the frontend must be started with `--failpoint`, and backend failpoints additionally require a backend compiled with `ENABLE_FAULT_INJECTION=ON`.
+- Introduced in: v4.2.0
 
 ### `gcp_gcs_impersonation_service_account`
 
@@ -355,6 +382,14 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Time-to-live in seconds for an unused cached HDFS/ObjectStore FileSystem managed by HdfsFsManager. The FileSystemExpirationChecker (runs every 60s) calls each HdfsFs.isExpired(...) using this value; when expired the manager closes the underlying FileSystem and removes it from the cache. Accessor methods (for example `HdfsFs.getDFSFileSystem`, `getUserName`, `getConfiguration`) update the last-access timestamp, so expiry is based on inactivity. Lower values reduce idle resource holding but increase reopen overhead; higher values keep handles longer and may consume more resources.
 - Introduced in: v3.2.0
+
+### `enable_lake_add_index_fast_path`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to route ADD INDEX and DROP INDEX alters on shared-data tables through the metadata-only fast path, which creates no shadow index. Set this item to `false` to fall back to the regular schema change path. This item is intended as a safety valve; the fast path is the supported default.
 
 ### `lake_autovacuum_grace_period_minutes`
 
@@ -569,6 +604,51 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description:
 - Introduced in: -
+
+### `lake_scheduler_enable_colocate_group_sample`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the tablet scheduler estimates a large colocate group's replica distribution by sampling its tablets, instead of scanning every tablet in the group. When a tablet that belongs to a colocate group is scheduled, the scheduler builds a per-Compute Node replica histogram over the whole group to decide where the new replica goes. For a group with tens of thousands of tablets, that full scan dominates the scheduling cost, even though a healthy colocate group is uniformly placed and every tablet in it reports the same signal. When this item is set to `true`, the scheduler instead draws `lake_scheduler_colocate_group_sample_size` random tablets from any group larger than `lake_scheduler_colocate_group_sample_threshold` and scales the sampled per-Compute Node counts up to the full group size. A healthy, fully placed colocate group has all of its tablets on the same Compute Nodes, so the sample reproduces the true distribution exactly; a group that is mid-rebalance incurs a bounded error that at worst produces a sub-optimal (never invalid) placement, which the background tablet balancer later reconciles. Only colocate groups are sampled. Set this item to `false` to always scan every tablet.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- Default: 256
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The minimum number of tablets a colocate group must exceed before the scheduler samples it. Groups at or below this size are always scanned in full, because the full scan is already cheap and sampling would only add error. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- Default: 128
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The number of tablets sampled when a colocate group exceeds `lake_scheduler_colocate_group_sample_threshold`. A larger sample reduces the estimation error for a skewed (mid-rebalance) group but costs more per scheduling decision, so it trades scheduling latency for placement precision. The value should stay well below `lake_scheduler_colocate_group_sample_threshold`, otherwise sampling saves little over a full scan. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- Default: 40
+- Type: Int
+- Unit: Percent
+- Is mutable: Yes
+- Description: The density guard for colocate group sampling, expressed as the maximum tolerated percentage of empty draws. A sampled tablet is an empty draw when it holds no replica on a candidate Compute Node, that is, it is not placed yet or is not on that Compute Node. If more than this percentage of the sample is empty, the group is too sparsely placed for the sample to represent its true distribution, which is what happens while a group is still bulk filling from empty, so the scheduler discards the sample and falls back to a full scan. Equivalently, the sample is trusted only when at least (100 - this value)% of the sampled tablets are placed on a candidate Compute Node, so a lower value is more conservative and demands a denser group before sampling. A stable, fully placed group yields close to 0% empty draws and always takes the fast sampled path regardless of this value, so this item only governs the bulk-fill transient. Set it to `100` to never fall back. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_online_rewrite_partition_retry_timeout_second`
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long an online rewrite of a shared-data range-distribution table keeps retrying one partition's rewrite `INSERT` after it fails, before cancelling the whole job. An online rewrite — a range sort-key schema change, a range rollup, or a materialized view sort-key rewrite — rebuilds data one partition per alter-scheduler tick, so a compute node that restarts or crashes while one of those `INSERT` statements is in flight fails that partition. Within this window the job re-runs only the failed partition on a later tick and keeps every partition it has already rewritten; once the window is exhausted the job is cancelled and reports the last rewrite error. The window is spent only by that partition's own failed attempts, each charged for how long it ran plus one `alter_scheduler_interval_millisecond`, and the job is cancelled as soon as an attempt's charge reaches it. A partition always gets at least one retry, even when that single attempt already costs more than the whole window — otherwise a rewrite that legitimately runs longer than the window would be cancelled by its first transient failure. Time the partition spends waiting rather than failing — because no compute node is available to run the rewrite, or because a committed rewrite is waiting to publish — does not consume it, and neither does time the job spends on a different partition; such waits are bounded by `alter_table_timeout_second` instead. Set this item to a value larger than the time a compute node takes to become available again. Keep it well below `alter_table_timeout_second`, because compaction on the table is deferred for as long as the online rewrite runs. Set this item to `0` to cancel the job on the first failure.
+- Introduced in: v4.2.0
 
 ## Data Lake
 
@@ -838,6 +918,24 @@ This topic introduces the following types of FE configurations:
 - Description: The name of the attribute that identifies users in LDAP objects.
 - Introduced in: -
 
+### `backup_clean_check_interval_seconds`
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the leader FE looks for expired backup snapshots to delete. Only takes effect when `enable_backup_snapshot_auto_clean` is `true`. The new interval applies from the next round onwards, without a restart.
+- Introduced in: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many consecutive failures automatic cleanup makes on one snapshot before leaving it alone. Only the failures of automatic cleanup are counted. The count is kept in memory, so restarting the FE, a leader switch, or raising this value lets cleanup try again. DROP SNAPSHOT deletes the snapshot regardless of this value.
+- Introduced in: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - Default: 86400 * 1000
@@ -846,6 +944,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The timeout duration of a backup job. If this value is exceeded, the backup job fails.
 - Introduced in: -
+
+### `enable_backup_snapshot_auto_clean`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether expired backup snapshots are deleted from their repository automatically. A snapshot is deleted only when the job info file in the repository records this cluster as its creator and an expiration time that has passed. Snapshots created by another cluster, created before this feature existed, or whose retention cannot be read are never deleted automatically. See the `ttl` property of [BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md).
+- Introduced in: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 

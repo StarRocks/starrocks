@@ -88,6 +88,44 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
 - Introduced in: v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the global-dictionary thrash guard. A "rolling" low-cardinality column—whose instantaneous distinct value count stays below the dictionary threshold but whose value set keeps rotating (for example, a daily-partitioned column that is reloaded with fresh values)—never trips the cardinality blacklist, yet every load introduces values missing from the current global dictionary and invalidates it. Each invalidation forces a full-table dictionary re-collection, which wastes IO and, in shared-data clusters, contends heavily on the segment metadata cache lock. When this guard is enabled, StarRocks counts how often each column's dictionary is invalidated within `dict_thrash_guard_window_sec`; once a column reaches `dict_thrash_guard_threshold` invalidations, StarRocks forbids collecting that column's global dictionary. The forbid takes effect immediately and is persisted as the table's `no_dict_columns` property, so it survives FE restart and leader failover. To re-enable dictionary collection for a column, run `ALTER TABLE ... ENABLE DICTIONARY (column)`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The length of the time window (in seconds) over which the global-dictionary thrash guard counts how often a column's dictionary is invalidated. This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of dictionary invalidations within `dict_thrash_guard_window_sec` at which the global-dictionary thrash guard forbids collecting a column's global dictionary. Set to `0` to disable the count check while keeping the guard enabled (no column is automatically forbidden). This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
+
+### `min_max_stats_collect_interval_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Minimum interval between two min/max statistics collections for the same column. Min/max stats (used to constant-fold `min()`/`max()` and to build compressed group-by keys) are collected on demand via a `[_META_]` MetaScan that reads every segment's zone-map metadata; without throttling a frequently loaded column re-scans on every load, contending on the segment metadata cache the same way global-dictionary re-collection does. Within the interval the min/max optimization is skipped rather than re-collected -- a stale value is never served, so this only affects the optimization, never correctness. Set to `0` to disable throttling.
+- Introduced in: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - Default: true
@@ -116,6 +154,15 @@ This topic introduces the following types of FE configurations:
 - Introduced in: v4.2.0
 
 ## Storage
+
+### `allow_implicit_key_column_in_agg_add_column`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether `ALTER TABLE ... ADD COLUMN` on an Aggregate table may create a key column when the new column specifies neither an aggregate function nor the `KEY` keyword. Such a statement is ambiguous, and creating a key column changes the table's aggregation key and rewrites existing data. When set to `true`, the column is created as a key column, which is the behavior in earlier versions. Set to `false` to reject the statement instead, so that the error names both options. This item is mutable but is not persisted across a restart unless it is set with `WITH PERSISTENT`.
+- Introduced in: v4.2.0
 
 ### `alter_table_timeout_second`
 
@@ -270,7 +317,7 @@ This topic introduces the following types of FE configurations:
 
 ### `enable_online_optimize_table`
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -569,8 +616,17 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to use the Range-based Distribution semantic as the default table distribution when a table or materialized view is created without a `DISTRIBUTED BY` clause. This configuration only takes effect in shared-data mode; it has no effect in shared-nothing mode. Set it to `false` to disable this default, so such a table uses the previous default distribution behavior instead (a PRIMARY KEY table defaults to hash, a DUPLICATE KEY table to random, and an AGGREGATE or UNIQUE KEY table requires an explicit `DISTRIBUTED BY` clause).
+- Description: Whether to use the Range-based Distribution semantic as the default table distribution when a table is created without a `DISTRIBUTED BY` clause. This configuration only takes effect in shared-data mode; it has no effect in shared-nothing mode. Set it to `false` to disable this default, so such a table uses the previous default distribution behavior instead (a PRIMARY KEY table defaults to hash, a DUPLICATE KEY table to random, and an AGGREGATE or UNIQUE KEY table requires an explicit `DISTRIBUTED BY` clause). A materialized view created without a `DISTRIBUTED BY` clause additionally requires `enable_mv_range_distribution`.
 - Introduced in: v4.1.0
+
+### `enable_mv_range_distribution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the Range-based Distribution semantic as the default distribution of an asynchronous materialized view that is created without a `DISTRIBUTED BY` clause. Tables are not affected by this configuration. The default selects the Range-based Distribution semantic only when this configuration and `enable_range_distribution` are both `true`, in shared-data mode. Otherwise the materialized view uses the previous default distribution behavior (a materialized view that is maintained incrementally defaults to hash over its key columns, and any other materialized view to random), even where a table would be range-distributed.
+- Introduced in: v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 
@@ -587,7 +643,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The target size of the tablets after the SPLIT or MERGE operation.
+- Description: The target size of tablets after a SPLIT or MERGE operation. `0` disables automatic size-based tablet splitting and merging. When a shared-data online range rewrite runs with this value set to `0`, it uses each latest base index's current tablet count as the requested count and recomputes boundaries in the new sort-key space instead of reusing the old boundaries. The actual count can be smaller if sampling cannot produce enough distinct boundaries.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_max_split_count`
@@ -599,13 +655,40 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of new tablets that an old tablet can be split into.
 - Introduced in: v4.1.0
 
+### `tablet_reshard_orderby_max_split_count`
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of new tablets one source tablet may be split into when the split drags a full UNSHARE rewrite behind it, that is, on a range-distributed PRIMARY KEY table whose `ORDER BY` key differs from its primary key. Such a split cannot range-filter the parent's shared segments, so every child is rewritten wholesale and a wide fan-out multiplies that read amplification. Further clamped by `tablet_reshard_max_split_count`. Values less than or equal to `1` disable this extra clamp.
+- Introduced in: -
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of source tablets one split job may **split** when the split drags a full UNSHARE rewrite behind it. The largest tablets are chosen first. Note that this bounds the split fan-out, not the rewrite itself: every untouched sibling still becomes an identical tablet in the replacement index, and the UNSHARE compaction is partition-wide, so those are rewritten as well. Values less than or equal to `0` mean the compute-node count of the warehouse.
+- Introduced in: -
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- Default: 180
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The quiet period after the previous tablet reshard job on a table finishes, before automatic splitting may trigger again, for tables whose split drags a full UNSHARE rewrite behind it. It gives size-tiered compaction a window to drain the small files that accumulated while the partition's compaction slot was held. Values less than or equal to `0` disable the wait. Note that the interval can only be enforced while the previous job is still retained, that is, up to `tablet_reshard_history_job_keep_max_ms`.
+- Introduced in: -
+
 ### `tablet_reshard_min_split_size`
 
 - Default: 2147483648 (2 GB)
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. Should be no larger than `tablet_reshard_target_size`.
+- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. It is also the smallest target size automatic splitting will aim at: while a materialized index holds fewer tablets than its warehouse has compute nodes (capped by `tablet_reshard_max_split_count`), splitting aims at the size that would give it one tablet per such slot, floored at this value, so a tablet splits once it is worth at least two of that target. Raising this value therefore also delays that splitting, and setting it at or above `tablet_reshard_target_size` turns it off, leaving only the size-based rule. Should be no larger than `tablet_reshard_target_size`.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
@@ -616,6 +699,33 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
+
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that the range-colocate checker sends to StarOS in a single `getShardInfo` membership-read batch RPC on shared-data clusters. Values less than `1` are treated as `1`.
+- Introduced in: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of PACK shard groups that the range-colocate checker sends to StarOS in a single `queryShardGroupStable` placement-convergence batch RPC. Each group's stability check is computed server-side, so a smaller batch bounds per-RPC latency, and the full result is assembled across repeated calls. Values less than `1` are treated as `1`.
+- Introduced in: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The TTL of the range-colocate checker's placement-convergence negative cache. Within this window, a PACK shard group that StarOS last reported as not yet converged is not re-queried, which throttles the per-tick `queryShardGroupStable` load while the group is still migrating. Only not-converged results are cached, so a stale entry can only delay the group's flip to stable by up to this window, never cause a premature flip. Values less than or equal to `0` disable the cache.
+- Introduced in: v4.1.3
 
 ### `enable_tablet_pre_split_for_insert_from_files`
 
@@ -641,8 +751,17 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads (INSERT-from-OLAP-table). On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP or external Iceberg table. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
 - Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for the refresh of a range-distributed incremental materialized view. Such a view is keyed by a hidden row-id column whose value domain is known in advance, so its boundaries are derived rather than sampled and no data is read. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.2.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
@@ -698,11 +817,19 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
 - Introduced in: v4.1.0
 
+### `tablet_pre_split_target_size`
+
+- Default: 0
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Target tablet size that Sample-Based Tablet Pre-Split sizes a load's split count against. `0` (the default) inherits `tablet_reshard_target_size`. Lower it to give a load more write parallelism without shrinking every tablet in the cluster: the background tablet split/merge daemon keeps measuring against `tablet_reshard_target_size`, so it merges the finer tablets back together after the load finishes. This matters most for a load that writes brand-new range-distributed partitions (for example the replacement partitions of an `INSERT OVERWRITE`), which start from a single catch-all tablet and would otherwise be written by a single backend.
+
 #### Rolling back Sample-Based Tablet Pre-Split
 
 To disable the feature safely before a downgrade or during a production rollback:
 
-1. Set all three pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, and `enable_tablet_pre_split_for_insert_from_table`. New loads will skip pre-split immediately.
+1. Set all four pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, `enable_tablet_pre_split_for_insert_from_table`, and `enable_tablet_pre_split_for_mv_refresh`. New loads will skip pre-split immediately.
 2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
 3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
 

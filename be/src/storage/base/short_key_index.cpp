@@ -88,10 +88,21 @@ Status ShortKeyIndexBuilder::finalize_full_sort_key(uint32_t num_segment_rows, s
 
 Status ShortKeyIndexDecoder::parse_body(const Slice& body, uint32_t num_items, uint32_t key_bytes,
                                         uint32_t offset_bytes) {
-    // check if body size match footer's information
-    if (body.size != (key_bytes + offset_bytes)) {
+    // num_items, key_bytes and offset_bytes come straight from a persisted page footer, so an
+    // adversarial or corrupt page can hand us values whose sum overflows uint32_t. Do the geometry
+    // arithmetic in 64-bit and validate it before it can wrap, rather than after.
+    uint64_t total_bytes = static_cast<uint64_t>(key_bytes) + static_cast<uint64_t>(offset_bytes);
+    if (total_bytes != body.size) {
         return Status::Corruption(
-                strings::Substitute("Index size not match, need=$0, real=$1", key_bytes + offset_bytes, body.size));
+                strings::Substitute("Index size not match, need=$0, real=$1", total_bytes, body.size));
+    }
+    // Each offset is encoded as a varint of at least one byte, so num_items varints can never fit in
+    // offset_bytes when num_items > offset_bytes. Reject that shape up front, before it can make
+    // num_items + 1 wrap and shrink _offsets below what the loop below writes into.
+    if (num_items > offset_bytes) {
+        return Status::Corruption(strings::Substitute(
+                "Short key index num_items exceeds offset_bytes capacity, num_items=$0, offset_bytes=$1", num_items,
+                offset_bytes));
     }
 
     // set index buffer
@@ -99,8 +110,8 @@ Status ShortKeyIndexDecoder::parse_body(const Slice& body, uint32_t num_items, u
 
     // parse offset information
     Slice offset_slice(body.data + key_bytes, offset_bytes);
-    // +1 for record total length
-    _offsets.resize(num_items + 1);
+    // +1 for record total length. num_items <= offset_bytes <= UINT32_MAX here, so this cannot wrap.
+    _offsets.resize(static_cast<size_t>(num_items) + 1);
     // Runtime-validate the offset table (not just DCHECK): offsets must be non-decreasing and no
     // larger than key_bytes so key(i) always yields an in-bounds, non-negative-length Slice. A page
     // that passes the CRC but carries a corrupt/decreasing/out-of-range offset would otherwise make

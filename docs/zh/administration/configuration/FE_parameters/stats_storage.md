@@ -88,6 +88,44 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。
 - 引入版本: v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用全局字典抖动守卫（thrash guard）。对于"滚动"低基数列——其瞬时不同值数量始终低于字典阈值，但取值集合持续轮换（例如按天分区、每天导入新值的列）——不会触发基数黑名单，但每次导入都会引入当前全局字典中缺失的值并使其失效。每次失效都会触发一次全表字典重采集，浪费 IO，并在存算分离集群中严重争用 segment 元数据缓存锁。启用该守卫后，StarRocks 会统计每个列的字典在 `dict_thrash_guard_window_sec` 时间窗口内的失效次数；当某列达到 `dict_thrash_guard_threshold` 次失效时，StarRocks 会禁止采集该列的全局字典。该禁用立即生效，并作为表的 `no_dict_columns` 属性持久化，因此能在 FE 重启和 Leader 切换后保留。如需重新启用某列的字典采集，执行 `ALTER TABLE ... ENABLE DICTIONARY (column)`。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 全局字典抖动守卫统计某列字典失效次数所用的时间窗口长度（秒）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 在 `dict_thrash_guard_window_sec` 时间窗口内，触发全局字典抖动守卫禁止采集某列全局字典的失效次数阈值。设置为 `0` 可在保持守卫启用的同时禁用次数检查（不会自动禁用任何列）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
+
+### `min_max_stats_collect_interval_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 同一列两次 min/max 统计采集之间的最小间隔。min/max 统计（用于将 `min()`/`max()` 折叠为常量、以及构建压缩 group-by key）通过读取每个 segment zone-map 元数据的 `[_META_]` MetaScan 按需采集；若不节流，频繁导入的列会在每次导入后重扫，和全局字典重采集一样争用 segment 元数据缓存。间隔窗口内跳过 min/max 优化而非重新采集——绝不返回陈旧值，因此只影响优化、不影响正确性。设置为 `0` 可禁用节流。
+- 引入版本: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true
@@ -116,6 +154,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.2.0
 
 ## 存储
+
+### `allow_implicit_key_column_in_agg_add_column`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在聚合表上执行 `ALTER TABLE ... ADD COLUMN` 时，如果新列既未指定聚合函数，也未指定 `KEY` 关键字，是否允许将该列创建为 Key 列。此类语句存在歧义，并且创建 Key 列会改变表的聚合键并重写已有数据。设置为 `true` 时，该列会被创建为 Key 列，与早期版本的行为一致。设置为 `false` 时，该语句会被拒绝，报错信息会同时说明两种写法。该参数可动态修改，但除非使用 `WITH PERSISTENT` 设置，否则重启后不会保留。
+- 引入版本: v4.2.0
 
 ### `alter_table_timeout_second`
 
@@ -270,7 +317,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_online_optimize_table`
 
-- 默认值: true
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
@@ -569,8 +616,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在创建表或物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。
+- 描述: 在创建表时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。未指定 `DISTRIBUTED BY` 子句的物化视图还需同时启用 `enable_mv_range_distribution`。
 - 引入版本: v4.1.0
+
+### `enable_mv_range_distribution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在创建异步物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的数据分布方式。该配置不影响表。仅当该配置与 `enable_range_distribution` 同时为 `true` 且处于存算分离模式时，默认分布才会选择 Range-based Distribution 语意；否则物化视图使用此前的默认分布行为（增量维护的物化视图默认按其 Key 列使用 hash 分布，其他物化视图默认使用 random 分布），即使同一集群中的表会使用 Range 分布。
+- 引入版本: v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 
@@ -587,7 +643,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 执行 SPLIT 或 MERGE 操作后，Tablet 的目标大小。
+- 描述: 执行 SPLIT 或 MERGE 操作后 Tablet 的目标大小。设置为 `0` 时，将禁用基于大小的 Tablet 自动分裂和合并。存算分离集群在该值为 `0` 时执行在线 Range Rewrite，会以各个最新基表索引当前的 Tablet 数量作为请求数量，并在新的排序键空间中重新计算边界，而不会复用原有边界。如果采样无法生成足够多的不同边界，实际 Tablet 数量可能更少。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_max_split_count`
@@ -599,13 +655,40 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 旧 Tablet 最多可分割成多少个新 Tablet。
 - 引入版本: v4.1.0
 
+### `tablet_reshard_orderby_max_split_count`
+
+- 默认值: 2
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当分裂会附带一次完整的 UNSHARE 重写时（即 Range 分布的主键表，其 `ORDER BY` 键与主键不同），单个源 Tablet 最多可分裂成的新 Tablet 数量。此类分裂无法对父 Tablet 的共享 Segment 做 Range 过滤，每个子 Tablet 都会被整体重写，因此过大的扇出会成倍放大读放大。该值还会被 `tablet_reshard_max_split_count` 进一步限制。取值小于或等于 `1` 时禁用该额外限制。
+- 引入版本: -
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当分裂会附带一次完整的 UNSHARE 重写时，单个分裂任务最多可**分裂**的源 Tablet 数量。优先选择最大的 Tablet。注意该值限制的是分裂扇出而非重写量：未被分裂的兄弟 Tablet 仍会在新索引中成为 Identical Tablet，而 UNSHARE Compaction 是分区级的，因此这些 Tablet 同样会被重写。取值小于或等于 `0` 时表示使用该 Warehouse 的计算节点数量。
+- 引入版本: -
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- 默认值: 180
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 对于分裂会附带完整 UNSHARE 重写的表，上一个 Tablet Reshard 任务完成后，自动分裂再次触发前的静默期。用于给 Size-tiered Compaction 留出窗口，清理占用 Compaction 槽位期间累积的小文件。取值小于或等于 `0` 时禁用等待。注意该间隔仅在上一个任务仍被保留期间生效，即最长不超过 `tablet_reshard_history_job_keep_max_ms`。
+- 引入版本: -
+
 ### `tablet_reshard_min_split_size`
 
 - 默认值: 2147483648 (2 GB)
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
+- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂所能采用的最小目标大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数（并受 `tablet_reshard_max_split_count` 上限约束）时，分裂会以“每个此类槽位一个 Tablet”对应的大小为目标，并以该参数为下限，Tablet 达到该目标的两倍时才会分裂。因此调大该参数也会推迟此类分裂；将其设置为大于或等于 `tablet_reshard_target_size` 即可关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
@@ -616,6 +699,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
 - 引入版本: v4.1.0
+
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群下，Range Colocate 检查器在单次 `getShardInfo` 成员关系读取批量 RPC 中发送给 StarOS 的最大 Tablet 数量。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- 默认值: 64
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: Range Colocate 检查器在单次 `queryShardGroupStable` 放置收敛批量 RPC 中发送给 StarOS 的最大 PACK Shard Group 数量。每个 Group 的稳定性检查在服务端计算，因此较小的批量可以限制单次 RPC 的延迟，完整结果通过多次调用累积得到。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: Range Colocate 检查器放置收敛负缓存的 TTL。在该时间窗口内，StarOS 上次报告为尚未收敛的 PACK Shard Group 不会被重新查询，从而在该 Group 仍在迁移期间降低每轮 `queryShardGroupStable` 的负载。仅缓存未收敛的结果，因此过期条目最多只会将该 Group 转为稳定状态的时间延迟一个时间窗口，而不会导致提前转为稳定。小于或等于 `0` 的值将禁用该缓存。
+- 引入版本: v4.1.3
 
 ### `enable_tablet_pre_split_for_insert_from_files`
 
@@ -641,8 +751,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入（INSERT-from-OLAP-table）启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
+
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 Range 分布的增量物化视图（incremental materialized view）刷新启用基于采样的 Tablet 预分裂。这类物化视图以一个隐藏的 row-id 列作为键，其取值域是预先已知的，因此边界由推导得出而非采样得出，完全不读取数据。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 引入版本: v4.2.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
@@ -698,11 +817,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（样本数最少的那部分）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
 
+### `tablet_pre_split_target_size`
+
+- 默认值: 0
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂计算分裂数量时使用的目标 Tablet 大小。默认值 `0` 表示沿用 `tablet_reshard_target_size`。调小该值可以让单次导入获得更高的写并行度，同时不会缩小集群中其他 Tablet：后台 Tablet 分裂/合并守护线程仍然按 `tablet_reshard_target_size` 判定，会在导入结束后把这些较小的 Tablet 重新合并回去。该配置对写入全新 Range 分布分区的导入最为关键（例如 `INSERT OVERWRITE` 的替换分区），这类分区初始只有一个覆盖全域的 Tablet，否则只能由单个 BE 节点写入。
+
 #### 回滚基于采样的 Tablet 预分裂
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
+1. 将四个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table` 和 `enable_tablet_pre_split_for_mv_refresh`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 

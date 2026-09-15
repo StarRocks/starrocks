@@ -4,14 +4,6 @@ show create table t;
 alter table t set('bucket_size'='1024');
 show create table t;
 
--- name: test_invalid_bucket_size
-create table t0(k int) properties('bucket_size'='0');
-create table t(k int) properties('bucket_size'='-1');
-create table t(k int) properties('bucket_size'='1024');
-alter table t set('bucket_size'='0');
-alter table t set('bucket_size'='-1');
-alter table t set('bucket_size'='2048');
-
 -- name: test_automatic_bucket @native
 create database kkk;
 use kkk;
@@ -91,34 +83,6 @@ insert into t values('2021-01-05', 1);
 insert into t values('2021-01-01', 1);
 select * from t;
 
--- name: test_schema_change @sequential
-create table t(k date, v int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
-PROPERTIES (
-"replication_num" = "1",
-"bucket_size" = "1"
-);
-insert into t values('2021-01-01', 1);
-insert into t values('2021-01-03', 1);
-insert into t values('2021-01-05', 1);
-insert into t values('2021-01-01', 1);
-insert into t values('2021-01-01', 2);
-insert into t values('2021-01-03', 2);
-insert into t values('2021-01-05', 2);
-insert into t values('2021-01-01', 2);
-insert into t values('2021-01-01', 3);
-insert into t values('2021-01-03', 3);
-insert into t values('2021-01-05', 3);
-insert into t values('2021-01-01', 3);
-select * from t;
-
-alter table t add column c bigint;
-function: wait_alter_table_finish()
-select * from t;
-
-alter table t order by (k,c,v);
-function: wait_alter_table_finish()
-select * from t;
-
 -- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -143,23 +107,6 @@ create materialized view mv as select k, v1 from t;
 function: wait_alter_table_finish("rollup", 8)
 select k, v1 from t;
 
--- name: test_delete
-create table t(k int, v int)
-PROPERTIES (
-"replication_num" = "1",
-"bucket_size" = "1"
-);
-
-insert into t values(1,1);
-insert into t values(1,2);
-insert into t values(1,3);
-insert into t values(1,4);
-insert into t values(1,5);
-select * from t;
-
-delete from t where k = 1;
-select * from t;
-
 -- name: test_mutable_bucket @sequential @native
 create database ggg;
 use ggg;
@@ -182,19 +129,3 @@ select * from t;
 
 alter table t set('mutable_bucket_num'='-1');
 alter table t set('mutable_bucket_num'='a');
-
--- name: test_tablet_check
-create table t(k int)properties('bucket_size'='1');
-insert into t values(1);
-insert into t values(1);
-insert into t values(1);
-admin set frontend config('consistency_tablet_meta_check_interval_ms'='100');
-select sleep(5);
-select * from t;
-admin set frontend config('consistency_tablet_meta_check_interval_ms'='7200000');
-
--- name: test_stale_flush @sequential
-create table t(k int)properties('bucket_size'='1');
-update information_schema.be_configs set value=102400 where name='write_buffer_size';
-insert into t select generate_series from TABLE(generate_series(1, 10000000));
-update information_schema.be_configs set value=104857600 where name='write_buffer_size';

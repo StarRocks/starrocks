@@ -17,8 +17,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "gen_cpp/AgentService_types.h"
@@ -186,15 +189,107 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     ASSERT_OK(res.status());
     ASSERT_FALSE(res.value().seek_key.empty());
 
-    // Case 2: different order -> Should return InternalError
+    // Case 2: the sort key is a permutation of the keys. A primary-key tablet's range is always in
+    // primary-key space, so the sort key does not enter the encoding and the result is unchanged.
     schema_pb.clear_sort_key_idxes();
     schema_pb.add_sort_key_idxes(1);
     schema_pb.add_sort_key_idxes(0);
-    auto tablet_schema_wrong = TabletSchema::create(schema_pb);
-    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema_wrong);
-    ASSERT_FALSE(res2.ok());
-    ASSERT_TRUE(res2.status().is_internal_error());
-    ASSERT_THAT(res2.status().to_string(), testing::HasSubstr("Sort key index 0 must be 0, but is 1"));
+    auto reordered_schema = TabletSchema::create(schema_pb);
+    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, reordered_schema);
+    ASSERT_OK(res2.status());
+    ASSERT_EQ(res.value().seek_key, res2.value().seek_key);
+
+    // Case 3: ORDER BY a value column -- still primary-key space, still the same encoding.
+    schema_pb.clear_sort_key_idxes();
+    schema_pb.add_sort_key_idxes(2);
+    schema_pb.add_sort_key_idxes(0);
+    auto separate_sort_key_schema = TabletSchema::create(schema_pb);
+    ASSERT_TRUE(separate_sort_key_schema->has_separate_sort_key());
+    auto res3 = TabletRangeHelper::create_sst_seek_range_from(range_pb, separate_sort_key_schema);
+    ASSERT_OK(res3.status());
+    ASSERT_EQ(res.value().seek_key, res3.value().seek_key);
+}
+
+TEST(TabletRangeHelperTest, test_range_key_idxes) {
+    TabletSchemaPB schema_pb;
+    auto add_column = [&](const char* name, bool is_key) {
+        auto c = schema_pb.add_column();
+        c->set_name(name);
+        c->set_type("INT");
+        c->set_is_key(is_key);
+        c->set_is_nullable(!is_key);
+        c->set_aggregation(is_key ? "NONE" : "REPLACE");
+    };
+    add_column("c0", true);
+    add_column("c1", true);
+    add_column("c2", false);
+    schema_pb.add_sort_key_idxes(2);
+    schema_pb.add_sort_key_idxes(0);
+
+    // A primary-key tablet routes by primary key whatever its physical order is.
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    EXPECT_EQ(std::vector<ColumnId>({0, 1}), TabletRangeHelper::range_key_idxes(*TabletSchema::create(schema_pb)));
+
+    // Every other key model keeps the historical sort-key boundary semantics.
+    schema_pb.set_keys_type(DUP_KEYS);
+    EXPECT_EQ(std::vector<ColumnId>({2, 0}), TabletRangeHelper::range_key_idxes(*TabletSchema::create(schema_pb)));
+}
+
+TEST(TabletRangeHelperTest, test_primary_key_range_filter_with_separate_sort_key) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    const std::array<std::string, 3> column_names = {"c0", "c1", "c2"};
+    for (int i = 0; i < 3; ++i) {
+        auto* column = schema_pb.add_column();
+        column->set_name(column_names[i]);
+        column->set_type("INT");
+        column->set_is_key(i < 2);
+        column->set_is_nullable(false);
+    }
+    schema_pb.add_sort_key_idxes(2);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TabletRangePB range;
+    range.mutable_lower_bound()->CopyFrom(make_int_tuple_pb(2));
+    *range.mutable_lower_bound()->add_values() = make_int_tuple_pb(0).values(0);
+    range.set_lower_bound_included(true);
+    range.mutable_upper_bound()->CopyFrom(make_int_tuple_pb(4));
+    *range.mutable_upper_bound()->add_values() = make_int_tuple_pb(0).values(0);
+    range.set_upper_bound_included(false);
+
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 4);
+    const std::vector<std::pair<int32_t, int32_t>> keys = {{1, 9}, {2, 0}, {3, 5}, {4, 0}};
+    for (const auto& [c0, c1] : keys) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(c0));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(c1));
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(100));
+    }
+
+    ASSIGN_OR_ABORT(auto pk_filter, PrimaryKeyRangeFilter::create(range, tablet_schema));
+    ASSIGN_OR_ABORT(auto filter, pk_filter.build(*chunk));
+    ASSERT_EQ(4, filter.size());
+    EXPECT_EQ(0, filter[0]);
+    EXPECT_EQ(1, filter[1]);
+    EXPECT_EQ(1, filter[2]);
+    EXPECT_EQ(0, filter[3]);
+
+    // The same instance is reused chunk after chunk during a compaction: a second call must not be
+    // polluted by the encoded keys of the first.
+    auto chunk2 = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 2);
+    for (const auto& [c0, c1] : std::vector<std::pair<int32_t, int32_t>>{{0, 0}, {2, 5}}) {
+        chunk2->get_column_raw_ptr_by_index(0)->append_datum(Datum(c0));
+        chunk2->get_column_raw_ptr_by_index(1)->append_datum(Datum(c1));
+        chunk2->get_column_raw_ptr_by_index(2)->append_datum(Datum(100));
+    }
+    ASSIGN_OR_ABORT(auto filter2, pk_filter.build(*chunk2));
+    ASSERT_EQ(2, filter2.size());
+    EXPECT_EQ(0, filter2[0]);
+    EXPECT_EQ(1, filter2[1]);
+
+    ASSIGN_OR_ABORT(auto empty,
+                    pk_filter.build(*ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 0)));
+    EXPECT_TRUE(empty.empty());
 }
 
 // NULL on a non-nullable PK column is treated as type-minimum (MIN sentinel from FE).

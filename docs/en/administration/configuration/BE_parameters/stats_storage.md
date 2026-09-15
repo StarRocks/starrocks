@@ -309,11 +309,11 @@ This topic introduces the following types of BE configurations:
 
 ### enable_binary_plain_delta_offset
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether high-cardinality string/varchar columns that fall back to plain (non-dictionary) encoding store their page offset trailer as per-value deltas (string lengths) instead of absolute offsets. Absolute offsets increase monotonically and compress poorly under LZ4; deltas are near-constant for fixed-ish strings and compress much better, while the uncompressed trailer keeps the same size. The reduction in compressed column size is roughly the size of the offset trailer (about 4 bytes per row), which is more significant for high-cardinality string columns. When enabled, such columns are written with the distinct `PLAIN_ENCODING_DELTA_OFFSET` column encoding recorded in the segment metadata; the format is therefore self-describing per column. Only the write side is gated by this config. A BE version that does not understand the encoding fails to open the segment (a clear error) rather than misreading it, so do not enable this until the whole cluster is upgraded, and note that segments written with it are not readable after downgrading to a version without support.
+- Description: Whether string/varchar columns that fall back to plain (non-dictionary) encoding, because of high cardinality or because an actual value exceeds 1 MiB, store their page offset trailer as per-value deltas (string lengths) instead of absolute offsets. Absolute offsets increase monotonically and compress poorly under LZ4; deltas are near-constant for fixed-ish strings and compress much better, while the uncompressed trailer keeps the same size. The reduction in compressed column size is roughly the size of the offset trailer (about 4 bytes per row), which is more significant for high-cardinality string columns. When enabled, such columns are written with the distinct `PLAIN_ENCODING_DELTA_OFFSET` column encoding recorded in the segment metadata; the format is therefore self-describing per column. Only the write side is gated by this config. It is enabled by default. A BE version that does not understand the encoding fails to open the segment (a clear error) rather than misreading it, so set it to `false` while any BE without support is still serving (for example during a rolling upgrade from such a version), and before downgrading to one, because segments already written with the encoding stay unreadable there.
 - Introduced in: v4.2.0
 
 ### default_num_rows_per_column_file_block
@@ -459,24 +459,6 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
 - Introduced in: v3.3.2
-
-### enable_pk_index_parallel_compaction
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel Compaction for Primary Key index in a shared-data cluster.
-- Introduced in: -
-
-### enable_pk_index_parallel_execution
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
-- Introduced in: -
 
 ### enable_pk_size_tiered_compaction_strategy
 
@@ -952,7 +934,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: percent (0-100)
 - Is mutable: Yes
-- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true`).
+- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate so the parallel path always runs.
 - Introduced in: -
 
 ### lake_partial_update_thread_pool_max_threads
@@ -961,7 +943,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores. Runtime on/off is controlled by `enable_pk_index_parallel_execution`.
+- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores.
 - Introduced in: v4.1
 
 ### lake_partial_update_thread_pool_queue_size
@@ -1299,6 +1281,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
 - Introduced in: -
+
+### lake_enable_segment_tail_index_region
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the segment writer places the ordinal index of every column in one contiguous region immediately before the segment footer, instead of writing each column's ordinal index directly after that column's own data pages. Page zone maps and the short key index are not affected and keep their existing positions. Only the write side is gated by this config, and only in shared-data clusters: a shared-nothing BE writes the original layout whatever this is set to. Vertical compaction produces the region as well; partial-update rewrites do not, because they copy an existing segment's prefix and append only the remaining value columns, so those segments keep the original layout. Both layouts are readable by any BE or CN version in either direction and can coexist in the same table, so this can be turned on or off at any time without rewriting data.
+- Introduced in: v4.2.0
 
 ### lake_tablet_stat_slow_log_ms
 

@@ -11,18 +11,18 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 ALTER TABLE は既存のテーブルを修正します。以下を含みます:
 
-- [テーブル、パーティション、ロールアップ、または列の名前変更](#rename)
-- [テーブルコメントの修正](#alter-table-comment-from-v31)
-- [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#modify-partition)
+- [テーブル、パーティション、ロールアップ、または列の名前変更](#テーブルの名前を変更する)
+- [テーブルコメントの修正](#テーブルコメントの修正-v31-以降)
+- [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#パーティションの変更)
 - [Tablet サイズの調整](#tablet-サイズの調整)
-- [バケッティング方法とバケット数の修正](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
-- [列の変更（列の追加/削除、列順の変更、列コメントの変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
-- [ロールアップの作成/削除](#modify-rollup)
-- [インデックスの作成/削除](#modify-indexes)
-- [テーブルプロパティの修正](#modify-table-properties)
-- [アトミックスワップ](#swap)
-- [手動データバージョンコンパクション](#manual-compaction-from-31)
-- [主キー永続性インデックスの削除](#drop-primary-key-persistent-index-from-339)
+- [バケッティング方法とバケット数の修正](#バケッティング方法とバケット数の修正-v32-以降)
+- [列の変更（列の追加/削除、列順の変更、列コメントの変更）](#列の変更列の追加削除列順の変更列コメントの変更)
+- [ロールアップの作成/削除](#ロールアップの作成)
+- [インデックスの作成/削除](#インデックスの作成)
+- [テーブルプロパティの修正](#テーブルプロパティの修正)
+- [アトミックスワップ](#一時パーティションを使用して現在のパーティションを置き換える)
+- [手動データバージョンコンパクション](#手動コンパクション-v31-以降)
+- [主キー永続性インデックスの削除](#主キー永続性インデックスの削除-v339-以降)
 
 :::tip
 この操作には、対象テーブルに対する ALTER 権限が必要です。
@@ -486,9 +486,19 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - Tablet のサイズが `tablet_reshard_target_size` を**上回る**こと。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
+  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回っており、かつその Tablet のサイズがそのルールのターゲットサイズの 2 倍に達した場合は、`tablet_reshard_target_size` に達するのを待たずに分割されます。そのターゲットサイズとは、インデックスのデータ量を上記のスロット数で割ったサイズであり、`tablet_reshard_min_split_size` を下限とします。したがってデフォルトの 2 GB では、データ量がまだこの下限を超えていないインデックスは、Tablet が 4 GB に達した時点で分割されます。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。`PROPERTIES` で `tablet_reshard_target_size` を指定すると、この動作は無効になり、指定したターゲットサイズが厳密に適用されます。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を `tablet_reshard_target_size` 以上に設定します。
+
   - MERGE が実行される条件：
     - 隣接する 2 つのタブレットの合計サイズが `tablet_reshard_target_size` を**下回る**こと。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
+
+:::note
+
+`ORDER BY` が主キーと異なるレンジ分散の主キーテーブルでは、**MERGE はサポートされません**。この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。`ALTER TABLE ... MERGE TABLETS` とサイズに基づく自動マージはいずれも拒否され、`Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key` というエラーになります。
+
+SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。
+
+:::
 
 詳しい例については、[Tablet の分割または結合](#tablet-の分割または結合)を参照してください。
 
@@ -509,7 +519,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意:
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
-2. 重複キーテーブルのような非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. 重複キーテーブルのような非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列はキー列として作成され、テーブルの集計キーが変わり、既存データが書き換えられます。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `false` に設定すると、このような文は拒否され、いずれかを指定するよう求められます。
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じてロールアップを再作成できます。）
 4. 共有データクラスタの Range 分散テーブルでは、Range ソートキーに加わるキー列の追加が、重複キー（Duplicate Key）テーブル、集計（Aggregate）テーブル、およびユニークキー（Unique Key）テーブルで v4.2 以降サポートされます。この操作はオンラインの書き換えをトリガーし、追加するキー列には定数の `DEFAULT` 値を指定する必要があります。主キー（Primary Key）テーブル、またはロールアップや同期マテリアライズドビューを持つテーブルではサポートされません。
 
@@ -541,7 +551,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
 
-2. 非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. 非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列はキー列として作成されます。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `false` に設定すると、このような文は拒否されます。
 
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じて別のロールアップを作成できます。）
 
@@ -1095,7 +1105,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 

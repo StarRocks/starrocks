@@ -484,9 +484,19 @@ Parameter:
     - The size of the tablet is **larger** than `tablet_reshard_target_size`. 
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
 
+  - A tablet is also split without waiting for `tablet_reshard_target_size` if the materialized index it belongs to has fewer tablets than the number of compute nodes in its warehouse -- capped by `tablet_reshard_max_split_count`, so lowering that configuration lowers the tablet count at which this stops -- and the tablet is worth at least two of the target that rule aims at. That target is the size that would give the index one tablet per such slot, floored at `tablet_reshard_min_split_size`, so with its 2 GB default an index below that floor splits once a tablet reaches 4 GB. This allows a newly created partition to reach cluster-wide write parallelism sooner. Specifying `tablet_reshard_target_size` in `PROPERTIES` disables this and applies exactly the target size you requested. To disable it for the whole cluster, set `tablet_reshard_min_split_size` at or above `tablet_reshard_target_size`.
+
   - A tablet will be merged if both the following conditions are met:
     - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
+
+:::note
+
+MERGE is **not supported** on a range-distributed Primary Key table whose `ORDER BY` differs from its primary key. Such a table routes rows by a range in primary-key space while its segments are laid out in sort-key order, so a merge cannot decide which source tablet still owns a given row of a segment those sources share. Both `ALTER TABLE ... MERGE TABLETS` and the automatic size-based merge are refused with `Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key`.
+
+SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key can still be merged.
+
+:::
 
 For detailed examples, see [Split or merge tablets](#split-or-merge-tablets).
 
@@ -507,7 +517,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 Note:
 
 1. If you add a value column to an Aggregate table, you need to specify agg_type.
-2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
+2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword. On an Aggregate table, a column that specifies neither `agg_type` nor `KEY` is created as a key column, which changes the table's aggregation key and rewrites existing data. Set the FE configuration item `allow_implicit_key_column_in_agg_add_column` to `false` to reject such a statement instead, so that you are asked to specify one of the two.
 3. You cannot add a column that already exists in the base index to the rollup. (You can recreate a rollup if needed.)
 4. On range-distribution tables in shared-data clusters, adding a key column (which joins the range sort key) is supported for Duplicate Key, Aggregate, and Unique Key tables, from v4.2 onwards. The operation triggers an online rewrite, and the added key column must have a constant `DEFAULT` value. It is not supported for Primary Key tables, or for tables that have a rollup or synchronous materialized view.
 
@@ -539,7 +549,7 @@ Note:
 
 1. If you add a value column to an Aggregate table, you need to specify `agg_type`.
 
-2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword.
+2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword. On an Aggregate table, a column that specifies neither `agg_type` nor `KEY` is created as a key column. Set the FE configuration item `allow_implicit_key_column_in_agg_add_column` to `false` to reject such a statement instead.
 
 3. You cannot add a column that already exists in the base index to the rollup. (You can create another rollup if needed.)
 
@@ -1094,7 +1104,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 

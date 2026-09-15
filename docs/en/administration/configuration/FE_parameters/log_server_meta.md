@@ -92,6 +92,15 @@ This topic introduces the following types of FE configurations:
 - Description: When true, the generated Log4j2 configuration appends a ".gz" postfix to rotated audit log filenames (fe.audit.log.*) so that Log4j2 will produce compressed (.gz) archived audit log files on rollover. The setting is read during FE startup in Log4jConfig.initLogging and is applied to the RollingFile appender for audit logs; it only affects rotated/archived files, not the active audit log. Because the value is initialized at startup, changing it requires restarting the FE to take effect. Use alongside audit log rotation settings (`audit_log_dir`, `audit_log_roll_interval`, `audit_roll_maxsize`, `audit_log_roll_num`).
 - Introduced in: 3.2.12
 
+### `audit_log_error_message_max_length`
+
+- Default: 1024
+- Type: Int
+- Unit: Characters
+- Is mutable: Yes
+- Description: The maximum length of the `ErrorMessage` field recorded in the audit log for a failed statement, counted in UTF-16 code units, so a character outside the Basic Multilingual Plane such as an emoji counts as two. A longer message is truncated and suffixed with `... /* truncated, audit_log_error_message_max_length=<value> */`; the suffix is not counted against the limit. Set it to `0` to stop recording error messages altogether, in which case the field is omitted from the audit record. Error messages are also omitted when `enable_sql_desensitize_in_log` is `true` or when `enable_audit_sql` is `false`, because an error message quotes the statement that failed, down to the values and the offending token.
+- Introduced in: 4.2.0
+
 ### `audit_log_json_format`
 
 - Default: false
@@ -1519,11 +1528,20 @@ This topic introduces the following types of FE configurations:
 
 ### `enable_collect_partition_access_time`
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to collect and expose the per-partition `LAST_ACCESS_TIME` (the last time a partition was scanned by a user query) in `SHOW PARTITIONS` and `information_schema.partitions_meta`. When disabled, the access time is neither recorded nor aggregated across FEs, and the `LAST_ACCESS_TIME` column shows `NULL`. This does not affect `LAST_UPDATE_TIME`.
+- Introduced in: v4.2.0
+
+### `partition_access_time_flush_interval_sec`
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which each FE flushes its own collected per-partition `LAST_ACCESS_TIME` to the internal `_statistics_.partition_access_time` table for durability across restart/failover. Only effective when `enable_collect_partition_access_time` is `true`.
 - Introduced in: v4.2.0
 
 ### `enable_show_materialized_views_include_all_task_runs`
@@ -1678,6 +1696,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FEs stops providing services.
 - Introduced in: -
+
+### `meta_freshness_check_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval at which a Follower or Observer FE re-evaluates whether its metadata is still fresh enough to serve reads, as defined by `meta_delay_toleration_second`. Values outside the range [10, 5000] are clamped. This check runs on a dedicated thread rather than on the metadata replay thread, so that the node still stops serving stale metadata while a single journal entry is taking a long time to apply, for example when a replay operation is waiting for a database lock.
+- Introduced in: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- Default: 30
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: A metadata journal entry that has been applying for longer than this duration is reported in **fe.log** as a stuck replay, together with the stack of the replay thread, so that you can identify what is blocking metadata replay. Set this item to `0` to disable the report.
+- Introduced in: v4.2
 
 ### `meta_dir`
 

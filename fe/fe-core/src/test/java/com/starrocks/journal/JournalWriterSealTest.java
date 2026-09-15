@@ -16,6 +16,7 @@ package com.starrocks.journal;
 
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
+import com.starrocks.metric.MetricRepo;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +46,7 @@ public class JournalWriterSealTest {
         TestJournal journal = new TestJournal();
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
         JournalWriter writer = new JournalWriter(journal, queue);
-        writer.init(3L);
+        writer.init(1L, 3L);
 
         JournalTask task1 = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
         JournalTask task2 = new JournalTask(System.nanoTime(), makeBuffer(11), -1);
@@ -58,6 +59,10 @@ public class JournalWriterSealTest {
         Assertions.assertTrue(task2.get());
         Assertions.assertEquals(5L, writer.getLastCommittedJournalId());
         Assertions.assertEquals(List.of(4L, 5L), journal.getCommittedJournalIds());
+        Assertions.assertEquals(5L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        long batchBytes = task1.estimatedSizeByte() + task2.estimatedSizeByte();
+        Assertions.assertEquals(Math.round(5.0 * batchBytes / 2.0),
+                MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
     }
 
     @Test
@@ -67,7 +72,7 @@ public class JournalWriterSealTest {
         journal.setCommitFailure(true);
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
         JournalWriter writer = new JournalWriter(journal, queue);
-        writer.init(3L);
+        writer.init(1L, 3L);
 
         JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
         queue.put(task);
@@ -80,6 +85,8 @@ public class JournalWriterSealTest {
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED,
                 ((JournalWriteException) abortException.getCause()).getReason());
         Assertions.assertEquals(3L, writer.getLastCommittedJournalId());
+        Assertions.assertEquals(3L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(-1L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
     }
 
     @Test

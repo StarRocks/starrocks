@@ -267,9 +267,8 @@ public:
     // read short_key_index, for data check, just used in unit test now
     Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
-    // for cloud native tablet metadata cache.
-    // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
-    // so the segment size in the cache needs to be updated when indexes are loading.
+    // Update the cloud-native segment cache charge. For share-nothing rowsets,
+    // mark the segment dirty when its memory usage may have changed.
     void update_cache_size();
 
     bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
@@ -289,6 +288,8 @@ public:
 
     // for ut test
     void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
+    bool consume_lazy_mem_update() { return _lazy_mem_update.exchange(false, std::memory_order_acq_rel); }
 
 #ifdef BE_TEST
     static void toggle_batch_update_cache_mode(bool enabled) { _s_allow_batch_update_mode = enabled; }
@@ -399,6 +400,10 @@ private:
     PageHandle _full_sk_index_handle;
     std::unique_ptr<ShortKeyIndexDecoder> _full_sk_index_decoder;
 
+    // Published size of the loaded short/full key indexes. Memory samplers must not inspect
+    // their handles or decoders while another reader is still loading them.
+    std::atomic<size_t> _loaded_key_index_mem_usage{0};
+
     std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
     std::atomic_int _batch_on_flags_counter{0};
@@ -408,6 +413,9 @@ private:
     lake::TabletManager* _tablet_manager = nullptr;
     // used to guarantee that segment will be opened at most once in a thread-safe way
     OnceFlag _open_once;
+
+    // for share nothing, set to true after update_cache_size() is called
+    std::atomic<bool> _lazy_mem_update{false};
 #ifdef BE_TEST
     static bool _s_allow_batch_update_mode;
 #endif

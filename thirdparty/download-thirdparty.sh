@@ -697,6 +697,10 @@ if [[ -d $TP_SOURCE_DIR/$JEMALLOC_SOURCE ]] ; then
         apply_patch -p0 $TP_PATCH_DIR/jemalloc_malloc_usable_size_minimal_tsd.patch
         touch $PATCHED_MARK.usable_size_minimal_tsd
     fi
+    if [ ! -f $PATCHED_MARK.metadata_breakdown ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+        apply_patch -p0 $TP_PATCH_DIR/jemalloc_metadata_breakdown.patch
+        touch $PATCHED_MARK.metadata_breakdown
+    fi
     cd -
     echo "Finished patching $JEMALLOC_SOURCE"
 fi
@@ -718,9 +722,6 @@ if [[ -d $TP_SOURCE_DIR/$HYPERSCAN_SOURCE ]] ; then
     if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
         apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.4.0.patch
         touch $PATCHED_MARK
-    elif [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.3.0.aarch64" ]; then
-        apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.3.0.aarch64.patch
-        touch $PATCHED_MARK
     fi
     cd -
     echo "Finished patching $HYPERSCAN_SOURCE"
@@ -731,6 +732,8 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+        # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
         touch $PATCHED_MARK
     fi
     cd -

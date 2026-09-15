@@ -115,6 +115,7 @@ starrocks_set_default_packages() {
         blake3
         pprof
         benchgen
+        paimon_cpp
     )
 
     if [[ "${machine_type}" != "aarch64" ]]; then

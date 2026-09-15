@@ -205,9 +205,7 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
     auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
 
     // spill components
-    // TODO: avoid create spill channel when when disable spill
-
-    auto workgroup = context->fragment_context()->workgroup();
+    // TODO: avoid creating spill channel when spill is disabled
     auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
 
     // spill process operator
@@ -224,7 +222,7 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
             runtime_state(), _tnode.sort_node.topn_type, need_merge, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
             _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, enable_pre_agg,
             _tnode.sort_node.pre_agg_exprs, _tnode.sort_node.pre_agg_output_slot_id, _offset, partition_limit,
-            _sort_keys, _order_by_types, has_outer_join_child, _build_runtime_filters);
+            _sort_keys, has_outer_join_child, _build_runtime_filters);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));

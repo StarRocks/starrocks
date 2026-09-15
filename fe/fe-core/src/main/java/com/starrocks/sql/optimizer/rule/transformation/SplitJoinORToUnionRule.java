@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -300,6 +301,10 @@ public class SplitJoinORToUnionRule extends TransformationRule {
     private boolean containsUnsupportedOperators(OptExpression expr) {
         if (expr == null) {
             return false;
+        }
+
+        if (expr.getOp() instanceof LogicalAIProjectOperator) {
+            return true;
         }
 
         if (expr.getOp().getOpType() == OperatorType.LOGICAL_LIMIT) {

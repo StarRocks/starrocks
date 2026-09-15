@@ -41,9 +41,13 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/seek_range.h"
+#include "storage/seek_tuple.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 
@@ -93,6 +97,86 @@ static std::string be32(uint32_t v) {
     s[2] = static_cast<char>((v >> 8) & 0xFF);
     s[3] = static_cast<char>(v & 0xFF);
     return s;
+}
+
+// DUP table whose ORDER BY leads with a VARCHAR column while the only key column is INT. A split
+// hands the segment iterator a tablet range in key-column (INT) space, but the segment's rows are
+// ordered by the sort key, so the two are not comparable.
+static std::shared_ptr<TabletSchema> make_varchar_leading_sortkey_schema() {
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_num_short_key_columns(1);
+    pb.set_next_column_unique_id(4);
+    auto* k1 = pb.add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("INT");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    k1->set_length(4);
+    k1->set_index_length(4);
+    k1->set_aggregation("NONE");
+    auto* s2 = pb.add_column();
+    s2->set_unique_id(2);
+    s2->set_name("s2");
+    s2->set_type("VARCHAR");
+    s2->set_is_key(false);
+    s2->set_is_nullable(false);
+    s2->set_length(16);
+    s2->set_index_length(16);
+    s2->set_aggregation("NONE");
+    auto* v3 = pb.add_column();
+    v3->set_unique_id(3);
+    v3->set_name("v3");
+    v3->set_type("INT");
+    v3->set_is_key(false);
+    v3->set_is_nullable(false);
+    v3->set_length(4);
+    v3->set_index_length(4);
+    v3->set_aggregation("NONE");
+    // ORDER BY (s2, k1): leading sort column is the VARCHAR, not the INT key column.
+    pb.add_sort_key_idxes(1);
+    pb.add_sort_key_idxes(0);
+    return std::make_shared<TabletSchema>(pb);
+}
+
+// Same shape, but a primary-key table: PRIMARY KEY(k1) ORDER BY(s2, k1). This is the combination
+// whose tablet range lives in a different space than the segment's row order.
+static std::shared_ptr<TabletSchema> make_pk_varchar_sortkey_schema() {
+    TabletSchemaPB pb;
+    pb.set_keys_type(PRIMARY_KEYS);
+    pb.set_num_short_key_columns(1);
+    pb.set_next_column_unique_id(4);
+    auto* k1 = pb.add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("INT");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    k1->set_length(4);
+    k1->set_index_length(4);
+    k1->set_aggregation("NONE");
+    auto* s2 = pb.add_column();
+    s2->set_unique_id(2);
+    s2->set_name("s2");
+    s2->set_type("VARCHAR");
+    s2->set_is_key(false);
+    s2->set_is_nullable(false);
+    s2->set_length(16);
+    s2->set_index_length(16);
+    s2->set_aggregation("REPLACE");
+    auto* v3 = pb.add_column();
+    v3->set_unique_id(3);
+    v3->set_name("v3");
+    v3->set_type("INT");
+    v3->set_is_key(false);
+    v3->set_is_nullable(false);
+    v3->set_length(4);
+    v3->set_index_length(4);
+    v3->set_aggregation("REPLACE");
+    pb.add_sort_key_idxes(1);
+    pb.add_sort_key_idxes(0);
+    return std::make_shared<TabletSchema>(pb);
 }
 
 class SegmentFullSortKeyIndexTest : public ::testing::Test {
@@ -455,6 +539,129 @@ TEST_F(SegmentFullSortKeyIndexTest, nonencodable_sortkey_schema_unusable) {
     EXPECT_TRUE(segment->has_full_sort_key_index_page());
     EXPECT_FALSE(segment->use_full_sort_key_index());
     EXPECT_EQ(nullptr, segment->full_sort_key_index_decoder());
+}
+
+// A primary-key tablet's range is expressed over its key columns. When the sort key is separate,
+// the segment is not ordered that way, so the range cannot be turned into a rowid interval --
+// feeding it to the short-key binary search compares an INT datum against a VARCHAR sort column and
+// throws bad_variant_access out of the scan, which on the publish path aborts the BE. The iterator
+// must skip the narrowing and return every row instead.
+TEST_F(SegmentFullSortKeyIndexTest, tablet_range_skipped_when_pk_sort_key_is_separate) {
+    auto schema = make_pk_varchar_sortkey_schema();
+    ASSERT_TRUE(schema->has_separate_sort_key());
+
+    std::string path = strings::Substitute("$0/$1.dat", kDir, "separate_sortkey_range");
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(path));
+    SegmentWriterOptions wopts;
+    wopts.num_rows_per_block = kRowsPerBlock;
+    SegmentWriter writer(std::move(wfile), 0, schema, wopts);
+    ASSERT_OK(writer.init(true));
+
+    auto write_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, kNumRows);
+    auto cols = chunk->columns();
+    for (int64_t i = 0; i < kNumRows; ++i) {
+        // Rows are appended in sort-key order (s2 ascending); k1 runs the other way, so no rowid
+        // interval matches a k1 range.
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(kNumRows - i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(strings::Substitute("s$0", 1000000 + i))));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{path}, 0, schema));
+
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    Schema key_schema(std::vector<FieldPtr>{read_schema.field(0)});
+
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    OlapReaderStatistics stats;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    // The range is over k1, the key column -- the space a split's tablet range lives in.
+    seg_opts.tablet_range = SeekRange(SeekTuple(key_schema, {Datum(1)}), SeekTuple(key_schema, {Datum(5)}));
+    seg_opts.tablet_range->set_inclusive_lower(true);
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, seg_opts));
+    ASSERT_OK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+
+    int64_t total = 0;
+    while (true) {
+        auto out = ChunkFactory::new_chunk(iter->schema(), kRowsPerBlock);
+        auto st = iter->get_next(out.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        total += out->num_rows();
+    }
+    // Not narrowed: the whole segment is scanned, and nothing threw.
+    ASSERT_EQ(kNumRows, total);
+}
+
+// The counterpart: a duplicate-key tablet encodes its range over the sort key itself, so the
+// narrowing stays well-defined there and must keep happening. Range distribution allows a DUP table
+// any ORDER BY, so this shape is not hypothetical.
+TEST_F(SegmentFullSortKeyIndexTest, tablet_range_still_narrows_without_primary_key) {
+    auto schema = make_varchar_leading_sortkey_schema();
+    ASSERT_TRUE(schema->has_separate_sort_key());
+    ASSERT_NE(KeysType::PRIMARY_KEYS, schema->keys_type());
+
+    std::string path = strings::Substitute("$0/$1.dat", kDir, "dup_sortkey_range");
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(path));
+    SegmentWriterOptions wopts;
+    wopts.num_rows_per_block = kRowsPerBlock;
+    SegmentWriter writer(std::move(wfile), 0, schema, wopts);
+    ASSERT_OK(writer.init(true));
+
+    auto write_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, kNumRows);
+    auto cols = chunk->columns();
+    for (int64_t i = 0; i < kNumRows; ++i) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(kNumRows - i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(strings::Substitute("s$0", 1000000 + i))));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{path}, 0, schema));
+
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    // The range is over s2, the leading sort column -- the space a non-PK tablet range lives in.
+    Schema sort_key_schema;
+    sort_key_schema.append_sort_key_idx(1);
+    sort_key_schema.append(read_schema.field(1));
+
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    OlapReaderStatistics stats;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    const std::string lower = "s1000000";
+    const std::string upper = strings::Substitute("s$0", 1000000 + kNumRows / 2);
+    seg_opts.tablet_range = SeekRange(SeekTuple(sort_key_schema, {Datum(Slice(lower))}),
+                                      SeekTuple(sort_key_schema, {Datum(Slice(upper))}));
+    seg_opts.tablet_range->set_inclusive_lower(true);
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, seg_opts));
+    ASSERT_OK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+
+    int64_t total = 0;
+    while (true) {
+        auto out = ChunkFactory::new_chunk(iter->schema(), kRowsPerBlock);
+        auto st = iter->get_next(out.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        total += out->num_rows();
+    }
+    ASSERT_LT(total, kNumRows);
 }
 
 } // namespace starrocks

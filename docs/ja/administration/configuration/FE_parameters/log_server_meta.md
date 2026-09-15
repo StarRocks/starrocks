@@ -92,6 +92,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：true の場合、生成された Log4j2 設定は、ローテーションされた監査ログファイル名 (fe.audit.log.*) に ".gz" 接尾辞を追加し、Log4j2 がロールオーバー時に圧縮された (.gz) アーカイブ監査ログファイルを生成するようにします。この設定は、FE 起動時に Log4jConfig.initLogging で読み込まれ、監査ログの RollingFile アペンダーに適用されます。アクティブな監査ログではなく、ローテーション/アーカイブされたファイルにのみ影響します。値は起動時に初期化されるため、変更を有効にするには FE の再起動が必要です。監査ログのローテーション設定 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) とともに使用します。
 - 導入時期：3.2.12
 
+### `audit_log_error_message_max_length`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：文字
+- 変更可能：Yes
+- 説明：ステートメントが失敗した場合に監査ログの `ErrorMessage` フィールドへ記録される最大長です。長さは UTF-16 コードユニットで数えるため、絵文字などの基本多言語面外の文字は 2 としてカウントされます。これを超えるエラーメッセージは切り詰められ、末尾に `... /* truncated, audit_log_error_message_max_length=<value> */` が付きます（この接尾辞は上限に含まれません）。`0` に設定するとエラーメッセージは記録されず、監査レコードにこのフィールドは現れません。エラーメッセージはステートメントを失敗させた値やエラー箇所のトークンを含むため、`enable_sql_desensitize_in_log` が `true` の場合、および `enable_audit_sql` が `false` の場合も記録されません。
+- 導入時期：4.2.0
+
 ### `audit_log_json_format`
 
 - デフォルト：false
@@ -1510,11 +1519,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_collect_partition_access_time`
 
-- デフォルト：true
+- デフォルト：false
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
 - 説明：`SHOW PARTITIONS` および `information_schema.partitions_meta` で、パーティションごとの `LAST_ACCESS_TIME`（パーティションがユーザークエリによって最後にスキャンされた時刻）を収集して公開するかどうかを制御します。無効にすると、アクセス時刻は記録されず、FE 間で集約もされず、`LAST_ACCESS_TIME` 列は `NULL` を表示します。この項目は `LAST_UPDATE_TIME` には影響しません。
+- 導入時期：v4.2.0
+
+### `partition_access_time_flush_interval_sec`
+
+- デフォルト：600
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：各 FE が自身で収集したパーティションごとの `LAST_ACCESS_TIME` を、再起動やフェイルオーバーをまたいで永続化するために内部テーブル `_statistics_.partition_access_time` にフラッシュする間隔です。`enable_collect_partition_access_time` が `true` の場合のみ有効です。
 - 導入時期：v4.2.0
 
 ### `enable_show_materialized_views_include_all_task_runs`
@@ -1669,6 +1687,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：フォロワー FE およびオブザーバー FE のメタデータがリーダー FE のメタデータよりも遅延できる最大期間。単位: 秒。この期間を超えると、非リーダー FE はサービスの提供を停止します。
 - 導入時期：-
+
+### `meta_freshness_check_interval_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：フォロワー FE およびオブザーバー FE が、自身のメタデータが読み取りを提供できるだけ新しいかどうかを再評価する間隔です。判定基準は `meta_delay_toleration_second` です。[10, 5000] の範囲外の値はこの範囲に丸められます。このチェックはメタデータ再生スレッドではなく専用スレッドで実行されます。そのため、1 件のジャーナルの適用に長時間かかっている場合（たとえば再生処理がデータベースロックを待っている場合）でも、ノードは古いメタデータの提供を止めることができます。
+- 導入時期：v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- デフォルト：30
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：メタデータジャーナルの適用がこの時間を超えた場合、再生が滞っているものとして再生スレッドのスタックとともに **fe.log** に記録します。これによりメタデータ再生を妨げている処理を特定できます。`0` を設定するとこのログを無効にします。
+- 導入時期：v4.2
 
 ### `meta_dir`
 

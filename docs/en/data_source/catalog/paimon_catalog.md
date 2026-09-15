@@ -49,6 +49,11 @@ You can only use Paimon catalogs to query data. You cannot use Paimon catalogs t
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` is supported from v4.2 onwards for splits read by the native reader (append-only tables and compacted primary-key data). Reading `VARIANT` from uncompacted primary-key data requires the JNI reader and is not yet supported; such queries are rejected with a plan-time error.
+:::
 
 ## Integration preparations
 
@@ -405,6 +410,15 @@ If you choose Google GCS as storage for your Paimon cluster, take one of the fol
     | gcp.gcs.service_account_private_key_id | ""            | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key    | ""            | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""            | "hello"                                                      | The data service account that you want to impersonate.       |
+
+#### MetadataCacheParams (optional)
+
+StarRocks caches Paimon metadata and refreshes it in the background. These optional properties tune that cache.
+
+| Parameter                              | Default value | Description                                                  |
+| -------------------------------------- | ------------- | ------------------------------------------------------------ |
+| paimon_meta_cache_ttl_sec              | 86400         | How long a cached entry lives, in seconds. |
+| paimon_table_cache_refresh_interval_sec | 60            | The minimum interval, in seconds, between two refreshes of the same table triggered by a query that read a newer snapshot. The refresh runs in the background and the query does not wait for it. Set to `0` to only refresh in the periodic background round. Supported from v4.2.0 onwards. |
 
 ### Examples
 

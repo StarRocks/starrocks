@@ -893,8 +893,17 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
             SlotId slot_id;
 
-            // probe expr is slot ref and slot id matches.
-            if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
+            if (!desc->is_probe_slot_ref(&slot_id)) {
+                Expr* probe_expr = desc->probe_expr_ctx()->root();
+                std::vector<SlotId> slot_ids;
+                if (probe_expr->is_monotonic() && probe_expr->get_slot_ids(&slot_ids) == 1 &&
+                    slot_ids[0] == slot.id()) {
+                    rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+                }
+                continue;
+            }
+
+            if (slot_id != slot.id()) continue;
 
             // runtime filter existed and does not have null.
             if (rf == nullptr || rf->get_in_filter() != nullptr) {
@@ -915,8 +924,9 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             if (rf->has_null()) {
                 normalized_rf_with_null<SlotType, MappingType, Decoder>(rf, &slot, std::forward<Args>(args)...);
             } else {
+                // No offset: this path normalizes a slot-ref probe, whose key IS the column value.
                 detail::RuntimeColumnPredicateBuilder::build_minmax_range<RangeType, SlotType, MappingType, Decoder>(
-                        *range, rf, _opts.obj_pool, std::forward<Args>(args)...);
+                        *range, rf, _opts.obj_pool, {}, std::forward<Args>(args)...);
             }
         }
 

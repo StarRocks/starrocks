@@ -2309,11 +2309,22 @@ class StarrocksSQLApiLib(object):
             if orig_value is not None:
                 self.execute_sql(f"set enable_materialized_view_rewrite = {orig_value};", True)
 
-    def print_hit_materialized_view(self, query, *expects) -> str:
+    def print_hit_materialized_view(self, query, *expects, timeout=10, interval=0.2) -> str:
         """
-        assert mv_name is hit in query
+        assert every name in ``expects`` appears in the plan for query
+
+        Callers pass more than one marker to assert a shape, not a choice: ("mv1", "UNION") means
+        the MV was used *and* the rewrite was a union. Returning on the first marker to appear left
+        the rest of them unchecked.
+
+        With ``expects`` there is a condition to poll on, so the explain runs immediately and
+        repeats until every marker appears. Without it the return value is free-form output that
+        lands in an R file, and there is nothing to wait for except stability, so the original
+        one-second settle wait is kept.
         """
-        time.sleep(1)
+        tools.assert_true(timeout > 0, "print_hit_materialized_view: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "print_hit_materialized_view: interval must be positive, got %s" % interval)
+
         def check_mv():
             sql = "explain %s" % (query)
             res = self.retry_execute_sql(sql, True)
@@ -2321,45 +2332,46 @@ class StarrocksSQLApiLib(object):
                 print(res)
                 return False
             plan = str(res["result"])
-            if expects is not None or len(expects) > 0:
+            if expects:
                 for expect in expects:
-                    if plan.find(expect) > 0:
-                        return True
+                    if plan.find(expect) <= 0:
+                        return False
+                return True
+            mvs = []
+            for line in plan.split('\n'):
+                if 'MaterializedView: true' in line:
+                    mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
+                    if mv_name:
+                        mvs.append(mv_name)
+            mvs.sort()
+            print("Hit materialized views:", ", ".join(mvs))
+            return mvs
+
+        if not expects:
+            time.sleep(1)
+            return self._with_materialized_view_rewrite(check_mv)
+
+        deadline = time.monotonic() + timeout
+        while True:
+            if self._with_materialized_view_rewrite(check_mv):
+                return True
+            if time.monotonic() >= deadline:
                 return False
-            else:
-                mvs = []
-                for line in plan.split('\n'):
-                    if 'MaterializedView: true' in line:
-                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
-                        if mv_name:
-                            mvs.append(mv_name)
-                mvs.sort()
-                print("Hit materialized views:", ", ".join(mvs))
-                return mvs
+            time.sleep(interval)
 
-        # Retry the check several times before declaring failure. MV partition
-        # staleness state propagates asynchronously after base-table writes, so
-        # the optimizer may not pick the expected rewrite (e.g. UNION) on the
-        # first explain call right after an INSERT.
-        max_retries = 5
-        for attempt in range(max_retries):
-            result = self._with_materialized_view_rewrite(check_mv)
-            if not isinstance(result, bool) or result:
-                return result
-            if attempt < max_retries - 1:
-                time.sleep(2)
-        return False
-
-    def print_hit_materialized_views(self, query, *expects) -> str:
+    def print_hit_materialized_views(self, query, *expects, timeout=10, interval=0.2) -> str:
         """
         print all mv_names hit in query.
 
-        If ``expects`` is provided, retry the explain a few times until every
-        expected mv name appears in the rewrite. MV partition-version state
-        propagates asynchronously after a refresh/insert, so the optimizer may
-        skip an eligible MV on the very first explain call.
+        If ``expects`` is provided, poll the explain until every expected mv name appears in the
+        rewrite. MV partition-version state propagates asynchronously after a refresh/insert, so
+        the optimizer may skip an eligible MV on the very first explain call. Without ``expects``
+        the return value is free-form output that lands in an R file, and there is nothing to wait
+        for except stability, so the original one-second settle wait is kept.
         """
-        time.sleep(1)
+        tools.assert_true(timeout > 0, "print_hit_materialized_views: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "print_hit_materialized_views: interval must be positive, got %s" % interval)
+
         def extract_mvs():
             sql = "explain %s" % (query)
             res = self.retry_execute_sql(sql, True)
@@ -2386,18 +2398,18 @@ class StarrocksSQLApiLib(object):
             return ",".join(ans)
 
         if not expects:
+            time.sleep(1)
             return self._with_materialized_view_rewrite(extract_mvs)
 
-        max_retries = 5
-        last_result = ""
-        for attempt in range(max_retries):
+        deadline = time.monotonic() + timeout
+        while True:
             last_result = self._with_materialized_view_rewrite(extract_mvs)
             hit_set = set(last_result.split(",")) if last_result else set()
             if all(e in hit_set for e in expects):
                 return last_result
-            if attempt < max_retries - 1:
-                time.sleep(2)
-        return last_result
+            if time.monotonic() >= deadline:
+                return last_result
+            time.sleep(interval)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
@@ -2665,22 +2677,28 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal(expect_status, status, "wait alter table finish error")
         time.sleep(0.5)
 
-    def wait_global_dict_ready(self, column_name, table_name):
+    def wait_global_dict_ready(self, column_name, table_name, timeout=60, interval=0.1):
         """
-        wait global dict ready
+        wait until the global dict for table_name:column_name is collected
+
+        The first EXPLAIN only asks the FE for a dictionary it does not have yet; CacheDictManager
+        loads it asynchronously from the BE, so the plan gains its Decode node a poll later rather
+        than on the first call. Poll rather than sleep between checks: the load finishes long
+        before a whole second has passed.
         """
-        status = ""
-        count = 0
-        while True:
-            if count > 60:
-                tools.assert_true(False, "acquire dictionary timeout for 60s")
-            sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        tools.assert_true(timeout > 0, "wait_global_dict_ready: timeout must be positive, got %s" % timeout)
+        tools.assert_true(interval > 0, "wait_global_dict_ready: interval must be positive, got %s" % interval)
+
+        sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             res = self.execute_sql(sql, True)
             if not res["status"]:
                 tools.assert_true(False, "acquire dictionary error")
             if str(res["result"]).find("Decode") > 0:
                 return ""
-            time.sleep(1)
+            time.sleep(interval)
+        tools.assert_true(False, "acquire dictionary timeout for %ss" % timeout)
     
     def wait_plan_contains(self, query, *expects):
         """
@@ -3240,9 +3258,45 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
 
-    def get_all_backend_ids(self) -> List[str]:
-        """Return ids of all alive backends (fallback to all rows if Alive not found)."""
-        res = self.execute_sql("show backends;", ori=True)
+    def get_any_worker_node_id(self) -> str:
+        """Return the id of one node that can run ADMIN EXECUTE.
+
+        Takes the union of backends and compute nodes, the way _get_backend_http_endpoints()
+        does: a shared-data cluster may run only compute nodes, and ADMIN EXECUTE resolves a
+        numeric id through getBackendOrComputeNode(), so either kind serves. Which node is
+        picked does not matter for anything per-process and identical everywhere.
+        """
+        node_ids = self.get_all_backend_ids() or self.get_all_compute_node_ids()
+
+        tools.assert_true(len(node_ids) > 0, "no backend or compute node to run ADMIN EXECUTE on")
+        return node_ids[0]
+
+    def assert_node_script_prints(self, node_id, script, pattern):
+        """Run a Wren script on `node_id` and match what it printed against a regex.
+
+        The regex lives here because a `function:` result is compared for equality, and the
+        printed text carries per-cluster numbers.
+        """
+        sql = "admin execute on %s '%s'" % (node_id, script)
+        res = self.execute_sql(sql, ori=True)
+        tools.assert_true(res["status"], "%s failed: %s" % (sql, res.get("msg", "")))
+
+        printed = "\n".join("\t".join(str(cell) for cell in row) for row in res["result"])
+        tools.assert_regex(
+            printed,
+            pattern,
+            "ADMIN EXECUTE result does not match\n- [script]: %s\n- [exp]: %s\n- [act]: %s"
+            % (script, pattern, printed),
+        )
+        return "OK"
+
+    def _alive_node_ids(self, sql, id_column_names) -> List[str]:
+        """Ids of the alive rows of a `show backends`/`show compute nodes` style result.
+
+        Both listings include dead nodes, so the Alive column decides. It is only ignored when
+        the column is absent, in which case every row is returned rather than none.
+        """
+        res = self.execute_sql(sql, ori=True)
         tools.assert_true(res["status"], res["msg"])
 
         alive_idx = None
@@ -3250,24 +3304,32 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for i, col_info in enumerate(res["desc"]):
             if col_info[0] == "Alive":
                 alive_idx = i
-            if col_info[0] in ("BackendId", "BackendID", "BackendId "):
+            if col_info[0] in id_column_names:
                 id_idx = i
         if id_idx is None:
             id_idx = 0
 
-        be_ids: List[str] = []
+        node_ids: List[str] = []
         if alive_idx is not None:
             for row in res["result"]:
                 try:
                     if str(row[alive_idx]).lower() == "true":
-                        be_ids.append(str(row[id_idx]))
+                        node_ids.append(str(row[id_idx]))
                 except Exception:
                     continue
         else:
             for row in res["result"]:
-                be_ids.append(str(row[id_idx]))
+                node_ids.append(str(row[id_idx]))
 
-        return be_ids
+        return node_ids
+
+    def get_all_backend_ids(self) -> List[str]:
+        """Return ids of all alive backends (fallback to all rows if Alive not found)."""
+        return self._alive_node_ids("show backends;", ("BackendId", "BackendID", "BackendId "))
+
+    def get_all_compute_node_ids(self) -> List[str]:
+        """Return ids of all alive compute nodes (empty on a shared-nothing cluster)."""
+        return self._alive_node_ids("show compute nodes;", ("ComputeNodeId", "ComputeNodeID"))
 
     def set_vlog_level_for_all_be(self, prefixes, level: int):
         """Set VLOG level for one or more file-prefix patterns on all alive backends.
@@ -3444,6 +3506,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             tools.assert_true(
                 plan_string.find(expect) > 0,
                 "verbose plan of sql (%s) assert expect %s is not found in plan: %s" % (query, expect, plan_string),
+            )
+
+    def assert_explain_verbose_not_contains(self, query, *expects):
+        """
+        assert explain verbose result does NOT contain expect string
+        """
+        sql = "explain verbose %s" % (query)
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], res["msg"])
+        plan_string = "\n".join(item[0] for item in res["result"])
+        for expect in expects:
+            tools.assert_true(
+                plan_string.find(expect) == -1,
+                "verbose plan of sql (%s) assert expect %s is found in plan: %s" % (query, expect, plan_string),
             )
 
     def assert_explain_costs_contains(self, query, *expects):
