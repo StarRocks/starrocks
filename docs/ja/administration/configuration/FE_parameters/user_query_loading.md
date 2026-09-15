@@ -400,6 +400,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、StarRocks は、基底外部テーブルが削除され再作成されたり、テーブル識別子が変更されたりした場合に、マテリアライズドビューの基底テーブルメタデータを自動的に修復しようとします。修復フローは、マテリアライズドビューの基底テーブル情報を更新し、外部テーブルパーティションのパーティションレベルの修復情報を収集し、`autoRefreshPartitionsLimit` を尊重しながら非同期自動更新マテリアライズドビューのパーティション更新決定を駆動することができます。現在、自動修復は Hive 外部テーブルをサポートしています。サポートされていないテーブルタイプでは、マテリアライズドビューが非アクティブに設定され、修復例外が発生します。パーティション情報収集は非ブロッキングであり、失敗はログに記録されます。
 - 導入時期：v3.3.19, v3.4.8, v3.5.6
 
+### `enable_mv_on_iceberg_table_with_partition_evolution`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：Partition Evolution が発生した（つまりテーブルメタデータに複数の partition spec が保持されている）Iceberg 基底テーブル上でマテリアライズドビューの作成と更新を許可するかどうか。デフォルトでは、Iceberg 基底テーブルの `specs()` の数が 1 を超える場合、StarRocks は `CREATE MATERIALIZED VIEW` およびマテリアライズドビューの更新の両方を拒否し、`Do not support create materialized view when base iceberg table ... has done partition evolution` エラーをスローします。この項目を `true` に設定すると、この制限が緩和されます：Iceberg テーブルの現在の snapshot 配下のすべての live manifest の partition spec id が、テーブルの currentSpec に一致している場合（通常は `REWRITE DATA` / `REWRITE MANIFESTS` で過去の spec のデータをすべて最新の spec に書き換えた後の状態）、StarRocks は対応するマテリアライズドビューの作成と更新を許可します。現在の spec 以外を参照している live manifest がまだ残っている場合、作成と更新は引き続き Partition Evolution 関連のエラーで失敗し、spec をまたいだ不整合なデータの読み取りを防ぎます。
+- 導入時期：-
+
 ### `enable_predicate_columns_collection`
 
 - デフォルト：true
