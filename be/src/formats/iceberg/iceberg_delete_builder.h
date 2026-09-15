@@ -55,10 +55,15 @@ public:
 
     // Invokes cb once per row. `path` is used for error reporting only; `length` is the file
     // size in bytes. `stats` may be null when the caller does not collect scanner stats.
+    //
+    // `pushdown_file_path_eq`, if set, is pushed down as a `file_path == *pushdown_file_path_eq`
+    // predicate to prune row-groups/pages (parquet only). `cb` still fires for every surviving row,
+    // since pruning isn't row-exact.
     static Status read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
                             const std::string& format, // "parquet" | "orc"
                             int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
-                            FormatScannerStats* stats, const RowCallback& cb);
+                            FormatScannerStats* stats, const RowCallback& cb,
+                            const std::string* pushdown_file_path_eq = nullptr);
 };
 
 class IcebergDeleteBuilder {
