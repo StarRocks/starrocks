@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
@@ -25,6 +26,8 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
 
 public class OpenIdConnectAuthenticationTest {
 
@@ -45,12 +48,50 @@ public class OpenIdConnectAuthenticationTest {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         serializer.writeInt1(0);
         serializer.writeLenEncodedString(openIdConnectJson);
+
+        ConnectContext context = new ConnectContext();
+        context.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
         try {
-            provider.authenticate(new ConnectContext().getAccessControlContext(), new UserIdentity("harbor", "%"),
+            provider.authenticate(context.getAccessControlContext(), new UserIdentity("harbor", "%"),
                     serializer.toArray());
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testAuthenticationWithoutNegotiatedPlugin() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+
+        JWTAuthenticationProvider provider =
+                new JWTAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
+        Assertions.assertTrue(provider.supportsUnnegotiatedCredential());
+
+        String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+        AccessControlContext authContext = new ConnectContext().getAccessControlContext();
+        Assertions.assertNull(authContext.getAuthPlugin());
+
+        provider.authenticate(authContext, new UserIdentity("harbor", "%"), idToken.getBytes(StandardCharsets.UTF_8));
+        Assertions.assertEquals(idToken, authContext.getAuthToken());
+    }
+
+    @Test
+    public void testAuthenticationWithoutNegotiatedPluginRejectsBadToken() throws Exception {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+
+        JWTAuthenticationProvider provider =
+                new JWTAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
+
+        String idToken = mockTokenUtils.getOpenIdConnect("fake-oidc.json");
+        AccessControlContext authContext = new ConnectContext().getAccessControlContext();
+
+        AuthenticationException e = Assertions.assertThrows(AuthenticationException.class, () -> provider.authenticate(
+                authContext, new UserIdentity("harbor", "%"), idToken.getBytes(StandardCharsets.UTF_8)));
+
+        // The token was read as a JWT and rejected by signature verification, not mangled by a length prefix.
+        Assertions.assertTrue(e.getMessage().contains("JWT with kid JKA9Gjuzv--loolRTY_pBN19sUF1Mf8naxOwvb0mgKQ is invalid"),
+                e.getMessage());
+        Assertions.assertNull(authContext.getAuthToken());
     }
 
     @Test

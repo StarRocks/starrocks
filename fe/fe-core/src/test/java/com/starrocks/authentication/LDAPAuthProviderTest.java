@@ -85,6 +85,28 @@ class LDAPAuthProviderTest {
     }
 
     @Test
+    void testSupportsUnnegotiatedCredentialAndEmptyResponse() throws Exception {
+        String providedDN = "cn=test,ou=People,dc=starrocks,dc=com";
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                "cn=admin,dc=starrocks,dc=com", "secret",
+                "ou=People,dc=starrocks,dc=com", "uid",
+                providedDN, null);
+
+        // LDAP takes a plain password, which is exactly what the non-MySQL endpoints hand over.
+        Assertions.assertTrue(provider.supportsUnnegotiatedCredential());
+
+        // An endpoint may pass an empty password. The trailing-NUL trim reads authResponse[length - 1], which
+        // indexes out of bounds on an empty array, and it sits outside the catch block so it escaped as a raw
+        // ArrayIndexOutOfBoundsException rather than an authentication failure.
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
+        Assertions.assertDoesNotThrow(() -> provider.authenticate(authCtx, user, new byte[0]));
+        Assertions.assertEquals(providedDN, authCtx.getDistinguishedName());
+    }
+
+    @Test
     void testAuthenticateSetsDNWhenLdapUserDNProvided() throws Exception {
 
         String providedDN = "cn=test,ou=People,dc=starrocks,dc=com";

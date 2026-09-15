@@ -20,6 +20,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -138,14 +139,13 @@ public class AuthenticationHandler {
                 continue;
             }
 
-            if (!Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
-                    .equalsIgnoreCase(authContext.getAuthPlugin())) {
-                continue;
-            }
-
             AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
             if (provider == null) {
                 LOG.warn("authentication provider is null for security integration: {}", authMechanism);
+                continue;
+            }
+
+            if (!matchesCredential(authContext, securityIntegration, provider)) {
                 continue;
             }
 
@@ -172,6 +172,32 @@ public class AuthenticationHandler {
         }
 
         return authenticationResult;
+    }
+
+    /**
+     * Decide whether a security integration should be tried for the credential at hand.
+     * <p>
+     * A MySQL connection is identified by its salt, not by its plugin name: {@link MysqlProto#negotiate} hands out
+     * the salt at the start of the greeting, before any plugin negotiation, so every MySQL connection carries one.
+     * The plugin name is not a substitute, because a client too old to send one leaves it unset
+     * ({@code switchAuthPlugin} returns early for those) and its password still arrives scrambled by the MySQL
+     * handshake. Selecting an integration for such a connection would hand those scrambled bytes to a provider as
+     * though they were a bare credential -- an LDAP bind with unusable input, for instance.
+     * <p>
+     * So a MySQL connection selects the integration whose type maps to the negotiated plugin, which is no match at
+     * all when the client named none. Every other endpoint (Arrow Flight SQL, the HTTP REST API, the thrift
+     * service) performs no greeting and passes an opaque credential, and there the integration is selected by
+     * asking the provider whether it can consume such a credential at all.
+     */
+    private static boolean matchesCredential(AccessControlContext authContext,
+                                             SecurityIntegration securityIntegration,
+                                             AuthenticationProvider provider) {
+        if (authContext.getAuthDataSalt() == null) {
+            return provider.supportsUnnegotiatedCredential();
+        }
+
+        return Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
+                .equalsIgnoreCase(authContext.getAuthPlugin());
     }
 
     private static void setAuthenticationResultToContext(ConnectContext context,

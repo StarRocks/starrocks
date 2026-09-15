@@ -49,6 +49,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.metric.SimpleCoreMetricVisitor;
+import com.starrocks.qe.ConnectContext;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -179,8 +180,9 @@ public class MetricsAction extends RestBaseAction {
             UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-                currentUser = checkPassword(authInfo);
-                checkUserOwnsAdminRole(currentUser);
+                ConnectContext authCtx = new ConnectContext();
+                currentUser = checkPassword(authInfo, authCtx);
+                checkUserOwnsAdminRole(currentUser, authCtx.getCurrentRoleIds());
             } catch (AccessDeniedException e) {
                 // disable Table related metrics collection due to AccessDenied
                 isCollectTableMetrics = false;

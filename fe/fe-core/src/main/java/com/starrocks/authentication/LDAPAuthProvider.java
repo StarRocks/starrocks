@@ -78,7 +78,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             throws AuthenticationException {
         //clear password terminate string
         byte[] clearPassword = authResponse;
-        if (authResponse[authResponse.length - 1] == 0) {
+        if (authResponse.length > 0 && authResponse[authResponse.length - 1] == 0) {
             clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
 
@@ -105,6 +105,11 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
             throw new AuthenticationException(e.getMessage());
         }
+    }
+
+    @Override
+    public boolean supportsUnnegotiatedCredential() {
+        return true;
     }
 
     private String getURL() {

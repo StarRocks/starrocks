@@ -176,16 +176,15 @@ public class WebBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo;
         try {
             authInfo = getAuthorizationInfo(request);
-            UserIdentity currentUser = checkPassword(authInfo);
+            // Authorize on the context authentication populated: an ephemeral security integration user carries
+            // its privileges in the group derived role ids, which rebuilding from the identity alone discards.
+            ConnectContext context = new ConnectContext();
+            UserIdentity currentUser = checkPassword(authInfo, context);
             if (needAdmin()) {
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(currentUser);
-                    context.setCurrentRoleIds(currentUser);
-
                     Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(currentUser);
+                    checkUserOwnsAdminRole(currentUser, context.getCurrentRoleIds());
                 }
             }
             request.setAuthorized(true);
