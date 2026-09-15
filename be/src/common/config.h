@@ -2171,6 +2171,38 @@ CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
 
+// paimon-cpp (paimon_reader_mode = NATIVE) read knobs. Mutable so they can be tuned at runtime.
+// batch size handed to paimon-cpp; larger batches cut per-batch overhead but raise peak memory
+CONF_mInt64(paimon_native_read_batch_size, "10000");
+// arrow IO coalescing: merge adjacent page ranges whose gap <= hole_size (bytes), stop merging past range_size
+CONF_mInt64(paimon_native_parquet_cache_hole_size_limit, "1048576");
+CONF_mInt64(paimon_native_parquet_cache_range_size_limit, "33554432");
+// arrow ReadRangeCache: lazy = read ranges on demand instead of up front; prefetch_limit caps in-flight ranges (0 = unlimited)
+CONF_mBool(paimon_native_parquet_cache_lazy, "false");
+CONF_mInt64(paimon_native_parquet_cache_prefetch_limit, "0");
+// pre-buffer whole column chunks of a row group before decoding
+CONF_mBool(paimon_native_parquet_enable_pre_buffer, "true");
+// page-level filtering with the parquet column index
+CONF_mBool(paimon_native_parquet_enable_page_index_filter, "true");
+// how the selection bitmap is turned into row ranges: "coalesce" (merge gaps <= coalesce_hole_size rows) or "trim"
+CONF_mString(paimon_native_parquet_bitmap_refining_strategy, "coalesce");
+CONF_mInt64(paimon_native_parquet_bitmap_coalesce_hole_size_limit, "32");
+// arrow parquet decode threads. Non-zero values resize the process-wide arrow CPU pool (shared by every
+// paimon-cpp reader in the BE); 0 keeps arrow single-threaded per reader and lets the BE's own scanner
+// concurrency provide the parallelism.
+CONF_mInt32(paimon_native_parquet_executor_thread_count, "0");
+// paimon-cpp per-file prefetch: parallel readers per file, batches in flight, and read-ahead cache mode
+// (1 ALWAYS, 2 EXCLUDE_PREDICATE, 3 EXCLUDE_BITMAP, 4 EXCLUDE_BITMAP_OR_PREDICATE, 5 NEVER).
+// Off by default: the BE already overlaps IO and decode across scanners, and paimon-cpp 0.3.0 reads
+// every column chunk twice on this path.
+CONF_mBool(paimon_native_enable_prefetch, "false");
+CONF_mInt32(paimon_native_prefetch_max_parallel_num, "3");
+CONF_mInt32(paimon_native_prefetch_batch_count, "600");
+CONF_mInt32(paimon_native_prefetch_cache_mode, "1");
+// merge-on-read row-to-batch conversion threads
+CONF_mBool(paimon_native_enable_multi_thread_row_to_batch, "true");
+CONF_mInt32(paimon_native_row_to_batch_thread_num, "3");
+
 // default not to build the empty index
 CONF_mInt32(config_tenann_default_build_threshold, "0");
 

@@ -15,6 +15,7 @@
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 
 #include <gtest/gtest.h>
+#include <paimon/data/decimal.h>
 #include <paimon/predicate/leaf_predicate.h>
 
 #include <memory>
@@ -23,6 +24,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/literal.h"
 #include "runtime/descriptors.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -94,6 +96,35 @@ TExprNode create_tinyint_literal_node(int8_t value) {
     TIntLiteral literal;
     literal.__set_value(value);
     node.__set_int_literal(literal);
+    return node;
+}
+
+TTypeDesc gen_decimal_type_desc(TPrimitiveType::type type, int precision, int scale) {
+    TTypeDesc desc = gen_type_desc(type);
+    desc.types[0].scalar_type.__set_precision(precision);
+    desc.types[0].scalar_type.__set_scale(scale);
+    return desc;
+}
+
+TExprNode create_date_literal_node(const std::string& value) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::DATE_LITERAL);
+    node.__set_type(gen_type_desc(TPrimitiveType::DATE));
+    node.__set_num_children(0);
+    TDateLiteral literal;
+    literal.__set_value(value);
+    node.__set_date_literal(literal);
+    return node;
+}
+
+TExprNode create_decimal_literal_node(TPrimitiveType::type type, int precision, int scale, const std::string& value) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::DECIMAL_LITERAL);
+    node.__set_type(gen_decimal_type_desc(type, precision, scale));
+    node.__set_num_children(0);
+    TDecimalLiteral literal;
+    literal.__set_value(value);
+    node.__set_decimal_literal(literal);
     return node;
 }
 
@@ -220,6 +251,110 @@ TEST(PaimonPredicateConverterTest, SkipsInPredicateWithNonLiteralOperand) {
     predicate.add_child(&isolation_ref);
     predicate.add_child(&function_result);
 
+    std::vector<Expr*> conjuncts{&predicate};
+    EXPECT_EQ(nullptr, converter.convert(&conjuncts));
+}
+
+TEST(PaimonPredicateConverterTest, ConvertsDateLiteralToDaysSinceEpoch) {
+    SlotDescriptor ship_date(16, "l_shipdate", TypeDescriptor(TYPE_DATE));
+    PaimonPredicateConverter converter({&ship_date});
+    TExprNode predicate_node = create_binary_predicate_node(TPrimitiveType::DATE);
+    predicate_node.__set_opcode(TExprOpcode::GE);
+    TestExpr predicate(predicate_node);
+    ColumnRef date_ref(TypeDescriptor(TYPE_DATE), ship_date.id());
+    VectorizedLiteral date_literal(create_date_literal_node("1995-01-01"));
+    predicate.add_child(&date_ref);
+    predicate.add_child(&date_literal);
+    std::vector<Expr*> conjuncts{&predicate};
+
+    auto leaf = as_leaf_predicate(converter.convert(&conjuncts));
+    ASSERT_NE(nullptr, leaf);
+    EXPECT_EQ("l_shipdate", leaf->FieldName());
+    EXPECT_EQ(paimon::FieldType::DATE, leaf->GetFieldType());
+    EXPECT_EQ(paimon::Function::Type::GREATER_OR_EQUAL, leaf->GetFunction().GetType());
+    ASSERT_EQ(1, leaf->Literals().size());
+    EXPECT_EQ(paimon::FieldType::DATE, leaf->Literals()[0].GetType());
+    // paimon stores DATE as days since 1970-01-01, the same encoding parquet uses for its stats
+    EXPECT_EQ(9131, leaf->Literals()[0].GetValue<int32_t>());
+}
+
+TEST(PaimonPredicateConverterTest, ConvertsDateInListToDateLiterals) {
+    SlotDescriptor ship_date(16, "l_shipdate", TypeDescriptor(TYPE_DATE));
+    PaimonPredicateConverter converter({&ship_date});
+    TestExpr predicate(create_in_predicate_node(TPrimitiveType::DATE));
+    ColumnRef date_ref(TypeDescriptor(TYPE_DATE), ship_date.id());
+    VectorizedLiteral first(create_date_literal_node("1970-01-01"));
+    VectorizedLiteral second(create_date_literal_node("1970-01-03"));
+    predicate.add_child(&date_ref);
+    predicate.add_child(&first);
+    predicate.add_child(&second);
+    std::vector<Expr*> conjuncts{&predicate};
+
+    auto leaf = as_leaf_predicate(converter.convert(&conjuncts));
+    ASSERT_NE(nullptr, leaf);
+    EXPECT_EQ(paimon::Function::Type::IN, leaf->GetFunction().GetType());
+    ASSERT_EQ(2, leaf->Literals().size());
+    EXPECT_EQ(0, leaf->Literals()[0].GetValue<int32_t>());
+    EXPECT_EQ(2, leaf->Literals()[1].GetValue<int32_t>());
+}
+
+TEST(PaimonPredicateConverterTest, ConvertsDecimal64LiteralKeepingPrecisionAndScale) {
+    SlotDescriptor discount(7, "l_discount", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 15, 2));
+    PaimonPredicateConverter converter({&discount});
+    TExprNode predicate_node = create_binary_predicate_node(TPrimitiveType::DECIMAL64);
+    predicate_node.__set_opcode(TExprOpcode::GT);
+    TestExpr predicate(predicate_node);
+    ColumnRef discount_ref(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 15, 2), discount.id());
+    VectorizedLiteral decimal_literal(create_decimal_literal_node(TPrimitiveType::DECIMAL64, 15, 2, "0.05"));
+    predicate.add_child(&discount_ref);
+    predicate.add_child(&decimal_literal);
+    std::vector<Expr*> conjuncts{&predicate};
+
+    auto leaf = as_leaf_predicate(converter.convert(&conjuncts));
+    ASSERT_NE(nullptr, leaf);
+    EXPECT_EQ(paimon::FieldType::DECIMAL, leaf->GetFieldType());
+    EXPECT_EQ(paimon::Function::Type::GREATER_THAN, leaf->GetFunction().GetType());
+    ASSERT_EQ(1, leaf->Literals().size());
+    EXPECT_EQ(paimon::FieldType::DECIMAL, leaf->Literals()[0].GetType());
+    auto decimal = leaf->Literals()[0].GetValue<paimon::Decimal>();
+    EXPECT_EQ(15, decimal.Precision());
+    EXPECT_EQ(2, decimal.Scale());
+    EXPECT_EQ(5, static_cast<int64_t>(decimal.Value()));
+}
+
+TEST(PaimonPredicateConverterTest, ConvertsDecimal128LiteralAsUnscaledInt128) {
+    SlotDescriptor amount(3, "amount", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 9));
+    PaimonPredicateConverter converter({&amount});
+    TestExpr predicate(create_binary_predicate_node(TPrimitiveType::DECIMAL128));
+    ColumnRef amount_ref(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 9), amount.id());
+    VectorizedLiteral decimal_literal(
+            create_decimal_literal_node(TPrimitiveType::DECIMAL128, 38, 9, "12345678901234567890.5"));
+    predicate.add_child(&amount_ref);
+    predicate.add_child(&decimal_literal);
+    std::vector<Expr*> conjuncts{&predicate};
+
+    auto leaf = as_leaf_predicate(converter.convert(&conjuncts));
+    ASSERT_NE(nullptr, leaf);
+    auto decimal = leaf->Literals()[0].GetValue<paimon::Decimal>();
+    EXPECT_EQ(38, decimal.Precision());
+    EXPECT_EQ(9, decimal.Scale());
+    __int128_t expected = static_cast<__int128_t>(12345678901234567890ULL) * 1000000000 + 500000000;
+    EXPECT_TRUE(expected == decimal.Value());
+}
+
+TEST(PaimonPredicateConverterTest, SkipsDatetimePredicate) {
+    // paimon-cpp 0.3.0 cannot push TIMESTAMP predicates into parquet, so they stay with StarRocks
+    SlotDescriptor ts(5, "ts", TypeDescriptor(TYPE_DATETIME));
+    PaimonPredicateConverter converter({&ts});
+    TExprNode predicate_node = create_binary_predicate_node(TPrimitiveType::DATETIME);
+    predicate_node.__set_opcode(TExprOpcode::GE);
+    TestExpr predicate(predicate_node);
+    ColumnRef ts_ref(TypeDescriptor(TYPE_DATETIME), ts.id());
+    TExprNode literal_node = create_date_literal_node("1995-01-01 00:00:00");
+    literal_node.__set_type(gen_type_desc(TPrimitiveType::DATETIME));
+    VectorizedLiteral ts_literal(literal_node);
+    predicate.add_child(&ts_ref);
+    predicate.add_child(&ts_literal);
     std::vector<Expr*> conjuncts{&predicate};
     EXPECT_EQ(nullptr, converter.convert(&conjuncts));
 }
