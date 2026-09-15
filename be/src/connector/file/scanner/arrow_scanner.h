@@ -57,12 +57,15 @@ public:
 private:
     Status open_next_reader();
     Status next_batch();
+    Status validate_batch_schema(const std::shared_ptr<arrow::RecordBatch>& batch);
+    void filter_current_discrete_message(const std::string& reason);
     Status initialize_src_chunk(ChunkPtr* chunk);
     Status append_batch_to_src_chunk(ChunkPtr* chunk);
     bool chunk_is_full();
     bool batch_is_exhausted();
     Status finalize_src_chunk(ChunkPtr* chunk);
 
+    bool _is_discrete_pipe{false};
     const TBrokerScanRange& _scan_range;
     int _next_file{0};
     // Index into _scan_range.ranges for the file whose rows are in the current

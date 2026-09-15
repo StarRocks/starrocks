@@ -173,7 +173,7 @@ TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_full) {
                                   .build();
     StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
     build_pulsar_message_meta(msg, "my-topic", "persistent://public/default/my-topic-partition-3",
-                              /*need_key=*/true, /*need_headers=*/true, &meta);
+                              /*need_meta=*/true, /*need_key=*/true, /*need_headers=*/true, &meta);
     EXPECT_EQ("my-topic", meta.topic());
     EXPECT_EQ(3, meta.partition());
     EXPECT_EQ(1700000000000L, meta.event_timestamp());
@@ -185,12 +185,30 @@ TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_full) {
     EXPECT_NE(std::string::npos, meta.to_string().find("pulsar"));
 }
 
+// Minimal source identity: partition and message_id are set even when need_meta=false,
+// ensuring error logging and rejected records always carry source identity for Pulsar Arrow jobs.
+TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_minimal_identity_when_not_needed) {
+    pulsar::Message msg = pulsar::MessageBuilder().setContent("x").setPartitionKey("pk").setProperty("p", "v").build();
+    StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
+    build_pulsar_message_meta(msg, "my-topic", "persistent://public/default/my-topic-partition-2",
+                              /*need_meta=*/false, /*need_key=*/false, /*need_headers=*/false, &meta);
+    EXPECT_EQ(2, meta.partition());
+    EXPECT_FALSE(meta.message_id().empty());
+    // Metadata columns remain unset when need_meta is false.
+    EXPECT_TRUE(meta.topic().empty());
+    EXPECT_EQ(-1, meta.timestamp());
+    EXPECT_EQ(-1, meta.event_timestamp());
+    EXPECT_FALSE(meta.has_key());
+    EXPECT_TRUE(meta.headers().empty());
+}
+
 // Pulsar KEY/HEADERS columns not selected: the partition key and properties are not copied. A
 // non-partitioned message topic leaves PARTITION at its NULL sentinel.
 TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_gated) {
     pulsar::Message msg = pulsar::MessageBuilder().setContent("x").setPartitionKey("pk").setProperty("p", "v").build();
     StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
-    build_pulsar_message_meta(msg, "my-topic", "my-topic", /*need_key=*/false, /*need_headers=*/false, &meta);
+    build_pulsar_message_meta(msg, "my-topic", "my-topic", /*need_meta=*/true, /*need_key=*/false,
+                              /*need_headers=*/false, &meta);
     EXPECT_EQ("my-topic", meta.topic());
     EXPECT_EQ(-1, meta.partition());
     EXPECT_FALSE(meta.has_key());
