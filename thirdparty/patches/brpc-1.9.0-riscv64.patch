@@ -1,0 +1,47 @@
+diff --git a/src/butil/build_config.h b/src/butil/build_config.h
+index 5ddf382..c35ace2 100644
+--- a/src/butil/build_config.h
++++ b/src/butil/build_config.h
+@@ -138,6 +138,11 @@
+ #define ARCH_CPU_LOONGARCH64 1
+ #define ARCH_CPU_64_BITS 1
+ #define ARCH_CPU_LITTLE_ENDIAN 1
++#elif defined(__riscv) && (__riscv_xlen == 64)
++#define ARCH_CPU_RISCV64_FAMILY 1
++#define ARCH_CPU_RISCV64 1
++#define ARCH_CPU_64_BITS 1
++#define ARCH_CPU_LITTLE_ENDIAN 1
+ #else
+ #error Please add support for your architecture in butil/build_config.h
+ #endif
+diff --git a/src/butil/time.h b/src/butil/time.h
+index 005f551..b489221 100644
+--- a/src/butil/time.h
++++ b/src/butil/time.h
+@@ -254,6 +254,10 @@ inline uint64_t clock_cycles() {
+         : "=r" (stable_counter), "=r" (counter_id)
+         );
+     return stable_counter;
++#elif defined(__riscv) && (__riscv_xlen == 64)
++    uint64_t cycles;
++    __asm__ __volatile__ ("rdcycle %0" : "=r"(cycles));
++    return cycles;
+ #else
+   #error "unsupported arch"
+ #endif
+diff --git a/src/bthread/processor.h b/src/bthread/processor.h
+index 0dc26a5..7f0e4d0 100644
+--- a/src/bthread/processor.h
++++ b/src/bthread/processor.h
+@@ -30,6 +30,11 @@
+ # define cpu_relax() asm volatile("yield\n": : :"memory")
+ #elif defined(ARCH_CPU_LOONGARCH64_FAMILY)
+ # define cpu_relax() asm volatile("nop\n": : :"memory");
++#elif defined(ARCH_CPU_RISCV64_FAMILY)
++// 'pause' hint requires the Zihintpause extension in -march; emit the base-ISA
++// fence-based spin hint (same one glibc and Linux use) instead, which assembles
++// unconditionally on rv64gc.
++# define cpu_relax() asm volatile("fence iorw, io" : : : "memory")
+ #else
+ # define cpu_relax() asm volatile("pause\n": : :"memory")
+ #endif

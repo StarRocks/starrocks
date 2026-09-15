@@ -1,0 +1,12 @@
+diff --git a/crypto/aes/asm/aes-riscv64.pl b/crypto/aes/asm/aes-riscv64.pl
+--- a/crypto/aes/asm/aes-riscv64.pl
++++ b/crypto/aes/asm/aes-riscv64.pl
+@@ -1068,7 +1068,7 @@
+     addi    sp,sp,-16
+     sd      $KEYP,0(sp) # We need to hold onto this!
+     sd      ra,8(sp)
+-    jal     ra,AES_set_encrypt_key
++    call    AES_set_encrypt_key
+     ld      $KEYP,0(sp)
+     ld      ra,8(sp)
+     addi    sp,sp,16
