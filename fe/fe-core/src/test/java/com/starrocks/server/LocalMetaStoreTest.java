@@ -30,6 +30,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.VacuumState;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -49,9 +50,14 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.PartitionVacuumStateInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
+<<<<<<< HEAD
 import com.starrocks.persist.WALApplier;
+=======
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> 93264f7823c... [Enhancement] Drive bounded incremental lake vacuum from the FE coordinator (#62441)
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -884,6 +890,7 @@ public class LocalMetaStoreTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAddPartitionsRejectedWhenBatchWouldExceedPerTableLimit() throws Exception {
         starRocksAssert.useDatabase("test").withTable(
                 "CREATE TABLE test.add_partition_limit(dt DATE NOT NULL, v1 INT) " +
@@ -1110,5 +1117,36 @@ public class LocalMetaStoreTest {
         Assertions.assertEquals(groupSchema.getBucketsNum(), p2.getDistributionInfo().getBucketNum());
 
         starRocksAssert.dropTable("test.colocate_auto_add");
+=======
+    public void testReplayModifyPartitionVacuumState() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        PhysicalPartition partition = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        partition.setMetadataSwitchVersion(40L);
+        partition.setLastSuccVacuumVersion(10L);
+
+        VacuumState state = new VacuumState();
+        state.setMinRetainedVersion(50L);
+        PartitionVacuumStateInfo info =
+                new PartitionVacuumStateInfo(db.getId(), table.getId(), partition.getId(), state);
+
+        // Round-trip through GSON exactly as the journal does (logJsonObject / EditLogDeserializer), so the
+        // payload's fields and the nested VacuumState survive serialization.
+        PartitionVacuumStateInfo replayed =
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(info), PartitionVacuumStateInfo.class);
+        Assertions.assertEquals(db.getId(), replayed.getDbId());
+        Assertions.assertEquals(table.getId(), replayed.getTableId());
+        Assertions.assertEquals(partition.getId(), replayed.getPhysicalPartitionId());
+        Assertions.assertEquals(50L, replayed.getVacuumState().getMinRetainedVersion());
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayModifyPartitionVacuumState(replayed);
+
+        // Replay installs the state, restores the image-excluded watermark from the retain floor (10 -> 50),
+        // and clears a metadataSwitchVersion the floor has now reached (40 <= 50).
+        Assertions.assertEquals(50L, partition.getVacuumState().getMinRetainedVersion());
+        Assertions.assertEquals(50L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
+>>>>>>> 93264f7823c... [Enhancement] Drive bounded incremental lake vacuum from the FE coordinator (#62441)
     }
 }
