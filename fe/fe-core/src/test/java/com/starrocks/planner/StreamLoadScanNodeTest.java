@@ -46,7 +46,9 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.Load;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -57,6 +59,7 @@ import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TExplainLevel;
@@ -81,6 +84,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -227,6 +231,71 @@ public class StreamLoadScanNodeTest {
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
         Assertions.assertEquals(1, scanNode.getScanRangeLocations(0).size());
+
+        // Plain stream load never opts into the routine-load-only skip: the property bag stays empty.
+        Assertions.assertFalse(scanRangeParams(scanNode).isSetProperties());
+    }
+
+    // The params live on a private nested ParamCreateContext; reach them the way the node itself does.
+    private static TBrokerScanRangeParams scanRangeParams(StreamLoadScanNode scanNode) {
+        Object ctx = Deencapsulation.getField(scanNode, "paramCreateContext");
+        return Deencapsulation.getField(ctx, "params");
+    }
+
+    // A routine load job with skip_on_fatal_parse_error=true must reach the BE as
+    // TBrokerScanRangeParams.properties["skip_on_fatal_parse_error"]="true" — the generic bag, not a
+    // new thrift field.
+    @Test
+    public void testSkipOnFatalParseErrorProperty() throws StarRocksException {
+        DescriptorTable descTbl = new DescriptorTable();
+
+        List<Column> columns = getBaseSchema();
+        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+        for (Column column : columns) {
+            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            slot.setIsNullable(column.isAllowNull());
+        }
+        new Expectations() {{
+            dstTable.getBaseSchema();
+            minTimes = 0;
+            result = columns;
+            dstTable.getFullSchema();
+            minTimes = 0;
+            result = columns;
+            dstTable.getColumn("k1");
+            minTimes = 0;
+            result = columns.get(0);
+            dstTable.getColumn("k2");
+            minTimes = 0;
+            result = columns.get(1);
+            dstTable.getColumn("v1");
+            minTimes = 0;
+            result = columns.get(2);
+            dstTable.getColumn("v2");
+            minTimes = 0;
+            result = columns.get(3);
+        }};
+
+        for (boolean skip : new boolean[] {false, true}) {
+            KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+            ((Map<String, String>) Deencapsulation.getField(job, "jobProperties"))
+                    .put("skip_on_fatal_parse_error", String.valueOf(skip));
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromRoutineLoadJob(job);
+            Assertions.assertEquals(skip, streamLoadInfo.isSkipOnFatalParseError());
+
+            StreamLoadScanNode scanNode = new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc,
+                    dstTable, streamLoadInfo);
+            scanNode.init(descTbl);
+
+            TBrokerScanRangeParams params = scanRangeParams(scanNode);
+            if (skip) {
+                Assertions.assertEquals("true", params.getProperties().get("skip_on_fatal_parse_error"));
+            } else {
+                Assertions.assertFalse(params.isSetProperties());
+            }
+        }
     }
 
     @Test

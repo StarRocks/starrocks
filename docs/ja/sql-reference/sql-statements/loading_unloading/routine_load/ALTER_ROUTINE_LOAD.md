@@ -76,6 +76,10 @@ FROM data_source
 
   - `strict_mode`
 
+  - `pause_on_fatal_parse_error`
+
+  - `skip_on_fatal_parse_error`
+
   - `timezone`
 
   詳細なパラメータの説明については、[CREATE ROUTINE LOAD](CREATE_ROUTINE_LOAD.md#job_properties) を参照してください。
