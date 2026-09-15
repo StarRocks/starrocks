@@ -102,6 +102,39 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
     ASSERT_EQ(1, merged_count1->min_value().value());
 }
 
+// MAX keeps the largest value at both merge levels and still reports min/max; SUM is untouched.
+TEST(TestRuntimeProfile, testMergeIsomorphicProfilesMax) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
+    const auto max_strategy = RuntimeProfile::Counter::create_strategy(TCounterAggregateType::MAX);
+    auto make_instance = [&](std::initializer_list<int64_t> driver_values) {
+        std::vector<RuntimeProfile*> drivers;
+        for (int64_t value : driver_values) {
+            auto* driver = obj_pool->add(new RuntimeProfile("profile"));
+            driver->add_counter("max1", TUnit::UNIT, max_strategy)->set(value);
+            driver->add_counter("sum1", TUnit::UNIT, create_strategy(TUnit::UNIT))->set(value);
+            drivers.push_back(driver);
+        }
+        return RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), drivers);
+    };
+
+    // First level: four drivers of one instance.
+    auto* instance_a = make_instance({5, 3, 0, 0});
+    ASSERT_EQ(5, instance_a->get_counter("max1")->value());
+    ASSERT_EQ(0, instance_a->get_counter("max1")->min_value().value());
+    ASSERT_EQ(5, instance_a->get_counter("max1")->max_value().value());
+    ASSERT_EQ(8, instance_a->get_counter("sum1")->value());
+
+    // Second level: an instance that never saw the filter merges with two that did.
+    auto* instance_b = make_instance({0, 0});
+    auto* instance_c = make_instance({5, 5});
+    std::vector<RuntimeProfile*> instances{instance_b, instance_a, instance_c};
+    auto* merged = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), instances);
+    ASSERT_EQ(5, merged->get_counter("max1")->value());
+    ASSERT_EQ(0, merged->get_counter("max1")->min_value().value());
+    ASSERT_EQ(5, merged->get_counter("max1")->max_value().value());
+    ASSERT_EQ(18, merged->get_counter("sum1")->value());
+}
+
 TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
     std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
     std::vector<RuntimeProfile*> profiles;

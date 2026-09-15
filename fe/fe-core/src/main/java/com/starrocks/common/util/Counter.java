@@ -106,6 +106,10 @@ public class Counter {
                 || Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM_AVG);
     }
 
+    public boolean isMax() {
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.MAX);
+    }
+
     public boolean isSkipMerge() {
         return Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_ALL)
                 || Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_SECOND_MERGE);
@@ -207,6 +211,8 @@ public class Counter {
 
         if (counters.get(0).isAvg()) {
             mergedValue /= counters.size();
+        } else if (counters.get(0).isMax()) {
+            mergedValue = maxValue;
         }
 
         return new MergedInfo(mergedValue, minValue, maxValue);
