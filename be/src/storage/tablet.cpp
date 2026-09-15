@@ -87,6 +87,7 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableM
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
     _keys_type = _max_version_schema->keys_type();
+    _double_write_phase.store(_tablet_meta->double_write_phase(), std::memory_order_release);
     MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
     if (_table_metrics_mgr != nullptr) {
         _table_metrics_mgr->register_table(_tablet_meta->table_id());
@@ -177,7 +178,7 @@ void Tablet::save_meta(bool skip_tablet_schema) {
 }
 
 Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
-                                  const std::vector<Version>& versions_to_delete) {
+                                  const std::vector<Version>& versions_to_delete, int32_t donor_double_write_phase) {
     LOG(INFO) << "begin to clone data to tablet. tablet=" << full_name()
               << ", rowsets_to_clone=" << rowsets_to_clone.size()
               << ", versions_to_delete_size=" << versions_to_delete.size();
@@ -211,6 +212,15 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         for (const auto& rs_meta : rowsets_to_clone) {
             new_tablet_meta->add_rs_meta(rs_meta);
         }
+        // The tablet's content is being rebuilt from another replica, so merge in the donor's
+        // double-write phase. The phases form a ladder (NONE < ACTIVE < OVERWRITTEN) that only
+        // ever moves forward, so take the max of both sides and never lower it: a donor that
+        // already applied the pinned overwrite lifts a suspension the local replica could never
+        // lift itself (it missed the overwrite publish, which is never republished), while a
+        // mid-job clone keeps the suspension armed no matter which side knows about it, so the
+        // cloned double-written rowsets stay ineligible for the compaction this function queues.
+        const int32_t merged_phase = std::max(_tablet_meta->double_write_phase(), donor_double_write_phase);
+        new_tablet_meta->set_double_write_phase(merged_phase);
         VLOG(3) << "load rowsets successfully when clone. tablet=" << full_name()
                 << ", added rowset size=" << rowsets_to_clone.size();
         // save and reload tablet_meta
@@ -220,6 +230,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
             break;
         }
         _tablet_meta.swap(new_tablet_meta);
+        _double_write_phase.store(_tablet_meta->double_write_phase(), std::memory_order_release);
     } while (false);
 
     for (auto& version : versions_to_delete) {
@@ -684,6 +695,38 @@ void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
     }
 }
 
+void Tablet::note_double_write_publish() {
+    // Lock-free exit once armed. The atomic is only ever stored after the phase has been
+    // written into the meta (and persisted) under _meta_lock below, so a publisher that sees
+    // it non-NONE knows the suspension is already durable and may go on to add its rowset.
+    if (_double_write_phase.load(std::memory_order_acquire) != kDoubleWriteNone) {
+        return;
+    }
+    // Persist the phase so a restart cannot forget that a pinned version-overwrite is still
+    // pending: with the suspension forgotten, compaction could merge a rowset across the
+    // overwrite version before the next double-write publish re-arms it. One header write per
+    // tablet per optimize job (every later publish takes the early exit above, and a reload
+    // restores the phase from the meta before publishes resume).
+    //
+    // Concurrent first publishes all serialize on _meta_lock here, and none of them can insert
+    // its rowset (which takes the same lock and saves the meta) before the winner has saved the
+    // meta with the phase set. That ordering is what makes a crash safe: no on-disk header can
+    // hold a double-written rowset while still saying NONE.
+    std::unique_lock wrlock(_meta_lock);
+    // Re-check the meta under the lock: another publisher may have armed the phase while we
+    // waited, or a concurrent overwrite publish may already have moved it to OVERWRITTEN
+    // (overwrite_rowset() runs under the same lock), and writing ACTIVE after that would
+    // re-suspend the tablet forever on the next reload.
+    if (_tablet_meta->double_write_phase() != kDoubleWriteNone) {
+        return;
+    }
+    _tablet_meta->set_double_write_phase(kDoubleWriteActive);
+#ifndef BE_TEST
+    save_meta();
+#endif
+    _double_write_phase.store(kDoubleWriteActive, std::memory_order_release);
+}
+
 void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     std::unique_lock wrlock(_meta_lock);
     vector<RowsetSharedPtr> origin_rowsets;
@@ -697,6 +740,16 @@ void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     Version rowset_version(0, version);
     rowset->make_visible(rowset_version);
     modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
+    // The pinned version-overwrite ends the double-write phase for this tablet for good: no
+    // further overwrite can arrive, so compaction no longer needs to be held back, and the
+    // double-writes that keep flowing until the partition swap must not re-suspend it (see
+    // note_double_write_publish()). Persisted together with the rowset modifications above in
+    // a single header write.
+    _double_write_phase.store(kDoubleWriteOverwritten, std::memory_order_release);
+    _tablet_meta->set_double_write_phase(kDoubleWriteOverwritten);
+#ifndef BE_TEST
+    save_meta();
+#endif
 }
 
 void Tablet::_delete_inc_rowset_by_version(const Version& version) {
@@ -1252,8 +1305,20 @@ TabletInfo Tablet::get_tablet_info() const {
     return {tablet_id(), schema_hash(), tablet_uid()};
 }
 
+// While the tablet is receiving double-writes and its pinned version-overwrite has not been
+// applied yet (it backs the temporary partition of an online optimize job), compaction is
+// suspended entirely. Merging any rowsets could produce one that straddles the pinned overwrite
+// version, which overwrite_rowset() can neither delete (versions after the overwrite would be
+// lost) nor keep (versions before it would be duplicated) — and the overwrite version is not
+// known on the backend until its publish arrives. The suspension costs nothing in practice: the
+// double-written versions usually sit beyond a version hole and are unreadable until the
+// overwrite fills it, and the only rowset below the hole is the empty one the partition was
+// created with. Normal tablets never enter the double-write phase and are unaffected.
 void Tablet::pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets) {
     std::shared_lock rdlock(_meta_lock);
+    if (compaction_suspended_for_double_write()) {
+        return;
+    }
     for (auto& it : _rs_version_map) {
         if (it.first.first >= _cumulative_point) {
             candidate_rowsets->push_back(it.second);
@@ -1263,6 +1328,9 @@ void Tablet::pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetS
 
 void Tablet::pick_candicate_rowsets_to_base_compaction(vector<RowsetSharedPtr>* candidate_rowsets) {
     std::shared_lock rdlock(_meta_lock);
+    if (compaction_suspended_for_double_write()) {
+        return;
+    }
     for (auto& it : _rs_version_map) {
         if (it.first.first < _cumulative_point) {
             candidate_rowsets->push_back(it.second);
@@ -1281,6 +1349,9 @@ void Tablet::_pick_candicate_rowset_before_specify_version(vector<RowsetSharedPt
 
 void Tablet::pick_all_candicate_rowsets(vector<RowsetSharedPtr>* candidate_rowsets) {
     std::shared_lock rdlock(_meta_lock);
+    if (compaction_suspended_for_double_write()) {
+        return;
+    }
     for (auto& it : _rs_version_map) {
         candidate_rowsets->emplace_back(it.second);
     }

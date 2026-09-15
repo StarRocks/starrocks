@@ -242,6 +242,10 @@ public:
         _enable_shortcut_compaction = enable_shortcut_compaction;
     }
 
+    // See Tablet::note_double_write_publish() for the phase values and their transitions.
+    int32_t double_write_phase() const { return _double_write_phase; }
+    void set_double_write_phase(int32_t phase) { _double_write_phase = phase; }
+
     void set_source_schema(const TabletSchemaCSPtr& source_schema) { _source_schema = source_schema; }
 
     const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
@@ -308,6 +312,9 @@ private:
     BinlogLsn _binlog_min_lsn;
 
     bool _enable_shortcut_compaction = true;
+
+    // See Tablet::note_double_write_publish().
+    int32_t _double_write_phase = 0;
 
     std::string _storage_type;
 
