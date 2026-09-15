@@ -120,12 +120,12 @@ ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const T
                                                     col_name.empty() ? "null" : col_name, raw_data);
         if (ctx->consumer_partition != -1) {
             error_msg += strings::Substitute(", partition = $0", ctx->consumer_partition);
-            if (ctx->consumer_offset != -1) {
-                error_msg += strings::Substitute(", offset = $0", ctx->consumer_offset);
-            }
-            if (!ctx->consumer_message_id.empty()) {
-                error_msg += strings::Substitute(", message_id = $0", ctx->consumer_message_id);
-            }
+        }
+        if (ctx->consumer_offset != -1) {
+            error_msg += strings::Substitute(", offset = $0", ctx->consumer_offset);
+        }
+        if (!ctx->consumer_message_id.empty()) {
+            error_msg += strings::Substitute(", message_id = $0", ctx->consumer_message_id);
         }
         LoadPathStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
@@ -143,16 +143,16 @@ ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const T
                               alloc);
             if (ctx->consumer_partition != -1) {
                 src_doc.AddMember("partition", rapidjson::Value(ctx->consumer_partition), alloc);
-                if (ctx->consumer_offset != -1) {
-                    src_doc.AddMember("offset", rapidjson::Value(ctx->consumer_offset), alloc);
-                }
-                if (!ctx->consumer_message_id.empty()) {
-                    src_doc.AddMember(
-                            "message_id",
-                            rapidjson::Value(ctx->consumer_message_id.c_str(),
-                                             static_cast<rapidjson::SizeType>(ctx->consumer_message_id.size()), alloc),
-                            alloc);
-                }
+            }
+            if (ctx->consumer_offset != -1) {
+                src_doc.AddMember("offset", rapidjson::Value(ctx->consumer_offset), alloc);
+            }
+            if (!ctx->consumer_message_id.empty()) {
+                src_doc.AddMember(
+                        "message_id",
+                        rapidjson::Value(ctx->consumer_message_id.c_str(),
+                                         static_cast<rapidjson::SizeType>(ctx->consumer_message_id.size()), alloc),
+                        alloc);
             }
             if (ctx->current_batch_first_row_in_file >= 0 && row_offset_in_array >= 0) {
                 int64_t row_in_file = ctx->current_batch_first_row_in_file + row_offset_in_array;
@@ -258,12 +258,12 @@ Status ArrowScanner::next_batch() {
         std::string info;
         if (_conv_ctx.consumer_partition != -1) {
             info += " at partition=" + std::to_string(_conv_ctx.consumer_partition);
-            if (_conv_ctx.consumer_offset != -1) {
-                info += " offset=" + std::to_string(_conv_ctx.consumer_offset);
-            }
-            if (!_conv_ctx.consumer_message_id.empty()) {
-                info += " message_id=" + _conv_ctx.consumer_message_id;
-            }
+        }
+        if (_conv_ctx.consumer_offset != -1) {
+            info += " offset=" + std::to_string(_conv_ctx.consumer_offset);
+        }
+        if (!_conv_ctx.consumer_message_id.empty()) {
+            info += " message_id=" + _conv_ctx.consumer_message_id;
         }
         return info;
     };
@@ -433,12 +433,12 @@ void ArrowScanner::filter_current_discrete_message(const std::string& reason, in
     std::string error_msg = "Arrow routine load: " + reason;
     if (_conv_ctx.consumer_partition != -1) {
         error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition);
-        if (_conv_ctx.consumer_offset != -1) {
-            error_msg += " offset=" + std::to_string(_conv_ctx.consumer_offset);
-        }
-        if (!_conv_ctx.consumer_message_id.empty()) {
-            error_msg += " message_id=" + _conv_ctx.consumer_message_id;
-        }
+    }
+    if (_conv_ctx.consumer_offset != -1) {
+        error_msg += " offset=" + std::to_string(_conv_ctx.consumer_offset);
+    }
+    if (!_conv_ctx.consumer_message_id.empty()) {
+        error_msg += " message_id=" + _conv_ctx.consumer_message_id;
     }
     _conv_ctx.report_error_message(error_msg, "", -1);
     LOG(WARNING) << error_msg;
