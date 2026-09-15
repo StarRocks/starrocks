@@ -122,6 +122,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_SET_FORBIDDEN_GLOBAL_DICT = 268;
 
+    // Column-level global-dictionary forbid list (persisted set of column names on a table whose
+    // low-cardinality global dict should not be collected). Ignorable on replay: it is only an
+    // optimization hint, losing it never affects correctness.
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_NO_DICT_COLUMNS = 269;
+
     // plugin 270~275
     @IgnorableOnReplayFailed
     public static final short OP_INSTALL_PLUGIN = 270;
