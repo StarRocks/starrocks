@@ -135,6 +135,16 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT,
             CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE);
 
+    // The S3 credential and STS-routing properties that must survive persistence. The file store models a
+    // narrower credential than CloudConfigurationFactory accepts, so any of these that the round-trip drops
+    // would silently change how the volume authenticates (temporary keys the session token can no longer
+    // back, an assumed role that becomes the base principal, a custom STS endpoint that becomes the default).
+    private static final List<String> S3_CREDENTIAL_PROPERTIES = ImmutableList.of(
+            CloudConfigurationConstants.AWS_S3_SESSION_TOKEN,
+            CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN,
+            CloudConfigurationConstants.AWS_S3_STS_REGION,
+            CloudConfigurationConstants.AWS_S3_STS_ENDPOINT);
+
     private String dumpMaskedParams(Map<String, String> params) {
         Gson gson = new Gson();
         Map<String, String> maskedParams = new HashMap<>(params);
@@ -404,30 +414,23 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     "Storage params contain a credential that cannot be stored for a %s storage volume: %s",
                     svt, new Gson().toJson(maskedParams)));
         }
-        if (svt == StorageVolumeType.S3
-                && isCredentialPropertySet(params, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN)) {
-            // AwsSimpleCredentialInfo carries the access key and its secret and nothing else - the
-            // credential's own toFileStoreInfo says as much with a TODO - so the session token is
-            // dropped and what reads back is a pair of temporary keys that can no longer
-            // authenticate. Unlike the ADLS2 workload identity this form is not documented for
-            // storage volumes, and temporary keys would expire during the volume's life anyway, so
-            // refuse it rather than warn.
-            throw new SemanticException(String.format(
-                    "Storage params contain a credential that cannot be stored for a %s storage volume, " +
-                            "storing it would drop %s", svt, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN));
-        }
-        if (svt == StorageVolumeType.S3
-                && isCredentialPropertySet(params, CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN)
-                && !isCredentialPropertySet(restored, CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN)) {
-            // Access key + secret key + iam_role_arn uses the keys to assume the role, but that lands in the
-            // AwsSimpleCredentialInfo branch of AwsCloudCredential#toFileStoreInfo (see its "assumeRole with
-            // AK/SK" TODO), which stores only the two keys. The role is dropped on persist, so the volume
-            // would read back and authenticate as the base principal instead of the assumed role. The check is
-            // on the round-trip, not the params, so the instance-profile and web-identity assume-role forms -
-            // which keep the role on read-back - are left untouched: restored still carries iam_role_arn there.
-            throw new SemanticException(String.format(
-                    "Storage params contain a credential that cannot be stored for a %s storage volume, " +
-                            "storing it would drop %s", svt, CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN));
+        if (svt == StorageVolumeType.S3) {
+            // Compare the S3 credential/routing set both ways, the same way the Azure block below does. A
+            // property the file store cannot carry (a session token, an AK/SK-assumed role's arn, a custom STS
+            // region or endpoint) is dropped on persist and comes back absent; refusing the whole set in one
+            // place keeps this honest as more forms are added, rather than special-casing each. The instance-
+            // profile and web-identity assume-role forms keep their role via AwsAssumeIamRoleCredentialInfo, so
+            // restored still carries iam_role_arn for them and they are not rejected.
+            List<String> changedProperties = S3_CREDENTIAL_PROPERTIES.stream()
+                    .filter(key -> isCredentialPropertySet(params, key) != isCredentialPropertySet(restored, key))
+                    .sorted()
+                    .collect(Collectors.toList());
+            if (!changedProperties.isEmpty()) {
+                throw new SemanticException(String.format(
+                        "Storage params contain a credential that cannot be stored for a %s storage volume, " +
+                                "storing it would drop %s", svt, String.join(", ", changedProperties)));
+            }
+            return;
         }
         if (svt != StorageVolumeType.AZBLOB && svt != StorageVolumeType.ADLS2) {
             return;

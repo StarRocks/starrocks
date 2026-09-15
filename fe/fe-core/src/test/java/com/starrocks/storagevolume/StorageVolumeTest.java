@@ -62,6 +62,8 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_STS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_STS_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
@@ -715,6 +717,25 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
         storageParams.put(AWS_S3_EXTERNAL_ID, "external_id");
         StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"), storageParams, true, "");
+    }
+
+    @Test
+    public void testS3RejectsAssumeRoleWithCustomStsRoutingBecauseItIsNotStored() {
+        // An instance-profile assumed role keeps its arn on read-back, but a custom aws.s3.sts.region /
+        // aws.s3.sts.endpoint has no field in the file store, so it is dropped and the volume falls back to the
+        // default STS routing - which fails in deployments that require the regional or private endpoint.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
+        storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
+        storageParams.put(AWS_S3_STS_REGION, "sts_region");
+        storageParams.put(AWS_S3_STS_ENDPOINT, "https://sts.private.example.com");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains(AWS_S3_STS_REGION), e.getMessage());
     }
 
     @Test
