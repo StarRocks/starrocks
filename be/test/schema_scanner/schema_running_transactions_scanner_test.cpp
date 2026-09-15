@@ -121,21 +121,20 @@ protected:
     // in SchemaRunningTransactionsScanner::fill_chunk.
     static constexpr int TXN_ID = 1;
     static constexpr int LABEL = 3;
-    static constexpr int DATABASE_NAME = 5;
-    static constexpr int TABLE_IDS = 6;
-    static constexpr int STATE = 8;
-    static constexpr int COORDINATOR = 9;
-    static constexpr int SOURCE_TYPE = 10;
-    static constexpr int TABLE_NAMES = 7;
-    static constexpr int PREPARE_TIME = 12;
-    static constexpr int COMMIT_TIME = 14;
-    static constexpr int PUBLISH_TIME = 15;
-    static constexpr int FINISH_TIME = 16;
-    static constexpr int PENDING_PUBLISH_MS = 17;
-    static constexpr int REASON = 21;
-    static constexpr int ERROR_MSG = 22;
-    static constexpr int IS_NO_OP_PUBLISH = 23;
-    static constexpr int NO_OP_PUBLISH_REASON = 24;
+    static constexpr int DATABASE_NAME = 4;
+    static constexpr int STATE = 6;
+    static constexpr int COORDINATOR = 7;
+    static constexpr int SOURCE_TYPE = 8;
+    static constexpr int TABLE_NAMES = 5;
+    static constexpr int PREPARE_TIME = 10;
+    static constexpr int COMMIT_TIME = 12;
+    static constexpr int PUBLISH_TIME = 13;
+    static constexpr int FINISH_TIME = 14;
+    static constexpr int PENDING_PUBLISH_MS = 15;
+    static constexpr int REASON = 18;
+    static constexpr int ERROR_MSG = 19;
+    static constexpr int IS_NO_OP_PUBLISH = 20;
+    static constexpr int NO_OP_PUBLISH_REASON = 21;
 };
 
 // Scalar columns (ids, label, state, the headline PENDING_PUBLISH_MS, the no-op-publish pair) copy through
@@ -229,7 +228,6 @@ TEST_F(SchemaRunningTransactionsScannerTest, nullable_strings_set_materialize) {
 
     TRunningTxnInfo info = make_min_txn_info(7, "COMMITTED");
     info.__set_database_name("hot_db");
-    info.__set_table_ids("100,200");
     info.__set_table_names("orders,order_items");
     info.__set_coordinator("FE: 127.0.0.1");
     info.__set_source_type("BACKEND_STREAMING");
@@ -237,7 +235,6 @@ TEST_F(SchemaRunningTransactionsScannerTest, nullable_strings_set_materialize) {
 
     auto chunk = scan_one(scanner, info);
     EXPECT_EQ("hot_db", read_string(chunk, DATABASE_NAME));
-    EXPECT_EQ("100,200", read_string(chunk, TABLE_IDS));
     EXPECT_EQ("orders,order_items", read_string(chunk, TABLE_NAMES));
     EXPECT_EQ("FE: 127.0.0.1", read_string(chunk, COORDINATOR));
     EXPECT_EQ("BACKEND_STREAMING", read_string(chunk, SOURCE_TYPE));
@@ -300,8 +297,8 @@ TEST_F(SchemaRunningTransactionsScannerTest, out_of_range_slot_id_is_rejected) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     const auto& slot_descs = scanner.get_slot_descs();
     MutableColumnPtr column = ColumnHelper::create_column(slot_descs[0]->type(), slot_descs[0]->is_nullable());
-    // 25 is one past the last declared column, so it can never be a valid slot for this scanner.
-    chunk->append_column(std::move(column), 25);
+    // 22 is one past the last declared column, so it can never be a valid slot for this scanner.
+    chunk->append_column(std::move(column), 22);
     bool eos = false;
     Status st = scanner.get_next(&chunk, &eos);
     EXPECT_FALSE(st.ok());

@@ -16,14 +16,12 @@ description: "running_transactions は、すべてのデータベースで現在
 | TXN_ID                | トランザクション ID。                                        |
 | GLOBAL_TXN_ID         | グローバルトランザクション ID（GTID）。GTID がない場合は `0`。 |
 | LABEL                 | トランザクションのラベル。                                   |
-| DATABASE_ID           | トランザクションが属するデータベースの ID。                  |
 | DATABASE_NAME         | データベース名。 |
-| TABLE_IDS             | トランザクションが対象とするテーブルの ID。カンマ区切り。     |
 | TABLE_NAMES           | トランザクションが対象とするテーブル名。カンマ区切り。ベストエフォート: 名前に解決できない ID は生の ID として表示されます。 |
 | STATE                 | トランザクションの状態。有効な値:<ul><li>`PREPARE`: トランザクションが開始されました。</li><li>`PREPARED`: トランザクションがプリコミットされました。</li><li>`COMMITTED`: トランザクションがコミットされ、`VISIBLE` への発行を待っています。</li></ul> |
 | COORDINATOR           | トランザクションのコーディネーターノード。例: `FE: 127.0.0.1`。 |
 | SOURCE_TYPE           | トランザクションのロードソースタイプ。例: `BACKEND_STREAMING`、`INSERT_STREAMING`、`LAKE_COMPACTION`、`ROUTINE_LOAD_TASK`、`FRONTEND`。 |
-| WAREHOUSE_ID          | トランザクションが属するウェアハウスの ID。                  |
+| WAREHOUSE             | トランザクションが属するウェアハウスの名前。                |
 | PREPARE_TIME          | トランザクションが開始された（`PREPARE` に入った）時刻。未設定の場合は `NULL`。 |
 | PREPARED_TIME         | トランザクションが `PREPARED` に到達した時刻。未設定の場合は `NULL`。 |
 | COMMIT_TIME           | トランザクションがコミットされた時刻。まだコミットされていない場合は `NULL`。 |
@@ -32,7 +30,6 @@ description: "running_transactions は、すべてのデータベースで現在
 | PENDING_PUBLISH_MS    | `COMMITTED` 状態のトランザクションについて、`VISIBLE` への発行を待った時間（ミリ秒。現在時刻からコミット時刻を引いた値）。それ以外の状態では `0`。発行の停止を診断するための中心的なフィールドです。 |
 | TIMEOUT_MS            | トランザクションのタイムアウト（ミリ秒）。                   |
 | PREPARED_TIMEOUT_MS   | `PREPARED` 状態のタイムアウト（ミリ秒）。                    |
-| ERROR_REPLICA_NUM     | エラーレプリカの数。                                         |
 | REASON                | 中止または失敗の理由テキスト。空の場合があります。           |
 | ERROR_MSG             | エラーメッセージテキスト。空の場合があります。               |
 | IS_NO_OP_PUBLISH      | 発行がノーオペレーション（no-op）かどうか。                  |

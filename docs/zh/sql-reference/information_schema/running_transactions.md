@@ -16,14 +16,12 @@ description: "running_transactions 列出所有数据库中当前正在运行的
 | TXN_ID                | 事务 ID。                                                    |
 | GLOBAL_TXN_ID         | 全局事务 ID（GTID）。如果事务没有 GTID，则为 `0`。            |
 | LABEL                 | 事务标签（Label）。                                          |
-| DATABASE_ID           | 事务所属数据库的 ID。                                        |
 | DATABASE_NAME         | 数据库名称。 |
-| TABLE_IDS             | 事务涉及的表 ID，以逗号连接。                                |
 | TABLE_NAMES           | 事务涉及的表名，以逗号连接。尽力而为：无法解析为表名的 ID 会以原始 ID 显示。 |
 | STATE                 | 事务状态。有效值：<ul><li>`PREPARE`：事务已开始。</li><li>`PREPARED`：事务已预提交。</li><li>`COMMITTED`：事务已提交，等待发布为 `VISIBLE`。</li></ul> |
 | COORDINATOR           | 事务的协调节点，例如 `FE: 127.0.0.1`。                       |
 | SOURCE_TYPE           | 事务的导入来源类型，例如 `BACKEND_STREAMING`、`INSERT_STREAMING`、`LAKE_COMPACTION`、`ROUTINE_LOAD_TASK` 或 `FRONTEND`。 |
-| WAREHOUSE_ID          | 事务所属仓库（Warehouse）的 ID。                            |
+| WAREHOUSE             | 事务所属仓库（Warehouse）的名称。                           |
 | PREPARE_TIME          | 事务开始（进入 `PREPARE`）的时间。未设置时为 `NULL`。        |
 | PREPARED_TIME         | 事务进入 `PREPARED` 的时间。未设置时为 `NULL`。              |
 | COMMIT_TIME           | 事务提交的时间。尚未提交时为 `NULL`。                        |
@@ -32,7 +30,6 @@ description: "running_transactions 列出所有数据库中当前正在运行的
 | PENDING_PUBLISH_MS    | 对于 `COMMITTED` 状态的事务，表示其等待发布为 `VISIBLE` 的时长（毫秒，即当前时间减去提交时间）；其他状态下为 `0`。这是诊断发布卡住问题的核心字段。 |
 | TIMEOUT_MS            | 事务超时时间（毫秒）。                                       |
 | PREPARED_TIMEOUT_MS   | `PREPARED` 状态的超时时间（毫秒）。                          |
-| ERROR_REPLICA_NUM     | 错误副本数量。                                               |
 | REASON                | 中止或失败原因文本，可能为空。                               |
 | ERROR_MSG             | 错误信息文本，可能为空。                                     |
 | IS_NO_OP_PUBLISH      | 该发布是否为空操作（no-op）。                                |

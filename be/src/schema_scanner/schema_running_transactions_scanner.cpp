@@ -26,14 +26,12 @@ SchemaScanner::ColumnDesc SchemaRunningTransactionsScanner::_s_tbls_columns[] = 
         {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"GLOBAL_TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"LABEL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"DATABASE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
-        {"TABLE_IDS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TABLE_NAMES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"COORDINATOR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"SOURCE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
-        {"WAREHOUSE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"WAREHOUSE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"PREPARE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"PREPARED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"COMMIT_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
@@ -42,7 +40,6 @@ SchemaScanner::ColumnDesc SchemaRunningTransactionsScanner::_s_tbls_columns[] = 
         {"PENDING_PUBLISH_MS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TIMEOUT_MS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"PREPARED_TIMEOUT_MS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"ERROR_REPLICA_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"IS_NO_OP_PUBLISH", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
@@ -99,7 +96,7 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _result.txns.size(); _cur_idx++) {
         auto& info = _result.txns[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 24) {
+            if (slot_id < 1 || slot_id > 21) {
                 return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
             auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
@@ -121,11 +118,6 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 4: {
-                // DATABASE_ID
-                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.database_id);
-                break;
-            }
-            case 5: {
                 // DATABASE_NAME
                 if (info.__isset.database_name) {
                     Slice s = Slice(info.database_name);
@@ -135,17 +127,7 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 6: {
-                // TABLE_IDS
-                if (info.__isset.table_ids) {
-                    Slice s = Slice(info.table_ids);
-                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&s);
-                } else {
-                    down_cast<NullableColumn*>(column)->append_nulls(1);
-                }
-                break;
-            }
-            case 7: {
+            case 5: {
                 // TABLE_NAMES
                 if (info.__isset.table_names) {
                     Slice s = Slice(info.table_names);
@@ -155,13 +137,13 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 8: {
+            case 6: {
                 // STATE (always set by the FE; is_null=false, so fill unconditionally like loads)
                 Slice s = Slice(info.state);
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&s);
                 break;
             }
-            case 9: {
+            case 7: {
                 // COORDINATOR
                 if (info.__isset.coordinator) {
                     Slice s = Slice(info.coordinator);
@@ -171,7 +153,7 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 10: {
+            case 8: {
                 // SOURCE_TYPE
                 if (info.__isset.source_type) {
                     Slice s = Slice(info.source_type);
@@ -181,57 +163,57 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 11: {
-                // WAREHOUSE_ID
-                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.warehouse_id);
+            case 9: {
+                // WAREHOUSE
+                if (info.__isset.warehouse) {
+                    Slice s = Slice(info.warehouse);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&s);
+                } else {
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
+                }
                 break;
             }
-            case 12: {
+            case 10: {
                 // PREPARE_TIME
                 _fill_datetime_column_from_ms(column, info.__isset.prepare_time_ms, info.prepare_time_ms);
                 break;
             }
-            case 13: {
+            case 11: {
                 // PREPARED_TIME
                 _fill_datetime_column_from_ms(column, info.__isset.prepared_time_ms, info.prepared_time_ms);
                 break;
             }
-            case 14: {
+            case 12: {
                 // COMMIT_TIME
                 _fill_datetime_column_from_ms(column, info.__isset.commit_time_ms, info.commit_time_ms);
                 break;
             }
-            case 15: {
+            case 13: {
                 // PUBLISH_TIME
                 _fill_datetime_column_from_ms(column, info.__isset.publish_time_ms, info.publish_time_ms);
                 break;
             }
-            case 16: {
+            case 14: {
                 // FINISH_TIME
                 _fill_datetime_column_from_ms(column, info.__isset.finish_time_ms, info.finish_time_ms);
                 break;
             }
-            case 17: {
+            case 15: {
                 // PENDING_PUBLISH_MS
                 fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.pending_publish_ms);
                 break;
             }
-            case 18: {
+            case 16: {
                 // TIMEOUT_MS
                 fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.timeout_ms);
                 break;
             }
-            case 19: {
+            case 17: {
                 // PREPARED_TIMEOUT_MS
                 fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.prepared_timeout_ms);
                 break;
             }
-            case 20: {
-                // ERROR_REPLICA_NUM
-                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.error_replica_num);
-                break;
-            }
-            case 21: {
+            case 18: {
                 // REASON
                 if (info.__isset.reason) {
                     Slice s = Slice(info.reason);
@@ -241,7 +223,7 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 22: {
+            case 19: {
                 // ERROR_MSG
                 if (info.__isset.error_msg) {
                     Slice s = Slice(info.error_msg);
@@ -251,12 +233,12 @@ Status SchemaRunningTransactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 23: {
+            case 20: {
                 // IS_NO_OP_PUBLISH
                 fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.is_no_op_publish);
                 break;
             }
-            case 24: {
+            case 21: {
                 // NO_OP_PUBLISH_REASON
                 if (info.__isset.no_op_publish_reason) {
                     Slice s = Slice(info.no_op_publish_reason);
