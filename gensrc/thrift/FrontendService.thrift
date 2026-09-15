@@ -738,6 +738,7 @@ struct TRunningTxnInfo {
     22: optional string error_msg
     23: optional bool is_no_op_publish
     24: optional string no_op_publish_reason
+    25: optional string warehouse
 }
 
 struct TGetRunningTxnsResult {

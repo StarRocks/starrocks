@@ -33,6 +33,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,14 +63,12 @@ public class RunningTransactionsSystemTable {
                         .column("TXN_ID", IntegerType.BIGINT)
                         .column("GLOBAL_TXN_ID", IntegerType.BIGINT)
                         .column("LABEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
-                        .column("DATABASE_ID", IntegerType.BIGINT)
                         .column("DATABASE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
-                        .column("TABLE_IDS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("TABLE_NAMES", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("COORDINATOR", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("SOURCE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
-                        .column("WAREHOUSE_ID", IntegerType.BIGINT)
+                        .column("WAREHOUSE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("PREPARE_TIME", DateType.DATETIME)
                         .column("PREPARED_TIME", DateType.DATETIME)
                         .column("COMMIT_TIME", DateType.DATETIME)
@@ -78,7 +77,6 @@ public class RunningTransactionsSystemTable {
                         .column("PENDING_PUBLISH_MS", IntegerType.BIGINT)
                         .column("TIMEOUT_MS", IntegerType.BIGINT)
                         .column("PREPARED_TIMEOUT_MS", IntegerType.BIGINT)
-                        .column("ERROR_REPLICA_NUM", IntegerType.BIGINT)
                         .column("REASON", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .column("ERROR_MSG", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .column("IS_NO_OP_PUBLISH", BooleanType.BOOLEAN)
@@ -142,6 +140,7 @@ public class RunningTransactionsSystemTable {
                     continue;
                 }
                 resolveTableNames(db, row);
+                resolveWarehouseName(row);
                 txns.add(row);
             }
             result.setTxns(txns);
@@ -180,6 +179,21 @@ public class RunningTransactionsSystemTable {
 
     // Off-lock resolution of the comma-joined table ids into TABLE_NAMES, done only for rows the caller may
     // see. Best-effort - an id whose table was dropped mid-flight keeps its raw id.
+    // Resolve the warehouse id carried out of the read lock into a name, the way the database and table
+    // names are resolved. The id stays on the thrift row because that is what the lookup needs, but only
+    // the name is exposed as a column, matching information_schema.loads.
+    private static void resolveWarehouseName(TRunningTxnInfo row) {
+        try {
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouse(row.getWarehouse_id());
+            if (warehouse != null) {
+                row.setWarehouse(warehouse.getName());
+            }
+        } catch (Exception e) {
+            // A dropped or unknown warehouse leaves the column NULL rather than failing the whole scan.
+        }
+    }
+
     private static void resolveTableNames(Database db, TRunningTxnInfo row) {
         if (!row.isSetTable_ids() || Strings.isNullOrEmpty(row.getTable_ids())) {
             return;

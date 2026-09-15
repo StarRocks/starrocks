@@ -44,15 +44,21 @@ public class RunningTransactionsSystemTableTest {
         SystemTable table = RunningTransactionsSystemTable.create();
         Assertions.assertEquals("running_transactions", table.getName());
 
-        // The column list and its order must stay in lockstep with the BE scanner's slot ids (1..24).
-        Assertions.assertEquals(24, table.getColumns().size());
+        // The column list and its order must stay in lockstep with the BE scanner's slot ids (1..21).
+        Assertions.assertEquals(21, table.getColumns().size());
 
         // Spot-check the diagnostic-critical columns exist.
         for (String col : new String[] {
-                "TXN_ID", "LABEL", "DATABASE_NAME", "TABLE_NAMES", "STATE",
+                "TXN_ID", "LABEL", "DATABASE_NAME", "TABLE_NAMES", "STATE", "WAREHOUSE",
                 "PENDING_PUBLISH_MS", "COMMIT_TIME", "IS_NO_OP_PUBLISH", "NO_OP_PUBLISH_REASON"}) {
             Column column = table.getColumn(col);
             Assertions.assertNotNull(column, "missing column " + col);
+        }
+
+        // Names, not ids. information_schema.loads exposes DB_NAME, TABLE_NAME and WAREHOUSE and carries no
+        // id columns, so a reader never has to resolve an id by hand. These stay absent.
+        for (String col : new String[] {"DATABASE_ID", "TABLE_IDS", "WAREHOUSE_ID", "ERROR_REPLICA_NUM"}) {
+            Assertions.assertNull(table.getColumn(col), "column should not exist: " + col);
         }
 
         // The headline stall column is a BIGINT count of milliseconds.
