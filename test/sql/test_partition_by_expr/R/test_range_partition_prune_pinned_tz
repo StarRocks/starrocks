@@ -1,0 +1,102 @@
+-- name: test_range_partition_prune_pinned_tz
+set time_zone = 'America/New_York';
+-- result:
+-- !result
+CREATE TABLE t_pinned_utc (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime(dt, '%Y-%m-%d', 'UTC'))
+(START ("2021-11-05") END ("2021-11-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_session_tz (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime(dt))
+(START ("2021-11-05") END ("2021-11-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_pinned_utc values (1636250400,1);
+-- result:
+-- !result
+insert into t_session_tz values (1636250400,1);
+-- result:
+-- !result
+select count(*) from t_pinned_utc partition(p20211107);
+-- result:
+1
+-- !result
+select count(*) from t_pinned_utc partition(p20211106);
+-- result:
+0
+-- !result
+select count(*) from t_session_tz partition(p20211107);
+-- result:
+0
+-- !result
+select count(*) from t_session_tz partition(p20211106);
+-- result:
+1
+-- !result
+insert into t_pinned_utc values (1636113600,2),(1636200000,3),(1636264799,4),(1636372800,5),(1636459200,6);
+-- result:
+-- !result
+insert into t_session_tz values (1636113600,2),(1636200000,3),(1636264799,4),(1636372800,5),(1636459200,6);
+-- result:
+-- !result
+select dt, id from t_pinned_utc where dt < 1636264800 order by id;
+-- result:
+1636250400	1
+1636113600	2
+1636200000	3
+1636264799	4
+-- !result
+function: assert_explain_contains('select dt from t_pinned_utc where dt < 1636264800', 'partitions=3/5')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select dt from t_session_tz where dt < 1636264800', 'partitions=5/5')
+-- result:
+None
+-- !result
+select dt, id from t_session_tz where dt < 1636264800 order by id;
+-- result:
+1636250400	1
+1636113600	2
+1636200000	3
+1636264799	4
+-- !result
+select count(*) from (
+        (select * from t_pinned_utc where dt < 1636264800)
+        union all (select * from t_pinned_utc where not (dt < 1636264800))
+        union all (select * from t_pinned_utc where (dt < 1636264800) is null)) t;
+-- result:
+6
+-- !result
+select count(*) from (
+        (select * from t_session_tz where dt < 1636264800)
+        union all (select * from t_session_tz where not (dt < 1636264800))
+        union all (select * from t_session_tz where (dt < 1636264800) is null)) t;
+-- result:
+6
+-- !result
+CREATE TABLE t_ms_extra_args (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime_ms(dt, '%Y-%m-%d'))
+(START ("2021-11-05") END ("2021-11-07") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+E: (1064, "Getting syntax error from line 6, column 19 to line 6, column 50. Detail message: Unsupported expr 'from_unixtime_ms(dt, '%Y-%m-%d')' in PARTITION BY clause.")
+-- !result
