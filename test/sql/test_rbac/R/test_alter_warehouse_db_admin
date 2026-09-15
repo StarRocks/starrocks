@@ -1,0 +1,132 @@
+-- name: test_alter_warehouse_db_admin @native
+drop user if exists u_wh_db_admin;
+-- result:
+-- !result
+create user u_wh_db_admin;
+-- result:
+-- !result
+grant db_admin to user u_wh_db_admin;
+-- result:
+-- !result
+grant impersonate on user root to u_wh_db_admin;
+-- result:
+-- !result
+drop user if exists u_wh_nested;
+-- result:
+-- !result
+create user u_wh_nested;
+-- result:
+-- !result
+drop role if exists r_wh_inner;
+-- result:
+-- !result
+create role r_wh_inner;
+-- result:
+-- !result
+drop role if exists r_wh_outer;
+-- result:
+-- !result
+create role r_wh_outer;
+-- result:
+-- !result
+grant db_admin to role r_wh_inner;
+-- result:
+-- !result
+grant r_wh_inner to role r_wh_outer;
+-- result:
+-- !result
+grant r_wh_outer to user u_wh_nested;
+-- result:
+-- !result
+grant impersonate on user root to u_wh_nested;
+-- result:
+-- !result
+drop user if exists u_wh_plain;
+-- result:
+-- !result
+create user u_wh_plain;
+-- result:
+-- !result
+grant impersonate on user root to u_wh_plain;
+-- result:
+-- !result
+execute as u_wh_db_admin with no revert;
+-- result:
+-- !result
+set role all;
+-- result:
+-- !result
+alter warehouse default_warehouse set ("compute_replica" = "2");
+-- result:
+E: (5907, 'unsupported statement in shared_nothing mode')
+-- !result
+alter warehouse default_warehouse set ("session.query_timeout" = "600");
+-- result:
+E: (5907, 'unsupported statement in shared_nothing mode')
+-- !result
+alter warehouse default_warehouse set ("enable_query_queue" = "true", "session.pipeline_dop" = "8");
+-- result:
+E: (5907, 'unsupported statement in shared_nothing mode')
+-- !result
+suspend warehouse default_warehouse;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE default_warehouse for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): [db_admin]. Inactivated role(s): NONE.')
+-- !result
+resume warehouse default_warehouse;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE default_warehouse for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): [db_admin]. Inactivated role(s): NONE.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as u_wh_db_admin with no revert;
+-- result:
+-- !result
+alter warehouse default_warehouse set ("compute_replica" = "2");
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE default_warehouse for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): [db_admin].')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as u_wh_nested with no revert;
+-- result:
+-- !result
+set role all;
+-- result:
+-- !result
+alter warehouse default_warehouse set ("compute_replica" = "2");
+-- result:
+E: (5907, 'unsupported statement in shared_nothing mode')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as u_wh_plain with no revert;
+-- result:
+-- !result
+set role all;
+-- result:
+-- !result
+alter warehouse default_warehouse set ("compute_replica" = "2");
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE default_warehouse for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user u_wh_db_admin;
+-- result:
+-- !result
+drop user u_wh_nested;
+-- result:
+-- !result
+drop user u_wh_plain;
+-- result:
+-- !result
+drop role r_wh_outer;
+-- result:
+-- !result
+drop role r_wh_inner;
+-- result:
+-- !result
