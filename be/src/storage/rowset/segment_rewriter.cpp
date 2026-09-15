@@ -22,17 +22,39 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
+namespace {
+
+constexpr size_t kRewriteCopyBufferSize = 1024 * 1024; // 1 MB
+
+// Copy |size| bytes of |src|, starting at |offset|, to the end of |dest|. |src| is read as the
+// SEGMENT it is, not as the file it lives in: for a bundled segment the caller opens it through
+// new_random_access_file_with_bundling, so offset 0 is the start of this segment's slice and
+// decryption (if any) happens on the way out.
+Status copy_segment_bytes(RandomAccessFile* src, WritableFile* dest, uint64_t offset, uint64_t size) {
+    std::string read_buffer;
+    raw::stl_string_resize_uninitialized(&read_buffer, kRewriteCopyBufferSize);
+    while (size > 0) {
+        if (size < read_buffer.size()) {
+            raw::stl_string_resize_uninitialized(&read_buffer, size);
+        }
+        // TODO(cbl): data is decrypted from src, then copy to dest re-encrypted,
+        // possible optimization opportunity to eliminate some decryption/encryption
+        RETURN_IF_ERROR(src->read_at_fully(offset, read_buffer.data(), read_buffer.size()));
+        RETURN_IF_ERROR(dest->append(read_buffer));
+
+        offset += read_buffer.size();
+        size -= read_buffer.size();
+    }
+    return Status::OK();
+}
+
+} // namespace
+
 Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                                const std::shared_ptr<const TabletSchema>& tschema,
                                                std::vector<uint32_t>& column_ids, MutableColumns& columns,
                                                uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
                                                SegmentFileMark segment_file_mark) {
-    constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
-    if (UNLIKELY(column_ids.empty())) {
-        // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
-        dest->size = src.size.value_or(0);
-        return fs::copy_file(src.path, dest->path, kBufferSize).status();
-    }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
     RandomAccessFileOptions ropts;
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -44,27 +66,31 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file_with_bundling(ropts, src));
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest->path));
 
+    if (UNLIKELY(column_ids.empty())) {
+        // The current schema leaves this rewrite nothing to backfill -- a DROP COLUMN can land
+        // between the partial write and its publish and take the unmodified columns with it -- so
+        // the rewrite degenerates to copying the source segment out under the new name.
+        //
+        // It still has to go through |rfile|. A bundled source is one slice of a physical file
+        // shared with the other tablets of the same load, so copying the file at src.path wholesale
+        // would hand the destination the entire bundle while the metadata records only this slice's
+        // size and (apply_opwrite unbundles a rewritten rowset) no offset. A reader that trusts the
+        // recorded size then looks for the footer 12 bytes before the slice length INSIDE the
+        // bundle, fails the magic number check, and the segment stays unreadable forever -- nothing
+        // repairs it, because compaction has to read it too.
+        ASSIGN_OR_RETURN(const int64_t segment_size, rfile->get_size());
+        RETURN_IF_ERROR(copy_segment_bytes(rfile.get(), wfile.get(), 0, segment_size));
+        RETURN_IF_ERROR(wfile->close());
+        dest->size = segment_size;
+        return Status::OK();
+    }
+
     SegmentFooterPB footer;
     RETURN_IF_ERROR(Segment::parse_segment_footer(rfile.get(), &footer, nullptr, &partial_rowset_footer));
     // keep the partial rowset footer in dest file
     // because be may be crash during update rowset meta
     uint64_t remaining = partial_rowset_footer.position() + partial_rowset_footer.size();
-    std::string read_buffer;
-    raw::stl_string_resize_uninitialized(&read_buffer, kBufferSize);
-    uint64_t offset = 0;
-    while (remaining > 0) {
-        if (remaining < kBufferSize) {
-            raw::stl_string_resize_uninitialized(&read_buffer, remaining);
-        }
-
-        // TODO(cbl): data is decrypted from rfile, then copy to wfile re-encrypted,
-        // possible optimization opportunity to eliminate some decryption/encryption
-        RETURN_IF_ERROR(rfile->read_at_fully(offset, read_buffer.data(), read_buffer.size()));
-        RETURN_IF_ERROR(wfile->append(read_buffer));
-
-        offset += read_buffer.size();
-        remaining -= read_buffer.size();
-    }
+    RETURN_IF_ERROR(copy_segment_bytes(rfile.get(), wfile.get(), 0, remaining));
 
     SegmentWriterOptions opts;
     opts.segment_file_mark = std::move(segment_file_mark);
