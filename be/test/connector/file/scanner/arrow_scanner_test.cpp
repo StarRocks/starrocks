@@ -2283,4 +2283,139 @@ TEST_F(ArrowScannerTest, TestStreamPulsarMessageMetaExtractionWithSourceId) {
     scanner->close();
 }
 
+TEST_F(ArrowScannerTest, TestStreamIterativeEmptyChunkSkipping) {
+    LoadStreamMgr load_stream_mgr;
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
+    ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_ARROW;
+    range.file_type = TFileType::FILE_STREAM;
+    range.__set_load_id(load_id.to_thrift());
+    ranges.emplace_back(range);
+
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
+    TQueryGlobals query_globals;
+    query_globals.time_zone = "UTC";
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    RuntimeState* state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), query_options, query_globals, &query_execution_services, nullptr));
+
+    DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+    state->set_db("test_db");
+    state->set_load_label("test_label");
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->strict_mode = true;
+    params->__isset.strict_mode = true;
+    std::vector<TupleDescriptor*> tuples;
+    desc_tbl->get_tuple_descs(&tuples);
+    params->src_tuple_id = 0;
+    params->dest_tuple_id = tuples.size() - 1;
+    const auto* src_tuple = desc_tbl->get_tuple_descriptor(params->src_tuple_id);
+    const auto* dst_tuple = desc_tbl->get_tuple_descriptor(params->dest_tuple_id);
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        auto& src_slot = src_tuple->slots()[i];
+        auto& dst_slot = dst_tuple->slots()[i];
+        params->expr_of_dest_slot[dst_slot->id()] =
+                create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+        params->dest_sid_to_src_sid_without_trans[dst_slot->id()] = src_slot->id();
+    }
+    params->__isset.dest_sid_to_src_sid_without_trans = true;
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        params->src_slot_ids.emplace_back(i);
+    }
+
+    RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+    ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+
+    TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    // Create a 0-row Arrow RecordBatch buffer
+    arrow::Int32Builder empty_builder;
+    std::shared_ptr<arrow::Array> empty_array;
+    ASSERT_ARROW_OK(empty_builder.Finish(&empty_array));
+    auto schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+    auto batch_empty = arrow::RecordBatch::Make(schema, 0, {empty_array});
+
+    auto stream_empty = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer_empty = arrow::ipc::MakeStreamWriter(stream_empty, schema).ValueOrDie();
+    ASSERT_ARROW_OK(writer_empty->WriteRecordBatch(*batch_empty));
+    ASSERT_ARROW_OK(writer_empty->Close());
+    auto buf_empty = stream_empty->Finish().ValueOrDie();
+
+    // Create a valid 1-row Arrow RecordBatch buffer
+    arrow::Int32Builder valid_builder;
+    ASSERT_ARROW_OK(valid_builder.Append(42));
+    std::shared_ptr<arrow::Array> valid_array;
+    ASSERT_ARROW_OK(valid_builder.Finish(&valid_array));
+    auto batch_valid = arrow::RecordBatch::Make(schema, 1, {valid_array});
+
+    auto stream_valid = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer_valid = arrow::ipc::MakeStreamWriter(stream_valid, schema).ValueOrDie();
+    ASSERT_ARROW_OK(writer_valid->WriteRecordBatch(*batch_valid));
+    ASSERT_ARROW_OK(writer_valid->Close());
+    auto buf_valid = stream_valid->Finish().ValueOrDie();
+
+    // Append 100 empty Arrow messages (would cause deep recursion if not iterative)
+    constexpr int kEmptyBatches = 100;
+    for (int i = 0; i < kEmptyBatches; ++i) {
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf_empty->size()).value();
+        bb->put_bytes((const char*)buf_empty->data(), buf_empty->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+
+    // Append 1 valid Arrow message
+    {
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf_valid->size()).value();
+        bb->put_bytes((const char*)buf_valid->data(), buf_valid->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+
+    // Append another 50 empty Arrow messages
+    constexpr int kTrailingEmptyBatches = 50;
+    for (int i = 0; i < kTrailingEmptyBatches; ++i) {
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf_empty->size()).value();
+        bb->put_bytes((const char*)buf_empty->data(), buf_empty->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    // First get_next should iteratively skip the 100 empty batches and return the 1-row chunk
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    ASSERT_NE(nullptr, res.value());
+    ASSERT_EQ(1, res.value()->num_rows());
+    ASSERT_EQ(42, res.value()->columns()[0]->get(0).get_int32());
+
+    // Second get_next should iteratively skip the remaining 50 empty batches and return EOF
+    auto res_eof = scanner->get_next();
+    ASSERT_TRUE(res_eof.status().is_end_of_file());
+
+    scanner->close();
+}
+
 } // namespace starrocks
