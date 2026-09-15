@@ -15,12 +15,14 @@
 #include "exec/pipeline/pipeline_fragment_reporter.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
+#include "common/util/thrift_key_redaction.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
@@ -178,7 +180,7 @@ std::vector<PipeLineReportTaskKey> report_pipeline_fragments(
             TBatchReportExecStatusResult res;
             Status rpc_status;
 
-            VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+            VLOG_ROW << "debug: reportExecStatus params is " << redacted_debug_string(params);
             rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
                     fe_addr,
                     [&res, &report_batch](FrontendServiceConnection& client) {

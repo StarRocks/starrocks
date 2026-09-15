@@ -31,6 +31,7 @@
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
+#include "common/util/thrift_key_redaction.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "exec/exec_env.h"
@@ -207,8 +208,7 @@ Status QueryOrchestrator::exec_external_plan_fragment(const TScanOpenParams& par
     exec_fragment_params.__set_params(fragment_exec_params);
     // batch_size for one RowBatch
     exec_fragment_params.__set_query_options(build_external_query_options(params));
-    VLOG_ROW << "external exec_plan_fragment params is "
-             << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();
+    VLOG_ROW << "external exec_plan_fragment params is " << redacted_debug_string(exec_fragment_params);
     FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, exec_fragment_params, exec_fragment_params);
     if (status.ok()) {

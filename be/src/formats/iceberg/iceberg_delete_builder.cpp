@@ -60,6 +60,7 @@ Status visit_position_delete_rows(const ChunkPtr& chunk, const IcebergPositionDe
 
 Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_size, const std::string& timezone,
                          const FormatScannerOptions& options, FormatScannerStats* stats,
+                         const TParquetEncryptionInfo* encryption_info,
                          const IcebergPositionDeleteReader::RowCallback& cb) {
     std::unique_ptr<parquet::FileReader> reader;
     try {
@@ -107,6 +108,10 @@ Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_s
     format_scan_context.scan_range_length = length;
     format_scan_context.lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
     format_scan_context.predicate_tree = &predicate_tree;
+    // A position-delete file in an encrypted table is itself encrypted, with its own per-file key.
+    // Without this the reader hits "no decryption key was provided by the planner", because this
+    // path builds a fresh FormatScanContext rather than inheriting the data file's.
+    format_scan_context.parquet_encryption_info = encryption_info;
     RETURN_IF_ERROR(reader->init(&format_scan_context));
 
     while (true) {
@@ -161,15 +166,19 @@ Status read_orc_rows(RandomAccessFile* file, const std::string& path, int64_t le
 Status IcebergPositionDeleteReader::read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
                                               const std::string& format, int32_t chunk_size,
                                               const std::string& timezone, const FormatScannerOptions& options,
-                                              FormatScannerStats* stats, const RowCallback& cb) {
+                                              FormatScannerStats* stats, const TParquetEncryptionInfo* encryption_info,
+                                              const RowCallback& cb) {
     FormatScannerStats local_stats;
     if (stats == nullptr) {
         stats = &local_stats;
     }
     if (format == PARQUET) {
-        return read_parquet_rows(file, length, chunk_size, timezone, options, stats, cb);
+        return read_parquet_rows(file, length, chunk_size, timezone, options, stats, encryption_info, cb);
     }
     if (format == ORC) {
+        if (encryption_info != nullptr) {
+            return Status::NotSupported("encrypted Iceberg position-delete files are only supported in Parquet format");
+        }
         return read_orc_rows(file, path, length, chunk_size, timezone, cb);
     }
     return Status::NotSupported(strings::Substitute("unsupported iceberg position-delete file format: $0", format));
@@ -210,7 +219,9 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
 
     RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
             file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size, _ctx.scan_context->timezone,
-            _ctx.scan_context->options, &app_stats, [this](const Slice& file_path, int64_t pos) {
+            _ctx.scan_context->options, &app_stats,
+            delete_file.__isset.parquet_encryption_info ? &delete_file.parquet_encryption_info : nullptr,
+            [this](const Slice& file_path, int64_t pos) {
                 if (file_path == _ctx.data_file_path) {
                     _deletion_bitmap->add_value(pos);
                 }

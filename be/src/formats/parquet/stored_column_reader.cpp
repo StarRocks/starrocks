@@ -48,7 +48,8 @@ public:
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
-                                                      _field->type_length, chunk_metadata, _opts);
+                                                      _field->type_length, chunk_metadata, _opts,
+                                                      static_cast<int16_t>(_field->physical_column_index));
         RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
         return Status::OK();
     }
@@ -114,7 +115,8 @@ public:
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
-                                                      _field->type_length, chunk_metadata, _opts);
+                                                      _field->type_length, chunk_metadata, _opts,
+                                                      static_cast<int16_t>(_field->physical_column_index));
         RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
         return Status::OK();
     }
@@ -167,7 +169,8 @@ public:
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
-                                                      _field->type_length, chunk_metadata, _opts);
+                                                      _field->type_length, chunk_metadata, _opts,
+                                                      static_cast<int16_t>(_field->physical_column_index));
         RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
         return Status::OK();
     }

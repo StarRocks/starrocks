@@ -95,9 +95,26 @@ public:
             int64_t offset_index_offset = get_chunk_metadata()->offset_index_offset;
             uint32_t offset_index_length = get_chunk_metadata()->offset_index_length;
             std::vector<uint8_t> offset_index_data;
-            offset_index_data.reserve(offset_index_length);
+            offset_index_data.resize(offset_index_length);
             RETURN_IF_ERROR(
                     _opts.file->read_at_fully(offset_index_offset, offset_index_data.data(), offset_index_length));
+
+            // PME encrypts the offset index as its own module, so on an encrypted file these bytes
+            // are ciphertext and have to be decrypted under that module's AAD before the thrift
+            // parser sees them.
+            if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+                std::string plaintext;
+                RETURN_IF_ERROR(
+                        decrypt_metadata_module(*_opts.file_meta_data, _opts.parquet_encryption_info,
+                                                kPmeModuleOffsetIndex, _opts.row_group_ordinal,
+                                                static_cast<int16_t>(get_column_parquet_field()->physical_column_index),
+                                                offset_index_data.data(), offset_index_length, &plaintext));
+                auto plaintext_len = static_cast<uint32_t>(plaintext.size());
+                RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8_t*>(plaintext.data()),
+                                                       &plaintext_len, TProtocolType::COMPACT,
+                                                       &_offset_index_ctx->offset_index));
+                return &_offset_index_ctx->offset_index;
+            }
 
             RETURN_IF_ERROR(deserialize_thrift_msg(offset_index_data.data(), &offset_index_length,
                                                    TProtocolType::COMPACT, &_offset_index_ctx->offset_index));
@@ -112,6 +129,9 @@ public:
 
 private:
     Status _init_column_bloom_filter(int32_t offset, int32_t length, BloomFilter& bloom_filter) const;
+    // PME bloom filters are two separately encrypted modules; see the definition.
+    Status _init_encrypted_column_bloom_filter(int offset, BloomFilter& bloom_filter) const;
+    char _bloom_filter_has_null_byte() const;
 
 protected:
     StatusOr<bool> _row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,

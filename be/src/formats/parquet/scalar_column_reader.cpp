@@ -14,6 +14,7 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "base/coding.h"
 #include "base/simd/gather.h"
 #include "base/simd/simd.h"
 #include "cache/scan/shared_buffered_input_stream.h"
@@ -271,6 +272,14 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
                                                             CompoundNodeType pred_relation,
                                                             const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                             const uint64_t rg_num_rows) {
+    // Parquet Modular Encryption encrypts the page index and bloom filters as their own modules
+    // (kColumnIndex / kOffsetIndex / kBloomFilterHeader / kBloomFilterBitset), and this reader has no
+    // decryptor for them -- it would hand ciphertext to the plaintext thrift deserializer. That
+    // either fails the query with a thrift error naming nothing useful, or, if the bytes happen to
+    // parse, yields two independently garbage structures whose sizes are then used to index each
+    // other (statistics_helper's null_pages[i] against values.size(), page_locations[i + 1]) with no
+    // relation asserted -- an out-of-bounds read. Skip the optimisation instead: correct, and slower.
+    // Decrypting these modules is the real fix and is tracked as a gap.
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
     if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||
         !chunk_meta->__isset.meta_data) {
@@ -283,8 +292,20 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     uint32_t column_index_length = chunk_meta->column_index_length;
 
     std::vector<uint8_t> page_index_data;
-    page_index_data.reserve(column_index_length);
+    page_index_data.resize(column_index_length);
     RETURN_IF_ERROR(_opts.file->read_at_fully(column_index_offset, page_index_data.data(), column_index_length));
+
+    // PME encrypts the column index as its own module, so decrypt before parsing on an encrypted
+    // file. The plaintext replaces the buffer so the deserialization below is shared.
+    if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+        std::string plaintext;
+        RETURN_IF_ERROR(decrypt_metadata_module(*_opts.file_meta_data, _opts.parquet_encryption_info,
+                                                kPmeModuleColumnIndex, _opts.row_group_ordinal,
+                                                static_cast<int16_t>(get_column_parquet_field()->physical_column_index),
+                                                page_index_data.data(), column_index_length, &plaintext));
+        page_index_data.assign(plaintext.begin(), plaintext.end());
+        column_index_length = static_cast<uint32_t>(page_index_data.size());
+    }
 
     tparquet::ColumnIndex column_index;
     RETURN_IF_ERROR(deserialize_thrift_msg(page_index_data.data(), &column_index_length, TProtocolType::COMPACT,
@@ -356,7 +377,81 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     return true;
 }
 
+// A PME bloom filter is two independently encrypted modules laid out back to back, each framed as
+// [4-byte ciphertext length][nonce][ciphertext][tag]. The header module has to be decrypted first
+// because its plaintext gives numBytes, and its own length prefix is what locates the bitset module.
+// The prefixes sit outside the AEAD, so they are bounded before being used to size anything.
+Status RawColumnReader::_init_encrypted_column_bloom_filter(int offset, BloomFilter& bloom_filter) const {
+    // A serialized BloomFilterHeader is a handful of bytes; this is a sanity bound on unauthenticated
+    // input, not a tuning knob.
+    constexpr uint32_t kMaxHeaderModuleSize = 1 * 1024 * 1024;
+    constexpr uint32_t kMaxBitsetModuleSize = 128 * 1024 * 1024;
+    const auto column_ordinal = static_cast<int16_t>(get_column_parquet_field()->physical_column_index);
+
+    auto read_module = [&](int64_t module_offset, uint32_t max_size, int8_t module_type, std::string* plaintext,
+                           uint32_t* module_total_len) -> Status {
+        uint8_t len_buf[4];
+        RETURN_IF_ERROR(_opts.file->read_at_fully(module_offset, len_buf, 4));
+        const uint32_t cipher_len = decode_fixed32_le(len_buf);
+        if (cipher_len == 0 || cipher_len > max_size) {
+            return Status::Corruption(
+                    fmt::format("invalid encrypted Parquet bloom-filter module length: {} (max={}, module={})",
+                                cipher_len, max_size, static_cast<int>(module_type)));
+        }
+        const uint32_t total = 4 + cipher_len;
+        std::vector<uint8_t> cipher(total);
+        RETURN_IF_ERROR(_opts.file->read_at_fully(module_offset, cipher.data(), total));
+        RETURN_IF_ERROR(decrypt_metadata_module(*_opts.file_meta_data, _opts.parquet_encryption_info, module_type,
+                                                _opts.row_group_ordinal, column_ordinal, cipher.data(), total,
+                                                plaintext));
+        *module_total_len = total;
+        return Status::OK();
+    };
+
+    std::string header_plain;
+    uint32_t header_module_len = 0;
+    RETURN_IF_ERROR(
+            read_module(offset, kMaxHeaderModuleSize, kPmeModuleBloomFilterHeader, &header_plain, &header_module_len));
+
+    tparquet::BloomFilterHeader header;
+    auto header_plain_len = static_cast<uint32_t>(header_plain.size());
+    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(header_plain.data()), &header_plain_len,
+                                           TProtocolType::COMPACT, &header));
+    if (header.numBytes <= 0 || static_cast<uint32_t>(header.numBytes) > kMaxBitsetModuleSize) {
+        return Status::Corruption(fmt::format("invalid Parquet bloom-filter numBytes: {}", header.numBytes));
+    }
+
+    std::string bitset_plain;
+    uint32_t bitset_module_len = 0;
+    RETURN_IF_ERROR(read_module(offset + header_module_len, kMaxBitsetModuleSize, kPmeModuleBloomFilterBitset,
+                                &bitset_plain, &bitset_module_len));
+    if (bitset_plain.size() != static_cast<size_t>(header.numBytes)) {
+        return Status::Corruption(
+                fmt::format("Parquet bloom-filter bitset is {} bytes after decryption but the header declares {}",
+                            bitset_plain.size(), header.numBytes));
+    }
+
+    // BloomFilter::init expects the bitset followed by one byte carrying "this column has nulls".
+    std::vector<char> bloom_filter_data(bitset_plain.begin(), bitset_plain.end());
+    bloom_filter_data.push_back(_bloom_filter_has_null_byte());
+    return bloom_filter.init(bloom_filter_data.data(), header.numBytes + 1, Hasher::HashStrategy::XXHASH64, 0);
+}
+
+// Whether to tell the bloom filter this column may contain nulls, so that `col IS NULL` is not
+// filtered away. Shared by the plaintext and encrypted paths.
+char RawColumnReader::_bloom_filter_has_null_byte() const {
+    if (get_chunk_metadata()->meta_data.__isset.statistics &&
+        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
+        return get_chunk_metadata()->meta_data.statistics.null_count > 0 ? 1 : 0;
+    }
+    // Default to "has null" so a nullable column is not wrongly pruned.
+    return get_column_parquet_field()->is_nullable ? 1 : 0;
+}
+
 Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomFilter& bloom_filter) const {
+    if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+        return _init_encrypted_column_bloom_filter(offset, bloom_filter);
+    }
     std::vector<char> bloom_filter_data;
     tparquet::BloomFilterHeader header;
     uint32_t header_len = SBBF_HEADER_SIZE_ESTIMATE;
@@ -376,18 +471,7 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
         RETURN_IF_ERROR(
                 _opts.file->read_at_fully(offset + header_len, bloom_filter_data.data() + header_len, header.numBytes));
     }
-    if (get_chunk_metadata()->meta_data.__isset.statistics &&
-        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
-        if (get_chunk_metadata()->meta_data.statistics.null_count > 0) {
-            bloom_filter_data.back() = 1;
-        } else {
-            bloom_filter_data.back() = 0;
-        }
-    } else if (get_column_parquet_field()->is_nullable) {
-        bloom_filter_data.back() = 1; //set has null as default, to avoid `column is null` to filter the group.
-    } else {
-        bloom_filter_data.back() = 0;
-    }
+    bloom_filter_data.back() = _bloom_filter_has_null_byte();
 
     return bloom_filter.init(bloom_filter_data.data() + header_len, header.numBytes + 1, Hasher::HashStrategy::XXHASH64,
                              0);
