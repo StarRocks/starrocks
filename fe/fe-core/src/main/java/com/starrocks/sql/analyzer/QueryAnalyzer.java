@@ -1090,7 +1090,7 @@ public class QueryAnalyzer {
 
                 // Validate ASOF JOIN conditions
                 if (join.getJoinOp().isAsofJoin()) {
-                    validateAsofJoinConditions(joinEqual);
+                    validateAsofJoinConditions(joinEqual, leftScope, rightScope);
                 }
 
                 // check the join on predicate, example:
@@ -1160,12 +1160,12 @@ public class QueryAnalyzer {
             return newFields;
         }
 
-        private void validateAsofJoinConditions(Expr joinPredicate) {
+        private void validateAsofJoinConditions(Expr joinPredicate, Scope leftScope, Scope rightScope) {
             if (joinPredicate == null) {
                 throw new SemanticException("ASOF JOIN requires ON clause with join conditions");
             }
 
-            AsofJoinConditionValidator validator = new AsofJoinConditionValidator();
+            AsofJoinConditionValidator validator = new AsofJoinConditionValidator(leftScope, rightScope);
             validator.validate(joinPredicate);
         }
 
@@ -2423,9 +2423,25 @@ public class QueryAnalyzer {
     }
 
     private static class AsofJoinConditionValidator {
+        // Which side of the join an operand of the temporal condition reads its columns from.
+        private enum OperandSide {
+            LEFT,
+            RIGHT,
+            BOTH,
+            // Reads neither child: a constant, or a column of an enclosing query.
+            NONE
+        }
+
+        private final Scope leftScope;
+        private final Scope rightScope;
         private int equalityPredicateCount = 0;
         private int inequalityPredicateCount = 0;
         private boolean containsOrOperator = false;
+
+        AsofJoinConditionValidator(Scope leftScope, Scope rightScope) {
+            this.leftScope = leftScope;
+            this.rightScope = rightScope;
+        }
 
         public void validate(Expr joinPredicate) {
             visit(joinPredicate);
@@ -2457,6 +2473,7 @@ public class QueryAnalyzer {
                 } else if (binary.getOp().isRange()) {
                     inequalityPredicateCount++;
                     validateTemporalConditionTypes(binary);
+                    validateTemporalConditionSides(binary);
                 } else {
                     throw new SemanticException("ASOF JOIN does not support '" + binary.getOp() + "' operator " +
                             "in join ON clause");
@@ -2482,6 +2499,61 @@ public class QueryAnalyzer {
 
         private boolean isTemporalOrderingType(Type type) {
             return type.isBigint() || type.isDate() || type.isDatetime();
+        }
+
+        // The temporal condition is what the ASOF match is computed on: the BE reads one operand from
+        // the probe chunk and the other from the build chunk. If both operands read the same side there
+        // is no temporal relation between the two tables at all, and the BE ends up asking the build
+        // chunk for a column that only the probe side carries.
+        private void validateTemporalConditionSides(BinaryPredicate predicate) {
+            OperandSide leftOperandSide = operandSide(predicate.getChild(0));
+            OperandSide rightOperandSide = operandSide(predicate.getChild(1));
+
+            // Exactly one operand per side, in either order. Anything else - both operands on one side, an
+            // operand mixing the two, or an operand that reads neither child (a constant, an outer
+            // reference) - leaves the join without a temporal column on one of its sides.
+            boolean relatesTheTwoSides =
+                    (leftOperandSide == OperandSide.LEFT && rightOperandSide == OperandSide.RIGHT) ||
+                            (leftOperandSide == OperandSide.RIGHT && rightOperandSide == OperandSide.LEFT);
+
+            if (!relatesTheTwoSides) {
+                throw new SemanticException(
+                        "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                                + "with a column from the right side, found: " + ExprToSql.toMySql(predicate),
+                        predicate.getPos());
+            }
+        }
+
+        private OperandSide operandSide(Expr operand) {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            operand.collect(SlotRef.class, slotRefs);
+
+            boolean readsLeft = false;
+            boolean readsRight = false;
+            for (SlotRef slotRef : slotRefs) {
+                if (readsScope(leftScope, slotRef)) {
+                    readsLeft = true;
+                } else if (readsScope(rightScope, slotRef)) {
+                    readsRight = true;
+                }
+            }
+
+            if (readsLeft && readsRight) {
+                return OperandSide.BOTH;
+            } else if (readsLeft) {
+                return OperandSide.LEFT;
+            } else if (readsRight) {
+                return OperandSide.RIGHT;
+            }
+            return OperandSide.NONE;
+        }
+
+        // Only this scope's own fields count. `Scope.tryResolveField` walks up to the parent scope, which
+        // resolves an outer query's column here: with a chained join whose left child is itself a join (that
+        // scope does have a parent), a right-side column that shares its name with an outer relation would be
+        // charged to the left side and a perfectly valid join rejected.
+        private boolean readsScope(Scope scope, SlotRef slotRef) {
+            return !scope.getRelationFields().resolveFields(slotRef).isEmpty();
         }
     }
 }

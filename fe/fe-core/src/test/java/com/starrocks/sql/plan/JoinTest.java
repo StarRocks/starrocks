@@ -22,6 +22,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -3593,9 +3594,12 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testAsofJoinConditionNormalizeWithSubqueries() {
+        // The subquery reads neither child of the join, so the condition does not relate the two sides.
+        // The analyzer rejects it before planning.
         String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and (SELECT MAX(v5) FROM t1) > t0.v2";
-        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
-                "ASOF JOIN requires exactly one temporal inequality condition",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side",
                 () -> getFragmentPlan(sql1));
     }
 
@@ -3611,9 +3615,12 @@ public class JoinTest extends PlanTestBase {
                 "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
                 "  |  other join predicates: 2: v2 = 3: v3 + 4: v4");
 
+        // `t0.v3 + t1.v4` reads both sides of the join, so the ON clause carries no temporal condition
+        // between the two tables. The analyzer rejects it before planning.
         String sql2 = "SELECT t0.v1 FROM t0 asof JOIN t1 ON t0.v1 = t1.v4 and t0.v2 < t0.v3 + t1.v4";
-        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
-                "ASOF JOIN requires exactly one temporal inequality condition",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side",
                 () -> getFragmentPlan(sql2));
 
         String sql3 = "select * from t0 asof join t1 on t0.v1 = t1.v4 and  t1.v5 <= t0.v2 where (v1 > 4 and v5 < 2)";
