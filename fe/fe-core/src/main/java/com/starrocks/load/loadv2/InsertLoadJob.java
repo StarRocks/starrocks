@@ -285,16 +285,51 @@ public class InsertLoadJob extends LoadJob {
     public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
     }
 
+    /**
+     * Replays the cancelled state of this INSERT load job during FE journal replay.
+     *
+     * <p>When FE crashes between the transaction ABORTED journal write and the
+     * {@code OP_END_LOAD_JOB_V2} journal write, the job is left in LOADING/QUEUEING
+     * state after restart. This method finalises the job as CANCELLED so it does not
+     * remain stuck.
+     */
     @Override
     public void replayOnAborted(TransactionState txnState) {
+        writeLock();
+        try {
+            failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
+            finishTimestamp = txnState.getFinishTime();
+            state = JobState.CANCELLED;
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+        } finally {
+            writeUnlock();
+        }
     }
 
     @Override
     public void afterVisible(TransactionState txnState) {
     }
 
+    /**
+     * Replays the finished state of this INSERT load job during FE journal replay.
+     *
+     * <p>When FE crashes between the transaction VISIBLE journal write and the
+     * {@code OP_END_LOAD_JOB_V2} journal write, the job is left in LOADING/QUEUEING
+     * state after restart. This method finalises the job as FINISHED so it does not
+     * remain stuck.
+     */
     @Override
     public void replayOnVisible(TransactionState txnState) {
+        writeLock();
+        try {
+            progress = 100;
+            finishTimestamp = txnState.getFinishTime();
+            state = JobState.FINISHED;
+            failMsg = null;
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+        } finally {
+            writeUnlock();
+        }
     }
 
     public long getTableId() {
