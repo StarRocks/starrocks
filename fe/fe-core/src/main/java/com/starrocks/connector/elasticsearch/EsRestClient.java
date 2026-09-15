@@ -90,10 +90,8 @@ public class EsRestClient {
 
     private static OkHttpClient sslNetworkClient;
 
-    private final Request.Builder builder;
+    private final String authHeader;
     private final String[] nodes;
-    private String currentNode;
-    private int currentNodeIndex = 0;
 
     private boolean sslEnabled;
 
@@ -104,21 +102,11 @@ public class EsRestClient {
 
     public EsRestClient(String[] nodes, String authUser, String authPassword) {
         this.nodes = nodes;
-        this.builder = new Request.Builder();
         if (!Strings.isEmpty(authUser) && !Strings.isEmpty(authPassword)) {
-            this.builder.addHeader(HttpHeaders.AUTHORIZATION,
-                    Credentials.basic(authUser, authPassword));
+            this.authHeader = Credentials.basic(authUser, authPassword);
+        } else {
+            this.authHeader = null;
         }
-        this.currentNode = nodes[currentNodeIndex];
-    }
-
-    private void selectNextNode() {
-        currentNodeIndex++;
-        // reroute, because the previously failed node may have already been restored
-        if (currentNodeIndex >= nodes.length) {
-            currentNodeIndex = 0;
-        }
-        currentNode = nodes[currentNodeIndex];
     }
 
     public Map<String, EsNodeInfo> getHttpNodes() throws StarRocksConnectorException {
@@ -225,7 +213,6 @@ public class EsRestClient {
      * @return response
      */
     String execute(String path) throws StarRocksConnectorException {
-        int retrySize = nodes.length;
         StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;
         if (sslEnabled) {
@@ -233,24 +220,28 @@ public class EsRestClient {
         } else {
             client = NETWORK_CLIENT;
         }
-        for (int i = 0; i < retrySize; i++) {
+        for (int i = 0; i < nodes.length; i++) {
             // maybe should add HTTP schema to the address
             // actually, at this time we can only process http protocol
-            // NOTE. currentNode may have some spaces.
+            // NOTE. nodes[i] may have some spaces.
             // User may set a config like described below:
             // hosts: "http://192.168.0.1:8200, http://192.168.0.2:8200"
-            // then currentNode will be "http://192.168.0.1:8200", " http://192.168.0.2:8200"
+            // then nodes[i] will be "http://192.168.0.1:8200", " http://192.168.0.2:8200"
             // If use ipv6, remember to use format like [2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8080
-            currentNode = currentNode.trim();
-            if (!(currentNode.startsWith("http://") || currentNode.startsWith("https://"))) {
-                currentNode = "http://" + currentNode;
+            String node = nodes[i].trim();
+            if (!(node.startsWith("http://") || node.startsWith("https://"))) {
+                node = "http://" + node;
             }
-            Request request = builder.get()
-                    .url(currentNode + "/" + path)
+            Request.Builder localBuilder = new Request.Builder();
+            if (authHeader != null) {
+                localBuilder.addHeader(HttpHeaders.AUTHORIZATION, authHeader);
+            }
+            Request request = localBuilder.get()
+                    .url(node + "/" + path)
                     .build();
             Response response = null;
             if (LOG.isTraceEnabled()) {
-                LOG.trace("es rest client request URL: {}", currentNode + "/" + path);
+                LOG.trace("es rest client request URL: {}", node + "/" + path);
             }
             try {
                 response = client.newCall(request).execute();
@@ -258,14 +249,13 @@ public class EsRestClient {
                     return response.body().string();
                 }
             } catch (IOException e) {
-                LOG.warn("request node [{}] [{}] failures {}, try next nodes", currentNode, path, e);
+                LOG.warn("request node [{}] [{}] failures {}, try next nodes", node, path, e);
                 scratchExceptionForThrow = new StarRocksConnectorException(e.getMessage());
             } finally {
                 if (response != null) {
                     response.close();
                 }
             }
-            selectNextNode();
         }
         LOG.warn("try all nodes [{}],no other nodes left", (Object) nodes);
         if (scratchExceptionForThrow != null) {
