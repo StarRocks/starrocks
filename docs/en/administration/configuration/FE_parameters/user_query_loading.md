@@ -826,6 +826,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Maximum wait time for semi-synchronous statistics collection during DML operations (INSERT INTO and INSERT OVERWRITE statements). Stream Load and Broker Load use asynchronous mode and are not affected by this configuration. If statistics collection time exceeds this value, the load operation continues without waiting for collection to complete. This configuration works in conjunction with `enable_statistic_collect_on_first_load`.
 - Introduced in: v3.1
 
+### `slot_manager_error_retry_interval_ms`
+
+- Default: 100
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The pause that the leader FE slot manager request worker takes after an unexpected error, before it retries its loop. This worker is the only thread that admits queries into the query queue and reclaims expired slots, so while it pauses no slot request is processed and the pause is added to the pending latency of every queued query. It exists so that a persistent failure cannot retry with no wait and saturate a CPU. Keep it small, and raise it only if the FE log is flooded by repeated slot manager errors.
+
 ### `slow_query_analyze_threshold`
 
 - Default: 5000

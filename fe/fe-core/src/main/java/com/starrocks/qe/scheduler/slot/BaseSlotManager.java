@@ -260,6 +260,30 @@ public abstract class BaseSlotManager {
     }
 
     private void handleRequireSlotTask(LogicalSlot slot) {
+        try {
+            handleRequireSlotTaskImpl(slot);
+        } catch (Throwable t) {
+            // The requester blocks on its slot future until the pending timeout unless this task
+            // replies, so an unexpected failure must be reported here rather than left to the
+            // worker loop, which can only log and drop the task. Release first: requireSlot
+            // registers the slot before running its listeners, and the selection strategies do not
+            // filter by state, so a slot left behind would later be allocated and answered with OK
+            // after the error reply below. Releasing a slot that was never registered is a no-op.
+            LOG.warn("[Slot] SlotManager fails to handle a slot requirement [slot={}]", slot, t);
+            try {
+                handleReleaseSlotTask(slot);
+            } catch (Throwable releaseThrowable) {
+                LOG.warn("[Slot] SlotManager fails to release a slot after a failed requirement [slot={}]",
+                        slot, releaseThrowable);
+            }
+            slot.onCancel();
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Collections.singletonList("failed to handle the slot requirement: " + t));
+            finishSlotRequirementToEndpoint(slot, status);
+        }
+    }
+
+    private void handleRequireSlotTaskImpl(LogicalSlot slot) {
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(slot.getRequestFeName());
         if (frontend == null) {
             slot.onCancel();
