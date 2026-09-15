@@ -72,6 +72,7 @@ import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFeMetricsResult;
 import com.starrocks.thrift.TFeResult;
+import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
@@ -1975,6 +1976,101 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testStreamLoadPutReportsFillDefaultOnAbsentKey() throws Exception {
+        boolean savedFlag = Config.enable_pipeline_stream_load;
+        long txnId = -1;
+        Config.enable_pipeline_stream_load = true;
+        try {
+            // The BE cannot tell an applied fill_default_on_absent_key from one an older FE dropped, so
+            // the FE reports back what it actually settled on and the BE echoes that, not the header.
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+            TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+            beginRequest.setLabel("test_fill_default_label");
+            beginRequest.setDb("test");
+            beginRequest.setTbl("site_access_empty");
+            beginRequest.setUser("root");
+            beginRequest.setPasswd("");
+            TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+            Assertions.assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+            txnId = beginResult.getTxnId();
+
+            TStreamLoadPutRequest loadRequest = new TStreamLoadPutRequest();
+            loadRequest.setDb("test");
+            loadRequest.setTbl("site_access_empty");
+            loadRequest.setTxnId(txnId);
+            loadRequest.setLoadId(new TUniqueId(6, 7));
+            loadRequest.setFileType(TFileType.FILE_STREAM);
+            loadRequest.setUser("root");
+            loadRequest.setColumnSeparator(",");
+            loadRequest.setFormatType(TFileFormatType.FORMAT_JSON);
+            loadRequest.setBackend_id(10001);
+            loadRequest.setFill_default_on_absent_key(true);
+
+            TStreamLoadPutResult result = impl.streamLoadPut(loadRequest);
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code(),
+                    String.valueOf(result.getStatus().getError_msgs()));
+            Assertions.assertTrue(result.isSetFill_default_on_absent_key());
+            Assertions.assertTrue(result.isFill_default_on_absent_key());
+        } finally {
+            // The class caps open stream load transactions per backend, and a transaction left
+            // open here would count against every later test that begins one.
+            if (txnId > 0) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        db.getId(), txnId, "test cleanup");
+            }
+            Config.enable_pipeline_stream_load = savedFlag;
+        }
+    }
+
+    @Test
+    public void testStreamLoadPutDoesNotReportFillDefaultForNonJson() throws Exception {
+        boolean savedFlag = Config.enable_pipeline_stream_load;
+        long txnId = -1;
+        Config.enable_pipeline_stream_load = true;
+        try {
+            // The option only means anything for JSON, so a CSV load must report that it was not applied.
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+            TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+            beginRequest.setLabel("test_fill_default_csv_label");
+            beginRequest.setDb("test");
+            beginRequest.setTbl("site_access_empty");
+            beginRequest.setUser("root");
+            beginRequest.setPasswd("");
+            TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+            Assertions.assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+            txnId = beginResult.getTxnId();
+
+            TStreamLoadPutRequest loadRequest = new TStreamLoadPutRequest();
+            loadRequest.setDb("test");
+            loadRequest.setTbl("site_access_empty");
+            loadRequest.setTxnId(txnId);
+            loadRequest.setLoadId(new TUniqueId(8, 9));
+            loadRequest.setFileType(TFileType.FILE_STREAM);
+            loadRequest.setUser("root");
+            loadRequest.setColumnSeparator(",");
+            loadRequest.setBackend_id(10001);
+            loadRequest.setFill_default_on_absent_key(true);
+
+            TStreamLoadPutResult result = impl.streamLoadPut(loadRequest);
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code(),
+                    String.valueOf(result.getStatus().getError_msgs()));
+            Assertions.assertFalse(result.isFill_default_on_absent_key());
+        } finally {
+            // The class caps open stream load transactions per backend, and a transaction left
+            // open here would count against every later test that begins one.
+            if (txnId > 0) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        db.getId(), txnId, "test cleanup");
+            }
+            Config.enable_pipeline_stream_load = savedFlag;
+        }
+    }
+
+    @Test
     public void testStreamLoadPutTimeout() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
@@ -1984,7 +2080,7 @@ public class FrontendServiceImplTest {
         request.setAuth_code(100);
         request.setUser("user1");
         request.setUser_ip("127.0.0.1");
-        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any(), any());
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any(), any(), any());
         TStreamLoadPutResult result = impl.streamLoadPut(request);
         Assertions.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
     }

@@ -35,6 +35,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REP
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FILL_DEFAULT_ON_ABSENT_KEY;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_JSONPATHS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_JSONROOT;
@@ -316,6 +317,36 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
         } catch (StarRocksException e) {
             assertTrue(e.getMessage().contains("Unknown envelope type"));
             assertTrue(e.getMessage().contains("debezimu"));
+        }
+    }
+
+    /**
+     * Merge Commit never reaches the BE's own check on this header, and it does not report the
+     * effective setting back either, so a typo has to be rejected here or it silently turns the
+     * option off.
+     */
+    @Test
+    public void testGetFillDefaultOnAbsentKeyRejectsNonBool() {
+        StreamLoadKvParams params = new StreamLoadKvParams(
+                Collections.singletonMap(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "ture"));
+        try {
+            params.getFillDefaultOnAbsentKey();
+            fail("Expected StarRocksException for a non bool fill_default_on_absent_key");
+        } catch (StarRocksException e) {
+            assertTrue(e.getMessage().contains("Invalid fill_default_on_absent_key format"));
+        }
+    }
+
+    @Test
+    public void testGetFillDefaultOnAbsentKeyAcceptsBool() throws Exception {
+        assertFalse(new StreamLoadKvParams(Collections.emptyMap()).getFillDefaultOnAbsentKey().isPresent());
+        for (String value : new String[] {"true", "TRUE", "True"}) {
+            assertTrue(new StreamLoadKvParams(Collections.singletonMap(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, value))
+                    .getFillDefaultOnAbsentKey().orElse(false), value);
+        }
+        for (String value : new String[] {"false", "FALSE", "False"}) {
+            assertFalse(new StreamLoadKvParams(Collections.singletonMap(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, value))
+                    .getFillDefaultOnAbsentKey().orElse(true), value);
         }
     }
 

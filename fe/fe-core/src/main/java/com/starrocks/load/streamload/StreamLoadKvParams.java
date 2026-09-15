@@ -40,6 +40,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REP
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FILL_DEFAULT_ON_ABSENT_KEY;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_HEADER_LIST;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_JSONPATHS;
@@ -316,6 +317,25 @@ public class StreamLoadKvParams implements StreamLoadParams {
             return Optional.of(TEnvelopeType.NONE);
         }
         throw new StarRocksException("Unknown envelope type: " + value);
+    }
+
+    @Override
+    public Optional<Boolean> getFillDefaultOnAbsentKey() throws StarRocksException {
+        // Parsed strictly rather than through getBoolParam, which maps anything that is not true
+        // or 1 to false. Merge Commit never reaches the BE's own check on this header, so a typo
+        // would otherwise turn the option off without saying so, and Merge Commit does not report
+        // the effective setting back either.
+        String value = params.get(HTTP_FILL_DEFAULT_ON_ABSENT_KEY);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (value.equalsIgnoreCase("true")) {
+            return Optional.of(true);
+        }
+        if (value.equalsIgnoreCase("false")) {
+            return Optional.of(false);
+        }
+        throw new StarRocksException("Invalid fill_default_on_absent_key format. Must be bool type");
     }
 
     public Optional<Boolean> getEnableBatchWrite() {
