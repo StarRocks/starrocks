@@ -81,7 +81,7 @@ Status AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(Chu
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_set_variant().visit(
                 [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
-        COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+        _aggregator->update_hash_set_profile_counters();
     }
 
     _aggregator->convert_hash_set_to_chunk(state->chunk_size(), chunk);
