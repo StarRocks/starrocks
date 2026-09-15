@@ -75,7 +75,31 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 4> : CAST(1: v1 AS DECIMAL128(22,0)) + 1.234");
 
         sql = "select v1 - v2 * 10 / 5 from t0";
-        assertPlanContains(sql, "<slot 4> : CAST(1: v1 AS DOUBLE) - CAST(2: v2 * 10 AS DOUBLE) / 5.0");
+        assertPlanContains(sql, "<slot 4> : 1: v1 - 2: v2 * 10 DIV 5");
+    }
+
+    @Test
+    public void testIntegerDivision() throws Exception {
+        assertPlanContains("select 7 / 2", "<slot 2> : 3");
+        assertPlanContains("select -7 / 2", "<slot 2> : -3");
+
+        assertPlanContains("select tb / cast(2 as smallint) from tall", "<slot 12> : 2: tb DIV 2");
+        assertPlanContains("select tc / cast(2 as integer) from tall", "<slot 12> : 3: tc DIV 2");
+        assertPlanContains("select td / cast(2 as bigint) from tall", "<slot 12> : 4: td DIV 2");
+
+        assertPlanContains("select td / cast(2 as double) from tall",
+                "<slot 12> : CAST(4: td AS DOUBLE) / 2.0");
+        assertPlanContains("select td / decimal '2.0' from tall", "<slot 12> : CAST(4: td AS DECIMAL", " / 2");
+        assertPlanContains("select sum(v1) over (order by v2 / 2) from t0", "2: v2 DIV 2");
+
+        try {
+            connectContext.getSessionVariable().setSqlDialect("starrocks");
+            assertPlanContains("select 7 / 2", "<slot 2> : 3.5");
+            assertPlanContains("select v1 / v2 from t0",
+                    "CAST(1: v1 AS DOUBLE) / CAST(2: v2 AS DOUBLE)");
+        } finally {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+        }
     }
 
     @Test
@@ -1062,10 +1086,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : NULL");
 
         sql = "select try(100 / v1) from t0 where v1 = 0";
-        assertPlanContains(sql, "100.0 / CAST(1: v1 AS DOUBLE)");
+        assertPlanContains(sql, "100 DIV 1: v1");
 
         sql = "select coalesce(try(100 / v1), 1) from t0 where v1 = 0";
-        assertPlanContains(sql, "coalesce(100.0 / CAST(1: v1 AS DOUBLE), 1.0)");
+        assertPlanContains(sql, "coalesce(100 DIV 1: v1, 1)");
     }
 
     @Test
@@ -1163,7 +1187,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : 1.1");
 
         sql = "select cast(v1 / v2 as real) from t0";
-        assertPlanContains(sql, "CAST(CAST(1: v1 AS DOUBLE) / CAST(2: v2 AS DOUBLE) AS FLOAT)");
+        assertPlanContains(sql, "CAST(1: v1 DIV 2: v2 AS FLOAT)");
     }
 
     @Test
