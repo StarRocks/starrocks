@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -51,6 +52,41 @@ public class OperatorFunctionCheckerTest {
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATE, DateType.DATETIME)).first);
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATETIME, DateType.DATE)).first);
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(IntegerType.BIGINT, IntegerType.BIGINT)).first);
+    }
+
+    /**
+     * An expression partition on a unix timestamp -- PARTITION BY RANGE(from_unixtime(ts)) -- reaches
+     * the pruner as cast(from_unixtime(ts) as datetime), because from_unixtime() returns text and the
+     * partition column is a datetime. That cast is order-preserving over the canonical text
+     * from_unixtime() produces even though it reorders an arbitrary varchar column, and refusing it
+     * costs those tables their range pruning.
+     */
+    @Test
+    public void testCastOverDatetimeTextIsMonotonic() {
+        ColumnRefOperator ts = new ColumnRefOperator(1, IntegerType.BIGINT, "ts", true);
+        CallOperator fromUnixtime =
+                new CallOperator("from_unixtime", VarcharType.VARCHAR, ImmutableList.of(ts));
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(
+                new CastOperator(DateType.DATETIME, fromUnixtime)).first);
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(
+                new CastOperator(DateType.DATE, fromUnixtime)).first);
+
+        CallOperator fromUnixtimeMs =
+                new CallOperator("from_unixtime_ms", VarcharType.VARCHAR, ImmutableList.of(ts));
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(
+                new CastOperator(DateType.DATETIME, fromUnixtimeMs)).first);
+
+        // the cast is licensed by what feeds it, not by the type pair: a bare varchar column sorts
+        // '2021-1-2' before '2021-01-03' as text and after it as an instant
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctions(
+                cast(VarcharType.VARCHAR, DateType.DATETIME)).first);
+
+        // a format that moves the month ahead of the year destroys the order, and the call itself is
+        // rejected before the cast is ever consulted
+        CallOperator scrambled = new CallOperator("from_unixtime", VarcharType.VARCHAR,
+                ImmutableList.of(ts, ConstantOperator.createVarchar("%m-%Y-%d")));
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctions(
+                new CastOperator(DateType.DATETIME, scrambled)).first);
     }
 
     /**

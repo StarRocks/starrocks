@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.type.Type;
@@ -24,6 +26,21 @@ import java.util.function.Predicate;
  * FunctionChecker is used to check whether a ScalarOperator only contains a specific type of functions.
  */
 public class OperatorFunctionChecker {
+    /**
+     * Functions that render an instant as canonical text: their result sorts the way the instant does,
+     * so a cast back to a datetime keeps the order even though the same cast reorders an arbitrary
+     * varchar column.
+     * <p>
+     * These two are the whole family that matters: ColumnFilterConverter.ExprRewriter substitutes the
+     * constant into the partition expression from a fixed whitelist, and from_unixtime/from_unixtime_ms
+     * are its only entries that render an instant as text. date_format() belongs to the family by
+     * shape, but the rewriter does not know it, so listing it here would license a cast on an
+     * expression that never reaches the rewrite.
+     */
+    private static final ImmutableSet<String> DATETIME_TEXT_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.FROM_UNIXTIME,
+            FunctionSet.FROM_UNIXTIME_MS);
+
     static class FunctionCheckerVisitor extends ScalarOperatorVisitor<Pair<Boolean, String>, Void> {
         private final Predicate<CallOperator> predicate;
         // A cast is checked separately from the call predicate: whether a cast is acceptable depends
@@ -115,6 +132,46 @@ public class OperatorFunctionChecker {
     }
 
     /**
+     * Whether a cast keeps the order depends on the values reaching it, not on the type pair alone.
+     * A string-to-datetime cast reorders an arbitrary varchar column -- '2021-1-2' sorts before
+     * '2021-01-03' as text but after it as an instant -- yet it is order-preserving over the canonical
+     * text a from_unixtime()/date_format() produces, which is how an expression partition on a unix
+     * timestamp is spelled: RANGE(from_unixtime(ts)) translates to cast(from_unixtime(ts) as datetime).
+     * Refusing that cast costs those tables their range pruning.
+     * <p>
+     * The format is not re-checked here: only a call the monotonicity predicate already accepted can
+     * get this far, and for these names that predicate is the format check. A three-argument
+     * from_unixtime() escapes it (the check only looks at the two-argument form), so it is not
+     * accepted.
+     */
+    private static boolean producesOrderedDatetimeText(ScalarOperator operator) {
+        if (!(operator instanceof CallOperator call)) {
+            return false;
+        }
+        // These render the epoch in the session time zone, so the text they produce is ordered only
+        // away from a clock rollback -- across one, an increasing epoch yields a DECREASING local
+        // datetime. That is a question about the predicate's constant rather than about the
+        // expression, so it is asked where the constant is known:
+        // ColumnFilterConverter.constantInsideClockRollback().
+        // from_unixtime() takes up to three arguments: the epoch, the format, and the time zone.
+        // ScalarOperatorEvaluator.isMonotonicFunction has already vetted the format for all of them.
+        return DATETIME_TEXT_FUNCTIONS.contains(call.getFnName().toLowerCase())
+                && call.getChildren().size() <= 3;
+    }
+
+    private static boolean isOrderPreservingCast(CastOperator cast) {
+        Type from = cast.fromType();
+        Type to = cast.getType();
+        if (isOrderPreservingCast(from, to)) {
+            return true;
+        }
+        if (from.isStringType() && (to.isDate() || to.isDatetime())) {
+            return producesOrderedDatetimeText(cast.getChild(0));
+        }
+        return false;
+    }
+
+    /**
      * Checks the calls only. Casts are accepted whatever the predicate says, so a caller that cares
      * about the order values come out in - anything driving partition pruning off a range predicate -
      * wants onlyContainMonotonicFunctions instead of passing a monotonicity predicate through here.
@@ -127,7 +184,7 @@ public class OperatorFunctionChecker {
     public static Pair<Boolean, String> onlyContainMonotonicFunctions(ScalarOperator scalarOperator) {
         return scalarOperator.accept(
                 new FunctionCheckerVisitor(call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call),
-                        cast -> isOrderPreservingCast(cast.fromType(), cast.getType())), null);
+                        OperatorFunctionChecker::isOrderPreservingCast), null);
     }
 
     public static Pair<Boolean, String> onlyContainFEConstantFunctions(ScalarOperator scalarOperator) {

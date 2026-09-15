@@ -1097,9 +1097,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             if (functionName.equals(FunctionSet.FROM_UNIXTIME) || functionName.equals(FunctionSet.FROM_UNIXTIME_MS)) {
-                if (hasCast || paramsExpr.size() > 1) {
+                // from_unixtime(ts[, format[, time_zone]]) -- from_unixtime_ms() has only the
+                // one-argument overload, so extra arguments there would resolve to nothing the BE can
+                // run. The format and the time zone must be written out: a partition value has to be
+                // computable at load time, and the checks that license range pruning -- that the
+                // format lays the fields out biggest-first and that the zone is not mid-rollback --
+                // can only read a literal.
+                int maxParams = functionName.equals(FunctionSet.FROM_UNIXTIME) ? 3 : 1;
+                if (hasCast || paramsExpr.size() > maxParams) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"),
                             pos);
+                }
+                for (int i = 1; i < paramsExpr.size(); i++) {
+                    if (!(paramsExpr.get(i) instanceof StringLiteral literal) || literal.getValue().isEmpty()) {
+                        throw new ParsingException(
+                                PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
+                    }
                 }
             }
         }
