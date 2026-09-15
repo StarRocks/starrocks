@@ -1027,7 +1027,6 @@ public class DatabaseTransactionMgr {
         info.setPending_publish_ms(pendingPublishMs);
         info.setTimeout_ms(txnState.getTimeoutMs());
         info.setPrepared_timeout_ms(txnState.getPreparedTimeoutMs());
-        info.setError_replica_num(txnState.getErrorReplicas().size());
         info.setReason(txnState.getReason());
         info.setError_msg(txnState.getErrMsg());
         info.setIs_no_op_publish(txnState.isNoOpPublish());
