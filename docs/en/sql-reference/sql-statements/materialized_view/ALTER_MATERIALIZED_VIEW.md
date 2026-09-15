@@ -27,6 +27,7 @@ ALTER MATERIALIZED VIEW can:
   - `unique_constraints`
   - `foreign_key_constraints`
   - `colocate_with`
+  - `datacache.partition_duration`
   - `excluded_refresh_tables`
   - All session variable-related properties. For information on session variables, see [System variables](../../System_variable.md).
 
