@@ -174,8 +174,10 @@ public:
     static void encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
                                  Column* dest, PrimaryKeyEncodingType encoding_type);
 
-    static bool encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
-                                    size_t limit_size, PrimaryKeyEncodingType encoding_type);
+    // Returns the row index of the first key whose encoded size exceeds limit_size,
+    // or -1 if none. The row index is used to report which row caused the failure.
+    static int64_t find_first_exceed_limit_index(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
+                                                 size_t limit_size, PrimaryKeyEncodingType encoding_type);
 
     static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
                          PrimaryKeyEncodingType encoding_type, std::vector<uint8_t>* value_encode_flags = nullptr);
