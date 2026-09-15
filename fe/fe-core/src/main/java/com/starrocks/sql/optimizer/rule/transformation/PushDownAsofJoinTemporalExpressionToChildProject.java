@@ -24,7 +24,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -173,7 +172,7 @@ public class PushDownAsofJoinTemporalExpressionToChildProject extends Transforma
                                                                   ColumnRefSet rightColumns) {
         List<ScalarOperator> candidates = Lists.newArrayList();
         for (ScalarOperator p : otherJoin) {
-            if (isValidAsofTemporalPredicate(p, leftColumns, rightColumns)) {
+            if (JoinHelper.isValidAsofTemporalPredicate(p, leftColumns, rightColumns)) {
                 candidates.add(p);
             }
         }
@@ -181,28 +180,6 @@ public class PushDownAsofJoinTemporalExpressionToChildProject extends Transforma
             return null;
         }
         return candidates.get(0);
-    }
-
-    private static boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
-                                                        ColumnRefSet leftColumns,
-                                                        ColumnRefSet rightColumns) {
-        if (!(predicate instanceof BinaryPredicateOperator binary)) {
-            return false;
-        }
-        if (!binary.getBinaryType().isRange()) {
-            return false;
-        }
-        ColumnRefSet lCols = binary.getChild(0).getUsedColumns();
-        ColumnRefSet rCols = binary.getChild(1).getUsedColumns();
-        if (lCols.isIntersect(leftColumns) && lCols.isIntersect(rightColumns)) {
-            return false;
-        }
-        if (rCols.isIntersect(leftColumns) && rCols.isIntersect(rightColumns)) {
-            return false;
-        }
-        boolean cross = (leftColumns.containsAll(lCols) && rightColumns.containsAll(rCols)) ||
-                (rightColumns.containsAll(lCols) && leftColumns.containsAll(rCols));
-        return cross;
     }
 
     static class Rewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
