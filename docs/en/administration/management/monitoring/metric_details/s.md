@@ -46,6 +46,46 @@ description: "Alphabetical s"
 - Unit: Count
 - Description: Number of small file caches.
 
+## `sort_key_sampling_data_page_fallback_total`
+
+- Unit: Count
+- Description: Cumulative number of times data-page sort-key sampling declined a segment and fell back to that segment's coarse `[min, max]` range: an unexpected schema, a `sort_key_idxes` that is not the segment schema's own, a failed page read, a short read, or a sample outside the segment's declared bounds. Sampling is fail-open, so this never fails a split; a rising value means tablet split and range-split compaction are working from coarser boundaries than intended.
+
+## `sort_key_sampling_data_page_latency`
+
+- Unit: us
+- Description: Time spent sampling one segment's sort key from its data pages, published as a bvar latency series (average, percentiles, max, qps and count). Covers every attempt that got past the sample-budget check, including attempts that then fell back, so a tablet that is slow and keeps failing open is still visible here.
+
+## `sort_key_sampling_data_page_segments_total`
+
+- Unit: Count
+- Description: Cumulative number of segments for which sampling committed to the data-page path. Counted once the sampling geometry is settled and before the first read, so a segment whose read then falls back is counted too — the counter exists to show that the free short-key-index path was NOT taken. For the I/O actually paid, read `sort_key_sampling_read_bytes_total` instead.
+
+## `sort_key_sampling_read_bytes_total`
+
+- Unit: Bytes
+- Description: Cumulative compressed bytes read from segment data pages while sampling sort keys. Charged from the page reader's own accounting, so it counts only transfers that really happened, including those on an attempt that later fell back. This is the metric to watch for the I/O cost of split-point sampling.
+
+## `sort_key_sampling_rowsets_opened_total`
+
+- Unit: Count
+- Description: Cumulative number of rowsets whose segment files were opened in order to sample them. The open is gated on at least one of the rowset's segments having a non-zero sample budget, so this rises only where sampling is actually attempted. Read it against `sort_key_sampling_samples_total`: rowsets opened while no samples are published means the sample budget is not reaching the segments being read.
+
+## `sort_key_sampling_samples_total`
+
+- Unit: Count
+- Description: Cumulative number of sort-key samples published, by either sampling path. An increase here with no increase in `sort_key_sampling_data_page_segments_total` means the samples came from the free short-key-index path.
+
+## `sort_key_sampling_short_key_index_fallback_total`
+
+- Unit: Count
+- Description: Cumulative number of times short-key-index sort-key sampling was entered for a segment and then declined it, falling back to that segment's coarse `[min, max]` range: an index page that does not parse, geometry that does not cross-check against the segment's own row count, a sample outside the segment's declared bounds, or a segment of fewer than two index blocks. Note what this does NOT count: a schema whose short key index cannot encode the whole sort key (a VARCHAR key, for example) never enters this path at all, so such tables leave this counter at zero and appear in `sort_key_sampling_data_page_segments_total` instead.
+
+## `sort_key_sampling_short_key_index_latency`
+
+- Unit: us
+- Description: Time spent sampling one segment's sort key from its short key index, published as a bvar latency series (average, percentiles, max, qps and count). This path reads no data pages, so values here should stay far below `sort_key_sampling_data_page_latency`.
+
 ## `spill_disk_bytes_used`
 
 - Unit: Bytes
