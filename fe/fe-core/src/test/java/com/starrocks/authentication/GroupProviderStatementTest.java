@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -54,6 +56,7 @@ public class GroupProviderStatementTest {
     private AuthenticationMgr authenticationMgr;
     private static final String TEST_PROVIDER_NAME = "test_provider";
     private static final String NON_EXISTENT_PROVIDER_NAME = "non_existent_provider";
+    private static final String TEST_EXTENSION_PROVIDER_NAME = "test_extension_provider";
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -141,6 +144,39 @@ public class GroupProviderStatementTest {
 
         Assertions.assertTrue(exception.getMessage().contains("Group provider '" + TEST_PROVIDER_NAME + "' already exists"),
                 "Error message should indicate provider already exists: " + exception.getMessage());
+    }
+
+    /**
+     * Test case: Create Group Provider from static extension
+     * Test point: Group Provider should return group test_group for user test_user
+     */
+    @Test
+    public void testCreateExtensionGroupProvider() throws Exception {
+        ExtensionManager.getInstance(); // ensure singleton is initialized
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, ExtensionGroupProvider.TYPE);
+        properties.put(
+                ExtensionGroupProvider.PROVIDER_FACTORY_CLASS_PROPERTY,
+                TestExtensionGroupProviderFactory.class.getName()
+        );
+
+        CreateGroupProviderStmt stmt = new CreateGroupProviderStmt(
+                TEST_EXTENSION_PROVIDER_NAME,
+                properties,
+                false,
+                NodePosition.ZERO
+        );
+
+        authenticationMgr.createGroupProviderStatement(stmt, ctx);
+
+        GroupProvider provider = authenticationMgr.getGroupProvider(TEST_EXTENSION_PROVIDER_NAME);
+        Assertions.assertNotNull(provider);
+        Assertions.assertEquals(TEST_EXTENSION_PROVIDER_NAME, provider.getName());
+        Assertions.assertEquals(ExtensionGroupProvider.TYPE, provider.getType());
+
+        Set<String> groups = provider.getGroup(new UserIdentity("test_user", "%"), "test_user");
+        Assertions.assertTrue(groups.contains("test_group"));
     }
 
     /**
@@ -352,6 +388,43 @@ public class GroupProviderStatementTest {
             authenticationMgr.dropGroupProviderStatement(dropStmt, ctx);
         } catch (Exception e) {
             // Ignore cleanup errors
+        }
+
+        try {
+            DropGroupProviderStmt dropStmt =
+                    new DropGroupProviderStmt(TEST_EXTENSION_PROVIDER_NAME, true, NodePosition.ZERO);
+            authenticationMgr.dropGroupProviderStatement(dropStmt, ctx);
+        } catch (Exception e) {
+            // Ignore cleanup errors
+        }
+    }
+
+    /**
+     * Fake ExtensionGroupProviderFactory that simulates plugin (GroupProvider provider)
+     * provided by static extension.
+     */
+    public static class TestExtensionGroupProviderFactory implements ExtensionGroupProviderFactory {
+        @Override
+        public GroupProvider create(String name, Map<String, String> properties) {
+            return new TestExtensionGroupProvider(name, properties);
+        }
+    }
+
+    /**
+     * Fake implementation for GroupProvider provided by static extension.
+     */
+    public static class TestExtensionGroupProvider extends GroupProvider {
+        public TestExtensionGroupProvider(String name, Map<String, String> properties) {
+            super(name, properties);
+        }
+
+        @Override
+        public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
+            return Set.of("test_group");
+        }
+
+        @Override
+        public void checkProperty() {
         }
     }
 }
