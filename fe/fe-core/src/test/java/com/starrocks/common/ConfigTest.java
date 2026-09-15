@@ -63,6 +63,13 @@ public class ConfigTest {
     }
 
     @Test
+    public void testJaegerGrpcEndpointIsOtlpAlias() throws Exception {
+        ConfigBase.ConfField confField = Config.class.getField("otlp_exporter_grpc_endpoint")
+                .getAnnotation(ConfigBase.ConfField.class);
+        Assertions.assertArrayEquals(new String[] {"jaeger_grpc_endpoint"}, confField.aliases());
+    }
+
+    @Test
     public void testMultiAlias() throws Exception {
         ConfigForTest configForTest = new ConfigForTest();
         URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");

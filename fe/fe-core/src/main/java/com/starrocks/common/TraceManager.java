@@ -16,12 +16,10 @@ package com.starrocks.common;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.api.internal.TemporaryBuffers;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
-import io.opentelemetry.exporter.jaeger.JaegerGrpcSpanExporter;
 import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.OpenTelemetrySdkBuilder;
@@ -86,13 +84,6 @@ public class TraceManager {
     @VisibleForTesting
     protected static List<SpanProcessor> getSpanProcessors() {
         List<SpanProcessor> processors = new ArrayList<>();
-        if (!Config.jaeger_grpc_endpoint.isEmpty()) {
-            processors.add(BatchSpanProcessor.builder(
-                    JaegerGrpcSpanExporter.builder()
-                            .setEndpoint(Config.jaeger_grpc_endpoint)
-                            .build()
-            ).build());
-        }
         if (!Config.otlp_exporter_grpc_endpoint.isEmpty()) {
             processors.add(BatchSpanProcessor.builder(
                     OtlpGrpcSpanExporter.builder()
@@ -150,7 +141,7 @@ public class TraceManager {
         if (!spanContext.isValid()) {
             return null;
         }
-        char[] chars = TemporaryBuffers.chars(55);
+        char[] chars = new char[55];
         chars[0] = "00".charAt(0);
         chars[1] = "00".charAt(1);
         chars[2] = '-';

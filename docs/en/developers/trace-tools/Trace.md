@@ -19,32 +19,27 @@ displayed_sidebar: docs
 
 Steps to enable tracing in SR:
 
-1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.76/getting-started/)
-    The guide above uses docker. For simplicity, you can also just download [binary package](https://github.com/jaegertracing/jaeger/releases) and run locally.
+1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.76/getting-started/). The following command exposes the Jaeger UI, the OTLP/gRPC receiver used by FE, and the Jaeger Thrift/UDP receiver used by BE.
 
-```
-    decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ll
-    total 215836
-    drwxr-xr-x  2 decster decster     4096 02-05 05:01:30 ./
-    drwxrwxr-x 28 decster decster     4096 05-18 18:24:07 ../
-    -rwxr-xr-x  1 decster decster 19323884 02-05 05:01:31 example-hotrod*
-    -rwxr-xr-x  1 decster decster 23430444 02-05 05:01:29 jaeger-agent*
-    -rwxr-xr-x  1 decster decster 51694774 02-05 05:01:29 jaeger-all-in-one*
-    -rwxr-xr-x  1 decster decster 41273869 02-05 05:01:30 jaeger-collector*
-    -rwxr-xr-x  1 decster decster 37576660 02-05 05:01:30 jaeger-ingester*
-    -rwxr-xr-x  1 decster decster 47698843 02-05 05:01:30 jaeger-query*
-
-    decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ./jaeger-all-in-one 
+```bash
+docker run --rm --name jaeger \
+    -p 16686:16686 \
+    -p 4317:4317 \
+    -p 6831:6831/udp \
+    jaegertracing/all-in-one:1.76.0
 ```
 
-2.  Config FE\&FE to enable tracing.
-    Currently, opentelemetry java & cpp sdk use different protocols, java uses grpc proto, while cpp uses thrift\&UDP, so the endpoint ports are different.
+2.  Configure FE and BE to enable tracing.
+    The Java SDK in FE exports OTLP over gRPC, while the C++ SDK in BE exports Jaeger Thrift over UDP, so the endpoint ports are different.
 
 ```
     fe.conf
 
-    # Enable jaeger tracing by setting jaeger_grpc_endpoint
-    # jaeger_grpc_endpoint = http://localhost:14250
+    # Export FE traces to Jaeger's OTLP/gRPC receiver
+    # otlp_exporter_grpc_endpoint = http://localhost:4317
+
+    # jaeger_grpc_endpoint remains accepted as a legacy alias, but its value
+    # must also point to the OTLP/gRPC receiver on port 4317, not port 14250.
 
 
     be.conf

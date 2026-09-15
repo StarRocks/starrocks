@@ -4,6 +4,8 @@ This is a connector for StarRocks that is compatible with [Trino](https://trino.
 ## Requirements
 To connect to StarRocks, you need:
 - StarRocks 2.5.0 or higher.
+- Trino 483.
+- JDK 25 to build and run Trino 483.
 - Network access from the Trino coordinator and workers to StarRocks. Port 9030 and 8030 are the default port.
 
 
@@ -130,4 +132,3 @@ If a WHERE clause is specified, the DELETE operation only works if the predicate
 
 ## Fault-tolerant execution support
 The connector does not support [Fault-tolerant](https://trino.io/docs/current/admin/fault-tolerant-execution.html) execution of query processing. 
-

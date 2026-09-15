@@ -33,7 +33,6 @@ public class TraceManagerTest {
 
     @BeforeEach
     public void resetConfig() {
-        Config.jaeger_grpc_endpoint = "";
         Config.otlp_exporter_grpc_endpoint = "";
     }
 
@@ -51,7 +50,6 @@ public class TraceManagerTest {
 
     @Test
     public void shouldConstructTracer() {
-        Config.jaeger_grpc_endpoint = "http://localhost:14250";
         Config.otlp_exporter_grpc_endpoint = "http://localhost:4317";
 
         Tracer tracer = TraceManager.getTracer();
@@ -66,30 +64,11 @@ public class TraceManagerTest {
     }
 
     @Test
-    public void shouldReturnSingleProcessorWhenJaegerExportEnabled() {
-        Config.jaeger_grpc_endpoint = "http://localhost:14250";
-
-        List<SpanProcessor> processors = TraceManager.getSpanProcessors();
-
-        assertEquals(1, processors.size());
-    }
-
-    @Test
     public void shouldReturnSingleProcessorWhenOtlpExportEnabled() {
         Config.otlp_exporter_grpc_endpoint = "http://localhost:4317";
 
         List<SpanProcessor> processors = TraceManager.getSpanProcessors();
 
         assertEquals(1, processors.size());
-    }
-
-    @Test
-    public void shouldReturnMultipleProcessorsWhenMultipleSpanExportEnabled() {
-        Config.jaeger_grpc_endpoint = "http://localhost:14250";
-        Config.otlp_exporter_grpc_endpoint = "http://localhost:4317";
-
-        List<SpanProcessor> processors = TraceManager.getSpanProcessors();
-
-        assertEquals(2, processors.size());
     }
 }

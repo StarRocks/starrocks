@@ -126,7 +126,9 @@ public class StarRocksPageSink
     public CompletableFuture<Collection<Slice>> finish()
     {
         applier.close();
-        return completedFuture(ImmutableList.of(Slices.wrappedLongArray(pageSinkId.getId())));
+        Slice value = Slices.allocate(Long.BYTES);
+        value.setLong(0, pageSinkId.getId());
+        return completedFuture(ImmutableList.of(value));
     }
 
     @SuppressWarnings("unused")
