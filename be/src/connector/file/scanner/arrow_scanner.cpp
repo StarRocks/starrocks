@@ -24,6 +24,7 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/simd/simd.h"
@@ -428,7 +429,7 @@ Status ArrowScanner::validate_batch_schema(const std::shared_ptr<arrow::RecordBa
     return Status::OK();
 }
 
-void ArrowScanner::filter_current_discrete_message(const std::string& reason) {
+void ArrowScanner::filter_current_discrete_message(const std::string& reason, int64_t pending_rows) {
     std::string error_msg = "Arrow routine load: " + reason;
     if (_conv_ctx.consumer_partition != -1) {
         error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition);
@@ -441,18 +442,43 @@ void ArrowScanner::filter_current_discrete_message(const std::string& reason) {
     }
     _conv_ctx.report_error_message(error_msg, "", -1);
     LOG(WARNING) << error_msg;
-    int64_t filtered = _batch != nullptr && _batch->num_rows() > 0 ? _batch->num_rows() : 1;
-    _counter->num_rows_filtered += filtered;
+    // Include rows buffered in a discarded chunk and the unconsumed part of
+    // this batch, but never recount rows already returned in earlier chunks.
+    int64_t filtered = pending_rows;
+    if (_batch != nullptr) {
+        filtered += _batch->num_rows() - _batch_start_idx;
+    }
+    // One IPC message can contain many batches. Account for the whole rejected
+    // message so load error budgets see every discarded row.
+    while (_curr_file_reader != nullptr) {
+        std::shared_ptr<arrow::RecordBatch> discarded_batch;
+        auto status = _curr_file_reader->ReadNext(&discarded_batch);
+        if (!status.ok()) {
+            const std::string read_error = error_msg + "; reading discarded batch failed: " + status.ToString();
+            _conv_ctx.report_error_message(read_error, "", -1);
+            LOG(WARNING) << read_error;
+            // The unreadable remainder has no reliable row count. Use the
+            // same one-error sentinel as the normal IPC parse-error path.
+            ++filtered;
+            break;
+        }
+        if (discarded_batch == nullptr) {
+            break;
+        }
+        filtered += discarded_batch->num_rows();
+    }
+    _counter->num_rows_filtered += std::max<int64_t>(filtered, 1);
     _batch.reset();
     _batch_start_idx = 0;
-    _chunk_start_idx = 0;
     _curr_file_reader.reset();
     _parser_buf.reset();
     _arrow_stream.reset();
     for (auto& conv : _conv_funcs) {
         conv = std::make_unique<ConvertFuncTree>();
     }
-    _pool.clear();
+    // next_batch() may be looking ahead while a previous message's chunk
+    // still needs _cast_exprs and _chunk_start_idx for finalization. Their
+    // lifetime ends when get_next() starts building the next chunk.
     _conv_ctx.consumer_partition = -1;
     _conv_ctx.consumer_offset = -1;
     _conv_ctx.consumer_message_id.clear();
@@ -568,6 +594,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
     while (true) {
         ChunkPtr chunk;
+        _chunk_start_idx = 0;
         if (batch_is_exhausted()) {
             while (true) {
                 Status status = next_batch();
@@ -598,7 +625,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
             auto append_st = append_batch_to_src_chunk(&chunk);
             if (!append_st.ok()) {
                 if (_is_discrete_pipe) {
-                    filter_current_discrete_message("append batch failed: " + append_st.to_string());
+                    filter_current_discrete_message("append batch failed: " + append_st.to_string(), _chunk_start_idx);
                     chunk_error = true;
                     break;
                 }

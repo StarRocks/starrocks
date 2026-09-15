@@ -1931,6 +1931,73 @@ TEST_F(ArrowScannerTest, TestLocalFileEmptyIpcStream) {
     scanner->close();
 }
 
+// Rejecting a whole IPC message must count every batch and must not destroy
+// the conversion expressions belonging to a preceding, unfinished chunk.
+TEST_F(ArrowScannerTest, TestStreamSchemaInvalidMultiBatchAccounting) {
+    for (auto [leading_valid_message, trailing_valid_message] :
+         {std::pair{false, true}, std::pair{true, false}, std::pair{true, true}}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "leading=" << leading_valid_message << " trailing=" << trailing_valid_message);
+        auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        SlotTypeDescInfoArray slots;
+        slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), false);
+        auto context = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+        ASSERT_OK(context.status());
+        auto ctx = std::move(context).value();
+
+        auto append_message = [&](const std::string& column_name, const std::vector<int>& batch_rows) {
+            auto schema = arrow::schema({arrow::field(column_name, arrow::int32())});
+            auto output = arrow::io::BufferOutputStream::Create().ValueOrDie();
+            auto writer = arrow::ipc::MakeStreamWriter(output, schema).ValueOrDie();
+            for (int rows : batch_rows) {
+                arrow::Int32Builder builder;
+                for (int row = 0; row < rows; ++row) {
+                    ASSERT_ARROW_OK(builder.Append(42));
+                }
+                std::shared_ptr<arrow::Array> array;
+                ASSERT_ARROW_OK(builder.Finish(&array));
+                auto batch = arrow::RecordBatch::Make(schema, rows, {array});
+                ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+            }
+            ASSERT_ARROW_OK(writer->Close());
+            auto buffer = output->Finish().ValueOrDie();
+            auto bytes = ByteBuffer::allocate_with_tracker(buffer->size()).value();
+            bytes->put_bytes(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+            bytes->flip_to_read();
+            ASSERT_OK(pipe->append(std::move(bytes)));
+        };
+        if (leading_valid_message) {
+            append_message("c0_int", {1});
+        }
+        // The missing required column invalidates all five rows, even though
+        // validation first sees an empty batch.
+        append_message("other", {0, 2, 3});
+        if (trailing_valid_message) {
+            append_message("c0_int", {1});
+        }
+        ASSERT_OK(pipe->finish());
+
+        ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(scanner.open());
+        int64_t loaded = 0;
+        while (true) {
+            auto result = scanner.get_next();
+            if (result.status().is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(result.status());
+            auto chunk = result.value();
+            for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                ASSERT_EQ(42, chunk->columns()[0]->get(row).get_int32());
+            }
+            loaded += chunk->num_rows();
+        }
+        EXPECT_EQ(static_cast<int>(leading_valid_message) + static_cast<int>(trailing_valid_message), loaded);
+        EXPECT_EQ(5, ctx->counter->num_rows_filtered);
+        scanner.close();
+    }
+}
+
 TEST_F(ArrowScannerTest, TestStreamSchemaInvalidMissingNonNullableColumnFiltered) {
     LoadStreamMgr load_stream_mgr;
     auto load_id = UniqueId::gen_uid();
