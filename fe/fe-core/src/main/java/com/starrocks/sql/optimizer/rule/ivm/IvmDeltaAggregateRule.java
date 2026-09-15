@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.ast.JoinOperator;
-import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -120,7 +119,7 @@ public class IvmDeltaAggregateRule extends TransformationRule {
 
         // Step 2: Create MV scan
         LogicalOlapScanOperator mvScan = MvRewritePreprocessor.createScanMvOperator(
-                mv, columnRefFactory, PCellSortedSet.of(), true);
+                mv, columnRefFactory, context.getTvrOptContext().getIvmExcludedMvPartitions(), true);
         ColumnRefOperator mvRowIdRef = mvScan.getColumnMetaToColRefMap().get(rowIdColumn);
         Map<Column, ColumnRefOperator> mvColMetaToRefMap = mvScan.getColumnMetaToColRefMap();
 

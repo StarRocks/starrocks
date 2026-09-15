@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class TvrOptContext {
     private final SessionVariable sessionVariable;
@@ -39,6 +40,9 @@ public class TvrOptContext {
     // consumed by IvmDeltaAggregateRule to locate each aggregate's state column by key
     // instead of by schema position.
     private Map<Integer, String> ivmStateColumnNameByAggRefId;
+
+    // MV partitions IvmDeltaAggregateRule leaves out of the state-merge MV scan; empty scans the whole MV.
+    private Set<String> ivmExcludedMvPartitions = Set.of();
 
     public TvrOptContext(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
@@ -59,6 +63,14 @@ public class TvrOptContext {
 
     public Map<Integer, String> getIvmStateColumnNameByAggRefId() {
         return ivmStateColumnNameByAggRefId;
+    }
+
+    public void setIvmExcludedMvPartitions(Set<String> ivmExcludedMvPartitions) {
+        this.ivmExcludedMvPartitions = ivmExcludedMvPartitions == null ? Set.of() : ivmExcludedMvPartitions;
+    }
+
+    public Set<String> getIvmExcludedMvPartitions() {
+        return ivmExcludedMvPartitions;
     }
 
     private MaterializedView loadTvrTargetMV() {

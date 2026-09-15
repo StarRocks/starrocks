@@ -947,6 +947,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_IVM_REFRESH = "enable_ivm_refresh";
     public static final String TVR_TARGET_MVID = "tvr_target_mvid";
+    public static final String ENABLE_IVM_MV_PARTITION_PRUNING = "enable_ivm_mv_partition_pruning";
 
     public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
     public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
@@ -3123,6 +3124,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_IVM_REFRESH, flag = VariableMgr.INVISIBLE)
     private boolean enableIVMRefresh = false;
+
+    @VarAttr(name = ENABLE_IVM_MV_PARTITION_PRUNING)
+    private boolean enableIvmMvPartitionPruning = true;
 
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
@@ -5880,6 +5884,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableIVMRefresh() {
         return enableIVMRefresh;
+    }
+
+    public void setEnableIvmMvPartitionPruning(boolean enableIvmMvPartitionPruning) {
+        this.enableIvmMvPartitionPruning = enableIvmMvPartitionPruning;
+    }
+
+    public boolean isEnableIvmMvPartitionPruning() {
+        return enableIvmMvPartitionPruning;
     }
 
     public void setTvrTargetMvid(String tvrTargetMvid) {

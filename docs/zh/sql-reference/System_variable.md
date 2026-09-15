@@ -674,6 +674,12 @@ FROM test;
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_ivm_mv_partition_pruning
+
+* 描述：异步物化视图增量刷新时，是否只扫描本次刷新增量中发生变更的基表分区所对应的物化视图分区，而不是扫描整个物化视图。仅对存算分离（云原生）基表生效；其他基表、首次刷新、以及非引用基表发生变更时，仍扫描整个物化视图。可通过 `PROPERTIES ("session.enable_ivm_mv_partition_pruning" = "false")` 针对单个物化视图设置，或通过 `SET GLOBAL` 对所有物化视图生效。
+* 默认值：true
+* 引入版本：v26.2
+
 ### enable_insert_partial_update
 
 * **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。

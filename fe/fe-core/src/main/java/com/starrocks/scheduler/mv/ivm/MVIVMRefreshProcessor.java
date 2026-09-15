@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections4.CollectionUtils;
@@ -591,6 +592,9 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
             }
             InsertStmt insertStmt;
+            // Derived under the lock: the pruner walks mv.getPartitions(), a live map view that a
+            // concurrent partition sync would otherwise be iterated mid-change.
+            Set<String> excludedMvPartitions;
             try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
                 try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
                     String derivedSelectSql = IvmRefreshDefinition.derive(ctx, mv);
@@ -599,6 +603,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     insertStmt = buildInsertPlan(insertStmt);
                     ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
                 }
+                excludedMvPartitions = IvmMvScanPruner.excludedMvPartitions(
+                        mv, ctx.getSessionVariable(), mvContext.getPartitionTopology(),
+                        snapshotBaseTables.values(), stagedTvrDeltaMap, insertStmt.getQueryStatement());
+                logger.info("Incremental refresh leaves {} of {} MV partitions out of the state-merge scan",
+                        excludedMvPartitions.size(), mv.getPartitions().size());
             } finally {
                 locker.unlock();
             }
@@ -606,6 +615,18 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
+                // Nothing to carry means nothing to attach: an empty set is what the planner already defaults
+                // to, so a refresh that prunes nothing leaves the ConnectContext exactly as it found it.
+                QueryMaterializationContext queryMVContext = null;
+                if (!excludedMvPartitions.isEmpty()) {
+                    // Every optimizer run detaches the context from ctx, and IvmRefreshDefinition.derive() may
+                    // have run one.
+                    queryMVContext = ctx.getQueryMVContext();
+                    if (queryMVContext == null) {
+                        queryMVContext = new QueryMaterializationContext();
+                        ctx.setQueryMVContext(queryMVContext);
+                    }
+                }
                 try {
                     // Match PCT by skipping authorization for the trusted refresh INSERT. ColumnPrivilege separately
                     // optimizes the query to identify referenced columns. This runs before InsertPlanner builds the
@@ -614,10 +635,16 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     // refresh authorization is required in the future, this IVM context problem must be solved before
                     // removing the bypass.
                     ctx.setBypassAuthorizerCheck(true);
+                    if (queryMVContext != null) {
+                        queryMVContext.setIvmExcludedMvPartitions(excludedMvPartitions);
+                    }
                     ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
                     mvContext.setExecPlan(execPlan);
                 } finally {
                     ctx.setBypassAuthorizerCheck(previousBypassAuthorizerCheck);
+                    if (queryMVContext != null) {
+                        queryMVContext.setIvmExcludedMvPartitions(null);
+                    }
                 }
             }
             return insertStmt;

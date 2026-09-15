@@ -83,6 +83,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.ConnectorSinkShuffleSpec;
@@ -148,6 +149,7 @@ public class InsertPlanner {
 
     private List<Column> outputBaseSchema;
     private List<Column> outputFullSchema;
+    private Set<String> ivmExcludedMvPartitions;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
@@ -278,6 +280,12 @@ public class InsertPlanner {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
+        // Read before the optimizer runs: it detaches the context from the session, so a retried
+        // buildExecPlan could not read it.
+        QueryMaterializationContext queryMVContext = session.getQueryMVContext();
+        if (session.getSessionVariable().isEnableIVMRefresh() && queryMVContext != null) {
+            ivmExcludedMvPartitions = queryMVContext.getIvmExcludedMvPartitions();
+        }
 
         if (insertStmt.usePartialUpdate()) {
             inferOutputSchemaForPartialUpdate(insertStmt);
@@ -631,6 +639,7 @@ public class InsertPlanner {
                 // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
                 // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
                 optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
+                optimizerContext.getTvrOptContext().setIvmExcludedMvPartitions(ivmExcludedMvPartitions);
             }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(

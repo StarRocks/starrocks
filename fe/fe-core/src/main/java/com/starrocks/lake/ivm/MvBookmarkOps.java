@@ -14,10 +14,13 @@
 
 package com.starrocks.lake.ivm;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -26,6 +29,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.bookmark.AlreadyAtLatestException;
 import com.starrocks.lake.bookmark.Bookmark;
+import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkNotFoundException;
@@ -37,6 +41,7 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Bookmark-side glue for IVM-on-Lake: lifecycle operations on Lake bookmarks
@@ -120,6 +125,33 @@ public final class MvBookmarkOps {
         BookmarkManager bookmarkManager = GlobalStateMgr.getCurrentState().getBookmarkManager();
         return bookmarkManager.findBookmarkById(dbId, tableId, bookmarkId)
                 .flatMap(Bookmark::getMaxVisibleVersionTimeMs);
+    }
+
+    /**
+     * Names of the partitions of {@code baseTable} whose data moved inside {@code range}, or empty when
+     * the range cannot be diffed: it has an open end, an endpoint bookmark is gone, or it names a
+     * partition the table no longer has. Callers must treat empty as "unknown", not "nothing changed".
+     */
+    public static Optional<Set<String>> changedPartitionNames(long dbId, OlapTable baseTable,
+                                                              TvrVersionRange range) {
+        if (range.start().isEmpty() || range.end().isEmpty()) {
+            return Optional.empty();
+        }
+        BookmarkManager bookmarkManager = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        Optional<Bookmark> from = bookmarkManager.findBookmarkById(dbId, baseTable.getId(), range.start().get());
+        Optional<Bookmark> to = bookmarkManager.findBookmarkById(dbId, baseTable.getId(), range.end().get());
+        if (from.isEmpty() || to.isEmpty()) {
+            return Optional.empty();
+        }
+        Set<String> names = Sets.newHashSet();
+        for (long partitionId : BookmarkChange.computeChanges(from, to.get()).getChanges().keySet()) {
+            Partition partition = baseTable.getPartition(partitionId);
+            if (partition == null) {
+                return Optional.empty();
+            }
+            names.add(partition.getName());
+        }
+        return Optional.of(names);
     }
 
     /** Release every bookmark {@code mv} pins on its internal-catalog base tables. */

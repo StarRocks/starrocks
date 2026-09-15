@@ -1080,7 +1080,7 @@ public class MvRewritePreprocessor {
         LogicalOlapScanOperator scanMvOp;
         synchronized (materializationContext.getQueryRefFactory()) {
             scanMvOp = createScanMvOperator(mv, materializationContext.getQueryRefFactory(),
-                    mvUpdateInfo.getMVToRefreshPCells(), false);
+                    mvUpdateInfo.getMVToRefreshPCells().getPartitionNames(), false);
         }
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
@@ -1115,10 +1115,13 @@ public class MvRewritePreprocessor {
      * - distribution infos.
      * - original MV's predicates which can be deduced from MV opt expression and be used
      * for partition/distribution pruning.
+     *
+     * {@code excludedPartitionNames} is looked up by partition name, so it has to compare names the way the
+     * rest of the partition code does, case-insensitively.
      */
     public static LogicalOlapScanOperator createScanMvOperator(OlapTable mv,
                                                                ColumnRefFactory columnRefFactory,
-                                                               PCellSortedSet excludedPartitions,
+                                                               Set<String> excludedPartitionNames,
                                                                boolean isWithHiddenColumns) {
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
@@ -1158,7 +1161,7 @@ public class MvRewritePreprocessor {
         List<Long> selectTabletIds = Lists.newArrayList();
         List<String> selectedPartitionNames = Lists.newArrayList();
         for (Partition p : mv.getPartitions()) {
-            if (!excludedPartitions.containsName(p.getName()) && p.hasData()) {
+            if (!excludedPartitionNames.contains(p.getName()) && p.hasData()) {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {

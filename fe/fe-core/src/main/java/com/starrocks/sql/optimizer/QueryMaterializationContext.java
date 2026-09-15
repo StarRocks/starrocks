@@ -90,6 +90,10 @@ public class QueryMaterializationContext {
     // checks this before the session-variable + catalog lookup.
     private MaterializedView overrideTargetMv;
 
+    // MV partitions the current incremental refresh plan excludes from its MV scan. Set by
+    // MVIVMRefreshProcessor before planning; InsertPlanner copies it into TvrOptContext.
+    private Set<String> ivmExcludedMvPartitions;
+
     /**
      * It's used to record the cache stats of `mvQueryContextCache`.
      */
@@ -123,6 +127,14 @@ public class QueryMaterializationContext {
 
     public void setOverrideTargetMv(MaterializedView overrideTargetMv) {
         this.overrideTargetMv = overrideTargetMv;
+    }
+
+    public Set<String> getIvmExcludedMvPartitions() {
+        return ivmExcludedMvPartitions;
+    }
+
+    public void setIvmExcludedMvPartitions(Set<String> ivmExcludedMvPartitions) {
+        this.ivmExcludedMvPartitions = ivmExcludedMvPartitions;
     }
 
     public void setEnableQueryContextCache(boolean enableQueryContextCache) {

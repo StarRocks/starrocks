@@ -787,6 +787,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_ivm_mv_partition_pruning
+
+* **Description**: Whether an incremental refresh of an asynchronous materialized view scans only the materialized view partitions mapped from the base table partitions changed in the refreshed delta, instead of the whole materialized view. Applies to cloud-native base tables; the whole materialized view is scanned for other base tables, for the first refresh, and when a non-reference base table changed. Set it per materialized view with `PROPERTIES ("session.enable_ivm_mv_partition_pruning" = "false")`, or for every materialized view with `SET GLOBAL`.
+* **Default**: true
+* **Introduced in**: v26.2
+
 ### enable_insert_partial_update
 
 * **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values.
