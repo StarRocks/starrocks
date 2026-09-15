@@ -1,0 +1,52 @@
+-- name: test_list_partition_minmax_declared_absent
+CREATE DATABASE IF NOT EXISTS test_list_partition_minmax_declared_absent_db;
+-- result:
+-- !result
+USE test_list_partition_minmax_declared_absent_db;
+-- result:
+-- !result
+CREATE TABLE lpm (k INT) DUPLICATE KEY(k)
+PARTITION BY LIST(k) (
+  PARTITION p1 VALUES IN ('1','2','3'),
+  PARTITION p2 VALUES IN ('10','20','30')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO lpm VALUES (1), (10);
+-- result:
+-- !result
+SET enable_rewrite_partition_column_minmax = false;
+-- result:
+-- !result
+SELECT max(k) mx, min(k) mn FROM lpm;
+-- result:
+10	1
+-- !result
+SET enable_rewrite_partition_column_minmax = true;
+-- result:
+-- !result
+SELECT max(k) mx, min(k) mn FROM lpm;
+-- result:
+10	1
+-- !result
+CREATE TABLE lpv (k INT) DUPLICATE KEY(k)
+PARTITION BY LIST(k) (
+  PARTITION s1 VALUES IN ('5'),
+  PARTITION s2 VALUES IN ('15')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO lpv VALUES (5), (15);
+-- result:
+-- !result
+SET enable_rewrite_partition_column_minmax = true;
+-- result:
+-- !result
+SELECT max(k) mx, min(k) mn FROM lpv;
+-- result:
+15	5
+-- !result
