@@ -30,15 +30,36 @@ dependencies {
     implementation("org.antlr:antlr4-runtime")
 }
 
+// The .g4 files sit under src/main/antlr/com/starrocks/grammar, and ANTLR must be pointed at
+// that directory as its source root instead of the plugin's default src/main/antlr. This is the
+// same root antlr4-maven-plugin uses via <sourceDirectory> in pom.xml, and the two builds must
+// agree.
+//
+// Why the deeper root is required, not just tidier: ANTLR mirrors each grammar's path *relative
+// to the source root* into the output directory, but resolves a `tokenVocab` reference only in
+// -lib or in the *base* output directory (TokenVocabParser#getImportedVocabFile). Rooted at
+// src/main/antlr, SearchDslLexer.tokens is written to <out>/com/starrocks/grammar/ while
+// SearchDslParser.g4's `options { tokenVocab=SearchDslLexer; }` is looked up in <out>/, so
+// generation fails with "cannot find tokens file". A flat root puts both in the same place.
+// It also keeps `import StarRocksLex;` in StarRocks.g4 resolvable via Tool.inputDirectory.
+val grammarDir = file("src/main/antlr/com/starrocks/grammar")
+
+sourceSets {
+    main {
+        antlr {
+            setSrcDirs(listOf(grammarDir))
+        }
+    }
+}
+
 // Configure ANTLR plugin
 tasks.generateGrammarSource {
     maxHeapSize = "512m"
 
-    val grammarDir = file("src/main/antlr/com/starrocks/grammar")
-
     arguments = listOf(
         "-visitor",
         "-package", "com.starrocks.sql.parser",
+        // Resolves `import StarRocksLex;` in StarRocks.g4; dropping it breaks that import.
         "-lib", grammarDir.absolutePath
     )
 }

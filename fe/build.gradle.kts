@@ -52,6 +52,7 @@ subprojects {
         set("dlf-metastore-client.version", "0.2.14")
         set("dnsjava.version", "3.6.3")
         set("fastutil.version", "8.5.15")
+        set("fluss.version", "0.9.1-incubating")
         set("gcs.connector.version", "hadoop3-2.2.26")
         set("grpc.version", "1.76.0")
         set("hadoop.version", "3.4.3")
@@ -81,6 +82,7 @@ subprojects {
         set("spark.version", "3.5.7")
         set("staros.version", "4.2-rc4")
         set("thrift.version", "0.24.0")
+        set("unboundid.ldapsdk.version", "7.0.5")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
         // var sync end
@@ -151,6 +153,8 @@ subprojects {
             implementation("com.starrocks:starmanager:${project.ext["staros.version"]}")
             implementation("com.starrocks:starrocks-bdb-je:18.3.20")
             implementation("com.sun.activation:javax.activation:1.2.0")
+            // In-process LDAP directory server for tests (Apache License 2.0 since 5.0.0).
+            implementation("com.unboundid:unboundid-ldapsdk:${project.ext["unboundid.ldapsdk.version"]}")
             implementation("commons-beanutils:commons-beanutils:${project.ext["commons-beanutils.version"]}")
             implementation("commons-cli:commons-cli:1.4")
             implementation("commons-codec:commons-codec:1.13")
@@ -185,6 +189,12 @@ subprojects {
             // 3.18.0 fixes CVE-2025-48924
             implementation("org.apache.commons:commons-lang3:3.18.0")
             implementation("org.apache.commons:commons-pool2:2.3")
+            implementation("org.apache.fluss:fluss-client:${project.ext["fluss.version"]}")
+            implementation("org.apache.fluss:fluss-common:${project.ext["fluss.version"]}")
+            implementation("org.apache.fluss:fluss-flink-common:${project.ext["fluss.version"]}")
+            implementation("org.apache.fluss:fluss-lake-paimon:${project.ext["fluss.version"]}")
+            // Required by fluss-flink-common, which declares flink-core with provided scope.
+            implementation("org.apache.flink:flink-core:1.20.1")
             implementation("org.apache.groovy:groovy-groovysh:4.0.9")
             implementation("org.apache.hadoop:hadoop-aliyun:${project.ext["hadoop.version"]}")
             implementation("org.apache.hadoop:hadoop-aws:${project.ext["hadoop.version"]}")
@@ -311,6 +321,15 @@ subprojects {
             substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
                 .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
         }
+
+        // Maven's <dependencyManagement> pins a version for every transitive; Gradle's
+        // constraints only state a preference and lose to any higher transitive request. The
+        // log4j coordinates the root pom manages must therefore be forced, or delta-storage ->
+        // unitycatalog-client (log4j-api 2.25.3) and spark (log4j-core 2.20.0) drag api and core
+        // apart and every test dies inside LogManager.getLogger with
+        // "NoSuchMethodError: ServiceLoaderUtil.loadServices".
+        listOf("log4j-api", "log4j-core", "log4j-slf4j-impl", "log4j-layout-template-json", "log4j-1.2-api")
+            .forEach { resolutionStrategy.force("org.apache.logging.log4j:$it:${project.ext["log4j.version"]}") }
     }
 
     tasks.withType<JavaCompile> {
