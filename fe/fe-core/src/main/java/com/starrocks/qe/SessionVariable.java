@@ -743,6 +743,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PARTITION_BUCKET_OPTIMIZE = "enable_partition_bucket_optimize";
     public static final String ENABLE_BUCKET_AWARE_EXECUTION_ON_LAKE = "enable_bucket_aware_execution_on_lake";
     public static final String LAKE_BUCKET_ASSIGN_MODE = "lake_bucket_assign_mode";
+    public static final String LAKE_BUCKET_AWARE_MIN_BUCKETS_PER_WORKER = "lake_bucket_aware_min_buckets_per_worker";
     public static final String ENABLE_GROUP_EXECUTION = "enable_group_execution";
     public static final String GROUP_EXECUTION_GROUP_SCALE = "group_execution_group_scale";
     public static final String GROUP_EXECUTION_MAX_GROUPS = "group_execution_max_groups";
@@ -2229,6 +2230,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LAKE_BUCKET_ASSIGN_MODE)
     private String lakeBucketAssignMode = SessionVariableConstants.BALANCE;
 
+    // Minimum buckets per alive worker for bucket-aware aggregation on lake tables. If pruning
+    // is estimated to leave fewer buckets than this ratio * workers, the scan does not claim
+    // the bucket distribution and the planner builds a normal shuffle (multi-stage) aggregation
+    // instead. <= 0 disables the fallback.
+    @VarAttr(name = LAKE_BUCKET_AWARE_MIN_BUCKETS_PER_WORKER)
+    private double lakeBucketAwareMinBucketsPerWorker = 1.0;
+
     @VarAttr(name = ENABLE_GROUP_EXECUTION)
     private boolean enableGroupExecution = true;
 
@@ -2702,6 +2710,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableBucketAwareExecutionOnLake() {
         return enableBucketAwareExecutionOnLake;
+    }
+
+    public void setEnableBucketAwareExecutionOnLake(boolean enableBucketAwareExecutionOnLake) {
+        this.enableBucketAwareExecutionOnLake = enableBucketAwareExecutionOnLake;
+    }
+
+    public double getLakeBucketAwareMinBucketsPerWorker() {
+        return lakeBucketAwareMinBucketsPerWorker;
+    }
+
+    public void setLakeBucketAwareMinBucketsPerWorker(double lakeBucketAwareMinBucketsPerWorker) {
+        this.lakeBucketAwareMinBucketsPerWorker = lakeBucketAwareMinBucketsPerWorker;
     }
 
     public String getLakeBucketAssignMode() {
