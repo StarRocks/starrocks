@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -90,6 +91,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
+        ConnectorPlanTestBase.mockHiveCatalog(ctx);
     }
 
     @AfterAll
@@ -909,5 +911,109 @@ public class PrivilegeStmtAnalyzerV2Test {
         analyzeFail("grant USAGE on ALL GLOBAL FUNCTIONS in all databases to test_user",
                 "Invalid grant statement with error privilege object");
 
+    }
+
+    @Test
+    public void testGrantAllViewsInExternalCatalogDatabase() throws Exception {
+        String previousCatalog = ctx.getCurrentCatalog();
+        try {
+            ctx.setCurrentCatalog("hive0");
+
+            String sql = "grant select on ALL views in database tpch to test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "revoke select on ALL views in database tpch from test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "grant select on ALL views in all databases to test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "revoke select on ALL views in all databases from test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        } finally {
+            ctx.setCurrentCatalog(previousCatalog);
+        }
+    }
+
+    @Test
+    public void testGrantAllMaterializedViewsInExternalCatalogDatabase() throws Exception {
+        String previousCatalog = ctx.getCurrentCatalog();
+        try {
+            ctx.setCurrentCatalog("hive0");
+
+            String sql = "grant select on ALL materialized views in database tpch to test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "revoke select on ALL materialized views in database tpch from test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "grant select on ALL materialized views in all databases to test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "revoke select on ALL materialized views in all databases from test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        } finally {
+            ctx.setCurrentCatalog(previousCatalog);
+        }
+    }
+
+    @Test
+    public void testGrantAllTablesInExternalCatalogDatabase() throws Exception {
+        String previousCatalog = ctx.getCurrentCatalog();
+        try {
+            ctx.setCurrentCatalog("hive0");
+
+            String sql = "grant select on ALL tables in database tpch to test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "revoke select on ALL tables in database tpch from test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        } finally {
+            ctx.setCurrentCatalog(previousCatalog);
+        }
+    }
+
+    @Test
+    public void testGrantAllViewsInInternalCatalogDatabase() throws Exception {
+        String sql = "grant select on ALL views in database db1 to test_user";
+        Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "revoke select on ALL views in database db1 from test_user";
+        Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant select on ALL views in all databases to test_user";
+        Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "revoke select on ALL views in all databases from test_user";
+        Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+    }
+
+    @Test
+    public void testGrantSpecificViewInExternalCatalog() throws Exception {
+        String previousCatalog = ctx.getCurrentCatalog();
+        try {
+            ctx.setCurrentCatalog("hive0");
+
+            String sql = "grant select on view tpch.customer to test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+            sql = "revoke select on view tpch.customer from test_user";
+            Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        } finally {
+            ctx.setCurrentCatalog(previousCatalog);
+        }
+    }
+
+    @Test
+    public void testGrantViewInNonExistentCatalog() throws Exception {
+        String previousCatalog = ctx.getCurrentCatalog();
+        try {
+            ctx.setCurrentCatalog("non_existent_catalog");
+            String sql = "grant select on ALL views in database somedb to test_user";
+            Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        } finally {
+            ctx.setCurrentCatalog(previousCatalog);
+        }
     }
 }
