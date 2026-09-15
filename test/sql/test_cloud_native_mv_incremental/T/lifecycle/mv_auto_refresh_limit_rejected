@@ -1,0 +1,67 @@
+-- The property refuses MANUAL, so an interval schedule is the only way to drive these by hand;
+-- DEFERRED then keeps that schedule from racing the manual refreshes.
+
+-- name: test_ivm_auto_refresh_limit_create_rejected @cloud
+CREATE TABLE arpl_create (dt DATE NOT NULL, k INT NOT NULL, v BIGINT NOT NULL) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO arpl_create VALUES ('2026-09-01',1,10),('2026-09-02',1,10),('2026-09-03',1,10),('2026-09-04',1,10),('2026-09-05',1,10);
+CREATE MATERIALIZED VIEW mv_arpl_create
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 DAY)
+PROPERTIES ("refresh_mode" = "INCREMENTAL", "auto_refresh_partitions_limit" = "2")
+AS SELECT dt, k, SUM(v) AS sv FROM arpl_create GROUP BY dt, k;
+-- the identical DDL without the limit must succeed, otherwise the refusal above proves nothing
+CREATE MATERIALIZED VIEW mv_arpl_create
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 DAY)
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, SUM(v) AS sv FROM arpl_create GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_arpl_create WITH SYNC MODE;
+SELECT EFFECTIVE_REFRESH_MODE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_arpl_create';
+SELECT count(*), sum(sv) FROM mv_arpl_create;
+
+-- name: test_ivm_auto_refresh_limit_alter_rejected @cloud
+CREATE TABLE arpl_alter (dt DATE NOT NULL, k INT NOT NULL, v BIGINT NOT NULL) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO arpl_alter VALUES ('2026-09-01',1,10),('2026-09-02',1,10),('2026-09-03',1,10),('2026-09-04',1,10),('2026-09-05',1,10);
+CREATE MATERIALIZED VIEW mv_arpl_alter
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 DAY)
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, SUM(v) AS sv FROM arpl_alter GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_arpl_alter WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_arpl_alter SET ('auto_refresh_partitions_limit' = '2');
+-- -1 stays legal on every mode: it is how an MV created before the gate clears the property
+ALTER MATERIALIZED VIEW mv_arpl_alter SET ('auto_refresh_partitions_limit' = '-1');
+-- a refused ALTER must leave the view maintainable
+INSERT INTO arpl_alter VALUES ('2026-09-06',1,10);
+REFRESH MATERIALIZED VIEW mv_arpl_alter WITH SYNC MODE;
+SELECT EFFECTIVE_REFRESH_MODE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_arpl_alter';
+SELECT count(*), sum(sv) FROM mv_arpl_alter;
+
+-- The rolling window is the property's whole purpose, so PCT keeps it. Asserted here: still
+-- creatable, still refreshable, and the pre-existing guard still withholds whole-MV freshness.
+-- The number of partitions the limit actually leaves is deliberately not asserted -- it does not
+-- match the documented "current partition plus N-1" and is a separate question.
+-- name: test_pct_auto_refresh_limit_still_allowed @cloud
+CREATE TABLE arpl_pct (dt DATE NOT NULL, k INT NOT NULL, v BIGINT NOT NULL) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO arpl_pct VALUES ('2026-09-01',1,10),('2026-09-02',1,10),('2026-09-03',1,10),('2026-09-04',1,10),('2026-09-05',1,10);
+CREATE MATERIALIZED VIEW mv_arpl_pct
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 DAY)
+PROPERTIES ("refresh_mode" = "PCT", "auto_refresh_partitions_limit" = "2")
+AS SELECT dt, k, SUM(v) AS sv FROM arpl_pct GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_arpl_pct WITH SYNC MODE;
+SELECT EFFECTIVE_REFRESH_MODE, LAST_REFRESH_STATE, LAST_FRESHNESS_CONFIRMED_AT IS NULL
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_arpl_pct';
