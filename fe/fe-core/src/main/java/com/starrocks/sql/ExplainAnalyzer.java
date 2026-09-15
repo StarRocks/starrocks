@@ -1104,8 +1104,15 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "SegmentsReadCount");
         appendMetric(uniqueMetrics, nodeInfo, "RowsetsReadCount");
         appendMetric(uniqueMetrics, nodeInfo, "TotalColumnsDataPageCount");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentInit");
         appendMetric(uniqueMetrics, nodeInfo, "ColumnIteratorInit");
         appendMetric(uniqueMetrics, nodeInfo, "BitmapIndexIteratorInit");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentInitPrepare");
+        appendMetric(uniqueMetrics, nodeInfo, "RowidRangeFilter");
+        appendMetric(uniqueMetrics, nodeInfo, "PrecomputedRangeFilter");
+        appendMetric(uniqueMetrics, nodeInfo, "TabletRangeFilter");
+        appendMetric(uniqueMetrics, nodeInfo, "DelVectorApply");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentInitFinalize");
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonInit");
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonMerge");
         popIndent();
@@ -1774,7 +1781,9 @@ public class ExplainAnalyzer {
                 "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
                 "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
                 "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "TotalColumnsDataPageCount",
-                "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+                "SegmentInit", "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+                "SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
+                "DelVectorApply", "SegmentInitFinalize",
                 "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",

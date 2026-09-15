@@ -82,6 +82,28 @@ struct OlapReaderStatistics {
     int64_t rows_key_range_filter_ns = 0;
     int64_t bf_filter_ns = 0;
 
+    // ------ Remaining SegmentInit phases ------
+    // Everything below runs inside segment_init_ns but had no timer of its own, so its cost showed up
+    // only as the gap between SegmentInit and the sum of its children. Each is expected to be small;
+    // they exist so that the residual is provably small rather than merely assumed to be.
+    // Only the lake (shared-data) scan path reports these. SegmentIterator is shared, so it fills the
+    // fields on both paths, but OlapChunkSource registers no counters for them: on shared-nothing they
+    // stay inside the SegmentInit residual, exactly as before.
+    // On the lake prepared-split path these same functions run under _get_prepared_pruned_row_ranges,
+    // which writes into its own statistics object, so seed time never lands in these counters. Note that
+    // it does not land anywhere else either: TabletReader::refine_initial_coarse_split_and_append_refined_tasks
+    // folds only a selected set of fields into lake_prepared_seed_*, and none of the phases below is in it.
+    // Those phases also do not re-run in the precomputed child, so on that path they stay part of the
+    // unattributed remainder under SeedSegmentInitTime. Closing that is seed-parity work, not this change.
+    int64_t segment_init_prepare_ns = 0;     // _init_column_access_paths + _check_low_cardinality_optimization
+    int64_t rowid_range_filter_ns = 0;       // _get_row_ranges_by_rowid_range
+    int64_t precomputed_range_filter_ns = 0; // _apply_precomputed_scan_range
+    int64_t tablet_range_filter_ns = 0;      // _apply_tablet_range
+    int64_t del_vector_apply_ns = 0;         // _apply_del_vector
+    // split/reverse + range iterator construction + sparse-to-io-range conversion, i.e. the tail of
+    // _init_scan_range_and_context after the last filtering phase.
+    int64_t segment_init_finalize_ns = 0;
+
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
     int64_t rows_after_key_range = 0;

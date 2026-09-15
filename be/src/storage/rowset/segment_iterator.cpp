@@ -1152,14 +1152,20 @@ Status SegmentIterator::_init_scan_range_and_context() {
     // now (once), before the range is split/reversed for the read loop.
     RETURN_IF_ERROR(_apply_bm25_scoring());
 
-    // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
-    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
-        _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
-    }
-    _range_iter = _scan_range.new_iterator();
+    // Finalize: turn the filtered range into the form the read loop consumes. Not a function of its
+    // own, so the scope is explicit -- it covers the split/reverse, the range iterator construction and
+    // the sparse-to-io-range conversion, and nothing else runs after it in this function.
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->segment_init_finalize_ns);
+        // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
+        if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
+            _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
+        }
+        _range_iter = _scan_range.new_iterator();
 
-    for (auto column_index : _io_coalesce_column_index) {
-        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        for (auto column_index : _io_coalesce_column_index) {
+            RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        }
     }
     return Status::OK();
 }
@@ -1944,6 +1950,10 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
 }
 
 void SegmentIterator::_init_column_access_paths() {
+    // Shares segment_init_prepare_ns with _check_low_cardinality_optimization: both are cheap
+    // schema-shaped setup that runs once before any filtering, and splitting them would add a second
+    // near-zero row to the profile for no diagnostic gain.
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_prepare_ns);
     if (_opts.column_access_paths == nullptr || _opts.column_access_paths->empty()) {
         return;
     }
@@ -2395,6 +2405,10 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
 }
 
 Status SegmentIterator::_apply_tablet_range() {
+    // Overlaps ColumnIteratorInit on the uncached path: _seek_range_to_rowid_range below initializes
+    // column iterators, which carry their own SCOPED_RAW_TIMER. Same pre-existing nesting that
+    // ShortKeyFilter has; untangling both belongs to the de-overlap change, not here.
+    SCOPED_RAW_TIMER(&_opts.stats->tablet_range_filter_ns);
     if (!_opts.tablet_range.has_value() || _opts.tablet_range.value().all_range()) {
         return Status::OK();
     }
@@ -2439,6 +2453,10 @@ Status SegmentIterator::_apply_tablet_range() {
 }
 
 Status SegmentIterator::_apply_precomputed_scan_range() {
+    // Kept separate from rowid_range_filter_ns rather than folded into it: this runs only on the lake
+    // prepared-split path while the rowid range runs on every scan, so summing them would hide which
+    // path a segment took.
+    SCOPED_RAW_TIMER(&_opts.stats->precomputed_range_filter_ns);
     if (_opts.read_state_cache.scan_range == nullptr) {
         return Status::OK();
     }
@@ -4452,6 +4470,8 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_check_low_cardinality_optimization() {
+    // Shared with _init_column_access_paths; see the note there.
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_prepare_ns);
     _predicate_need_rewrite.resize(1 + ChunkSchemaHelper::max_column_id(_schema), false);
     const size_t n = _opts.pred_tree.num_columns();
     for (size_t i = 0; i < n; i++) {
@@ -4744,6 +4764,7 @@ Status SegmentIterator::_apply_bitmap_index() {
 }
 
 Status SegmentIterator::_apply_del_vector() {
+    SCOPED_RAW_TIMER(&_opts.stats->del_vector_apply_ns);
     RETURN_IF(_scan_range.empty(), Status::OK());
     if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
         Roaring row_bitmap = range2roaring(_scan_range);
@@ -5023,6 +5044,7 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_rowid_range() {
+    SCOPED_RAW_TIMER(&_opts.stats->rowid_range_filter_ns);
     DCHECK_EQ(0, _scan_range.span_size());
 
     _scan_range.add(Range<>(0, num_rows()));

@@ -1785,6 +1785,15 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
         }
     }
 
+    // The remaining SegmentInit phases, parented on SegmentInit like every other init child.
+    for (const auto* name : {"SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
+                             "DelVectorApply", "SegmentInitFinalize"}) {
+        auto it = profile->_counter_map.find(name);
+        ASSERT_NE(it, profile->_counter_map.end()) << name;
+        EXPECT_EQ(it->second.second, "SegmentInit") << name;
+        EXPECT_EQ(it->second.first->value(), 0) << name;
+    }
+
     std::stringstream rendered;
     profile->pretty_print(&rendered);
     const auto text = rendered.str();

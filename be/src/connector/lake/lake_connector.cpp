@@ -1427,6 +1427,12 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
+    _segment_init_prepare_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentInitPrepare", segment_init_name);
+    _rowid_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "RowidRangeFilter", segment_init_name);
+    _precomputed_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PrecomputedRangeFilter", segment_init_name);
+    _tablet_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "TabletRangeFilter", segment_init_name);
+    _del_vector_apply_timer = ADD_CHILD_TIMER(_runtime_profile, "DelVectorApply", segment_init_name);
+    _segment_init_finalize_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentInitFinalize", segment_init_name);
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
@@ -1658,6 +1664,12 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
     COUNTER_UPDATE(_column_iterator_init_timer, _reader->stats().column_iterator_init_ns);
     COUNTER_UPDATE(_bitmap_index_iterator_init_timer, _reader->stats().bitmap_index_iterator_init_ns);
+    COUNTER_UPDATE(_segment_init_prepare_timer, _reader->stats().segment_init_prepare_ns);
+    COUNTER_UPDATE(_rowid_range_filter_timer, _reader->stats().rowid_range_filter_ns);
+    COUNTER_UPDATE(_precomputed_range_filter_timer, _reader->stats().precomputed_range_filter_ns);
+    COUNTER_UPDATE(_tablet_range_filter_timer, _reader->stats().tablet_range_filter_ns);
+    COUNTER_UPDATE(_del_vector_apply_timer, _reader->stats().del_vector_apply_ns);
+    COUNTER_UPDATE(_segment_init_finalize_timer, _reader->stats().segment_init_finalize_ns);
     COUNTER_UPDATE(_zone_map_filter_timer, _reader->stats().zone_map_filter_ns);
     COUNTER_UPDATE(_rows_key_range_filter_timer, _reader->stats().rows_key_range_filter_ns);
     COUNTER_UPDATE(_bf_filter_timer, _reader->stats().bf_filter_ns);
@@ -1912,6 +1924,40 @@ void LakeDataSource::update_counter(RuntimeState* state) {
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
         FlatJsonMetrics::instance()->flat_json_flatten_duration_ns_total.increment(_reader->stats().json_flatten_ns);
     }
+    // Data sampling. The lake path reported none of these, so on a shared-data cluster the whole cost of
+    // sampling was invisible. SampleTime takes sample_time_ns, the elapsed time, not the population count.
+    //
+    // Parented on SegmentInit rather than SegmentRead: _apply_data_sampling() runs from
+    // _init_scan_range_and_context(), inside segment_init_ns, so SegmentRead is a sibling subtree the time
+    // is not part of -- SampleTime there could exceed its own parent. The shared-nothing block in
+    // OlapChunkSource::_update_counter still uses SegmentRead; that counter already ships, so moving it
+    // belongs with the counter re-parenting work rather than here.
+    //
+    // Not covered: with enable_lake_prepared_physical_split_scan on (default off), sampling runs once in
+    // the seed against its own prepare statistics and the precomputed children skip it, so these read
+    // zero. TabletReader::refine_initial_coarse_split_and_append_refined_tasks folds only selected seed
+    // fields into lake_prepared_seed_*, and carries no sampling breakdown; adding one is part of the
+    // seed-parity work, not of this change.
+    const std::string sample_parent_name = "SegmentInit";
+    if (_params.sample_options.enable_sampling) {
+        double sample_percent = _params.sample_options.__isset.probability_percent_v2
+                                        ? _params.sample_options.probability_percent_v2
+                                        : static_cast<double>(_params.sample_options.probability_percent);
+        _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
+        _runtime_profile->add_info_string("SamplePercent", std::to_string(sample_percent) + "%");
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", sample_parent_name),
+                       _reader->stats().sample_time_ns);
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleBuildHistogramTime", sample_parent_name),
+                       _reader->stats().sample_build_histogram_time_ns);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleSize", TUnit::UNIT, sample_parent_name),
+                       _reader->stats().sample_size);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SamplePopulationSize", TUnit::UNIT, sample_parent_name),
+                       _reader->stats().sample_population_size);
+        COUNTER_UPDATE(
+                ADD_CHILD_COUNTER(_runtime_profile, "SampleBuildHistogramCount", TUnit::UNIT, sample_parent_name),
+                _reader->stats().sample_build_histogram_count);
+    }
+
     if (state != nullptr && state->query_runtime_state() != nullptr) {
         state->query_runtime_state()->incr_read_stats(_reader->stats().io_count_local_disk,
                                                       _reader->stats().io_count_remote);
