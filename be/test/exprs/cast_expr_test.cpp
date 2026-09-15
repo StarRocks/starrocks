@@ -3068,6 +3068,47 @@ TEST_F(VectorizedCastExprTest, const_array_with_variant_children_cast_to_variant
     EXPECT_EQ(R"([{"a":1}])", json.value());
 }
 
+TEST_F(VectorizedCastExprTest, variant_string_cast_constants_and_nullable_rows) {
+    auto constant = make_const_variant_column_from_json(R"("35")", 3);
+    auto constant_result = cast_from_variant(gen_type_desc(TPrimitiveType::INT), constant);
+    ASSERT_EQ(3, constant_result->size());
+    for (size_t i = 0; i < constant_result->size(); ++i) {
+        ASSERT_FALSE(constant_result->is_null(i));
+        EXPECT_EQ(35, constant_result->get(i).get_int32());
+    }
+
+    auto strings = BinaryColumn::create();
+    for (const auto* value : {"35", "bad", "128", "", "0"}) {
+        strings->append(value);
+    }
+    auto nulls = NullColumn::create(5, 0);
+    nulls->get_data()[3] = 1;
+    auto variants =
+            cast_to_variant(TypeDescriptor(TYPE_VARCHAR), NullableColumn::create(std::move(strings), std::move(nulls)));
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::TINYINT), variants);
+    ASSERT_EQ(5, result->size());
+    EXPECT_EQ(35, result->get(0).get_int8());
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_TRUE(result->is_null(2));
+    EXPECT_TRUE(result->is_null(3));
+    EXPECT_EQ(0, result->get(4).get_int8());
+}
+
+TEST_F(VectorizedCastExprTest, variant_string_cast_in_array) {
+    auto variants = make_const_variant_column_from_json(R"(["35","-2","bad",null])", 2);
+    auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), variants);
+    ASSERT_EQ(2, result->size());
+    for (size_t row = 0; row < result->size(); ++row) {
+        ASSERT_FALSE(result->is_null(row));
+        auto values = result->get(row).get_array();
+        ASSERT_EQ(4, values.size());
+        EXPECT_EQ(35, values[0].get_int32());
+        EXPECT_EQ(-2, values[1].get_int32());
+        EXPECT_TRUE(values[2].is_null());
+        EXPECT_TRUE(values[3].is_null());
+    }
+}
+
 // Verifies const variant input can cast to complex types with stable semantics.
 TEST_F(VectorizedCastExprTest, const_variant_cast_to_complex_types) {
     constexpr size_t kInputSize = 3;

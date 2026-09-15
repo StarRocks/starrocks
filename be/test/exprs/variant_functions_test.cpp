@@ -680,6 +680,61 @@ TEST_F(VariantFunctionsTest, get_variant_int_shredded_array_index_path_from_type
     ASSERT_EQ(2, result.value()->get(0).get_int64());
 }
 
+TEST_F(VariantFunctionsTest, numeric_strings_in_variant_fields) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variants = VariantColumn::create();
+    variants->append(create_variant_from_json_text(R"({"x":"35"})"));
+    variants->append(create_variant_from_json_text(R"({"x":"bad"})"));
+    variants->append(create_variant_from_json_text(R"({"x":null})"));
+    ColumnBuilder<TYPE_VARCHAR> paths(1);
+    paths.append("$.x");
+    Columns columns{variants, paths.build(true)};
+    ctx->set_constant_columns(columns);
+
+    auto integers = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(integers.ok()) << integers.status();
+    ASSERT_EQ(3, integers.value()->size());
+    EXPECT_EQ(35, integers.value()->get(0).get_int64());
+    EXPECT_TRUE(integers.value()->is_null(1));
+    EXPECT_TRUE(integers.value()->is_null(2));
+
+    auto doubles = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(doubles.ok()) << doubles.status();
+    ASSERT_EQ(3, doubles.value()->size());
+    EXPECT_DOUBLE_EQ(35.0, doubles.value()->get(0).get_double());
+    EXPECT_TRUE(doubles.value()->is_null(1));
+    EXPECT_TRUE(doubles.value()->is_null(2));
+}
+
+TEST_F(VariantFunctionsTest, numeric_strings_in_shredded_variant_fields) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variants = VariantColumn::create();
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_varchar_column({"35", "3.5", "bad", "NaN", ""}, {0, 0, 0, 0, 1}));
+    variants->set_shredded_columns({"x"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed), nullptr, nullptr);
+    ColumnBuilder<TYPE_VARCHAR> paths(1);
+    paths.append("$.x");
+    Columns columns{variants, paths.build(true)};
+    ctx->set_constant_columns(columns);
+
+    auto integers = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(integers.ok()) << integers.status();
+    ASSERT_EQ(5, integers.value()->size());
+    EXPECT_EQ(35, integers.value()->get(0).get_int64());
+    for (size_t row : {2, 3, 4}) {
+        EXPECT_TRUE(integers.value()->is_null(row));
+    }
+
+    auto doubles = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(doubles.ok()) << doubles.status();
+    ASSERT_EQ(5, doubles.value()->size());
+    EXPECT_DOUBLE_EQ(35.0, doubles.value()->get(0).get_double());
+    EXPECT_DOUBLE_EQ(3.5, doubles.value()->get(1).get_double());
+    for (size_t row : {2, 3, 4}) {
+        EXPECT_TRUE(doubles.value()->is_null(row));
+    }
+}
+
 // Verifies typed-column direct hit path for VARCHAR without remain fallback.
 TEST_F(VariantFunctionsTest, get_variant_string_shredded_typed_only_path) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
