@@ -34,6 +34,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -482,6 +483,11 @@ static std::unique_ptr<ColumnConverter> make_int32_decimal_converter(bool src_un
     return std::make_unique<PrimitiveToDecimalConverter<int32_t, DestType, false>>(src_scale, dst_scale);
 }
 
+class BinaryToGeographyConverter final : public ColumnConverter {
+public:
+    Status convert(const Column* src, Column* dst) override;
+};
+
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
                                                 std::unique_ptr<ColumnConverter>* converter) {
@@ -604,6 +610,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
             col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
+        }
+        if (col_type == TYPE_GEOGRAPHY) {
+            *converter = std::make_unique<BinaryToGeographyConverter>();
         }
         break;
     }
@@ -1004,6 +1013,20 @@ Status Int64ToTimeConverter::convert(const Column* src, Column* dst) {
         }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
+Status BinaryToGeographyConverter::convert(const Column* src, Column* dst) {
+    const auto* input = down_cast<const NullableColumn*>(src);
+    auto* output = down_cast<NullableColumn*>(dst);
+    const auto* binary = down_cast<const BinaryColumn*>(input->data_column().get());
+    auto* geo = down_cast<GeoColumn*>(output->data_column_raw_ptr());
+    geo->reset_column();
+    geo->append_wkb_column(*binary);
+    auto* nulls = output->null_column_raw_ptr();
+    nulls->reset_column();
+    nulls->append(*input->null_column(), 0, input->size());
+    output->set_has_null(input->has_null());
     return Status::OK();
 }
 

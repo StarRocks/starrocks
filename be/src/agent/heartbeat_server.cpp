@@ -55,6 +55,7 @@
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "gen_cpp/HeartbeatService.h"
+#include "gen_cpp/HeartbeatService_constants.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/runtime_env.h"
 #include "storage/storage_engine.h"
@@ -148,6 +149,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         }
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
+        heartbeat_result.backend_info.__set_native_geo_capabilities(
+                g_HeartbeatService_constants.NATIVE_GEOGRAPHY_TRANSPORT |
+                g_HeartbeatService_constants.NATIVE_GEOGRAPHY_MYSQL_OUTPUT |
+                g_HeartbeatService_constants.NATIVE_GEOGRAPHY_ICEBERG_READ);
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
         heartbeat_result.backend_info.__set_mem_limit_bytes(RuntimeEnv::GetInstance()->process_mem_tracker()->limit());
         if (reboot_time == 0) {
