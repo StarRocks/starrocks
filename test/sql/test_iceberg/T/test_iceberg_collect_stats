@@ -64,6 +64,18 @@ insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 
 function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5', 'cardinality: 2')
 drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t5 force;
 
+-- bounded-cost scan budget: analyze with explicit scan caps still succeeds and collects stats
+create table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 (
+    c1 int,
+    c2 string
+) partition by c1;
+insert into iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 values(1,'a'),(2,'b'),(3,'c');
+[UC] analyze table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 properties("scan_bytes_cap"="1073741824", "scan_files_cap"="1000", "scan_rows_cap"="10000000");
+function: assert_explain_costs_contains('select * from iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6', 'cardinality=3')
+-- the resolved scan caps are surfaced in the Properties column of SHOW ANALYZE STATUS
+[UC] show analyze status where db_name = 'iceberg_collect_stats_db_${uuid0}';
+drop table iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0}.t6 force;
+
 drop database iceberg_collect_stats_${uuid0}.iceberg_collect_stats_db_${uuid0};
 drop catalog iceberg_collect_stats_${uuid0};
 

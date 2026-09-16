@@ -1,0 +1,121 @@
+-- name: test_lake_add_index_pk_column_partial_update @cloud
+create database lake_idx_pu_${uuid0};
+-- result:
+-- !result
+use lake_idx_pu_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_noidx (
+    k1 int,
+    v1 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_fast (
+    k1 int,
+    v1 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_noidx values (1,10),(2,20),(3,30),(4,20),(5,20);
+-- result:
+-- !result
+insert into t_fast  values (1,10),(2,20),(3,30),(4,20),(5,20);
+-- result:
+-- !result
+ALTER TABLE t_fast ADD INDEX idx_v1(v1) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+update t_noidx set v1 = 777 where k1 <= 2;
+-- result:
+-- !result
+update t_fast  set v1 = 777 where k1 <= 2;
+-- result:
+-- !result
+select count(*) from t_noidx where v1 = 777;
+-- result:
+2
+-- !result
+select count(*) from t_fast  where v1 = 777;
+-- result:
+2
+-- !result
+select count(*) from t_noidx where v1 = 20;
+-- result:
+2
+-- !result
+select count(*) from t_fast  where v1 = 20;
+-- result:
+2
+-- !result
+select count(*) from t_noidx where v1 = 10;
+-- result:
+0
+-- !result
+select count(*) from t_fast  where v1 = 10;
+-- result:
+0
+-- !result
+select * from t_fast order by k1;
+-- result:
+1	777
+2	777
+3	30
+4	20
+5	20
+-- !result
+CREATE TABLE t_bf (
+    k1 int,
+    s1 varchar(32)
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_bf values (1,'aa'),(2,'bb'),(3,'cc'),(4,'bb'),(5,'bb');
+-- result:
+-- !result
+ALTER TABLE t_bf SET ("bloom_filter_columns" = "s1");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+update t_bf set s1 = 'zz' where k1 <= 2;
+-- result:
+-- !result
+select count(*) from t_bf where s1 = 'zz';
+-- result:
+2
+-- !result
+select count(*) from t_bf where s1 = 'bb';
+-- result:
+2
+-- !result
+select count(*) from t_bf where s1 = 'cc';
+-- result:
+1
+-- !result
+select * from t_bf order by k1;
+-- result:
+1	zz
+2	zz
+3	cc
+4	bb
+5	bb
+-- !result
+drop database lake_idx_pu_${uuid0};
+-- result:
+-- !result

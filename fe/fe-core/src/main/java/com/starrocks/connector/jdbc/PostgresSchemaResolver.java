@@ -21,12 +21,12 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -202,8 +202,29 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
         }
     }
 
+    @Override
+    public long getTableRowCount(Connection connection, String dbName, String tableName) throws SQLException {
+        // pg_class.reltuples is updated by ANALYZE and auto-vacuum; it is an estimate, not exact.
+        // The cast to bigint avoids returning a float to Java.
+        String sql = "SELECT c.reltuples::bigint FROM pg_class c " +
+                     "JOIN pg_namespace n ON c.relnamespace = n.oid " +
+                     "WHERE n.nspname = ? AND c.relname = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, dbName);
+            ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long rows = rs.getLong(1);
+                    return rs.wasNull() ? -1L : rows;
+                }
+            }
+        }
+        return -1L;
+    }
+
     public List<Partition> getPartitions(Connection connection, Table table) {
-        return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+        return Lists.newArrayList(new Partition(table.getName(), System.currentTimeMillis()));
     }
 
     private static boolean isTimeWithTimezoneTypeName(String typeName) {

@@ -1,0 +1,49 @@
+-- name: test_split_empty_delim_oob @sequential
+CREATE DATABASE IF NOT EXISTS test_split_empty_delim_oob_db;
+-- result:
+-- !result
+USE test_split_empty_delim_oob_db;
+-- result:
+-- !result
+CREATE TABLE t (
+  id INT,
+  s VARCHAR(65533)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, unhex('F0')), (2, char(228)), (3, unhex('E4B8')), (4, 'ok');
+-- result:
+-- !result
+SELECT id, length(s) AS len, length(split_part(s, '', 1)) AS sp_len,
+       length(split_part(s, '', 1)) <= length(s) AS in_bounds
+FROM t ORDER BY id;
+-- result:
+1	1	1	1
+2	1	1	1
+3	2	2	1
+4	2	1	1
+-- !result
+SELECT id, hex(split_part(s, '', 1)) AS sp_hex FROM t ORDER BY id;
+-- result:
+1	F0
+2	E4
+3	E4B8
+4	6F
+-- !result
+SELECT id, map_size(str_to_map(s, ',', '')) AS map_sz FROM t ORDER BY id;
+-- result:
+1	1
+2	1
+3	1
+4	1
+-- !result
+SELECT id, array_length(split(s, '')) AS n_parts FROM t ORDER BY id;
+-- result:
+1	1
+2	1
+3	1
+4	2
+-- !result

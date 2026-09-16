@@ -1,0 +1,18 @@
+-- name: test_encode_fingerprint_sha256_null @sequential
+CREATE TABLE t_fp (k INT, v INT)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_fp SELECT generate_series, generate_series FROM TABLE(generate_series(1, 5000));
+-- result:
+-- !result
+[UC] SELECT count(encode_fingerprint_sha256(v, CAST(NULL AS INT))) FROM t_fp;
+SELECT length(encode_fingerprint_sha256(7, 11));
+-- result:
+32
+-- !result
+SELECT count(*) FROM t_fp;
+-- result:
+5000
+-- !result

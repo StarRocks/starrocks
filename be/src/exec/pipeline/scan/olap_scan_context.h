@@ -20,13 +20,14 @@
 
 #include "base/phmap/phmap_fwd_decl.h"
 #include "column/column_access_path.h"
-#include "exec/olap_scan_prepare.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/rowset/rowset.h"
+#include "storage_primitive/olap_scan_range.h"
 
 namespace starrocks {
 

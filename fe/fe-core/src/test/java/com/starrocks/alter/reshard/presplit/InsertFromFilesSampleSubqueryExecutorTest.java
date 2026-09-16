@@ -94,7 +94,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                         /*brokerDesc=*/ null,
                         List.of(),
                         List.of(),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("sort_key")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -161,7 +161,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                         "{\"data\":[null]}", "{\"data\":[42]}")));
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(nullableSortKey), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
         List<SampleRow> rows = Lists.newArrayList(execution.rows());
@@ -280,7 +280,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                             "{\"data\":[100, 300]}"));
                 });
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("tenant"), bigintColumn("position")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -309,7 +309,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) ->
                         List.of(jsonResultBatch("{\"data\":[100]}")));
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("tenant"), bigintColumn("position")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -332,7 +332,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         // 25_600 bytes / 256 bytes-per-row estimate = 100 rows, well below the 200_000 hard cap.
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("sort_key")),
                 /*sampleByteLimit=*/ 25_600L,
                 /*seed=*/ 0L);
@@ -356,7 +356,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                     return List.of();
                 });
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, expectedComputeResource),
+                new InsertFromFilesScanContext(sourceTable, expectedComputeResource, "UTC"),
                 List.of(bigintColumn("sort_key")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -372,6 +372,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         // resource. Warehouse-id alignment MUST come first: ConnectContext
         // discards the resource on a mismatched warehouse during planning.
         ConnectContext sampleContext = Mockito.mock(ConnectContext.class);
+        SessionVariable sessionVariable = Mockito.mock(SessionVariable.class);
+        Mockito.when(sampleContext.getSessionVariable()).thenReturn(sessionVariable);
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         Mockito.when(computeResource.getWarehouseId()).thenReturn(42L);
 
@@ -384,8 +386,11 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         inOrder.verify(sampleContext).setCurrentComputeResource(computeResource);
         inOrder.verify(sampleContext).setNeedQueued(false);
         inOrder.verify(sampleContext).setStartTime();
-        // queryTimeoutSeconds == 0 → no cap applied, session variable untouched.
-        Mockito.verify(sampleContext, Mockito.never()).getSessionVariable();
+        // The sample scan is pinned to the base index (MV/rollup rewrite disabled) regardless of the cap.
+        Mockito.verify(sessionVariable).setEnableMaterializedViewRewrite(false);
+        Mockito.verify(sessionVariable).setEnableSyncMaterializedViewRewrite(false);
+        // queryTimeoutSeconds == 0 → no timeout cap applied.
+        Mockito.verify(sessionVariable, Mockito.never()).setQueryTimeoutS(Mockito.anyInt());
     }
 
     @Test
@@ -457,7 +462,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
     private static SampleRequest bigintRequest(TableFunctionTable sourceTable, Column sortKeyColumn) {
         return new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(sortKeyColumn),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);

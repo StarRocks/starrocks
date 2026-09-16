@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
@@ -25,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -37,6 +37,7 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
@@ -66,7 +67,9 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -77,7 +80,18 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TA
 public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(ExternalFullStatisticsCollectJob.class);
 
-    private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
+    // Per-partition CTE wrapper: the partition is read exactly once into base_cte_table and every per-column
+    // aggregate branch reads from it, so a partition is scanned once instead of once per column. Requires CTE
+    // reuse to be forced on in the collection session (see collect()); otherwise the optimizer may inline the
+    // CTE and fall back to one scan per column.
+    private static final String BATCH_FULL_STATISTIC_CTE_TEMPLATE =
+            "WITH base_cte_table AS (SELECT $projection " +
+            "FROM `$catalogName`.`$dbName`.`$tableName` WHERE $partitionPredicate) $unionSelects";
+
+    // One statistics row per column, reading from the shared CTE instead of re-scanning the physical table.
+    // The output schema is identical to the previous per-(partition, column) query, so result parsing is
+    // unchanged.
+    private static final String BATCH_FULL_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
             ", '$partitionNameStr'" + // VARCHAR
             ", '$columnNameStr'" + // VARCHAR
             ", cast(COUNT(1) as BIGINT)" + // BIGINT
@@ -86,15 +100,34 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
-            " FROM `$catalogName`.`$dbName`.`$tableName` where $partitionPredicate";
+            " FROM base_cte_table";
 
     private final String catalogName;
     protected List<String> partitionNames;
+    // Full partition list for the table, independent of which partitions this job actually scans data
+    // for (`partitionNames`, which for a SAMPLE job is only the sampled subset). Defaults to
+    // `partitionNames`: a FULL job's `partitionNames` already covers every partition (or the caller's
+    // explicit scope, which this job's own scan already matches). ExternalSampleStatisticsCollectJob
+    // overrides this to the table's true full partition list, so it can scan direct-value partition
+    // columns (see StatisticUtils#isDirectValuePartitionColumn) across every partition while other
+    // columns stay within the sampled subset - see its buildCollectSQLList override.
+    protected List<String> allPartitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    // Per-partition total row count from connector metadata (Iceberg PARTITIONS table), used to extrapolate a
+    // bounded-cost truncated sample back to the full partition. Empty when no scan budget is active or the
+    // connector cannot supply per-partition row counts - then statistics are stored as raw sample values.
+    private Map<String, Long> partitionTotalRowCounts = Collections.emptyMap();
     // Skip collecting statistics for default partition in iceberg table,
     // because we can not generate partition predicates for it.
     private static final Set<String> DO_NOT_COLLECT_PARTITIONS = Set.of(ICEBERG_DEFAULT_PARTITION);
+
+    // Conservative mirror of BE's primary_key_limit_size default (be/src/common/config.h) and its
+    // per-field VARCHAR encoding overhead, used only to decide whether to log a warning below -
+    // table_uuid is always hashed (StatisticUtils.hashTableUuidForPkStorage) regardless of this
+    // estimate, so an inaccurate guess here never causes a correctness problem.
+    private static final int EXTERNAL_STATS_PK_LIMIT_ESTIMATE = 128;
+    private static final int PK_FIELD_OVERHEAD_ESTIMATE = 12;
 
     public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
                                             List<String> columnNames, List<Type> columnTypes,
@@ -103,6 +136,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties);
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
+        this.allPartitionNames = partitionNames;
     }
 
     @Override
@@ -121,18 +155,122 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-        long finishedSQLNum = 0;
+        long startMs = System.currentTimeMillis();
+        long jobId = analyzeStatus.getId();
+        LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
+                jobId, catalogName, db.getOriginName(), table.getName(),
+                partitionNames.size(), columnNames.size());
+        logIfRawKeyWouldExceedPkLimit(jobId);
+
+        // Bounded-cost scan budgets (design 2.4): resolve per-statement PROPERTIES over global Config, then
+        // stash on the session variable so every statistics scan this job triggers inherits them via the
+        // normal query path (read back in IcebergScanNode). Restored in the finally block. All three <= 0
+        // leaves early stop disabled, i.e. the pre-existing full-scan behavior.
+        SessionVariable sessionVariable = context.getSessionVariable();
+        long savedScanBytesCap = sessionVariable.getExternalStatsScanBytesCap();
+        long savedScanFilesCap = sessionVariable.getExternalStatsScanFilesCap();
+        long savedScanRowsCap = sessionVariable.getExternalStatsScanRowsCap();
+        // Saved so the forced CTE-reuse settings (set below, restored in finally) do not leak to a reused context.
+        boolean savedCboCteReuse = sessionVariable.isCboCteReuse();
+        double savedCboCteReuseRatio = sessionVariable.getCboCTERuseRatio();
+        long scanBytesCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+                Config.connector_table_analyze_scan_bytes_cap, jobId);
+        long scanFilesCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+                Config.connector_table_analyze_scan_files_cap, jobId);
+        long scanRowsCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP,
+                Config.connector_table_analyze_scan_rows_cap, jobId);
+        // Fetch per-partition totals up front so a budget-truncated sample can be extrapolated back to the
+        // full partition (see scaleStatisticData). Cheap: one PARTITIONS metadata scan, and only when a
+        // budget is actually active.
+        partitionTotalRowCounts = buildPartitionTotalRowCounts(scanBytesCap, scanFilesCap, scanRowsCap, jobId);
+
+        Map<String, String> extendedInfo = new LinkedHashMap<>();
+        extendedInfo.put("table_format", table.getType().name().toLowerCase(Locale.ROOT));
+        extendedInfo.put("partition_count", String.valueOf(partitionNames.size()));
+        extendedInfo.put("column_count", String.valueOf(columnNames.size()));
+        // Surface the resolved scan budgets so operators can see, in SHOW ANALYZE STATUS, whether a run was
+        // bounded-cost and with what caps (the lightweight observability of design 2.7).
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP, String.valueOf(scanBytesCap));
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP, String.valueOf(scanFilesCap));
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP, String.valueOf(scanRowsCap));
+        extendedInfo.putAll(table.getStatsCollectMetadata());
+
+        // Merge into the existing properties map so it surfaces via the Properties column of
+        // SHOW ANALYZE STATUS without introducing new columns.
+        Map<String, String> mergedProperties = new LinkedHashMap<>();
+        if (analyzeStatus.getProperties() != null) {
+            mergedProperties.putAll(analyzeStatus.getProperties());
+        }
+        mergedProperties.putAll(extendedInfo);
+        analyzeStatus.setProperties(mergedProperties);
+
+        LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
+                jobId, catalogName, db.getOriginName(), table.getName(), extendedInfo);
+
+        sessionVariable.setExternalStatsScanBytesCap(scanBytesCap);
+        sessionVariable.setExternalStatsScanFilesCap(scanFilesCap);
+        sessionVariable.setExternalStatsScanRowsCap(scanRowsCap);
+        LOG.info("[ExternalStats] scan budget | jobId={} catalog={} db={} table={} bytesCap={} filesCap={} rowsCap={}",
+                jobId, catalogName, db.getOriginName(), table.getName(), scanBytesCap, scanFilesCap, scanRowsCap);
+
+        // Each query wraps the read in a CTE (base_cte_table) shared by every column's aggregate branch. Force
+        // CTE reuse (ratio 0 = reuse regardless of estimated cost) so the optimizer materializes a single scan
+        // instead of inlining the CTE back into one scan per column.
+        // NOTE: buildConnectContext() already forces this, but collectStatistics(resetWarehouse=true) - used by
+        // the query-trigger and CREATE ANALYZE paths - calls setCurrentWarehouse() right before collect(),
+        // which re-clones the session variable from defaults (ratio back to 1.15) and only re-applies
+        // enable_profile. So re-force it here, the last write before the collection SQL runs. Do not remove.
+        sessionVariable.setCboCteReuse(true);
+        sessionVariable.setCboCTERuseRatio(0);
+
+        String status = "SUCCESS";
+        String failureReason = "";
+        try {
+            runCollectPhases(context, analyzeStatus, jobId);
+        } catch (Exception e) {
+            status = "FAILED";
+            failureReason = e.getMessage();
+            throw e;
+        } finally {
+            sessionVariable.setExternalStatsScanBytesCap(savedScanBytesCap);
+            sessionVariable.setExternalStatsScanFilesCap(savedScanFilesCap);
+            sessionVariable.setExternalStatsScanRowsCap(savedScanRowsCap);
+            sessionVariable.setCboCteReuse(savedCboCteReuse);
+            sessionVariable.setCboCTERuseRatio(savedCboCteReuseRatio);
+            LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
+                            "durationMs={} partitions={} columns={} reason={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(),
+                    status, System.currentTimeMillis() - startMs,
+                    partitionNames.size(), columnNames.size(), failureReason);
+        }
+    }
+
+    // Runs the job's collection SQL to completion, force-flushing and cleaning up stale raw-keyed rows
+    // once every query succeeds. Extracted out of collect() so ExternalSampleStatisticsCollectJob can
+    // override it to run direct-value and sampled-partition columns as two independent phases (see its
+    // override) instead of one flat query list - each phase gets its own force-flush and, for the
+    // direct-value phase, an immediate ColumnStatsMeta commit, so a later phase's failure can't
+    // retroactively erase an earlier phase's already-successful results (see PR #60703 review
+    // discussion).
+    protected void runCollectPhases(ConnectContext context, AnalyzeStatus analyzeStatus, long jobId) throws Exception {
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
         List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
-        long totalCollectSQL = collectSQLList.size();
+        executeCollectSQLList(collectSQLList, context, analyzeStatus, 0, collectSQLList.size(), parallelism);
+        flushInsertStatisticsData(context, true);
+        cleanupStaleRawKeyedRows(context, jobId);
+    }
 
-        // First, the collection task is divided into several small tasks according to the column name and partition,
-        // and then the multiple small tasks are aggregated into several tasks
-        // that will actually be run according to the configured parallelism, and are connected by union all
-        // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
-        // dop will be set to 1 to meet the requirements of the degree of parallelism.
-        // If the number of unions is less than the degree of parallelism,
-        // dop should be adjusted appropriately to use enough cpu cores
+    // Runs every CTE query in `collectSQLList` (in order). `finishedSQLNum`/`totalCollectSQL` let a
+    // caller running multiple phases report smooth overall progress instead of resetting to 0% at the
+    // start of each phase. Returns the updated finishedSQLNum so the caller can chain further phases.
+    //
+    // Each element is one self-contained CTE query for a (partition, column-group): all columns in the
+    // group share a single partition scan. They cannot be merged (only one WITH per statement), so
+    // each runs on its own. The collect parallelism now drives per-query pipeline dop: a single-element
+    // group is given dop = parallelism to use enough cpu cores.
+    protected long executeCollectSQLList(List<List<String>> collectSQLList, ConnectContext context,
+                                         AnalyzeStatus analyzeStatus, long finishedSQLNum, long totalCollectSQL,
+                                         int parallelism) throws Exception {
         for (List<String> sqlUnion : collectSQLList) {
             if (sqlUnion.size() < parallelism) {
                 context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
@@ -147,53 +285,206 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
         }
+        return finishedSQLNum;
+    }
 
-        flushInsertStatisticsData(context, true);
+    // Resolves a scan cap: an explicit ANALYZE ... PROPERTIES value wins over the global Config default;
+    // an absent or unparseable property falls back to the Config value. <= 0 means the dimension is unlimited.
+    private long resolveScanCap(String propertyKey, long configDefault, long jobId) {
+        if (properties != null && properties.containsKey(propertyKey)) {
+            String raw = properties.get(propertyKey);
+            try {
+                return Long.parseLong(raw.trim());
+            } catch (NumberFormatException e) {
+                LOG.warn("[ExternalStats] invalid scan cap property | jobId={} key={} value={} fallbackConfig={}",
+                        jobId, propertyKey, raw, configDefault);
+            }
+        }
+        return configDefault;
+    }
+
+    // Fetches the total row count of each collected partition from connector metadata, so a budget-truncated
+    // sample can be extrapolated back to the full partition. Only meaningful when a budget is active and the
+    // connector exposes exact per-partition row counts cheaply - currently Iceberg (PARTITIONS metadata table).
+    // Other connectors / no-budget runs return empty, and statistics are then stored as raw sample values.
+    //
+    // Uses allPartitionNames, not partitionNames: for a SAMPLE job, direct-value partition columns (see
+    // StatisticUtils#isDirectValuePartitionColumn) are scanned across every partition in allPartitionNames,
+    // not just the sampled partitionNames subset - looking up only partitionNames here would leave every
+    // "extra" partition's total unknown, silently skipping extrapolation (and under-reporting row_count)
+    // for any of them that a scan-budget cap truncates. allPartitionNames always covers partitionNames too
+    // (it's a superset - see ExternalSampleStatisticsCollectJob's constructor), so this is a strict widening,
+    // never a behavior change for a plain FULL job where the two lists are already identical.
+    private Map<String, Long> buildPartitionTotalRowCounts(long bytesCap, long filesCap, long rowsCap, long jobId) {
+        boolean budgetActive = bytesCap > 0 || filesCap > 0 || rowsCap > 0;
+        if (!budgetActive) {
+            return Collections.emptyMap();
+        }
+        try {
+            // Connector-agnostic: each PartitionTraits decides whether it can supply per-partition totals
+            // (Iceberg does via the PARTITIONS metadata table; others return empty -> no extrapolation).
+            return ConnectorPartitionTraits.build(table).getPartitionRowCounts(allPartitionNames);
+        } catch (Exception e) {
+            // Never fail collection over missing extrapolation input: fall back to raw sample values.
+            LOG.warn("[ExternalStats] failed to fetch partition row counts for extrapolation | jobId={} " +
+                    "catalog={} db={} table={}", jobId, catalogName, db.getOriginName(), table.getName(), e);
+            return Collections.emptyMap();
+        }
+    }
+
+    // Extrapolates one (partition, column) statistics row from the scanned sample to the full partition when
+    // the bounded-cost scan truncated it. row_count is set to the exact metadata total; null_count and
+    // data_size scale by (total / sample) so the derived null-fraction and average-row-size (consumed as
+    // ratios against row_count) stay correct. NDV (the HLL sketch) is NOT scaled - it cannot be cheaply
+    // extrapolated, so it remains a sample undercount (documented degradation). No-op when the partition was
+    // not truncated (sample >= total) or its total is unknown.
+    private ScaledStats scaleStatisticData(TStatisticData data) {
+        return extrapolate(data.getRowCount(), data.getNullCount(), (long) data.getDataSize(),
+                partitionTotalRowCounts.get(data.getPartitionName()));
+    }
+
+    // Package-private for unit testing. Extrapolates one row's (rowCount, nullCount, dataSize) to the full
+    // partition when the sample was truncated (totalRows > sample rowCount); otherwise returns values as-is.
+    static ScaledStats extrapolate(long rowCount, long nullCount, long dataSize, Long totalRows) {
+        if (totalRows != null && rowCount > 0 && totalRows > rowCount) {
+            double scale = (double) totalRows / rowCount;
+            nullCount = Math.min(totalRows, Math.round(nullCount * scale));
+            dataSize = Math.round(dataSize * scale);
+            rowCount = totalRows;
+        }
+        return new ScaledStats(rowCount, nullCount, dataSize);
+    }
+
+    // Holder for the extrapolated (or pass-through) statistics values of one collected row.
+    static final class ScaledStats {
+        final long rowCount;
+        final long nullCount;
+        final long dataSize;
+
+        ScaledStats(long rowCount, long nullCount, long dataSize) {
+            this.rowCount = rowCount;
+            this.nullCount = nullCount;
+            this.dataSize = dataSize;
+        }
+    }
+
+    // table_uuid is always hashed for storage (StatisticUtils.hashTableUuidForPkStorage), so this
+    // never affects correctness. It's a diagnostic-only warning to confirm which tables actually
+    // would have hit "primary key size exceed the limit" pre-hashing (e.g. long Iceberg
+    // catalog/db/table names combined with long partition_name values, see the Demandbase case).
+    private void logIfRawKeyWouldExceedPkLimit(long jobId) {
+        String rawTableUuid = table.getUUID();
+        int maxPartitionNameLen = partitionNames.stream().mapToInt(String::length).max().orElse(0);
+        int maxColumnNameLen = columnNames.stream().mapToInt(String::length).max().orElse(0);
+        int estimatedRawPkLen = rawTableUuid.length() + maxPartitionNameLen + maxColumnNameLen + PK_FIELD_OVERHEAD_ESTIMATE;
+        if (estimatedRawPkLen > EXTERNAL_STATS_PK_LIMIT_ESTIMATE) {
+            LOG.warn("[ExternalStats] table_uuid hashed | jobId={} catalog={} db={} table={} rawTableUuidLen={} " +
+                            "maxPartitionNameLen={} maxColumnNameLen={} estimatedRawPkLen={} limitEstimate={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(), rawTableUuid.length(),
+                    maxPartitionNameLen, maxColumnNameLen, estimatedRawPkLen, EXTERNAL_STATS_PK_LIMIT_ESTIMATE);
+        }
+    }
+
+    // Deletes the stale raw-keyed rows for exactly the (partition, column) pairs this job just
+    // (re-)wrote under the hashed table_uuid. Purely storage hygiene: buildQueryExternalFullStatisticsSQL
+    // dedups by (partition_name, column_name, latest update_time) internally, so a lingering stale
+    // row is never double-counted even if this cleanup fails - it just wastes a bit of space until
+    // the next collection retries it. Best-effort: must never fail a job whose actual stats write
+    // already succeeded.
+    protected void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+        String rawTableUuid = table.getUUID();
+        boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);
+        if (!ok) {
+            LOG.warn("[ExternalStats] failed to clean up stale raw-keyed rows | jobId={} catalog={} db={} table={}",
+                    jobId, catalogName, db.getOriginName(), table.getName());
+        }
     }
 
     protected List<List<String>> buildCollectSQLList(int parallelism) {
+        return buildCollectSQLListForColumns(partitionNames, columnNames, columnTypes, parallelism);
+    }
+
+    // Builds one CTE query per (partition, column-batch) for the given partitions/columns. Extracted out
+    // of buildCollectSQLList so ExternalSampleStatisticsCollectJob can independently scan direct-value
+    // partition columns (see StatisticUtils#isDirectValuePartitionColumn) across every partition while
+    // non-partition columns stay within the sampled subset - see its buildCollectSQLList override.
+    //
+    // Collect a partition in a single scan by wrapping the read in a CTE (base_cte_table) shared by every
+    // column's aggregate branch. Columns are split into groups so a wide table does not build one CTE
+    // multicast to hundreds of consumers (inflating query/plan size and the memory held for the
+    // materialized partition); each group scans the partition once, so total scans are
+    // partitions x ceil(columns / columnsPerScan). The group size mirrors the internal sample path
+    // (ColumnSampleManager.splitPrimitiveTypeStats): max(2, statistic_collect_parallelism), i.e. at least
+    // two columns share a scan. Each group is a self-contained CTE query and two CTE queries cannot be
+    // UNION ALL'd (one WITH per statement), so the outer group size is fixed to 1; parallelism only sets
+    // per-query pipeline dop in the execute loop.
+    protected List<List<String>> buildCollectSQLListForColumns(List<String> partitionsToScan,
+                                                               List<String> scanColumnNames,
+                                                               List<Type> scanColumnTypes, int parallelism) {
+        if (scanColumnNames.isEmpty()) {
+            return Collections.emptyList();
+        }
+        int columnsPerScan = Math.max(2, parallelism);
         List<String> totalQuerySQL = new ArrayList<>();
-        for (String partitionName : partitionNames) {
-            for (int i = 0; i < columnNames.size(); i++) {
-                if (DO_NOT_COLLECT_PARTITIONS.contains(partitionName)) {
-                    LOG.info("Skip collect full statistics for partition: {} in table: {}",
-                            partitionName, table.getName());
-                    continue;
-                }
-                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnNames.get(i),
-                        columnTypes.get(i)));
+        for (String partitionName : partitionsToScan) {
+            if (DO_NOT_COLLECT_PARTITIONS.contains(partitionName)) {
+                LOG.info("Skip collect full statistics for partition: {} in table: {}",
+                        partitionName, table.getName());
+                continue;
+            }
+            for (int start = 0; start < scanColumnNames.size(); start += columnsPerScan) {
+                int end = Math.min(scanColumnNames.size(), start + columnsPerScan);
+                totalQuerySQL.add(buildPartitionCTESQL(table, partitionName,
+                        scanColumnNames.subList(start, end), scanColumnTypes.subList(start, end)));
             }
         }
 
-        return Lists.partition(totalQuerySQL, parallelism);
+        return Lists.partition(totalQuerySQL, 1);
     }
 
-    private String buildBatchCollectFullStatisticSQL(Table table, String partitionName, String columnName,
-                                                     Type columnType) {
-        StringBuilder builder = new StringBuilder();
+    // Builds one CTE query that collects `batchColumnNames` of a single partition in a shared scan.
+    private String buildPartitionCTESQL(Table table, String partitionName, List<String> batchColumnNames,
+                                        List<Type> batchColumnTypes) {
+        Collection<String> nullValues = resolveNullValues(table);
+        String partitionPredicate = table.isUnPartitioned() ? "1=1" :
+                Joiner.on(" AND ").join(generatePartitionPredicates(table, partitionName, nullValues));
+
+        // CTE projection: only the columns in this group actually read by an aggregate (statable,
+        // non-collection). Non-statable columns emit constant sketches and need nothing beyond COUNT(1).
+        List<String> projection = new ArrayList<>();
+        List<String> unionSelects = new ArrayList<>();
+        for (int i = 0; i < batchColumnNames.size(); i++) {
+            Type columnType = batchColumnTypes.get(i);
+            if (columnType.canStatistic() && !columnType.isCollectionType()) {
+                projection.add(StatisticUtils.quoting(table, batchColumnNames.get(i)));
+            }
+            unionSelects.add(buildColumnSelectFromCTE(table, partitionName, batchColumnNames.get(i), columnType));
+        }
+
+        VelocityContext context = new VelocityContext();
+        context.put("catalogName", this.catalogName);
+        context.put("dbName", db.getOriginName());
+        context.put("tableName", table.getName());
+        context.put("projection", projection.isEmpty() ? "1" : Joiner.on(", ").join(projection));
+        context.put("partitionPredicate", partitionPredicate);
+        context.put("unionSelects", Joiner.on(" UNION ALL ").join(unionSelects));
+        return build(context, BATCH_FULL_STATISTIC_CTE_TEMPLATE);
+    }
+
+    // Builds one statistics row (COUNT/dataSize/HLL/null-count/max/min) for a single column, reading from the
+    // shared base_cte_table. The output columns match the legacy per-(partition, column) query verbatim.
+    private String buildColumnSelectFromCTE(Table table, String partitionName, String columnName, Type columnType) {
         VelocityContext context = new VelocityContext();
 
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(table, columnName);
-
-        Collection<String> nullValues;
-        if (table.isIcebergTable()) {
-            nullValues = Collections.singleton(IcebergApiConverter.PARTITION_NULL_VALUE);
-        } else if (table.isPaimonTable()) {
-            nullValues = PaimonMetadata.PARTITION_NULL_VALUES;
-        } else {
-            nullValues = Collections.singleton(HiveMetaClient.PARTITION_NULL_VALUE);
-        }
+        Collection<String> nullValues = resolveNullValues(table);
 
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
-        // all table now, partition later
         context.put("partitionNameStr", table.isIcebergTable() ? partitionName :
                 PartitionUtil.normalizePartitionName(partitionName, table.getPartitionColumnNames(), nullValues));
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnName, columnType));
-        context.put("dbName", db.getOriginName());
-        context.put("tableName", table.getName());
-        context.put("catalogName", this.catalogName);
 
         if (!columnType.canStatistic() || columnType.isCollectionType()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
@@ -207,15 +498,17 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("minFunction", getMinMaxFunction(columnType, quoteColumnName, false));
         }
 
-        if (table.isUnPartitioned()) {
-            context.put("partitionPredicate", "1=1");
-        } else {
-            List<String> partitionPredicate = generatePartitionPredicates(table, partitionName, nullValues);
-            context.put("partitionPredicate", Joiner.on(" AND ").join(partitionPredicate));
-        }
+        return build(context, BATCH_FULL_STATISTIC_SELECT_TEMPLATE);
+    }
 
-        builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
-        return builder.toString();
+    private Collection<String> resolveNullValues(Table table) {
+        if (table.isIcebergTable()) {
+            return Collections.singleton(IcebergApiConverter.PARTITION_NULL_VALUE);
+        } else if (table.isPaimonTable()) {
+            return PaimonMetadata.PARTITION_NULL_VALUES;
+        } else {
+            return Collections.singleton(HiveMetaClient.PARTITION_NULL_VALUE);
+        }
     }
 
     private List<String> generatePartitionPredicates(Table table, String partitionName, Collection<String> nullValues) {
@@ -305,34 +598,39 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
+        String hashedTableUuid = StatisticUtils.hashTableUuidForPkStorage(table.getUUID());
         for (TStatisticData data : dataList) {
+            // Extrapolate a bounded-cost truncated sample back to the full partition. No-op (scale=1) when the
+            // partition was not truncated or its total is unknown.
+            ScaledStats scaled = scaleStatisticData(data);
+
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            params.add("'" + table.getUUID() + "'");
+            params.add("'" + hashedTableUuid + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getPartitionName()) + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
             params.add("'" + catalogName + "'");
             params.add("'" + db.getOriginName() + "'");
             params.add("'" + table.getName() + "'");
-            params.add(String.valueOf(data.getRowCount()));
-            params.add(String.valueOf(data.getDataSize()));
+            params.add(String.valueOf(scaled.rowCount));
+            params.add(String.valueOf(scaled.dataSize));
             params.add("hll_deserialize(unhex('mockData'))");
-            params.add(String.valueOf(data.getNullCount()));
+            params.add(String.valueOf(scaled.nullCount));
             params.add("'" + data.getMax() + "'");
             params.add("'" + data.getMin() + "'");
             params.add("now()");
             // int
-            row.add(new StringLiteral(table.getUUID())); // table id, wait to byte
+            row.add(new StringLiteral(hashedTableUuid)); // table id, wait to byte
             row.add(new StringLiteral(data.getPartitionName()));
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
             row.add(new StringLiteral(catalogName));
             row.add(new StringLiteral(db.getOriginName()));
             row.add(new StringLiteral(table.getName()));
-            row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
-            row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
+            row.add(new IntLiteral(scaled.rowCount, IntegerType.BIGINT)); // row count, 8 byte
+            row.add(new IntLiteral(scaled.dataSize, IntegerType.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
-            row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
+            row.add(new IntLiteral(scaled.nullCount, IntegerType.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte
@@ -343,7 +641,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         flushInsertStatisticsData(context, false);
     }
 
-    private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
+    protected void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
         // hll serialize to hex, about 32kb
         long bufferSize = 33L * 1024 * rowsBuffer.size();
         if (bufferSize < Config.statistic_full_collect_buffer && !force) {

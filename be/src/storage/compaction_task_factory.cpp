@@ -15,8 +15,8 @@
 #include "storage/compaction_task_factory.h"
 
 #include "common/config_compaction_fwd.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
@@ -72,7 +72,7 @@ std::shared_ptr<CompactionTask> CompactionTaskFactory::create_compaction_task() 
     compaction_task->set_tablet_schema(tablet_schema);
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
             MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(_tablet->tablet_id()),
-            GlobalEnv::GetInstance()->compaction_mem_tracker());
+            RuntimeEnv::GetInstance()->compaction_mem_tracker());
     compaction_task->set_mem_tracker(mem_tracker.release());
     return compaction_task;
 }

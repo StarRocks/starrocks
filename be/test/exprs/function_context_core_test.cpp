@@ -42,13 +42,10 @@ TEST(FunctionContextCoreTest, CreateTestContextArgAccess) {
 
 TEST(FunctionContextCoreTest, FunctionStateScopeSetGet) {
     FunctionContext ctx;
-    int thread_local_state = 11;
     int fragment_local_state = 22;
 
-    ctx.set_function_state(FunctionContext::THREAD_LOCAL, &thread_local_state);
     ctx.set_function_state(FunctionContext::FRAGMENT_LOCAL, &fragment_local_state);
 
-    EXPECT_EQ(&thread_local_state, ctx.get_function_state(FunctionContext::THREAD_LOCAL));
     EXPECT_EQ(&fragment_local_state, ctx.get_function_state(FunctionContext::FRAGMENT_LOCAL));
 }
 
@@ -65,8 +62,7 @@ TEST(FunctionContextCoreTest, CloneKeepsConstantsAndFragmentState) {
     constant_columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(42, 1));
     ctx->set_constant_columns(std::move(constant_columns));
 
-    MemPool clone_pool;
-    auto clone_ctx = std::unique_ptr<FunctionContext>(ctx->clone(&clone_pool));
+    auto clone_ctx = std::unique_ptr<FunctionContext>(ctx->clone());
 
     EXPECT_EQ(&fragment_local_state, clone_ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     EXPECT_TRUE(clone_ctx->is_constant_column(0));

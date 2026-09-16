@@ -104,6 +104,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/kudu-reader-lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
+                            <includeScope>runtime</includeScope>
                         </configuration>
                     </execution>
                 </executions>

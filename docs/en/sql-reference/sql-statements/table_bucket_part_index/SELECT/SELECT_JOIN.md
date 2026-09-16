@@ -256,7 +256,7 @@ Example:
 SELECT *
 FROM holdings h ASOF LEFT JOIN prices p             
 ON h.ticker = p.ticker            
-AND h.when >= p.when
+AND h.`when` >= p.`when`
 ORDER BY ALL;
 ```
 

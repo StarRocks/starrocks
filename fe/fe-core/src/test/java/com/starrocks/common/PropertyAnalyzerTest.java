@@ -49,7 +49,6 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -231,17 +230,17 @@ public class PropertyAnalyzerTest {
         // empty property
         Map<String, String> property = new HashMap<>();
         boolean enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property);
-        Assertions.assertEquals(true, enablePeristentIndex);
+        Assertions.assertTrue(enablePeristentIndex);
         // with property
         Map<String, String> property2 = new HashMap<>();
         property2.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property2);
-        Assertions.assertEquals(true, enablePeristentIndex);
+        Assertions.assertTrue(enablePeristentIndex);
 
         Map<String, String> property3 = new HashMap<>();
         property3.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property3);
-        Assertions.assertEquals(false, enablePeristentIndex);
+        Assertions.assertFalse(enablePeristentIndex);
 
         // change config
         Config.enable_persistent_index_by_default = false;
@@ -249,17 +248,17 @@ public class PropertyAnalyzerTest {
         // empty property
         Map<String, String> property4 = new HashMap<>();
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property4);
-        Assertions.assertEquals(true, enablePeristentIndex);
+        Assertions.assertTrue(enablePeristentIndex);
         // with property
         Map<String, String> property5 = new HashMap<>();
         property5.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property5);
-        Assertions.assertEquals(true, true);
+        Assertions.assertTrue(enablePeristentIndex);
 
         Map<String, String> property6 = new HashMap<>();
         property6.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property6);
-        Assertions.assertEquals(false, enablePeristentIndex);
+        Assertions.assertFalse(enablePeristentIndex);
         Config.enable_persistent_index_by_default = true;
     }
 
@@ -281,29 +280,6 @@ public class PropertyAnalyzerTest {
         Map<String, String> property = new HashMap<>();
         property.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "zlib");
         Assertions.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property).first));
-    }
-
-    @Test
-    public void testPersistentIndexType() throws AnalysisException {
-        // empty property
-        Map<String, String> property = new HashMap<>();
-        Assertions.assertEquals(TPersistentIndexType.CLOUD_NATIVE, PropertyAnalyzer.analyzePersistentIndexType(property));
-
-        Map<String, String> property2 = new HashMap<>();
-        property2.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
-        Assertions.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property2));
-
-        Map<String, String> property3 = new HashMap<>();
-        property3.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "local");
-        Assertions.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property3));
-
-        try {
-            Map<String, String> property4 = new HashMap<>();
-            property4.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL2");
-            TPersistentIndexType type = PropertyAnalyzer.analyzePersistentIndexType(property4);
-        } catch (AnalysisException e) {
-            Assertions.assertTrue(e.getMessage().contains("Invalid persistent index type: LOCAL2"));
-        }
     }
 
     @Test
@@ -358,7 +334,7 @@ public class PropertyAnalyzerTest {
 
             Map<String, String> property4 = new HashMap<>();
             property4.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "BATCH");
-            TCompactionStrategy strategy = PropertyAnalyzer.analyzecompactionStrategy(property4);
+            PropertyAnalyzer.analyzecompactionStrategy(property4);
         } catch (AnalysisException e) {
             Assertions.assertTrue(e.getMessage().contains("Invalid compaction strategy: BATCH"));
         }

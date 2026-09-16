@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "thrift/protocol/TDebugProtocol.h"
 #include "types/constexpr.h"
+#include "types/geo_type_descriptor.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -44,6 +46,13 @@ struct TypeDescriptor {
     int precision{-1};
     int scale{-1};
 
+    /// Only meaningful for TYPE_DATETIME read from lake formats that distinguish
+    /// timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    /// as metadata and does NOT participate in type identity (operator==, hashing, etc.).
+    /// Default false means "shift a UTC instant into the session timezone" (Hive / Iceberg /
+    /// Paimon LTZ); true means the value is a naive wall clock that must NOT be shifted.
+    bool datetime_is_ntz{false};
+
     /// Must be kept in sync with FE's max precision/scale.
     static const int MAX_PRECISION = 76;
     static const int MAX_SCALE = MAX_PRECISION;
@@ -62,6 +71,10 @@ struct TypeDescriptor {
     std::vector<int32_t> field_ids;
     // Only set if type == TYPE_STRUCT. The field physical name of each child.
     std::vector<std::string> field_physical_names;
+
+    // Semantic metadata only, also used by GeoColumnDescriptor::type.
+    // Encoding, dimension and validation state belong to the column/transport layer.
+    std::optional<GeoTypeDescriptor> geo_type;
 
     TypeDescriptor() = default;
 
@@ -176,6 +189,8 @@ struct TypeDescriptor {
         return ret;
     }
 
+    static TypeDescriptor create_geo_type(LogicalType type, GeoTypeDescriptor descriptor);
+
     static TypeDescriptor from_logical_type(LogicalType type,
                                             [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
                                             [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
@@ -225,6 +240,7 @@ struct TypeDescriptor {
     }
 
     bool is_assignable(const TypeDescriptor& o) const {
+        if (is_geo_type() || o.is_geo_type()) return false; // SQL compatibility is not enabled yet.
         if (is_complex_type()) {
             if ((type != o.type) || (children.size() != o.children.size())) {
                 return false;
@@ -256,7 +272,7 @@ struct TypeDescriptor {
         if (is_decimal_type()) {
             return precision == o.precision && scale == o.scale;
         }
-        return true;
+        return geo_type == o.geo_type;
     }
 
     bool operator!=(const TypeDescriptor& other) const { return !(*this == other); }
@@ -287,6 +303,8 @@ struct TypeDescriptor {
     inline bool is_decimal_type() const {
         return (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_type());
     }
+
+    bool is_geo_type() const;
 
     inline bool is_unknown_type() const { return type == TYPE_UNKNOWN; }
 

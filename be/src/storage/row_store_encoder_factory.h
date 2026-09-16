@@ -17,7 +17,7 @@
 #include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "storage/olap_define.h"
+#include "common/storage_define.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_simple.h"
 

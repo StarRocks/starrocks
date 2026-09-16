@@ -255,6 +255,9 @@ public:
     Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _scalar_column_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
     Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); };
 
@@ -301,6 +304,9 @@ public:
     Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _scalar_column_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
@@ -575,6 +581,13 @@ Status ScalarColumnWriter::write_zone_map() {
         return _zone_map_index_builder->finish(_wfile, _opts.meta->add_indexes());
     }
     return Status::OK();
+}
+
+// Give up the ordinal-index builder so the rest of this writer can be destroyed on schedule. The
+// meta pointer travels with it because write_ordinal_index() records the page pointer through
+// _opts.meta, and by the time the region is written this writer is gone.
+void ScalarColumnWriter::take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) {
+    out->push_back({std::move(_ordinal_index_builder), _opts.meta});
 }
 
 Status ScalarColumnWriter::write_bitmap_index() {
@@ -921,13 +934,20 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const Binary
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
 
+    // When the column is too high-cardinality for dictionary encoding, fall back to plain.
+    // If delta-offset plain is enabled, use the delta-offset variant so the offset trailer
+    // (which dominates the compressed size of high-cardinality string columns) compresses
+    // far better. The choice is recorded in the column meta encoding.
+    const EncodingTypePB plain_encoding =
+            config::enable_binary_plain_delta_offset ? PLAIN_ENCODING_DELTA_OFFSET : PLAIN_ENCODING;
+
     if (row_count > dictionary_min_rowcount) {
         phmap::flat_hash_set<size_t> hash_set;
         for (size_t i = 0; i < row_count; i++) {
             size_t hash = SliceHash()(bin_col.get_slice(i));
             hash_set.insert(hash);
             if (hash_set.size() > max_card) {
-                return PLAIN_ENCODING;
+                return plain_encoding;
             }
         }
     }

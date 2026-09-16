@@ -28,7 +28,7 @@
 #include "runtime/memory/counting_allocator.h"
 
 #ifndef BE_TEST
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #endif
 
 #endif
@@ -106,7 +106,7 @@ int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
         }                                                                                   \
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
-    starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
+    starrocks::tls_exceed_mem_tracker = starrocks::RuntimeEnv::GetInstance()->process_mem_tracker()
 #define IS_BAD_ALLOC_CATCHED() starrocks::tls_is_catched
 #else
 std::atomic<int64_t> g_mem_usage(0);

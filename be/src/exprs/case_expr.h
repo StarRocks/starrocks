@@ -15,8 +15,15 @@
 #pragma once
 
 #include "exprs/expr.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
+
+// Result-type-partitioned factory helpers (defined in case_expr_g{1,2,3}.cpp). Each returns
+// nullptr for result types it does not handle.
+Expr* case_from_thrift_group1(const TExprNode& node, LogicalType resultType, LogicalType whenType);
+Expr* case_from_thrift_group2(const TExprNode& node, LogicalType resultType, LogicalType whenType);
+Expr* case_from_thrift_group3(const TExprNode& node, LogicalType resultType, LogicalType whenType);
 
 class VectorizedCaseExprFactory {
 public:

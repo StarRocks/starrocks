@@ -153,7 +153,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"hive0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -165,7 +165,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"hive0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -177,7 +177,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"not_exist_reousrce\", \"database\"=\"db0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -189,7 +189,7 @@ public class HiveTableTest {
                     "(\"database\"=\"db0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -216,7 +216,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }

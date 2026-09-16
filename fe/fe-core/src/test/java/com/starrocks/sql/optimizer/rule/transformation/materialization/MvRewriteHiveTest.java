@@ -211,9 +211,13 @@ public class MvRewriteHiveTest extends MVTestBase {
 
             long mvMaxBaseTableRefreshTimestamp = mv1.maxBaseTableRefreshTimestamp().get();
 
-            long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-            Assertions.assertTrue(mvRefreshTimeStamp == mvMaxBaseTableRefreshTimestamp);
-            Assertions.assertTrue((mvMaxBaseTableRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+            // The staleness baseline is the confirmed complete refresh's start time (wall-clock millis),
+            // and maxBaseTableRefreshTimestamp() is unit-normalized to millis, so the gap below is
+            // meaningful even for Hive whose native modified time is epoch seconds. lastRefreshTime
+            // stays in the connector-native unit and no longer participates in the staleness gap.
+            long lastFreshnessConfirmedAt = mv1.getRefreshScheme().getLastFreshnessConfirmedAt();
+            Assertions.assertTrue(lastFreshnessConfirmedAt > 0);
+            Assertions.assertTrue((mvMaxBaseTableRefreshTimestamp - lastFreshnessConfirmedAt) / 1000 < 60);
             Assertions.assertTrue(mv1.isStalenessSatisfied());
 
             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);

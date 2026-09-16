@@ -22,6 +22,7 @@
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
+#include "cache/dynamic_cache.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -29,55 +30,113 @@
 #include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "storage/lake/lake_primary_index.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_manager.h"
-#include "util/dynamic_cache.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
 
+// Does this rowset hold any rows? The rowset-level count alone cannot answer it: a split cross
+// publish apportions that count across the siblings, so a rowset whose segments hold this tablet's
+// rows can arrive with num_rows == 0 and be mistaken for empty. The per-segment counts are not
+// apportioned, so they settle it -- and they also keep a genuinely empty write (segments written,
+// no rows in them) out, which the segment count alone would not.
+//
+// The last clause covers a legacy rowset whose segment_metas were back-filled by
+// normalize_*_after_load from the deprecated parallel arrays, which carry no per-segment count:
+// nothing proves it empty, so it is kept.
+bool rowset_holds_rows(const RowsetMetadataPB& rowset) {
+    if (rowset.num_rows() > 0) {
+        return true;
+    }
+    if (rowset.segment_metas_size() == 0) {
+        return false;
+    }
+    bool any_segment_counted = false;
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (segment_meta.num_rows() > 0) {
+            return true;
+        }
+        any_segment_counted |= segment_meta.has_num_rows();
+    }
+    return !any_segment_counted;
+}
+
 namespace {
 
-Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
-                            TabletManager* tablet_mgr) {
-    for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
-        if (alter_meta.has_enable_persistent_index()) {
-            auto update_mgr = tablet_mgr->update_mgr();
-            metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
-            update_mgr->set_enable_persistent_index(metadata->id(), alter_meta.enable_persistent_index());
-            // Try remove index from index cache
-            // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
-            // because the primary index is available in cache
-            // But it will be remove from index cache after apply is finished
-            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
+// Non-clearing archival of the tablet's current schema before a new schema is installed: map every
+// currently-unmapped rowset to the current schema id, and record the current schema in
+// historical_schemas only if it is absent. Must be called BEFORE the caller overwrites
+// metadata->schema() with the new schema.
+void archive_current_schema_into_history(TabletMetadataPB* metadata) {
+    const auto& old_schema = metadata->schema();
+    bool record_old_schema_in_history = false;
+    for (const auto& rowset : metadata->rowsets()) {
+        if (metadata->rowset_to_schema().count(rowset.id()) <= 0) {
+            record_old_schema_in_history = true;
+            metadata->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
         }
-        // Check if the alter_meta has a persistent index type change
-        if (alter_meta.has_persistent_index_type()) {
-            // Get the previous and new persistent index types
-            PersistentIndexTypePB prev_type = metadata->persistent_index_type();
-            PersistentIndexTypePB new_type = alter_meta.persistent_index_type();
-            // Apply the changes to the persistent index type
-            metadata->set_persistent_index_type(new_type);
-            LOG(INFO) << fmt::format("alter persistent index type from {} to {} for tablet id: {}",
-                                     PersistentIndexTypePB_Name(prev_type), PersistentIndexTypePB_Name(new_type),
-                                     metadata->id());
-            // Get the update manager
-            auto update_mgr = tablet_mgr->update_mgr();
-            // Try to remove the index from the index cache
-            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
+    }
+    if (record_old_schema_in_history && metadata->historical_schemas().count(old_schema.id()) <= 0) {
+        auto& item = (*metadata->mutable_historical_schemas())[old_schema.id()];
+        item.CopyFrom(old_schema);
+    }
+}
+
+Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas) {
+    for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
+        // `enable_persistent_index` and `persistent_index_type` are deliberately NOT applied.
+        //
+        // A shared-data tablet has exactly one primary-key index implementation left, the cloud-native
+        // one: force_cloud_native_pk_persistent_index() rewrites every primary-key tablet's metadata to
+        // enabled + CLOUD_NATIVE as it is loaded, and LakePersistentIndex::_do_lake_load unconditionally
+        // builds a LakePersistentIndex. The two fields are therefore immutable in practice, and writing
+        // them here was the only way a value contradicting that could enter a live publish's metadata --
+        // this function's output is both persisted and cached (put_tablet_metadata /
+        // cache_tablet_metadata), neither of which normalizes.
+        //
+        // FE already rejects such a request (SchemaChangeHandler refuses to disable the persistent index
+        // or to select LOCAL for a primary-key table), so ignoring it costs nothing on a matched pair;
+        // for an older FE mid-rolling-upgrade, or a replayed txn log, the alter now no-ops instead of
+        // planting a LOCAL that later deletes the tablet's index. For a non-primary-key tablet both
+        // fields are inert -- every reader of them requires enabled + CLOUD_NATIVE, i.e. asks "is this a
+        // cloud-native primary-key index".
+        //
+        // A range-carrying update is a metadata-only trailing sort-key ADD: the schema arity grows by
+        // one or more and every tablet bound gains one trailing NULL sentinel per added column.
+        // Validate the change against the
+        // metadata as it stands (old schema + old range), archive the pre-alter schema without
+        // clearing existing history, then install the new schema and range. This path is independent
+        // of `lake_enable_alter_struct` and must not touch the clearing branch below.
+        if (alter_meta.has_tablet_range()) {
+            if (!alter_meta.has_tablet_schema()) {
+                return Status::Corruption("alter metadata carries a range without a tablet schema");
+            }
+            auto new_schema = TabletSchema::create(alter_meta.tablet_schema());
+            RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(alter_meta.tablet_range(), *new_schema));
+            RETURN_IF_ERROR(
+                    TabletRangeHelper::validate_range_transition(*metadata, *new_schema, alter_meta.tablet_range()));
+
+            // Archive the pre-alter schema (non-clearing) before installing the new one.
+            archive_current_schema_into_history(metadata);
+
+            metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
+            metadata->mutable_range()->CopyFrom(alter_meta.tablet_range());
         }
         // update tablet meta
         // 1. rowset_to_schema is empty, maybe upgrade from old version or first time to do fast ddl. So we will
         //    add the tablet schema before alter into historical schema.
         // 2. rowset_to_schema is not empty, no need to update historical schema because we historical schema already
         //    keep the tablet schema before alter.
-        if (alter_meta.has_tablet_schema()) {
+        else if (alter_meta.has_tablet_schema()) {
             VLOG(2) << "old schema: " << metadata->schema().DebugString()
                     << " new schema: " << alter_meta.tablet_schema().DebugString();
             // add/drop field for struct column is under testing, To avoid impacting the existing logic, add the
@@ -106,6 +165,13 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
                                      CompactionStrategyPB_Name(metadata->compaction_strategy()),
                                      CompactionStrategyPB_Name(alter_meta.compaction_strategy()), metadata->id());
             metadata->set_compaction_strategy(alter_meta.compaction_strategy());
+        }
+
+        if (alter_meta.has_flat_json_config()) {
+            LOG(INFO) << fmt::format("alter flat_json_config from version {} to version {} for tablet id: {}",
+                                     metadata->has_flat_json_config() ? metadata->flat_json_config().version() : 0,
+                                     alter_meta.flat_json_config().version(), metadata->id());
+            metadata->mutable_flat_json_config()->CopyFrom(alter_meta.flat_json_config());
         }
     }
     return Status::OK();
@@ -148,17 +214,7 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
               << new_schema->schema_version() << ", old schema id/version: " << old_schema.id() << "/"
               << old_schema.schema_version();
 
-    bool record_old_schema_in_history = false;
-    for (auto& rowset : tablet_meta->rowsets()) {
-        if (tablet_meta->rowset_to_schema().count(rowset.id()) <= 0) {
-            record_old_schema_in_history = true;
-            tablet_meta->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
-        }
-    }
-    if (record_old_schema_in_history && tablet_meta->historical_schemas().count(old_schema.id()) <= 0) {
-        auto& item = (*tablet_meta->mutable_historical_schemas())[old_schema.id()];
-        item.CopyFrom(old_schema);
-    }
+    archive_current_schema_into_history(tablet_meta.get());
     tablet_meta->mutable_schema()->Clear();
     new_schema->to_schema_pb(tablet_meta->mutable_schema());
     return Status::OK();
@@ -166,8 +222,10 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
 
 // Build rssid_remap for DCG application during replication.
 // Maps source rssid to target rssid based on which op_writes will actually be applied.
-// For PK tables: an op_write is applied when dels_size > 0 || num_rows > 0 || has_delete_predicate.
-// For Non-PK tables: an op_write is applied when has_rowset && (num_rows > 0 || has_delete_predicate).
+// The predicates below must stay identical to the ones the two appliers use to decide whether an
+// op_write carries anything -- they model the same target_id advance.
+// For PK tables: an op_write is applied when holds_rows || dels > 0 || has_delete_predicate.
+// For Non-PK tables: an op_write is applied when has_rowset && (holds_rows || has_delete_predicate).
 std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplication& op_replication,
                                                          uint32_t start_target_id, bool is_pk) {
     std::unordered_map<uint32_t, uint32_t> rssid_remap;
@@ -178,10 +236,10 @@ std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplic
         }
         bool included = false;
         if (is_pk) {
-            included = op_write.dels_meta_size() > 0 || op_write.rowset().num_rows() > 0 ||
+            included = rowset_holds_rows(op_write.rowset()) || op_write.dels_meta_size() > 0 ||
                        op_write.rowset().has_delete_predicate();
         } else {
-            included = op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate();
+            included = rowset_holds_rows(op_write.rowset()) || op_write.rowset().has_delete_predicate();
         }
         if (included) {
             uint32_t source_id = op_write.rowset().id();
@@ -228,6 +286,9 @@ void collect_dcg_orphan_files(const DeltaColumnGroupMetadataPB& old_dcg_meta,
             if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
+            if (i < dcg_ver.versions_size()) {
+                file_meta.set_version(dcg_ver.versions(i));
+            }
             metadata->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -250,6 +311,7 @@ void collect_idg_orphan_files(const IndexDeltaGroupMetadataPB& old_idg_meta,
             file_meta.set_name(entry.index_file());
             if (entry.has_file_size()) file_meta.set_size(entry.file_size());
             file_meta.set_shared(entry.shared_file());
+            file_meta.set_version(entry.version());
             metadata->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -304,6 +366,7 @@ public:
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
                 file_meta.set_shared(sstable.shared());
+                file_meta.set_version(sstable.generation_version());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             _metadata->clear_sstable_meta();
@@ -348,14 +411,14 @@ public:
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
         if (log.has_op_add_index()) {
-            _builder.apply_add_index(log.op_add_index());
+            RETURN_IF_ERROR(_builder.apply_add_index(log.op_add_index()));
         }
         if (log.has_op_drop_index()) {
             _builder.apply_drop_index(log.op_drop_index());
         }
         if (log.has_op_alter_metadata()) {
             DCHECK_EQ(_base_version + 1, _new_version);
-            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
+            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata());
         }
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication(), log.txn_id()));
@@ -430,12 +493,11 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
-        // local persistent index will update index version, so we need to load first
-        // still need prepare primary index even when this iteration produced no
-        // rowset changes (legacy "empty compaction" or admin no-op publish)
-        if (_index_entry == nullptr &&
-            (_has_no_op_apply || (_metadata->enable_persistent_index() &&
-                                  _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
+        // Still need to prepare the primary index even when this iteration produced no rowset changes
+        // (legacy "empty compaction" or admin no-op publish). The old companion condition -- a LOCAL
+        // persistent index, which had to be loaded so that its index version could be updated -- went
+        // away with the LOCAL implementation itself.
+        if (_index_entry == nullptr && _has_no_op_apply) {
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -446,7 +508,7 @@ public:
         // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         if (_index_entry != nullptr) {
-            RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
+            RETURN_IF_ERROR(_index_entry->value().commit(&_builder));
             _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
             // Record publish-phase SST flush stats
             if (config::enable_tablet_write_log) {
@@ -536,7 +598,11 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        if (op_write.dels_meta_size() == 0 && op_write.rowset().num_rows() == 0 &&
+        // Ask the segments, not just the rowset-level count: a cross publish apportions that count
+        // across the siblings, so a rowset whose segments hold this tablet's rows can arrive with
+        // num_rows == 0, and skipping on it drops those segments -- the rows are gone while the
+        // transaction reports success. See rowset_holds_rows.
+        if (!rowset_holds_rows(op_write.rowset()) && op_write.dels_meta_size() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
@@ -630,7 +696,12 @@ private:
         // Cleanup orphan lcrm files from merged large rowset split subtasks
         // These files are no longer valid after merging (segment IDs changed)
         for (const auto& lcrm_file : op_parallel.orphan_lcrm_files()) {
-            _metadata->add_orphan_files()->CopyFrom(lcrm_file);
+            auto* added = _metadata->add_orphan_files();
+            added->CopyFrom(lcrm_file);
+            // Transient mapper file produced and orphaned by this compaction, never referenced by
+            // visible metadata; stamp its creation version so vacuum can reclaim it rather than
+            // over-retaining it under a covering snapshot.
+            added->set_version(_new_version);
         }
 
         return Status::OK();
@@ -757,6 +828,10 @@ private:
                 }
                 for (auto&& old_rowset : old_rowsets) {
                     if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        // Drop the delete_predicate before archiving into compaction_inputs; it is
+                        // consumed only by vacuum/file cleanup, never by readers, so it is pure
+                        // metadata bloat here (same rationale as the compaction archival paths).
+                        old_rowset.clear_delete_predicate();
                         _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
                     }
                 }
@@ -787,6 +862,11 @@ private:
                 apply_replication_dcg_meta(op_replication, old_next_rowset_id, _metadata.get());
                 _metadata->set_next_rowset_id(new_next_rowset_id);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+                // Drop delete_predicate on the archived inputs; compaction_inputs is consumed only
+                // by vacuum/file cleanup, never by readers, so the predicate is pure metadata bloat.
+                for (auto& archived : *_metadata->mutable_compaction_inputs()) {
+                    archived.clear_delete_predicate();
+                }
             }
 
             _metadata->set_cumulative_point(0);
@@ -820,6 +900,7 @@ private:
                 file_meta.set_name(file.name());
                 file_meta.set_size(file.size());
                 file_meta.set_shared(file.shared());
+                file_meta.set_version(version);
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             // Clear sstable_meta and add to orphan files.
@@ -829,6 +910,7 @@ private:
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
                 file_meta.set_shared(sstable.shared());
+                file_meta.set_version(sstable.generation_version());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
@@ -853,7 +935,7 @@ private:
     int64_t _new_version{0};
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
-    DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
+    DynamicCache<uint64_t, LakePersistentIndex>::Entry* _index_entry{nullptr};
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
@@ -899,7 +981,7 @@ public:
             // TabletMetadata; construct a transient builder scoped to this log.
             MetaFileBuilder builder(_tablet, _metadata);
             if (log.has_op_add_index()) {
-                builder.apply_add_index(log.op_add_index());
+                RETURN_IF_ERROR(builder.apply_add_index(log.op_add_index()));
             }
             if (log.has_op_drop_index()) {
                 builder.apply_drop_index(log.op_drop_index());
@@ -909,7 +991,7 @@ public:
             RETURN_IF_ERROR(apply_replication_log(log.op_replication()));
         }
         if (log.has_op_alter_metadata()) {
-            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
+            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata());
         }
         return Status::OK();
     }
@@ -1070,7 +1152,10 @@ private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
         RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
-        if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
+        // Ask the segments too -- see rowset_holds_rows: num_rows is apportioned per sibling on a
+        // cross publish and cannot be the only witness that the rowset exists.
+        if (op_write.has_rowset() &&
+            (rowset_holds_rows(op_write.rowset()) || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());
@@ -1171,9 +1256,13 @@ private:
         const auto end_input_pos = pre_input_pos + 1;
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
             if (iter != last_input_pos) {
+                // Drop the delete_predicate before archiving into compaction_inputs; it is consumed
+                // only by vacuum/file cleanup, never by readers, so it is pure metadata bloat here.
+                (*iter).clear_delete_predicate();
                 _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
             } else {
                 // might be a partial compaction, use real last input rowset
+                last_input_rowset.clear_delete_predicate();
                 _metadata->mutable_compaction_inputs()->Add(std::move(last_input_rowset));
             }
         }
@@ -1337,6 +1426,10 @@ private:
                 }
                 for (auto&& old_rowset : old_rowsets) {
                     if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        // Drop the delete_predicate before archiving into compaction_inputs; it is
+                        // consumed only by vacuum/file cleanup, never by readers, so it is pure
+                        // metadata bloat here (same rationale as the compaction archival paths).
+                        old_rowset.clear_delete_predicate();
                         _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
                     }
                 }
@@ -1348,6 +1441,11 @@ private:
                 }
                 apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+                // Drop delete_predicate on the archived inputs; compaction_inputs is consumed only
+                // by vacuum/file cleanup, never by readers, so the predicate is pure metadata bloat.
+                for (auto& archived : *_metadata->mutable_compaction_inputs()) {
+                    archived.clear_delete_predicate();
+                }
             }
             std::unordered_set<std::string> new_referenced_files;
             for (const auto& [_, dcg] : _metadata->dcg_meta().dcgs()) {

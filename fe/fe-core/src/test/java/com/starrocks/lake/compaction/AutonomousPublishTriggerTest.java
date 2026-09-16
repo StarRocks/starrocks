@@ -200,7 +200,7 @@ public class AutonomousPublishTriggerTest {
         // No real DB/Table fixtures here — we just verify the field round-trips.
         // This keeps Phase 3.1 changes covered even without the full job lifecycle.
         try {
-            CompactionJob job = new CompactionJob(null, null, null, 1L, false, null, "wh");
+            CompactionJob job = new CompactionJob(null, null, null, 1L, false, null, "wh", null);
             // Constructor will NPE on null db; skip if it happens. We only care about
             // the type accessor being wired.
         } catch (NullPointerException e) {

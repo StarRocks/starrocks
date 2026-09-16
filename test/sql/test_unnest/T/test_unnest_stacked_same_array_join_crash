@@ -1,0 +1,42 @@
+-- name: test_unnest_stacked_same_array_join_crash
+-- Repro for the stacked-UNNEST access-group overwrite (PR #75012, xhumanoid:fix-merge-unnest-planner).
+-- Two UNNESTs on the SAME array column need DIFFERENT subfields: a() reads .name, b() reads .value.
+-- Without merging access groups in setUnnest, the second UNNEST's hard put overwrites the first's
+-- access path, so the scan prunes a still-needed subfield. A shuffle JOIN then copies the array column
+-- whose slot type was narrowed (1 field) while the physical struct is full (2 fields), aborting in
+-- StructColumn::append (_fields.size() == fields().size(), 1 vs 2). Merging the access groups keeps both
+-- subfields so the scan stays full and the join copy is consistent.
+drop database if exists test_unnest_stacked_same_array_join_crash;
+create database test_unnest_stacked_same_array_join_crash;
+use test_unnest_stacked_same_array_join_crash;
+
+create table t_evt(
+  transaction_uuid varchar(64) null,
+  request_attributes array<struct<name varchar(32), value varchar(32)>> null,
+  ts datetime null
+) duplicate key(transaction_uuid)
+distributed by hash(transaction_uuid) buckets 3 properties("replication_num"="1");
+
+create table t_dim(transaction_uuid varchar(64) null, dim int)
+  duplicate key(transaction_uuid) distributed by hash(dim) buckets 3 properties("replication_num"="1");
+
+insert into t_evt
+select concat('u', generate_series % 300), [row('n1','v1'), row('n2','v2')], '2026-02-02 03:04:05'
+from table(generate_series(1, 3000));
+
+insert into t_dim
+select concat('u', generate_series % 300), generate_series from table(generate_series(1, 3000));
+
+set broadcast_row_limit = 0;
+set enable_prune_complex_types_in_unnest = true;
+
+-- a() needs request_attributes.name, b() needs request_attributes.value; the scan must keep BOTH.
+-- Before the fix this aborts the BE; after the fix it returns 30000.
+select count(*)
+from t_evt e
+join t_dim d on e.transaction_uuid = d.transaction_uuid
+cross join unnest(e.request_attributes) as a(s)
+cross join unnest(e.request_attributes) as b(s2)
+where a.s.name = 'n1' and b.s2.value = 'v2';
+
+drop database test_unnest_stacked_same_array_join_crash;

@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "arrow/array.h"
 #include "arrow/type.h"

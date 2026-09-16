@@ -118,16 +118,27 @@ Usage: $0 <options>
                         build Backend without the benchgen-backed benchmark connector
      --without-connector-elasticsearch
                         build Backend without the Elasticsearch connector
+     --without-connector-jdbc
+                        build Backend without the JDBC connector
      --without-connector-mysql
                         build Backend without the MySQL connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
+     --with-glibc-compat
+                        build Backend with the glibc compatibility shim, so the binary also
+                        runs on hosts whose glibc is older than the build image's, and check
+                        the produced artifacts against that floor (default without).
+                        Floors: GLIBC_ABI_MAX (default 2.35), GLIBCXX_ABI_MAX (default 3.4.30)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      --with-thin-archive
                         build Backend with thin static archives to avoid large-archive ranlib failures
      --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
+     --without-paimon-cpp
+                        build Backend without the paimon-cpp native reader and its
+                        shared libraries (default with paimon-cpp; forced off on macOS,
+                        where thirdparty does not build paimon-cpp)
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -177,15 +188,18 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-bench' \
   -l 'without-connector-benchmark' \
   -l 'without-connector-elasticsearch' \
+  -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
   -l 'with-dynamic' \
   -l 'module' \
   -l 'with-clang-tidy' \
+  -l 'with-glibc-compat' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'with-thin-archive' \
   -l 'without-pch' \
   -l 'without-starcache' \
+  -l 'without-paimon-cpp' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -217,8 +231,10 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
 WITH_CLANG_TIDY=OFF
+WITH_GLIBC_COMPAT=OFF
 WITH_COMPRESS=ON
 THIN_ARCHIVE=OFF
 if starrocks_is_darwin; then
@@ -227,6 +243,7 @@ else
     WITH_STARCACHE=ON
 fi
 WITH_PCH=ON
+WITH_PAIMON_CPP=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -342,14 +359,17 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+            --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
+            --with-glibc-compat) WITH_GLIBC_COMPAT=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --configure-only) CONFIGURE_ONLY=ON; shift ;;
@@ -371,6 +391,11 @@ fi
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
 fi
 
 if [[ ${HELP} -eq 1 ]]; then
@@ -408,11 +433,14 @@ echo "Get params:
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CONNECTOR_BENCHMARK    -- $WITH_CONNECTOR_BENCHMARK
     WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
+    WITH_CONNECTOR_JDBC         -- $WITH_CONNECTOR_JDBC
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
+    WITH_GLIBC_COMPAT           -- $WITH_GLIBC_COMPAT
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
+    WITH_PAIMON_CPP             -- $WITH_PAIMON_CPP
     WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
@@ -559,12 +587,15 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+                  -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC}            \
                   -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
+                  -DWITH_GLIBC_COMPAT=${WITH_GLIBC_COMPAT}              \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+                  -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP}                  \
                   -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
@@ -667,6 +698,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/failpoint.btm ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -745,6 +777,17 @@ if [ ${BUILD_BE} -eq 1 ]; then
     elif [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ]]; then
         mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     fi
+    if [ "${WITH_PAIMON_CPP}" == "ON" ]; then
+        # All paimon-cpp libraries live in be/lib/paimon-cpp-lib
+        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib/libpaimon*.so*)
+        if (( ${#paimon_cpp_libs[@]} == 0 )); then
+            echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp, run thirdparty/build-thirdparty.sh paimon_cpp first"
+            exit 1
+        fi
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib
+        cp -r -p ${STARROCKS_HOME}/be/output/lib/paimon-cpp-lib/. ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+        cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+    fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     fi
@@ -789,7 +832,22 @@ if [ ${BUILD_BE} -eq 1 ]; then
         objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
         strip --strip-debug $BE_BIN
         objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
+        # The thirdparty libpaimon*.so ship with debug info (>1 GB unstripped); strip them in place.
+        for so in paimon-cpp-lib/libpaimon*.so; do
+            [[ -f ${so} ]] || continue
+            echo "Strip $so debug symbol ..."
+            strip --strip-debug $so
+        done
         popd &>/dev/null
+    fi
+
+    # The dev-env image's glibc decides which symbol versions the linker stamps onto our
+    # references, so building in a newer image silently yields binaries that cannot even
+    # load on an older host. be/src/common/glibc_compat.c removes those references; this
+    # verifies it actually did, on the stripped artifacts that ship.
+    if [ "${WITH_GLIBC_COMPAT}" == "ON" ]; then
+        echo "Checking the ABI floor of the Backend artifacts"
+        ${STARROCKS_HOME}/build-support/check_glibc_abi.sh ${STARROCKS_OUTPUT}/be
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
 
@@ -817,6 +875,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/fluss-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/starrocks-fluss-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/starrocks-fluss-reader.jar ${STARROCKS_OUTPUT}/be/lib/fluss-reader-lib
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/kudu-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib

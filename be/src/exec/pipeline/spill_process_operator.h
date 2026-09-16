@@ -18,9 +18,9 @@
 #include <optional>
 
 #include "compute_env/spill/spiller.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 // operator for process spill task

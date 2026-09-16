@@ -20,8 +20,8 @@
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {

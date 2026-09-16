@@ -1,0 +1,5 @@
+position: 50
+label: 'Loading Tools'
+description: 'Integrations with more loading tools'
+collapsible: true
+collapsed: true

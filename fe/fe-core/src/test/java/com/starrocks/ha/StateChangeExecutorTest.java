@@ -28,17 +28,21 @@ public class StateChangeExecutorTest {
 
     private class StateChangeExecutionTest implements StateChangeExecution {
         private FrontendNodeType type;
+
         @Override
         public void transferToLeader() {
             type = FrontendNodeType.LEADER;
         }
+
         @Override
         public void transferToNonLeader(FrontendNodeType newType) {
             type = newType;
         }
+
         public FrontendNodeType getType() {
             return type;
         }
+
         public void setType(FrontendNodeType newType) {
             type = newType;
         }
@@ -102,5 +106,8 @@ public class StateChangeExecutorTest {
 
         // OBSERVER -> UNKNOWN
         runOne("StateChangeExecutor_observerTOunknown", FrontendNodeType.OBSERVER, FrontendNodeType.UNKNOWN);
+
+        // LEADER -> FOLLOWER
+        runOne("StateChangeExecutor_leaderTOfollower", FrontendNodeType.LEADER, FrontendNodeType.FOLLOWER);
     }
 }

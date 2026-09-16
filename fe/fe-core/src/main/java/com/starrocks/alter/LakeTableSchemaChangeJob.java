@@ -47,6 +47,8 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
@@ -158,7 +160,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private List<Integer> sortKeyUniqueIds;
 
     // save all schema change tasks
-    private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
@@ -171,6 +174,24 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     // for deserialization
     public LakeTableSchemaChangeJob() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-verifies the watershed and re-sends every AlterReplicaTask.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Start from an empty batch: the WAITING_TXN handler APPENDS to it (double-add hazard),
+        // and getInfo dereferences the field, so fresh-empty rather than null. No AgentTaskQueue
+        // cleanup needed - the demotion drain (abandonInFlightAgentTasks) already emptied the
+        // queue before this hook runs. watershedTxnId/Gtid stay - they are durable with the
+        // WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
+        schemaChangeBatchTask = new AgentBatchTask();
+        createReplicaLatch = null;
+        waitingCreatingReplica.set(false);
+        isCancelling.set(false);
     }
 
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
@@ -270,7 +291,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         indexMetaIdToSchema.put(shadowIdxMetaId, shadowIdxSchema);
     }
 
-    // REQUIRE: has acquired the exclusive lock of database
+    // REQUIRE: has acquired the exclusive (WRITE) lock of the table
     void addShadowIndexToCatalog(@NotNull OlapTable table, long visibleTxnId) {
         Preconditions.checkState(visibleTxnId != -1);
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -362,20 +383,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @VisibleForTesting
-    public static long getNextTransactionId() {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-    }
-
-    @VisibleForTesting
-    public static long peekNextTransactionId() {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
-    }
-
-    public static long getNextGtid() {
-        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
-    }
-
-    @VisibleForTesting
     public void setIsCancelling(boolean isCancelling) {
         this.isCancelling.set(isCancelling);
     }
@@ -402,10 +409,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
         boolean lightWeight;
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            lightWeight = table.isLightWeightTabletCreation();
+            // Light-weight's on-demand shadow schema reads the table's index/BF set, written back only at job finish.
+            lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange;
 
             // disable tablet creation optimaization to avoid overwriting files with the same name.
             if (table.isFileBundling()) {
@@ -513,8 +521,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         // Add shadow indexes to table.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
             watershedGtid = getNextGtid();
@@ -563,8 +571,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
 
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             Map<Long, TTabletSchema> indexToBaseTabletReadSchema = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -625,7 +634,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                         col.getName(), col.getType(), col.isAllowNull()));
                             }
 
-                            TableName tableName = new TableName(db.getFullName(), table.getName());
+                            TableName tableName = new TableName(database.getFullName(), table.getName());
 
                             // sourceScope must be set null tableName for its Field in RelationFields
                             // because we hope slotRef can not be resolved in sourceScope but can be
@@ -643,7 +652,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             if (ConnectContext.get() == null) {
                                 LOG.warn("Connect Context is null when add/modify generated column");
                             } else {
-                                ConnectContext.get().setDatabase(db.getFullName());
+                                ConnectContext.get().setDatabase(database.getFullName());
                             }
 
                             RewriteAliasVisitor visitor =
@@ -748,8 +757,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTableOrThrow();
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -788,8 +797,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         // Replace the current index with shadow index.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
             if (table == null) {
                 LOG.info("database or table been dropped while doing schema change job {}", jobId);
                 return;
@@ -808,6 +817,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             });
         }
 
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
+        }
+
         if (span != null) {
             span.end();
         }
@@ -816,8 +830,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     // Note: throws AlterCancelException iff the database or table has been dropped.
     boolean readyToPublishVersion() throws AlterCancelException {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
             isFileBundling = table.isFileBundling();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -868,8 +882,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 // For indexes whose schema have not changed, we still need to upgrade the version
                 List<MaterializedIndex> originMaterializedIndices;
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
-                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-                    OlapTable table = getTableOrThrow(db, tableId);
+                try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                    OlapTable table = getTableOrThrow();
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     originMaterializedIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                 }
@@ -937,12 +951,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             List<Tablet> regularTablets = new ArrayList<>();
-            try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-                // Use the null-returning getTable (not getTableOrThrow) so a
+            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                // Use the null-returning getTable() (not getTableOrThrow) so a
                 // concurrent db/table drop is a benign skip rather than a
                 // checked AlterCancelException — there is nothing to advance if
                 // the table is gone.
-                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+                OlapTable table = getTable();
                 if (table == null) {
                     continue;
                 }
@@ -1005,13 +1019,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     boolean tableHasBeenDropped() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            return db == null || db.getTable(tableId) == null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            return getTable() == null;
         }
     }
 
     // Update each Partition's nextVersion.
-    // The caller must have acquired the database's exclusive lock.
+    // The caller must have acquired the table's exclusive (WRITE) lock.
     void updateNextVersion(@NotNull OlapTable table) {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -1064,8 +1078,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
             if (table == null) {
                 return; // do nothing if the table has been dropped.
             }
@@ -1301,8 +1315,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.finishedTimeMs = System.currentTimeMillis();
 
         persistStateChange(this, JobState.CANCELLED, () -> {
-            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+                OlapTable table = getTable();
                 if (table != null) {
                     if (advanceVersionForForce) {
                         // We just no-op published tablet_metadata at commitVersion

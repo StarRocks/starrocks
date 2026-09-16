@@ -9,13 +9,22 @@ description: "使用 Docker 开发环境镜像编译 StarRocks 源代码。"
 
 ## 概述
 
-StarRocks 提供 Ubuntu 22.04 和 CentOS 7.9 的开发环境镜像。通过该镜像，您可以在 Docker 容器中编译 StarRocks。
+StarRocks 提供 Ubuntu（22.04 和 24.04）、CentOS 7.9 和 Rocky Linux 9 的开发环境镜像。通过该镜像，您可以在 Docker 容器中编译 StarRocks。
+
+:::note
+
+自 v4.2 起，开发环境有如下变化：
+
+- CentOS 7 已于 2024 年 6 月 30 日停止维护（End-of-Life），其编译发行版停止支持，并由 Rocky Linux 9 取代。CentOS 7 镜像仅适用于 v4.1 及更早版本。
+- Ubuntu 开发环境由 Ubuntu 22.04（v4.1 及更早版本）升级为 Ubuntu 24.04（v4.2 及更高版本）。镜像名称 `starrocks/dev-env-ubuntu` 保持不变。
+
+:::
 
 ### StarRocks 版本和开发环境镜像
 
 StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/starrocks) 上提供的不同开发环境镜像。
 
-- Ubuntu 22.04:
+- Ubuntu（v4.1 及更早版本为 22.04，v4.2 及更高版本为 24.04）:
 
   | **分支名** | **镜像名**                          |
   | ---------- | ----------------------------------- |
@@ -24,14 +33,19 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
   | branch-4.0 | starrocks/dev-env-ubuntu:4.0-latest |
   | branch-3.5 | starrocks/dev-env-ubuntu:3.5-latest |
 
-- For CentOS 7.9:
+- CentOS 7.9（v4.1 及更早版本；自 v4.2 起停止支持）:
 
   | **分支名** | **镜像名**                           |
   | ---------- | ------------------------------------ |
-  | main       | starrocks/dev-env-centos7:latest     |
   | branch-4.1 | starrocks/dev-env-centos7:4.1-latest |
   | branch-4.0 | starrocks/dev-env-centos7:4.0-latest |
   | branch-3.5 | starrocks/dev-env-centos7:3.5-latest |
+
+- Rocky Linux 9（v4.2 及更高版本）:
+
+  | **分支名** | **镜像名**                      |
+  | ---------- | ------------------------------- |
+  | main       | starrocks/dev-env-rocky9:latest |
 
 ## 前提条件
 
@@ -43,7 +57,7 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
 
 - **软件**
 
-  - 机器必须运行 Ubuntu 22.04 或 CentOS 7.9
+  - 机器必须运行 Ubuntu 22.04 或 24.04、CentOS 7.9 或 Rocky Linux 9
   - 机器必须安装 Docker, docker 版本至少为 v20.10.10
 
 ## 第一步：下载镜像

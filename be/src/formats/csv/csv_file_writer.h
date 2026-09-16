@@ -71,7 +71,7 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult close() override;
+    FileCommitResult close() override;
 
 private:
     const std::string _location;

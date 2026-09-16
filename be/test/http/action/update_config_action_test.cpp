@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gflags/gflags.h>
 #include <gtest/gtest.h>
+
+#include <iterator>
+#include <memory>
+#include <string>
 
 #include "agent/agent_server.h"
 #include "base/testutil/assert.h"
@@ -22,21 +27,39 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_staros_worker_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/configbase.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
+#include "platform/platform_env.h"
+#include "platform/store_path.h"
+#include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/persistent_index_load_executor.h"
+#include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/update_manager.h"
+
+#ifdef USE_STAROS
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+#endif
 
 namespace starrocks {
 
@@ -47,14 +70,23 @@ public:
 
     void SetUp() override {
         ConfigUpdateRegistry::instance()->TEST_reset();
-        _global_env = GlobalEnv::GetInstance();
-        register_config_update_hooks(ExecEnv::GetInstance(), *_global_env);
+        _runtime_env = RuntimeEnv::GetInstance();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, RuntimeEnv::GetInstance()->diagnose_daemon(),
+                                                             PlatformEnv::GetInstance()->brpc_stub_cache());
+        ASSERT_OK(_load_channel_mgr->init(_runtime_env->load_mem_tracker()));
+        register_config_update_hooks(ExecEnv::GetInstance(), *_runtime_env, _load_channel_mgr.get(), nullptr);
         ConfigUpdateRegistry::instance()->set_ready();
     }
-    void TearDown() override { ConfigUpdateRegistry::instance()->TEST_reset(); }
+    void TearDown() override {
+        ConfigUpdateRegistry::instance()->TEST_reset();
+        if (_load_channel_mgr != nullptr) {
+            _load_channel_mgr->close();
+        }
+    }
 
 protected:
-    GlobalEnv* _global_env = nullptr;
+    RuntimeEnv* _runtime_env = nullptr;
+    std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
 };
 
 TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
@@ -110,7 +142,7 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
 TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_count) {
     auto st = ConfigUpdateRegistry::instance()->update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
-    ASSERT_EQ(8, _global_env->put_aggregate_metadata_thread_pool()->max_threads());
+    ASSERT_EQ(8, _runtime_env->put_aggregate_metadata_thread_pool()->max_threads());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_tablet_meta_info_worker_count) {
@@ -133,7 +165,9 @@ TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path) {
     auto st = ConfigUpdateRegistry::instance()->update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
 
-    int expected_max_threads = static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * 4;
+    const auto* store_path_registry = ExecEnv::GetInstance()->platform_services().store_path_registry;
+    ASSERT_NE(nullptr, store_path_registry);
+    int expected_max_threads = static_cast<int>(store_path_registry->store_path_count()) * 4;
     expected_max_threads = std::max(expected_max_threads, 2);
     ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
 }
@@ -151,8 +185,59 @@ TEST_F(ConfigUpdateHooksTest, test_update_parallel_clone_task_per_path_with_miss
     CHECK_OK(st);
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_lake_schema_change_pool_size) {
+    auto* thread_pool = StorageEngine::instance()->lake_schema_change_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+
+    const int original_alter_tablet_worker_count = config::alter_tablet_worker_count;
+    const int original_lake_schema_change_parallelism = config::lake_schema_change_per_tablet_parallelism;
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count",
+                                                                 std::to_string(original_alter_tablet_worker_count)));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config(
+                "lake_schema_change_per_tablet_parallelism", std::to_string(original_lake_schema_change_parallelism)));
+    });
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("lake_schema_change_per_tablet_parallelism", "3");
+    CHECK_OK(st);
+    ASSERT_EQ(std::max(1, config::alter_tablet_worker_count * 3), thread_pool->max_threads());
+
+    st = ConfigUpdateRegistry::instance()->update_config("alter_tablet_worker_count", "2");
+    CHECK_OK(st);
+    ASSERT_EQ(6, thread_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_storage_cleanup_worker_count) {
+    auto* storage_cleanup_executor = StorageEngine::instance()->storage_cleanup_executor();
+    ASSERT_NE(nullptr, storage_cleanup_executor);
+    auto* storage_cleanup_pool = storage_cleanup_executor->thread_pool();
+    ASSERT_NE(nullptr, storage_cleanup_pool);
+
+    auto* drop_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+    ASSERT_NE(nullptr, drop_pool);
+    const auto original_drop_pool_max_threads = drop_pool->max_threads();
+    const auto original_drop_tablet_worker_count = config::drop_tablet_worker_count;
+    const auto original_storage_cleanup_worker_count = config::storage_cleanup_worker_count;
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("drop_tablet_worker_count",
+                                                                 std::to_string(original_drop_tablet_worker_count)));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config(
+                "storage_cleanup_worker_count", std::to_string(original_storage_cleanup_worker_count)));
+    });
+
+    auto st = ConfigUpdateRegistry::instance()->update_config("storage_cleanup_worker_count", "4");
+    CHECK_OK(st);
+    ASSERT_EQ(4, storage_cleanup_pool->max_threads());
+    ASSERT_EQ(original_drop_pool_max_threads, drop_pool->max_threads());
+
+    st = ConfigUpdateRegistry::instance()->update_config("drop_tablet_worker_count", "2");
+    CHECK_OK(st);
+    ASSERT_EQ(2, drop_pool->max_threads());
+    ASSERT_EQ(4, storage_cleanup_pool->max_threads());
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
-    auto* thread_pool = _global_env->lake_metadata_fetch_thread_pool();
+    auto* thread_pool = _runtime_env->lake_metadata_fetch_thread_pool();
     ASSERT_NE(nullptr, thread_pool);
     ASSERT_EQ(std::max(1, config::lake_metadata_fetch_thread_count), thread_pool->max_threads());
 
@@ -166,24 +251,21 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
-#ifndef __APPLE__
-// Re-registers the hooks with a null exec_env to verify the
-// `vector_query_cache_capacity` callback short-circuits to InternalError instead
-// of dereferencing exec_env. The override of SetUp's registration is OK because
-// TearDown's TEST_reset() restores a clean registry for the next test.
-TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_null_exec_env_returns_internal_error) {
-    ConfigUpdateRegistry::instance()->TEST_reset();
-    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
-    ConfigUpdateRegistry::instance()->set_ready();
-
+#ifdef WITH_TENANN
+TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_uninitialized_cache_returns_internal_error) {
+    auto* storage_env = StorageEnv::GetInstance();
+    storage_env->destroy_vector_index_cache();
     auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");
     EXPECT_FALSE(st.ok()) << st.to_string();
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+
+    ASSERT_OK(storage_env->init_vector_index_cache(RuntimeEnv::GetInstance()->process_mem_limit(),
+                                                   RuntimeEnv::GetInstance()->vector_index_mem_tracker()));
 }
 
 TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cache) {
-    auto* cache = ExecEnv::GetInstance()->vector_index_cache();
-    ASSERT_NE(cache, nullptr) << "test_main must initialize ExecEnv with vector_index_cache";
+    auto* cache = StorageEnv::GetInstance()->vector_index_cache();
+    ASSERT_NE(cache, nullptr) << "test_main must initialize StorageEnv with vector_index_cache";
     const std::string saved = config::vector_query_cache_capacity;
 
     // Absolute bytes.
@@ -203,5 +285,98 @@ TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cac
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", saved));
 }
 #endif
+
+#ifdef USE_STAROS
+
+namespace {
+
+struct StarletUploadThresholdMapping {
+    const char* be_config;
+    int64_t* flag;
+    int64_t* config_value;
+    int64_t valid_value;
+};
+
+// Distinct valid_value per row, so deleting one UPDATE_STARLET_CONFIG line or swapping two fails.
+const StarletUploadThresholdMapping kStarletUploadThresholdMappings[] = {
+        {"starlet_fslib_s3_max_single_part_size", &FLAGS_fslib_s3_max_single_part_size,
+         &config::starlet_fslib_s3_max_single_part_size, 21000000},
+        {"starlet_fslib_s3_min_upload_part_size", &FLAGS_fslib_s3_min_upload_part_size,
+         &config::starlet_fslib_s3_min_upload_part_size, 22000000},
+        {"starlet_fslib_gcs_max_single_part_size", &FLAGS_fslib_gs_max_single_part_size,
+         &config::starlet_fslib_gcs_max_single_part_size, 23000000},
+        {"starlet_fslib_azure_storage_max_single_part_size", &FLAGS_fslib_azure_storage_max_single_part_size,
+         &config::starlet_fslib_azure_storage_max_single_part_size, 24000000},
+        {"starlet_fslib_azure_storage_min_upload_part_size", &FLAGS_fslib_azure_storage_min_upload_part_size,
+         &config::starlet_fslib_azure_storage_min_upload_part_size, 25000000},
+};
+
+constexpr size_t kStarletUploadThresholdMappingCount = std::size(kStarletUploadThresholdMappings);
+
+// Saves the BE configs and every starlet gflag on construction and puts them back on destruction.
+// Restores through config::set_config, never by assigning the config global directly:
+// Field::set_value maintains the _current_set_val/_last_set_val pair that Field::rollback() reads,
+// so a raw assignment would leave that metadata pointing at this test's value and a later rejected
+// update in another test could roll back to it.
+class ScopedStarletUploadThresholdConfigs {
+public:
+    ScopedStarletUploadThresholdConfigs() {
+        for (size_t i = 0; i < kStarletUploadThresholdMappingCount; ++i) {
+            _saved[i] = *kStarletUploadThresholdMappings[i].config_value;
+        }
+    }
+
+    ~ScopedStarletUploadThresholdConfigs() {
+        for (size_t i = 0; i < kStarletUploadThresholdMappingCount; ++i) {
+            auto st = config::set_config(kStarletUploadThresholdMappings[i].be_config, std::to_string(_saved[i]));
+            EXPECT_TRUE(st.ok()) << kStarletUploadThresholdMappings[i].be_config << ": " << st;
+        }
+    }
+
+private:
+    int64_t _saved[kStarletUploadThresholdMappingCount];
+    // Restores every gflag it saw at construction. The destructor body above always completes before
+    // any member is destroyed, so the config restore runs first and this undoes the gflag side after.
+    gflags::FlagSaver _flag_saver;
+};
+
+} // namespace
+
+TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs) {
+    ScopedStarletUploadThresholdConfigs scoped_configs;
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    for (const auto& mapping : kStarletUploadThresholdMappings) {
+        // ASSERT_OK is a do/while macro and cannot take a trailing `<< message`, so capture the
+        // status and use a streamable native assertion instead.
+        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
+        EXPECT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
+    }
+}
+
+// starlet's validator rejects non-positive values; the registry must roll the BE config back.
+// Covers all five mappings, with both 0 and a negative value.
+TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non_positive) {
+    ScopedStarletUploadThresholdConfigs scoped_configs;
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    for (const auto& mapping : kStarletUploadThresholdMappings) {
+        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
+        ASSERT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
+
+        for (const char* bad_value : {"0", "-1"}) {
+            EXPECT_FALSE(registry->update_config(mapping.be_config, bad_value).ok())
+                    << mapping.be_config << " should reject " << bad_value;
+            EXPECT_EQ(mapping.valid_value, *mapping.flag)
+                    << mapping.be_config << " flag changed on rejected " << bad_value;
+            EXPECT_EQ(mapping.valid_value, *mapping.config_value)
+                    << mapping.be_config << " config not rolled back on rejected " << bad_value;
+        }
+    }
+}
+
+#endif // USE_STAROS
 
 } // namespace starrocks

@@ -176,6 +176,14 @@ public class FragmentInstanceExecState {
         }
     }
 
+    // Mark this instance EXECUTING for a BE-local pipeline load (classic sync stream load /
+    // routine load) whose fragment runs in-process on the receiving BE WITHOUT an FE-driven
+    // deploy. Without this the state stays CREATED and the BE exec-state/profile report is
+    // rejected as a duplicate, so the load profile is never collected.
+    public void markLocalExecuting() {
+        transitionState(State.CREATED, State.EXECUTING);
+    }
+
     public void changeStateIntoDeploying() {
         transitionState(State.CREATED, State.DEPLOYING);
     }

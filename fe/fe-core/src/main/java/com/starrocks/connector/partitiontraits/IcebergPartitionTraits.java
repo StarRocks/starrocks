@@ -25,6 +25,7 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
@@ -36,7 +37,9 @@ import org.apache.iceberg.Snapshot;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class IcebergPartitionTraits extends DefaultTraits {
@@ -66,6 +69,62 @@ public class IcebergPartitionTraits extends DefaultTraits {
         }
         return GlobalStateMgr.getCurrentState().getMetadataMgr().
                 getPartitions(icebergTable.getCatalogName(), table, partitionNames);
+    }
+
+    // record_count from the PARTITIONS table is pre-delete (live data-file rows), while a MOR read returns
+    // post-delete rows. For POSITION deletes (exactly one row removed per record) a small delete fraction
+    // keeps record_count a trustworthy live-row total; above this fraction the difference can no longer be
+    // attributed to truncation vs. deletes, so the partition falls back to raw sample. EQUALITY deletes are
+    // handled separately: their record count is not a row count, so the ratio is meaningless there.
+    private static final double MAX_DELETE_RATIO_FOR_ROW_COUNT = 0.1;
+
+    @Override
+    public Map<String, Long> getPartitionRowCounts(List<String> partitionNames) {
+        // The Iceberg PARTITIONS metadata table carries per-partition row/delete counts, so one metadata scan
+        // yields all totals without opening data files (see IcebergCatalog#getPartitions).
+        Map<String, Long> result = new HashMap<>();
+        List<PartitionInfo> partitions = getPartitions(partitionNames);
+        for (int i = 0; i < partitionNames.size() && i < partitions.size(); i++) {
+            PartitionInfo info = partitions.get(i);
+            if (!(info instanceof Partition)) {
+                continue;
+            }
+            Partition partition = (Partition) info;
+            long liveTotal = liveRowCountForExtrapolation(partition.getRecordCount(),
+                    partition.getPositionDeleteRecordCount(), partition.getEqualityDeleteRecordCount());
+            if (liveTotal > 0) {
+                result.put(partitionNames.get(i), liveTotal);
+            }
+        }
+        return result;
+    }
+
+    // Package-private for unit testing. Returns a trustworthy live-row total for extrapolation, or -1 when it
+    // should not be trusted, in which case the caller stores the raw sample instead.
+    //
+    // Returns -1 when:
+    //  - record_count is unknown; or
+    //  - any equality deletes are present: equality_delete_record_count counts delete predicates, not rows
+    //    removed - one predicate can match many rows - so it yields neither a trustworthy live total nor a
+    //    trustworthy ratio (a tiny count can still hide a huge deletion). No exact live total is available
+    //    cheaply from metadata, so we bail; or
+    //  - position deletes exceed MAX_DELETE_RATIO_FOR_ROW_COUNT of record_count.
+    //
+    // Otherwise position deletes (exactly one row each) are subtracted to give the live-row total.
+    static long liveRowCountForExtrapolation(long recordCount, long positionDeleteRecordCount,
+                                             long equalityDeleteRecordCount) {
+        if (recordCount <= 0) {
+            return -1;
+        }
+        if (equalityDeleteRecordCount > 0) {
+            return -1;
+        }
+        long posDelete = Math.max(0, positionDeleteRecordCount);
+        double deleteRatio = (double) posDelete / recordCount;
+        if (deleteRatio > MAX_DELETE_RATIO_FOR_ROW_COUNT) {
+            return -1;
+        }
+        return Math.max(1, recordCount - posDelete);
     }
 
     @Override

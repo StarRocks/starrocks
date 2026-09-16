@@ -21,8 +21,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "compute_env/query_cache/lane_arbiter.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "runtime/runtime_fwd.h"
 
 namespace starrocks::query_cache {

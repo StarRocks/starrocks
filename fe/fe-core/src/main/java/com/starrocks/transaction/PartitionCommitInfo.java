@@ -39,6 +39,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.proto.TabletStatPB;
 
 import java.util.HashMap;
 import java.util.List;
@@ -83,7 +84,22 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
-    private final Map<Long, Long> tabletIdToRowCountForPartitionFirstLoad = new HashMap<>();
+    // Per-tablet stats collected during publish: for lake tables from the publish RPC response
+    // (range-distribution tablets, and any tablet on first import), for shared-nothing tables
+    // from TTabletInfo on first import. Transient (not serialized), leader-only. Consumed for
+    // first-load statistics collection and (lake only) real-time reshard triggering.
+    //
+    // Deliberately an unsynchronized HashMap: exactly one thread may touch a given instance at a
+    // time, and that must stay true.
+    //  - shared-nothing: written only by the thread finishing the transaction, via
+    //    TransactionState.applyPublishTaskTabletStats() under the txn write lock. The thrift
+    //    finishTask handlers write to their own PublishVersionTask, never here.
+    //  - lake: written only by the publish thread that owns this partition, which happens-before
+    //    the finish through the publish CompletableFuture.
+    // Writing this map from a thread that does not own it is a bug, not a tuning question - it is
+    // what made the publish daemon's snapshot throw ConcurrentModificationException in issue #77595.
+    // Leaving it unsynchronized keeps such a mistake loud instead of silently truncating stats.
+    private final Map<Long, TabletStatPB> tabletStats = new HashMap<>();
 
     private boolean isDoubleWrite = false;
 
@@ -129,7 +145,7 @@ public class PartitionCommitInfo implements Writable {
         this.compactionScore = partitionCommitInfo.compactionScore == null
                 ? null
                 : new Quantiles(partitionCommitInfo.compactionScore);
-        this.tabletIdToRowCountForPartitionFirstLoad.putAll(partitionCommitInfo.tabletIdToRowCountForPartitionFirstLoad);
+        this.tabletStats.putAll(partitionCommitInfo.tabletStats);
         this.isDoubleWrite = partitionCommitInfo.isDoubleWrite;
     }
 
@@ -193,8 +209,23 @@ public class PartitionCommitInfo implements Writable {
         this.compactionScore = compactionScore;
     }
 
-    public Map<Long, Long> getTabletIdToRowCountForPartitionFirstLoad() {
-        return tabletIdToRowCountForPartitionFirstLoad;
+    public Map<Long, TabletStatPB> getTabletStats() {
+        return tabletStats;
+    }
+
+    // Single entry point for adding stats, so every writer of tabletStats is greppable and can be
+    // checked against the single-owner-thread rule documented on the field.
+    public void putAllTabletStats(@Nullable Map<Long, TabletStatPB> stats) {
+        if (stats == null) {
+            return;
+        }
+        // Lake entries come straight off a publish RPC response; every consumer null-checks the
+        // value, so drop null stats here instead of storing them.
+        stats.forEach((tabletId, stat) -> {
+            if (stat != null) {
+                tabletStats.put(tabletId, stat);
+            }
+        });
     }
 
     @Nullable

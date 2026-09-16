@@ -166,6 +166,38 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ------------------------------------- AI Provider -------------------------------------
+
+    default R visitCreateAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSetDefaultAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitDropTaskStmt(DropTaskStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -504,6 +536,10 @@ public interface AstVisitor<R, C> {
         return visitFrontendClause(clause, context);
     }
 
+    default R visitTransferLeaderClause(TransferLeaderClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
     default R visitModifyBrokerClause(ModifyBrokerClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -694,6 +730,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitDropSnapshotStatement(DropSnapshotStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -840,6 +880,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, C context) {
         return visitNode(clause, context);
     }
 

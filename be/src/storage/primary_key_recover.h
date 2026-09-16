@@ -20,7 +20,7 @@
 #include "column/schema.h"
 #include "common/status.h"
 #include "storage/primary_index.h"
-#include "storage/primitive/chunk_iterator.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 

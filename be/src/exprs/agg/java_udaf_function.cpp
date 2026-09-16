@@ -23,6 +23,7 @@
 #include "fmt/core.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
+#include "runtime/java/java_runtime.h"
 
 namespace starrocks {
 
@@ -31,6 +32,11 @@ const int DEFAULT_UDAF_BUFFER_SIZE = 1024;
 const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
     static JavaUDAFAggregateFunction no_nullable_udaf_func;
     return &no_nullable_udaf_func;
+}
+
+const AggregateFunction* getArrowJavaUDAFFunction() {
+    static ArrowJavaUDAFAggregateFunction arrow_udaf_func;
+    return &arrow_udaf_func;
 }
 
 // Build a JavaUDAFSharedContext (class-level, shareable/cacheable).
@@ -46,20 +52,20 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     std::string state_cls_name = symbol + "$State";
 
     auto udaf_ctx = std::make_shared<JavaUDAFSharedContext>();
-    udaf_ctx->udf_classloader = std::make_unique<ClassLoader>(libpath);
-    auto analyzer = std::make_unique<ClassAnalyzer>();
+    udaf_ctx->udf_classloader = std::make_unique<JavaUdfClassLoader>(libpath);
+    auto analyzer = std::make_unique<JavaUdfClassAnalyzer>();
     RETURN_IF_ERROR(udaf_ctx->udf_classloader->init());
 
     ASSIGN_OR_RETURN(udaf_ctx->udaf_class, udaf_ctx->udf_classloader->getClass(symbol));
     ASSIGN_OR_RETURN(udaf_ctx->udaf_state_class, udaf_ctx->udf_classloader->getClass(state_cls_name));
 
-    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
+    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
         std::string method_name = name;
         std::string sign;
-        std::vector<MethodTypeDescriptor> mtdesc;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &sign));
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(sign, &mtdesc));
-        *res = std::make_unique<JavaMethodDescriptor>();
+        *res = std::make_unique<JavaUdfMethodDescriptor>();
         (*res)->signature = std::move(sign);
         (*res)->name = std::move(method_name);
         (*res)->method_desc = std::move(mtdesc);
@@ -75,14 +81,16 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     RETURN_IF_ERROR(add_method("serialize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->serialize));
     RETURN_IF_ERROR(add_method("serializeLength", udaf_ctx->udaf_state_class.clazz(), &udaf_ctx->serialize_size));
 
-    // Generate and store the stub class/method — each unique context creates its own AggBatchCallStub from these
+    // Generate and store the stub class/method — each unique context creates its own AggBatchCallStub from these.
+    // Also generated for vectorized ("input"="arrow") UDAFs: the stub generator accepts FieldVector params
+    // (only primitives are rejected) and the arrow update path simply does not use the stub.
     const char* stub_clazz_name = AggBatchCallStub::stub_clazz_name;
     const char* stub_method_name = AggBatchCallStub::batch_update_method_name;
     jclass udaf_clazz = udaf_ctx->udaf_class.clazz();
     jobject update_method_obj = udaf_ctx->update->method.handle();
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_clazz,
                      udaf_ctx->udf_classloader->genCallStub(stub_clazz_name, udaf_clazz, update_method_obj,
-                                                            ClassLoader::BATCH_SINGLE_UPDATE, num_args));
+                                                            JavaUdfClassLoader::BATCH_SINGLE_UPDATE, num_args));
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_method,
                      analyzer->get_method_object(udaf_ctx->update_stub_clazz.clazz(), stub_method_name));
 
@@ -99,7 +107,7 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     // for input boxing, writeResult for output drain); slots without STRUCT are stored
     // as null-handle entries and the existing fast paths run unchanged.
     {
-        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
         // UDAF `update(State, sql_args...)` — SQL args start at parameter index 1. The
         // method itself returns void, so suppress the helper's return-type pass by
         // passing a default-constructed (TYPE_UNKNOWN) sql_return_type — otherwise the
@@ -129,7 +137,7 @@ static Status build_udaf_unique_context(std::shared_ptr<JavaUDAFSharedContext> u
     ASSIGN_OR_RETURN(agg_ctx->handle, agg_ctx->ctx->udaf_class.newInstance());
 
     // Create a per-aggregator AggBatchCallStub with the shared stub class/method cloned as new global refs
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
     JVMClass stub_clazz(env->NewGlobalRef(agg_ctx->ctx->update_stub_clazz.clazz()));
     jobject stub_method = env->NewGlobalRef(agg_ctx->ctx->update_stub_method.handle());
     agg_ctx->update_batch_call_stub = std::make_unique<AggBatchCallStub>(

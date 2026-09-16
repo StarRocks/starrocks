@@ -41,8 +41,15 @@ class CompactionProfile {
     private long writeRemoteSec;
     @SerializedName(value = "in_queue_sec")
     private int inQueueSec;
+    @SerializedName(value = "score_before")
+    private Quantiles scoreBefore;
+    @SerializedName(value = "score_after")
+    private Quantiles scoreAfter;
+    @SerializedName(value = "partial_success")
+    private boolean partialSuccess;
 
-    public CompactionProfile(@NotNull CompactStat stat) {
+    public CompactionProfile(@NotNull CompactStat stat, Quantiles scoreBefore, Quantiles scoreAfter,
+            boolean partialSuccess) {
         subTaskCount = stat.subTaskCount;
 
         readLocalSec = stat.readTimeLocal / 1000000000L;
@@ -54,6 +61,9 @@ class CompactionProfile {
         writeSegmentMb = stat.writeSegmentBytes / 1048576;
         writeRemoteSec = stat.writeTimeRemote / 1000000000L;
         inQueueSec = stat.inQueueTimeSec;
+        this.scoreBefore = scoreBefore;
+        this.scoreAfter = scoreAfter;
+        this.partialSuccess = partialSuccess;
     }
 
     @Override

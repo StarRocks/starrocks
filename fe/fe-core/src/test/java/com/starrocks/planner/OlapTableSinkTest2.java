@@ -130,7 +130,7 @@ public class OlapTableSinkTest2 {
 
             StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
                 OlapTableSink.createPartition(db.getId(), olapTable, null,
-                        false, 0, partitionIds, null);
+                        false, 0, partitionIds, null, null);
             });
             Assertions.assertTrue(exception.getMessage().contains("different distribute columns"));
         } finally {
@@ -161,7 +161,7 @@ public class OlapTableSinkTest2 {
 
             StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
                 OlapTableSink.createPartition(db.getId(), olapTable, null,
-                        false, 0, partitionIds, null);
+                        false, 0, partitionIds, null, null);
             });
             Assertions.assertTrue(exception.getMessage().contains("different distribute columns"));
         } finally {

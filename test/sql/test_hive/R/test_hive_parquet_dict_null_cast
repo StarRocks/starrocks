@@ -1,0 +1,74 @@
+-- name: test_hive_parquet_dict_null_cast
+create external catalog hive_dict_null_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+set catalog hive_dict_null_${uuid0};
+-- result:
+-- !result
+create database hive_db_${uuid0};
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+create table src_${uuid0} (val_col bigint) properties ("file_format" = "parquet");
+-- result:
+-- !result
+insert into src_${uuid0}
+select case when generate_series % 20 = 0 then cast(1000000 + (generate_series % 7) as bigint) else null end
+from table(generate_series(1, 2000));
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table dst_${uuid0} (val_col int) properties ("replication_num" = "1");
+-- result:
+-- !result
+set sql_mode='ALLOW_THROW_EXCEPTION';
+-- result:
+-- !result
+insert into dst_${uuid0} select val_col from hive_dict_null_${uuid0}.hive_db_${uuid0}.src_${uuid0};
+-- result:
+-- !result
+select count(*), count(val_col), min(val_col), max(val_col) from dst_${uuid0};
+-- result:
+2000	100	1000000	1000006
+-- !result
+select count(cast(val_col as int)) from hive_dict_null_${uuid0}.hive_db_${uuid0}.src_${uuid0};
+-- result:
+100
+-- !result
+set sql_mode='';
+-- result:
+-- !result
+drop table dst_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+set catalog hive_dict_null_${uuid0};
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+drop table src_${uuid0} force;
+-- result:
+-- !result
+drop database hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_dict_null_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

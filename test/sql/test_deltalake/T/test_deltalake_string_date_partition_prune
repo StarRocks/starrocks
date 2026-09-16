@@ -1,0 +1,35 @@
+-- name: test_deltalake_string_date_partition_prune
+-- description: A STRING date partition column compared with a temporal value coerces to CAST(c2 AS DATETIME) = <ts>.
+-- ScalarOperationToDeltaLakeExpr unwraps the cast and compares in the string domain, which never equals a
+-- 'yyyy-MM-dd' partition value, so buildFileScanTaskIterator pruned every file and the query returned empty.
+-- StarRocks now keeps such cast-on-string-partition conjuncts out of the pushed filter and evaluates them
+-- against each file's partition values. Same root cause as the Iceberg series (#76068 / #76107).
+--
+-- StarRocks/Spark can only read Delta; the fixture is created in advance with Spark:
+--   CREATE TABLE delta_oss_db.delta_str_date_part (c1 INT, c2 STRING) USING delta PARTITIONED BY (c2);
+--   INSERT INTO delta_oss_db.delta_str_date_part VALUES
+--     (1,'2020-01-02'),(2,'2020-06-08'),(3,'2020-06-14'),(4,'2020-06-15'),(5,'2020-06-22');
+
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+set new_planner_optimize_timeout = 30000;
+
+-- baseline
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part order by c1;
+
+-- cast/interval form: pre-fix returned empty; now selects partition 2020-06-14.
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 = cast('2020-06-15' as date) - interval 1 day order by c1;
+-- date_sub builtin form of the same value.
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 = date_sub(cast('2020-06-15' as date), interval 1 day) order by c1;
+-- range comparison keeps the correct partitions.
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 >= cast('2020-06-15' as date) - interval 1 day order by c1;
+-- control: bare 'yyyy-MM-dd' literal (no cast, always worked) must agree with the cast forms.
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 = '2020-06-14' order by c1;
+
+drop catalog delta_test_${uuid0};

@@ -23,12 +23,11 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #ifndef __APPLE__
-#include "exec/data_sinks/mysql_table_writer.h"
+#include "data_sink/external/mysql_table_writer.h"
 #endif
 #include "base/concurrency/spinlock.h"
 #include "base/utility/defer_op.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/utils.h"
 
 namespace starrocks::pipeline {
 

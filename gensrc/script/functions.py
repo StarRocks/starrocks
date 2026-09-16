@@ -61,6 +61,8 @@ vectorized_functions = [
     #   cosine function
     [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
     [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+    [10104, "inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
+    [10105, "approx_inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
     [10106, "approx_cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
 
     [10110, "ceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
@@ -189,6 +191,7 @@ vectorized_functions = [
     [10323, "hex", True, False, "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
+    [10318, "blake3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::blake3"],
     [10316, "hex_decode_binary", True, False, "VARBINARY", ['VARCHAR'], "StringFunctions::unhex"],
     [10317, "hex_decode_string", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
 
@@ -487,6 +490,11 @@ vectorized_functions = [
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
     [30603, 'from_binary', True, True, 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+
+    # dict_encode(value, dict_slot_id): translate a constant to its global dictionary code (resolved
+    # once from BE runtime state), so a dict-aware comparison can run on codes. BE-only.
+    [30700, 'dict_encode', True, False, 'INT', ['VARCHAR', 'INT'], 'DictFunctions::dict_encode',
+     'DictFunctions::dict_encode_prepare', 'DictFunctions::dict_encode_close'],
 
     # 50xxx: timestamp functions
     [50008, 'year', True, False, 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
@@ -858,6 +866,12 @@ vectorized_functions = [
      'BitmapFunctions::bitmap_subset_in_range'],
     [91003, 'bitmap_to_binary', False, True, 'VARBINARY', ['BITMAP'], 'BitmapFunctions::bitmap_to_binary'],
     [91004, 'bitmap_from_binary', False, False, 'BITMAP', ['VARBINARY'], 'BitmapFunctions::bitmap_from_binary'],
+
+    # data sketches theta scalar functions
+    [91100, 'ds_theta_union', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_union'],
+    [91101, 'ds_theta_intersect', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_intersect'],
+    [91102, 'ds_theta_a_not_b', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_a_not_b'],
+    [91103, 'ds_theta_estimate', False, False, 'DOUBLE', ['VARBINARY'], 'DsThetaFunctions::ds_theta_estimate'],
 
     # hash function
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
@@ -1577,4 +1591,15 @@ vectorized_functions = [
 
     # ai functions
     [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
+]
+
+# AI functions are registered as FE metadata independently from ordinary builtins. They are
+# dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
+# BE builtin descriptor table.
+ai_vectorized_functions = [
+    [200100, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR'], 'AiFunctions::ai_complete', 'SYSTEM'],
+    [200101, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_complete', 'SYSTEM'],
+    [200102, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_complete', 'SYSTEM'],
+    [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
+     'AiFunctions::ai_complete', 'SYSTEM'],
 ]

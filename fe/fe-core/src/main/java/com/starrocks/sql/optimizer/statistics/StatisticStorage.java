@@ -123,4 +123,8 @@ public interface StatisticStorage {
     }
 
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);
+
+    // Inject a histogram into the cache for query-dump replay; no-op if histograms aren't cached.
+    default void addHistogramStatistics(Table table, String column, Histogram histogram) {
+    }
 }

@@ -24,20 +24,23 @@ Spark SQL を使用して StarRocks テーブルに一時ビューを作成し�
 
 ## バージョン要件
 
-| Spark コネクタ | Spark         | StarRocks       | Java | Scala |
-|---------------- | ------------- | --------------- | ---- | ----- |
+| Spark コネクタ    | Spark              | StarRocks     | Java | Scala |
+|---------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5  以降      | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5  以降      | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 以降       | 8    | 2.12  |
 | 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 以降       | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, 3.4 | 2.5 以降       | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, 3.4 | 2.5 以降       | 8    | 2.12  |
-| 1.0.0           | 3.x           | 1.18 以降      | 8    | 2.12  |
-| 1.0.0           | 2.x           | 1.18 以降      | 8    | 2.11  |
+| 1.1.1           | 3.2, 3.3, 3.4      | 2.5 以降       | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, 3.4      | 2.5 以降       | 8    | 2.12  |
+| 1.0.0           | 3.x                | 1.18 以降      | 8    | 2.12  |
+| 1.0.0           | 2.x                | 1.18 以降      | 8    | 2.11  |
 
 > **注意**
 >
-> - 異なるコネクタバージョン間の動作変更については、[Upgrade Spark connector](#upgrade-spark-connector) を参照してください。
+> - 異なるコネクタバージョン間の動作変更については、[Upgrade Spark connector](#spark-コネクタのアップグレード) を参照してください。
 > - バージョン 1.1.1 以降、コネクタは MySQL JDBC ドライバを提供していないため、Spark のクラスパスに手動でドライバをインポートする必要があります。ドライバは [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/) で見つけることができます。
 > - バージョン 1.0.0 では、Spark コネクタは StarRocks からのデータ読み取りのみをサポートしています。バージョン 1.1.0 以降、Spark コネクタは StarRocks からのデータ読み取りと書き込みの両方をサポートしています。
-> - バージョン 1.0.0 とバージョン 1.1.0 では、パラメータとデータ型マッピングが異なります。[Upgrade Spark connector](#upgrade-spark-connector) を参照してください。
+> - バージョン 1.0.0 とバージョン 1.1.0 では、パラメータとデータ型マッピングが異なります。[Upgrade Spark connector](#spark-コネクタのアップグレード) を参照してください。
 > - 一般的な場合、バージョン 1.0.0 に新しい機能は追加されません。できるだけ早く Spark コネクタをアップグレードすることをお勧めします。
 
 ## Spark コネクタの入手
@@ -220,10 +223,12 @@ Spark コネクタに必要な依存関係を次のように設定します。
 | STRING              | DataTypes.StringType      |
 | DATE                | DataTypes.DateType        |
 | DATETIME            | DataTypes.TimestampType   |
-| JSON | DataTypes.StringType <br /> **注意:** <br /> このデータ型マッピングは Spark コネクタ v1.1.2 以降でサポートされ、StarRocks バージョン 2.5.13、3.0.3、3.1.0 以降が必要です。 |
-| ARRAY               | サポートされていないデータ型      |
-| HLL                 | サポートされていないデータ型      |
-| BITMAP              | サポートされていないデータ型      |
+| JSON                | DataTypes.StringType<br />**注意:**<br />このデータ型マッピングは Spark コネクタ v1.1.2 以降でサポートされ、StarRocks バージョン 2.5.13、3.0.3、3.1.0 以降が必要です。 |
+| ARRAY               | ArrayType<br />**注意:**<br />このデータ型マッピングは Spark コネクタ v1.1.3 以降でサポートされています。ネストされた型は、`starrocks.column.types` を通じて宣言する必要があります。詳細は [ネストされたカラムの読み取り](#ネストされたカラムstructarraymapの読み取り) を参照してください。 |
+| HLL                 | サポートされていないデータ型   |
+| BITMAP              | サポートされていないデータ型   |
+| MAP                 | MapType<br />**注意:**<br />このデータ型マッピングは Spark コネクタ v1.1.3 以降でサポートされています。ネストされた型は、`starrocks.column.types` を通じて宣言する必要があります。詳細は [ネストされたカラムの読み取り](#ネストされたカラムstructarraymapの読み取り) を参照してください。 |
+| STRUCT              | StructType<br />**注意:**<br />このデータ型マッピングは Spark コネクタ v1.1.3 以降でサポートされています。ネストされた型は、`starrocks.column.types` を通じて宣言する必要があります。詳細は [ネストされたカラムの読み取り](#ネストされたカラムstructarraymapの読み取り) を参照してください。 |
 
 ### Spark コネクタ 1.0.0
 
@@ -271,7 +276,7 @@ StarRocks が使用する基盤ストレージエンジンの処理ロジック�
 
 ### ネットワーク設定
 
-Spark が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/management/BE_configuration.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認してください。
+Spark が配置されているマシンが、StarRocks クラスターの FE ノードに `http_port`（デフォルト: `8030`）および `query_port`（デフォルト: `9030`）を介してアクセスでき、BE ノードに `be_port`（デフォルト: `9060`）を介してアクセスできることを確認してください。
 
 ### データ例
 
@@ -855,7 +860,7 @@ Spark コネクタを使用して StarRocks からデータを読み取る際に
 
 5. ブラウザを使用して `http://<fe_host>:<http_http_port>/query` ページを開き、SELECT * FROM mytable where k=1 文のプロファイルを確認します。例：
 
-   ```SQL
+   ```Plain
    OLAP_SCAN (plan_node_id=0):
      CommonMetrics:
         - CloseTime: 1.255ms
@@ -932,4 +937,67 @@ Spark コネクタを使用して StarRocks からデータを読み取る際に
    ```
 
 この例では、フィルタ条件 `k = 1` がプレフィックスインデックスにヒットすることができます。そのため、Spark は3行（`ShortKeyFilterRows: 3` と示されているように）をフィルタリングできます。
+
+## ネストされたカラム（STRUCT、ARRAY、MAP）の読み取り
+
+ネストされたカラムの読み取りは、バージョン 1.1.3 以降でサポートされています。
+
+Spark Connector は、StarRocks の `STRUCT`、`ARRAY`、および `MAP` 型のカラムの読み取りをサポートしています。ただし、Connector は StarRocks のスキーマからネストされた型全体を自動的に推論できないため、すべてのネストされたカラムについて、`starrocks.column.types` オプションを使用してカラム型を明示的に指定する必要があります。
+
+### ネストされたデータ型のマッピング
+
+| StarRocks データ型                         | Spark データ型 |
+| ----------------------------------------- | ------------ |
+| `STRUCT<field1 TYPE1, field2 TYPE2, ...>` | `StructType` |
+| `ARRAY<TYPE>`                             | `ArrayType`  |
+| `MAP<KEY_TYPE, VALUE_TYPE>`               | `MapType`    |
+
+ネストされた型は任意に組み合わせることができます（たとえば、`STRUCT<a ARRAY<INT>, b MAP<STRING, BIGINT>>`）。
+
+### ネストされた型における型マッピングの注意事項
+
+同じ Arrow のワイヤー表現を共有する論理 StarRocks 型（特に `DATE`、`DATETIME`、および一部の `DECIMAL` エンコーディング）は、`starrocks.column.types` を使用して型を明示的に指定した場合にのみ正しくデコードされます。型を指定しない場合、これらのフィールドは通常の `STRING` として扱われます。
+
+### 例
+
+次の StarRocks テーブルがあるとします。
+
+```SQL
+CREATE TABLE nested_tbl (
+    id       INT,
+    info     STRUCT<type STRING, phone BIGINT, created DATETIME>,
+    tags     ARRAY<STRING>,
+    metadata MAP<STRING, STRUCT<value STRING, count INT>>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4;
 ```
+
+Spark でこのテーブルを読み取ります。
+
+```Scala
+val columnTypes =
+  "info STRUCT<type STRING, phone BIGINT, created TIMESTAMP>, " +
+  "tags ARRAY<STRING>, " +
+  "metadata MAP<STRING, STRUCT<value STRING, count INT>>"
+
+val df = spark.read.format("starrocks")
+  .option("starrocks.fenodes", "127.0.0.1:8030")
+  .option("starrocks.table.identifier", "test.nested_tbl")
+  .option("starrocks.user", "root")
+  .option("starrocks.password", "")
+  .option("starrocks.column.types", columnTypes)
+  .load()
+
+df.printSchema()
+// root
+//  |-- id: integer
+//  |-- info: struct<type: string, phone: long, created: timestamp>
+//  |-- tags: array<string>
+//  |-- metadata: map<string, struct<value: string, count: integer>>
+```
+
+### 現在の制限事項
+
+- ネストされた型は**自動的に推論されません**。すべてのネストされたカラムについて、`starrocks.column.types` を指定する必要があります。
+- ネストされた型内の `DATE` および `DATETIME` フィールドは、宣言された型を指定した場合にのみ、それぞれ Spark の `DateType` / `TimestampType` として返されます。型の指定がない場合は、`StringType` にフォールバックします。

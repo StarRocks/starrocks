@@ -136,7 +136,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
                             "{\"data\":[2, \"2026-05-27\"]}"));
                 });
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 /*sortKey=*/ List.of(bigintColumn("user_id")),
                 /*partitionSourceColumns=*/ List.of(varcharColumn("ts")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
@@ -172,7 +172,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
                         "{\"data\":[20, \"west\"]}")));
         ReservoirSampler sampler = new ReservoirSampler(executor);
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 /*sortKey=*/ List.of(bigintColumn("user_id")),
                 /*partitionSourceColumns=*/ List.of(varcharColumn("region")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
@@ -205,7 +205,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
                 /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
                         "{\"data\":[1, \"east\", \"unexpected\"]}")));
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 /*sortKey=*/ List.of(bigintColumn("user_id")),
                 /*partitionSourceColumns=*/ List.of(varcharColumn("region")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
@@ -237,7 +237,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
         // bigintColumn(...) is non-nullable by default, used here as the
         // partition-source slot so a null cell hits the non-nullable branch.
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 /*sortKey=*/ List.of(bigintColumn("user_id")),
                 /*partitionSourceColumns=*/ List.of(bigintColumn("region_id")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,

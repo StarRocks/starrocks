@@ -142,12 +142,12 @@ public class MVPCTRefreshPlanBuilder {
         for (Map.Entry<String, TableRelation> entry : tableRelations.entries()) {
             TableRelation relation = entry.getValue();
             Table table = relation.getTable();
-            // Skip null here to avoid NPE on getTableIdentifier(); the relation-grouping loop below
+            // Skip null here to avoid NPE on getUUID(); the relation-grouping loop below
             // throws a controlled AnalysisException for any base table that resolved to null.
             if (table == null) {
                 continue;
             }
-            TvrVersionRange pinned = pinnedMap.get(table.getTableIdentifier());
+            TvrVersionRange pinned = pinnedMap.get(table.getUUID());
             if (pinned != null) {
                 relation.setTvrVersionRange(pinned);
                 logger.info("Inject pinned TVR {} into table relation {} for scan",

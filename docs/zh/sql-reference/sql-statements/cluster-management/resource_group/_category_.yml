@@ -3,4 +3,5 @@ label: '资源组'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: resource_group

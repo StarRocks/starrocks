@@ -1,0 +1,45 @@
+-- name: test_meta_scan_json_multi_subfield
+drop database if exists test_meta_scan_json_multi_subfield;
+-- result:
+-- !result
+create database test_meta_scan_json_multi_subfield;
+-- result:
+-- !result
+use test_meta_scan_json_multi_subfield;
+-- result:
+-- !result
+CREATE TABLE t (
+  id bigint,
+  fields json
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES
+ (1, parse_json('{"Campaign":"CapA","campaign":"lowa","title":"t1"}')),
+ (2, parse_json('{"Campaign":"CapB","campaign":"lowb","title":"t2"}'));
+-- result:
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+set cbo_prune_subfield = true;
+-- result:
+-- !result
+SELECT length(dict_merge(get_json_string(fields, 'Campaign'), 255)) a,
+       length(dict_merge(get_json_string(fields, 'campaign'), 255)) b
+FROM t [_META_];
+-- result:
+None	None
+-- !result
+SELECT length(dict_merge(get_json_string(fields, 'Campaign'), 255)) a,
+       length(dict_merge(get_json_string(fields, 'campaign'), 255)) b,
+       length(dict_merge(get_json_string(fields, 'title'), 255)) c
+FROM t [_META_];
+-- result:
+None	None	None
+-- !result
+drop database test_meta_scan_json_multi_subfield;
+-- result:
+-- !result

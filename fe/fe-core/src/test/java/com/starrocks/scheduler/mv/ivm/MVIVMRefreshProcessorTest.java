@@ -92,6 +92,19 @@ public class MVIVMRefreshProcessorTest {
     }
 
     @Test
+    public void compactionMidRangeStillSplitsTheFollowingLargeAppend() {
+        // What IcebergMetadata emits for APPEND(11) -> REPLACE(12) -> APPEND(13): the compaction owns 11's
+        // end boundary, so 13's rows are still weighed before the cut can reach them.
+        List<TvrTableDeltaTrait> traits = List.of(
+                TvrTableDeltaTrait.ofMonotonic(TvrTableDelta.of(11L, 12L), new TvrDeltaStats(1L, 0L)),
+                TvrTableDeltaTrait.ofMonotonic(TvrTableDelta.of(13L, 13L), new TvrDeltaStats(10L, 0L)));
+        MVIVMRefreshProcessor.AdaptiveDelta r =
+                MVIVMRefreshProcessor.computeAdaptiveDelta(TABLE, traits, TvrTableDelta.of(10L, 13L), 2, MAX_BYTES);
+        assertEquals(TvrTableDelta.of(10L, 12L), r.delta);
+        assertTrue(r.hasNext);
+    }
+
+    @Test
     public void wholeRangeUnderCapRefreshesAtOnce() {
         List<TvrTableDeltaTrait> traits = appendChain(10, 1, 1, 1);
         MVIVMRefreshProcessor.AdaptiveDelta r =

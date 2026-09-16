@@ -14,12 +14,16 @@
 
 #include "platform/platform_env.h"
 
+#include <utility>
+
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/bthread_timer.h"
 #include "common/config_exec_env_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "platform/broker_mgr.h"
+#include "platform/small_file_mgr.h"
 #include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -28,7 +32,9 @@ PlatformEnv::PlatformEnv() = default;
 
 PlatformEnv::~PlatformEnv() = default;
 
-Status PlatformEnv::init(MetricRegistry* metrics) {
+Status PlatformEnv::init(PlatformEnvOptions options) {
+    RETURN_IF_ERROR(_store_path_registry.init(std::move(options.store_paths)));
+
     if (_backend_client_cache != nullptr) {
         return Status::OK();
     }
@@ -43,12 +49,26 @@ Status PlatformEnv::init(MetricRegistry* metrics) {
     _backend_client_cache = std::make_unique<BackendServiceClientCache>(config::max_client_cache_size_per_host);
     _frontend_client_cache = std::make_unique<FrontendServiceClientCache>(config::max_client_cache_size_per_host);
     _broker_client_cache = std::make_unique<BrokerServiceClientCache>(config::max_client_cache_size_per_host);
-    _brpc_stub_cache = std::make_unique<BrpcStubCache>(_rpc_timer.get(), metrics);
+    _brpc_stub_cache = std::make_unique<BrpcStubCache>(_rpc_timer.get(), options.metrics);
 
-    _backend_client_cache->init_metrics(metrics, "backend");
-    _frontend_client_cache->init_metrics(metrics, "frontend");
-    _broker_client_cache->init_metrics(metrics, "broker");
+    _backend_client_cache->init_metrics(options.metrics, "backend");
+    _frontend_client_cache->init_metrics(options.metrics, "frontend");
+    _broker_client_cache->init_metrics(options.metrics, "broker");
     ThriftRpcHelper::setup(_backend_client_cache.get(), _frontend_client_cache.get(), _broker_client_cache.get());
+
+    _broker_mgr = std::make_unique<BrokerMgr>();
+    status = _broker_mgr->init(options.metrics);
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
+
+    _small_file_mgr = std::make_unique<SmallFileMgr>(config::small_file_dir, options.metrics);
+    status = _small_file_mgr->init();
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
 
     HttpBrpcStubCache::initialize(_rpc_timer.get());
 #ifndef __APPLE__
@@ -59,6 +79,8 @@ Status PlatformEnv::init(MetricRegistry* metrics) {
 }
 
 void PlatformEnv::destroy() {
+    _small_file_mgr.reset();
+    _broker_mgr.reset();
     ThriftRpcHelper::clear();
 #ifndef __APPLE__
     if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
@@ -73,6 +95,10 @@ void PlatformEnv::destroy() {
     _broker_client_cache.reset();
     _frontend_client_cache.reset();
     _backend_client_cache.reset();
+}
+
+void PlatformEnv::reset_store_paths_for_test() {
+    _store_path_registry.reset_for_test();
 }
 
 HttpBrpcStubCache* PlatformEnv::http_brpc_stub_cache() const {

@@ -1,0 +1,50 @@
+-- name: test_iceberg_rewrite_manifests_partitioned
+create external catalog iceberg_sql_test_${uuid0} properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "enable_iceberg_metadata_cache" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (
+    k1 int,
+    p int
+)
+partition by (p)
+properties (
+    'location' = 'oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}',
+    'commit.manifest-merge.enabled' = 'false',
+    'commit.manifest.target-size-bytes' = '24000'
+);
+
+-- Five single-row appends => five data manifests, over four non-null partitions plus NULL.
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (1, 1);
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (2, 2);
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (3, 3);
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (4, 4);
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (99, NULL);
+
+-- Five manifests before clustering.
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$manifests;
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute rewrite_manifests();
+
+-- Clustered down to one manifest per bucket: {p=1,2},{p=3,4} and {p=NULL}.
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$manifests;
+-- Each manifest's partition bound is a narrow, non-overlapping range (order-preserving clustering);
+-- the NULL-only manifest reports NULL bounds.
+select partitions[1].lower_bound as lo, partitions[1].upper_bound as hi from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$manifests order by cast(partitions[1].lower_bound as int) nulls last;
+
+-- Data is preserved; partition filters and the NULL partition still resolve correctly after clustering.
+select k1, p from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} order by k1;
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where p = 3;
+select count(1) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where p is null;
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

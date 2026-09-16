@@ -42,10 +42,10 @@
 #include "base/failpoint/fail_point.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/sorting/sorting.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
-#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -54,9 +54,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_aggregator.h"
 #include "storage/chunk_helper.h"
-#include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/metadata_util.h"
@@ -66,6 +64,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage_primitive/chunk_aggregator.h"
 
 namespace starrocks {
 
@@ -361,10 +360,10 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
                 }
             }
             status = chunk_changer->append_generated_columns(read_chunk, new_chunk, all_ref_columns_ids,
-                                                             base_tablet_schema->num_columns());
+                                                             new_columns_ids);
             if (!status.ok()) {
-                LOG(WARNING) << "failed to append generated columns";
-                return Status::InternalError("failed to append generated columns");
+                LOG(WARNING) << "failed to append generated columns: " << status.to_string();
+                return Status::InternalError("failed to append generated columns: " + std::string(status.message()));
             }
         }
 
@@ -767,7 +766,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
             return Status::InternalError(_alter_msg_header +
                                          "change materialized view but query_options/query_globals is not set");
         }
-        chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+        chunk_changer->init_runtime_state(request.query_options, request.query_globals, _exec_env);
 
         RuntimeState* runtime_state = chunk_changer->get_runtime_state();
         RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, chunk_changer->get_object_pool(), request.desc_tbl,
@@ -803,7 +802,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
         DCHECK_EQ(sc_params.sc_sorting, false);
 
         chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
-                                          request.materialized_column_req.query_globals);
+                                          request.materialized_column_req.query_globals, _exec_env);
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;

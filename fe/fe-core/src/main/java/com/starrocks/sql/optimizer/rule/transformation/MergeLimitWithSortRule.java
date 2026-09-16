@@ -33,7 +33,6 @@ public class MergeLimitWithSortRule extends TransformationRule {
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalTopNOperator topN = (LogicalTopNOperator) input.getInputs().get(0).getOp();
         LogicalLimitOperator limit = ((LogicalLimitOperator) input.getOp());
 
         // Merge Init-Limit/Local-limit and Sort

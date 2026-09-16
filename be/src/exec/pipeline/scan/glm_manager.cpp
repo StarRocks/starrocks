@@ -14,13 +14,9 @@
 
 #include "exec/pipeline/scan/glm_manager.h"
 
-#include "storage/lake/meta_file.h"
-#include "storage/lake/rowset.h"
 #include "storage/rowset/rowset.h"
 
 namespace starrocks {
-
-static_assert(sizeof(lake::Rowset) > 0);
 
 RowsetSharedPtr OlapScanLazyMaterializationContext::get_rowset(int32_t tablet_id, int32_t drssid,
                                                                int32_t* segment_idx) const {
@@ -75,60 +71,6 @@ void OlapScanLazyMaterializationContext::set_scan_node(const TOlapScanNode& node
     std::unique_lock lock(_mutex);
     if (!_thrift_olap_scan_node.has_value()) {
         _thrift_olap_scan_node = node;
-    }
-}
-
-lake::RowsetPtr LakeScanLazyMaterializationContext::get_rowset(int32_t tablet_id, int32_t rssid,
-                                                               int32_t* segment_idx) const {
-    std::shared_lock lock(_mutex);
-    if (!_rowsets.contains(tablet_id)) {
-        return nullptr;
-    }
-
-    const auto& tablet_rowsets = _rowsets.at(tablet_id);
-
-    return get_rowset(tablet_rowsets, rssid, segment_idx);
-}
-
-lake::RowsetPtr LakeScanLazyMaterializationContext::get_rowset(const std::vector<lake::RowsetPtr>& rowsets,
-                                                               int32_t rssid, int32_t* segment_idx) const {
-    lake::RowsetPtr target;
-    int32_t segment_id = 0;
-
-    for (const auto& rowset : rowsets) {
-        const auto& rowset_meta = rowset->metadata();
-        const uint32_t rssid_base = rowset_meta.id();
-        size_t num_segment = rowset_meta.segment_metas_size();
-        if (rssid_base <= rssid && rssid < rssid_base + num_segment) {
-            segment_id = rssid - rssid_base;
-            target = rowset;
-            break;
-        }
-    }
-
-    *segment_idx = segment_id;
-    return target;
-}
-
-void LakeScanLazyMaterializationContext::capture_rowsets(int32_t tablet_id, int64_t version,
-                                                         const std::vector<BaseRowsetSharedPtr>& rowsets) {
-    std::unique_lock lock(_mutex);
-    std::vector<lake::RowsetPtr> lake_rowsets;
-    lake_rowsets.reserve(rowsets.size());
-    for (const auto& rowset : rowsets) {
-        auto lake_rowset = std::dynamic_pointer_cast<lake::Rowset>(rowset);
-        if (lake_rowset != nullptr) {
-            lake_rowsets.emplace_back(std::move(lake_rowset));
-        }
-    }
-    _rowsets[tablet_id] = std::move(lake_rowsets);
-    _versions[tablet_id] = version;
-}
-
-void LakeScanLazyMaterializationContext::set_scan_node(const TLakeScanNode& node) {
-    std::unique_lock lock(_mutex);
-    if (!_thrift_lake_scan_node.has_value()) {
-        _thrift_lake_scan_node = node;
     }
 }
 

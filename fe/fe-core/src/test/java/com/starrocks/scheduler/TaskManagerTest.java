@@ -1055,7 +1055,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldCancelLongRunningTasks() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -1093,7 +1092,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelTasksWithoutTimeout() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -1129,7 +1127,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelNonExpiredTasks() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 1000);
@@ -1270,7 +1267,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskTriggerImmediately() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1310,7 +1306,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1348,7 +1343,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1386,7 +1380,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_ctas");
         task.setSource(Constants.TaskSource.CTAS);
         TaskSchedule schedule = new TaskSchedule();
@@ -1523,8 +1516,6 @@ public class TaskManagerTest {
             }
         };
 
-        TaskManager tm = new TaskManager();
-        TaskRunManager taskRunManager = tm.getTaskRunManager();
 
         // Simulate the dispatch scheduler callback logic from TaskManager.start()
         // This is the same guard that was added in the fix
@@ -1552,5 +1543,77 @@ public class TaskManagerTest {
         }
         Assertions.assertTrue(dispatched[0],
                 "Dispatch scheduler should proceed when leader");
+    }
+
+    @Test
+    public void testStopShutsDownSchedulersAndStartRebuilds() throws Exception {
+        // TaskManager owns two ScheduledExecutorService instances; stop() must shut both down
+        // so worker threads exit on demotion and start() must rebuild them for re-election.
+        // periodFutureMap holds futures scheduled on the old pool - it must be empty after
+        // stop() so a re-registered periodic task on the new leader does not collide with
+        // stale futures.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+
+        java.util.concurrent.ScheduledExecutorService periodBefore = mgr.periodScheduler;
+        java.util.concurrent.ScheduledExecutorService dispatchBefore = mgr.dispatchScheduler;
+
+        mgr.stop(5000L);
+        Assertions.assertTrue(periodBefore.isShutdown(), "periodScheduler must be shut down by stop()");
+        Assertions.assertTrue(dispatchBefore.isShutdown(), "dispatchScheduler must be shut down by stop()");
+        Assertions.assertTrue(periodBefore.isTerminated(),
+                "periodScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(dispatchBefore.isTerminated(),
+                "dispatchScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(mgr.periodFutureMap.isEmpty(), "periodFutureMap must be cleared by stop()");
+
+        // Second start() rebuilds both pools.
+        mgr.start();
+        Assertions.assertNotSame(periodBefore, mgr.periodScheduler,
+                "periodScheduler must be rebuilt on re-election");
+        Assertions.assertNotSame(dispatchBefore, mgr.dispatchScheduler,
+                "dispatchScheduler must be rebuilt on re-election");
+        Assertions.assertFalse(mgr.periodScheduler.isShutdown());
+        Assertions.assertFalse(mgr.dispatchScheduler.isShutdown());
+
+        mgr.stop();
+    }
+
+    @Test
+    public void testStopIsNoOpWhenNotStarted() {
+        // stop() guards with isStart.compareAndSet(true, false); a TaskManager that never
+        // started must not throw when stop is called.
+        TaskManager mgr = new TaskManager();
+        Assertions.assertDoesNotThrow(() -> mgr.stop());
+    }
+
+    @Test
+    public void testStopWithTimeoutLogsWhenSchedulerRefusesToTerminate() throws Exception {
+        // stop(timeoutMs) must call awaitTermination on both pools; when the await returns
+        // false (a worker ignored shutdownNow's interrupt) it logs a warning and proceeds
+        // rather than blocking forever. This test covers the LOG.warn branches by injecting
+        // a scheduler whose worker ignores interrupts long enough to outlast the budget.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+        // Replace periodScheduler with a pool whose single worker spins ignoring interrupt.
+        java.util.concurrent.ScheduledThreadPoolExecutor stuckSched =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        stuckSched.execute(() -> {
+            long deadline = System.currentTimeMillis() + 2000L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible work
+                }
+            }
+        });
+        mgr.periodScheduler = stuckSched;
+
+        mgr.stop(50L);
+
+        Assertions.assertTrue(stuckSched.isShutdown(), "scheduler must be shutdown by stop");
+        // worker is still running but stop() returned within budget; cleanup
+        stuckSched.shutdownNow();
     }
 }

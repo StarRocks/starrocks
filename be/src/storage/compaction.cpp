@@ -25,7 +25,6 @@
 #include "common/config_exec_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"

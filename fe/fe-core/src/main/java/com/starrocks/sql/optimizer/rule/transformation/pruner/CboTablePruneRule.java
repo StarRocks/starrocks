@@ -352,6 +352,7 @@ public class CboTablePruneRule extends TransformationRule {
         // set new ColumnRefToColumnMap in case that when the same tables join on UK/PK
         newColRefToColumnMap.ifPresent(newOpBuilder::setColRefToColumnMetaMap);
         Operator newScan = newOpBuilder.build();
+        newScan.addSalt();
         return Collections.singletonList(OptExpression.create(newScan));
     }
 
@@ -378,6 +379,7 @@ public class CboTablePruneRule extends TransformationRule {
 
         Operator newScan = OperatorBuilderFactory.build(retainOpt.getOp()).withOperator(retainOpt.getOp())
                 .setProjection(newProjection).build();
+        newScan.addSalt();
         return Collections.singletonList(OptExpression.create(newScan));
     }
 }

@@ -74,6 +74,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -102,6 +103,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
     public enum LoadJobSourceType {
         // The second argument marks whether the source type is a loading transaction, which is used to decide
         // combined txn log support. When adding a new type, set it explicitly so the classification is not missed.
+        // NOTE: if a new type is a *system/internal* txn (not a user data write), also add it to
+        // TransactionState.NON_USER_WRITE_SOURCE_TYPES (see isUserWriteSource()) so it does not advance
+        // a partition's lastUpdateTime.
         FRONTEND(1, false),                    // old dpp load, mini load, insert stmt(not streaming type) use this type
         BACKEND_STREAMING(2, true),            // streaming load use this type
         INSERT_STREAMING(3, true),             // insert stmt (streaming type) use this type
@@ -113,7 +117,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         MV_REFRESH(9, false),                  // Refresh MV
         REPLICATION(10, false),                // Replication
         BYPASS_WRITE(11, false),               // Bypass BE, and write data file directly
-        MULTI_STATEMENT_STREAMING(12, false);  // multi statement streaming load
+        MULTI_STATEMENT_STREAMING(12, false),  // multi statement streaming load
+        SHADOW_REWRITE(13, false);             // shadow-index rewrite phase of a range-dist key schema change
 
         private final int flag;
         private final boolean loadingTransaction;
@@ -141,6 +146,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         public boolean isLoadingTransaction() {
             return loadingTransaction;
         }
+    }
+
+    public enum TxnPrepareMode {
+        // PREPARED is only an in-memory transition inside a one-phase commit.
+        INTERNAL_ONE_PHASE,
+        // PREPARED is an explicit, persisted transaction state controlled by the client.
+        EXPLICIT_TWO_PHASE
     }
 
     public enum TxnSourceType {
@@ -213,6 +225,11 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
     }
 
+    // Transaction source types that are NOT a user data write (compaction / replication / shadow-rewrite):
+    // they bump the visible version but must NOT advance a partition's lastUpdateTime. See isUserWriteSource().
+    private static final EnumSet<LoadJobSourceType> NON_USER_WRITE_SOURCE_TYPES =
+            EnumSet.of(LoadJobSourceType.LAKE_COMPACTION, LoadJobSourceType.REPLICATION, LoadJobSourceType.SHADOW_REWRITE);
+
     @SerializedName("dd")
     private long dbId;
     @SerializedName("tl")
@@ -243,6 +260,11 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private long finishTime;
     @SerializedName("rs")
     private String reason = "";
+
+    // Temporary diagnostics shown while a transaction is still running. This field is deliberately
+    // neither persisted nor copied by the COW constructor, so a successful state transition cannot
+    // retain a stale retry message.
+    private String temporaryReason = "";
     @SerializedName("gtid")
     private long globalTransactionId;
 
@@ -348,6 +370,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     // transaction transitions to the PREPARED state.
     @SerializedName("pto")
     private long preparedTimeoutMs = DEFAULT_PREPARED_TIMEOUT_MS;
+
+    // This mode is not persisted because INTERNAL_ONE_PHASE PREPARED state is not written to the edit log,
+    // while a recovered PREPARED state is always an explicit two-phase transaction.
+    private TxnPrepareMode txnPrepareMode = TxnPrepareMode.EXPLICIT_TWO_PHASE;
 
     // optional
     @SerializedName("ta")
@@ -536,6 +562,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.callbackIdList = txnState.callbackIdList;
         this.timeoutMs = txnState.timeoutMs;
         this.preparedTimeoutMs = txnState.preparedTimeoutMs;
+        this.txnPrepareMode = txnState.txnPrepareMode;
         this.txnCommitAttachment = txnState.txnCommitAttachment;
         this.warehouseId = txnState.warehouseId;
         this.computeResource = txnState.computeResource;
@@ -736,7 +763,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public String getReason() {
-        return reason;
+        return Strings.isNullOrEmpty(temporaryReason) ? reason : temporaryReason;
     }
 
     public TxnCommitAttachment getTxnCommitAttachment() {
@@ -753,6 +780,19 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public long getTimeoutMs() {
         return timeoutMs;
+    }
+
+    public long getTimeoutDeadlineMs() {
+        if (transactionStatus == TransactionStatus.PREPARE) {
+            return prepareTime + timeoutMs;
+        }
+        if (transactionStatus == TransactionStatus.PREPARED) {
+            if (txnPrepareMode == TxnPrepareMode.INTERNAL_ONE_PHASE) {
+                return prepareTime + timeoutMs;
+            }
+            return preparedTime + getPreparedTimeoutMs();
+        }
+        return Long.MAX_VALUE;
     }
 
     public long getWarehouseId() {
@@ -900,8 +940,14 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public void setPreparedTimeAndTimeout(long preparedTime, long preparedTimeoutMs) {
+        setPreparedTimeAndTimeout(preparedTime, preparedTimeoutMs, TxnPrepareMode.EXPLICIT_TWO_PHASE);
+    }
+
+    public void setPreparedTimeAndTimeout(
+            long preparedTime, long preparedTimeoutMs, TxnPrepareMode txnPrepareMode) {
         this.preparedTime = preparedTime;
         this.preparedTimeoutMs = preparedTimeoutMs;
+        this.txnPrepareMode = Objects.requireNonNull(txnPrepareMode, "txnPrepareMode is null");
     }
 
     public long getPreparedTime() {
@@ -909,8 +955,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public long getPreparedTimeoutMs() {
-        return preparedTimeoutMs == DEFAULT_PREPARED_TIMEOUT_MS ?
-            Config.prepared_transaction_default_timeout_second * 1000L : preparedTimeoutMs;
+        return preparedTimeoutMs > 0 ?
+                preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
     }
 
     public void setCommitTime(long commitTime) {
@@ -923,6 +969,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public void setReason(String reason) {
         this.reason = Strings.nullToEmpty(reason);
+        this.temporaryReason = "";
+    }
+
+    public void setTemporaryReason(String reason) {
+        this.temporaryReason = Strings.nullToEmpty(reason);
+    }
+
+    public void clearTemporaryReason() {
+        this.temporaryReason = "";
     }
 
     public Set<Long> getErrorReplicas() {
@@ -971,6 +1026,22 @@ public class TransactionState implements Writable, GsonPreProcessable {
                 && ((InsertTxnCommitAttachment) txnCommitAttachment).getIsVersionOverwrite();
     }
 
+    public boolean isShadowRewrite() {
+        return sourceType == LoadJobSourceType.SHADOW_REWRITE;
+    }
+
+    // The watershed txn id that a shadow-rewrite txn's converted op_schema_change log is keyed by.
+    public long getShadowRewriteWatershedTxnId() {
+        return txnCommitAttachment instanceof InsertTxnCommitAttachment
+                ? ((InsertTxnCommitAttachment) txnCommitAttachment).getShadowRewriteWatershedTxnId() : 0;
+    }
+
+    // The alter version a shadow-rewrite txn's rewritten data is anchored at.
+    public long getShadowRewriteAlterVersion() {
+        return txnCommitAttachment instanceof InsertTxnCommitAttachment
+                ? ((InsertTxnCommitAttachment) txnCommitAttachment).getShadowRewriteAlterVersion() : 0;
+    }
+
     // return true if txn is in final status and label is expired
     public boolean isExpired(long currentMillis) {
         return transactionStatus.isFinalStatus() && (currentMillis - finishTime) / 1000 > Config.label_keep_max_second;
@@ -978,15 +1049,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        if (transactionStatus == TransactionStatus.PREPARE) {
-            return currentMillis - prepareTime > timeoutMs;
-        }
-        if (transactionStatus == TransactionStatus.PREPARED) {
-            long timeout = preparedTimeoutMs > 0 ?
-                    preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
-            return (currentMillis - preparedTime) > timeout;
-        }
-        return false;
+        long timeoutDeadlineMs = getTimeoutDeadlineMs();
+        return timeoutDeadlineMs != Long.MAX_VALUE && currentMillis > timeoutDeadlineMs;
     }
 
     /**
@@ -1164,6 +1228,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return sourceType;
     }
 
+    public boolean isUserWriteSource() {
+        return !NON_USER_WRITE_SOURCE_TYPES.contains(sourceType);
+    }
+
     public boolean isFromLakeCompaction() {
         return sourceType == LoadJobSourceType.LAKE_COMPACTION;
     }
@@ -1175,6 +1243,44 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {
         return publishVersionTasks;
+    }
+
+    /**
+     * Merge the first-load per-tablet stats each BE reported through its publish task into the
+     * partition commit infos.
+     * <p>
+     * Must be called while holding this transaction's write lock, immediately before the state is
+     * snapshotted. That makes the finishing thread the only writer of
+     * {@link PartitionCommitInfo#getTabletStats()}: the thrift finishTask handlers only ever write to
+     * their own {@link PublishVersionTask}, so nothing mutates the commit infos while they are being
+     * copied. Doing it the other way round - handler threads writing the commit infos directly - is
+     * what threw ConcurrentModificationException out of PublishVersionDaemon in issue #77595.
+     * <p>
+     * Idempotent, so a transaction whose finish is retried simply re-applies the same stats.
+     */
+    public void applyPublishTaskTabletStats() {
+        // TODO(stephen): support insert into multiple tables in a transaction
+        if (sourceType != LoadJobSourceType.INSERT_STREAMING || idToTableCommitInfos.size() != 1 ||
+                publishVersionTasks.isEmpty()) {
+            return;
+        }
+        TableCommitInfo tableCommitInfo = idToTableCommitInfos.values().iterator().next();
+        if (tableCommitInfo == null) {
+            return;
+        }
+        for (PublishVersionTask task : publishVersionTasks.values()) {
+            // An unfinished task has not published its stats yet; reading them would be a torn read
+            // of a report still in flight. Its stats land on the next finish attempt, if any.
+            if (!task.isFinished()) {
+                continue;
+            }
+            task.getFirstLoadTabletStats().forEach((partitionId, tabletStats) -> {
+                PartitionCommitInfo commitInfo = tableCommitInfo.getPartitionCommitInfo(partitionId);
+                if (commitInfo != null) {
+                    commitInfo.putAllTabletStats(tabletStats);
+                }
+            });
+        }
     }
 
     public void clearAfterPublished() {

@@ -37,13 +37,17 @@
 #include <vector>
 
 #include "base/string/slice.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "io/seekable_input_stream.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 namespace starrocks {
+
+namespace compression {
+class ZstdDDict;
+} // namespace compression
 
 class BlockCompressionCodec;
 class RandomAccessFile;
@@ -66,6 +70,11 @@ struct PageReadOptions {
     bool use_page_cache = true;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
+    // Per-column ZSTD dictionary this page may reference, or null. Read side only:
+    // a page whose frame does not reference a dictionary decodes identically whether
+    // or not this is set, which is what makes a column with a mix of dictionary and
+    // plain pages safe to read.
+    const compression::ZstdDDict* dict = nullptr;
 
     void sanity_check() const {
         CHECK_NOTNULL(read_file);

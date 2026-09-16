@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.type.BooleanType;
@@ -209,5 +210,195 @@ public class FoldConstantsRuleTest {
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_FALSE, rule.apply(bpo10, null));
 
+    }
+
+    @Test
+    public void applyLikeFolding() {
+        // Values below are what the FE Parser produces after the first layer of string-literal
+        // escaping (AstBuilder.escapeBackSlash). Java string mapping:
+        //   SQL 'a\\b'   → Java "a\\b"  (3 chars: a, \, b)
+        //   SQL 'a\\\\b' → Java "a\\\\b" (4 chars: a, \, \, b)
+        //   SQL '100\\%' → Java "100\\%" (5 chars: 1,0,0,\,%) — Parser keeps \% intact
+        //   SQL 'a\\_b'  → Java "a\\_b"  (4 chars: a,\,_,b)   — Parser keeps \_ intact
+
+        // Bug regression: 'a\\b' LIKE 'a\\\\b' must return 1 (MySQL), was 0 before fix
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("a\\b"),
+                ConstantOperator.createVarchar("a\\\\b")), null));
+
+        // Bug regression: 'a\\b' LIKE 'a\\b' must return 0 (MySQL), was 1 before fix
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("a\\b"),
+                ConstantOperator.createVarchar("a\\b")), null));
+
+        // Escaped % as literal: '100%' LIKE '100\%' → 1 (\% matches the literal % in text)
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("100%"),
+                ConstantOperator.createVarchar("100\\%")), null));
+
+        // Escaped % must NOT act as wildcard: '100abc' LIKE '100\%' → 0
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("100abc"),
+                ConstantOperator.createVarchar("100\\%")), null));
+
+        // Plain equals (no backslash) — existing behavior preserved
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("hello")), null));
+
+        // Plain startsWith — existing behavior preserved
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("abcdef"),
+                ConstantOperator.createVarchar("abc%")), null));
+
+        // Pattern with _ wildcard: not a fast-path pattern, returned to BE as-is
+        LikePredicateOperator withUnderscore = new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("abc"),
+                ConstantOperator.createVarchar("a_c"));
+        assertEquals(withUnderscore, rule.apply(withUnderscore, null));
+
+        // Non-constant text: not folded, returned as-is
+        LikePredicateOperator nonConst = new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                new ColumnRefOperator(1, VarcharType.VARCHAR, "col", true),
+                ConstantOperator.createVarchar("a\\\\b"));
+        assertEquals(nonConst, rule.apply(nonConst, null));
+
+        // endsWith path: 'xyzabc' LIKE '%abc' → 1
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("xyzabc"),
+                ConstantOperator.createVarchar("%abc")), null));
+
+        // contains path: 'xyzabcdef' LIKE '%abc%' → 1
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("xyzabcdef"),
+                ConstantOperator.createVarchar("%abc%")), null));
+
+        // Trailing lone backslash — invalid LIKE escape, not folded → return predicate
+        LikePredicateOperator trailingSlash = new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("a\\"),
+                ConstantOperator.createVarchar("a\\"));
+        assertEquals(trailingSlash, rule.apply(trailingSlash, null));
+
+        // startsWith with escaped % in body: text must start with literal "a%xy"
+        // SQL pattern 'a\%xy%': Parser keeps \% → Java "a\\%xy%"; trailing % is the real wildcard
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("a%xyz"),
+                ConstantOperator.createVarchar("a\\%xy%")), null));
+
+        // \% in body is NOT a wildcard: "aXxyz" does not start with "a%xy"
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("aXxyz"),
+                ConstantOperator.createVarchar("a\\%xy%")), null));
+
+        // --- Escaped wildcard directly adjacent to a real wildcard (regression for the
+        //     stripStart/stripEnd over-strip bug; only passes with the capture-group fix) ---
+
+        // startsWith: SQL 'abc\%%' → Java "abc\\%%": literal "abc%" + trailing wildcard %.
+        // Must match text starting with "abc%".
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("abc%xyz"),
+                ConstantOperator.createVarchar("abc\\%%")), null));
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("abcXyz"),
+                ConstantOperator.createVarchar("abc\\%%")), null));
+
+        // endsWith: SQL '%\%abc' → Java "%\\%abc": leading wildcard % + literal "%abc".
+        // Must match text ending with "%abc".
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("xyz%abc"),
+                ConstantOperator.createVarchar("%\\%abc")), null));
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("xyzabc"),
+                ConstantOperator.createVarchar("%\\%abc")), null));
+
+        // contains: SQL '%a\%b%' → Java "%a\\%b%": wildcards on both ends, literal "a%b" inside.
+        // Must match text containing "a%b".
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("xa%by"),
+                ConstantOperator.createVarchar("%a\\%b%")), null));
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("xaXby"),
+                ConstantOperator.createVarchar("%a\\%b%")), null));
+
+        // --- Other escape forms ---
+
+        // Double backslash + wildcard: SQL 'a\\%' → Java "a\\\\%": literal "a\" + wildcard %.
+        // Must match text starting with "a\".
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("a\\xyz"),
+                ConstantOperator.createVarchar("a\\\\%")), null));
+
+        // Trailing escaped backslash (EQUALS): SQL 'abc\\' → Java "abc\\\\": literal "abc\".
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("abc\\"),
+                ConstantOperator.createVarchar("abc\\\\")), null));
+
+        // Escaped underscore as a literal: SQL 'a\_b' → Java "a\\_b": literal "a_b".
+        assertEquals(OB_TRUE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("a_b"),
+                ConstantOperator.createVarchar("a\\_b")), null));
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("aXb"),
+                ConstantOperator.createVarchar("a\\_b")), null));
+
+        // --- Cases that are intentionally NOT folded (returned to BE) ---
+
+        // Pure wildcards have no literal body → not folded
+        LikePredicateOperator pureWildcard = new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("anything"),
+                ConstantOperator.createVarchar("%"));
+        assertEquals(pureWildcard, rule.apply(pureWildcard, null));
+
+        // Empty pattern → not folded
+        LikePredicateOperator emptyPattern = new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("x"),
+                ConstantOperator.createVarchar(""));
+        assertEquals(emptyPattern, rule.apply(emptyPattern, null));
+
+        // REGEXP (not LIKE) type → not folded by this rule
+        LikePredicateOperator regexp = new LikePredicateOperator(
+                LikePredicateOperator.LikeType.REGEXP,
+                ConstantOperator.createVarchar("abc"),
+                ConstantOperator.createVarchar("abc"));
+        assertEquals(regexp, rule.apply(regexp, null));
+
+        // --- Other correctness checks ---
+
+        // NULL operand → NULL
+        assertEquals(OB_NULL, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createNull(VarcharType.VARCHAR),
+                ConstantOperator.createVarchar("abc")), null));
+
+        // LIKE folding is case-sensitive (binary collation): 'ABC' LIKE 'abc' → 0
+        assertEquals(OB_FALSE, rule.apply(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE,
+                ConstantOperator.createVarchar("ABC"),
+                ConstantOperator.createVarchar("abc")), null));
     }
 }

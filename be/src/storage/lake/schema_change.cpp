@@ -18,7 +18,6 @@
 
 #include <memory>
 
-#include "agent/agent_metrics.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
@@ -33,6 +32,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -40,8 +40,11 @@
 #include "storage/metadata_util.h"
 #include "storage/schema_change_utils.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_reader_params.h"
+#include "storage/tablet_schema.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks::lake {
 
@@ -411,30 +414,48 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
     return status;
 }
 
+// Resolve the schema that an alter request must treat as authoritative.
+//
+// Under fast schema evolution v2 the FE catalog schema can be NEWER than the one
+// in tablet metadata: ADD COLUMN there only updates the FE catalog, and tablet
+// metadata catches up lazily, on the next write whose schema_key names a newer
+// schema. A table that is not being written to can sit in that state
+// indefinitely. FE therefore attaches its catalog schema to the alter request as
+// base_tablet_read_schema; prefer it, and fall back to tablet metadata only for
+// a request that carries none (pre-FSE-v2 FE).
+//
+// Resolution goes through the by-id schema cache so repeated alters against the
+// same catalog schema share one TabletSchema instance.
+static StatusOr<TabletSchemaPtr> resolve_authoritative_schema(TabletManager* tablet_manager,
+                                                              const TAlterTabletReqV2& request,
+                                                              const VersionedTablet& base_tablet) {
+    if (!request.__isset.base_tablet_read_schema) {
+        auto schema = base_tablet.get_schema();
+        if (schema == nullptr) {
+            return Status::InternalError("tablet has null schema and request carries no base_tablet_read_schema");
+        }
+        return schema;
+    }
+    if (auto cached = tablet_manager->get_cached_schema(request.base_tablet_read_schema.id); cached != nullptr) {
+        return cached;
+    }
+    TabletSchemaPB schema_pb;
+    RETURN_IF_ERROR(convert_t_schema_to_pb_schema(request.base_tablet_read_schema, &schema_pb));
+    auto schema = TabletSchema::create(schema_pb);
+    tablet_manager->cache_schema(schema);
+    return schema;
+}
+
 Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& request) {
     // get base tablet and new tablet
     const auto alter_version = request.alter_version;
     ASSIGN_OR_RETURN(auto base_tablet, _tablet_manager->get_tablet(request.base_tablet_id, alter_version));
     ASSIGN_OR_RETURN(auto new_tablet, _tablet_manager->get_tablet(request.new_tablet_id, 1));
 
-    // Determine the schema to use for reading data from base tablet.
-    // In Fast Schema Evolution v2, FE may send base_tablet_read_schema which is newer than the schema stored in tablet metadata.
-    // We must use the FE catalog schema (request.base_tablet_read_schema) if provided, otherwise fallback to tablet metadata schema.
-    TabletSchemaCSPtr base_tablet_read_schema;
-    if (request.__isset.base_tablet_read_schema) {
-        // Use schema from FE catalog (may be newer than tablet metadata schema).
-        auto schema_id = request.base_tablet_read_schema.id;
-        base_tablet_read_schema = _tablet_manager->get_cached_schema(schema_id);
-        if (base_tablet_read_schema == nullptr) {
-            TabletSchemaPB schema_pb;
-            RETURN_IF_ERROR(convert_t_schema_to_pb_schema(request.base_tablet_read_schema, &schema_pb));
-            base_tablet_read_schema = TabletSchema::create(schema_pb);
-            _tablet_manager->cache_schema(base_tablet_read_schema);
-        }
-    } else {
-        // Fallback to schema from tablet metadata (old behavior before Fast Schema Evolution v2).
-        base_tablet_read_schema = base_tablet.get_schema();
-    }
+    // Determine the schema to use for reading data from base tablet: the FE
+    // catalog schema when the request carries one, else tablet metadata.
+    ASSIGN_OR_RETURN(TabletSchemaCSPtr base_tablet_read_schema,
+                     resolve_authoritative_schema(_tablet_manager, request, base_tablet));
     auto new_schema = new_tablet.get_schema();
     auto has_delete_predicates = base_tablet.has_delete_predicates();
 
@@ -462,7 +483,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
         if (!request.__isset.query_options || !request.__isset.query_globals) {
             return Status::InternalError("change materialized view but query_options/query_globals is not set");
         }
-        chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+        chunk_changer->init_runtime_state(request.query_options, request.query_globals, _exec_env);
 
         RuntimeState* runtime_state = chunk_changer->get_runtime_state();
         RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, chunk_changer->get_object_pool(), request.desc_tbl,
@@ -490,7 +511,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
         sc_params.sc_directly = true;
 
         chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
-                                          request.materialized_column_req.query_globals);
+                                          request.materialized_column_req.query_globals, _exec_env);
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
@@ -534,7 +555,25 @@ Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaIn
 Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
     auto timer = MonotonicStopWatch{};
     timer.start();
-    LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
+    if (tablet_meta_info.__isset.tablet_range) {
+        // A populated range carries raw user boundary values; do not log them, and do not copy the whole
+        // message just to redact them (that would duplicate a possibly-oversized range before the caps in
+        // convert_t_range_to_pb_range run). Log the tablet id, the accompanying schema, and the per-bound
+        // arity only.
+        const int lower_arity = tablet_meta_info.tablet_range.__isset.lower_bound
+                                        ? static_cast<int>(tablet_meta_info.tablet_range.lower_bound.values.size())
+                                        : -1;
+        const int upper_arity = tablet_meta_info.tablet_range.__isset.upper_bound
+                                        ? static_cast<int>(tablet_meta_info.tablet_range.upper_bound.values.size())
+                                        : -1;
+        LOG(INFO) << "Updating tablet metadata (with range): tablet_id: " << tablet_meta_info.tablet_id
+                  << ", tablet_schema: "
+                  << (tablet_meta_info.__isset.tablet_schema ? ThriftDebugString(tablet_meta_info.tablet_schema)
+                                                             : "<none>")
+                  << ", range lower arity: " << lower_arity << ", range upper arity: " << upper_arity;
+    } else {
+        LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
+    }
 
     auto tablet_id = tablet_meta_info.tablet_id;
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(tablet_id));
@@ -562,6 +601,19 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         }
     }
 
+    if (tablet_meta_info.__isset.tablet_range) {
+        // A range must always travel with the schema it is to be interpreted against.
+        if (!tablet_meta_info.__isset.tablet_schema) {
+            return Status::Corruption("tablet meta update carries a range without a tablet schema");
+        }
+        ASSIGN_OR_RETURN(auto pb_range, TabletRangeHelper::convert_t_range_to_pb_range(tablet_meta_info.tablet_range));
+        // Build has no authoritative base metadata version, so only structural checks are possible
+        // here; the exact trailing-ADD transition is validated at apply.
+        auto new_schema = TabletSchema::create(metadata_update_info->tablet_schema());
+        RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(pb_range, *new_schema));
+        metadata_update_info->mutable_tablet_range()->CopyFrom(pb_range);
+    }
+
     // TODO(zhangqiang)
     // aggregate alter txn log
     if (tablet_meta_info.__isset.bundle_tablet_metadata) {
@@ -573,6 +625,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
                                                            ? CompactionStrategyPB::DEFAULT
                                                            : CompactionStrategyPB::REAL_TIME;
         metadata_update_info->set_compaction_strategy(compaction_strategy);
+    }
+
+    if (tablet_meta_info.__isset.flat_json_config) {
+        FlatJsonConfig cfg;
+        cfg.update(tablet_meta_info.flat_json_config);
+        cfg.to_pb(metadata_update_info->mutable_flat_json_config());
     }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
@@ -652,20 +710,28 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 // failures here represent real BE-side errors that should cancel the
 // alter, not silently land in an unsupported fallback shape.
 Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
-    AgentMetrics::instance()->lake_add_index_requests_total.increment(1);
-    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
-        // The fast-path request shape (base_tablet_id == new_tablet_id, no
-        // tablet_schema diff) is incompatible with the legacy rewrite path:
-        // delegating here would self-targeted "rewrite" the tablet and
-        // append duplicate rowsets. FE's classifier guarantees this branch
-        // is unreachable in practice, so fail loudly instead of falling
-        // back.
-        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
-        return Status::InvalidArgument("ADD INDEX fast path called with empty indexes_to_add");
-    }
+    StorageMetrics::instance()->lake_add_index_requests_total.increment(1);
     if (!request.__isset.txn_id) {
-        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
         return Status::InvalidArgument("txn_id not set for ADD INDEX fast path");
+    }
+    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
+        // Explicit no-op: FE sends an EMPTY index set for a materialized index
+        // (rollup / sync MV) whose schema does not carry the indexed column(s) —
+        // the index is only built on the metas that contain the columns,
+        // mirroring the legacy path which only builds on the base index. This
+        // tablet still needs a txn log so the reserved alter version publishes
+        // on every tablet of the partition; apply_add_index on an empty op is a
+        // pure version advance. (The legacy-rewrite fallback stays forbidden:
+        // the fast-path request shape base_tablet_id == new_tablet_id would
+        // make it re-process the tablet against itself and duplicate rows.)
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(request.new_tablet_id);
+        txn_log->set_txn_id(request.txn_id);
+        txn_log->mutable_op_add_index()->set_alter_version(request.alter_version);
+        LOG(INFO) << "ADD INDEX fast path no-op (no applicable index for this materialized index): tablet="
+                  << request.new_tablet_id << " txn_id=" << request.txn_id;
+        return _tablet_manager->put_txn_log(std::move(txn_log));
     }
 
     const int64_t alter_version = request.alter_version;
@@ -673,15 +739,20 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     // Fast path: shadow tablet == origin tablet (FE sends tabletId for both
     // base_tablet_id and new_tablet_id). Reuse base_tablet; do NOT read the
     // initial metadata at version 1 — on a long-running partition that file
-    // has been vacuumed and lookups will 404 on object storage. The schema
-    // used below resolves column names → unique_ids; since ADD INDEX does
-    // not change the column set, base_tablet's schema is authoritative.
+    // has been vacuumed and lookups will 404 on object storage.
     auto& new_tablet = base_tablet;
 
-    auto new_schema = new_tablet.get_schema();
-    if (new_schema == nullptr) {
-        return Status::InternalError("new tablet has null schema");
-    }
+    // This schema resolves index column names → unique ids and drives every
+    // per-segment build below, so it must be the schema FE attached to the
+    // request whenever there is one. base_tablet's metadata schema is NOT a safe
+    // substitute: ADD INDEX does not change the column set, but the column set
+    // can already have changed without tablet metadata knowing, because a
+    // metadata-only ADD COLUMN under fast schema evolution v2 updates only the FE
+    // catalog and tablet metadata catches up lazily on the next write. Resolving
+    // names against tablet metadata in that window fails every ADD INDEX on an
+    // ALTER-added column — deterministically, and on an empty table too, since
+    // with no writes there is nothing to trigger the catch-up.
+    ASSIGN_OR_RETURN(auto new_schema, resolve_authoritative_schema(_tablet_manager, request, base_tablet));
 
     // Translate each TOlapTableIndex into TabletIndexPB. TOlapTableIndex
     // carries column *names* (driven by FE catalog), and TabletIndexPB uses
@@ -693,28 +764,37 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
         if (!tix.__isset.index_type) {
             return Status::InvalidArgument("TOlapTableIndex has no index_type");
         }
-        TabletIndexPB pb;
-        if (tix.__isset.index_id) pb.set_index_id(tix.index_id);
-        if (tix.__isset.index_name) pb.set_index_name(tix.index_name);
-        auto converted = TabletIndex::convert_index_type_from_thrift(tix.index_type);
-        if (!converted.ok()) return converted.status();
-        pb.set_index_type(*converted);
         if (!tix.__isset.columns || tix.columns.empty()) {
-            return Status::InvalidArgument(strings::Substitute("index $0 has no columns", pb.index_name()));
+            return Status::InvalidArgument(
+                    strings::Substitute("index $0 has no columns", tix.__isset.index_name ? tix.index_name : ""));
         }
+        // Validate every indexed column exists in new_schema *before* delegating to
+        // TabletIndex::init_from_thrift, whose field_index() lookup is unchecked and
+        // would read out of bounds on a missing column. A missing column must fail
+        // fast here rather than fall back to do_process_alter_tablet — the fast-path
+        // request shape (same tablet for base/new) would make the legacy rewrite
+        // re-process the tablet against itself and duplicate rows.
         for (const auto& col_name : tix.columns) {
             auto ordinal = new_schema->field_index(col_name);
             if (ordinal >= new_schema->num_columns()) {
-                // See note above: do not fall back to do_process_alter_tablet
-                // — the request shape would cause the legacy path to
-                // re-write the tablet against itself and duplicate rows.
-                AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+                StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
                 return Status::InternalError(
                         strings::Substitute("ADD INDEX fast path: column $0 not found in new schema. tablet=$1",
                                             col_name, request.new_tablet_id));
             }
-            pb.add_col_unique_id(new_schema->column(ordinal).unique_id());
         }
+        // Build TabletIndexPB via TabletIndex so every field is populated exactly like
+        // the standard (segment-rewrite) write path: index id/name/type, the
+        // schema-resolved column unique ids, AND the serialized common/index/search
+        // property maps. The previous manual construction copied only
+        // id/name/type/col_unique_id and dropped index_properties, so NGRAMBF lost
+        // gram_num/case_sensitive (and plain bloom lost bloom_filter_fpp); the fast
+        // path then built the index with wrong defaults (e.g. gram_num=4) that never
+        // matched the query-side predicate ngrams, yielding empty/incorrect results.
+        TabletIndex tablet_index;
+        RETURN_IF_ERROR(tablet_index.init_from_thrift(tix, *new_schema));
+        TabletIndexPB pb;
+        tablet_index.to_schema_pb(&pb);
         indexes_to_build.push_back(std::move(pb));
     }
 
@@ -723,9 +803,63 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     txn_log->set_tablet_id(request.new_tablet_id);
     txn_log->set_txn_id(request.txn_id);
     auto* op_add_index = txn_log->mutable_op_add_index();
+    // Carry the FE-allocated new schema id/version so apply_add_index stamps them
+    // onto the tablet metadata schema — this invalidates every by-id schema cache
+    // so data loaded after the index (and compaction output) build the new index
+    // instead of reusing the cached pre-index schema.
+
+    // Publish the authoritative column definitions, carrying the FE-allocated
+    // schema id/version INSIDE them rather than in the standalone new_schema_id /
+    // new_schema_version fields.
+    //
+    // Sending only an id would let apply_add_index stamp FE's new schema id onto
+    // tablet-metadata content that still lacks the indexed column;
+    // update_metadata_schema() then short-circuits on the matching id and the
+    // tablet never fetches the real schema again, freezing a transient FE/BE
+    // schema gap into a permanent silent one.
+    //
+    // Keeping the id out of the standalone fields is what makes this safe across
+    // a rolling upgrade. The alter runs on the worker FE assigned at RUNNING, but
+    // publish resolves its worker separately at FINISHED_REWRITING, so a log
+    // written by an upgraded worker can be applied by one that predates this
+    // change. Such a worker ignores new_schema (an unknown field) but would still
+    // honour new_schema_id -- and would then perform exactly the id-onto-stale-
+    // content stamping described above. With the id reachable only through
+    // new_schema, its `op.has_new_schema_id()` gate is false, so it skips schema
+    // mutation entirely: the IDG entries still publish and the schema keeps its
+    // old id -- the permanent mis-binding is off the table.
+    //
+    // What this does NOT buy: that worker also never repoints rowset_to_schema
+    // pins, and a later write does not either (update_metadata_schema() refreshes
+    // metadata->schema(), while archive_current_schema_into_history() pins the
+    // existing rowsets to the OLD schema). A compaction of those pinned rowsets
+    // then resolves an un-flagged schema, writes no inline index, and drops the
+    // sidecar entries with its inputs. On a tablet published by a pre-new_schema
+    // worker the index therefore lasts only until compaction, landing in the
+    // fixed point pinned by
+    // MetaFileTest.test_apply_add_index_old_pin_is_a_compaction_fixed_point. The
+    // complete answer is a capability gate (or a wire format an old applier cannot
+    // partially apply); this placement is the part that keeps it from being worse.
+    //
+    // apply_add_index composes this with new_indexes above into the final schema,
+    // so the compose logic lives in exactly one place.
+    //
+    // Emitted only when FE allocated an id for this alter. Without one there is no
+    // id to invalidate the by-id schema caches with, and to_schema_pb() would leave
+    // FE's *catalog* schema id in place -- installing content under that id would
+    // bind it to a schema the caches may already hold. Publishing nothing instead
+    // keeps the pre-existing behaviour for such a request.
+    if (request.__isset.new_index_schema_id && request.new_index_schema_id > 0) {
+        auto* target_schema_pb = op_add_index->mutable_new_schema();
+        new_schema->to_schema_pb(target_schema_pb);
+        target_schema_pb->set_id(request.new_index_schema_id);
+        if (request.__isset.new_index_schema_version) {
+            target_schema_pb->set_schema_version(static_cast<int32_t>(request.new_index_schema_version));
+        }
+    }
 
     AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
-                            alter_version);
+                            alter_version, new_schema, _lake_schema_change_pool);
     auto run_st = sc.run(op_add_index);
     if (!run_st.ok()) {
         // Do NOT fall back to do_process_alter_tablet here. The fast-path
@@ -736,14 +870,14 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
         // .idx files have already been cleaned up by the run() failure
         // branch (cleanup_written_idx_files()).
         LOG(WARNING) << "ADD INDEX fast path failed: " << run_st << " tablet=" << request.new_tablet_id;
-        AgentMetrics::instance()->lake_add_index_requests_failed.increment(1);
+        StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
         return run_st;
     }
 
     LOG(INFO) << "ADD INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id
               << " segment_entries=" << op_add_index->segment_entries_size()
               << " new_indexes=" << op_add_index->new_indexes_size();
-    AgentMetrics::instance()->lake_idg_files_written_total.increment(op_add_index->segment_entries_size());
+    StorageMetrics::instance()->lake_idg_files_written_total.increment(op_add_index->segment_entries_size());
     return _tablet_manager->put_txn_log(std::move(txn_log));
 }
 
@@ -757,7 +891,7 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
 // when compaction later rebuilds the segment (keys absent from the inlined
 // footer, the .idx file becomes unreferenced and gets vacuumed).
 Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& request) {
-    AgentMetrics::instance()->lake_drop_index_requests_total.increment(1);
+    StorageMetrics::instance()->lake_drop_index_requests_total.increment(1);
     if (!request.__isset.drop_indexes || request.drop_indexes.empty()) {
         LOG(WARNING) << "DROP INDEX fast path called with empty drop_indexes list; tablet=" << request.new_tablet_id;
         return Status::InvalidArgument("drop_indexes is empty for DROP INDEX fast path");

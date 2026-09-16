@@ -32,9 +32,9 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "storage/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
 #include "types/logical_type.h"
 
 namespace tparquet {
@@ -146,6 +146,20 @@ public:
         dst_col->swap_column(*src_col);
         return Status::OK();
     }
+
+    // Finalize a column that may be in lazy physical state (dict codes or
+    // intermediate / non-converted values) back to StarRocks logical type.
+    //
+    // This is the evaluate-line boundary: after read_range() may return
+    // Parquet-native physical columns for dict-filter / lazy-convert
+    // performance, but before any StarRocks expression evaluator (ExprContext,
+    // ChunkPredicateEvaluator, compound conjunct) consumes a column, it MUST
+    // be finalized to logical form.  Idempotent / no-op when the column is
+    // already logical.
+    //
+    // Not to be confused with fill_dst_column() which is the emit-time
+    // boundary and may skip decode for predicate-only columns.
+    virtual Status finalize_lazy_state(ColumnPtr& col) { return Status::OK(); }
 
     virtual void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                          ColumnIOTypeFlags types, bool active) = 0;

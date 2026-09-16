@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
-import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.AbstractOlapTableScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -48,14 +48,14 @@ import java.util.function.Function;
 public class ColocatedBackendSelector implements BackendSelector {
     private static final Logger LOG = LogManager.getLogger(ColocatedBackendSelector.class);
 
-    private final OlapScanNode scanNode;
+    private final AbstractOlapTableScanNode scanNode;
     private final FragmentScanRangeAssignment assignment;
     private final ColocatedBackendSelector.Assignment colocatedAssignment;
     private final boolean isRightOrFullBucketShuffleFragment;
     private final WorkerProvider workerProvider;
     private final BucketSequenceIterator bucketSequenceIterator;
 
-    public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment,
+    public ColocatedBackendSelector(AbstractOlapTableScanNode scanNode, FragmentScanRangeAssignment assignment,
                                     ColocatedBackendSelector.Assignment colocatedAssignment,
                                     boolean isRightOrFullBucketShuffleFragment, WorkerProvider workerProvider,
                                     int maxBucketsPerBeToUseBalancerAssignment) {
@@ -76,7 +76,7 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         Iterable<Integer> bucketSeqs = bucketSequenceIterator.createIterable();
         for (Integer bucketSeq : bucketSeqs) {
-            List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
+            List<TScanRangeLocations> locations = scanNode.getBucketSeqToLocations().get(bucketSeq);
             if (!bucketSeqToWorkerId.containsKey(bucketSeq)) {
                 // Use the first tablet to represent the locations, calculate the backend assigned to this bucket sequence.
                 // In colocation table, all tablets of a bucket sequence have the same locations.
@@ -227,7 +227,7 @@ public class ColocatedBackendSelector implements BackendSelector {
      * {@link NormalBucketSequenceIterator}, so only use {@link BalancerBucketSequenceIterator} when  {@code numBucketsPerBe} is
      * smaller than the parameter {@code maxBucketsPerBeToUseBalancerAssignment}.
      */
-    private static BucketSequenceIterator createBucketIterator(OlapScanNode scanNode,
+    private static BucketSequenceIterator createBucketIterator(AbstractOlapTableScanNode scanNode,
                                                                int maxBucketsPerBeToUseBalancerAssignment) {
         if (maxBucketsPerBeToUseBalancerAssignment <= 0) {
             return new NormalBucketSequenceIterator(scanNode);
@@ -236,8 +236,8 @@ public class ColocatedBackendSelector implements BackendSelector {
         boolean hasMultiReplications = false;
         int numTotalBuckets = 0;
         Set<Long> backends = Sets.newHashSet();
-        for (Integer bucket : scanNode.bucketSeq2locations.keySet()) {
-            List<TScanRangeLocations> bucketLocations = scanNode.bucketSeq2locations.get(bucket);
+        for (Integer bucket : scanNode.getBucketSeqToLocations().keySet()) {
+            List<TScanRangeLocations> bucketLocations = scanNode.getBucketSeqToLocations().get(bucket);
             if (bucketLocations.isEmpty()) {
                 continue;
             }
@@ -283,8 +283,8 @@ public class ColocatedBackendSelector implements BackendSelector {
     private static class NormalBucketSequenceIterator implements BucketSequenceIterator {
         private final Iterator<Integer> iterator;
 
-        public NormalBucketSequenceIterator(OlapScanNode scanNode) {
-            this.iterator = scanNode.bucketSeq2locations.keySet().iterator();
+        public NormalBucketSequenceIterator(AbstractOlapTableScanNode scanNode) {
+            this.iterator = scanNode.getBucketSeqToLocations().keySet().iterator();
         }
 
         @Override
@@ -347,8 +347,8 @@ public class ColocatedBackendSelector implements BackendSelector {
         private final Map<Integer, Integer> bucketToBackendUsedTimes;
         private final NavigableSet<Integer> buckets;
 
-        public BalancerBucketSequenceIterator(OlapScanNode scanNode) {
-            ArrayListMultimap<Integer, TScanRangeLocations> bucketToLocations = scanNode.bucketSeq2locations;
+        public BalancerBucketSequenceIterator(AbstractOlapTableScanNode scanNode) {
+            ArrayListMultimap<Integer, TScanRangeLocations> bucketToLocations = scanNode.getBucketSeqToLocations();
 
             this.backendToBuckets = Maps.newHashMap();
             this.bucketToBackendUsedTimes = Maps.newHashMap();

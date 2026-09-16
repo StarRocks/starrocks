@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/aggregator_fwd.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 class SortedAggregateStreamingSourceOperator : public SourceOperator {

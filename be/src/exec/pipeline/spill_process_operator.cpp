@@ -18,6 +18,7 @@
 
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spiller.hpp"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state.h"
 
@@ -31,6 +32,12 @@ Status SpillProcessOperator::prepare(RuntimeState* state) {
     // for poller mode is inside subscribe_source.
     if (_channel->spiller() != nullptr) {
         _channel->spiller()->observable().subscribe_source(state, observer());
+    }
+    // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator) for the whole
+    // spill-processing lifetime, so async spill tasks (which reference context-owned state such as the
+    // build chunks / hash map) never dereference it after the owning operators free it on cancel/close.
+    if (auto* context = _channel->guarded_context(); context != nullptr) {
+        context->ref();
     }
     return Status::OK();
 }
@@ -76,6 +83,11 @@ Status SpillProcessOperator::set_finished(RuntimeState* state) {
 
 void SpillProcessOperator::close(RuntimeState* state) {
     _channel->close();
+    // Release the lifetime-anchor ref taken in prepare(); the channel is drained by now, so no spill
+    // task will dereference the context after this (which may be the last unref -> context close()).
+    if (auto* context = _channel->guarded_context(); context != nullptr) {
+        context->unref(state);
+    }
     SourceOperator::close(state);
 }
 

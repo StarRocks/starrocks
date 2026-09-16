@@ -16,11 +16,15 @@
 #include <string>
 #include <vector>
 
+#include "column/global_dict/types.h"
 #include "column/variant_path_parser.h"
 #include "formats/parquet/column_reader.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
+
+// Compare file-side geo metadata with the source semantics supplied by FE.
+Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field);
 
 struct VariantShreddedReadHints {
     // String form of the paths, kept in sync with parsed_shredded_paths via add_path().

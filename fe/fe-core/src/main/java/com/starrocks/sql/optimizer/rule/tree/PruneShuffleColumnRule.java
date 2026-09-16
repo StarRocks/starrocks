@@ -266,7 +266,7 @@ public class PruneShuffleColumnRule implements TreeRewriteRule {
                 }
 
                 HashDistributionDesc desc = ((HashDistributionSpec) d.getDistributionSpec()).getHashDistributionDesc();
-                if (!desc.isShuffle() && !desc.isShuffleEnforce()) {
+                if (!desc.isShuffleLike()) {
                     return false;
                 }
             }

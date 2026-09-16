@@ -52,7 +52,8 @@ public class PartitionStatistics {
 
     public enum CompactionPriority {
         DEFAULT(0),
-        MANUAL_COMPACT(1);
+        MANUAL_COMPACT(1),
+        UNSHARE(2);
 
         private final int value;
 
@@ -189,4 +190,3 @@ public class PartitionStatistics {
         return new Gson().toJson(this);
     }
 }
-

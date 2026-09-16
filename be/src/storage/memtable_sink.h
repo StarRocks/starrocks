@@ -46,6 +46,18 @@ public:
                                             bool eos = false, int64_t* flush_data_size = nullptr,
                                             int64_t slot_idx = -1) = 0;
 
+    // If true, the memtable does NOT split upserts/deletes; it keeps the trailing __op column in the
+    // flushed chunk and hands the whole chunk to flush_chunk_with_op(). The sink then resolves the
+    // upsert/delete order across flushes during its (spill) merge. Only the spill sink overrides this.
+    virtual bool keep_op_column() const { return false; }
+
+    // Flush a chunk whose last column is __op (TINYINT, REPLACE-aggregated). Only called when
+    // keep_op_column() is true. Default: not supported.
+    virtual Status flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* seg_info = nullptr,
+                                       bool eos = false, int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) {
+        return Status::NotSupported("flush_chunk_with_op not supported");
+    }
+
     virtual int64_t txn_id() = 0;
     virtual int64_t tablet_id() = 0;
 };

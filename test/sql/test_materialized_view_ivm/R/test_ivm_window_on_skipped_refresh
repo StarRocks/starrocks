@@ -1,0 +1,93 @@
+-- name: test_ivm_window_on_skipped_refresh
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t_skip (k int, v bigint);
+-- result:
+-- !result
+insert into t_skip values (1, 10), (2, 20);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_skip
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental",
+    "replication_num" = "1"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_skip;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_skip WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_skip WITH SYNC MODE;
+select count(*) from mv_skip;
+-- result:
+2
+-- !result
+select REFRESH_STATE, count(*) as jobs
+from information_schema.materialized_view_refresh_jobs
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_skip'
+group by REFRESH_STATE order by REFRESH_STATE;
+-- result:
+SKIPPED	1
+SUCCESS	1
+-- !result
+select regexp_extract(IMV_SOURCE_VERSION_RANGE, '"start": *"([0-9]+)"', 1) =
+           regexp_extract(IMV_SOURCE_VERSION_RANGE, '"end": *"([0-9]+)"', 1)
+       and regexp_extract(IMV_SOURCE_VERSION_RANGE, '"start": *"([0-9]+)"', 1) != '' as version_is_point_range,
+       regexp_extract(IMV_SOURCE_TIMESTAMP_RANGE, '"start": *"([0-9]+)"', 1) =
+           regexp_extract(IMV_SOURCE_TIMESTAMP_RANGE, '"end": *"([0-9]+)"', 1)
+       and regexp_extract(IMV_SOURCE_TIMESTAMP_RANGE, '"start": *"([0-9]+)"', 1) != '' as timestamp_is_point_range
+from information_schema.materialized_view_refresh_jobs
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_skip' and REFRESH_STATE = 'SKIPPED';
+-- result:
+1	1
+-- !result
+select get_json_string(EXTRA_MESSAGE, '$.refreshMode') as refresh_mode,
+       regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) =
+           regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([0-9]+)"', 1)
+       and regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) != '' as version_is_point_range
+from information_schema.task_runs
+where `DATABASE` = 'db_${uuid0}' and STATE = 'SKIPPED';
+-- result:
+INCREMENTAL	1
+-- !result
+drop materialized view mv_skip;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_skip force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result

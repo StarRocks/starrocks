@@ -19,7 +19,7 @@
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
 
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 

@@ -122,6 +122,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_SET_FORBIDDEN_GLOBAL_DICT = 268;
 
+    // Column-level global-dictionary forbid list (persisted set of column names on a table whose
+    // low-cardinality global dict should not be collected). Ignorable on replay: it is only an
+    // optimization hint, losing it never affects correctness.
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_NO_DICT_COLUMNS = 269;
+
     // plugin 270~275
     @IgnorableOnReplayFailed
     public static final short OP_INSTALL_PLUGIN = 270;
@@ -686,6 +692,15 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_RESOURCE = 13557;
 
+    // Physically erase a materialized index parked in the CatalogRecycleBin (e.g. a superseded index
+    // retired by a tablet reshard). The recycle itself is not journaled -- it is rebuilt from the
+    // reshard job's replay and persisted in the recycle-bin image; only the leader-driven erase is.
+    // Ignorable like its erase/drop siblings above: replayEraseMaterializedIndex is idempotent and
+    // null-safe, and a failed erase merely leaves the index installed to retry next cycle, so a replay
+    // exception should be skippable (metadata_journal_ignore_replay_failure) rather than abort the FE.
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
+
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
@@ -706,6 +721,21 @@ public class OperationType {
     // Grant Role to Group
     public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
     public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
+
+    // AI providers (SQL-managed OpenAI-compatible embedding / rerank endpoints).
+    // Ignorable on replay: an AI provider is auxiliary external-service config, so a failed replay
+    // should log and continue rather than halt the FE.
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_AI_PROVIDER = 20740;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_AI_PROVIDER = 20741;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_AI_PROVIDER = 20742;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_DEFAULT_AI_PROVIDER = 20743;
 
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
@@ -734,7 +764,11 @@ public class OperationType {
                     opType != OP_DROP_SECURITY_INTEGRATION &&
                     opType != OP_ALTER_SECURITY_INTEGRATION &&
                     opType != OP_GRANT_ROLE_TO_GROUP &&
-                    opType != OP_REVOKE_ROLE_FROM_GROUP) {
+                    opType != OP_REVOKE_ROLE_FROM_GROUP &&
+                    opType != OP_CREATE_AI_PROVIDER &&
+                    opType != OP_ALTER_AI_PROVIDER &&
+                    opType != OP_DROP_AI_PROVIDER &&
+                    opType != OP_SET_DEFAULT_AI_PROVIDER) {
                 LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);

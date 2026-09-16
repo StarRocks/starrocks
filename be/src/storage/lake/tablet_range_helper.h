@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/sst_seek_range.h"
 #include "storage/seek_range.h"
@@ -27,6 +28,11 @@
 namespace starrocks::lake {
 class TabletRangeHelper {
 public:
+    // Returns the schema column indexes used to encode tablet boundaries. Range-distributed
+    // primary-key tablets always route in primary-key space, even when their physical sort key
+    // is different. Other key models retain the historical sort-key boundary semantics.
+    static std::vector<ColumnId> range_key_idxes(const TabletSchema& tablet_schema);
+
     /**
      * @brief Create a SeekRange from TabletRangePB.
      *
@@ -44,8 +50,24 @@ public:
      * @return StatusOr<SeekRange> A SeekRange referencing data owned either by
      *         `tablet_range_pb` or `mem_pool`, depending on `mem_pool`.
      */
+    // Decode a persisted tablet range into a SeekRange under `tablet_schema`'s sort key. `tablet_schema`
+    // must be the schema the TARGET SEGMENT is read with (for an old rowset, its archived schema): the
+    // SeekRange's field ids are positional in `tablet_schema`, so callers pass the segment's own schema so
+    // the seek positions align with it.
+    //
+    // A range's bound arity normally equals `tablet_schema`'s sort-key arity (exact decode). It can be
+    // LARGER when the range was written under a wider (later) sort key than this segment -- e.g. a reshard
+    // stamps a per-rowset range in the current sort key after a metadata-only trailing key add, onto an old
+    // rowset that still carries its archived schema. In that case the segment's rows all read the added
+    // columns' constant default `D`, so the bound is projected onto `tablet_schema`'s sort key: keep the
+    // leading (segment-arity) values, and derive the bound's inclusivity by comparing `D` against the
+    // dropped trailing bound values (via `current_schema`, which must contain the added columns). This makes
+    // a boundary-prefix row route exactly as it would under the full-arity range. `current_schema` is
+    // required whenever a bound arity exceeds `tablet_schema`'s sort-key arity; it is unused for exact
+    // decodes.
     static StatusOr<SeekRange> create_seek_range_from(const TabletRangePB& tablet_range_pb,
-                                                      const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool);
+                                                      const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool,
+                                                      const TabletSchemaCSPtr& current_schema = nullptr);
 
     static StatusOr<SstSeekRange> create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                              const TabletSchemaCSPtr& tablet_schema);
@@ -73,6 +95,49 @@ public:
     static Status validate_new_tablet_ranges(
             const TabletRangePB& old_tablet_range,
             const google::protobuf::RepeatedPtrField<TabletRangePB>& new_tablet_ranges);
+
+    // Schema-aware structural validation of a single tablet range against the schema it will be
+    // interpreted with. Used at BOTH build (before the txn log is written) and apply. Checks, in
+    // order: half-open flags (lower inclusive / upper exclusive when set); defensive size caps
+    // (per-bound arity, per-value bytes, total range bytes) applied before any value decoding; the
+    // per-bound arity equals the schema's effective sort-key count; each value's logical type equals
+    // its sort-key column's type; and, when both bounds are present, the lower bound is strictly less
+    // than the upper bound under type-aware comparison. A fully unbounded range (Range.all) is
+    // accepted. Callers must ensure a schema is present whenever a range is present.
+    static Status validate_range_structural(const TabletRangePB& range, const TabletSchema& new_schema);
+
+    // Apply-only validation that the schema/range change is exactly a trailing sort-key ADD relative
+    // to the currently-installed metadata. Requires: the new effective sort key equals the old
+    // effective sort key plus one or more new trailing columns (existing sort-key unique-ids, types and
+    // order unchanged); each present bound of `new_range` equals the corresponding bound of
+    // `old_meta.range()` with one trailing typed NULL_VALUE per added column appended; bound presence and
+    // inclusivity are unchanged; and a fully unbounded (Range.all) range stays fully unbounded.
+    // Rejections return Status::Corruption. `new_schema` is the resolved new schema; the old schema
+    // and old range are read from `old_meta`.
+    static Status validate_range_transition(const TabletMetadataPB& old_meta, const TabletSchema& new_schema,
+                                            const TabletRangePB& new_range);
+};
+
+// Row selection over a tablet's PK-space half-open range. This is intentionally a row filter rather
+// than a segment seek: a tablet with ORDER BY != PK has segments ordered by the sort key, so its PK
+// range cannot be mapped to a contiguous rowid span.
+//
+// Everything except the encode-and-compare is decided by (range, schema) alone, so it is computed
+// once here instead of per chunk -- an UNSHARE compaction runs this over thousands of chunks.
+// Not thread-safe: the encoder's output column is reused, so give each compaction task its own.
+class PrimaryKeyRangeFilter {
+public:
+    static StatusOr<PrimaryKeyRangeFilter> create(const TabletRangePB& tablet_range_pb,
+                                                  const TabletSchemaCSPtr& tablet_schema);
+
+    // Returns one byte per row of |chunk|: 1 to keep, 0 to drop. Empty for an empty chunk.
+    StatusOr<Filter> build(const Chunk& chunk);
+
+private:
+    SstSeekRange _seek_range;
+    Schema _pkey_schema;
+    PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
+    MutableColumnPtr _encoded_keys;
 };
 
 } // namespace starrocks::lake

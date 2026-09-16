@@ -1,6 +1,5 @@
 -- name: test_vector_index_hnsw_quantizer @sequential @native
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 -- =====================================================================
 -- HNSW + quantizer DDL: SQ4 / SQ8 / PQ acceptance and rejection.

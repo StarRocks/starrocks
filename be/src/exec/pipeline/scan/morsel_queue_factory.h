@@ -18,8 +18,8 @@
 #include <map>
 #include <vector>
 
-#include "exec/pipeline/scan/morsel_queue.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
+#include "exec_primitive/pipeline/scan/morsel_queue.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 
 namespace starrocks::pipeline {
 
@@ -68,6 +68,7 @@ public:
         DCHECK(_could_local_shuffle);
         return _enable_random_append_split_morsel;
     }
+    void add_split_source_morsels(int64_t count) override;
     void set_has_more_scan_ranges(bool v) override;
     Status mark_split_source_morsel_finished() override;
     bool reach_limit() const override;

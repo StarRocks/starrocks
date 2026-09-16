@@ -22,9 +22,13 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.plugin.DynamicPluginLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InstallPluginStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 public class InstallPluginStmtTest {
@@ -37,5 +41,52 @@ public class InstallPluginStmtTest {
         Assertions.assertEquals("7529db41471ec72e165f96fe9fb92742",
                 stmt.getProperties().get(DynamicPluginLoader.MD5SUM_KEY));
         Assertions.assertEquals("http://test/test.zip", stmt.getPluginPath());
+    }
+
+    @Test
+    public void testInstallPluginIfNotExistsParsedTrue() {
+        String sql = "INSTALL PLUGIN IF NOT EXISTS FROM '/path/to/plugin.zip'";
+        List<StatementBase> stmts = SqlParser.parse(sql, 32);
+        InstallPluginStmt stmt = (InstallPluginStmt) stmts.get(0);
+        Assertions.assertTrue(stmt.isIfNotExists());
+    }
+
+    @Test
+    public void testInstallPluginWithoutIfNotExistsDefaultsFalse() {
+        String sql = "INSTALL PLUGIN FROM '/path/to/plugin.zip'";
+        List<StatementBase> stmts = SqlParser.parse(sql, 32);
+        InstallPluginStmt stmt = (InstallPluginStmt) stmts.get(0);
+        Assertions.assertFalse(stmt.isIfNotExists());
+    }
+
+    @Test
+    public void testUninstallPluginIfExistsParsedTrue() {
+        String sql = "UNINSTALL PLUGIN IF EXISTS my_plugin";
+        List<StatementBase> stmts = SqlParser.parse(sql, 32);
+        UninstallPluginStmt stmt = (UninstallPluginStmt) stmts.get(0);
+        Assertions.assertTrue(stmt.isIfExists());
+    }
+
+    @Test
+    public void testUninstallPluginWithoutIfExistsDefaultsFalse() {
+        String sql = "UNINSTALL PLUGIN my_plugin";
+        List<StatementBase> stmts = SqlParser.parse(sql, 32);
+        UninstallPluginStmt stmt = (UninstallPluginStmt) stmts.get(0);
+        Assertions.assertFalse(stmt.isIfExists());
+    }
+
+    @Test
+    public void testInstallPluginConstructorDefaultsIfNotExistsFalse() {
+        Map<String, String> props = Maps.newHashMap();
+        InstallPluginStmt stmt = new InstallPluginStmt("http://test/plugin.zip", props);
+        Assertions.assertFalse(stmt.isIfNotExists());
+        Assertions.assertEquals("http://test/plugin.zip", stmt.getPluginPath());
+    }
+
+    @Test
+    public void testUninstallPluginConstructorDefaultsIfExistsFalse() {
+        UninstallPluginStmt stmt = new UninstallPluginStmt("my_plugin");
+        Assertions.assertFalse(stmt.isIfExists());
+        Assertions.assertEquals("my_plugin", stmt.getPluginName());
     }
 }

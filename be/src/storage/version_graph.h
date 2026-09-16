@@ -38,8 +38,8 @@
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
 
+#include "common/storage_define.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/rowset/rowset_meta.h"
 
 namespace starrocks {

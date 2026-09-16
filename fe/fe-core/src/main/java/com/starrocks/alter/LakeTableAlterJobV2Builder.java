@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
@@ -95,10 +96,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
                 List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
-                Map<String, String> properties = new HashMap<>();
-                properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
-                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
-                properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
+                Map<String, String> properties = buildShadowShardProperties(table, physicalPartitionId, shadowIndexId);
                 List<Long> shadowTabletIds = createShards(originTablets.size(),
                         table.getPartitionFilePathInfo(physicalPartitionId),
                         table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
@@ -138,6 +136,78 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                     entry.getValue());
         } // end for index
         return schemaChangeJob;
+    }
+
+    /**
+     * Build a shadow {@link MaterializedIndex} with K tablets whose ranges are provided by the caller.
+     * This is the N→K path: K may differ from the origin tablet count, so {@code matchShardIds} is
+     * {@code null} (no origin-shard preference). Shards are allocated internally via
+     * {@link #createShards}, and every resulting tablet is stamped with its sampled range before
+     * being added to the index.
+     *
+     * <p>Unlike the 1:1 alter path, this does not stamp {@code vectorIndexBuiltVersion}: the rewrite
+     * produces shadow data via an internal INSERT, not an inline alter build, so the vector index
+     * (if any) builds through the normal load path — leaving {@code vectorIndexBuiltVersion = 0}
+     * (build-needed) is intentional and correct here.
+     *
+     * @param dbId            database id (for TabletMeta construction)
+     * @param table           the source table (used for storage path / cache info and partition info)
+     * @param partition       the physical partition being shadowed
+     * @param shadowIndexId   id for the new shadow index
+     * @param tabletCount     K: the number of shadow tablets to create (must equal ranges.size())
+     * @param ranges          one range per tablet (size == K)
+     * @param shardGroupId    shard group for the new index
+     * @param computeResource compute resource for shard allocation
+     * @return the new shadow index, in SHADOW state, containing K tablets
+     */
+    public static MaterializedIndex buildRangeShadowIndex(
+            long dbId,
+            OlapTable table,
+            PhysicalPartition partition,
+            long shadowIndexId,
+            int tabletCount,
+            List<TabletRange> ranges,
+            long shardGroupId,
+            ComputeResource computeResource) throws DdlException {
+        Preconditions.checkArgument(tabletCount == ranges.size(),
+                "tabletCount (%s) != ranges.size() (%s)", tabletCount, ranges.size());
+
+        long physicalPartitionId = partition.getId();
+        Map<String, String> properties = buildShadowShardProperties(table, physicalPartitionId, shadowIndexId);
+
+        // No origin-shard preference for the K-tablet shadow: matchShardIds = null.
+        List<Long> allocatedShardIds = createShards(tabletCount,
+                table.getPartitionFilePathInfo(physicalPartitionId),
+                table.getPartitionFileCacheInfo(physicalPartitionId),
+                shardGroupId, null, properties, computeResource);
+        Preconditions.checkState(allocatedShardIds.size() == tabletCount);
+
+        TStorageMedium medium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+        TabletMeta shadowTabletMeta =
+                new TabletMeta(dbId, table.getId(), physicalPartitionId, shadowIndexId, medium, true);
+        MaterializedIndex shadowIndex =
+                new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
+        for (int i = 0; i < tabletCount; i++) {
+            LakeTablet shadowTablet = new LakeTablet(allocatedShardIds.get(i));
+            shadowTablet.setRange(ranges.get(i));
+            // updateInvertedIndex=false: this shadow index is built lock-free, before the job's PENDING
+            // state is journaled. Registering the tablets in the global TabletInvertedIndex now would
+            // leave orphan entries on a pre-journal failure (dropOrphanedShadowShards only reclaims the
+            // StarOS shards, not inverted-index entries). The range-rewrite job registers them via
+            // LakeOnlineRewriteJobBase#addShadowTabletsToInvertedIndex once the shadow index is durably
+            // installed in the catalog (PENDING stage 3, and on replay).
+            shadowIndex.addTablet(shadowTablet, shadowTabletMeta, false);
+        }
+        return shadowIndex;
+    }
+
+    private static Map<String, String> buildShadowShardProperties(OlapTable table, long physicalPartitionId,
+                                                                       long shadowIndexId) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
+        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
+        properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
+        return properties;
     }
 
     @VisibleForTesting

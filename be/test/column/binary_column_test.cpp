@@ -117,13 +117,13 @@ PARALLEL_TEST(BinaryColumnTest, test_get_data) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_byte_size) {
     auto column = BinaryColumn::create();
-    ASSERT_EQ(sizeof(BinaryColumn::Offset), column->byte_size());
+    ASSERT_EQ(sizeof(uint32_t), column->byte_size());
     std::string s("test_string");
     for (int i = 0; i < 10; i++) {
         column->append(s);
     }
     ASSERT_EQ(10, column->size());
-    ASSERT_EQ(10 * s.size() + 11 * sizeof(BinaryColumn::Offset), column->byte_size());
+    ASSERT_EQ(10 * s.size() + 11 * sizeof(uint32_t), column->byte_size());
     //                            ^^^ one more element in offset array.
 }
 
@@ -602,7 +602,7 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     c1->append_datum("abc");
     c1->append_datum("def");
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(3);
     offsets.emplace_back(5);

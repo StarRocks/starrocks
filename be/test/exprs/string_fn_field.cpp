@@ -238,7 +238,8 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest3) {
 }
 
 PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest4) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_INT)));
     Columns columns;
     auto paramBuilder1 = ColumnBuilder<TYPE_INT>(5);
     auto paramBuilder2 = ColumnBuilder<TYPE_INT>(5);
@@ -273,9 +274,9 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest4) {
     columns.emplace_back(std::move(param3));
     int res[] = {2, 0, 0, 0, 0};
     ctx->set_constant_columns(columns);
-    ASSERT_TRUE(StringFunctions::field_prepare<TYPE_INT>(ctx.get(), FunctionContext::THREAD_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::field_prepare<TYPE_INT>(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ColumnPtr result = StringFunctions::field<TYPE_INT>(ctx.get(), columns).value();
-    ASSERT_TRUE(StringFunctions::field_close<TYPE_INT>(ctx.get(), FunctionContext::THREAD_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::field_close<TYPE_INT>(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(result->is_numeric());
     ASSERT_FALSE(result->is_nullable());

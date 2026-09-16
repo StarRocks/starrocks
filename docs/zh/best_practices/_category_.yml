@@ -1,0 +1,7 @@
+position: 40
+label: 'Best Practices'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: best_practices

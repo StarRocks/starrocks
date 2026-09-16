@@ -39,23 +39,23 @@
 #include <string>
 
 #include "base/format.h"
+#include "base/json/json_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "common/tracer.h"
 #include "fmt/core.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 #include "storage/compaction_manager.h"
 #include "storage/manual_compaction.h"
-#include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "util/json_util.h"
 
 namespace starrocks {
 

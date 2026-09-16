@@ -1,0 +1,35 @@
+-- name: test_reject_variant_olap_column
+-- description: A VARIANT column on a native OLAP table must be rejected at DDL. VARIANT has no
+--              native storage write path (it is only an internal type for reading external
+--              catalogs such as Iceberg), so previously CREATE TABLE accepted it and the first
+--              INSERT aborted the BE (storage LogicalType dispatch LOG(FATAL)). Now DDL fails
+--              with a clean semantic error and the BE is never reached.
+
+CREATE DATABASE IF NOT EXISTS test_reject_variant_olap_column_db;
+USE test_reject_variant_olap_column_db;
+
+-- rejected at analysis with a clean error (was: accepted -> BE SIGABRT on insert)
+CREATE TABLE vtest (id INT, v VARIANT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+-- VARIANT nested inside ARRAY/MAP/STRUCT is rejected too: the BE storage column dispatch recurses
+-- into sub-fields and still hits LOG(FATAL) for TYPE_VARIANT, so a nested VARIANT crashes the node
+-- on insert just like a top-level one.
+CREATE TABLE varr (id INT, a ARRAY<VARIANT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE vmap (id INT, m MAP<INT, VARIANT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE vstruct (id INT, s STRUCT<f VARIANT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+-- deeply nested VARIANT (array of struct) is rejected as well
+CREATE TABLE vnest (id INT, a ARRAY<STRUCT<f VARIANT>>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+-- a normal table with no VARIANT column still creates fine
+CREATE TABLE vok (id INT, j JSON) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO vok VALUES (1, parse_json('{"a":1}'));
+SELECT count(*) FROM vok;

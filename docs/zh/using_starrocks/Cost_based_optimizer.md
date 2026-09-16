@@ -244,7 +244,7 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name
 - 采集列类型：
   - `col_name`: 要采集统计信息的列，多列使用逗号分隔。如果不指定，表示采集整张表的信息。
   - `ALL COLUMNS`：对所有列进行采集。自 v3.5.0 起支持。
-  - `PREDICATE COLUMNS`：仅对 Predicate Column 进行采集。自 v3.5.0 起支持。
+  - `PREDICATE COLUMNS`：仅对 Predicate Column 进行采集。原生表自 v3.5.0 起支持，可分析的外部表（包括 Hive、Iceberg、Hudi、ODPS、Delta Lake 和 Paimon）自 v4.1.4 起支持。
   - `MULTIPLE COLUMNS`：对指定的多个列进行联合统计信息进行采集。当前多列联合统计信息仅支持手动同步采集。当前手动采集多列联合统计信息的列数不能超过 `statistics_max_multi_column_combined_num`, 默认值为 `10`。自 v3.5.0 起支持。
 
 - `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。
@@ -673,7 +673,7 @@ partition_name:
   - 目前只有 Leader FE 节点可以触发收集任务。
   - 仅支持检查 Hive、Iceberg 外表的分区变动，只收集数据发生变动分区的统计信息。对于 Delta Lake/Hudi 外表，系统会收集整表的统计信息。
   - 如果 Iceberg 表启用 Partition Transform，仅支持对于 `identity`、`year`、`month`、`day`、`hour` 类型 Transform 收集统计信息。
-  - 不支持针对 Iceberg 表的 Partition Evolution 收集统计信息。
+  - Iceberg 表 Partition Evolution 统计信息的收集功能在 4.0 及更高版本中已启用。
 
 以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
 

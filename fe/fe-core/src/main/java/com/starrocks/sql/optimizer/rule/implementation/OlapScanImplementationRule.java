@@ -36,6 +36,7 @@ public class OlapScanImplementationRule extends ImplementationRule {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
         PhysicalOlapScanOperator physicalOlapScan = new PhysicalOlapScanOperator(scan);
 
+        physicalOlapScan.setSalt(scan.getSalt());
         physicalOlapScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);

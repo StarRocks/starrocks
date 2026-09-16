@@ -17,52 +17,14 @@ if (APPLE)
     list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
 endif()
 
-set(EXEC_PRIMITIVE_TEST_FILES
-    ${BE_TEST_MACOS_LINK_STUBS}
-    data_sink/data_sink_core_test.cpp
-    exec_node_exec_primitive_test.cpp
-    morsel_primitive_test.cpp
-    pipeline_event_exec_primitive_test.cpp
-    pipeline_metrics_exec_primitive_test.cpp
-    pipeline_observer_exec_primitive_test.cpp
-    runtime_filter_exec_primitive_test.cpp
-)
-
-set(EXEC_PRIMITIVE_TEST_LINK_LIBS
-    ExecPrimitive
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
-    ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
-    ${WL_START_GROUP}
-    gmock
-    gtest
-    ${WL_END_GROUP}
-)
-
-add_library(starrocks_exec_primitive_test_objs OBJECT ${EXEC_PRIMITIVE_TEST_FILES})
-target_link_libraries(starrocks_exec_primitive_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_exec_primitive_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(exec_primitive_test $<TARGET_OBJECTS:starrocks_exec_primitive_test_objs>)
-target_link_libraries(exec_primitive_test ${EXEC_PRIMITIVE_TEST_LINK_LIBS} gtest_main)
-
 set(EXEC_RUNTIME_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
     pipeline_driver_exec_runtime_test.cpp
     pipeline_event_scheduler_exec_runtime_test.cpp
     pipeline_execution_group_exec_runtime_test.cpp
     pipeline_builder_context_exec_runtime_test.cpp
     pipeline_fragment_context_exec_runtime_test.cpp
-    pipeline_fragment_runtime_state_exec_runtime_test.cpp
-    pipeline_query_runtime_state_exec_runtime_test.cpp
     pipeline/query_context_manger_test.cpp
 )
 
@@ -71,12 +33,10 @@ set(EXEC_RUNTIME_TEST_LINK_LIBS
     ComputeEnv
     ExecPrimitive
     StoragePrimitive
-    ExprCore
-    Serde
-    RuntimeEnv
-    RuntimeCore
+    Expr
+    Runtime
     Platform
-    FSCore
+    FileSystem
     IO
     ChunkCore
     ColumnCore
@@ -100,79 +60,17 @@ set_target_properties(starrocks_exec_runtime_test_objs PROPERTIES COMPILE_FLAGS 
 add_executable(exec_runtime_test $<TARGET_OBJECTS:starrocks_exec_runtime_test_objs>)
 target_link_libraries(exec_runtime_test ${EXEC_RUNTIME_TEST_LINK_LIBS} gtest_main)
 
-set(SCHEMA_SCANNER_CORE_TEST_FILES
-    ${BE_TEST_MACOS_LINK_STUBS}
-    schema_scanner/schema_scanner_core_test.cpp
-)
-
-set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
-    ExecSchemaScannerCore
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
-    ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
-    ${WL_START_GROUP}
-    gmock
-    gtest
-    ${WL_END_GROUP}
-)
-
-add_library(starrocks_schema_scanner_core_test_objs OBJECT ${SCHEMA_SCANNER_CORE_TEST_FILES})
-target_link_libraries(starrocks_schema_scanner_core_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_schema_scanner_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(schema_scanner_core_test $<TARGET_OBJECTS:starrocks_schema_scanner_core_test_objs>)
-target_link_libraries(schema_scanner_core_test ${SCHEMA_SCANNER_CORE_TEST_LINK_LIBS} gtest_main)
-
-set(EXEC_SCHEMA_SCANNERS_TEST_FILES
-    ${BE_TEST_MACOS_LINK_STUBS}
-    schema_scanner/exec_schema_scanners_test.cpp
-)
-
-set(EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS
-    ExecSchemaScanners
-    ExecSchemaScannerCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
-    ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
-    ${WL_START_GROUP}
-    gmock
-    gtest
-    ${WL_END_GROUP}
-)
-
-add_library(starrocks_exec_schema_scanners_test_objs OBJECT ${EXEC_SCHEMA_SCANNERS_TEST_FILES})
-target_link_libraries(starrocks_exec_schema_scanners_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_exec_schema_scanners_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(exec_schema_scanners_test $<TARGET_OBJECTS:starrocks_exec_schema_scanners_test_objs>)
-target_link_libraries(exec_schema_scanners_test ${EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS} gtest_main)
-
 set(JOIN_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
     join_hash_map_test.cpp
 )
 
 set(JOIN_CORE_TEST_LINK_LIBS
     ExecJoinCore
     ComputeEnv
-    ExprCore
-    Serde
-    RuntimeCore
+    Expr
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -194,3 +92,61 @@ target_link_libraries(starrocks_join_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_join_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(exec_join_core_test $<TARGET_OBJECTS:starrocks_join_core_test_objs>)
 target_link_libraries(exec_join_core_test ${JOIN_CORE_TEST_LINK_LIBS} gtest_main)
+
+set(AI_CHUNK_BUFFER_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    ../../src/exec/pipeline/ai/ai_chunk_buffer.cpp
+    pipeline/ai/ai_chunk_buffer_test.cpp
+)
+
+add_executable(ai_chunk_buffer_test ${AI_CHUNK_BUFFER_TEST_FILES})
+target_link_libraries(ai_chunk_buffer_test PRIVATE StarRocksPCH)
+set_target_properties(ai_chunk_buffer_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_chunk_buffer_test PRIVATE ${EXEC_RUNTIME_TEST_LINK_LIBS} gtest_main)
+
+set(AI_QUERY_MEMORY_ACCOUNT_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    ../../src/exec/pipeline/ai/ai_query_memory_account.cpp
+    pipeline/ai/ai_query_memory_account_test.cpp
+)
+
+add_executable(ai_query_memory_account_test ${AI_QUERY_MEMORY_ACCOUNT_TEST_FILES})
+target_link_libraries(ai_query_memory_account_test PRIVATE StarRocksPCH)
+set_target_properties(ai_query_memory_account_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_query_memory_account_test PRIVATE ${EXEC_RUNTIME_TEST_LINK_LIBS} gtest_main)
+
+set(AI_PROJECT_PROCESSOR_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    pipeline/ai/ai_project_processor_test.cpp
+)
+
+add_executable(ai_project_processor_test ${AI_PROJECT_PROCESSOR_TEST_FILES})
+target_link_libraries(ai_project_processor_test PRIVATE StarRocksPCH)
+set_target_properties(ai_project_processor_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_project_processor_test PRIVATE ${TEST_LINK_LIBS} gtest_main)
+
+set(AI_PROJECT_OPERATOR_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    pipeline/ai/ai_project_operator_test.cpp
+)
+
+add_executable(ai_project_operator_test ${AI_PROJECT_OPERATOR_TEST_FILES})
+target_link_libraries(ai_project_operator_test PRIVATE StarRocksPCH)
+set_target_properties(ai_project_operator_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_project_operator_test PRIVATE ${TEST_LINK_LIBS} gtest_main)
+
+set(AI_PROJECT_PIPELINE_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    ai_project_node_test.cpp
+    pipeline/ai/ai_project_pipeline_test.cpp
+)
+
+add_executable(ai_project_pipeline_test ${AI_PROJECT_PIPELINE_TEST_FILES})
+target_link_libraries(ai_project_pipeline_test PRIVATE StarRocksPCH)
+set_target_properties(ai_project_pipeline_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_project_pipeline_test PRIVATE ${TEST_LINK_LIBS} gtest_main)

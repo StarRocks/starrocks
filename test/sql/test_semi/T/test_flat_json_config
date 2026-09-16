@@ -29,6 +29,7 @@ SELECT id, my_json_col FROM test_json_config ORDER BY id;
 
 -- Step 2: Modify flat_json.null.factor
 ALTER TABLE test_json_config SET ("flat_json.null.factor" = "0.2");
+function: wait_alter_table_finish()
 
 -- Insert data after changing null.factor
 INSERT INTO test_json_config VALUES
@@ -41,6 +42,7 @@ SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
 
 -- Step 3: Modify flat_json.sparsity.factor
 ALTER TABLE test_json_config SET ("flat_json.sparsity.factor" = "0.9");
+function: wait_alter_table_finish()
 
 -- Insert data after changing sparsity.factor
 INSERT INTO test_json_config VALUES
@@ -53,6 +55,7 @@ SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
 
 -- Step 4: Modify flat_json.column.max
 ALTER TABLE test_json_config SET ("flat_json.column.max" = "100");
+function: wait_alter_table_finish()
 
 -- Insert data after changing column.max
 INSERT INTO test_json_config VALUES
@@ -65,6 +68,7 @@ SELECT id, my_json_col->'$.key3' FROM test_json_config ORDER BY id;
 
 -- Step 5: Disable flat JSON (critical test - should not throw exception)
 ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
+function: wait_alter_table_finish()
 
 -- Insert data after disabling flat JSON (should work)
 INSERT INTO test_json_config VALUES
@@ -80,6 +84,7 @@ SELECT COUNT(*) FROM test_json_config;
 
 -- Step 6: Re-enable flat JSON
 ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
+function: wait_alter_table_finish()
 
 -- Insert data after re-enabling flat JSON
 INSERT INTO test_json_config VALUES
@@ -92,6 +97,7 @@ SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
 
 -- Step 7: Disable flat JSON again
 ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
+function: wait_alter_table_finish()
 
 -- Insert data after disabling again (should work)
 INSERT INTO test_json_config VALUES
@@ -106,6 +112,7 @@ SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
 
 -- Step 8: Re-enable and verify all queries still work
 ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
+function: wait_alter_table_finish()
 
 -- Insert data after final re-enable
 INSERT INTO test_json_config VALUES

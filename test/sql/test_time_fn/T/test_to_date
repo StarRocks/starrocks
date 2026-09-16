@@ -32,6 +32,25 @@ select to_tera_date("1988/04/08","xyz/mm/dd");
 select to_tera_timestamp("1988/04/0800 02 pm:3:4","yyyy/mm/dd hh am:mi:ss");
 select to_tera_timestamp("1988/04/08 02 pm:3:4","yyyy/mm/dd hh am:mi:ss");
 
+-- test_to_tera_date_short_input
+-- A value shorter than the format must yield NULL, not read past the end of the string.
+select to_tera_date("", ";yyyy");
+select to_tera_timestamp("", ";yyyy");
+select to_tera_timestamp("", "-yyyy");
+select to_tera_timestamp("", " yyyy");
+select to_tera_timestamp(";", ";yyyy");
+select to_tera_timestamp("1988", "yyyy/mm/dd");
+select to_tera_timestamp("1988/04/", "yyyy/mm/dd");
+select to_tera_timestamp("1988/04/08 02 ", "yyyy/mm/dd hh am");
+select to_tera_timestamp("1988/04/08 02 a", "yyyy/mm/dd hh am");
+select to_tera_timestamp("1988/04/08 02 p", "yyyy/mm/dd hh pm");
+select str_to_jodatime("", ";yyyy");
+select str_to_jodatime("", "-yyyy");
+select str_to_jodatime(";", ";yyyy");
+select str_to_jodatime("2024", "yyyy-MM-dd");
+select str_to_jodatime("2024-04-", "yyyy-MM-dd");
+select str_to_jodatime("2024-04-01", "yyyy-MM-dd HH:mm:ss");
+
 -- test_to_tera_date_from_table
 CREATE TABLE IF NOT EXISTS `to_tera_date_test` (
   `d1` DATE,

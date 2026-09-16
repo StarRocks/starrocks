@@ -17,7 +17,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline_node.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"

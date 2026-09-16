@@ -1,0 +1,55 @@
+-- name: test_iceberg_stats_source
+create external catalog iceberg_stats_source_${uuid0} PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_stats_source_${uuid0}/test_iceberg_stats_source/${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1 (
+    c1 int,
+    c2 bigint,
+    c3 date
+) partition by c1;
+-- result:
+-- !result
+insert into iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1 values(1, 2, '2022-01-01'), (2, 3, '2022-02-02'), (3, 4, '2022-03-03');
+-- result:
+-- !result
+set enable_query_trigger_analyze = false;
+-- result:
+-- !result
+set disable_table_stats_from_metadata_for_single_table = false;
+-- result:
+-- !result
+function: assert_stats_source('select * from iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1', 't1', 'TABLE_METADATA')
+-- result:
+None
+-- !result
+[UC] analyze table iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1;
+function: assert_stats_source('select * from iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1', 't1', 'ANALYZE')
+-- result:
+None
+-- !result
+drop table iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_stats_source_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_stats_source_${uuid0}/test_iceberg_stats_source/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

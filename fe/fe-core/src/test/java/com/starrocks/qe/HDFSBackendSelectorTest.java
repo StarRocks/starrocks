@@ -42,8 +42,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class HDFSBackendSelectorTest {
     @Mocked
@@ -451,5 +453,224 @@ public class HDFSBackendSelectorTest {
             }
         }
         Assertions.assertEquals(scanRanges, scanRangeNumber);
+    }
+
+    @Test
+    public void testCacheReplicaNumDefaultDoesNotSpread() throws Exception {
+        // With the default (hdfs_backend_selector_cache_replica_num = 1) a given split always lands on its
+        // single hash home; no spreading is introduced when the feature is off.
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int hostNumber = 10;
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        List<TScanRangeLocations> hotSplit = createScanRanges(1, 10000);
+
+        Set<Long> chosen = new HashSet<>();
+        for (int i = 0; i < 200; i++) {
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                    ImmutableMap.of(), computeNodes, ImmutableMap.of(), computeNodes,
+                    true, WarehouseManager.DEFAULT_RESOURCE);
+            HDFSBackendSelector selector =
+                    new HDFSBackendSelector(hdfsScanNode, hotSplit, assignment, workerProvider,
+                            false, false, false, context);
+            selector.computeScanRangeAssignment();
+            chosen.addAll(computeWorkerIdToReadBytes(assignment, scanNodeId).keySet());
+        }
+        Assertions.assertEquals(1, chosen.size());
+    }
+
+    @Test
+    public void testCacheReplicaNumSpreadsHotSplit() throws Exception {
+        // With cache_replica_num = N a hot split (same path, read by many queries) spreads uniformly across
+        // exactly its top-N hash candidates instead of pinning to its single hash home.
+        int replicaNum = 5;
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setHdfsBackendSelectorCacheReplicaNum(replicaNum);
+        sessionVariable.setEnableScanDataCache(true);
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int hostNumber = 10;
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        List<TScanRangeLocations> hotSplit = createScanRanges(1, 10000);
+
+        // Expected spread targets: the top-N hash candidates for this split.
+        DefaultWorkerProvider probeProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(), computeNodes, ImmutableMap.of(), computeNodes,
+                true, WarehouseManager.DEFAULT_RESOURCE);
+        HDFSBackendSelector probe = new HDFSBackendSelector(hdfsScanNode, hotSplit,
+                new FragmentScanRangeAssignment(), probeProvider, false, false, false, context);
+        HashRing hashRing = probe.makeHashRing(computeNodes.values());
+        List<ComputeNode> topNodes = hashRing.get(hotSplit.get(0), replicaNum);
+        Set<Long> expectedTopN = new HashSet<>();
+        for (ComputeNode node : topNodes) {
+            expectedTopN.add(node.getId());
+        }
+        Assertions.assertEquals(replicaNum, expectedTopN.size());
+
+        int iterations = 1000;
+        Map<Long, Integer> histogram = new HashMap<>();
+        for (int i = 0; i < iterations; i++) {
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                    ImmutableMap.of(), computeNodes, ImmutableMap.of(), computeNodes,
+                    true, WarehouseManager.DEFAULT_RESOURCE);
+            HDFSBackendSelector selector =
+                    new HDFSBackendSelector(hdfsScanNode, hotSplit, assignment, workerProvider,
+                            false, false, false, context);
+            selector.computeScanRangeAssignment();
+            for (Long id : computeWorkerIdToReadBytes(assignment, scanNodeId).keySet()) {
+                histogram.merge(id, 1, Integer::sum);
+            }
+        }
+
+        // All chosen nodes are within the top-N, and all N are exercised (uniform random over N).
+        Assertions.assertEquals(expectedTopN, histogram.keySet());
+        int expectedPerNode = iterations / replicaNum;
+        for (Map.Entry<Long, Integer> entry : histogram.entrySet()) {
+            System.out.printf("%s -> %d hits\n", entry.getKey(), entry.getValue());
+            Assertions.assertTrue(entry.getValue() > expectedPerNode / 2,
+                    "node " + entry.getKey() + " got too few hits: " + entry.getValue());
+            Assertions.assertTrue(entry.getValue() < expectedPerNode * 2,
+                    "node " + entry.getKey() + " got too many hits: " + entry.getValue());
+        }
+    }
+
+    @Test
+    public void testCacheReplicaNumClampedAndCappedByCluster() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        // A non-positive value clamps to 1 (single-home, no spread).
+        sessionVariable.setHdfsBackendSelectorCacheReplicaNum(0);
+        Assertions.assertEquals(1, sessionVariable.getHdfsBackendSelectorCacheReplicaNum());
+
+        // A replica count larger than the cluster spreads across all nodes without error.
+        int hostNumber = 3;
+        sessionVariable.setHdfsBackendSelectorCacheReplicaNum(100);
+        sessionVariable.setEnableScanDataCache(true);
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        List<TScanRangeLocations> hotSplit = createScanRanges(1, 10000);
+
+        Set<Long> chosen = new HashSet<>();
+        for (int i = 0; i < 500; i++) {
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                    ImmutableMap.of(), computeNodes, ImmutableMap.of(), computeNodes,
+                    true, WarehouseManager.DEFAULT_RESOURCE);
+            HDFSBackendSelector selector =
+                    new HDFSBackendSelector(hdfsScanNode, hotSplit, assignment, workerProvider,
+                            false, false, false, context);
+            selector.computeScanRangeAssignment();
+            chosen.addAll(computeWorkerIdToReadBytes(assignment, scanNodeId).keySet());
+        }
+        Assertions.assertEquals(hostNumber, chosen.size());
+    }
+
+    @Test
+    public void testCacheReplicaNumGatedOffWhenDataCacheDisabled() throws Exception {
+        // The spread only applies when the data cache is on. With it disabled, cache_replica_num is ignored
+        // and placement falls back to the byte-rebalance path (a single range stays on its single home).
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setHdfsBackendSelectorCacheReplicaNum(5);
+        sessionVariable.setEnableScanDataCache(false);
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int hostNumber = 10;
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        List<TScanRangeLocations> hotSplit = createScanRanges(1, 10000);
+
+        Set<Long> chosen = new HashSet<>();
+        for (int i = 0; i < 200; i++) {
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                    ImmutableMap.of(), computeNodes, ImmutableMap.of(), computeNodes,
+                    true, WarehouseManager.DEFAULT_RESOURCE);
+            HDFSBackendSelector selector =
+                    new HDFSBackendSelector(hdfsScanNode, hotSplit, assignment, workerProvider,
+                            false, false, false, context);
+            selector.computeScanRangeAssignment();
+            chosen.addAll(computeWorkerIdToReadBytes(assignment, scanNodeId).keySet());
+        }
+        Assertions.assertEquals(1, chosen.size());
+    }
+
+    @Test
+    public void testCacheReplicaNumEmptyWorkersThrowsClearError() throws Exception {
+        // With cache_replica_num > 1 and no available workers, the random draw must not throw
+        // IllegalArgumentException; it must surface the clear "Failed to find backend to execute" error.
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setHdfsBackendSelectorCacheReplicaNum(5);
+        sessionVariable.setEnableScanDataCache(true);
+        // The assignment fails before any scan range is placed, so only the constructor path runs.
+        // Stub just what it touches (getId()/getTableName() are never reached here).
+        new Expectations() {
+            {
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        List<TScanRangeLocations> locations = createScanRanges(1, 10000);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(), ImmutableMap.of(), ImmutableMap.of(), ImmutableMap.of(),
+                true, WarehouseManager.DEFAULT_RESOURCE);
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false, context);
+        try {
+            selector.computeScanRangeAssignment();
+            Assertions.fail("expected StarRocksException for an empty worker set");
+        } catch (Exception e) {
+            Assertions.assertEquals("Failed to find backend to execute", e.getMessage());
+        }
     }
 }

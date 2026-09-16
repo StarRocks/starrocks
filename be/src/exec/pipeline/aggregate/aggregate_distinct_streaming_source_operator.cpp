@@ -15,7 +15,7 @@
 #include "aggregate_distinct_streaming_source_operator.h"
 
 #include "common/status.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

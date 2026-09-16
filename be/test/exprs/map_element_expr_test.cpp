@@ -461,7 +461,7 @@ TEST_F(MapElementExprTest, test_map_const) {
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         // corner test
-        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_constant());
         EXPECT_EQ(33, result->get(0).get_int32());

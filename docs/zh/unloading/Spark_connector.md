@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks provides a self-developed connector for Apache Spark to read StarRocks data for complex processing and machine learning."
 ---
@@ -21,13 +22,16 @@ Spark Connector 支持三种数据读取方式：Spark SQL、Spark DataFrame 和
 
 ## 版本要求
 
-| Spark Connector | Spark         | StarRocks   | Java | Scala |
-|---------------- | ------------- | ----------- | ---- | ----- |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上   | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, 3.4 | 2.5 及以上   | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, 3.4 | 2.5 及以上   | 8    | 2.12  |
-| 1.0.0           | 3.x           | 1.18 及以上  | 8    | 2.12  |
-| 1.0.0           | 2.x           | 1.18 及以上  | 8    | 2.11  |
+| Spark connector | Spark              | StarRocks      | Java | Scala |
+| --------------- | ------------------ | -------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 及以上      | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上      | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上      | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上      | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上      | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上      | 8    | 2.12  |
+| 1.0.0           | 3.x                | 1.18 及以上     | 8    | 2.12  |
+| 1.0.0           | 2.x                | 1.18 及以上     | 8    | 2.11  |
 
 > **注意**
 >
@@ -217,10 +221,12 @@ Spark Connector Jar 包的命名格式如下：
 | STRING           | DataTypes.StringType    |
 | DATE             | DataTypes.DateType      |
 | DATETIME         | DataTypes.TimestampType |
-| JSON             | DataTypes.StringType <br /> **NOTE:** <br /> **自 1.1.2 版本起支持该类型映射**，并且 StarRocks 版本需要为 2.5.13、3.0.3、3.1.0 或更高版本。 |
-| ARRAY            | Unsupported datatype    |
+| JSON             | DataTypes.StringType<br />**NOTE:**<br />自 1.1.2 版本起支持该类型映射，并且 StarRocks 版本需要为 2.5.13、3.0.3、3.1.0 或更高版本。 |
+| ARRAY            | ArrayType<br />**NOTE:**<br />自 1.1.3 版本起支持该类型映射。嵌套类型必须通过 `starrocks.column.types` 进行声明。请参阅 [读取嵌套列](#读取嵌套列structarray-以及-map)。 |
 | HLL              | Unsupported datatype    |
 | BITMAP           | Unsupported datatype    |
+| MAP                 | MapType<br />**NOTE:**<br />自 1.1.3 版本起支持该类型映射。嵌套类型必须通过 `starrocks.column.types` 进行声明。请参阅 [读取嵌套列](#读取嵌套列structarray-以及-map)。 |
+| STRUCT              | StructType<br />**NOTE:**<br />自 1.1.3 版本起支持该类型映射。嵌套类型必须通过 `starrocks.column.types` 进行声明。请参阅 [读取嵌套列](#读取嵌套列structarray-以及-map)。 |
 
 ### Spark Connector 1.0.0 版本
 
@@ -268,7 +274,7 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 
 ### 网络设置
 
-确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/management/BE_configuration.md#be_port) 端口（默认 `9060`）。
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port) 端口（默认 `9060`）。
 
 ### 数据样例
 
@@ -926,3 +932,67 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    ```
 
 `k = 1` 能够命中前缀索引，因此，读取数据的过程中过滤掉 3 行 (`ShortKeyFilterRows: 3`)。
+
+## 读取嵌套列（STRUCT、ARRAY 以及 MAP）
+
+从 1.1.3 版本开始支持读取嵌套列。
+
+Spark Connector 支持读取 StarRocks 中 `STRUCT`、`ARRAY` 和 `MAP` 类型的列。由于 Connector 无法从 StarRocks Schema 中自动推断完整的嵌套类型，因此您必须使用 `starrocks.column.types` 选项为每个嵌套列显式声明列类型。
+
+### 嵌套数据类型映射
+
+| StarRocks 数据类型                         | Spark 数据类型 |
+| ----------------------------------------- | ------------ |
+| `STRUCT<field1 TYPE1, field2 TYPE2, ...>` | `StructType` |
+| `ARRAY<TYPE>`                             | `ArrayType`  |
+| `MAP<KEY_TYPE, VALUE_TYPE>`               | `MapType`    |
+
+嵌套类型可以任意组合（例如，`STRUCT<a ARRAY<INT>, b MAP<STRING, BIGINT>>`）。
+
+### 嵌套类型中的类型映射注意事项
+
+共享相同 Arrow wire 表示的逻辑 StarRocks 类型（尤其是 `DATE`、`DATETIME` 和某些 `DECIMAL` 编码）只有在通过 `starrocks.column.types` 显式声明类型时才能被正确解码。如果未声明类型，这些字段将回退为普通的 `STRING`。
+
+### 示例
+
+假设存在以下 StarRocks 表：
+
+```SQL
+CREATE TABLE nested_tbl (
+    id       INT,
+    info     STRUCT<type STRING, phone BIGINT, created DATETIME>,
+    tags     ARRAY<STRING>,
+    metadata MAP<STRING, STRUCT<value STRING, count INT>>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4;
+```
+
+使用 Spark 读取该表：
+
+```Scala
+val columnTypes =
+  "info STRUCT<type STRING, phone BIGINT, created TIMESTAMP>, " +
+  "tags ARRAY<STRING>, " +
+  "metadata MAP<STRING, STRUCT<value STRING, count INT>>"
+
+val df = spark.read.format("starrocks")
+  .option("starrocks.fenodes", "127.0.0.1:8030")
+  .option("starrocks.table.identifier", "test.nested_tbl")
+  .option("starrocks.user", "root")
+  .option("starrocks.password", "")
+  .option("starrocks.column.types", columnTypes)
+  .load()
+
+df.printSchema()
+// root
+//  |-- id: integer
+//  |-- info: struct<type: string, phone: long, created: timestamp>
+//  |-- tags: array<string>
+//  |-- metadata: map<string, struct<value: string, count: integer>>
+```
+
+### 当前限制
+
+- 嵌套类型**不会自动推断**。您必须为每个嵌套列指定 `starrocks.column.types`。
+- 只有在显式声明类型时，嵌套类型中的 `DATE` 和 `DATETIME` 字段才会分别以 Spark 的 `DateType` / `TimestampType` 返回。如果未声明类型，则会回退为 `StringType`。

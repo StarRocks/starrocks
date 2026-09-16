@@ -23,9 +23,9 @@
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
-#include "storage/primitive/edit_version.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
+#include "storage_primitive/edit_version.h"
 
 namespace starrocks {
 
@@ -33,7 +33,7 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
-class ParallelPublishContext;
+class ParallelUpsertContext;
 
 class TabletLoader {
 public:
@@ -61,10 +61,6 @@ protected:
     size_t _total_segments = 0;
     size_t _rowset_num = 0;
 };
-
-namespace lake {
-class LakeLocalPersistentIndex;
-}
 
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
@@ -352,8 +348,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    // |check_l1_key_sizes|: a set of key size need to be checked in l1.
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, std::set<size_t>& check_l1_key_sizes);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values);
 
     // batch erase(delete)
     // |n|: size of key/value array
@@ -420,7 +415,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
 
     template <int N>
     void _init_loop_helper();
@@ -452,8 +446,9 @@ public:
     Status get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
                size_t key_size, IOStat* stat = nullptr);
 
-    // batch check key existence
-    Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
+    // batch check that none of |keys| already exist in this immutable index. Keys are grouped
+    // internally by the index's own shard layout (_shard_info_by_length)
+    Status check_not_exist(size_t n, const Slice* keys);
 
     // get Immutable index file size;
     uint64_t file_size() {
@@ -526,7 +521,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
     friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
@@ -730,7 +724,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr, ParallelPublishContext* ctx = nullptr);
+                          IOStat* stat = nullptr, ParallelUpsertContext* ctx = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array

@@ -35,7 +35,6 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -50,7 +49,6 @@ public class VectorIndexTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        Config.enable_experimental_vector = true;
         FeConstants.enablePruneEmptyOutputScan = false;
         starRocksAssert.withTable("CREATE TABLE test.test_cosine ("
                 + " c0 INT,"
@@ -70,6 +68,16 @@ public class VectorIndexTest extends PlanTestBase {
                 + " c2 array<float>,"
                 + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'l2_distance', "
                 + "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim'='5') "
+                + ") "
+                + "DUPLICATE KEY(c0) "
+                + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1');");
+
+        starRocksAssert.withTable("CREATE TABLE test.test_inner_product ("
+                + " c0 INT,"
+                + " c1 array<float> NOT NULL,"
+                + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'inner_product', "
+                + "'is_vector_normed' = 'false', 'M' = '16', 'index_type' = 'hnsw', 'dim'='5') "
                 + ") "
                 + "DUPLICATE KEY(c0) "
                 + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
@@ -143,7 +151,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
@@ -158,7 +166,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A");
 
         // Constant vector with cast.
         sql = "select c1 from test_cosine " +
@@ -168,7 +176,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: N/A");
 
         sql = "select c1 from test_cosine " +
                 "order by approx_cosine_similarity([cast(1.1 as float),cast(2.1 as float),cast(3.1 as float)" +
@@ -177,7 +185,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: N/A");
 
         sql = "select c1 from test_cosine " +
                 "order by approx_cosine_similarity([cast(1.1 as int),cast(2.1 as int),cast(3.1 as int)" +
@@ -186,7 +194,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: N/A");
         } finally {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
         }
@@ -377,19 +385,39 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "VECTORINDEX: OFF");
 
-        // Cannot deal with approx_l2_distance with other predicates.
-        sql = "select c1 from test_l2 " +
-                "where approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 100 and c0 < 10 " +
-                "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "VECTORINDEX: OFF");
-
         // OR
         sql = "select c1 from test_l2 " +
                 "where approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 100 or approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 1000 " +
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "VECTORINDEX: OFF");
+    }
+
+    @Test
+    public void testResidualScalarPredicate() throws Exception {
+        String sql;
+        String plan;
+
+        // A pure scalar predicate on a non-vector column no longer disables the vector index: it is kept
+        // as a residual on the scan, and the BE pre/post-filters it against the ANN. (Used to be OFF.)
+        sql = "select c1 from test_l2 " +
+                "where c0 < 10 " +
+                "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        // The residual predicate must be retained on the scan (dropping it would give wrong results);
+        // c0 is not in the select list, so its only appearance is the retained predicate.
+        assertContains(plan, "c0");
+
+        // Mixed: a vector-distance range AND a scalar residual. The range folds into the ANN; the scalar
+        // stays as a residual on the scan.
+        sql = "select c1 from test_l2 " +
+                "where approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 100 and c0 < 10 " +
+                "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan, "Predicate Range: 100.0");
+        assertContains(plan, "c0");
     }
 
     @Test
@@ -445,7 +473,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          Refine: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "          Refine: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
@@ -471,14 +499,14 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A");
 
         sql = "select c1 from test_l2 " +
                 "order by approx_l2_distance(c1, [1.1,2.2,3.3,4.4,5.5]) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A");
 
         // Predicate argument order doesn't matter.
         sql = "select c1 from test_cosine " +
@@ -535,9 +563,10 @@ public class VectorIndexTest extends PlanTestBase {
         assertContains(plan, "  13:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: OFF");
+        // A table without a vector index reports no VECTORINDEX state at all.
         assertContains(plan, "  25:OlapScanNode\n" +
                 "     table: test_no_vector_index, rollup: test_no_vector_index\n" +
-                "     VECTORINDEX: OFF");
+                "     preAggregation: on");
     }
 
     @Test
@@ -576,7 +605,7 @@ public class VectorIndexTest extends PlanTestBase {
                     "     table: test_ivfpq, rollup: test_ivfpq\n" +
                     "     VECTORINDEX: ON\n" +
                     "          Refine: ON, Distance Column: <0:__vector_approx_l2_distance>, LimitK: 10, " +
-                    "Order: ASC, Query Vector: [1.1, 2.2, 3.3, 4.4], Predicate Range: -1.0");
+                    "Order: ASC, Query Vector: [1.1, 2.2, 3.3, 4.4], Predicate Range: N/A");
         } finally {
             connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
         }
@@ -680,7 +709,9 @@ public class VectorIndexTest extends PlanTestBase {
 
         String sql7 = "select c1, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score"
                 + " from test.test_cosine where c0 = 1 order by score desc limit 10";
-        assertPlanContains(sql7, "VECTORINDEX: OFF");
+        // The scalar predicate c0 = 1 is now kept as a residual on the scan (BE pre/post-filters it
+        // against the ANN), so the vector index is used instead of falling back to a brute-force scan.
+        assertPlanContains(sql7, "VECTORINDEX: ON");
 
         String sql8 = "select c1, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score"
                 + " from test.test_cosine having score >= cast(0.8 as float) order by score desc limit 10";
@@ -896,6 +927,36 @@ public class VectorIndexTest extends PlanTestBase {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
             connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
         }
+    }
+
+    @Test
+    public void testInnerProductVectorIndexRewrite() throws Exception {
+        String query = "[1.1,2.2,3.3,4.4,5.5]";
+        String sql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product order by score desc limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan, "__vector_approx_inner_product");
+        assertContains(plan, "Order: DESC");
+        assertContains(plan, "Predicate Range: N/A");
+
+        String rangeSql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product where approx_inner_product(" + query + ", c1) >= -2.5 "
+                + "order by score desc limit 10";
+        String rangePlan = getFragmentPlan(rangeSql);
+        assertContains(rangePlan, "VECTORINDEX: ON");
+        assertContains(rangePlan, "Predicate Range: -2.5");
+
+        String negativeOneRangeSql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product where approx_inner_product(" + query + ", c1) >= -1 "
+                + "order by score desc limit 10";
+        String negativeOneRangePlan = getFragmentPlan(negativeOneRangeSql);
+        assertContains(negativeOneRangePlan, "Predicate Range: -1.0");
+        assertNotContains(negativeOneRangePlan, "Predicate Range: N/A");
+
+        String wrongOrderSql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product order by score asc limit 10";
+        assertNotContains(getFragmentPlan(wrongOrderSql), "VECTORINDEX: ON");
     }
 
     // Regression guard for the vector distance-column schema pollution bug.

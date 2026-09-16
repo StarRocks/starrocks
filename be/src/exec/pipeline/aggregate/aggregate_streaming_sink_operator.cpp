@@ -19,7 +19,7 @@
 #include "base/simd/simd.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
 namespace starrocks::pipeline {
 
@@ -70,11 +70,8 @@ void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
         _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
     }
-    if (_aggregator->hash_map_memory_usage() > config::streaming_agg_limited_memory_size) {
-        _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
-    } else {
-        _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
-    }
+    _limited_mem_state.limited_memory_size = LimitedMemAggState::clamp_budget(
+            _aggregator->hash_map_memory_usage(), config::streaming_agg_limited_memory_size);
 }
 
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

@@ -9,7 +9,7 @@ description: "System view showing the privileges granted to each user in StarRoc
 
 :::note
 
-默认仅拥有 `user_admin` 角色的用户或角色可以查询此视图，或通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 语句将此视图的权限赋予给其他用户。
+默认仅拥有 `user_admin` 角色的用户或角色可以查询此视图，或通过 [GRANT](../sql-statements/account-management/GRANT.md) 语句将此视图的权限赋予给其他用户。
 
 :::
 

@@ -1,0 +1,113 @@
+-- name: test_lake_prepared_physical_split_scan @cloud @sequential
+-- End-to-end SQL integration for the lake prepared-physical-split scan (decided per scan node).
+-- Runs @sequential: it flips split-tuning BE configs (update_be_config) that are global to the
+-- backend, so it must not overlap other concurrent cases (which would otherwise see the changed
+-- split granularity), and it inspects its own query's runtime profile via last_query_id().
+--
+-- The optimization only engages when a single lake tablet is physically split into many
+-- INITIAL_COARSE + REFINED sub-scans that share one prepared read state, and its chunk-source
+-- reuse only fires when one scan operator drains several REFINED splits of the same tablet.
+-- To make that happen deterministically on a modest test table we:
+--   * pin the split granularity small (a narrow table would otherwise clamp splitted_scan_rows
+--     up to ~1M rows and never split), and lower the per-tablet split-threshold ratio to 1.0,
+--   * load ~200k rows across several rowsets into a SINGLE bucket (one tablet, many segments),
+--   * force tablet-internal-parallel splitting.
+-- The test then proves via the query profile that the split + reuse code actually ran
+-- (RefinedMorsels / InitialCoarseMorsels / ReusableSegmentIterReused are non-zero), exercises
+-- a runtime-filter join and diverse scan shapes, checks the EXPLAIN marker follows the session
+-- switch, that query cache is mutually exclusive, and that results are identical on and off.
+-- The BE configs are restored at the end.
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '2000')
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '2000')
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.0')
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Single bucket => exactly one tablet => all splits share one prepared_tablet_read_state.
+create table t (
+    k bigint,
+    k2 int,
+    v bigint,
+    s varchar(64)
+) duplicate key(k)
+distributed by hash(k) buckets 1
+properties('replication_num' = '1');
+
+-- Small dimension whose key covers every t.k2 value, so the join pushes a runtime filter that
+-- is present but non-selective: the probe scan still reads the whole tablet (many splits) while
+-- the runtime-filter snapshot bookkeeping on the prepared-split path is exercised.
+create table ds8 (
+    id int
+) duplicate key(id)
+distributed by hash(id) buckets 1
+properties('replication_num' = '1');
+
+-- ~200k rows across 5 rowsets => ~5 segments (=> InitialCoarseMorsels) and, at 2000 rows/split,
+-- ~100 REFINED splits funneled through a few operators so chunk-source reuse fires repeatedly.
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(1, 40000));
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(40001, 80000));
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(80001, 120000));
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(120001, 160000));
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(160001, 200000));
+insert into ds8 select generate_series from table(generate_series(0, 7));
+
+set enable_lake_prepared_physical_split_scan = true;
+set enable_lake_tablet_internal_parallel = true;
+set tablet_internal_parallel_mode = "force_split";
+set pipeline_dop = 4;
+set enable_query_cache = false;
+
+-- The per-scan decision fires on a cloud-native table, so the EXPLAIN marker appears.
+function: assert_explain_contains('select k, v from t where k > 100', 'Prepared Physical Split Scan: true')
+
+-- Prove the split + reuse machinery actually executed by inspecting the runtime profile.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*), min(k), max(k), sum(v) from t;
+create table profile_scan properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- The prepared split produced coarse seed morsels and refined sub-splits ...
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- InitialCoarseMorsels: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_scan where line like '%- InitialCoarseMorsels:%';
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- RefinedMorsels: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_scan where line like '%- RefinedMorsels:%';
+-- ... and the reuse path re-used a prepared segment iterator (i.e. a REFINED split reused an
+-- earlier split's chunk source instead of preparing from scratch).
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ReusableSegmentIterReused: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_scan where line like '%- ReusableSegmentIterReused:%';
+
+-- A runtime-filter join over the prepared-split path (exercises the RF snapshot bookkeeping).
+[UC]select count(*) from t join ds8 on t.k2 = ds8.id;
+
+-- Correctness under the optimization across diverse scan shapes.
+select count(*), min(k), max(k), sum(v) from t;
+select count(*) from t where k between 50000 and 100000;
+select count(*) from t where k % 7 = 0;
+select count(*) from t where s = 'v50';
+select k2, count(*) from t group by k2 order by k2;
+select k, k2 from t order by k limit 5;
+select count(*) from t join ds8 on t.k2 = ds8.id;
+
+-- Query cache is mutually exclusive with the optimization by design: no marker when it is on.
+set enable_query_cache = true;
+function: assert_explain_not_contains('select k, v from t where k > 100', 'Prepared Physical Split Scan: true')
+set enable_query_cache = false;
+
+-- Switch off (the default): no marker, and the same queries return identical results.
+set enable_lake_prepared_physical_split_scan = false;
+function: assert_explain_not_contains('select k, v from t where k > 100', 'Prepared Physical Split Scan: true')
+select count(*), min(k), max(k), sum(v) from t;
+select count(*) from t where k between 50000 and 100000;
+select count(*) from t where k % 7 = 0;
+select count(*) from t where s = 'v50';
+select k2, count(*) from t group by k2 order by k2;
+select k, k2 from t order by k limit 5;
+select count(*) from t join ds8 on t.k2 = ds8.id;
+
+-- Restore the split-tuning BE configs to their defaults.
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '16384')
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '1048576')
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.5')
+
+drop database db_${uuid0};

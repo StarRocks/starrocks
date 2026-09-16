@@ -1,0 +1,75 @@
+-- name: test_query_cache_empty_build_side_hang
+CREATE TABLE eb1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE eb2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO eb1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+INSERT INTO eb2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1
+FROM TABLE(generate_series(1, 2000));
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 0) b on eb1.ts > b.k group by eb1.c1) x;
+-- result:
+0
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 0) b on eb1.ts > b.k group by eb1.c1) x;
+-- result:
+0
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 3) b on eb1.ts > b.k group by eb1.c1) x;
+-- result:
+1240
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 3) b on eb1.ts > b.k group by eb1.c1) x;
+-- result:
+1240
+-- !result

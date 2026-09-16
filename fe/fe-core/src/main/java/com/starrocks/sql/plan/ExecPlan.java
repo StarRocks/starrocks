@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -32,9 +33,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -42,8 +46,10 @@ import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class ExecPlan {
@@ -82,6 +88,10 @@ public class ExecPlan {
 
     private long useBaseline = -1;
 
+    private Set<Long> duplicatedLakeScanTableIds;
+    // Captured lazily only for plans containing an AIProject.
+    private SystemChatConfig systemChatConfig;
+
     @VisibleForTesting
     public ExecPlan() {
         connectContext = new ConnectContext();
@@ -117,6 +127,47 @@ public class ExecPlan {
 
     public List<ScanNode> getScanNodes() {
         return scanNodes;
+    }
+
+    SystemChatConfig getOrCreateSystemChatConfig() {
+        if (systemChatConfig == null) {
+            systemChatConfig = AIModelConfigs.systemChatSnapshot(
+                    AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+        }
+        return systemChatConfig;
+    }
+
+    // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one
+    // table). Derived lazily from the physical plan and consulted per scan to gate the prepared physical split
+    // scan, whose per-scan reuse of a shared prepared read state is unsafe when the same table feeds two scans.
+    public Set<Long> getDuplicatedLakeScanTableIds() {
+        if (duplicatedLakeScanTableIds == null) {
+            Map<Long, Integer> counts = new HashMap<>();
+            countLakeScanTableIds(physicalPlan, counts);
+            Set<Long> duplicated = new HashSet<>();
+            counts.forEach((tableId, count) -> {
+                if (count >= 2) {
+                    duplicated.add(tableId);
+                }
+            });
+            duplicatedLakeScanTableIds = duplicated;
+        }
+        return duplicatedLakeScanTableIds;
+    }
+
+    private static void countLakeScanTableIds(OptExpression optExpression, Map<Long, Integer> counts) {
+        if (optExpression == null) {
+            return;
+        }
+        if (optExpression.getOp() instanceof PhysicalOlapScanOperator) {
+            Table table = ((PhysicalOlapScanOperator) optExpression.getOp()).getTable();
+            if (table != null && table.isCloudNativeTableOrMaterializedView()) {
+                counts.merge(table.getId(), 1, Integer::sum);
+            }
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            countLakeScanTableIds(child, counts);
+        }
     }
 
     public List<Expr> getOutputExprs() {

@@ -9,10 +9,10 @@ let
       md5 = "955b6faedf32ec2ce1b7725561d15618";
       sha256 = "00nnmg2mazx8i1brxzvbmfq5j7738md884373nx8jq0096di4222";
     };
-    "arrow-apache-arrow-19.0.1.tar.gz" = {
-      url = "https://github.com/apache/arrow/archive/refs/tags/apache-arrow-19.0.1.tar.gz";
-      md5 = "8c5091da0f8fb41a47d7f4dad7b712df";
-      sha256 = "0snqca1wlkxc22n8k2gs21g6py8r575hwwgqns3cqhc8jl28b2ac";
+    "arrow-apache-arrow-24.0.0.tar.gz" = {
+      url = "https://github.com/apache/arrow/archive/refs/tags/apache-arrow-24.0.0.tar.gz";
+      md5 = "66c53bd00baa79034bd2ca167beea436";
+      sha256 = "0a3b43avih2kiniav2rhp24awdhmxhzp4fmvlr6lqci6iwc8vqcl";
     };
     "avro-release-1.12.0.tar.gz" = {
       url = "https://github.com/apache/avro/archive/refs/tags/release-1.12.0.tar.gz";
@@ -109,10 +109,10 @@ let
       md5 = "724cd1df9735de2b8939d298f0d95ea2";
       sha256 = "04ng0l997j8vxvsp60haf6nvhx4201qsrkhzm3y35qr57k3f4mh4";
     };
-    "fast-float-3.5.1.tar.gz" = {
-      url = "https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz";
-      md5 = "adb3789b99f47e0cd971b4d90727d4d0";
-      sha256 = "1nad5fihmv4g2i7cih7nwkv9rba9gw81lill7k8gglnccsfbyn45";
+    "fast-float-8.2.10.tar.gz" = {
+      url = "https://github.com/fastfloat/fast_float/archive/refs/tags/v8.2.10.tar.gz";
+      md5 = "ddcf64ffe15f1e1ed964a355db7a04f3";
+      sha256 = "07wnjlxxwh0gxwaswar58n4gmgfl8xm9iw6ica44vkxijzfmiybn";
     };
     "FlameGraph-20251015.tar.gz" = {
       url = "https://github.com/murphyatwork/FlameGraph/archive/refs/tags/20251015.tar.gz";
@@ -164,11 +164,6 @@ let
       md5 = "c5ac53ca70cc667189ec824c6048914a";
       sha256 = "1d38yknmvvym19s8hia14pkrccqr7lq5iclm9j9hqvpyx0h0ww0l";
     };
-    "hyperscan-5.3.0.aarch64.tar.gz" = {
-      url = "https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz";
-      md5 = "ef337257bde6583242a739fab6fb161f";
-      sha256 = "1cawqr9yx7b02kk8ihvf41ps7wv4qzi7gi4jw53x13rnnfyva170";
-    };
     "hyperscan-5.4.0.tar.gz" = {
       url = "https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz";
       md5 = "65e08385038c24470a248f6ff2fa379b";
@@ -189,20 +184,20 @@ let
       md5 = "09a8328574dab22a7df848eae6dbbf53";
       sha256 = "1apyxjd1ixy4g8xkr61p0ny8jiz8vyv1j0k4nxqkxpqrf4g2vf1d";
     };
-    "krb5-1.19.4.tar.gz" = {
-      url = "https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz";
-      md5 = "ef76083e58f8c49066180642d7c2814a";
-      sha256 = "1sslkcbzg4dc98957lhzchwkfnyd2shpkrip75ms5q2db8f9ixa1";
+    "krb5-1.21.3.tar.gz" = {
+      url = "https://web.mit.edu/kerberos/dist/krb5/1.21/krb5-1.21.3.tar.gz";
+      md5 = "beb34d1dfc72ba0571ce72bed03e06eb";
+      sha256 = "0ddd81431pfsqv89w31jxa2pw8gp1wavs6mjh2whiyv7mmgcv95p";
     };
     "leveldb-1.20.tar.gz" = {
       url = "https://github.com/google/leveldb/archive/v1.20.tar.gz";
       md5 = "298b5bddf12c675d6345784261302252";
       sha256 = "0r36bcrj6b2afsp4aw1gjai3jbs1c7734pxpc1jz7hh9nasyiazm";
     };
-    "libdeflate-1.18.zip" = {
-      url = "https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.18.zip";
-      md5 = "1ec42dfe7d777929ade295281560d750";
-      sha256 = "0y1vcvv5s3iwip1xskhggxsgyc6ivb2ajdddahzfif5gh4c5ijqr";
+    "libdeflate-1.26.zip" = {
+      url = "https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.26.zip";
+      md5 = "15fde5dcbc584d1adee99c0ed13212db";
+      sha256 = "0kqlm3j0iqh92apng41wqk2dsqd01adxv8v074nyszlcgqbvjr6c";
     };
     "libdivide-v5.2.0.tar.gz" = {
       url = "https://github.com/ridiculousfish/libdivide/archive/refs/tags/v5.2.0.tar.gz";
@@ -245,7 +240,7 @@ let
       sha256 = "12zlqlp7j3fri1bvwfpz7637cvf6iv7mq18j54imxcs48y814xak";
     };
     "lzo-2.10.tar.gz" = {
-      url = "http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz";
+      url = "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz";
       md5 = "39d3f3f9c55c87b1e5d6888e1420f4b5";
       sha256 = "0wm04519pd3g8hqpjqhfr72q8qmbiwqaxcs3cndny9h86aa95y60";
     };
@@ -254,15 +249,15 @@ let
       md5 = "86c4052adeb8447900bf33b4e2ddd1f9";
       sha256 = "13ia4a1zh9r22pnwsdi55wax9kj9y8b9b02lis0rfw269j1g0596";
     };
-    "openssl-OpenSSL_1_1_1m.tar.gz" = {
-      url = "https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz";
-      md5 = "710c2368d28f1a25ab92e25b5b9b11ec";
-      sha256 = "0q5kvar91asbv7k203sx3rafqirf4rhqih3anz829a7hgjnj9bin";
+    "openssl-3.5.7.tar.gz" = {
+      url = "https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz";
+      md5 = "36608cd5445f708d0c2200aea9682c35";
+      sha256 = "1s4qmjp33ai43ahlm3iw59aq86fj5hp7kxbcygwq194waa5d5h58";
     };
-    "opentelemetry-cpp-v1.2.0.tar.gz" = {
-      url = "https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.2.0.tar.gz";
-      md5 = "c084abc742c6b3cd4c9c3684e559d4e1";
-      sha256 = "1hlplg4fzq96y725qvh8r7n1v9vd25g0xqq6bcdbhi7swkwj0r3s";
+    "opentelemetry-cpp-v1.9.1.tar.gz" = {
+      url = "https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.9.1.tar.gz";
+      md5 = "fd353f085f3f3bfbc2c28197287335a0";
+      sha256 = "0jc2nink6pp0xj2j9ryv793l3kcp5aqdrn9a15snvly8h57y53b6";
     };
     "poco-1.12.5-release.tar.gz" = {
       url = "https://github.com/pocoproject/poco/archive/refs/tags/poco-1.12.5-release.tar.gz";
@@ -314,30 +309,30 @@ let
       md5 = "bdc1dfcb2a89dc0c09e8370808a946f5";
       sha256 = "0byazknlr5x941n9ba3j14prf29yk2dw7nwh3a4wbqd11zh3pwcv";
     };
-    "simdutf-5.2.8.tar.gz" = {
-      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz";
-      md5 = "731c78ab5a10c6073942dc93d5c4b04c";
-      sha256 = "0xwdx99qn4ckv4bd9ib5w3i00l8wiy2d7vrdz2c8avasz2zg21i7";
+    "simdutf-9.1.0.tar.gz" = {
+      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz";
+      md5 = "e55123960edadb8d9987fa30f877e588";
+      sha256 = "14yihiaalw4nxmjbbn6b64r7f4qdcpm7x8ml1zmydacm9h553qr4";
     };
-    "snappy-1.1.8.tar.gz" = {
-      url = "https://github.com/google/snappy/archive/1.1.8.tar.gz";
-      md5 = "70e48cba7fecf289153d009791c9977f";
-      sha256 = "07v5b365vz6bjdlqw4vwcna4yhaf6xzxny31hfq159ijg3q7gdhn";
+    "snappy-1.2.1.tar.gz" = {
+      url = "https://github.com/google/snappy/archive/1.2.1.tar.gz";
+      md5 = "dd6f9b667e69491e1dbf7419bdf68823";
+      sha256 = "0wvaxdjdhrb6s8invpzs51jywpbshb96r40nndi1iz62gsjg17w6";
     };
-    "starrocks-clucene-2026.04.09.tar.gz" = {
-      url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz";
-      md5 = "a06ce32908dad5b2b834b19a8879a2c8";
-      sha256 = "1a40dmgchxcbalxr1xvl1ma3k11z34qa934v4f0i0az3kqpcyrmb";
+    "starrocks-clucene-2026.06.23.tar.gz" = {
+      url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz";
+      md5 = "774561443bc372ec6e8e56f46f3e9f4a";
+      sha256 = "04wpgq7bq923bh2fbp9g2ljqd8svx8k5rvfa99bqjrxnfmnhn3hp";
     };
     "streamvbyte-0.5.1.tar.gz" = {
       url = "https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz";
       md5 = "251d9200d27dda9120653b4928a23a86";
       sha256 = "0287mwpqc83rgs7rmc3iilsl6bnnldf8791ppgs7j2zrh8sl1wmh";
     };
-    "thrift-0.23.0.tar.gz" = {
-      url = "https://archive.apache.org/dist/thrift/0.23.0/thrift-0.23.0.tar.gz";
-      md5 = "7b62f4258ded41e233a638fe8b9fcf64";
-      sha256 = "0vzlx0xv0g8xs6zz4l7zll8664cc40qnj6asdk8i67xfs8rdjn8q";
+    "thrift-0.24.0.tar.gz" = {
+      url = "https://archive.apache.org/dist/thrift/0.24.0/thrift-0.24.0.tar.gz";
+      md5 = "232e035ff80c5fb4b7243f0be3a76b02";
+      sha256 = "1r66jr1wx0jgzlzzpag3zvia9gzbak2z474kn0qxdhf5lhwmiyp0";
     };
     "vectorscan-5.4.12.tar.gz" = {
       url = "https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz";
@@ -349,10 +344,10 @@ let
       md5 = "161cbf4c347f6daadacfb749c31842f8";
       sha256 = "1g943v85ipgyxb62hrn54fsc5aicihrp6rwvj0pb6p19l181swym";
     };
-    "xsimd-13.2.0.tar.gz" = {
-      url = "https://github.com/xtensor-stack/xsimd/archive/refs/tags/13.2.0.tar.gz";
-      md5 = "f451a1c57d2a4fdc0ba663be438dced4";
-      sha256 = "0yj4hbdfrhwkdny6fb7yq5jbw6pldp1m671jf3f5l64cahywvn7d";
+    "xsimd-14.0.0.tar.gz" = {
+      url = "https://github.com/xtensor-stack/xsimd/archive/refs/tags/14.0.0.tar.gz";
+      md5 = "75c0d34cf7011924ba19978076c76dc1";
+      sha256 = "1khd94aipz09blfxvnp53g9r4frsbx68v4yn146c2ma9jlv05php";
     };
     "xxHash-0.8.3.tar.gz" = {
       url = "https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz";
@@ -365,9 +360,9 @@ let
       sha256 = "1l87r6h8qccba1yjx6n13q36yh0wrq3rzz9nnraq5ssjr2lmmipr";
     };
     "zstd-1.5.7.tar.gz" = {
-      url = "https://github.com/facebook/zstd/archive/v1.5.7.tar.gz";
-      md5 = "619a019adbbc4536e7fb93cdbb01af3e";
-      sha256 = "1qrf074w0wlykrj3pgfs5qp90s374a05pa0wdvjm82djar2jimrp";
+      url = "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz";
+      md5 = "780fc1896922b1bc52a4e90980cdda48";
+      sha256 = "18vgkvh7w6zw4jn2aj1mp0yv98m4fk52ay6da0wh4pm194gyaczb";
     };
   };
 
@@ -460,17 +455,17 @@ let
 
   bySystem = {
     "x86_64-linux" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
-      "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
+      "openssl-3.5.7.tar.gz"
+      "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
@@ -481,12 +476,12 @@ let
       "leveldb-1.20.tar.gz"
       "brpc-1.9.0.tar.gz"
       "rocksdb-6.22.1.zip"
-      "krb5-1.19.4.tar.gz"
+      "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
       "flatbuffers-v1.10.0.tar.gz"
-      "arrow-apache-arrow-19.0.1.tar.gz"
+      "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
@@ -503,9 +498,9 @@ let
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
-      "opentelemetry-cpp-v1.2.0.tar.gz"
+      "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
@@ -513,15 +508,15 @@ let
       "lzo-2.10.tar.gz"
       "datasketches-cpp-4.0.0.tar.gz"
       "libfiu-1.1.tar.gz"
-      "libdeflate-1.18.zip"
+      "libdeflate-1.26.zip"
       "llvm-project-18.1.8.src.tar.xz"
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
-      "xsimd-13.2.0.tar.gz"
+      "xsimd-14.0.0.tar.gz"
       "libxml2-2.11.7.tar.gz"
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
@@ -531,17 +526,17 @@ let
       "benchgen-26.03.11.tar.gz"
     ];
     "aarch64-linux" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
-      "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
+      "openssl-3.5.7.tar.gz"
+      "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
@@ -552,81 +547,12 @@ let
       "leveldb-1.20.tar.gz"
       "brpc-1.9.0.tar.gz"
       "rocksdb-6.22.1.zip"
-      "krb5-1.19.4.tar.gz"
+      "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
       "flatbuffers-v1.10.0.tar.gz"
-      "arrow-apache-arrow-19.0.1.tar.gz"
-      "brotli-1.0.9.tar.gz"
-      "zstd-1.5.7.tar.gz"
-      "s2geometry-0.9.0.tar.gz"
-      "bitshuffle-0.5.1.tar.gz"
-      "CRoaring-4.2.1.tar.gz"
-      "jemalloc-5.3.0.tar.bz2"
-      "cctz-2.3.tar.gz"
-      "fmt-10.2.1.zip"
-      "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
-      "hadoop-3.4.3-src.tar.gz"
-      "ragel-6.10.tar.gz"
-      "hyperscan-5.3.0.aarch64.tar.gz"
-      "mariadb-connector-c-3.1.14.tar.gz"
-      "aws-sdk-cpp-1.11.267.tar.gz"
-      "velocypack-XYZ1.0.tar.gz"
-      "opentelemetry-cpp-v1.2.0.tar.gz"
-      "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
-      "streamvbyte-0.5.1.tar.gz"
-      "jansson-2.14.tar.gz"
-      "avro-release-1.12.0.tar.gz"
-      "libserdes-7.3.1.tar.gz"
-      "lzo-2.10.tar.gz"
-      "datasketches-cpp-4.0.0.tar.gz"
-      "libfiu-1.1.tar.gz"
-      "llvm-project-18.1.8.src.tar.xz"
-      "abseil-cpp-20220623.0.tar.gz"
-      "cares-1_19_1.tar.gz"
-      "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
-      "poco-1.12.5-release.tar.gz"
-      "icu4c-76_1-src.zip"
-      "xsimd-13.2.0.tar.gz"
-      "libxml2-2.11.7.tar.gz"
-      "azure-storage-files-shares_12.12.0.tar.gz"
-      "libdivide-v5.2.0.tar.gz"
-      "FlameGraph-20251015.tar.gz"
-      "xxHash-0.8.3.tar.gz"
-      "BLAKE3-1.8.5.tar.gz"
-      "benchgen-26.03.11.tar.gz"
-    ];
-    "aarch64-darwin" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
-      "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
-      "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
-      "protobuf-3.16.1.tar.gz"
-      "gflags-2.2.2.tar.gz"
-      "glog-0.7.1.tar.gz"
-      "googletest-release-1.10.0.tar.gz"
-      "rapidjson-1.1.0.tar.gz"
-      "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
-      "gperftools-2.7.tar.gz"
-      "zlib-ng-2.3.3.tar.gz"
-      "lz4-1.10.0.tar.gz"
-      "bzip2-1.0.8.tar.gz"
-      "curl-8.16.0.tar.gz"
-      "re2-2022-12-01.tar.gz"
-      "boost_1_86_0.tar.gz"
-      "leveldb-1.20.tar.gz"
-      "brpc-1.9.0.tar.gz"
-      "rocksdb-6.22.1.zip"
-      "krb5-1.19.4.tar.gz"
-      "cyrus-sasl-2.1.28.tar.gz"
-      "librdkafka-2.11.0.tar.gz"
-      "pulsar-client-3.3.0.tar.gz"
-      "flatbuffers-v1.10.0.tar.gz"
-      "arrow-apache-arrow-19.0.1.tar.gz"
+      "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
@@ -642,9 +568,9 @@ let
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
-      "opentelemetry-cpp-v1.2.0.tar.gz"
+      "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
@@ -652,14 +578,85 @@ let
       "lzo-2.10.tar.gz"
       "datasketches-cpp-4.0.0.tar.gz"
       "libfiu-1.1.tar.gz"
+      "libdeflate-1.26.zip"
       "llvm-project-18.1.8.src.tar.xz"
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
-      "xsimd-13.2.0.tar.gz"
+      "xsimd-14.0.0.tar.gz"
+      "libxml2-2.11.7.tar.gz"
+      "azure-storage-files-shares_12.12.0.tar.gz"
+      "libdivide-v5.2.0.tar.gz"
+      "FlameGraph-20251015.tar.gz"
+      "xxHash-0.8.3.tar.gz"
+      "BLAKE3-1.8.5.tar.gz"
+      "benchgen-26.03.11.tar.gz"
+    ];
+    "aarch64-darwin" = [
+      "starrocks-clucene-2026.06.23.tar.gz"
+      "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
+      "openssl-3.5.7.tar.gz"
+      "thrift-0.24.0.tar.gz"
+      "protobuf-3.16.1.tar.gz"
+      "gflags-2.2.2.tar.gz"
+      "glog-0.7.1.tar.gz"
+      "googletest-release-1.10.0.tar.gz"
+      "rapidjson-1.1.0.tar.gz"
+      "simdjson-v3.9.4.tar.gz"
+      "snappy-1.2.1.tar.gz"
+      "gperftools-2.7.tar.gz"
+      "zlib-ng-2.3.3.tar.gz"
+      "lz4-1.10.0.tar.gz"
+      "bzip2-1.0.8.tar.gz"
+      "curl-8.16.0.tar.gz"
+      "re2-2022-12-01.tar.gz"
+      "boost_1_86_0.tar.gz"
+      "leveldb-1.20.tar.gz"
+      "brpc-1.9.0.tar.gz"
+      "rocksdb-6.22.1.zip"
+      "krb5-1.21.3.tar.gz"
+      "cyrus-sasl-2.1.28.tar.gz"
+      "librdkafka-2.11.0.tar.gz"
+      "pulsar-client-3.3.0.tar.gz"
+      "flatbuffers-v1.10.0.tar.gz"
+      "arrow-apache-arrow-24.0.0.tar.gz"
+      "brotli-1.0.9.tar.gz"
+      "zstd-1.5.7.tar.gz"
+      "s2geometry-0.9.0.tar.gz"
+      "bitshuffle-0.5.1.tar.gz"
+      "CRoaring-4.2.1.tar.gz"
+      "jemalloc-5.3.0.tar.bz2"
+      "cctz-2.3.tar.gz"
+      "fmt-10.2.1.zip"
+      "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
+      "hadoop-3.4.3-src.tar.gz"
+      "ragel-6.10.tar.gz"
+      "vectorscan-5.4.12.tar.gz"
+      "mariadb-connector-c-3.1.14.tar.gz"
+      "aws-sdk-cpp-1.11.267.tar.gz"
+      "velocypack-XYZ1.0.tar.gz"
+      "opentelemetry-cpp-v1.9.1.tar.gz"
+      "google_benchmark-1.9.5.tar.gz"
+      "fast-float-8.2.10.tar.gz"
+      "streamvbyte-0.5.1.tar.gz"
+      "jansson-2.14.tar.gz"
+      "avro-release-1.12.0.tar.gz"
+      "libserdes-7.3.1.tar.gz"
+      "lzo-2.10.tar.gz"
+      "datasketches-cpp-4.0.0.tar.gz"
+      "libfiu-1.1.tar.gz"
+      "libdeflate-1.26.zip"
+      "llvm-project-18.1.8.src.tar.xz"
+      "abseil-cpp-20220623.0.tar.gz"
+      "cares-1_19_1.tar.gz"
+      "grpc-1.43.0.tar.gz"
+      "simdutf-9.1.0.tar.gz"
+      "poco-1.12.5-release.tar.gz"
+      "icu4c-76_1-src.zip"
+      "xsimd-14.0.0.tar.gz"
       "libxml2-2.11.7.tar.gz"
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
@@ -795,6 +792,7 @@ let
       "LZO2"
       "DATASKETCHES"
       "FIU"
+      "LIBDEFLATE"
       "LLVM"
       "ABSL"
       "CARES"
@@ -864,6 +862,7 @@ let
       "LZO2"
       "DATASKETCHES"
       "FIU"
+      "LIBDEFLATE"
       "LLVM"
       "ABSL"
       "CARES"
@@ -951,8 +950,8 @@ let
       "xxhash"
       "blake3"
       "benchgen"
-      "breakpad"
       "libdeflate"
+      "breakpad"
     ];
     "aarch64-linux" = [
       "libevent"
@@ -1022,6 +1021,7 @@ let
       "xxhash"
       "blake3"
       "benchgen"
+      "libdeflate"
     ];
     "aarch64-darwin" = [
       "libevent"
@@ -1091,6 +1091,7 @@ let
       "xxhash"
       "blake3"
       "benchgen"
+      "libdeflate"
     ];
   };
 

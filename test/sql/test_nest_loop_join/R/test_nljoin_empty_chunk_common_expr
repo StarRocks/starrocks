@@ -1,0 +1,76 @@
+-- name: test_nljoin_empty_chunk_common_expr
+CREATE TABLE `nlj_probe` (
+  `k` bigint(20) NULL COMMENT "",
+  `v` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `nlj_build` (
+  `k` bigint(20) NULL COMMENT "",
+  `v` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `nlj_build_multi_chunk` (
+  `k` bigint(20) NULL COMMENT "",
+  `v` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into nlj_probe select generate_series, generate_series from table(generate_series(1, 10));
+-- result:
+-- !result
+insert into nlj_build select generate_series, generate_series from table(generate_series(1, 10000));
+-- result:
+-- !result
+insert into nlj_build_multi_chunk select generate_series, generate_series from table(generate_series(1, 5000));
+-- result:
+-- !result
+select count(*) from nlj_probe left join nlj_build on nlj_probe.k > nlj_build.k + 1000000
+where abs(nlj_probe.v + coalesce(nlj_build.v, 0)) > 5 or abs(nlj_probe.v + coalesce(nlj_build.v, 0)) < 3;
+-- result:
+7
+-- !result
+set enable_predicate_expr_reuse = false;
+-- result:
+-- !result
+select count(*) from nlj_probe left join nlj_build on nlj_probe.k > nlj_build.k + 1000000
+where abs(nlj_probe.v + coalesce(nlj_build.v, 0)) > 5 or abs(nlj_probe.v + coalesce(nlj_build.v, 0)) < 3;
+-- result:
+7
+-- !result
+set enable_predicate_expr_reuse = true;
+-- result:
+-- !result
+select count(*) from nlj_probe left join nlj_build on nlj_probe.k > nlj_build.k
+where abs(nlj_probe.v + coalesce(nlj_build.v, 0)) > 5 or abs(nlj_probe.v + coalesce(nlj_build.v, 0)) < 3;
+-- result:
+42
+-- !result
+select count(*) from nlj_probe full outer join nlj_build on nlj_probe.k > nlj_build.k + 1000000
+where abs(coalesce(nlj_probe.v, 0) + coalesce(nlj_build.v, 0)) > 5
+   or abs(coalesce(nlj_probe.v, 0) + coalesce(nlj_build.v, 0)) < 3;
+-- result:
+10004
+-- !result
+select count(*) from nlj_build_multi_chunk left join nlj_probe on nlj_build_multi_chunk.k > nlj_probe.k + 1000000
+where abs(nlj_build_multi_chunk.v + coalesce(nlj_probe.v, 0)) > 5
+   or abs(nlj_build_multi_chunk.v + coalesce(nlj_probe.v, 0)) < 3;
+-- result:
+4997
+-- !result

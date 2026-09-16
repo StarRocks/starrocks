@@ -44,6 +44,15 @@ public:
     Status write_zone_map() override { return Status::OK(); }
 
     Status write_bitmap_index() override { return Status::OK(); }
+    // Same order and the same is_nullable() guard as write_ordinal_index().
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        if (is_nullable()) {
+            _null_writer->take_ordinal_index_builders(out);
+        }
+        for (auto& w : _field_writers) {
+            w->take_ordinal_index_builders(out);
+        }
+    }
 
     Status write_bloom_filter_index() override { return Status::OK(); }
 
@@ -87,6 +96,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_struct_column_writer(const Column
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
+        null_options.meta->set_compression_level(opts.meta->compression_level());
         null_options.meta->set_is_nullable(false);
 
         TypeInfoPtr tiny_type_info = get_type_info(TYPE_TINYINT);

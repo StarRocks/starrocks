@@ -45,12 +45,12 @@
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
 #include "storage/compaction_utils.h"
-#include "storage/primitive/column_mapping.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage_primitive/column_mapping.h"
 
 namespace butil {
 class IOBuf;
@@ -213,6 +213,10 @@ protected:
     int64_t _total_row_size = 0;
     int64_t _total_data_size = 0;
     int64_t _total_index_size = 0;
+    // Bytes of standalone index files (vector index .vi); a subset of _total_index_size that
+    // is stored outside the segment files. Persisted so consumers starting from the segment
+    // file size can recover the embedded-only index bytes.
+    int64_t _total_standalone_index_size = 0;
     int64_t _num_rows_upt = 0;
     int64_t _total_update_row_size = 0;
 

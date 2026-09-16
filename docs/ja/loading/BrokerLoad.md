@@ -13,7 +13,7 @@ Broker Load は非同期ロードモードで動作します。ロードジョ�
 
 Broker Load は単一テーブルのロードと複数テーブルのロードをサポートしています。1 つの Broker Load ジョブを実行することで、1 つまたは複数のデータファイルを 1 つまたは複数の宛先テーブルにロードできます。Broker Load は、複数のデータファイルをロードする各ロードジョブのトランザクションの原子性を保証します。原子性とは、1 つのロードジョブで複数のデータファイルをロードする場合、すべてのロードが成功するか失敗するかのいずれかであることを意味します。あるデータファイルのロードが成功し、他のファイルのロードが失敗することはありません。
 
-Broker Load はデータロード時のデータ変換をサポートし、データロード中に UPSERT および DELETE 操作によるデータ変更をサポートします。詳細については、[Transform data at loading](../loading/Etl_in_loading.md) および [Change data through loading](../loading/Load_to_Primary_Key_tables.md) を参照してください。
+Broker Load はデータロード時のデータ変換をサポートし、データロード中に UPSERT および DELETE 操作によるデータ変更をサポートします。詳細については、[Transform data at loading](./Etl_in_loading.md) および [Change data through loading](./Load_to_Primary_Key_tables.md) を参照してください。
 
 <InsertPrivNote />
 
@@ -184,7 +184,7 @@ WITH BROKER
 
 上記の例では、`StorageCredentialParams` は選択した認証方法に応じて異なる認証パラメータのグループを表します。詳細については、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#aws-s3) を参照してください。
 
-v3.1 以降、StarRocks は Parquet 形式または ORC 形式のファイルのデータを AWS S3 から直接ロードすることをサポートしており、INSERT コマンドと TABLE キーワードを使用することで、外部テーブルを最初に作成する手間を省くことができます。詳細については、[Load data using INSERT > Insert data directly from files in an external source using TABLE keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) を参照してください。
+v3.1 以降、StarRocks は Parquet 形式または ORC 形式のファイルのデータを AWS S3 から直接ロードすることをサポートしており、INSERT コマンドと TABLE キーワードを使用することで、外部テーブルを最初に作成する手間を省くことができます。詳細については、[Load data using INSERT > Insert data directly from files in an external source using TABLE keyword](./InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) を参照してください。
 
 #### Google GCS からデータをロードする
 
@@ -413,7 +413,7 @@ Broker Load ジョブは、1 つ以上のタスクに分割され、並行して
 
 - 複数の `data_desc` パラメータを宣言し、それぞれが同じテーブルの異なるパーティションを指定する場合、各パーティションのデータをロードするタスクが生成されます。
 
-さらに、各タスクは 1 つ以上のインスタンスにさらに分割され、StarRocks クラスターの BE に均等に分散され、並行して実行されます。StarRocks は、次の [FE 設定](../administration/management/FE_configuration.md) に基づいて各タスクを分割します。
+さらに、各タスクは 1 つ以上のインスタンスにさらに分割され、StarRocks クラスターの BE に均等に分散され、並行して実行されます。StarRocks は、次の [FE 設定](../administration/configuration/FE_parameters/FE_parameters.md) に基づいて各タスクを分割します。
 
 - `min_bytes_per_broker_scanner`: 各インスタンスが処理するデータの最小量。デフォルトは 64 MB です。
 
@@ -427,7 +427,7 @@ Broker Load ジョブは、1 つ以上のタスクに分割され、並行して
 
 ## 関連設定項目
 
-[FE 設定項目](../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` は、StarRocks クラスター内で並行して実行できる Broker Load ジョブの最大数を指定します。
+[FE 設定項目](../administration/configuration/FE_parameters/FE_parameters.md) `max_broker_load_job_concurrency` は、StarRocks クラスター内で並行して実行できる Broker Load ジョブの最大数を指定します。
 
 StarRocks v2.4 以前では、特定の期間内に送信された Broker Load ジョブの総数が最大数を超える場合、過剰なジョブはキューに入れられ、送信時間に基づいてスケジュールされます。
 

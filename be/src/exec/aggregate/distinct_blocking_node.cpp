@@ -31,9 +31,9 @@
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
@@ -46,7 +46,6 @@ StatusOr<pipeline::OpFactories> DistinctBlockingNode::_decompose_to_pipeline(pip
                                                                              bool per_bucket_optimize) {
     using namespace pipeline;
 
-    auto workgroup = context->fragment_context()->workgroup();
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
 

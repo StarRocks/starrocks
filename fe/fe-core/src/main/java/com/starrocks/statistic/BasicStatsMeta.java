@@ -166,7 +166,7 @@ public class BasicStatsMeta implements Writable {
         } else if (metrics.unhealthyPartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
             updateRatio = (metrics.updatePartitionRowCountForCalc * 1.0) / metrics.tableRowCount;
         } else {
-            double rowUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.tableRowCount;
+            double rowUpdateRatio = (metrics.updatePartitionRowCountForCalc * 1.0) / metrics.tableRowCount;
             double partitionUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.totalPartitionCount;
             updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
         }

@@ -19,7 +19,7 @@
 
 #include "common/status.h"
 #include "compute_env/pipeline/pipeline_timer.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 
 namespace starrocks {
 

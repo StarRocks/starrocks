@@ -34,13 +34,13 @@
 #include "common/util/thrift_util.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/connector_scan_node.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_instantiator.h"
-#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
@@ -49,13 +49,13 @@
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_driver.h"
 #include "exec/runtime/query_context_manager.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "gutil/map_util.h"
 #include "pipeline_test_base.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 
@@ -87,8 +87,8 @@ public:
         _query_ctx->query_runtime_state().set_query_expire_seconds(60);
         _query_ctx->query_runtime_state().extend_delivery_lifetime();
         _query_ctx->query_runtime_state().extend_query_lifetime();
-        _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                     GlobalEnv::GetInstance()->query_pool_mem_tracker());
+        _query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                     RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
         auto fragment_ctx = std::make_shared<FragmentContext>();
         _fragment_ctx = fragment_ctx.get();

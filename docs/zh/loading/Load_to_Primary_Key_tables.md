@@ -1,4 +1,5 @@
 ---
+sidebar_position: 140
 displayed_sidebar: docs
 description: "在 Primary Key 表中通过 Stream Load、Broker Load 或 Routine Load 实现 INSERT、UPDATE、DELETE 操作。"
 keywords: ['zhujian']
@@ -56,7 +57,7 @@ StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 IN
 
 ### Broker Load
 
-参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/objectstorage.mdx)中的“背景信息”小节。
+参见[从 HDFS 导入](./hdfs_load.md)或[从云存储导入](./objectstorage/objectstorage.mdx)中的“背景信息”小节。
 
 ### Routine Load
 

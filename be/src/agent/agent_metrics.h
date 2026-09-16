@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metric_group.h"
 
 namespace starrocks {
 
@@ -47,7 +48,8 @@ public:
     void install_disk_path_metrics(MetricRegistry* registry, const std::vector<std::string>& paths);
     void set_disk_metrics(const std::string& path, int64_t total_capacity, int64_t available_capacity,
                           int64_t data_used_capacity, int64_t state);
-    void register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
+    void register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                      ThreadPool* threadpool);
 
     METRIC_DEFINE_INT_COUNTER(report_all_tablets_requests_failed, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(report_tablet_requests_failed, MetricUnit::REQUESTS);
@@ -64,14 +66,6 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(schema_change_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(schema_change_requests_failed, MetricUnit::REQUESTS);
-    // Lake-only ADD/DROP INDEX fast path (Index Delta Group). Total counts the
-    // entries into do_process_add_index_only / do_process_drop_index_only.
-    // lake_idg_files_written_total counts every .idx file successfully written
-    // by AddIndexSchemaChange::build_idg_for_segment (one per base segment).
-    METRIC_DEFINE_INT_COUNTER(lake_add_index_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(lake_add_index_requests_failed, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(lake_drop_index_requests_total, MetricUnit::REQUESTS);
-    METRIC_DEFINE_INT_COUNTER(lake_idg_files_written_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(clone_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(clone_requests_failed, MetricUnit::REQUESTS);
 
@@ -90,7 +84,6 @@ public:
     METRICS_DEFINE_THREAD_POOL(drop);
     METRICS_DEFINE_THREAD_POOL(create_tablet);
     METRICS_DEFINE_THREAD_POOL(alter_tablet);
-    METRICS_DEFINE_THREAD_POOL(lake_schema_change);
     METRICS_DEFINE_THREAD_POOL(clear_transaction);
     METRICS_DEFINE_THREAD_POOL(storage_medium_migrate);
     METRICS_DEFINE_THREAD_POOL(check_consistency);
@@ -112,10 +105,12 @@ public:
 private:
     struct PendingThreadPoolMetrics {
         std::string name;
+        ThreadPoolMetricGroup* metric_group;
         ThreadPool* threadpool;
     };
 
-    void _register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
+    void _register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                       ThreadPool* threadpool);
 
     MetricRegistry* _registry = nullptr;
     std::vector<PendingThreadPoolMetrics> _pending_thread_pool_metrics;
@@ -127,3 +122,9 @@ private:
 };
 
 } // namespace starrocks
+
+#define REGISTER_AGENT_THREAD_POOL_METRICS(agent_metrics, metric_name, threadpool)                          \
+    do {                                                                                                    \
+        auto* metric_owner = (agent_metrics);                                                               \
+        metric_owner->register_thread_pool_metrics(#metric_name, &metric_owner->metric_name, (threadpool)); \
+    } while (false)

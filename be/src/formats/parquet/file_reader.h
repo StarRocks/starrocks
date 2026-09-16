@@ -20,15 +20,17 @@
 #include <string>
 #include <vector>
 
+#include "cache/cache_options.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/split_context.h"
+#include "formats/scan_context.h"
 #include "gen_cpp/parquet_types.h"
 
 namespace tparquet {
@@ -39,7 +41,6 @@ class RowGroup;
 
 namespace starrocks {
 class RandomAccessFile;
-struct HdfsScannerContext;
 class BlockCache;
 class StoragePageCache;
 class SlotDescriptor;
@@ -55,18 +56,6 @@ class ObjectCache;
 
 namespace starrocks::parquet {
 
-struct SplitContext : public HdfsSplitContext {
-    FileMetaDataPtr file_metadata;
-    SkipRowsContextPtr skip_rows_ctx;
-
-    HdfsSplitContextPtr clone() override {
-        auto ctx = std::make_unique<SplitContext>();
-        ctx->file_metadata = file_metadata;
-        ctx->skip_rows_ctx = skip_rows_ctx;
-        return ctx;
-    }
-};
-
 class FileReader {
 public:
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
@@ -74,7 +63,7 @@ public:
                SharedBufferedInputStream* sb_stream = nullptr, SkipRowsContextPtr skipRowsContext = nullptr);
     ~FileReader();
 
-    Status init(HdfsScannerContext* scanner_ctx);
+    Status init(FormatScanContext* scanner_ctx);
 
     Status get_next(ChunkPtr* chunk);
 
@@ -126,7 +115,7 @@ private:
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
-    HdfsScannerContext* _scanner_ctx = nullptr;
+    FormatScanContext* _scanner_ctx = nullptr;
     SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;

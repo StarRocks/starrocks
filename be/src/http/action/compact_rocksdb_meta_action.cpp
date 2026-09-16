@@ -18,7 +18,7 @@
 #include <string>
 
 #include "common/logging.h"
-#include "http/http_request.h"
+#include "platform/http/http_request.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

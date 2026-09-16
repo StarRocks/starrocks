@@ -157,15 +157,9 @@ public class CatalogMgr {
 
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
-        readLock();
-        try {
-            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
-        } finally {
-            readUnlock();
-        }
-
         writeLock();
         try {
+            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
             if (!isResourceMappingCatalog(catalogName)) {
                 DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
                 GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog, wal -> {

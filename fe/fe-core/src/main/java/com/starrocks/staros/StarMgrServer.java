@@ -52,7 +52,9 @@ public class StarMgrServer {
     private static final Logger LOG = LogManager.getLogger(StarMgrServer.class);
 
     private static StarMgrServer CHECKPOINT = null;
-    private CheckpointController checkpointController = null;
+    // Package-private so same-package tests can inject a mock controller and verify
+    // stopCheckpointController without reflection.
+    CheckpointController checkpointController = null;
     private CheckpointWorker checkpointWorker = null;
     private boolean checkpointWorkerStarted = false;
     private static long checkpointThreadId = -1;
@@ -166,6 +168,11 @@ public class StarMgrServer {
         com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
         com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
         com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+        com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
 
         grpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(Config.starmgr_grpc_server_max_worker_threads,
                         Integer.MAX_VALUE, "starmgr-grpc-default-executor", true);
@@ -182,6 +189,11 @@ public class StarMgrServer {
             com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
             com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
             com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+            com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                    Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
             ThreadPoolManager.setFixedThreadPoolSize(grpcExecutor, Config.starmgr_grpc_server_max_worker_threads);
         });
         // set the following config, in order to provide a customized worker group definition
@@ -227,6 +239,21 @@ public class StarMgrServer {
         checkpointController = new CheckpointController(
                 "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR);
         checkpointController.start();
+    }
+
+    /**
+     * Symmetric counterpart to {@link #startCheckpointController()}. Fire-and-forget stop for leader
+     * demotion: requests stop on the StarMgr-side CheckpointController without joining, so the single
+     * state-change thread is not blocked. The controller's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence. The field is left
+     * as-is because {@link #startCheckpointController()} unconditionally replaces it with a fresh
+     * instance on re-election; the old one becomes garbage once its worker exits.
+     */
+    public void stopCheckpointController() {
+        CheckpointController controller = checkpointController;
+        if (controller != null) {
+            controller.stopBestEffort();
+        }
     }
 
     private void becomeFollower() {

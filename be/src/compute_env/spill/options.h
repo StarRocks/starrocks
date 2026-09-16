@@ -19,9 +19,9 @@
 #include <memory>
 #include <vector>
 
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "compute_env/sorting/sorting.h"
 #include "compute_env/spill/block_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exprs/sort_exec_exprs.h"

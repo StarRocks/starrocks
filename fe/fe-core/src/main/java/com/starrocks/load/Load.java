@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -53,6 +54,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.load.routineload.RoutineLoadMetadata;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -68,6 +70,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -91,6 +94,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.thrift.TRoutineLoadMetaColumn;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -116,6 +120,7 @@ public class Load {
     public static final String VERSION = "v1";
 
     public static final String LOAD_OP_COLUMN = "__op";
+
     // load job meta
     private LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
 
@@ -305,7 +310,7 @@ public class Load {
                                    List<String> columnsFromPath, boolean isLoadJson) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, isLoadJson, false);
+                columnsFromPath, isLoadJson, false, null, null);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -314,7 +319,22 @@ public class Load {
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isLoadJson,
-                                   boolean partialUpdate) throws StarRocksException {
+                                   boolean partialUpdate, String routineLoadSourceType) throws StarRocksException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, isLoadJson, partialUpdate, routineLoadSourceType, null);
+    }
+
+    // `metadata` carries the routine-load INCLUDE METADATA clause; each alias is appended as a hidden
+    // source column, typed from the metadata kind and filled by the BE scanner from the message.
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath, boolean isLoadJson,
+                                   boolean partialUpdate, String routineLoadSourceType,
+                                   ImportMetadataStmt metadata) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -365,8 +385,12 @@ public class Load {
         }
 
         // We make a copy of the columnExprs so that our subsequent changes
-        // to the columnExprs will not affect the original columnExprs.
-        List<ImportColumnDesc> copiedColumnExprs = Lists.newArrayList(columnExprs);
+        // to the columnExprs will not affect the original columnExprs. Routine load mutates the mapping
+        // list in place (appends metadata-alias columns, __op reset), so it needs a deep copy; otherwise
+        // SHOW CREATE ROUTINE LOAD -- which renders the job's shared ImportColumnDesc/Expr objects --
+        // would display the mutated list instead of the user's original COLUMNS text.
+        List<ImportColumnDesc> copiedColumnExprs = routineLoadSourceType != null
+                ? RoutineLoadMetadata.deepCopyColumnDescs(columnExprs) : Lists.newArrayList(columnExprs);
 
         // If user does not specify the file field names, generate it by using base schema of table.
         // So that the following process can be unified
@@ -416,6 +440,27 @@ public class Load {
                 // 2. __op is not specified
                 copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_OP_COLUMN,
                         isLoadJson ? null : new IntLiteral(TOpType.UPSERT.getValue())));
+            }
+        }
+
+        // Build the metadata bindings from the INCLUDE METADATA clause (routine load only): each alias is
+        // a hidden bare source column the BE scanner fills from the message metadata, appended last so it
+        // sits after the jsonpath-covered columns. metaByName keys by alias for the typing/emit below.
+        List<RoutineLoadMetadata.StreamMetaBinding> metaBindings = Lists.newArrayList();
+        Map<String, RoutineLoadMetadata.StreamMetaBinding> metaByName =
+                Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        if (routineLoadSourceType != null && metadata != null) {
+            metaBindings = RoutineLoadMetadata.bindingsFromMetadata(metadata, routineLoadSourceType);
+            for (RoutineLoadMetadata.StreamMetaBinding b : metaBindings) {
+                // An alias equal to a destination-table column would be typed from the table (not as
+                // metadata) below; reject it here, where the table is available (CREATE/ALTER validation
+                // runs without the table).
+                if (tbl != null && tbl.getColumn(b.hiddenName) != null) {
+                    throw new DdlException("INCLUDE METADATA alias '" + b.hiddenName
+                            + "' collides with a column of table " + tbl.getName());
+                }
+                metaByName.put(b.hiddenName, b);
+                copiedColumnExprs.add(new ImportColumnDesc(b.hiddenName));
             }
         }
 
@@ -523,6 +568,14 @@ public class Load {
             }
         }
 
+        // Hidden source-metadata columns have a fixed type assigned below; exclude them from expr-driven
+        // type inference (replaceSrcSlotDescType) so a MAP/INT/BIGINT metadata slot keeps its type.
+        for (ImportColumnDesc importColumnDesc : copiedColumnExprs) {
+            if (importColumnDesc.isColumn() && metaByName.containsKey(importColumnDesc.getColumnName())) {
+                varcharColumns.add(importColumnDesc.getColumnName());
+            }
+        }
+
         // init slot desc add expr map, also transform hadoop functions
         // if use vectorized load, set src slot desc type with starrocks schema if source column is in starrocks table
         // else set varchar firstly, and try to set specific type later after expr analyzed.
@@ -558,6 +611,14 @@ public class Load {
                         slotDesc.setType(IntegerType.TINYINT);
                         slotDesc.setColumn(new Column(columnName, IntegerType.TINYINT));
                         slotDesc.setIsMaterialized(true);
+                    } else if (metaByName.containsKey(columnName)) {
+                        // Hidden source-metadata column (from the INCLUDE METADATA clause). Fix the type
+                        // (INT/BIGINT/VARCHAR/MAP) here, before expression analysis, so element_at() over a
+                        // HEADERS alias sees a MAP child.
+                        Type metaType = metaByName.get(columnName).type;
+                        slotDesc.setType(metaType);
+                        slotDesc.setColumn(new Column(columnName, metaType));
+                        slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(VarcharType.VARCHAR);
                         slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
@@ -581,6 +642,20 @@ public class Load {
                 slotDescByName.put(columnName, slotDesc);
             }
         }
+
+        // Emit a TRoutineLoadMetaColumn for each hidden metadata slot so the BE scanner fills it from the
+        // message metadata by slot id (never by name, so payload fields are not shadowed).
+        for (RoutineLoadMetadata.StreamMetaBinding b : metaBindings) {
+            SlotDescriptor metaSlot = slotDescByName.get(b.hiddenName);
+            if (metaSlot == null) {
+                continue;
+            }
+            TRoutineLoadMetaColumn metaDesc = new TRoutineLoadMetaColumn();
+            metaDesc.setSlot_id(metaSlot.getId().asInt());
+            metaDesc.setKind(RoutineLoadMetadata.toTStreamSourceMetaKind(b.kind));
+            params.addToStream_source_meta_columns(metaDesc);
+        }
+
         /*
          * The extension column of the materialized view is added to the expression evaluation of load
          * To avoid nested expressions. eg : column(a, tmp_c, c = expr(tmp_c)) ,
@@ -852,8 +927,10 @@ public class Load {
             }
 
             // check if contain aggregation
+            // collectAll (not collect): collect() stops at the first match and does not descend, so it
+            // would miss a function nested inside another, e.g. an aggregate in from_unixtime(sum(x)).
             List<FunctionCallExpr> funcs = Lists.newArrayList();
-            expr.collect(FunctionCallExpr.class, funcs);
+            expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
                     throw new StarRocksException("Don't support aggregation function in load expression");
@@ -889,8 +966,10 @@ public class Load {
             expr = ExprUtils.analyzeAndCastFold(expr);
 
             // check if contain aggregation
+            // collectAll (not collect): collect() stops at the first match and does not descend, so it
+            // would miss a function nested inside another, e.g. an aggregate in from_unixtime(sum(x)).
             List<FunctionCallExpr> funcs = Lists.newArrayList();
-            expr.collect(FunctionCallExpr.class, funcs);
+            expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
                     throw new StarRocksException("Don't support aggregation function in load expression");
@@ -1165,6 +1244,8 @@ public class Load {
                 return TFileFormatType.FORMAT_JSON;
             } else if (fileFormat.toLowerCase().equals("avro")) {
                 return TFileFormatType.FORMAT_AVRO;
+            } else if (fileFormat.toLowerCase().equals("arrow")) {
+                return TFileFormatType.FORMAT_ARROW;
             }
             // Attention: The compression type of csv format is from the suffix of filename.
         }
@@ -1174,6 +1255,8 @@ public class Load {
             return TFileFormatType.FORMAT_PARQUET;
         } else if (lowerCasePath.endsWith(".orc")) {
             return TFileFormatType.FORMAT_ORC;
+        } else if (lowerCasePath.endsWith(".arrow") || lowerCasePath.endsWith(".ipc")) {
+            return TFileFormatType.FORMAT_ARROW;
         } else if (lowerCasePath.endsWith(".gz")) {
             return TFileFormatType.FORMAT_CSV_GZ;
         } else if (lowerCasePath.endsWith(".bz2")) {

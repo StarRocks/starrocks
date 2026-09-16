@@ -7,7 +7,6 @@ on:
       - 'branch-[0-9].[0-9]'
       - 'branch-[0-9].[0-9].[0-9]'
     types:
-      - closed
       - labeled
 
 env:
@@ -26,14 +25,8 @@ jobs:
     if: >
       contains(github.event.pull_request.title, 'backport') &&
       startsWith(github.head_ref, 'mergify/bp') &&
-      (
-        (github.event.action == 'labeled' &&
-         (github.event.label.name == 'conflicts' || github.event.label.name == 'conflict')) ||
-        (github.event.action == 'closed' &&
-         github.event.pull_request.merged != true &&
-         (contains(github.event.pull_request.labels.*.name, 'conflicts') ||
-          contains(github.event.pull_request.labels.*.name, 'conflict')))
-      )
+      github.event.action == 'labeled' &&
+      (github.event.label.name == 'conflicts' || github.event.label.name == 'conflict')
     env:
       STATUS: CONFLICT
 

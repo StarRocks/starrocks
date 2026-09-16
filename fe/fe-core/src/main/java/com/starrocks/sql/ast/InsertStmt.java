@@ -29,6 +29,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -96,6 +97,14 @@ public class InsertStmt extends DmlStmt {
 
     private boolean isVersionOverwrite = false;
 
+    private boolean isShadowRewrite = false;
+    private Long targetWriteIndexId = null;
+    // For a shadow-rewrite INSERT: the watershed txn id the converted op_schema_change log must be
+    // keyed by, and the alter version W it is anchored at. Forwarded to the InsertTxnCommitAttachment
+    // at commit so the publish path can convert the committed op_write into op_schema_change@W.
+    private long shadowRewriteWatershedTxnId = 0;
+    private long shadowRewriteAlterVersion = 0;
+
     // hint in each part of ast. used to ast to sql
     protected List<HintNode> hintNodes;
 
@@ -117,6 +126,12 @@ public class InsertStmt extends DmlStmt {
     // Currently only takes effect when the SELECT source is files().
     private boolean enablePushDownSchema = false;
 
+    // The property keys the statement was written with. Snapshotted here because getProperties()
+    // stops answering "what did the user ask for?" once InsertAnalyzer#analyzeProperties fills the
+    // same map with the session defaults for max_filter_ratio / strict_mode / timeout (and consumes
+    // enable_push_down_schema out of it). A caller that runs after analysis has no other way to ask.
+    private Set<String> userSpecifiedPropertyKeys = Set.of();
+
     public InsertStmt(TableRef tableRef, PartitionRef targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
                       NodePosition pos) {
@@ -128,6 +143,7 @@ public class InsertStmt extends DmlStmt {
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
         this.properties.putAll(insertProperties);
+        this.userSpecifiedPropertyKeys = Set.copyOf(insertProperties.keySet());
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
@@ -205,6 +221,38 @@ public class InsertStmt extends DmlStmt {
         return isVersionOverwrite;
     }
 
+    public void setShadowRewrite(boolean isShadowRewrite) {
+        this.isShadowRewrite = isShadowRewrite;
+    }
+
+    public boolean isShadowRewrite() {
+        return isShadowRewrite;
+    }
+
+    public void setTargetWriteIndexId(Long targetWriteIndexId) {
+        this.targetWriteIndexId = targetWriteIndexId;
+    }
+
+    public Long getTargetWriteIndexId() {
+        return targetWriteIndexId;
+    }
+
+    public void setShadowRewriteWatershedTxnId(long shadowRewriteWatershedTxnId) {
+        this.shadowRewriteWatershedTxnId = shadowRewriteWatershedTxnId;
+    }
+
+    public long getShadowRewriteWatershedTxnId() {
+        return shadowRewriteWatershedTxnId;
+    }
+
+    public void setShadowRewriteAlterVersion(long shadowRewriteAlterVersion) {
+        this.shadowRewriteAlterVersion = shadowRewriteAlterVersion;
+    }
+
+    public long getShadowRewriteAlterVersion() {
+        return shadowRewriteAlterVersion;
+    }
+
     public void setIsDynamicOverwrite(boolean isDynamicOverwrite) {
         this.isDynamicOverwrite = isDynamicOverwrite;
     }
@@ -227,6 +275,15 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isEnablePushDownSchema() {
         return enablePushDownSchema;
+    }
+
+    /**
+     * The load-property keys this statement was written with, empty when it carries no
+     * {@code PROPERTIES(...)} clause. Unlike {@link #getProperties()}, the answer does not change
+     * once the statement has been analyzed.
+     */
+    public Set<String> getUserSpecifiedPropertyKeys() {
+        return userSpecifiedPropertyKeys;
     }
 
     public QueryStatement getQueryStatement() {

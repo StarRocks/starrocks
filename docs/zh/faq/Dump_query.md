@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "使用 query_dump 接口捕获 SQL 查询详情以进行故障排查。"
 ---

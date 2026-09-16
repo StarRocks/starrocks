@@ -29,8 +29,8 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
-#include "storage/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
 #include "types/type_descriptor.h"
 #include "types/type_info.h"
 #include "types/variant.h"
@@ -904,7 +904,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderDoesNotFilterWhenPredicateInStatRange) {
     EXPECT_FALSE(result.value()); // row group should NOT be filtered
 }
 
-TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
+TEST(VariantZoneMapTest, ZoneMapReaderDelegatesPredicatesWhenTypesMatch) {
     auto file_meta = make_minimal_file_meta();
     ASSERT_NE(file_meta, nullptr);
 
@@ -919,11 +919,11 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
     ObjectPool pool;
-    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
-    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(100))));
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(100))));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
@@ -940,7 +940,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
     EXPECT_FALSE(bloom_result.value());
 }
 
-TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
+TEST(VariantZoneMapTest, ZoneMapReaderDelegatesDecimalPredicatesWhenLayoutsMatch) {
     auto file_meta = make_minimal_file_meta();
     ASSERT_NE(file_meta, nullptr);
 
@@ -955,13 +955,13 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("price"));
     ASSERT_OK(path);
-    auto virtual_slot_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2);
+    auto virtual_slot_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
     VariantVirtualZoneMapReader zm_reader(vr, *path, virtual_slot_type);
 
     ObjectPool pool;
     TypeInfoPtr ti = get_type_info(virtual_slot_type);
     ASSERT_NE(ti, nullptr);
-    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(2000))));
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(2000))));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
@@ -972,6 +972,38 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
     ASSERT_OK(page_result);
     EXPECT_FALSE(page_result.value());
     EXPECT_TRUE(row_ranges.empty());
+}
+
+TEST(VariantZoneMapTest, ZoneMapReaderSkipsDecimalToBigintPredicateDelegation) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_decimal_variant_reader(rg, opts, root_field, /*stats_on_leaf_chunk=*/true,
+                                                         /*leaf_value_all_null=*/true, /*include_leaf_value=*/true));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("price"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    auto* pred = pool.add(new_column_eq_predicate_from_datum(ti, 0, Datum(int64_t(10))));
+
+    const ColumnReader* leaf_reader = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    EXPECT_FALSE(zm_reader._prepare_delegate_predicates({pred}, &pool, 5, &leaf_reader, &rewritten_predicates));
+    EXPECT_NE(leaf_reader, nullptr);
+    EXPECT_TRUE(rewritten_predicates.empty());
+
+    auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(row_group_result);
+    EXPECT_FALSE(row_group_result.value());
 }
 
 TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
@@ -989,9 +1021,9 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
-    FailingConvertPredicate pred(get_type_info(LogicalType::TYPE_BIGINT));
+    FailingConvertPredicate pred(get_type_info(LogicalType::TYPE_INT));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({&pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
@@ -1022,11 +1054,11 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsWhenFallbackValueMayContainNonNullRow
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
     ObjectPool pool;
-    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
-    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(100))));
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(100))));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
@@ -1059,9 +1091,9 @@ TEST(ParquetComplexColumnReaderTest, VariantVirtualZoneMapReaderSkipsWhenSourceI
 
 // White-box coverage for the fail-fast invariants introduced by the dict-code-leak fix.
 //
-// In normal flow fill_dst_column()/_restore_tmp_column() are only reached right after read_range()
-// has swapped in the reader's internal temporary column, so the "source is not a temporary column"
-// and "lost original destination column" guards are unreachable end to end. The test target is built
+// In normal flow fill_dst_column()/_restore_physical_column() are only reached right after read_range()
+// has swapped in the reader's PHYSICAL column, so the "source is not a physical column"
+// and "lost logical destination" guards are unreachable end to end. The test target is built
 // with -fno-access-control, so construct the readers directly and reach into their internals.
 TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource) {
     ColumnReaderOptions opts;
@@ -1071,35 +1103,35 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     GlobalDictMap dict;
     auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
 
-    // LowCardColumnReader::fill_dst_column rejects a src that is not its dict-code column
-    // (_dict_code is null without a preceding read_range()).
+    // LowCardColumnReader::fill_dst_column: when src is not _code_column
+    // (PHYSICAL dict codes), it is treated as already LOGICAL → swap directly.
     {
         ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
-        EXPECT_FALSE(reader.fill_dst_column(dst, src).ok());
+        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
     }
 
-    // LowRowsColumnReader::fill_dst_column rejects a src that is not its temporary string column.
+    // LowRowsColumnReader::fill_dst_column: same LOGICAL fallback.
     {
         ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
         LowRowsColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr dst = make_int_col();
         ColumnPtr src = make_int_col();
-        EXPECT_FALSE(reader.fill_dst_column(dst, src).ok());
+        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
     }
 
-    // RawColumnReader::_restore_tmp_column errors when a temporary column is still referenced as the
-    // caller-visible column but the original destination column was lost.
+    // RawColumnReader::_restore_physical_column errors when a PHYSICAL column
+    // is still the caller-visible column but _logical_dst was lost.
     {
         ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
         LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
         ColumnPtr code = make_int_col();
-        reader._dict_code = code;
-        reader._ori_column = nullptr;
+        reader._code_column = code;
+        reader._logical_dst = nullptr;
         ColumnPtr col = code;
-        EXPECT_FALSE(reader._restore_tmp_column(col).ok());
+        EXPECT_FALSE(reader._restore_physical_column(col).ok());
     }
 }
 

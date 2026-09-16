@@ -35,6 +35,11 @@ template <LogicalType LT, bool IsOutputHLL, typename T = RunTimeCppType<LT>>
 class HllNdvAggregateFunction final
         : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<LT, IsOutputHLL, T>> {
 public:
+    // ndv/approx_count_distinct (cardinality output) return 0, never NULL, even over a nullable input or an
+    // empty window frame. The IsOutputHLL variant (hll_raw) is NOT in alwaysReturnNonNullableFunctions, so
+    // don't claim it here.
+    bool is_result_non_nullable() const override { return !IsOutputHLL; }
+
     using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
@@ -110,9 +115,10 @@ public:
 
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 10);
-        result->get_offset().resize(chunk_size + 1);
-
         size_t old_size = bytes.size();
+        auto& offsets = result->get_offset();
+        offsets.resize(chunk_size + 1);
+
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
             uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
@@ -123,8 +129,7 @@ public:
             size_t new_size = old_size + hll.max_serialized_size();
             bytes.resize(new_size);
             hll.serialize(bytes.data() + old_size);
-
-            result->get_offset()[i + 1] = new_size;
+            offsets.set(i + 1, new_size);
             old_size = new_size;
         }
     }

@@ -206,6 +206,7 @@ public class Authorizer {
             case SCHEMA:
             case PAIMON:
             case PAIMON_VIEW:
+            case FLUSS:
             case ODPS:
             case KUDU:
                 // `privilegeType == null` meaning we don't check specified action, just any action
@@ -403,7 +404,6 @@ public class Authorizer {
      * whether we need to hide the ip and port in the returned result
      */
     public static Pair<Boolean, Boolean> checkPrivForShowTablet(ConnectContext context, String dbName, Table table) {
-        UserIdentity currentUser = context.getCurrentUserIdentity();
         // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);

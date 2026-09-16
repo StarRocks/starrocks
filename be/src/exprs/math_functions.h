@@ -173,6 +173,9 @@ public:
     DEFINE_VECTORIZED_FN(cosine_similarity2);
 
     template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(inner_product);
+
+    template <LogicalType TYPE>
     DEFINE_VECTORIZED_FN(l2_distance);
 
     template <LogicalType TYPE>
@@ -567,6 +570,13 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(RValueCheckZeroDecimalv2Impl, a, b) {
 
 // pmod
 DEFINE_BINARY_FUNCTION_WITH_IMPL(pmodImpl, a, b) {
+    // Guard against SIGFPE: on x86 the idiv instruction raises #DE when computing
+    // TYPE_MIN % -1 (the quotient overflows the result width). pmod(a, -1) == 0 for
+    // every a, so short-circuit before the hardware divide. The operator path in
+    // arithmetic_operation.h already carries this guard; mirror it for the function.
+    if (b == -1) {
+        return ResultType(0);
+    }
     return ((a % (b + (b == 0))) + b) % (b + (b == 0));
 }
 
@@ -579,6 +589,10 @@ DEFINE_BINARY_FUNCTION(fmodImpl, fmod);
 
 // mod
 DEFINE_BINARY_FUNCTION_WITH_IMPL(modImpl, a, b) {
+    // See pmodImpl: avoid SIGFPE on TYPE_MIN % -1. a % -1 == 0 for every a.
+    if (b == -1) {
+        return ResultType(0);
+    }
     return (a % (b + (b == 0)));
 }
 

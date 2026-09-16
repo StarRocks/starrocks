@@ -18,12 +18,12 @@
 
 #include "base/testutil/assert.h"
 #include "exec/chunk_buffer_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/exec_env.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -36,7 +36,7 @@ public:
 
         _query_context = std::make_shared<QueryContext>();
         _query_context->set_query_execution_services(&_exec_env->query_execution_services());
-        _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
+        _query_context->init_mem_tracker(-1, RuntimeEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         query_options.batch_size = 4096;
