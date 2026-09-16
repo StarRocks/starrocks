@@ -314,22 +314,20 @@ Status ArrowScanner::next_batch() {
                         }
                     }
 
+                    int64_t filtered_rows = 0;
+                    auto validation_status = validate_discrete_message(&filtered_rows);
+                    if (!validation_status.ok()) {
+                        reject_discrete_message(validation_status.to_string(), filtered_rows);
+                        continue;
+                    }
+
                     _arrow_buffer_reader = std::make_shared<arrow::io::BufferReader>(arrow::Buffer::Wrap(
                             reinterpret_cast<const uint8_t*>(_parser_buf->ptr), _parser_buf->remaining()));
                     _arrow_stream = _arrow_buffer_reader;
 
                     auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(_arrow_stream);
                     if (!reader_res.ok()) {
-                        std::string error_msg =
-                                "Arrow IPC parse error: " + reader_res.status().ToString() + format_source_info();
-                        _conv_ctx.report_error_message(error_msg, "", -1);
-                        LOG(WARNING) << "Arrow routine load: " << error_msg;
-                        _counter->num_rows_filtered++;
-                        _parser_buf.reset();
-                        _arrow_stream.reset();
-                        _conv_ctx.consumer_partition = -1;
-                        _conv_ctx.consumer_offset = -1;
-                        _conv_ctx.consumer_message_id.clear();
+                        reject_discrete_message("Arrow IPC parse error: " + reader_res.status().ToString(), 1);
                         continue;
                     }
                     _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
@@ -342,6 +340,12 @@ Status ArrowScanner::next_batch() {
 
         arrow::Status status = _curr_file_reader->ReadNext(&_batch);
         if (!status.ok()) {
+            if (is_discrete_pipe) {
+                // This is unreachable for an unchanged buffer after the pre-validation pass,
+                // but reject the current message defensively if that invariant is violated.
+                reject_discrete_message("ReadNext batch failed, reason: " + status.ToString(), 1);
+                continue;
+            }
             std::string error_msg = "ReadNext batch failed, reason: " + status.ToString() + format_source_info();
             _conv_ctx.report_error_message(error_msg, "", -1);
             LOG(WARNING) << "Arrow routine load: " << error_msg;
@@ -349,18 +353,6 @@ Status ArrowScanner::next_batch() {
             _curr_file_reader.reset();
             _parser_buf.reset();
             _arrow_stream.reset();
-            if (is_discrete_pipe) {
-                // Reset conversion plans and mark message boundary so the next
-                // message gets a fresh schema mapping (mirrors the EOF path).
-                for (auto& conv : _conv_funcs) {
-                    conv = std::make_unique<ConvertFuncTree>();
-                }
-                _conv_ctx.consumer_partition = -1;
-                _conv_ctx.consumer_offset = -1;
-                _conv_ctx.consumer_message_id.clear();
-                _message_boundary = true;
-                continue;
-            }
             return Status::InternalError(error_msg);
         }
 
@@ -429,7 +421,49 @@ Status ArrowScanner::validate_batch_schema(const std::shared_ptr<arrow::RecordBa
     return Status::OK();
 }
 
-void ArrowScanner::filter_current_discrete_message(const std::string& reason, int64_t pending_rows) {
+Status ArrowScanner::validate_discrete_message(int64_t* filtered_rows) {
+    DCHECK(_parser_buf != nullptr);
+    *filtered_rows = 0;
+
+    auto buffer = arrow::Buffer::Wrap(reinterpret_cast<const uint8_t*>(_parser_buf->ptr), _parser_buf->remaining());
+    auto buffer_reader = std::make_shared<arrow::io::BufferReader>(std::move(buffer));
+    auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(buffer_reader);
+    if (!reader_res.ok()) {
+        *filtered_rows = 1;
+        return Status::InternalError("Arrow IPC parse error: " + reader_res.status().ToString());
+    }
+
+    auto reader = std::move(reader_res).MoveValueUnsafe();
+    int64_t rows = 0;
+    std::string schema_error;
+    while (true) {
+        std::shared_ptr<arrow::RecordBatch> batch;
+        auto status = reader->ReadNext(&batch);
+        if (!status.ok()) {
+            *filtered_rows = rows + 1;
+            const std::string read_error = "ReadNext batch failed, reason: " + status.ToString();
+            return schema_error.empty() ? Status::InternalError(read_error)
+                                        : Status::InvalidArgument(schema_error + "; " + read_error);
+        }
+        if (batch == nullptr) {
+            break;
+        }
+
+        rows += batch->num_rows();
+        auto schema_status = validate_batch_schema(batch);
+        if (!schema_status.ok() && schema_error.empty()) {
+            schema_error = "schema mismatch: " + schema_status.to_string();
+        }
+    }
+
+    if (!schema_error.empty()) {
+        *filtered_rows = rows;
+        return Status::InvalidArgument(schema_error);
+    }
+    return Status::OK();
+}
+
+void ArrowScanner::reject_discrete_message(const std::string& reason, int64_t filtered_rows) {
     std::string error_msg = "Arrow routine load: " + reason;
     if (_conv_ctx.consumer_partition != -1) {
         error_msg += " at partition=" + std::to_string(_conv_ctx.consumer_partition);
@@ -442,6 +476,24 @@ void ArrowScanner::filter_current_discrete_message(const std::string& reason, in
     }
     _conv_ctx.report_error_message(error_msg, "", -1);
     LOG(WARNING) << error_msg;
+    _counter->num_rows_filtered += std::max<int64_t>(filtered_rows, 1);
+
+    _batch.reset();
+    _batch_start_idx = 0;
+    _curr_file_reader.reset();
+    _parser_buf.reset();
+    _arrow_stream.reset();
+    _arrow_buffer_reader.reset();
+    for (auto& conv : _conv_funcs) {
+        conv = std::make_unique<ConvertFuncTree>();
+    }
+    _conv_ctx.consumer_partition = -1;
+    _conv_ctx.consumer_offset = -1;
+    _conv_ctx.consumer_message_id.clear();
+    _message_boundary = true;
+}
+
+void ArrowScanner::filter_current_discrete_message(const std::string& reason, int64_t pending_rows) {
     // Include rows buffered in a discarded chunk and the unconsumed part of
     // this batch, but never recount rows already returned in earlier chunks.
     int64_t filtered = pending_rows;
@@ -454,9 +506,6 @@ void ArrowScanner::filter_current_discrete_message(const std::string& reason, in
         std::shared_ptr<arrow::RecordBatch> discarded_batch;
         auto status = _curr_file_reader->ReadNext(&discarded_batch);
         if (!status.ok()) {
-            const std::string read_error = error_msg + "; reading discarded batch failed: " + status.ToString();
-            _conv_ctx.report_error_message(read_error, "", -1);
-            LOG(WARNING) << read_error;
             // The unreadable remainder has no reliable row count. Use the
             // same one-error sentinel as the normal IPC parse-error path.
             ++filtered;
@@ -467,22 +516,7 @@ void ArrowScanner::filter_current_discrete_message(const std::string& reason, in
         }
         filtered += discarded_batch->num_rows();
     }
-    _counter->num_rows_filtered += std::max<int64_t>(filtered, 1);
-    _batch.reset();
-    _batch_start_idx = 0;
-    _curr_file_reader.reset();
-    _parser_buf.reset();
-    _arrow_stream.reset();
-    for (auto& conv : _conv_funcs) {
-        conv = std::make_unique<ConvertFuncTree>();
-    }
-    // next_batch() may be looking ahead while a previous message's chunk
-    // still needs _cast_exprs and _chunk_start_idx for finalization. Their
-    // lifetime ends when get_next() starts building the next chunk.
-    _conv_ctx.consumer_partition = -1;
-    _conv_ctx.consumer_offset = -1;
-    _conv_ctx.consumer_message_id.clear();
-    _message_boundary = true;
+    reject_discrete_message(reason, filtered);
 }
 
 Status ArrowScanner::initialize_src_chunk(ChunkPtr* chunk) {
