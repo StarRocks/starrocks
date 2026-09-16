@@ -473,14 +473,39 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     task.submit_time = submit_time;
 
     // Add the task to the token's queue.
+    //
+    // This has to give the strong exception guarantee. Both pushes below allocate and can throw
+    // std::bad_alloc, and a caller whose submit() threw takes that as "the runnable was never accepted"
+    // and rolls back whatever the runnable was going to do (TabletParallelCompactionManager::
+    // submit_subtasks_from_groups(), for one, unregisters the subtask and returns its limiter token).
+    // A runnable left in the token's entries after such a throw would be dispatched by the next
+    // submission through that token, against state that no longer exists. So the token goes onto the
+    // dispatch queue first, where std::deque::pop_back() can always unwind it, and the entry is pushed
+    // last: nothing is left behind if either push fails.
     ThreadPoolToken::State state = token->state();
     DCHECK(state == ThreadPoolToken::State::IDLE || state == ThreadPoolToken::State::RUNNING);
-    token->_entries.emplace_back(pri, std::move(task));
-    if (state == ThreadPoolToken::State::IDLE || token->mode() == ExecutionMode::CONCURRENT) {
-        _queue.emplace_back(token);
-        if (state == ThreadPoolToken::State::IDLE) {
-            token->transition(ThreadPoolToken::State::RUNNING);
+    const bool queue_token = state == ThreadPoolToken::State::IDLE || token->mode() == ExecutionMode::CONCURRENT;
+    bool token_queued = false;
+    try {
+        if (queue_token) {
+            _queue.emplace_back(token);
+            token_queued = true;
         }
+        // Lets a test throw here, i.e. once the token is queued but before its entry exists.
+        TEST_SYNC_POINT_CALLBACK("ThreadPool::do_submit:before_push_entry", token);
+        token->_entries.emplace_back(pri, std::move(task));
+    } catch (...) {
+        if (token_queued) {
+            _queue.pop_back();
+        }
+        if (need_a_thread && !sole_thread) {
+            // The thread this submit was about to create below is not going to be created.
+            _num_threads_pending_start--;
+        }
+        throw;
+    }
+    if (state == ThreadPoolToken::State::IDLE) {
+        token->transition(ThreadPoolToken::State::RUNNING);
     }
     _total_queued_tasks++;
 

@@ -1232,4 +1232,50 @@ TEST_F(ThreadPoolTest, TestTaskUnknownExceptionIsSwallowedWhenEnabled) {
     _pool->shutdown();
 }
 
+// A submit() that throws must leave nothing behind. The caller takes the exception as "the runnable was
+// never accepted" and rolls back whatever the runnable was going to do -- e.g.
+// TabletParallelCompactionManager::submit_subtasks_from_groups() unregisters the subtask and returns its
+// limiter token -- so a runnable left in the token's entries would be dispatched by the next submission
+// against state that no longer exists, and a token left on the dispatch queue without an entry would
+// crash the worker that pops it. Covered for both the pool's own concurrent token and a serial token,
+// whose IDLE -> RUNNING transition must not happen either.
+TEST_F(ThreadPoolTest, TestThrowingSubmitLeavesNothingBehind) {
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(2)).ok());
+
+    // Throw from inside do_submit() once the token is on the dispatch queue but before its entry is pushed,
+    // which is what a std::bad_alloc from the entry push looks like.
+    std::atomic<bool> armed{true};
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:before_push_entry", [&](void*) {
+        if (armed.load()) {
+            throw std::bad_alloc();
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SCOPED_CLEANUP({
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:before_push_entry");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic<int> dropped_runs{0};
+    std::unique_ptr<ThreadPoolToken> token = _pool->new_token(ThreadPool::ExecutionMode::SERIAL);
+    ASSERT_THROW((void)_pool->submit_func([&]() { dropped_runs++; }), std::bad_alloc);
+    ASSERT_THROW((void)token->submit_func([&]() { dropped_runs++; }), std::bad_alloc);
+    ASSERT_TRUE(_pool->_queue.empty());
+    ASSERT_EQ(0, _pool->_total_queued_tasks);
+    ASSERT_TRUE(token->_entries.empty());
+    ASSERT_EQ(ThreadPoolToken::State::IDLE, token->state());
+
+    // The pool is still usable, and the next submissions run only their own tasks.
+    armed.store(false);
+    CountDownLatch latch(2);
+    ASSERT_TRUE(_pool->submit_func([&]() { latch.count_down(); }).ok());
+    ASSERT_TRUE(token->submit_func([&]() { latch.count_down(); }).ok());
+    latch.wait();
+    _pool->wait();
+    ASSERT_EQ(0, dropped_runs.load());
+    token->shutdown();
+    _pool->shutdown();
+}
+
 } // namespace starrocks
