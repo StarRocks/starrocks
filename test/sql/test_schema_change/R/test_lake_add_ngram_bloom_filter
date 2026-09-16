@@ -1,0 +1,80 @@
+-- name: test_lake_add_ngram_bloom_filter @cloud
+create database lake_ngram_${uuid0};
+-- result:
+-- !result
+use lake_ngram_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 int,
+    v1 varchar(64)
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select x, concat('apple_', x) from table(generate_series(1, 100)) t(x);
+-- result:
+-- !result
+insert into t1 select x, concat('banana_', x) from table(generate_series(101, 200)) t(x);
+-- result:
+-- !result
+insert into t1 select x, concat('cherry_', x) from table(generate_series(201, 300)) t(x);
+-- result:
+-- !result
+ALTER TABLE t1 ADD INDEX idx_v1_ngbf (v1) USING NGRAMBF("gram_num"="3","bloom_filter_fpp"="0.05");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t1 where v1 like '%apple%';
+-- result:
+100
+-- !result
+select count(*) from t1 where v1 like '%banana%';
+-- result:
+100
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*) from t1 where v1 like '%cherry%';
+create table profile_lines properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(count(1) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines
+    where line like '%- BloomFilterFilter:%';
+-- result:
+1
+-- !result
+ALTER TABLE t1 DROP INDEX idx_v1_ngbf;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t1 where v1 like '%apple%';
+-- result:
+100
+-- !result
+select count(*) from t1 where v1 like '%cherry%';
+-- result:
+100
+-- !result
+drop database lake_ngram_${uuid0};
+-- result:
+-- !result

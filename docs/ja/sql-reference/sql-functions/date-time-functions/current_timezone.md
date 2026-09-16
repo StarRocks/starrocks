@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在の日付を取得し、DATETIME 型の値を返します。"
 ---
 
 # current_timestamp

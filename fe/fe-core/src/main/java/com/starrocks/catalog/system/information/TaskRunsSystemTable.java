@@ -93,6 +93,7 @@ public class TaskRunsSystemTable extends SystemTable {
                         .column("PROPERTIES", TypeFactory.createVarcharType(512))
                         .column("JOB_ID", TypeFactory.createVarcharType(64))
                         .column("PROCESS_TIME", DATETIME)
+                        .column("TASK_SOURCE", TypeFactory.createVarcharType(16))
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
 
@@ -235,6 +236,7 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setProperties(status.getPropertiesJson());
             info.setProcess_time(status.getProcessStartTime() / 1000);
             info.setJob_id(status.getStartTaskRunId());
+            info.setTask_source(status.getSource().name());
             tasksResult.add(info);
         }
         return result;

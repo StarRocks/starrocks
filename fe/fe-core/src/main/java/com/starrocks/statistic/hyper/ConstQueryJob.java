@@ -44,7 +44,11 @@ public class ConstQueryJob extends HyperQueryJob {
             if (partition == null || !partition.hasData()) {
                 continue;
             }
-            partitionRowCounts.put(pid, partition.getRowCount());
+            long rowCount = partition.getRowCount();
+            if (rowCount <= 0) {
+                continue;
+            }
+            partitionRowCounts.put(pid, rowCount);
         }
     }
 

@@ -53,6 +53,7 @@ public class MergeJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
+                joinOperator.getPredicateCommonOperators(),
                 joinOperator.getProjection());
         OptExpression result = OptExpression.create(physicalMergeJoin, input.getInputs());
         return Lists.newArrayList(result);

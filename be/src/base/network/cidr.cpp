@@ -39,7 +39,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <exception>
 #include <iterator>
 #include <ostream>
 
@@ -73,21 +72,12 @@ bool CIDR::reset(const std::string& cidr_str) {
         return true;
     }
 
-    std::size_t pos;
     std::string suffix = std::string(slash + 1, std::end(cidr_str));
-    int len;
-    try {
-        len = std::stoi(suffix, &pos);
-    } catch (const std::exception& e) {
-        LOG(WARNING) << "Wrong CIDR format. network = " << cidr_str << ", reason = " << e.what();
-        return false;
-    }
-
-    if (pos != suffix.size()) {
+    int32 len;
+    if (!safe_strto32(suffix, &len)) {
         LOG(WARNING) << "Wrong CIDR format. network = " << cidr_str;
         return false;
     }
-
     if (len < 0 || len > _netmask_len) {
         LOG(WARNING) << "Wrong CIDR format. network = " << cidr_str;
         return false;

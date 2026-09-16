@@ -151,10 +151,10 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
 
     protected static String getDumpInfoFromFile(String fileName) throws Exception {
         String completeFileName = fileName + ".json";
-        return geContentFromFile(completeFileName);
+        return getContentFromFile(completeFileName);
     }
 
-    public static String geContentFromFile(String completeFileName) throws Exception {
+    public static String getContentFromFile(String completeFileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + completeFileName);
         StringBuilder sb = new StringBuilder();

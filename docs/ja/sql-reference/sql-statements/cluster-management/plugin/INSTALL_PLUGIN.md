@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INSTALL PLUGIN は、プラグインをインストールするために使用されます。"
 ---
 
 # INSTALL PLUGIN

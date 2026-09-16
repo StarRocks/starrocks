@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN CHECK TABLET は、一連の tablet をチェックするために使用されます。"
 ---
 
 # ADMIN CHECK TABLET

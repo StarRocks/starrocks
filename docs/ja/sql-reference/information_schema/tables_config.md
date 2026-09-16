@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "tables_configはテーブルの設定に関する情報を提供します。"
 ---
 
 # tables_config

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "partitions_metaはテーブルのパーティションに関する情報を提供します。"
 ---
 
 # partitions_meta
@@ -24,7 +25,7 @@ displayed_sidebar: docs
 | PARTITION_KEY                 | パーティションのパーティションキー。             |
 | PARTITION_VALUE               | パーティションの値（例: `Range` または `List`）。 |
 | DISTRIBUTION_KEY              | パーティションの分散キー。                       |
-| BUCKETS                       | パーティション内のバケット数。                   |
+| BUCKETS                       | パーティション内のバケット数。Range 分散を使用するテーブルでは、この値はパーティションのベースインデックスにおける実際のタブレット数であり、タブレットの分割およびマージに応じて変化します。同じパーティション内のロールアップインデックスは異なるタブレット数を持つことがあります。 |
 | REPLICATION_NUM               | パーティションのレプリケーション数。             |
 | STORAGE_MEDIUM                | パーティションのストレージメディア。             |
 | COOLDOWN_TIME                 | パーティションのクールダウン時間。               |
@@ -41,3 +42,5 @@ displayed_sidebar: docs
 | STORAGE_SIZE                  | パーティションのストレージサイズ。               |
 | METADATA_SWITCH_VERSION       | パーティションのメタデータスイッチバージョン。   |
 | TABLET_BALANCED               | Tablet の配置がパーティション内で均等に分散されているかどうか。 |
+| LAST_UPDATE_TIME              | パーティションが最後にユーザー書き込み（ロード / INSERT / DELETE / UPDATE）で変更された時刻。 |
+| LAST_ACCESS_TIME              | パーティションが最後にユーザーステートメント（クエリ、`INSERT ... SELECT`、`INSERT OVERWRITE`、CTAS、主キーテーブルの `UPDATE`/`DELETE`、マテリアライズドビューのリフレッシュ、`EXPORT`）で読み取られた時刻。内部の統計情報収集による読み取りは除外されます。現在は FE メモリのみに保持され（永続化されない）、クエリ時に FE 間で集約されます。 |

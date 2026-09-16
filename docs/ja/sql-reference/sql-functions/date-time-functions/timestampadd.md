@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付または日時式に整数式の時間間隔を追加します。"
 ---
 
 # timestampadd

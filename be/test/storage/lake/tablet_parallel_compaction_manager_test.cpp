@@ -18,14 +18,21 @@
 
 #include <filesystem>
 #include <future>
+#include <optional>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
@@ -33,6 +40,9 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rows_mapper.h"
+#include "storage/rowset/segment_writer.h"
+#include "storage/sort_key_sampler.h"
+#include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
 #include "types/type_descriptor.h"
@@ -125,6 +135,32 @@ TEST_F(TabletParallelCompactionStateTest, test_is_complete) {
     EXPECT_TRUE(_state->is_complete());
 }
 
+// Pins the compaction-policy configs that these tests' expected subtask counts are derived from, and
+// puts the previous values back on destruction. The BE test binary shares one process, so without
+// this the number of rowsets pick_rowsets() returns depends on whatever suite ran earlier: with a
+// leaked max_cumulative_compaction_num_singleton_deltas=10, a 20-rowset tablet yields 2 subtasks
+// instead of 4. The pinned values are the config defaults.
+class CompactionPolicyConfigPin {
+public:
+    CompactionPolicyConfigPin() {
+        config::enable_size_tiered_compaction_strategy = true;
+        config::min_cumulative_compaction_num_singleton_deltas = 5;
+        config::max_cumulative_compaction_num_singleton_deltas = 500;
+    }
+
+    ~CompactionPolicyConfigPin() {
+        config::enable_size_tiered_compaction_strategy = _enable_size_tiered;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _max_cumulative_deltas;
+    }
+
+private:
+    // Captured before the constructor body overwrites them.
+    bool _enable_size_tiered = config::enable_size_tiered_compaction_strategy;
+    int64_t _min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+    int64_t _max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+};
+
 class TabletParallelCompactionManagerTest : public TestBase {
 public:
     TabletParallelCompactionManagerTest() : TestBase(kTestDirectory) { clear_and_init_test_dir(); }
@@ -173,8 +209,9 @@ protected:
             rowset->set_data_size(rowset_size);
 
             std::string segment_name = fmt::format("segment_{}.dat", i);
-            rowset->add_segments(segment_name);
-            rowset->add_segment_size(rowset_size);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(segment_name);
+            segment_meta->set_size(rowset_size);
 
             // Create dummy segment file
             std::string path = _lp->segment_location(tablet_id, segment_name);
@@ -193,9 +230,244 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
     }
 
+    // Writes a real segment (key column c0 = start_key..start_key+num_rows-1, value column c1 constant 0)
+    // for |tablet_id| at |segment_name|, under |schema_pb|. Returns the file size.
+    uint64_t write_int_key_segment(int64_t tablet_id, const TabletSchemaPB& schema_pb, const std::string& segment_name,
+                                   int64_t num_rows, int32_t start_key = 0) {
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        std::string path = _lp->segment_location(tablet_id, segment_name);
+        std::string dir = std::filesystem::path(path).parent_path().string();
+        CHECK_OK(fs::create_directories(dir));
+        auto fs = FileSystemFactory::CreateSharedFromString(path);
+        WritableFileOptions opts;
+        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+        auto wfile = fs.value()->new_writable_file(opts, path);
+        CHECK_OK(wfile.status());
+
+        SegmentWriterOptions writer_opts;
+        SegmentWriter writer(std::move(wfile.value()), /*segment_id=*/0, tablet_schema, writer_opts);
+        CHECK_OK(writer.init());
+
+        auto chunk_schema = ChunkHelper::convert_schema(tablet_schema);
+        auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+        auto cols = chunk->columns();
+        for (int64_t i = 0; i < num_rows; ++i) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(start_key + static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+        }
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+        return file_size;
+    }
+
+    // ================================================================================
+    // Range-split sampling fixture
+    //
+    // A tablet whose written key layout is known exactly, so a subtask's row count can be measured
+    // against ground truth instead of against the split algorithm's own per-range estimate.
+    // ================================================================================
+
+    // (k VARCHAR, v INT), DUP_KEYS, sort key = k. VARCHAR is deliberate: it is what forces sampling
+    // onto the data-page path, because short_key_index_encodes_full_sort_key() rejects the schema on
+    // TYPE -- sort_key_fixed_encode_size(TYPE_VARCHAR) falls into its `default: return 0` arm.
+    // That holds at ANY index_length, so the value below does not
+    // select the path and raising it would change nothing; it is set only because a real VARCHAR key
+    // carries a truncated short key, and 4 is narrower than the 6-digit keys this fixture writes.
+    static TabletSchemaPB varchar_sort_key_schema_pb() {
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_id(next_id());
+        pb.set_num_short_key_columns(1);
+        pb.set_num_rows_per_row_block(65535);
+        auto* k = pb.add_column();
+        k->set_unique_id(1);
+        k->set_name("k");
+        k->set_type("VARCHAR");
+        k->set_is_key(true);
+        k->set_is_nullable(false);
+        k->set_length(32);
+        k->set_index_length(4);
+        auto* v = pb.add_column();
+        v->set_unique_id(2);
+        v->set_name("v");
+        v->set_type("INT");
+        v->set_is_key(false);
+        v->set_is_nullable(false);
+        v->set_aggregation("NONE");
+        pb.add_sort_key_idxes(0);
+        return pb;
+    }
+
+    // Zero-padded so byte order == numeric order. That is what lets a VARCHAR range bound be read
+    // back as the integer key it denotes, and it keeps each written run non-decreasing so the
+    // sampler's monotonicity validation sees a well-formed segment.
+    static std::string encode_varchar_key(int64_t key) { return fmt::format("{:06d}", key); }
+
+    static TuplePB make_varchar_tuple(int64_t key) {
+        TuplePB tuple;
+        auto* v = tuple.add_values();
+        TypeDescriptor type_desc = TypeDescriptor::create_varchar_type(32);
+        v->mutable_type()->CopyFrom(type_desc.to_protobuf());
+        v->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        v->set_value(encode_varchar_key(key));
+        return tuple;
+    }
+
+    // Writes a real segment holding the ascending key run [start_key, start_key + num_rows) under
+    // |schema_pb| (key column k, value column v constant 0). Returns the file size.
+    uint64_t write_varchar_key_segment(int64_t tablet_id, const TabletSchemaPB& schema_pb,
+                                       const std::string& segment_name, int64_t num_rows, int64_t start_key) {
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        std::string path = _lp->segment_location(tablet_id, segment_name);
+        std::string dir = std::filesystem::path(path).parent_path().string();
+        CHECK_OK(fs::create_directories(dir));
+        auto fs = FileSystemFactory::CreateSharedFromString(path);
+        WritableFileOptions opts;
+        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+        auto wfile = fs.value()->new_writable_file(opts, path);
+        CHECK_OK(wfile.status());
+
+        SegmentWriterOptions writer_opts;
+        SegmentWriter writer(std::move(wfile.value()), /*segment_id=*/0, tablet_schema, writer_opts);
+        CHECK_OK(writer.init());
+
+        auto chunk_schema = ChunkHelper::convert_schema(tablet_schema);
+        auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+        auto cols = chunk->columns();
+        // The Slices below point into this vector, which must therefore outlive append_chunk.
+        std::vector<std::string> encoded;
+        encoded.reserve(num_rows);
+        for (int64_t i = 0; i < num_rows; ++i) {
+            encoded.push_back(encode_varchar_key(start_key + i));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(Slice(encoded.back())));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+        }
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+        return file_size;
+    }
+
+    // Builds a tablet of |num_rowsets| rowsets, one real segment each, and returns Rowsets over it.
+    //
+    // Segment s holds the dense key run [s * rows_each / 2, s * rows_each / 2 + rows_each), so
+    // consecutive segments overlap over half their key span -- the shape a set of rowsets awaiting
+    // compaction has, and one the coarse [min, max] model cannot divide evenly: with only the
+    // segments' 2*N endpoints as boundary candidates, and each segment's rows spread EQUALLY over
+    // the candidate ranges it overlaps rather than by width (distribute_to_ranges), the outer
+    // subtasks come out ~50% off even though every key run is perfectly uniform.
+    //
+    // Records the layout in _written_key_runs so written_rows_in_group() can reconstruct ground
+    // truth, and the tablet id in _sampling_tablet_id.
+    std::vector<RowsetPtr> build_rowsets_with_varchar_sort_key(int num_rowsets, int64_t rows_each) {
+        const int64_t tablet_id = next_id();
+        const auto schema_pb = varchar_sort_key_schema_pb();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(num_rowsets + 1);
+        *metadata->mutable_schema() = schema_pb;
+
+        _written_key_runs.clear();
+        const int64_t shift = rows_each / 2;
+        for (int s = 0; s < num_rowsets; ++s) {
+            const int64_t start_key = s * shift;
+            const std::string name = fmt::format("varchar_seg_{}.dat", s);
+            write_varchar_key_segment(tablet_id, schema_pb, name, rows_each, start_key);
+            _written_key_runs.emplace_back(start_key, rows_each);
+
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(s);
+            rowset->set_overlapped(false);
+            rowset->set_num_rows(rows_each);
+            // Recorded rather than measured from disk: the split algorithm reads only these sizes,
+            // and pinning them is what lets kBytesPerSubtask be a constant (see its comment).
+            rowset->set_data_size(kSampledRowsetDataSize);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(name);
+            segment_meta->set_size(kSampledRowsetDataSize);
+            segment_meta->set_num_rows(rows_each);
+            // The sampler rejects any sample outside [sort_key_min, sort_key_max], so these must be
+            // the segment's real first and last key -- not a rounded envelope.
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_varchar_tuple(start_key));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_varchar_tuple(start_key + rows_each - 1));
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, metadata->version()));
+        auto meta = tablet.metadata();
+        std::vector<RowsetPtr> rowsets;
+        for (int i = 0; i < meta->rowsets_size(); ++i) {
+            rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
+        }
+        _sampling_tablet_id = tablet_id;
+        return rowsets;
+    }
+
+    // The integer key a subtask range bound denotes, or nullopt when the bound is absent
+    // (unbounded). The key space IS the integers [0, ...): the fixture stores them zero-padded.
+    static std::optional<int64_t> decode_varchar_bound(const VariantTuple& bound) {
+        if (bound.empty()) {
+            return std::nullopt;
+        }
+        CHECK_EQ(1u, bound.size());
+        return std::stoll(bound[0].value().get_slice().to_string());
+    }
+
+    // Rows the FIXTURE actually wrote into |group|'s key range -- arithmetic over the written runs,
+    // never a second reading of the algorithm's own estimate. SubtaskGroup::total_bytes comes from
+    // RangeSplitResult::range_data_sizes, which the greedy loop optimises directly, so a spread
+    // assertion over THAT is satisfied by construction and would pass with no samples at all.
+    //
+    // Reads range_lower_inclusive / range_upper_inclusive rather than assuming the [lower, upper)
+    // convention _create_range_split_groups writes today. This helper IS the ground truth of the
+    // evenness tests, so if that convention ever changed, an assumption here would mis-measure
+    // silently instead of failing. The key space is the integers, so an exclusive bound is just the
+    // adjacent one.
+    int64_t written_rows_in_group(const SubtaskGroup& group) const {
+        auto lower = decode_varchar_bound(group.range_lower_bound);
+        auto upper = decode_varchar_bound(group.range_upper_bound);
+        if (lower.has_value() && !group.range_lower_inclusive) {
+            lower = *lower + 1;
+        }
+        if (upper.has_value() && group.range_upper_inclusive) {
+            upper = *upper + 1;
+        }
+        int64_t rows = 0;
+        for (const auto& [start, count] : _written_key_runs) {
+            const int64_t lo = lower.has_value() ? std::max(*lower, start) : start;
+            const int64_t hi = upper.has_value() ? std::min(*upper, start + count) : start + count;
+            rows += std::max<int64_t>(0, hi - lo);
+        }
+        return rows;
+    }
+
+    // Each rowset's RECORDED data_size. Pinned in the metadata instead of measured from the file so
+    // that kBytesPerSubtask can be a constant; nothing on the read path consults it.
+    static constexpr int64_t kSampledRowsetDataSize = 1000000;
+    // One rowset's worth, so ceil(total_bytes / kBytesPerSubtask) == the rowset count. With
+    // max_parallel equal to that count, target_subtasks is the count AND the greedy loop's target
+    // is total/count rather than this cap -- calculate_range_split_boundaries uses
+    // min(total / actual_split_count, target_value_per_split), so a smaller value here would make
+    // it place every boundary inside the first few candidate ranges.
+    static constexpr int64_t kBytesPerSubtask = kSampledRowsetDataSize;
+    // Subtasks _create_range_split_groups produced for
+    // build_rowsets_with_varchar_sort_key(4, 25'000) at max_parallel 4 BEFORE sampling was wired
+    // in, i.e. from coarse [min, max] bounds alone. Pinned so a change in compaction parallelism
+    // cannot ride along unnoticed with a change in boundary quality.
+    static constexpr size_t kExpectedSubtaskCount = 4;
+
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::unique_ptr<TabletParallelCompactionManager> _manager;
     std::unique_ptr<ThreadPool> _thread_pool;
+    // Constructed before SetUp() and destroyed after TearDown(), so every test in this fixture sees
+    // the pinned values and no other suite inherits them.
+    CompactionPolicyConfigPin _config_pin;
+    int64_t _sampling_tablet_id = 0;
+    // (first key, rows) of every segment build_rowsets_with_varchar_sort_key wrote.
+    std::vector<std::pair<int64_t, int64_t>> _written_key_runs;
 };
 
 TEST_F(TabletParallelCompactionManagerTest, test_get_tablet_state_not_exist) {
@@ -236,6 +508,154 @@ TEST_F(TabletParallelCompactionManagerTest, test_metrics_initial_value) {
     EXPECT_EQ(0, _manager->completed_subtasks());
 }
 
+// Builds |rowset_count| shared rowsets of |segments_per_rowset| segments, each |segment_bytes| big.
+// Returned by value alongside the metadata that owns them.
+static std::vector<RowsetPtr> make_shared_rowsets(TabletManager* tablet_mgr, const MutableTabletMetadataPtr& metadata,
+                                                  int rowset_count, int segments_per_rowset, int64_t segment_bytes) {
+    std::vector<RowsetPtr> rowsets;
+    for (int rowset_id = 0; rowset_id < rowset_count; ++rowset_id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_num_rows(segments_per_rowset * 100);
+        rowset->set_data_size(segments_per_rowset * segment_bytes);
+        rowset->set_overlapped(false);
+        for (int segment = 0; segment < segments_per_rowset; ++segment) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("unshare_{}_{}", rowset_id, segment));
+            segment_meta->set_size(segment_bytes);
+            segment_meta->set_shared(true);
+        }
+        rowsets.push_back(std::make_shared<Rowset>(tablet_mgr, metadata, rowset_id, 0));
+    }
+    return rowsets;
+}
+
+// The planner refuses to plan at all rather than returning a partial cover. UNSHARE is
+// all-or-nothing, so "no groups" is the safe answer and the caller falls back to the serial path.
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_degenerate_inputs) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90101);
+    metadata->set_version(2);
+    auto rowsets = make_shared_rowsets(_tablet_mgr.get(), metadata, 2, 4, 100);
+
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), {}, 4, 200).empty()) << "no rowsets";
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 1, 200).empty()) << "no parallelism";
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 0).empty()) << "no byte budget";
+    // Budget larger than the whole tablet: one part is enough, so there is nothing to parallelise.
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 1 << 20).empty())
+            << "a single part covers everything";
+}
+
+// More rowsets than parts: each group takes whole rowsets and never splits one, so every group is
+// NORMAL and the cover is still exact.
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_pack_whole_rowsets) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90102);
+    metadata->set_version(2);
+    auto rowsets = make_shared_rowsets(_tablet_mgr.get(), metadata, 6, 2, 100);
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 3, 400);
+    ASSERT_FALSE(groups.empty());
+    EXPECT_LE(groups.size(), 3u);
+    EXPECT_TRUE(std::all_of(groups.begin(), groups.end(),
+                            [](const SubtaskGroup& group) { return group.type == SubtaskType::NORMAL; }));
+    EXPECT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+
+    size_t covered = 0;
+    for (const auto& group : groups) {
+        covered += group.rowsets.size();
+    }
+    EXPECT_EQ(rowsets.size(), covered) << "every rowset must land in exactly one group";
+}
+
+// A rowset that only warrants one part is emitted as NORMAL rather than as a one-part
+// LARGE_ROWSET_PART, while its outsized sibling is still split. Both shapes in one plan.
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_mixed_part_counts) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90103);
+    metadata->set_version(2);
+    std::vector<RowsetPtr> rowsets;
+    // rowset 0 is tiny (1 segment), rowset 1 is 8x bigger and must be carved up.
+    for (int rowset_id = 0; rowset_id < 2; ++rowset_id) {
+        const int segments = rowset_id == 0 ? 1 : 8;
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_num_rows(segments * 100);
+        rowset->set_data_size(segments * 100);
+        rowset->set_overlapped(false);
+        for (int segment = 0; segment < segments; ++segment) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("mixed_{}_{}", rowset_id, segment));
+            segment_meta->set_size(100);
+            segment_meta->set_shared(true);
+        }
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), metadata, rowset_id, 0));
+    }
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 200);
+    ASSERT_FALSE(groups.empty());
+    EXPECT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok())
+            << "a mixed plan must still cover every segment exactly once";
+}
+
+// Coverage validation has to reject a plan that drops a whole rowset, not just one with a
+// gap/overlap inside a rowset -- dropping one is exactly how sibling rows would survive UNSHARE.
+TEST_F(TabletParallelCompactionManagerTest, test_validate_unshare_coverage_rejects_a_missing_rowset) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90104);
+    metadata->set_version(2);
+    auto rowsets = make_shared_rowsets(_tablet_mgr.get(), metadata, 2, 4, 100);
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 200);
+    ASSERT_FALSE(groups.empty());
+    ASSERT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+
+    groups.pop_back();
+    EXPECT_FALSE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+}
+
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_cover_all_segments) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90001);
+    metadata->set_version(2);
+    std::vector<RowsetPtr> rowsets;
+    for (uint32_t rowset_id = 0; rowset_id < 2; ++rowset_id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_num_rows(600);
+        rowset->set_data_size(600);
+        rowset->set_overlapped(false);
+        for (int segment = 0; segment < 6; ++segment) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("unshare_{}_{}", rowset_id, segment));
+            segment_meta->set_size(100);
+            segment_meta->set_shared(true);
+        }
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), metadata, rowset_id, 0));
+    }
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 200);
+    ASSERT_EQ(4, groups.size());
+    EXPECT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+    EXPECT_TRUE(std::all_of(groups.begin(), groups.end(),
+                            [](const SubtaskGroup& group) { return group.type == SubtaskType::LARGE_ROWSET_PART; }));
+
+    groups.front().segment_start = 1;
+    auto invalid = _manager->_validate_unshare_group_coverage(rowsets, groups);
+    EXPECT_FALSE(invalid.ok());
+    EXPECT_TRUE(invalid.message().find("gap/overlap") != std::string::npos);
+
+    const int64_t txn_id = 90002;
+    auto state_or = _manager->create_and_register_tablet_state(metadata->id(), txn_id, metadata->version(), 4, 200,
+                                                               true, nullptr, [](bool /*success*/) {});
+    ASSERT_TRUE(state_or.ok());
+    state_or.value()->expected_unshare_subtask_count = 2;
+    auto merged_log = _manager->get_merged_txn_log(metadata->id(), txn_id);
+    EXPECT_FALSE(merged_log.ok());
+    EXPECT_TRUE(merged_log.status().message().find("Incomplete parallel UNSHARE") != std::string::npos);
+    _manager->cleanup_tablet(metadata->id(), txn_id);
+}
+
 TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_not_exist) {
     int64_t tablet_id = 12345;
     int64_t txn_id = 67890;
@@ -260,6 +680,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     config.set_max_bytes_per_subtask(5 * 1024 * 1024); // 5MB per subtask, will create 2 groups
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -314,6 +735,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_multiple_
     config.set_max_bytes_per_subtask(25 * 1024 * 1024); // 25MB limit
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -380,6 +802,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_manual_completion_flow) {
     create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -470,6 +893,177 @@ TEST_F(TabletParallelCompactionManagerTest, test_manual_completion_flow) {
 
     // In real scenario, cleanup_tablet is called by CompactionScheduler::remove_states.
     // Since we don't have CompactionScheduler in this test, manually clean up.
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    ASSERT_EQ(nullptr, _manager->get_tablet_state(tablet_id, txn_id));
+}
+
+// Regression test for the merged parallel-compaction txn log being silently dropped on the regular
+// (non-aggregate/non-file-bundling) path. On that path FE does not set skip_write_txnlog, so there is
+// no aggregator to consume CompactResponse.txn_logs: the merged log MUST be persisted to object
+// storage by the CN itself, exactly as a serial compaction does. Before the fix the merged context
+// unconditionally set skip_write_txnlog=true, so the log went into the RPC response, was read by
+// nobody, and the committed compaction txn could never be published.
+TEST_F(TabletParallelCompactionManagerTest, test_regular_path_persists_merged_txn_log) {
+    int64_t tablet_id = 10013;
+    int64_t txn_id = 20013;
+    int64_t version = 11;
+
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    // Regular path: skip_write_txnlog stays false (FE never sets it for non-file-bundling tables).
+    request.set_skip_write_txnlog(false);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+
+    {
+        SubtaskInfo info0;
+        info0.subtask_id = 0;
+        info0.input_rowset_ids = {0, 1, 2, 3, 4};
+        info0.input_bytes = 5 * 1024 * 1024;
+        info0.start_time = ::time(nullptr);
+        state->running_subtasks[0] = std::move(info0);
+        state->total_subtasks_created = 1;
+
+        SubtaskInfo info1;
+        info1.subtask_id = 1;
+        info1.input_rowset_ids = {5, 6, 7, 8, 9};
+        info1.input_bytes = 5 * 1024 * 1024;
+        info1.start_time = ::time(nullptr);
+        state->running_subtasks[1] = std::move(info1);
+        state->total_subtasks_created = 2;
+    }
+    for (int i = 0; i < 10; i++) {
+        state->compacting_rowsets[i] = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
+
+    auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx1->subtask_id = 1;
+    ctx1->txn_log = std::make_unique<TxnLogPB>();
+    ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(5);
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
+
+    ASSERT_TRUE(closure.is_finished());
+
+    // Regular path: the merged log must NOT be handed back via the RPC response ...
+    ASSERT_EQ(0, response.txn_logs_size());
+
+    // ... it must instead be persisted to object storage under txn_log_location(tablet_id, txn_id),
+    // where the publish daemon expects to find it.
+    auto merged_log_or = _tablet_mgr->get_txn_log(tablet_id, txn_id);
+    ASSERT_TRUE(merged_log_or.ok()) << merged_log_or.status();
+    const auto& merged_log = *merged_log_or.value();
+    ASSERT_TRUE(merged_log.has_op_parallel_compaction());
+    ASSERT_EQ(2, merged_log.op_parallel_compaction().subtask_compactions_size());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    ASSERT_EQ(nullptr, _manager->get_tablet_state(tablet_id, txn_id));
+}
+
+// Regression: when persisting the merged txn log fails on the regular path, the tablet must be
+// reported as failed (so FE does not commit an unpublishable compaction txn) and no txn log is
+// returned inline. Covers the put_txn_log-failure branch in on_subtask_complete.
+TEST_F(TabletParallelCompactionManagerTest, test_regular_path_put_txn_log_failure_marks_tablet_failed) {
+    int64_t tablet_id = 10023;
+    int64_t txn_id = 20023;
+    int64_t version = 11;
+
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    // Regular path: skip_write_txnlog stays false, so the merged log is persisted via put_txn_log.
+    request.set_skip_write_txnlog(false);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+    {
+        SubtaskInfo info0;
+        info0.subtask_id = 0;
+        info0.input_rowset_ids = {0, 1, 2, 3, 4};
+        info0.input_bytes = 5 * 1024 * 1024;
+        info0.start_time = ::time(nullptr);
+        state->running_subtasks[0] = std::move(info0);
+        state->total_subtasks_created = 1;
+
+        SubtaskInfo info1;
+        info1.subtask_id = 1;
+        info1.input_rowset_ids = {5, 6, 7, 8, 9};
+        info1.input_bytes = 5 * 1024 * 1024;
+        info1.start_time = ::time(nullptr);
+        state->running_subtasks[1] = std::move(info1);
+        state->total_subtasks_created = 2;
+    }
+    for (int i = 0; i < 10; i++) {
+        state->compacting_rowsets[i] = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
+
+    // Force the merged-log persistence (put_txn_log) to fail, then complete the last subtask so the
+    // merge + persist runs.
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto* fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("put_txn_log_fail");
+    ASSERT_TRUE(fp != nullptr);
+    fp->setMode(trigger_mode);
+
+    auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx1->subtask_id = 1;
+    ctx1->txn_log = std::make_unique<TxnLogPB>();
+    ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(5);
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
+
+    // Disable the fail point before assertions so a failed assertion cannot leak it to other tests.
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    ASSERT_TRUE(closure.is_finished());
+    // Persistence failed → the tablet is reported failed so FE will not commit an unpublishable txn.
+    ASSERT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(tablet_id, response.failed_tablets(0));
+    // Regular path never hands the merged log back via the RPC response.
+    EXPECT_EQ(0, response.txn_logs_size());
+    // And nothing was persisted at the standalone txn-log location.
+    auto merged_log_or = _tablet_mgr->get_txn_log(tablet_id, txn_id);
+    EXPECT_FALSE(merged_log_or.ok());
+
     _manager->cleanup_tablet(tablet_id, txn_id);
     ASSERT_EQ(nullptr, _manager->get_tablet_state(tablet_id, txn_id));
 }
@@ -601,6 +1195,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_default_m
     config.set_max_bytes_per_subtask(-1); // Invalid, will use BE config default
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -646,6 +1241,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_invalid_m
     config.set_max_bytes_per_subtask(100 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -688,6 +1284,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_tablet_no
     config.set_max_bytes_per_subtask(10 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -715,6 +1312,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_already_e
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -766,6 +1364,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_acquire_t
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -797,6 +1396,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_subtask_not
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -843,6 +1443,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -878,6 +1479,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks) {
         EXPECT_EQ(txn_id, info.txn_id);
         EXPECT_EQ(tablet_id, info.tablet_id);
         EXPECT_EQ(version, info.version);
+        EXPECT_GE(info.subtask_id, 0);
     }
 
     block_promise.set_value();
@@ -898,6 +1500,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_overlapped) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -925,9 +1528,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_overlapped) {
     output0->set_num_rows(100);
     output0->set_data_size(1024);
     output0->set_overlapped(true);
-    output0->add_segments("segment_0.dat");
-    output0->add_segment_size(512);
-    output0->add_segment_encryption_metas("meta0");
+    auto* output0_seg = output0->add_segment_metas();
+    output0_seg->set_filename("segment_0.dat");
+    output0_seg->set_size(512);
+    output0_seg->set_encryption_meta("meta0");
     ctx0->txn_log->mutable_op_compaction()->set_compact_version(10);
     ctx0->table_id = 1001;
     ctx0->partition_id = 2001;
@@ -944,9 +1548,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_overlapped) {
     output1->set_num_rows(200);
     output1->set_data_size(2048);
     output1->set_overlapped(false);
-    output1->add_segments("segment_1.dat");
-    output1->add_segment_size(1024);
-    output1->add_segment_encryption_metas("meta1");
+    auto* output1_seg = output1->add_segment_metas();
+    output1_seg->set_filename("segment_1.dat");
+    output1_seg->set_size(1024);
+    output1_seg->set_encryption_meta("meta1");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -1001,6 +1606,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1026,7 +1632,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -1042,7 +1648,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(6);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -1069,8 +1675,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     EXPECT_TRUE(subtask0.has_output_rowset());
     EXPECT_EQ(50, subtask0.output_rowset().num_rows());
     EXPECT_EQ(500, subtask0.output_rowset().data_size());
-    EXPECT_EQ(1, subtask0.output_rowset().segments_size());
-    EXPECT_EQ("segment_0.dat", subtask0.output_rowset().segments(0));
+    EXPECT_EQ(1, subtask0.output_rowset().segment_metas_size());
+    EXPECT_EQ("segment_0.dat", subtask0.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -1090,6 +1696,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_exceeds_c
     config.set_max_bytes_per_subtask(20 * 1024 * 1024); // 20MB per subtask, so 40MB total capacity
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1138,6 +1745,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_stats_merging) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1203,6 +1811,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_no_rowset
     config.set_max_bytes_per_subtask(10 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1234,8 +1843,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_single_sm
     rowset->set_overlapped(false); // Not overlapped, may not be selected
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("segment_0.dat");
-    rowset->add_segment_size(100);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename("segment_0.dat");
+    segment_meta->set_size(100);
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
 
@@ -1244,6 +1854,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_single_sm
     config.set_max_bytes_per_subtask(10 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1272,6 +1883,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_execute_subtask_state_cleaned_u
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1312,6 +1924,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_subtask_creation) {
     config.set_max_bytes_per_subtask(15 * 1024 * 1024); // ~15MB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1363,6 +1976,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1407,6 +2021,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     bool found_completed_profile = false;
     for (const auto& info : infos) {
         if (info.finish_time > 0 && info.runs > 0) {
+            EXPECT_EQ(0, info.subtask_id);
             EXPECT_NE(info.profile.find(R"("in_queue_sec":7)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("subtask_id":0)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("input_rowsets":4)"), std::string::npos);
@@ -1445,6 +2060,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_table_partition_id_copy) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1504,6 +2120,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_output) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1573,6 +2190,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_compact_versi
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1629,6 +2247,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_null_txn_log) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1681,6 +2300,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_op_compaction
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1735,6 +2355,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1762,7 +2383,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     output0->set_num_rows(100);
     output0->set_data_size(1000);
     output0->set_overlapped(false);
-    output0->add_segments("merged_segment_0.dat");
+    output0->add_segment_metas()->set_filename("merged_segment_0.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -1778,7 +2399,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     output1->set_num_rows(200);
     output1->set_data_size(2000);
     output1->set_overlapped(false);
-    output1->add_segments("merged_segment_1.dat");
+    output1->add_segment_metas()->set_filename("merged_segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -1797,7 +2418,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     EXPECT_TRUE(subtask0.has_output_rowset());
     EXPECT_EQ(100, subtask0.output_rowset().num_rows());
     EXPECT_EQ(1000, subtask0.output_rowset().data_size());
-    EXPECT_EQ("merged_segment_0.dat", subtask0.output_rowset().segments(0));
+    EXPECT_EQ("merged_segment_0.dat", subtask0.output_rowset().segment_metas(0).filename());
 
     const auto& subtask1 = op_parallel.subtask_compactions(1);
     EXPECT_EQ(1, subtask1.subtask_id());
@@ -1807,7 +2428,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     EXPECT_TRUE(subtask1.has_output_rowset());
     EXPECT_EQ(200, subtask1.output_rowset().num_rows());
     EXPECT_EQ(2000, subtask1.output_rowset().data_size());
-    EXPECT_EQ("merged_segment_1.dat", subtask1.output_rowset().segments(0));
+    EXPECT_EQ("merged_segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -1826,6 +2447,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_metrics_after_completion) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1908,6 +2530,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_rowsets_marking) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -1967,6 +2590,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_with_callba
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2025,6 +2649,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_all_subtasks_failed) {
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2087,6 +2712,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2113,7 +2739,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -2125,7 +2751,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(6);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2137,7 +2763,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(11);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(200);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_2.dat");
+    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_2.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -2165,7 +2791,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     EXPECT_TRUE(subtask1.has_output_rowset());
     EXPECT_EQ(100, subtask1.output_rowset().num_rows());
     EXPECT_EQ(1000, subtask1.output_rowset().data_size());
-    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segments(0));
+    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
     const auto& subtask2 = op_parallel.subtask_compactions(1);
     EXPECT_EQ(2, subtask2.subtask_id());
@@ -2175,7 +2801,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     EXPECT_TRUE(subtask2.has_output_rowset());
     EXPECT_EQ(200, subtask2.output_rowset().num_rows());
     EXPECT_EQ(2000, subtask2.output_rowset().data_size());
-    EXPECT_EQ("segment_2.dat", subtask2.output_rowset().segments(0));
+    EXPECT_EQ("segment_2.dat", subtask2.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -2195,6 +2821,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2221,7 +2848,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     // Subtask 1: success
@@ -2234,9 +2861,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(7);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(150);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1500);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(750);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta1");
+    auto* ctx1_seg = ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx1_seg->set_filename("segment_1.dat");
+    ctx1_seg->set_size(750);
+    ctx1_seg->set_encryption_meta("meta1");
     ctx1->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2250,9 +2878,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(12);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(200);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_2.dat");
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(1000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta2");
+    auto* ctx2_seg = ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx2_seg->set_filename("segment_2.dat");
+    ctx2_seg->set_size(1000);
+    ctx2_seg->set_encryption_meta("meta2");
     ctx2->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -2265,7 +2894,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx3->txn_log->mutable_op_compaction()->add_input_rowsets(16);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(250);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2500);
-    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_3.dat");
+    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_3.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 3, std::move(ctx3));
 
     ASSERT_TRUE(closure.is_finished());
@@ -2328,6 +2957,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2354,7 +2984,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     // Subtask 1: success (should be applied)
@@ -2366,7 +2996,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(6);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2392,8 +3022,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     EXPECT_TRUE(subtask1.has_output_rowset());
     EXPECT_EQ(100, subtask1.output_rowset().num_rows());
     EXPECT_EQ(1000, subtask1.output_rowset().data_size());
-    EXPECT_EQ(1, subtask1.output_rowset().segments_size());
-    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segments(0));
+    EXPECT_EQ(1, subtask1.output_rowset().segment_metas_size());
+    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -2413,6 +3043,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2439,7 +3070,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     // Subtask 1: success
@@ -2452,9 +3083,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(7);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(150);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1500);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(750);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta1");
+    auto* ctx1_seg = ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx1_seg->set_filename("segment_1.dat");
+    ctx1_seg->set_size(750);
+    ctx1_seg->set_encryption_meta("meta1");
     ctx1->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2468,9 +3100,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(12);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(200);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_2.dat");
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(1000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta2");
+    auto* ctx2_seg = ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx2_seg->set_filename("segment_2.dat");
+    ctx2_seg->set_size(1000);
+    ctx2_seg->set_encryption_meta("meta2");
     ctx2->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -2483,7 +3116,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx3->txn_log->mutable_op_compaction()->add_input_rowsets(16);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(250);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2500);
-    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_3.dat");
+    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_3.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 3, std::move(ctx3));
 
     ASSERT_TRUE(closure.is_finished());
@@ -2668,8 +3301,9 @@ protected:
 
         for (int i = 0; i < num_segments; i++) {
             std::string segment_name = fmt::format("segment_{}.dat", i);
-            rowset->add_segments(segment_name);
-            rowset->add_segment_size(segment_size);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(segment_name);
+            segment_meta->set_size(segment_size);
 
             // Create dummy segment file
             std::string path = _lp->segment_location(tablet_id, segment_name);
@@ -2707,8 +3341,9 @@ protected:
 
             for (int i = 0; i < num_segments; i++) {
                 std::string segment_name = fmt::format("rowset_{}_segment_{}.dat", rowset_id, i);
-                rowset->add_segments(segment_name);
-                rowset->add_segment_size(segment_size);
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(segment_name);
+                segment_meta->set_size(segment_size);
 
                 // Create dummy segment file
                 std::string path = _lp->segment_location(tablet_id, segment_name);
@@ -2734,6 +3369,9 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::unique_ptr<TabletParallelCompactionManager> _manager;
+    // Constructed before SetUp() and destroyed after TearDown(), so every test in this fixture sees
+    // the pinned values and no other suite inherits them.
+    CompactionPolicyConfigPin _config_pin;
 };
 
 // Test that a large rowset meeting split criteria is identified
@@ -2751,6 +3389,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_c
     config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2811,6 +3450,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_mixed_large_and_smal
     config.set_max_bytes_per_subtask(1024 * 1024 * 1024L); // 1GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2865,6 +3505,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_manual_large_rowset_
     create_pk_tablet_with_large_rowset(tablet_id, 8, 1024 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -2968,6 +3609,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_p
     create_pk_tablet_with_large_rowset(tablet_id, 8, 1024 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3066,6 +3708,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_c
     config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3146,6 +3789,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_uses_al
     config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3211,6 +3855,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_m
     config.set_max_bytes_per_subtask(3 * 1024 * 1024 * 1024L); // 3GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3256,6 +3901,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_skipped
     config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3309,6 +3955,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_incomplete_large_row
     create_pk_tablet_with_large_rowset(tablet_id, 16, 550 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3427,6 +4074,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_token_acquisiti
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3483,6 +4131,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_token_partial_a
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3552,6 +4201,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_create_subtask_group
     config.set_max_bytes_per_subtask(3 * 1024 * 1024 * 1024L);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3621,6 +4271,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_thread_pool_fai
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3666,8 +4317,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_split_rowsets_into_groups_all_l
         rowset->set_overlapped(false);
         rowset->set_num_rows(1000);
         rowset->set_data_size(large_size);
-        rowset->add_segments("segment_" + std::to_string(i) + ".dat");
-        rowset->add_segment_size(large_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("segment_" + std::to_string(i) + ".dat");
+        segment_meta->set_size(large_size);
         std::string path = _lp->segment_location(tablet_id, "segment_" + std::to_string(i) + ".dat");
         std::string dir = std::filesystem::path(path).parent_path().string();
         CHECK_OK(fs::create_directories(dir));
@@ -3734,8 +4386,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_split_rowsets_into_groups_fallb
         rowset->set_overlapped(true);
         rowset->set_num_rows(100);
         rowset->set_data_size(2 * 1024 * 1024);
-        rowset->add_segments("seg_" + std::to_string(i) + ".dat");
-        rowset->add_segment_size(2 * 1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("seg_" + std::to_string(i) + ".dat");
+        segment_meta->set_size(2 * 1024 * 1024);
         if (i == 0) {
             rowset->mutable_delete_predicate()->set_version(version);
         }
@@ -3772,8 +4425,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_filter_compactable_rowsets_skip
         rowset->set_overlapped(i > 0);
         rowset->set_num_rows(100);
         rowset->set_data_size(i == 0 ? large_size : 2 * 1024 * 1024);
-        rowset->add_segments("s_" + std::to_string(i) + ".dat");
-        rowset->add_segment_size(i == 0 ? large_size : 2 * 1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("s_" + std::to_string(i) + ".dat");
+        segment_meta->set_size(i == 0 ? large_size : 2 * 1024 * 1024);
         std::string path = _lp->segment_location(tablet_id, "s_" + std::to_string(i) + ".dat");
         std::string dir = std::filesystem::path(path).parent_path().string();
         CHECK_OK(fs::create_directories(dir));
@@ -3807,6 +4461,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_already_r
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3850,6 +4505,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->running_subtasks[1] = std::move(info1);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3899,6 +4555,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->running_subtasks[1] = std::move(info1);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -3916,10 +4573,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("s0.dat");
-    out0->add_segment_size(1000);
-    out0->add_segment_encryption_metas("enc0");
-    out0->add_segment_metas()->set_segment_idx(0);
+    auto* out0_seg = out0->add_segment_metas();
+    out0_seg->set_filename("s0.dat");
+    out0_seg->set_size(1000);
+    out0_seg->set_encryption_meta("enc0");
+    out0_seg->set_segment_idx(0);
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
@@ -3930,9 +4588,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("s1.dat");
-    out1->add_segment_size(2000);
-    out1->add_segment_metas()->set_segment_idx(0);
+    auto* out1_seg = out1->add_segment_metas();
+    out1_seg->set_filename("s1.dat");
+    out1_seg->set_size(2000);
+    out1_seg->set_segment_idx(0);
     op1->add_ssts();
     op1->add_sst_ranges();
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
@@ -3945,7 +4604,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     EXPECT_TRUE(merged.has_output_rowset());
     EXPECT_EQ(300, merged.output_rowset().num_rows());
     EXPECT_EQ(3000, merged.output_rowset().data_size());
-    EXPECT_EQ(2, merged.output_rowset().segments_size());
     EXPECT_EQ(2, merged.output_rowset().segment_metas_size());
     EXPECT_EQ(0, merged.output_rowset().segment_metas(0).segment_idx());
     EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
@@ -3954,60 +4612,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
-TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset_segment_meta_size_mismatch) {
-    int64_t tablet_id = 10056;
-    int64_t txn_id = 20056;
-    int64_t version = 2;
-
-    auto state = std::make_shared<TabletParallelCompactionState>();
-    state->tablet_id = tablet_id;
-    state->txn_id = txn_id;
-    state->version = version;
-    state->total_subtasks_created = 2;
-    state->large_rowset_split_groups[0] = {0, 1};
-    state->expected_large_rowset_split_counts[0] = 2;
-
-    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
-    ctx0->subtask_id = 0;
-    ctx0->txn_log = std::make_unique<TxnLogPB>();
-    auto* op0 = ctx0->txn_log->mutable_op_compaction();
-    op0->add_input_rowsets(0);
-    auto* out0 = op0->mutable_output_rowset();
-    out0->set_num_rows(100);
-    out0->set_data_size(1000);
-    out0->add_segments("s0.dat");
-    out0->add_segment_size(1000);
-    out0->add_segment_metas()->set_segment_idx(0);
-
-    auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
-    ctx1->subtask_id = 1;
-    ctx1->txn_log = std::make_unique<TxnLogPB>();
-    auto* op1 = ctx1->txn_log->mutable_op_compaction();
-    op1->add_input_rowsets(0);
-    auto* out1 = op1->mutable_output_rowset();
-    out1->set_num_rows(200);
-    out1->set_data_size(2000);
-    out1->add_segments("s1.dat");
-    out1->add_segment_size(2000);
-    // Invalid subtask output: missing segment metadata for the segment above.
-
-    state->completed_subtasks.emplace_back(std::move(ctx0));
-    state->completed_subtasks.emplace_back(std::move(ctx1));
-    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
-
-#if DCHECK_IS_ON()
-    ASSERT_DEATH(
-            {
-                auto result = _manager->get_merged_txn_log(tablet_id, txn_id);
-                (void)result;
-            },
-            "segment_metas_size");
-#else
-    GTEST_SKIP() << "DCHECK is disabled";
-#endif
-
-    _manager->cleanup_tablet(tablet_id, txn_id);
-}
+// NOTE: the former test_get_merged_txn_log_large_rowset_segment_meta_size_mismatch was removed
+// during the segment_metas refactor. It forced a mismatch between the legacy `segments[]` array
+// and `segment_metas[]` to trip a DCHECK in get_merged_txn_log. With segment_metas now the sole
+// canonical source (no parallel arrays), that inconsistency is structurally impossible to express,
+// and the corresponding DCHECK was removed.
 
 // Test get_merged_txn_log large rowset group with no valid subtasks (RemoveLast, lines 1132-1140)
 TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset_no_valid_subtasks) {
@@ -4030,6 +4639,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->running_subtasks[1] = std::move(info1);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -4076,6 +4686,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->running_subtasks[1] = std::move(info1);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -4100,33 +4711,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
-// Test PK table with enable_pk_index_parallel_execution disabled fallback (lines 659-663)
-TEST_F(TabletParallelCompactionManagerTest, test_try_create_parallel_tasks_pk_index_parallel_disabled) {
-    int64_t tablet_id = 10059;
-    int64_t txn_id = 20059;
-    int64_t version = 11;
-    create_pk_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
-
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, false);
-
-    TabletParallelConfig config;
-    config.set_max_parallel_per_tablet(4);
-    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
-
-    CompactRequest request;
-    request.add_tablet_ids(tablet_id);
-    CompactResponse response;
-    TestClosure closure;
-    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
-
-    auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, _thread_pool.get(), []() { return true; },
-            [](bool) {});
-
-    EXPECT_TRUE(st.ok()) << st.status();
-    EXPECT_EQ(0, st.value()) << "PK table with enable_pk_index_parallel_execution disabled should fallback";
-}
-
 // Test non-PK table with enable_size_tiered_compaction_strategy=false fallback (lines 662-666)
 TEST_F(TabletParallelCompactionManagerTest, test_try_create_parallel_tasks_non_pk_size_tiered_disabled) {
     int64_t tablet_id = 10058;
@@ -4141,6 +4725,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_try_create_parallel_tasks_non_p
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -4174,6 +4759,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     config.set_max_bytes_per_subtask(3L * 1024 * 1024 * 1024); // 3GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -4230,6 +4816,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_mixed_large
     config.set_max_bytes_per_subtask(3L * 1024 * 1024 * 1024); // 3GB per subtask
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -4313,6 +4900,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     state->compacting_rowsets[0] = 2; // refcount=2
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -4329,12 +4917,14 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     op0->add_input_rowsets(0);
     op0->mutable_output_rowset()->set_num_rows(500);
     op0->mutable_output_rowset()->set_data_size(4000000000L);
-    op0->mutable_output_rowset()->add_segments("out_seg_0.dat");
-    op0->mutable_output_rowset()->add_segments("out_seg_1.dat");
-    op0->mutable_output_rowset()->add_segment_size(2000000000L);
-    op0->mutable_output_rowset()->add_segment_size(2000000000L);
-    op0->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
-    op0->mutable_output_rowset()->add_segment_metas()->set_segment_idx(1);
+    auto* op0_seg0 = op0->mutable_output_rowset()->add_segment_metas();
+    op0_seg0->set_filename("out_seg_0.dat");
+    op0_seg0->set_size(2000000000L);
+    op0_seg0->set_segment_idx(0);
+    auto* op0_seg1 = op0->mutable_output_rowset()->add_segment_metas();
+    op0_seg1->set_filename("out_seg_1.dat");
+    op0_seg1->set_size(2000000000L);
+    op0_seg1->set_segment_idx(1);
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     ASSERT_FALSE(closure.is_finished());
@@ -4347,12 +4937,14 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     op1->add_input_rowsets(0);
     op1->mutable_output_rowset()->set_num_rows(500);
     op1->mutable_output_rowset()->set_data_size(4000000000L);
-    op1->mutable_output_rowset()->add_segments("out_seg_2.dat");
-    op1->mutable_output_rowset()->add_segments("out_seg_3.dat");
-    op1->mutable_output_rowset()->add_segment_size(2000000000L);
-    op1->mutable_output_rowset()->add_segment_size(2000000000L);
-    op1->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
-    op1->mutable_output_rowset()->add_segment_metas()->set_segment_idx(1);
+    auto* op1_seg0 = op1->mutable_output_rowset()->add_segment_metas();
+    op1_seg0->set_filename("out_seg_2.dat");
+    op1_seg0->set_size(2000000000L);
+    op1_seg0->set_segment_idx(0);
+    auto* op1_seg1 = op1->mutable_output_rowset()->add_segment_metas();
+    op1_seg1->set_filename("out_seg_3.dat");
+    op1_seg1->set_size(2000000000L);
+    op1_seg1->set_segment_idx(1);
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
     ASSERT_TRUE(closure.is_finished());
@@ -4369,7 +4961,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     EXPECT_TRUE(merged.has_output_rowset());
     EXPECT_EQ(1000, merged.output_rowset().num_rows());         // 500+500
     EXPECT_EQ(8000000000L, merged.output_rowset().data_size()); // 4G+4G
-    EXPECT_EQ(4, merged.output_rowset().segments_size());       // 2+2
+    EXPECT_EQ(4, merged.output_rowset().segment_metas_size());  // 2+2
     EXPECT_EQ(4, merged.output_rowset().segment_metas_size());
     EXPECT_EQ(0, merged.output_rowset().segment_metas(0).segment_idx());
     EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
@@ -4441,12 +5033,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_can_use_range_split) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(100);
             rowset->set_data_size(1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 99));
-            seg_meta->set_num_rows(100);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 99));
+            segment_meta->set_num_rows(100);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4477,12 +5068,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(200);
             rowset->set_data_size(2000);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 15));
-            seg_meta->set_num_rows(200);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 15));
+            segment_meta->set_num_rows(200);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4494,7 +5084,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        // 2 is the smallest width that enables sampling at all: allocate_sort_key_sample_budget
+        // returns an all-zero budget below it. These segments have no file on disk, so every one of
+        // them falls back to its coarse [min, max] range regardless.
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(3, result.value().size());
         EXPECT_EQ(200, result.value()[0].num_rows);
@@ -4513,15 +5106,12 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
         rowset->set_overlapped(true);
         rowset->set_num_rows(0);
         rowset->set_data_size(6000);
-        rowset->add_segments("seg_0.dat");
-        rowset->add_segments("seg_1.dat");
-        rowset->add_segments("seg_2.dat");
-
         for (int i = 0; i < 3; i++) {
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 9));
-            seg_meta->set_num_rows(0);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 9));
+            segment_meta->set_num_rows(0);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4533,7 +5123,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(3, result.value().size());
         for (const auto& bound : result.value()) {
@@ -4556,11 +5146,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
         rowset->set_data_size(4000);
 
         for (int i = 0; i < 2; i++) {
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 5));
-            seg_meta->set_num_rows(i == 0 ? 100 : 300);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 5));
+            segment_meta->set_num_rows(i == 0 ? 100 : 300);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4572,12 +5162,486 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(2, result.value().size());
         EXPECT_EQ(1000, result.value()[0].data_size); // 100/400 * 4000
         EXPECT_EQ(3000, result.value()[1].data_size); // 300/400 * 4000
     }
+}
+
+// _collect_segment_key_bounds sampling integration: every segment goes through
+// SegmentSplitInfo::load_samples, which reads the segment's short key index when that index
+// already encodes the whole sort key and otherwise its data pages, and leaves the segment's coarse
+// [min, max] range in place when neither can produce trustworthy samples. The Rowset objects here
+// are already constructed (unlike build_segments_from_rowsets, which may construct one from
+// synthetic reshard metadata), so there is no schema-id-resolution abort risk to guard against in
+// this path -- opening a rowset's segments can only ever gain precision or, on failure, silently
+// fall back to the coarse range.
+TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_sampling) {
+    // Case 1: a segment whose sort key the short key index covers is sampled from that index --
+    // 250 rows over 100-row blocks -> [100, 200] at a 100-row interval -- with no data-page I/O.
+    {
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        // generate_simple_tablet_metadata leaves index_length unset, and SeekTuple::short_key_encode
+        // writes a key's bytes only when Field::short_key_length() > 0 -- so without this the index
+        // holds marker-only entries no decoder can read back, and sampling would silently degrade
+        // to the data-page path. Set locally rather than in the shared helper: flipping every test
+        // in the repo onto the covered path is its own change.
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4);
+
+        const int64_t num_rows = 250;
+        const std::string seg_name = "seg_covered_key.dat";
+        const uint64_t seg_size = write_int_key_segment(tablet_id, metadata->schema(), seg_name, num_rows);
+        const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(seg_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(seg_name);
+        segment_meta->set_size(seg_size);
+        segment_meta->set_num_rows(num_rows);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(1, result.value().size());
+        ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
+        EXPECT_EQ(100, result.value()[0].sort_key_samples[0][0].value().get_int32());
+        EXPECT_EQ(200, result.value()[0].sort_key_samples[1][0].value().get_int32());
+        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+        // Which path produced them, asserted rather than assumed: both publish through the same
+        // carrier, so the samples alone cannot tell the free index path from the paid data-page one.
+        EXPECT_EQ(data_page_segments_before, sort_key_sampling_data_page_segments_count())
+                << "a covered sort key must not read data pages";
+    }
+
+    // Case 2: metadata sort-key samples (deprecated_sort_key_samples) are no longer a source. This
+    // segment carries them and has no file on disk, so it comes back coarse -- where the previous
+    // metadata-driven code returned [100, 200] at a 100-row interval.
+    {
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(250);
+        rowset->set_data_size(2500);
+        auto* segment_meta = rowset->add_segment_metas();
+        // Never written to disk: the budget is nonzero so the open IS attempted, load_segments
+        // fails, and the &&-chain leaves this segment coarse.
+        segment_meta->set_filename("seg_never_written.dat");
+        segment_meta->set_size(2500);
+        segment_meta->set_num_rows(250);
+        segment_meta->set_deprecated_sort_key_sample_row_interval(100);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(249));
+        segment_meta->add_deprecated_sort_key_samples()->CopyFrom(make_int_tuple(100));
+        segment_meta->add_deprecated_sort_key_samples()->CopyFrom(make_int_tuple(200));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(1, result.value().size());
+        EXPECT_TRUE(result.value()[0].sort_key_samples.empty());
+        EXPECT_EQ(0, result.value()[0].sort_key_sample_row_interval);
+        EXPECT_EQ(0, result.value()[0].min_key[0].value().get_int32());
+        EXPECT_EQ(249, result.value()[0].max_key[0].value().get_int32());
+    }
+
+    // Case 3: a segment whose file is missing (Rowset::LoadedSegment::segment == nullptr, via
+    // experimental_lake_ignore_lost_segment=true) degrades to coarse bounds WITHOUT crashing,
+    // while a sibling real segment in the SAME rowset is still sampled.
+    {
+        const bool old_ignore_lost = config::experimental_lake_ignore_lost_segment;
+        config::experimental_lake_ignore_lost_segment = true;
+        DeferOp restore_ignore_lost([&] { config::experimental_lake_ignore_lost_segment = old_ignore_lost; });
+
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
+
+        const int64_t num_rows = 250;
+        const std::string present_seg_name = "seg_present.dat";
+        const uint64_t present_seg_size =
+                write_int_key_segment(tablet_id, metadata->schema(), present_seg_name, num_rows);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(present_seg_size);
+
+        auto* sm_present = rowset->add_segment_metas();
+        sm_present->set_filename(present_seg_name);
+        sm_present->set_size(present_seg_size);
+        sm_present->set_num_rows(num_rows);
+        // Load-bearing, not decoration: with the bounds unset, every !min_key.empty() /
+        // !max_key.empty() guard in sample_sort_key_from_short_key_index is skipped -- including the
+        // entry-0 == sort_key_min comparison the sampler calls the check that "empirically subsumes
+        // every static assumption the predicate makes". Without them this case would establish "the
+        // sibling segment is still sampled" with the only cross-source verification switched off.
+        sm_present->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        sm_present->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+
+        // Never written to disk; with experimental_lake_ignore_lost_segment=true this
+        // becomes a null LoadedSegment placeholder instead of a hard load error.
+        auto* sm_lost = rowset->add_segment_metas();
+        sm_lost->set_filename("seg_missing.dat");
+        sm_lost->set_size(100);
+        sm_lost->set_num_rows(10);
+        sm_lost->mutable_sort_key_min()->CopyFrom(make_int_tuple(1000));
+        sm_lost->mutable_sort_key_max()->CopyFrom(make_int_tuple(1009));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(2, result.value().size());
+
+        // segments[0]: the real, present segment -- still gets samples.
+        ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
+        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+
+        // segments[1]: the lost segment -- coarse fallback, no crash.
+        EXPECT_TRUE(result.value()[1].sort_key_samples.empty());
+        EXPECT_EQ(0, result.value()[1].sort_key_sample_row_interval);
+        EXPECT_EQ(10, result.value()[1].num_rows);
+        EXPECT_EQ(1000, result.value()[1].min_key[0].value().get_int32());
+        EXPECT_EQ(1009, result.value()[1].max_key[0].value().get_int32());
+    }
+
+    // Case 4: the per-segment budget must be indexed by the segment's position across ALL rowsets
+    // (rowset_flat_index + meta_pos), not by the rowset's. Every other case here puts one segment
+    // in its own rowset, where those two are the same number; this one puts two segments of very
+    // UNEQUAL row counts in a single rowset, and squeezes the tablet-wide cap so the budget
+    // actually binds -- feeding the second segment the first's share collapses it from 9 samples
+    // at a 200-row interval to 1 at a 1,900-row interval.
+    {
+        const auto old_cap = config::sort_key_max_samples_per_tablet;
+        config::sort_key_max_samples_per_tablet = 12;
+        DeferOp restore_cap([&] { config::sort_key_max_samples_per_tablet = old_cap; });
+
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
+
+        // 12 samples apportioned over 200 + 2000 rows gives the small segment 1 and the large one
+        // 10. At 100-row blocks the small segment offers 1 index candidate (stride 1, 1 sample) and
+        // the large one 19 (stride ceil(19/10) = 2, 9 samples at a 2 * 100 = 200-row interval).
+        const std::string small_name = "seg_budget_small.dat";
+        const std::string large_name = "seg_budget_large.dat";
+        write_int_key_segment(tablet_id, metadata->schema(), small_name, /*num_rows=*/200, /*start_key=*/0);
+        write_int_key_segment(tablet_id, metadata->schema(), large_name, /*num_rows=*/2000, /*start_key=*/1000);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(2200);
+        rowset->set_data_size(22000);
+
+        auto* sm_small = rowset->add_segment_metas();
+        sm_small->set_filename(small_name);
+        sm_small->set_size(2000);
+        sm_small->set_num_rows(200);
+        sm_small->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        sm_small->mutable_sort_key_max()->CopyFrom(make_int_tuple(199));
+
+        auto* sm_large = rowset->add_segment_metas();
+        sm_large->set_filename(large_name);
+        sm_large->set_size(20000);
+        sm_large->set_num_rows(2000);
+        sm_large->mutable_sort_key_min()->CopyFrom(make_int_tuple(1000));
+        sm_large->mutable_sort_key_max()->CopyFrom(make_int_tuple(2999));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(2, result.value().size());
+
+        EXPECT_EQ(1u, result.value()[0].sort_key_samples.size());
+        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+
+        ASSERT_EQ(9u, result.value()[1].sort_key_samples.size());
+        EXPECT_EQ(200, result.value()[1].sort_key_sample_row_interval);
+        // The first sample of the large segment is the key 200 rows into its own run.
+        EXPECT_EQ(1200, result.value()[1].sort_key_samples[0][0].value().get_int32());
+    }
+
+    // Case 5: under partial-segment compaction, Rowset::load_segments hands back only
+    // [next_compaction_offset, +limit); a segment outside that window can never be sampled, so it
+    // must take no share of the cap. Three equal 2,000-row segments with the window at [1, 3) and
+    // the cap squeezed to 12: the two in-window segments are entitled to 6 samples each, which at
+    // 19 index candidates is a stride of 4 -> 4 samples at a 400-row interval. Counting the
+    // out-of-window segment would apportion 12 over 6,000 rows instead of 4,000, giving each of
+    // them 4 -> a stride of 5 -> 3 samples at a 500-row interval.
+    {
+        const auto old_cap = config::sort_key_max_samples_per_tablet;
+        config::sort_key_max_samples_per_tablet = 12;
+        DeferOp restore_cap([&] { config::sort_key_max_samples_per_tablet = old_cap; });
+
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
+
+        constexpr int64_t kRowsPerSegment = 2000;
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        // Load-bearing: the Rowset(tablet_mgr, tablet_metadata, rowset_index, compaction_segment_limit)
+        // ctor drops compaction_segment_limit unless the rowset is overlapped
+        // (storage/lake/rowset.cpp), so without this partial_segments_compaction() is false and
+        // there is no window to test.
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(3 * kRowsPerSegment);
+        rowset->set_data_size(30000);
+        // Segments 1 and 2 are the compaction window; segment 0 is already compacted.
+        rowset->set_next_compaction_offset(1);
+
+        for (int i = 0; i < 3; ++i) {
+            const int64_t start_key = i * 10000;
+            const std::string name = fmt::format("seg_window_{}.dat", i);
+            write_int_key_segment(tablet_id, metadata->schema(), name, kRowsPerSegment,
+                                  static_cast<int32_t>(start_key));
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(name);
+            sm->set_size(10000);
+            sm->set_num_rows(kRowsPerSegment);
+            sm->mutable_sort_key_min()->CopyFrom(make_int_tuple(static_cast<int32_t>(start_key)));
+            sm->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(start_key + kRowsPerSegment - 1)));
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, /*compaction_segment_limit=*/2));
+        ASSERT_TRUE(rowsets[0]->partial_segments_compaction());
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(3, result.value().size());
+
+        // Out of window: load_segments never returned it, so it stays coarse.
+        EXPECT_TRUE(result.value()[0].sort_key_samples.empty());
+        EXPECT_EQ(0, result.value()[0].sort_key_sample_row_interval);
+
+        for (int i = 1; i < 3; ++i) {
+            SCOPED_TRACE(fmt::format("in-window segment meta_pos={}", i));
+            EXPECT_EQ(4u, result.value()[i].sort_key_samples.size());
+            EXPECT_EQ(400, result.value()[i].sort_key_sample_row_interval);
+        }
+    }
+
+    // Case 6: the perf gate. A zero sampling cap must open no rowset at all -- the samples that do
+    // not get taken are already covered above, but the I/O that is not performed is only visible
+    // through the rowsets-opened counter, which is why that counter exists.
+    {
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+        metadata->mutable_schema()->mutable_column(0)->set_index_length(4); // see Case 1
+
+        const int64_t num_rows = 250;
+        const std::string seg_name = "seg_gate.dat";
+        const uint64_t seg_size = write_int_key_segment(tablet_id, metadata->schema(), seg_name, num_rows);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(seg_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(seg_name);
+        segment_meta->set_size(seg_size);
+        segment_meta->set_num_rows(num_rows);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        {
+            const auto old_cap = config::sort_key_max_samples_per_tablet;
+            config::sort_key_max_samples_per_tablet = 0;
+            DeferOp restore_cap([&] { config::sort_key_max_samples_per_tablet = old_cap; });
+
+            const int64_t opened_before = sort_key_sampling_rowsets_opened_count();
+            auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+            ASSERT_TRUE(result.ok());
+            ASSERT_EQ(1, result.value().size());
+            EXPECT_TRUE(result.value()[0].sort_key_samples.empty());
+            EXPECT_EQ(opened_before, sort_key_sampling_rowsets_opened_count())
+                    << "a zero sampling cap must not open a single rowset";
+        }
+
+        // Same rowset, same call, non-zero cap: this is what proves the assertion above is about
+        // the gate and not about the fixture being unsampleable.
+        const int64_t opened_before = sort_key_sampling_rowsets_opened_count();
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(1, result.value().size());
+        EXPECT_FALSE(result.value()[0].sort_key_samples.empty());
+        EXPECT_EQ(opened_before + 1, sort_key_sampling_rowsets_opened_count());
+    }
+}
+
+// How far a subtask's WRITTEN row count may sit from a perfectly even share. Sampling divides this
+// fixture's four overlapping 25,000-row segments at a granularity of ~760 rows (32 samples per
+// segment at a 758-row stride), i.e. ~3% of a subtask, so 0.25 leaves ample headroom -- while
+// still being far tighter than the ~50% skew coarse [min, max] bounds alone produce here.
+constexpr double kSubtaskEvennessTolerance = 0.25;
+
+// target_subtasks = max(2, min(max_parallel, ceil(total_bytes / max_bytes_per_subtask))) caps the
+// output width, and sampling does not touch any term of it: it only refines WHERE the boundaries
+// between those subtasks fall. The cap is what this pins.
+//
+// What is observable from here is groups.size(), which is min(target_subtasks, boundaries + 1) --
+// so "never exceeds the cap" is the general law, while the EQ below holds only for THIS fixture,
+// where the coarse path already produced enough boundaries to reach the cap (measured at 4 both
+// before and after sampling was wired in). It is deliberately not asserted as a general invariant:
+// on a layout whose coarse bounds yield fewer boundaries than the cap, sampling legitimately RAISES
+// the count, and an EQ asserted as a law there would fail a correct change.
+TEST_F(TabletParallelCompactionManagerTest, subtask_count_stays_at_the_target_for_this_fixture) {
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, /*rows_each=*/25000);
+    auto groups =
+            _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/4, kBytesPerSubtask);
+    // The LE is implied by the EQ below, so deleting it alone leaves the suite green. It is kept
+    // deliberately: the EQ is scoped to this fixture's boundary count (see the comment above), while
+    // the LE is the general law that must still hold if the EQ is ever relaxed for another layout.
+    EXPECT_LE(groups.size(), kExpectedSubtaskCount) << "sampling must never raise the width above target_subtasks";
+    EXPECT_EQ(kExpectedSubtaskCount, groups.size());
+}
+
+// Sampled boundaries must divide the tablet to within kSubtaskEvennessTolerance of even, measured
+// against the rows the fixture actually wrote. Coarse [min, max] bounds alone put ~37,500 rows in
+// the first subtask and ~12,500 in the last on this layout (see
+// build_rowsets_with_varchar_sort_key); that skew is what this asserts is gone.
+TEST_F(TabletParallelCompactionManagerTest, range_split_subtasks_are_balanced_with_sampling) {
+    constexpr int64_t kRowsEach = 25000;
+    constexpr int64_t kTotalRows = 4 * kRowsEach;
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, kRowsEach);
+
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    auto groups =
+            _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/4, kBytesPerSubtask);
+    ASSERT_EQ(kExpectedSubtaskCount, groups.size());
+
+    // Which sampler path ran, asserted rather than assumed: both paths publish through the same
+    // carrier, so the boundaries alone cannot tell them apart. A VARCHAR sort key is truncated in
+    // the short key index, so all four segments must be sampled from their data pages.
+    EXPECT_EQ(4, sort_key_sampling_data_page_segments_count() - data_page_segments_before);
+
+    const double ideal = static_cast<double>(kTotalRows) / kExpectedSubtaskCount;
+    int64_t total = 0;
+    for (size_t i = 0; i < groups.size(); ++i) {
+        SCOPED_TRACE(fmt::format("subtask={}", i));
+        const int64_t rows = written_rows_in_group(groups[i]);
+        total += rows;
+        EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * kSubtaskEvennessTolerance);
+    }
+    EXPECT_EQ(kTotalRows, total) << "the emitted subtask ranges must tile every written row";
+}
+
+// The width requested from the sampler must be floored at 2. Both terms of target_subtasks --
+// max_parallel and ceil(total_bytes / max_bytes_per_subtask) -- can be 1 while target_subtasks is
+// still 2, and allocate_sort_key_sample_budget returns an all-zero budget below a width of 2, so
+// without the floor those two subtasks would be cut from coarse [min, max] bounds.
+//
+// This is a DEFENSIVE floor, not a reachable production state: _create_range_split_groups has one
+// caller (_create_subtask_groups), which already returns early on max_parallel <= 1, so production
+// never reaches this function with a width-1 request. The floor is asserted here because it is
+// otherwise unobservable -- at the max_parallel = 4 the other tests use, max(2, 4) == 4 -- and
+// removing it would then be invisible.
+TEST_F(TabletParallelCompactionManagerTest, requested_width_is_floored_at_two) {
+    constexpr int64_t kRowsEach = 25000;
+    constexpr int64_t kTotalRows = 4 * kRowsEach;
+    // Two rowsets' worth, so ceil(total_bytes / this) == 2 == the floored subtask count, which
+    // keeps the greedy loop's target at total/2 rather than at this cap.
+    constexpr int64_t kBytesPerHalf = 2 * kBytesPerSubtask;
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, kRowsEach);
+
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    auto groups = _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/1, kBytesPerHalf);
+    ASSERT_EQ(2u, groups.size());
+    EXPECT_EQ(4, sort_key_sampling_data_page_segments_count() - data_page_segments_before)
+            << "a width-1 request must still be floored to 2, which funds sampling";
+
+    // Tighter than kSubtaskEvennessTolerance on purpose: at 0.25 a two-way split of this layout is
+    // within tolerance even from coarse bounds alone (62,498 / 37,502), so a looser bound here
+    // would assert nothing.
+    const double ideal = static_cast<double>(kTotalRows) / 2;
+    for (size_t i = 0; i < groups.size(); ++i) {
+        SCOPED_TRACE(fmt::format("subtask={}", i));
+        EXPECT_NEAR(static_cast<double>(written_rows_in_group(groups[i])), ideal, ideal * 0.10);
+    }
+}
+
+// The sample budget must be requested at the width this call can actually produce, not at
+// max_parallel, which is a user-set table property. Here max_parallel is 64 but the data is only
+// two and a half subtasks' worth, so target_subtasks is 3 and the budget must be 3 * 32 samples --
+// budgeting at max_parallel would ask for min(1024, 64 * 32) = 1024, better than ten times what a
+// 3-way split can use, in synchronous data-page reads before any subtask starts.
+TEST_F(TabletParallelCompactionManagerTest, requested_width_tracks_the_achievable_width) {
+    // ceil(4 * kSampledRowsetDataSize / this) == 3, and 3 < max_parallel, so the byte bound is what
+    // decides the width.
+    constexpr int64_t kBytesPerThird = 3 * kSampledRowsetDataSize / 2;
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, /*rows_each=*/25000);
+
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    auto groups =
+            _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/64, kBytesPerThird);
+    ASSERT_EQ(3u, groups.size());
+
+    const int64_t samples = sort_key_sampling_samples_count() - samples_before;
+    EXPECT_GT(samples, 0) << "the width must still fund sampling, not merely be small";
+    EXPECT_LE(samples, 3 * kSortKeySamplesPerSplit)
+            << "budgeted at max_parallel (64) this would be min(1024, 2048) samples, not 3 * 32";
 }
 
 TEST_F(TabletParallelCompactionManagerTest, test_calculate_range_split_boundaries) {
@@ -4687,12 +5751,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups) {
         rowset->set_num_rows(1000);
         rowset->set_data_size(10 * 1024 * 1024); // 10MB each
 
-        rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-        auto* seg_meta = rowset->add_segment_metas();
-        seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-        seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-        seg_meta->set_num_rows(1000);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+        segment_meta->set_num_rows(1000);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4749,10 +5812,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split)
         auto* out = op->mutable_output_rowset();
         out->set_num_rows(100 * (i + 1));
         out->set_data_size(1000 * (i + 1));
-        out->add_segments(fmt::format("range_seg_{}.dat", i));
-        out->add_segment_size(1000 * (i + 1));
         // Each subtask assigns segment_idx=0 independently; merge must renumber them.
         auto* sm = out->add_segment_metas();
+        sm->set_filename(fmt::format("range_seg_{}.dat", i));
+        sm->set_size(1000 * (i + 1));
         sm->set_segment_idx(0);
         sm->set_num_rows(100 * (i + 1));
 
@@ -4782,7 +5845,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split)
     ASSERT_TRUE(merged.has_output_rowset());
     EXPECT_EQ(600, merged.output_rowset().num_rows());   // 100+200+300
     EXPECT_EQ(6000, merged.output_rowset().data_size()); // 1000+2000+3000
-    EXPECT_EQ(3, merged.output_rowset().segments_size());
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size());
     EXPECT_FALSE(merged.output_rowset().overlapped());
     // next_compaction_offset must NOT be set for non-overlapped rowsets (proto contract).
     EXPECT_FALSE(merged.output_rowset().has_next_compaction_offset());
@@ -4894,8 +5957,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split_
         op->set_compact_version(version);
         op->mutable_output_rowset()->set_num_rows(100);
         op->mutable_output_rowset()->set_data_size(1000);
-        op->mutable_output_rowset()->add_segments(fmt::format("range_seg_{}.dat", i));
-        op->mutable_output_rowset()->add_segment_size(1000);
+        auto* segment_meta = op->mutable_output_rowset()->add_segment_metas();
+        segment_meta->set_filename(fmt::format("range_seg_{}.dat", i));
+        segment_meta->set_size(1000);
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -4952,7 +6016,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split_
         op->set_compact_version(version);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
+        op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
 
         auto* lcrm = op->mutable_lcrm_file();
         lcrm->set_name(fmt::format("lcrm_{}", i));
@@ -5042,14 +6106,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_segment_metas
         auto* output = op->mutable_output_rowset();
         output->set_num_rows(100);
         output->set_data_size(1000);
-        output->add_segments(fmt::format("range_{}_seg_0.dat", i));
-        output->add_segments(fmt::format("range_{}_seg_1.dat", i));
-        output->add_segment_size(500);
-        output->add_segment_size(500);
-
         // Each subtask produces 2 segment_metas with segment_idx starting from 0
         for (int j = 0; j < 2; j++) {
             auto* sm = output->add_segment_metas();
+            sm->set_filename(fmt::format("range_{}_seg_{}.dat", i, j));
+            sm->set_size(500);
             sm->set_segment_idx(j); // Each subtask starts from 0
             sm->set_num_rows(50);
             sm->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100 + j * 50));
@@ -5076,7 +6137,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_segment_metas
 
     const auto& merged_output = op_parallel.subtask_compactions(0).output_rowset();
     // 3 subtasks * 2 segments each = 6 segments total
-    EXPECT_EQ(6, merged_output.segments_size());
     EXPECT_EQ(6, merged_output.segment_metas_size());
     EXPECT_EQ(300, merged_output.num_rows());
     EXPECT_FALSE(merged_output.overlapped());
@@ -5119,7 +6179,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
         op->add_input_rowsets(100);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments("seg_0.dat");
+        op->mutable_output_rowset()->add_segment_metas()->set_filename("seg_0.dat");
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -5162,7 +6222,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
         op->add_input_rowsets(200);
         op->mutable_output_rowset()->set_num_rows(100);
         op->mutable_output_rowset()->set_data_size(1000);
-        op->mutable_output_rowset()->add_segments("seg_2.dat");
+        op->mutable_output_rowset()->add_segment_metas()->set_filename("seg_2.dat");
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -5227,7 +6287,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_incomp
         op->add_input_rowsets(100);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
+        op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -5316,8 +6376,9 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_is_large_rowset_next
 
     for (int i = 0; i < num_segments; i++) {
         std::string segment_name = fmt::format("segment_{}.dat", i);
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
 
         std::string path = _lp->segment_location(tablet_id, segment_name);
         std::string dir = std::filesystem::path(path).parent_path().string();
@@ -5362,8 +6423,9 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_m
 
     for (int i = 0; i < 5; i++) {
         std::string segment_name = fmt::format("segment_{}.dat", i);
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
 
         std::string path = _lp->segment_location(tablet_id, segment_name);
         std::string dir = std::filesystem::path(path).parent_path().string();
@@ -5412,8 +6474,9 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_t
     rowset->set_data_size(segment_size);
 
     // Only 1 segment
-    rowset->add_segments("segment_0.dat");
-    rowset->add_segment_size(segment_size);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename("segment_0.dat");
+    segment_meta->set_size(segment_size);
     std::string path = _lp->segment_location(tablet_id, "segment_0.dat");
     std::string dir = std::filesystem::path(path).parent_path().string();
     CHECK_OK(fs::create_directories(dir));
@@ -5577,9 +6640,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
             auto* output = op->mutable_output_rowset();
             output->set_num_rows(50);
             output->set_data_size(500);
-            output->add_segments(fmt::format("seg_{}.dat", i));
-            output->add_segment_size(500);
-            output->add_segment_encryption_metas(fmt::format("enc_{}", i));
+            auto* segment_meta = output->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->set_size(500);
+            segment_meta->set_encryption_meta(fmt::format("enc_{}", i));
 
             auto* sst = op->add_ssts();
             sst->set_name(fmt::format("sst_{}.sst", i));
@@ -5604,10 +6668,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
         ASSERT_EQ(1, op_parallel.subtask_compactions_size());
         const auto& merged = op_parallel.subtask_compactions(0);
 
-        EXPECT_EQ(2, merged.output_rowset().segment_encryption_metas_size());
-        EXPECT_EQ("enc_0", merged.output_rowset().segment_encryption_metas(0));
-        EXPECT_EQ("enc_1", merged.output_rowset().segment_encryption_metas(1));
-        EXPECT_EQ(2, merged.output_rowset().segment_size_size());
+        EXPECT_EQ(2, merged.output_rowset().segment_metas_size());
+        EXPECT_EQ("enc_0", merged.output_rowset().segment_metas(0).encryption_meta());
+        EXPECT_EQ("enc_1", merged.output_rowset().segment_metas(1).encryption_meta());
+        EXPECT_EQ(2, merged.output_rowset().segment_metas_size());
         EXPECT_EQ(2, merged.ssts_size());
         EXPECT_EQ(2, merged.sst_ranges_size());
         EXPECT_FALSE(merged.output_rowset().overlapped());
@@ -5625,6 +6689,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
         create_tablet_with_rowsets(tablet_id, 5, 1024 * 1024);
 
         CompactRequest request;
+        request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
         request.add_tablet_ids(tablet_id);
         CompactResponse response;
         TestClosure closure;
@@ -5662,8 +6727,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
             auto* out = op->mutable_output_rowset();
             out->set_num_rows((i + 1) * 100);
             out->set_data_size((i + 1) * 1000);
-            out->add_segments(fmt::format("seg_{}.dat", i));
             auto* meta = out->add_segment_metas();
+            meta->set_filename(fmt::format("seg_{}.dat", i));
             meta->set_segment_idx(0); // Both subtasks start from 0
             _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
         }
@@ -5792,6 +6857,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -5838,9 +6904,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("range_seg_0.dat");
-    out0->add_segment_size(500);
-    out0->add_segment_encryption_metas("enc_meta_0");
+    auto* out0_seg = out0->add_segment_metas();
+    out0_seg->set_filename("range_seg_0.dat");
+    out0_seg->set_size(500);
+    out0_seg->set_encryption_meta("enc_meta_0");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -5855,9 +6922,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("range_seg_1.dat");
-    out1->add_segment_size(1000);
-    out1->add_segment_encryption_metas("enc_meta_1");
+    auto* out1_seg = out1->add_segment_metas();
+    out1_seg->set_filename("range_seg_1.dat");
+    out1_seg->set_size(1000);
+    out1_seg->set_encryption_meta("enc_meta_1");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -5872,9 +6940,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     auto* out2 = op2->mutable_output_rowset();
     out2->set_num_rows(300);
     out2->set_data_size(3000);
-    out2->add_segments("range_seg_2.dat");
-    out2->add_segment_size(1500);
-    out2->add_segment_encryption_metas("enc_meta_2");
+    auto* out2_seg = out2->add_segment_metas();
+    out2_seg->set_filename("range_seg_2.dat");
+    out2_seg->set_size(1500);
+    out2_seg->set_encryption_meta("enc_meta_2");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -5900,15 +6969,15 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
 
     // Merged output
     EXPECT_TRUE(merged.has_output_rowset());
-    EXPECT_EQ(600, merged.output_rowset().num_rows());    // 100+200+300
-    EXPECT_EQ(6000, merged.output_rowset().data_size());  // 1000+2000+3000
-    EXPECT_FALSE(merged.output_rowset().overlapped());    // Non-overlapped for range split
-    EXPECT_EQ(3, merged.output_rowset().segments_size()); // 3 segments merged
-    EXPECT_EQ("range_seg_0.dat", merged.output_rowset().segments(0));
-    EXPECT_EQ("range_seg_1.dat", merged.output_rowset().segments(1));
-    EXPECT_EQ("range_seg_2.dat", merged.output_rowset().segments(2));
-    EXPECT_EQ(3, merged.output_rowset().segment_size_size());
-    EXPECT_EQ(3, merged.output_rowset().segment_encryption_metas_size());
+    EXPECT_EQ(600, merged.output_rowset().num_rows());         // 100+200+300
+    EXPECT_EQ(6000, merged.output_rowset().data_size());       // 1000+2000+3000
+    EXPECT_FALSE(merged.output_rowset().overlapped());         // Non-overlapped for range split
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size()); // 3 segments merged
+    EXPECT_EQ("range_seg_0.dat", merged.output_rowset().segment_metas(0).filename());
+    EXPECT_EQ("range_seg_1.dat", merged.output_rowset().segment_metas(1).filename());
+    EXPECT_EQ("range_seg_2.dat", merged.output_rowset().segment_metas(2).filename());
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size());
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size());
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
@@ -5922,6 +6991,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_one_failure) 
     create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -5981,6 +7051,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_incomplete) {
     create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6039,6 +7110,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     create_tablet_with_rowsets(tablet_id, 5, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6100,8 +7172,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("split_seg_0.dat");
-    out0->add_segment_size(500);
+    auto* out0_seg = out0->add_segment_metas();
+    out0_seg->set_filename("split_seg_0.dat");
+    out0_seg->set_size(500);
     // Set LCRM file
     auto* lcrm0 = op0->mutable_lcrm_file();
     lcrm0->set_name("lcrm_0.dat");
@@ -6121,8 +7194,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("split_seg_1.dat");
-    out1->add_segment_size(1000);
+    auto* out1_seg = out1->add_segment_metas();
+    out1_seg->set_filename("split_seg_1.dat");
+    out1_seg->set_size(1000);
     // Set LCRM file
     auto* lcrm1 = op1->mutable_lcrm_file();
     lcrm1->set_name("lcrm_1.dat");
@@ -6144,10 +7218,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     EXPECT_EQ(1, merged.input_rowsets_size());
     EXPECT_EQ(0, merged.input_rowsets(0));
     EXPECT_TRUE(merged.has_output_rowset());
-    EXPECT_EQ(300, merged.output_rowset().num_rows());    // 100+200
-    EXPECT_EQ(3000, merged.output_rowset().data_size());  // 1000+2000
-    EXPECT_TRUE(merged.output_rowset().overlapped());     // Large rowset split is overlapped
-    EXPECT_EQ(2, merged.output_rowset().segments_size()); // 2 segments
+    EXPECT_EQ(300, merged.output_rowset().num_rows());         // 100+200
+    EXPECT_EQ(3000, merged.output_rowset().data_size());       // 1000+2000
+    EXPECT_TRUE(merged.output_rowset().overlapped());          // Large rowset split is overlapped
+    EXPECT_EQ(2, merged.output_rowset().segment_metas_size()); // 2 segments
 
     // Verify orphan LCRM files are recorded
     EXPECT_EQ(2, op_parallel.orphan_lcrm_files_size());
@@ -6165,6 +7239,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_no_valid_txn
     create_tablet_with_rowsets(tablet_id, 5, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6222,7 +7297,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_no_valid_txn
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(2);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("seg_2.dat");
+    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("seg_2.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
     ASSERT_TRUE(closure.is_finished());
@@ -6248,6 +7323,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_all_failed) 
     create_tablet_with_rowsets(tablet_id, 5, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6303,6 +7379,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_incomplete) 
     create_tablet_with_rowsets(tablet_id, 5, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6363,7 +7440,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_incomplete) 
         }
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
+        op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
 
         _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
     }
@@ -6399,6 +7476,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_range_split_groups_state
     config.set_max_bytes_per_subtask(5 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6439,6 +7517,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     create_tablet_with_rowsets(tablet_id, 5, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6492,7 +7571,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("range_seg_0.dat");
+    out0->add_segment_metas()->set_filename("range_seg_0.dat");
     // Add SST
     auto* sst0 = op0->add_ssts();
     sst0->set_name("sst_0.sst");
@@ -6518,7 +7597,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("range_seg_1.dat");
+    out1->add_segment_metas()->set_filename("range_seg_1.dat");
     // Add SST
     auto* sst1 = op1->add_ssts();
     sst1->set_name("sst_1.sst");
@@ -6572,7 +7651,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups_error
             rowset->set_overlapped(true);
             rowset->set_num_rows(1000);
             rowset->set_data_size(10 * 1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
+            rowset->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -6601,12 +7680,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups_error
             rowset->set_overlapped(true);
             rowset->set_num_rows(1000);
             rowset->set_data_size(10 * 1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(100));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(100));
-            seg_meta->set_num_rows(1000);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(100));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(100));
+            segment_meta->set_num_rows(1000);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -6635,6 +7713,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_no_valid_wit
     create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6694,8 +7773,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_no_valid_wit
         op->set_segment_range_end((i + 1) * 2);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("grp0_seg_{}.dat", i));
-        op->mutable_output_rowset()->add_segment_size(500);
+        auto* segment_meta = op->mutable_output_rowset()->add_segment_metas();
+        segment_meta->set_filename(fmt::format("grp0_seg_{}.dat", i));
+        segment_meta->set_size(500);
         auto* lcrm = op->mutable_lcrm_file();
         lcrm->set_name(fmt::format("lcrm_grp0_{}.dat", i));
         lcrm->set_size(lcrm_file_sizes[i]);
@@ -6737,6 +7817,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_vlog_paths) {
         create_tablet_with_rowsets(tablet_id, 5, 1024 * 1024);
 
         CompactRequest request;
+        request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
         request.add_tablet_ids(tablet_id);
         CompactResponse response;
         TestClosure closure;
@@ -6772,7 +7853,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_vlog_paths) {
             op->add_input_rowsets(2);
             op->mutable_output_rowset()->set_num_rows(100);
             op->mutable_output_rowset()->set_data_size(1000);
-            op->mutable_output_rowset()->add_segments(fmt::format("range_seg_{}.dat", i));
+            op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("range_seg_{}.dat", i));
             _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
         }
 
@@ -6794,12 +7875,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_vlog_paths) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(1000);
             rowset->set_data_size(10 * 1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-            seg_meta->set_num_rows(1000);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+            segment_meta->set_num_rows(1000);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -6831,6 +7911,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_range_split_vlog_paths) {
     create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
@@ -6891,8 +7972,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_range_split_vlog_paths) {
         op->set_segment_range_end((i + 1) * 2);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
-        op->mutable_output_rowset()->add_segment_size(500);
+        auto* segment_meta = op->mutable_output_rowset()->add_segment_metas();
+        segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+        segment_meta->set_size(500);
         _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
     }
 
@@ -6930,67 +8012,106 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_range_split_vlog_paths) {
 
 TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split) {
     int64_t tablet_id = 10256;
+    constexpr int kNumRowsets = 5;
+    constexpr int32_t kRowsPerRowset = 250;
+    constexpr int64_t kLogicalRowsetSize = 50 * 1024 * 1024;
 
     auto old_enable = config::enable_lake_compaction_range_split;
     config::enable_lake_compaction_range_split = true;
+    DeferOp restore_range_split([&]() { config::enable_lake_compaction_range_split = old_enable; });
 
     auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
     metadata->set_id(tablet_id);
-    metadata->set_version(5);
+    metadata->set_version(kNumRowsets + 1);
+    metadata->set_next_rowset_id(kNumRowsets);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < kNumRowsets; i++) {
+        const int32_t start_key = static_cast<int32_t>(i * kRowsPerRowset);
         auto* rowset = metadata->add_rowsets();
         rowset->set_id(i);
         rowset->set_overlapped(true);
-        rowset->set_num_rows(10000);
-        rowset->set_data_size(50 * 1024 * 1024);
+        rowset->set_num_rows(kRowsPerRowset);
+        // Keep the logical size large enough to create multiple range-split subtasks;
+        // the physical segment stays small so the UT remains fast.
+        rowset->set_data_size(kLogicalRowsetSize);
 
         std::string segment_name = fmt::format("rs_seg_{}.dat", i);
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(50 * 1024 * 1024);
-
-        auto* seg_meta = rowset->add_segment_metas();
-        seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-        seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-        seg_meta->set_num_rows(10000);
-
-        std::string path = _lp->segment_location(tablet_id, segment_name);
-        std::string dir = std::filesystem::path(path).parent_path().string();
-        CHECK_OK(fs::create_directories(dir));
-        auto fs = FileSystemFactory::CreateSharedFromString(path);
-        WritableFileOptions opts;
-        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-        auto st = fs.value()->new_writable_file(opts, path);
-        CHECK_OK(st.status());
-        CHECK_OK(st.value()->append("dummy_segment_data"));
-        CHECK_OK(st.value()->close());
+        const uint64_t segment_size =
+                write_int_key_segment(tablet_id, metadata->schema(), segment_name, kRowsPerRowset, start_key);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(start_key));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(start_key + kRowsPerRowset - 1));
+        segment_meta->set_num_rows(kRowsPerRowset);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
 
     int64_t txn_id = 20256;
-    int64_t version = 5;
+    int64_t version = kNumRowsets + 1;
 
     TabletParallelConfig pconfig;
     pconfig.set_max_parallel_per_tablet(3);
     pconfig.set_max_bytes_per_subtask(80 * 1024 * 1024);
 
     CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
     request.add_tablet_ids(tablet_id);
     CompactResponse response;
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
     std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("range_split_test_pool").set_max_threads(4).build(&pool);
+    ThreadPoolBuilder("rng_split_test").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+    CancelableDefer unblock_pool([&]() { block_promise.set_value(); });
+    ASSERT_OK(pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    }));
+    start_promise.get_future().wait();
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
+    ASSERT_OK(st.status());
+    ASSERT_GT(st.value(), 0);
 
+    auto state = _manager->get_tablet_state(tablet_id, txn_id);
+    ASSERT_NE(nullptr, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(st.value(), state->running_subtasks.size());
+        for (auto& entry : state->running_subtasks) {
+            entry.second.enqueue_time_ns = MonotonicNanos() - 1'000'000;
+        }
+    }
+
+    block_promise.set_value();
+    unblock_pool.cancel();
     pool->wait();
-    _manager->cleanup_tablet(tablet_id, txn_id);
+    ASSERT_TRUE(closure.wait_finish());
 
-    config::enable_lake_compaction_range_split = old_enable;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(st.value(), state->completed_subtasks.size());
+        for (const auto& context : state->completed_subtasks) {
+            ASSERT_NE(nullptr, context->stats);
+            EXPECT_EQ(1, context->runs.load(std::memory_order_relaxed));
+            EXPECT_EQ(1, context->stats->task_attempt_count);
+            EXPECT_GT(context->stats->queue_wait_ns, 0);
+            EXPECT_GT(context->stats->task_prepare_ns, 0);
+            EXPECT_GT(context->stats->task_execute_ns, 0);
+            EXPECT_GE(context->stats->task_total_ns, context->stats->task_prepare_ns + context->stats->task_execute_ns);
+            EXPECT_EQ(0, context->task_attempt_start_ns.load(std::memory_order_acquire));
+            EXPECT_EQ(0, context->task_execute_start_ns.load(std::memory_order_acquire));
+        }
+    }
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
 
     // Also test execute_subtask_range_split when state not found (lines 2517-2525)
     {
@@ -6999,6 +8120,73 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
         _manager->execute_subtask_range_split(99999, 99999, 0, std::move(empty_rowsets), lower, upper, true, true, true,
                                               true, 1, false, [](bool) {});
     }
+}
+
+// A failing PK index major compaction must fail the parallel compaction, exactly as it does on the
+// three non-parallel paths (horizontal_compaction_task.cpp, vertical_compaction_task.cpp,
+// cloud_native_index_compaction_task.cpp all RETURN_IF_ERROR the same call).
+//
+// Swallowing it here returned Status::OK() after one WARNING, so the data compaction reported
+// success while the index compactor made no progress -- and every consistency guard inside major
+// compaction ("sstables are not ordered", "inconsistent fileset_id in sstables", "no matching
+// sstable fileset found") was silent on this path only. Both directions are asserted: armed, so a
+// typo'd failpoint name cannot make the test vacuous; disarmed, so the path is not failing
+// unconditionally.
+TEST_F(TabletParallelCompactionManagerTest, test_index_major_compaction_failure_fails_parallel_compaction) {
+    int64_t tablet_id = 10023;
+    int64_t txn_id = 20023;
+    int64_t version = 11;
+
+    // A cloud-native persistent-index PK tablet is the only shape that reaches
+    // execute_index_major_compaction from the parallel path.
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto register_completed_state = [&](int64_t id) {
+        auto state = std::make_shared<TabletParallelCompactionState>();
+        state->tablet_id = tablet_id;
+        state->txn_id = id;
+        state->version = version;
+        state->max_parallel = 1;
+
+        auto ctx = std::make_unique<CompactionTaskContext>(id, tablet_id, version, false, true, nullptr);
+        ctx->subtask_id = 0;
+        ctx->txn_log = std::make_unique<TxnLogPB>();
+        ctx->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+        state->completed_subtasks.push_back(std::move(ctx));
+
+        _manager->register_tablet_state_for_test(tablet_id, id, state);
+    };
+
+    auto set_failpoint_mode = [](const std::string& name, FailPointTriggerModeType mode) {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(mode);
+        auto* fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(name);
+        ASSERT_NE(nullptr, fp) << "failpoint " << name << " is not registered";
+        fp->setMode(trigger_mode);
+    };
+
+    // Armed: the injected failure must reach the caller.
+    register_completed_state(txn_id);
+    set_failpoint_mode("fail_execute_index_major_compaction", FailPointTriggerModeType::ENABLE);
+    auto failed = _manager->get_merged_txn_log(tablet_id, txn_id);
+    set_failpoint_mode("fail_execute_index_major_compaction", FailPointTriggerModeType::DISABLE);
+
+    ASSERT_FALSE(failed.ok());
+    EXPECT_NE(std::string::npos, failed.status().to_string().find("injected index major compaction failure"))
+            << failed.status();
+    _manager->cleanup_tablet(tablet_id, txn_id);
+
+    // Disarmed: the same tablet and state must merge cleanly.
+    register_completed_state(txn_id + 1);
+    auto ok = _manager->get_merged_txn_log(tablet_id, txn_id + 1);
+    EXPECT_TRUE(ok.ok()) << ok.status();
+    _manager->cleanup_tablet(tablet_id, txn_id + 1);
 }
 
 } // namespace starrocks::lake

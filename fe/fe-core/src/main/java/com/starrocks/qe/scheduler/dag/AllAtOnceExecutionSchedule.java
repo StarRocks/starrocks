@@ -40,28 +40,40 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     private volatile boolean cancelled = false;
     private DeployScanRangesTask deployScanRangesTask = null;
 
+    /**
+     * Sets the worker thread's ThreadLocal Tracers to a pre-forked instance
+     * and cleans up on close. Does NOT fork or merge — those happen at the
+     * task level (see {@link DeployScanRangesTask}).
+     */
     class TracerContext implements AutoCloseable {
-        Tracers savedTracers;
-        ConnectContext savedConnectContext;
+        private final ConnectContext savedConnectContext;
+        private final boolean connectContextSwapped;
 
-        TracerContext(Tracers currentTracers, ConnectContext connectContext) {
-            if (currentTracers != null) {
-                savedTracers = Tracers.get();
-                Tracers.set(currentTracers);
-            }
+        TracerContext(Tracers forkedTracers, ConnectContext connectContext) {
+            Tracers.set(forkedTracers);
             if (connectContext != null) {
                 savedConnectContext = ConnectContext.get();
                 ConnectContext.set(connectContext);
+                connectContextSwapped = true;
+            } else {
+                savedConnectContext = null;
+                connectContextSwapped = false;
             }
         }
 
         @Override
         public void close() {
-            if (savedTracers != null) {
-                Tracers.set(savedTracers);
-            }
-            if (savedConnectContext != null) {
-                ConnectContext.set(savedConnectContext);
+            Tracers.close();
+            // Restore whenever a context was swapped in: on a pooled query-deploy worker the
+            // previous context is null, and skipping the restore would leave the query's
+            // ConnectContext (and every plan object it references) pinned in the worker's
+            // ThreadLocal indefinitely.
+            if (connectContextSwapped) {
+                if (savedConnectContext != null) {
+                    ConnectContext.set(savedConnectContext);
+                } else {
+                    ConnectContext.remove();
+                }
             }
         }
     }
@@ -69,7 +81,8 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     class DeployScanRangesTask implements Runnable {
         List<DeployState> states;
         ExecutorService executorService;
-        Tracers currentTracers;
+        Tracers ownerTracers;          // merge target, captured from the main thread
+        Tracers forkedTracers;         // fork of ownerTracers, used by worker threads
         ConnectContext currentConnectContext;
 
         DeployScanRangesTask(List<DeployState> states) {
@@ -79,9 +92,11 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         @Override
         public void run() {
             if (cancelled || states.isEmpty()) {
+                // Task complete — merge forked profiling data back into the owner
+                ownerTracers.mergeFrom(forkedTracers);
                 return;
             }
-            try (TracerContext tracerContext = new TracerContext(currentTracers, currentConnectContext)) {
+            try (TracerContext ignored = new TracerContext(forkedTracers, currentConnectContext)) {
                 runOnce();
             }
             // If run in the executor service, we need to start the next turn.
@@ -138,7 +153,8 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         deployScanRangesTask = new DeployScanRangesTask(states);
         if (option.useQueryDeployExecutor) {
             deployScanRangesTask.executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
-            deployScanRangesTask.currentTracers = Tracers.get();
+            deployScanRangesTask.ownerTracers = Tracers.get();
+            deployScanRangesTask.forkedTracers = deployScanRangesTask.ownerTracers.fork(false);
             deployScanRangesTask.currentConnectContext = ConnectContext.get();
         }
     }

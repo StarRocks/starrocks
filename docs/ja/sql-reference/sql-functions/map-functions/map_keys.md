@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたマップ内のすべてのキーを配列として返します。"
 ---
 
 # map_keys

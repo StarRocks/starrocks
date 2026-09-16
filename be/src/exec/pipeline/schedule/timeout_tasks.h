@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "compute_env/pipeline/observer.h"
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "runtime/descriptors.h"
 
@@ -29,18 +28,6 @@ public:
 
 private:
     FragmentContext* _fragment_ctx;
-};
-
-// If the timeout is reached, a cancel_update event is sent to all objects observing _timeout.
-class RFScanWaitTimeout final : public PipelineTimerTask {
-public:
-    RFScanWaitTimeout(bool all_rf_timeout = false) : _all_rf_timeout(all_rf_timeout) {}
-    void add_observer(RuntimeState* state, PipelineObserver* observer) { _timeout.add_observer(state, observer); }
-    void Run() override;
-
-private:
-    bool _all_rf_timeout = false;
-    Observable _timeout;
 };
 
 } // namespace starrocks::pipeline

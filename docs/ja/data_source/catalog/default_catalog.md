@@ -1,5 +1,7 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
+description: "Default catalog は StarRocks クラスター内の内部データを管理する組み込み internal catalog。"
 ---
 
 # Default catalog
@@ -85,4 +87,4 @@ SELECT * FROM default_catalog.olap_db.olap_table limit 1;
 
 ## 参考文献
 
-外部データソースからデータをクエリするには、[Query external data](../catalog/query_external_data.md) を参照してください。
+外部データソースからデータをクエリするには、[Query external data](./query_external_data.md) を参照してください。

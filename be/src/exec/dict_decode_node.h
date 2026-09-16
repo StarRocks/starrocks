@@ -18,12 +18,12 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/global_dict/decoder.h"
 #include "common/global_types.h"
 #include "common/statusor.h"
-#include "exec/olap_common.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/pipeline_node.h"
-#include "runtime/global_dict/decoder.h"
-#include "runtime/global_dict/parser.h"
+#include "storage_primitive/olap_scan_keys.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -53,7 +53,7 @@ private:
     ChunkPtr _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<TypeDescriptor*> _decode_column_types;
+    std::vector<const TypeDescriptor*> _decode_column_types;
     std::vector<GlobalDictDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;

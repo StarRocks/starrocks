@@ -25,6 +25,7 @@ import com.starrocks.common.profile.Tracers;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultJsonHandler;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.exceptions.KernelEngineException;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.util.Utils;
@@ -57,7 +58,7 @@ public class TraceDefaultJsonHandler extends DefaultJsonHandler {
     private final Configuration hadoopConf;
     private final int maxBatchSize;
     public TraceDefaultJsonHandler(Configuration hadoopConf) {
-        super(hadoopConf);
+        super(new HadoopFileIO(hadoopConf));
         this.hadoopConf = hadoopConf;
         this.maxBatchSize =
                 hadoopConf.getInt("delta.kernel.default.json.reader.batch-size", 1024);

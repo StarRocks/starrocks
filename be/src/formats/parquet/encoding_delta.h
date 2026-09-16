@@ -350,11 +350,11 @@ private:
         }
         values_per_mini_block_ = values_per_block_ / mini_blocks_per_block_;
         if (values_per_mini_block_ == 0) {
-            throw Status::Corruption("cannot have zero value per miniblock");
+            return Status::Corruption("cannot have zero value per miniblock");
         }
         if (values_per_mini_block_ % 32 != 0) {
-            throw Status::Corruption("the number of values in a miniblock must be multiple of 32, but it's " +
-                                     std::to_string(values_per_mini_block_));
+            return Status::Corruption("the number of values in a miniblock must be multiple of 32, but it's " +
+                                      std::to_string(values_per_mini_block_));
         }
 
         total_values_remaining_ = total_value_count_;

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "character_setsは利用可能な文字セットを識別します。"
 ---
 
 # character_sets

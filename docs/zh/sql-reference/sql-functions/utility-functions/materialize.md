@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回输入值本身，但作为 FE 优化器的优化屏障。"
 ---
 
 # materialize

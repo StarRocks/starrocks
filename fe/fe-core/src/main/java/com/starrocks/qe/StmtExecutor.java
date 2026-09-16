@@ -43,7 +43,9 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
-import com.starrocks.alter.reshard.presplit.InsertFromFilesPreSplitHook;
+import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitEstimates;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
@@ -55,6 +57,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
@@ -80,6 +83,7 @@ import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -96,6 +100,7 @@ import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
@@ -202,6 +207,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -291,6 +297,9 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
@@ -318,6 +327,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
@@ -353,6 +363,12 @@ public class StmtExecutor {
     private PQueryStatistics statisticsForAuditLog;
     private boolean statisticsForAuditLogFromPlaceholder = false;
     private List<StmtExecutor> subStmtExecutors;
+    // Set as soon as a cancellation reaches this statement, by whatever route: KILL QUERY, a cancelled
+    // TaskRun, a closed client. cancel() itself only reaches the coordinator, so once a statement has
+    // moved past execution -- committing, for instance -- this flag is the only thing that keeps the
+    // cancellation observable. A StmtExecutor serves exactly one statement, so it cannot leak to the
+    // next one. Written by the killing thread, read by the executing thread.
+    private volatile boolean cancelled;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext = null;
@@ -490,6 +506,7 @@ public class StmtExecutor {
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
         Tracers.toRuntimeProfile(plannerProfile);
+        PreSplitProfile.appendTo(profile, context);
         return profile;
     }
 
@@ -518,21 +535,40 @@ public class StmtExecutor {
         // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its own node.
         if (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
             long lastPrintTime = -1L;
-            while (true) {
+            // Bound by the statement's own execution budget: a legitimately slow activation (journal
+            // replay catch-up) can take minutes, and an RPC-scale bound (thrift_rpc_timeout_ms = 10s)
+            // failed statements that would have succeeded by waiting as long as their owner allowed.
+            // A failed activation no longer strands the waiter either way - it exits the process.
+            long timeoutMs = Math.max(1L, context != null
+                    ? context.getExecTimeout() * 1000L : Config.thrift_rpc_timeout_ms);
+            long deadlineMs = System.currentTimeMillis() + timeoutMs;
+            while (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
                 try {
-                    Thread.sleep(1);
-                } catch (InterruptedException ignored) {
+                    Thread.sleep(Math.min(20L, Math.max(1L, deadlineMs - System.currentTimeMillis())));
+                } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    throw new StarRocksPlannerException("interrupted while waiting current FE node transferring to LEADER state",
+                            ErrorType.INTERNAL_ERROR);
                 }
 
-                if (System.currentTimeMillis() - lastPrintTime > 1000L) {
-                    lastPrintTime = System.currentTimeMillis();
+                long now = System.currentTimeMillis();
+                if (now - lastPrintTime > 1000L) {
+                    lastPrintTime = now;
                     LOG.info("waiting for current FE node transferring to LEADER state");
                 }
 
                 if (GlobalStateMgr.getCurrentState().isLeader()) {
                     return false;
                 }
+                if (now >= deadlineMs) {
+                    throw new StarRocksPlannerException(
+                            "timed out after " + timeoutMs
+                                    + " ms waiting current FE node transferring to LEADER state",
+                            ErrorType.INTERNAL_ERROR);
+                }
+            }
+            if (GlobalStateMgr.getCurrentState().isLeader()) {
+                return false;
             }
         }
 
@@ -705,6 +741,8 @@ public class StmtExecutor {
             return "Update";
         } else if (parsedStmt instanceof DeleteStmt) {
             return "Delete";
+        } else if (parsedStmt instanceof MergeIntoStmt) {
+            return "MergeInto";
         } else {
             return "Query";
         }
@@ -851,8 +889,8 @@ public class StmtExecutor {
                         }
                     }
                 } else {
-                    // Sample-Based Tablet Pre-Split runs pre-plan; see InsertFromFilesPreSplitHook for rationale.
-                    InsertFromFilesPreSplitHook.maybeRunPreSplit(parsedStmt, context);
+                    // Sample-Based Tablet Pre-Split runs pre-plan; see InsertPreSplitHook for rationale.
+                    InsertPreSplitHook.maybeRunPreSplit(parsedStmt, context);
                     execPlan = StatementPlanner.plan(parsedStmt, context);
                     if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
                         context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
@@ -919,6 +957,23 @@ public class StmtExecutor {
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         context.setIsForward(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
+
+        // A statement replaces the previous statement's diagnostics, following the MySQL
+        // diagnostics area. Three statement classes are exempt while they succeed: SET,
+        // transaction control, and SHOW (which covers SHOW WARNINGS / SHOW ERRORS reading the
+        // buffer back), so a load's warnings stay readable across the SET / COMMIT / SHOW
+        // statements a client typically issues before checking them. This is narrower than the
+        // MySQL rule, which exempts every statement that uses no tables and generates no
+        // messages. A failing statement of any class, including the three above, still replaces
+        // the buffer with its own error (see the finally block below).
+        boolean preservesDiagnosticsArea = parsedStmt instanceof ShowStmt
+                || parsedStmt instanceof SetStmt
+                || parsedStmt instanceof BeginStmt
+                || parsedStmt instanceof CommitStmt
+                || parsedStmt instanceof RollbackStmt;
+        if (!preservesDiagnosticsArea) {
+            context.clearWarnings();
+        }
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
         ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
@@ -1277,7 +1332,7 @@ public class StmtExecutor {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", SqlCredentialRedactor.redact(sql), e.getMessage());
-            context.getState().setError(e.getMessage());
+            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
@@ -1300,11 +1355,34 @@ public class StmtExecutor {
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
-            context.getState().setError(e.getMessage());
+            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError()) {
+                // Surface the failing statement's error as a session diagnostic so SHOW ERRORS /
+                // SHOW WARNINGS can read it back. The code mirrors the ERR packet (default 1064).
+                if (preservesDiagnosticsArea) {
+                    // A failure generates a message, which replaces the diagnostics area even for
+                    // statement classes that preserve it on success (skipped at the top). This
+                    // includes SHOW WARNINGS / SHOW ERRORS themselves: they only read the buffer
+                    // back while they succeed, and a client that just received an ERR packet for
+                    // one of them must find that error in the buffer, not the previous statement's
+                    // diagnostics.
+                    context.clearWarnings();
+                }
+                // A statement forwarded to the leader is answered with the leader's own ERR
+                // packet, which ConnectProcessor.finalizeCommand() relays verbatim. TMasterOpResult
+                // brings the message back but carries no error code, so LeaderOpExecutor leaves
+                // this QueryState without one and a diagnostic built here would pair the leader's
+                // message with the local 1064 fallback, disagreeing with the code the client just
+                // read. Record nothing in that case, matching the empty result a follower already
+                // returns for the warnings of a forwarded statement. getOutputPacket() is non-null
+                // exactly when a leader result came back, which is the same condition
+                // finalizeCommand() uses to pick the leader's packet.
+                if (getOutputPacket() == null) {
+                    context.addWarning(QueryWarning.fromErrorState(context.getState()));
+                }
                 ExecuteExceptionHandler.logFailedQueryPlan(lastExecPlan, context, originStmt);
                 if (coord != null) {
                     coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
@@ -1354,7 +1432,7 @@ public class StmtExecutor {
      * some statements may execute multiple statement which will also create multiple StmtExecutor, so here
      * we accumulate them into the ConnectContext instead of using the last one
      */
-    private void recordExecStatsIntoContext() {
+    public void recordExecStatsIntoContext() {
         PQueryStatistics execStats = getQueryStatisticsForAuditLog();
         context.getAuditEventBuilder().addCpuCostNs(execStats.getCpuCostNs() != null ? execStats.getCpuCostNs() : 0);
         context.getAuditEventBuilder()
@@ -1591,6 +1669,7 @@ public class StmtExecutor {
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
         maybeEmbedExplainPlanInProfile(profile, plan);
+        appendStatsSourceToProfile(profile, plan);
         // Capture the session timezone now so that the async profile task uses the same zone
         // as START_TIME (the context may change before the async task runs).
         java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
@@ -1647,6 +1726,40 @@ public class StmtExecutor {
     }
 
     /**
+     * Traverse scan operators in the profiled plan and record per-table StatsSource
+     * into a dedicated section of the runtime profile.
+     */
+    private void appendStatsSourceToProfile(RuntimeProfile profile, ExecPlan plan) {
+        if (plan == null) {
+            return;
+        }
+        ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
+        if (profilingPlan == null) {
+            return;
+        }
+        RuntimeProfile statsSourceProfile = new RuntimeProfile("StatsSource");
+        for (ProfilingExecPlan.ProfilingFragment fragment : profilingPlan.getFragments()) {
+            collectStatsSource(fragment.getRoot(), statsSourceProfile);
+        }
+        profile.addChild(statsSourceProfile);
+    }
+
+    private static void collectStatsSource(ProfilingExecPlan.ProfilingElement element,
+                                           RuntimeProfile statsSourceProfile) {
+        if (element == null) {
+            return;
+        }
+        if (element.instanceOf(ScanNode.class)) {
+            String tableName = element.getUniqueInfos().get("Table");
+            String label = tableName != null ? tableName : String.valueOf(element.getId());
+            statsSourceProfile.addInfoString(label, element.getStatsSource().name());
+        }
+        for (ProfilingExecPlan.ProfilingElement child : element.getChildren()) {
+            collectStatsSource(child, statsSourceProfile);
+        }
+    }
+
+    /**
      * When the {@code enable_explain_in_profile} session variable is true and an executed plan is
      * available, render its {@link TExplainLevel#COSTS} text and embed it into the profile's
      * {@code Summary} section under {@link ProfileKeyDictionary#EXPLAIN_PLAN}. Honors the existing
@@ -1700,6 +1813,7 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel(String cancelledMessage) {
+        cancelled = true;
         if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
@@ -1717,6 +1831,11 @@ public class StmtExecutor {
                 coordRef.cancel(cancelledMessage);
             }
         }
+    }
+
+    /** Whether a cancellation has reached this statement. See {@link #cancelled}. */
+    public boolean isCancelled() {
+        return cancelled;
     }
 
     // Handle kill statement.
@@ -1781,35 +1900,68 @@ public class StmtExecutor {
             context.getState().setOk();
             return;
         }
-        // > 0 means it is forwarded from other fe
-        if (context.getForwardTimes() == 0) {
-            String errorMsg = null;
-            // forward to all fe
-            for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
-                LeaderOpExecutor leaderOpExecutor =
-                        new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
-                                context, redirectStatus, false);
-                try {
-                    leaderOpExecutor.execute();
-                    // if query is successfully killed by this fe, it can return now
-                    if (context.getState().getStateType() == MysqlStateType.OK) {
-                        context.getState().setOk();
-                        return;
-                    }
-                    errorMsg = context.getState().getErrorMessage();
-                } catch (TTransportException e) {
-                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
-                    LOG.warn(errorMsg, e);
-                } catch (Exception e) {
-                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort() + " due to " +
-                            e.getMessage();
-                    LOG.warn(e.getMessage(), e);
-                }
-            }
-            // if the queryId is not found in any fe, print the error message
-            context.getState().setError(errorMsg == null ? ErrorCode.ERR_UNKNOWN_ERROR.formatErrorMsg() : errorMsg);
+
+        // Try to resolve and kill the query on the local FE first. Queries running here - including
+        // coordinator-backed internal queries (statistics collection, task runs, MV refreshes) that only
+        // live in this FE's coordinator map and never had a client connection - can be killed directly.
+        // This also avoids forwarding the kill to ourselves over thrift, which the receiving FE rejects
+        // when the self-connection's source address is not in its frontend host allowlist.
+        ConnectContext killCtx = findLocalKillTarget(queryId);
+        if (killCtx != null) {
+            handleKill(killCtx, false);
             return;
         }
+
+        // A request forwarded from another FE (forwardTimes > 0) must be resolvable locally; if it is not,
+        // the query no longer exists on this FE.
+        if (context.getForwardTimes() > 0) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+            return;
+        }
+
+        // Not found locally: forward to the OTHER frontends so the FE that owns the query can kill it. Skip
+        // ourselves - the local FE was already searched above, and forwarding the kill back to this node over
+        // thrift can be rejected by the receiving FE's host allowlist in some network setups.
+        Frontend self = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+        String selfNodeName = (self == null) ? null : self.getNodeName();
+        String forwardErrorMsg = null;
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
+            if (selfNodeName != null && selfNodeName.equals(fe.getNodeName())) {
+                continue;
+            }
+            LeaderOpExecutor leaderOpExecutor =
+                    new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
+                            context, redirectStatus, false);
+            try {
+                leaderOpExecutor.execute();
+                // if query is successfully killed by that fe, it can return now
+                if (context.getState().getStateType() == MysqlStateType.OK) {
+                    context.getState().setOk();
+                    return;
+                }
+                // reached, but that fe does not own the query either; keep looking
+            } catch (TTransportException e) {
+                forwardErrorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
+                LOG.warn(forwardErrorMsg, e);
+            } catch (Exception e) {
+                forwardErrorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort() + " due to " +
+                        e.getMessage();
+                LOG.warn(e.getMessage(), e);
+            }
+        }
+        // Surface a frontend we could not reach as-is; otherwise the query was not found on any FE.
+        if (forwardErrorMsg != null) {
+            context.getState().setError(forwardErrorMsg);
+        } else {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+        }
+    }
+
+    // Resolve a query running on the local FE by id, covering both client connections (in the
+    // ConnectScheduler / proxy manager) and coordinator-backed internal queries that are only present in
+    // the coordinator map (statistics collection, task runs, MV refreshes, etc.). The privilege check in
+    // handleKill() still applies via the resolved ConnectContext's user.
+    private ConnectContext findLocalKillTarget(String queryId) {
         ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByCustomQueryId(queryId);
         if (killCtx == null) {
             killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
@@ -1818,9 +1970,9 @@ public class StmtExecutor {
             killCtx = ProxyContextManager.getInstance().getContextByQueryId(queryId);
         }
         if (killCtx == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+            killCtx = QeProcessorImpl.INSTANCE.getConnectContextByQueryId(queryId);
         }
-        handleKill(killCtx, false);
+        return killCtx;
     }
 
     // Process set statement.
@@ -1917,6 +2069,12 @@ public class StmtExecutor {
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
+
+        // Skip scheduler-only explains: they build the schedule via execWithoutDeploy() below and
+        // return without scanning any data, so they must not advance LAST_ACCESS_TIME.
+        if (!isSchedulerExplain) {
+            recordPartitionAccessTime(execPlan);
+        }
 
         if (executeInFe) {
             coord = new FeExecuteCoordinator(context, execPlan);
@@ -2022,6 +2180,41 @@ public class StmtExecutor {
         GlobalStateMgr.getCurrentState().getQueryHistoryMgr().addQueryHistory(context, execPlan);
     }
 
+    /**
+     * Record that the OLAP partitions scanned by {@code execPlan} were accessed by a user statement
+     * now, feeding the per-partition last query access time exposed via
+     * information_schema.partitions_meta and SHOW PARTITIONS. Covers every user path that carries a
+     * scan plan: SELECT, INSERT ... SELECT / INSERT OVERWRITE, CTAS, primary-key UPDATE / DELETE, and
+     * materialized-view refresh (which runs as an internal INSERT). System-driven reads (statistics
+     * collection, internal metadata queries) are skipped by {@link #isInternalAccess} so the signal
+     * reflects user access only, consistent with LAST_UPDATE_TIME excluding system transactions.
+     * Best-effort: recording must never fail the statement.
+     */
+    private void recordPartitionAccessTime(ExecPlan execPlan) {
+        if (execPlan == null || isInternalAccess() || !Config.enable_collect_partition_access_time) {
+            return;
+        }
+        PartitionAccessTimeMgr accessTimeMgr = GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode) {
+                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+                OlapTable olapTable = olapScanNode.getOlapTable();
+                accessTimeMgr.recordAccess(MetaUtils.lookupDbIdByTable(olapTable), olapTable.getId(),
+                        olapScanNode.getSelectedPartitionIds());
+            }
+        }
+    }
+
+    /**
+     * Whether the current statement is a system-driven read that must not update the partition access
+     * time: statistics collection (analyze jobs and the statistics connection) and internal metadata
+     * queries. Materialized-view refresh and user DML run on non-statistics contexts and are recorded.
+     */
+    private boolean isInternalAccess() {
+        return context != null
+                && (context.isStatisticsJob() || context.isStatisticsConnection() || context.isMetadataContext());
+    }
+
     private void responseRowBatch(RawScopedTimer timer, RowBatch batch, MysqlChannel channel) throws IOException {
         try (final RawScopedTimer.Guard ignore = timer.start()) {
             for (ByteBuffer row : batch.getBatch().getRows()) {
@@ -2043,7 +2236,8 @@ public class StmtExecutor {
     /**
      * The query result batch will piggyback query statistics in it
      */
-    private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
+    @VisibleForTesting
+    void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             statisticsForAuditLogFromPlaceholder = false;
@@ -2058,8 +2252,16 @@ public class StmtExecutor {
             }
 
             analyzePlanWithExecStats(execPlan);
-            if (context.isArrowFlightSql()) {
-                context.updateReturnRows(statisticsForAuditLog.getReturnedRows());
+            // Arrow Flight SQL and OUTFILE queries do not deliver result rows to the client through
+            // the normal row batches (the responseRowBatch path in the result loop is skipped for
+            // both), so context.returnRows is never accumulated from batch sizes for them. Take the
+            // row count from the BE-reported statistics instead. Other queries already count rows
+            // per batch in the result loop, so they must NOT enter here to avoid double counting.
+            if (context.isArrowFlightSql() || isOutfileQuery) {
+                Long returnedRows = statisticsForAuditLog.getReturnedRows();
+                if (returnedRows != null) {
+                    context.updateReturnRows(returnedRows);
+                }
             }
 
             if (null == statisticsForAuditLog.statsItems || statisticsForAuditLog.statsItems.isEmpty()) {
@@ -3110,7 +3312,7 @@ public class StmtExecutor {
         return statisticsForAuditLog;
     }
 
-    public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
+    public void handleInsertOverwrite(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
         TableRef tableRef = insertStmt.getTableRef();
         Database db =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableRef.getCatalogName(), tableRef.getDbName());
@@ -3130,7 +3332,13 @@ public class StmtExecutor {
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, db.getId(), olapTable.getId(), context.getCurrentWarehouseId(),
                 insertStmt.isDynamicOverwrite());
-        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
+        // A READ lock is enough here: the job is fully built above and the critical
+        // section only writes the job-creation edit log; no table state is read or
+        // mutated. The lock merely keeps the table from being dropped until the job
+        // creation is durable, and InsertOverwriteJobRunner.prepare() re-validates the
+        // table after this. Note it provides NO exclusion between concurrent insert
+        // overwrite jobs on the same table (see InsertOverwriteJobRunner).
+        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.READ)) {
             throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
@@ -3140,11 +3348,13 @@ public class StmtExecutor {
                     job.isDynamicOverwrite());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
-        manager.executeJob(context, this, job);
+        // The runner replans against the temporary partitions and never sees the plan built for this
+        // statement, so the size the optimizer estimated has to be read here and handed down.
+        manager.executeJob(context, this, job, PreSplitEstimates.fromExecPlan(execPlan));
     }
 
     /**
@@ -3191,12 +3401,24 @@ public class StmtExecutor {
             if (extra == null) {
                 extra = new IcebergMetadata.IcebergSinkExtra();
             }
+            // A rewrite removes the data files it scanned, so a delete file may only be removed along with them
+            // when it is provably dangling afterwards. Removing one that still applies to an untouched data file
+            // would resurrect the rows it deletes.
+            boolean wholeTableRewrite = ((IcebergRewriteStmt) stmt).rewriteAll()
+                    && !((IcebergRewriteStmt) stmt).hasPartitionFilter();
             for (PlanFragment fragment : execPlan.getFragments()) {
                 for (ScanNode scan : fragment.collectScanNodes().values()) {
                     if (scan instanceof IcebergScanNode && scan.getPlanNodeName().equals("IcebergScanNode")) {
-                        extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getPosAppliedDeleteFiles());
-                        extra.addScannedDataFiles(((IcebergScanNode) scan).getScannedDataFiles());
-                        if (((IcebergRewriteStmt) stmt).rewriteAll()) {
+                        Set<DataFile> scannedDataFiles = ((IcebergScanNode) scan).getScannedDataFiles();
+                        extra.addScannedDataFiles(scannedDataFiles);
+                        extra.addAppliedDeleteFiles(
+                                danglingPosDeleteFiles(((IcebergScanNode) scan).getPosAppliedDeleteFiles(),
+                                        scannedDataFiles, wholeTableRewrite));
+                        // Equality deletes carry no reference to the data files they apply to; they cover every
+                        // file of their partition with a lower sequence number. Only a rewrite of the whole table
+                        // is guaranteed to have rewritten all of them. Keeping them is harmless: the files written
+                        // by the rewrite get a higher sequence number, so the deletes no longer apply to them.
+                        if (wholeTableRewrite) {
                             extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getEqualAppliedDeleteFiles());
                         }
                     }
@@ -3204,6 +3426,26 @@ public class StmtExecutor {
             }
         }
         return extra;
+    }
+
+    // A position delete is file scoped when it names the single data file it applies to; deletion vectors always
+    // are. Such a file becomes dangling once that data file is rewritten, so it can be dropped with it. Position
+    // deletes without a reference span the whole partition and would still apply to data files this rewrite left
+    // untouched - unless the rewrite covered the whole table, in which case there is no untouched file left and
+    // every applied position delete, file scoped or not, is dangling.
+    private static Set<DeleteFile> danglingPosDeleteFiles(Set<DeleteFile> posDeleteFiles,
+                                                          Set<DataFile> scannedDataFiles,
+                                                          boolean wholeTableRewrite) {
+        if (wholeTableRewrite) {
+            return posDeleteFiles;
+        }
+        Set<String> rewrittenLocations = scannedDataFiles.stream()
+                .map(ContentFile::location)
+                .collect(Collectors.toSet());
+        return posDeleteFiles.stream()
+                .filter(deleteFile -> deleteFile.referencedDataFile() != null
+                        && rewrittenLocations.contains(deleteFile.referencedDataFile()))
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -3231,15 +3473,10 @@ public class StmtExecutor {
         }
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
-            try {
-                context.getGlobalStateMgr().getDeleteMgr().process((DeleteStmt) stmt);
-                context.getState().setOk();
-            } catch (QueryStateException e) {
-                if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                    LOG.warn("DDL statement({}) process failed.", getRedactedOriginStmtInString(), e);
-                }
-                context.setState(e.getQueryState());
-            }
+            context.setState(executeNonPrimaryKeyDelete(
+                    (DeleteStmt) stmt,
+                    context.getGlobalStateMgr().getDeleteMgr(),
+                    this::getRedactedOriginStmtInString));
             return;
         }
 
@@ -3286,8 +3523,14 @@ public class StmtExecutor {
 
         if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
                 !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
-            handleInsertOverwrite((InsertStmt) parsedStmt);
+            handleInsertOverwrite(execPlan, (InsertStmt) parsedStmt);
             return;
+        }
+
+        // Record the source-side scan as a user access. Skip scheduler-only explains, which build the
+        // schedule via execWithoutDeploy() without scanning any data.
+        if (!isSchedulerExplain) {
+            recordPartitionAccessTime(execPlan);
         }
 
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
@@ -3486,7 +3729,7 @@ public class StmtExecutor {
                 return;
             }
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
-                    || stmt instanceof UpdateStmt)) {
+                    || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
@@ -3613,6 +3856,10 @@ public class StmtExecutor {
                     } else {
                         attachment = new InsertTxnCommitAttachment(loadedRows);
                     }
+                    if (insertStmt.isShadowRewrite()) {
+                        attachment.setShadowRewriteWatershedTxnId(insertStmt.getShadowRewriteWatershedTxnId());
+                        attachment.setShadowRewriteAlterVersion(insertStmt.getShadowRewriteAlterVersion());
+                    }
                 } else {
                     attachment = new InsertTxnCommitAttachment(loadedRows);
                 }
@@ -3629,9 +3876,15 @@ public class StmtExecutor {
 
                 txnStatus = TransactionStatus.COMMITTED;
                 final long waitInterval = 300;
+                boolean stopPublishWaitForLeaderTransfer = false;
                 while (publishWaitMs > 0) {
+                    if (shouldStopPublishWaitAfterCommit()) {
+                        stopPublishWaitForLeaderTransfer = true;
+                        break;
+                    }
 
-                    if (visibleWaiter.await(Math.min(publishWaitMs, waitInterval), TimeUnit.MILLISECONDS)) {
+                    long currentWaitMs = Math.min(publishWaitMs, waitInterval);
+                    if (visibleWaiter.await(currentWaitMs, TimeUnit.MILLISECONDS)) {
                         txnStatus = TransactionStatus.VISIBLE;
                         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                         // collect table-level metrics
@@ -3642,8 +3895,15 @@ public class StmtExecutor {
                         entity.counterInsertLoadBytesTotal.increase(loadedBytes);
                         break;
                     } else {
-                        publishWaitMs -= Math.min(publishWaitMs, waitInterval);
+                        publishWaitMs -= currentWaitMs;
                     }
+                }
+                if (stopPublishWaitForLeaderTransfer) {
+                    LOG.warn("txn {} committed, but stop waiting for publish because this FE is leaving leader role. "
+                            + "feType={}, admissionOpen={}, demoting={}",
+                            transactionId, context.getGlobalStateMgr().getFeType(),
+                            context.getGlobalStateMgr().isLeaderWorkAdmissionOpen(),
+                            context.getGlobalStateMgr().isLeaderDemoting());
                 }
             }
         } catch (Throwable t) {
@@ -3669,8 +3929,11 @@ public class StmtExecutor {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
                     recordExternalSinkFailure(targetTable, dmlType, t);
-                } else if (targetTable.isBlackHoleTable()) {
-                    // black hole table does not need txn
+                } else if (targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+                    // INSERT INTO FILES(...) (table function) and black hole tables begin no FE txn
+                    // (see the transaction-begin skip and the commit path), so there is nothing to
+                    // abort here. `database` is null for a table function table, so calling
+                    // abortTransaction(database.getId(), ...) would throw an NPE.
                 } else {
                     transactionMgr.abortTransaction(database.getId(), transactionId, errMsg,
                             Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
@@ -3729,12 +3992,16 @@ public class StmtExecutor {
 
         String errMsg = "";
         if (txnStatus.equals(TransactionStatus.COMMITTED)) {
-            String timeoutInfo = transactionMgr.getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
-            LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
-            if (timeoutInfo.length() > 240) {
-                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
+            if (shouldStopPublishWaitAfterCommit()) {
+                errMsg = "Publish pending because leader transfer started after transaction commit";
+            } else {
+                String timeoutInfo = transactionMgr.getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
+                LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
+                if (timeoutInfo.length() > 240) {
+                    timeoutInfo = timeoutInfo.substring(0, 240) + "...";
+                }
+                errMsg = "Publish timeout " + timeoutInfo;
             }
-            errMsg = "Publish timeout " + timeoutInfo;
         }
         try {
             if (jobId != -1) {
@@ -3758,8 +4025,22 @@ public class StmtExecutor {
             sb.append("}");
         }
 
+        if (filteredRows > 0) {
+            // Surface the silently filtered / NULL-substituted rows as a session warning so the
+            // client can read the detail back via SHOW WARNINGS (the OK packet already reports the
+            // count).
+            context.addWarning(QueryWarning.filteredRowsWarning(filteredRows, coord.getTrackingUrl()));
+        }
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
+    }
+
+    private boolean shouldStopPublishWaitAfterCommit() {
+        if (context == null || context.getGlobalStateMgr() == null) {
+            return false;
+        }
+        GlobalStateMgr globalStateMgr = context.getGlobalStateMgr();
+        return globalStateMgr.shouldStopPublishWaitAfterCommit();
     }
 
     private void recordExternalSinkFailure(Table targetTable, DmlType dmlType, Throwable t) {
@@ -3777,6 +4058,8 @@ public class StmtExecutor {
             ConnectorMetricsMgr.increaseUpdateTotalFail(connectorType, t);
         } else if (dmlType == DmlType.DELETE) {
             ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
+        } else if (dmlType == DmlType.MERGE_INTO) {
+            ConnectorMetricsMgr.increaseIcebergMergeTotalFail(t);
         } else {
             String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
             ConnectorMetricsMgr.increaseWriteTotalFail(connectorType, t, writeType);
@@ -3814,7 +4097,12 @@ public class StmtExecutor {
 
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            // Register with the ConnectContext and SQL so that these coordinator-backed internal queries
+            // (e.g. statistics dict/sample/table-stats collection, internal SimpleExecutor and user-variable
+            // sub-queries) are visible in "SHOW PROC '/current_queries'" and '/global_current_queries',
+            // instead of being filtered out by the sql/context null check in getQueryStatistics().
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                    new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
             coord.exec();
             RowBatch batch;
@@ -3830,7 +4118,14 @@ public class StmtExecutor {
             } while (!batch.isEos());
             processQueryStatisticsFromResult(batch, plan, false);
         } catch (Exception e) {
-            LOG.warn("Failed to execute executeStmtWithExecPlan", e);
+            // A global dict collection that finds no dict is an expected outcome, not a failure: the caller
+            // turns it into a "not a low cardinality column" decision. Keep it out of the warn log, the same
+            // way DefaultCoordinator suppresses it, so it can't drown the real failures on this path.
+            if (coord != null && coord.getExecStatus().isSuppressedError()) {
+                LOG.debug("Failed to execute executeStmtWithExecPlan: {}", e.getMessage());
+            } else {
+                LOG.warn("Failed to execute executeStmtWithExecPlan", e);
+            }
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -3878,7 +4173,11 @@ public class StmtExecutor {
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            // Register with the ConnectContext and SQL so this coordinator-backed metadata collection query
+            // is visible in "SHOW PROC '/current_queries'" and '/global_current_queries', instead of being
+            // filtered out by the sql/context null check in getQueryStatistics().
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                    new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
             coord.exec();
             RowBatch batch;
@@ -4082,5 +4381,50 @@ public class StmtExecutor {
             }
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    // Run the non-Primary-Key DELETE path and return the resulting QueryState. Encapsulates
+    // the dual completion model of DeleteMgr.process(): a normal return (e.g. partition
+    // pruning yielded no work) is treated as success; a successful job exits via
+    // QueryStateException(OK, "{label,status,txnId}") whose state we keep and onto which
+    // we attach the non-PK DELETE notice. Non-OK QueryStateExceptions are propagated as
+    // the resulting state with the notice suppressed.
+    static QueryState executeNonPrimaryKeyDelete(DeleteStmt stmt, DeleteMgr deleteMgr,
+                                                 Supplier<String> redactedStmtSupplier) throws DdlException {
+        String okInfo = stmt.getOkInfoMessage();
+        try {
+            deleteMgr.process(stmt);
+            QueryState state = new QueryState();
+            if (okInfo != null && !okInfo.isEmpty()) {
+                state.setOk(0, 0, okInfo);
+            } else {
+                state.setOk();
+            }
+            return state;
+        } catch (QueryStateException e) {
+            if (e.getQueryState().getStateType() != MysqlStateType.OK) {
+                LOG.warn("DELETE statement({}) process failed.", redactedStmtSupplier.get(), e);
+            }
+            QueryState state = e.getQueryState();
+            attachDeleteOkInfo(state, okInfo);
+            return state;
+        }
+    }
+
+    // Append the non-Primary-Key DELETE notice on top of an existing OK QueryState.
+    // DeleteMgr signals successful DELETE via QueryStateException(OK, "{label,status,txnId}"),
+    // whose state replaces the executor's state in the catch block. To make the notice
+    // reach the client, we re-call setOk with the merged info string. No-op when the
+    // notice is empty or the state is not OK.
+    static void attachDeleteOkInfo(QueryState state, String okInfo) {
+        if (okInfo == null || okInfo.isEmpty()) {
+            return;
+        }
+        if (state.getStateType() != MysqlStateType.OK) {
+            return;
+        }
+        String existing = state.getInfoMessage();
+        String merged = (existing == null || existing.isEmpty()) ? okInfo : existing + "; " + okInfo;
+        state.setOk(state.getAffectedRows(), state.getWarningRows(), merged);
     }
 }

@@ -51,3 +51,18 @@ where k2 = 2;
 
 -- primary key
 select count(k1), sum(k1), sum(k2) from pk_t1 sample('seed'='1', 'method'='by_block', 'percent'='10');
+
+-- sub-1% / fractional percent must be accepted end-to-end (it used to be truncated to integer 0 and
+-- rejected as "invalid percent which should in (0, 100)"); the fallback keeps the sample non-empty (count > 0).
+select count(k1) > 0 from t1 sample('seed'='1', 'method'='by_block', 'percent'='0.5');
+select count(k1) > 0 from t1 sample('seed'='1', 'method'='by_block', 'percent'='0.01');
+select count(k1) > 0 from t1 sample('seed'='1', 'method'='by_block', 'percent'='0.001');
+select count(k1) > 0 from t1 sample('seed'='1', 'method'='by_block', 'percent'='1.5');
+select count(k1) > 0 from pk_t1 sample('seed'='1', 'method'='by_block', 'percent'='0.5');
+-- by_page needs the scan to read a single column, so use a single-column table here.
+create table t1_page (k1 int) duplicate key(k1) distributed by hash(k1) buckets 1 properties("replication_num" = "1");
+insert into t1_page select s1 from table(generate_series(1, 655350)) s(s1);
+alter table t1_page compact;
+select count(k1) > 0 from t1_page sample('seed'='1', 'method'='by_page', 'percent'='0.5');
+select count(k1) > 0 from t1_page sample('seed'='1', 'method'='by_page', 'percent'='0.01');
+select count(k1) > 0 from t1_page sample('seed'='1', 'method'='by_page', 'percent'='1.5');

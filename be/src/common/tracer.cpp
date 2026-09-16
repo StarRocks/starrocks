@@ -40,6 +40,14 @@ void Tracer::release_instance() {
     Instance().shutdown();
 }
 
+#ifdef BE_TEST
+void Tracer::reinitialize_for_test() {
+    auto& tracer = Instance();
+    tracer.shutdown();
+    tracer.init("starrocks-be");
+}
+#endif
+
 static inline opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> create_no_op_tracer() {
     return opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
 }

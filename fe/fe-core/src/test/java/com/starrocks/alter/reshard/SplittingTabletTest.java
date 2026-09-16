@@ -14,8 +14,16 @@
 
 package com.starrocks.alter.reshard;
 
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
+import com.starrocks.common.Range;
+import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.SplittingTabletInfoPB;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -80,12 +88,37 @@ public class SplittingTabletTest {
         Assertions.assertFalse(t.isIdenticalTablet());
         Assertions.assertEquals(3, t.getNewTabletRanges().size());
 
+        ReshardingTabletInfoPB beforeFallback = t.toProto();
+
         t.fallbackToIdenticalTablet();
+
+        Assertions.assertEquals(List.of(21L, 22L, 23L),
+                beforeFallback.splittingTabletInfo.newTabletIds);
+        Assertions.assertEquals(3, beforeFallback.splittingTabletInfo.newTabletRanges.size());
+        ReshardingTabletInfoPB afterFallback = t.toProto();
+        Assertions.assertNull(afterFallback.splittingTabletInfo);
+        Assertions.assertNotNull(afterFallback.identicalTabletInfo);
+        Assertions.assertEquals(Long.valueOf(2L), afterFallback.identicalTabletInfo.oldTabletId);
+        Assertions.assertEquals(Long.valueOf(21L), afterFallback.identicalTabletInfo.newTabletId);
 
         Assertions.assertTrue(t.isIdenticalTablet());
         Assertions.assertEquals(1, t.getNewTabletIds().size());
         Assertions.assertTrue(t.getNewTabletRanges().isEmpty(),
                 "fallback must clear stale FE-supplied ranges along with the trailing new tablet ids");
+    }
+
+    @Test
+    public void testDataDrivenFallbackReplaysAsIdenticalTablet() {
+        SplittingTablet tablet = new SplittingTablet(2, new ArrayList<>(List.of(21L, 22L)));
+        tablet.fallbackToIdenticalTablet();
+
+        SplittingTablet replayed = GSON.fromJson(GSON.toJson(tablet), SplittingTablet.class);
+        ReshardingTabletInfoPB proto = replayed.toProto();
+
+        Assertions.assertNull(proto.splittingTabletInfo);
+        Assertions.assertNotNull(proto.identicalTabletInfo);
+        Assertions.assertEquals(Long.valueOf(2L), proto.identicalTabletInfo.oldTabletId);
+        Assertions.assertEquals(Long.valueOf(21L), proto.identicalTabletInfo.newTabletId);
     }
 
     @Test
@@ -115,5 +148,31 @@ public class SplittingTabletTest {
         Assertions.assertEquals(List.of(21L, 22L), pb.newTabletIds);
         Assertions.assertNotNull(pb.newTabletRanges);
         Assertions.assertEquals(2, pb.newTabletRanges.size());
+    }
+
+    @Test
+    public void testJsonRoundTripPreservesDecimalBoundaries() {
+        ScalarType decimalType = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Tuple lower = new Tuple(List.of(Variant.of(decimalType, "10.00")));
+        Tuple mid = new Tuple(List.of(Variant.of(decimalType, "50.00")));
+        Tuple upper = new Tuple(List.of(Variant.of(decimalType, "90.00")));
+        List<TabletRange> ranges = List.of(
+                new TabletRange(Range.of(lower, mid, true, false)),
+                new TabletRange(Range.of(mid, upper, true, false)));
+        SplittingTablet original = new SplittingTablet(2, new ArrayList<>(List.of(21L, 22L)), ranges);
+
+        String json = GSON.toJson(original);
+        SplittingTablet copy = GSON.fromJson(json, SplittingTablet.class);
+
+        Assertions.assertEquals(2, copy.getNewTabletRanges().size());
+        Variant restoredLower =
+                copy.getNewTabletRanges().get(0).getRange().getLowerBound().getValues().get(0);
+        Assertions.assertTrue(restoredLower instanceof DecimalVariant);
+        Assertions.assertEquals("10.00", restoredLower.getStringValue());
+        ScalarType restoredType = (ScalarType) restoredLower.getType();
+        Assertions.assertEquals(18, restoredType.getScalarPrecision());
+        Assertions.assertEquals(2, restoredType.getScalarScale());
+        // The restored boundary serializes the canonical decimal text the BE validator parses.
+        Assertions.assertEquals("10.00", restoredLower.toProto().value);
     }
 }

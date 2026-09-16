@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Configure StarRocks to spill intermediate query results from large operators to local disk or object storage to prevent out-of-memory errors during processing."
 sidebar_position: 50
 ---
 

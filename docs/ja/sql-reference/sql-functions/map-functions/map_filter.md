@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Boolean配列またはLambda式を使用して、マップ内のキーと値のペアをフィルタリングします。"
 ---
 
 # map_filter

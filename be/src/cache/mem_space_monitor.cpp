@@ -27,7 +27,7 @@ namespace starrocks {
 
 void MemSpaceMonitor::start() {
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
-    Thread::set_thread_name(_adjust_datacache_thread, "adjust_mem_cache");
+    Thread::set_thread_name(_adjust_datacache_thread, "adj_mem_cache");
 }
 
 void MemSpaceMonitor::stop() {

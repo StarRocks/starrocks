@@ -1,0 +1,31 @@
+-- name: test_iceberg_equality_delete_null_key
+create external catalog iceberg_eqnull_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_eqnull_${uuid0}.eq_delete_db_${uuid0};
+-- result:
+-- !result
+call iceberg_eqnull_${uuid0}.system.register_table("eq_delete_db_${uuid0}", "eq_del_convert", "oss://${oss_bucket}/iceberg_ci_db/eq_del_convert/metadata/v4.metadata.json");
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+select * from iceberg_eqnull_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert order by id;
+-- result:
+1	n1
+2	n2
+4	n4
+5	n5
+7	n7
+8	n8
+-- !result
+drop table iceberg_eqnull_${uuid0}.eq_delete_db_${uuid0}.eq_del_convert;
+-- result:
+-- !result
+drop database iceberg_eqnull_${uuid0}.eq_delete_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_eqnull_${uuid0};
+-- result:
+-- !result

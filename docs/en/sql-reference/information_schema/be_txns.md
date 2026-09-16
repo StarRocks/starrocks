@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`be_txns` provides information about transactions on each BE node."
+description: "be_txns provides information about transactions on each BE node."
 ---
 
 # be_txns

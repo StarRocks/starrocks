@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "hll_raw_agg 聚合 HLL 类型字段，返回 HLL 类型用于近似 COUNT(DISTINCT)。"
 ---
 
 # hll_raw_agg

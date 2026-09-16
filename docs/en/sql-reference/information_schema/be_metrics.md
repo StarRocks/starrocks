@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`be_metrics` provides information about the metrics of each BE node."
+description: "be_metrics provides information about the metrics of each BE node."
 ---
 
 # be_metrics

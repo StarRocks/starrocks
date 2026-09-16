@@ -18,8 +18,10 @@ import com.staros.proto.FileStoreInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -28,6 +30,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.proc.IndexInfoProcDir;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.qe.ConnectContext;
@@ -36,14 +40,17 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TBatchGetTabletMetadataRequest;
 import com.starrocks.thrift.TBatchGetTabletMetadataResponse;
 import com.starrocks.thrift.TGetTabletMetadataRequest;
 import com.starrocks.thrift.TGetTabletMetadataResponse;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletRange;
 import com.starrocks.utframe.UtFrameUtils;
@@ -58,6 +65,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +73,13 @@ import java.util.Objects;
 
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
+
+    // Shared by the @Mock static methods below: a static mock method cannot reference a
+    // test-method local, so these live at class scope. Each test resets them at the start.
+    private static java.util.concurrent.atomic.AtomicBoolean backfillSeen =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static java.util.concurrent.atomic.AtomicInteger partitionsBackfilled =
+            new java.util.concurrent.atomic.AtomicInteger(0);
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -84,6 +99,11 @@ public class CreateLakeTableTest {
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+    }
+
+    private static void alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {
@@ -258,8 +278,10 @@ public class CreateLakeTableTest {
         }
 
         UtFrameUtils.addMockComputeNode(50001);
+        // LOCAL persistent index is deprecated for shared-data primary key tables and is now
+        // rejected outright, regardless of whether a compute node has a storage path.
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Cannot create cloud native table with local persistent index",
+                "Only cloud native persistent index",
                 () -> createTable(
                 "create table lake_test.table_with_persistent_index2\n" +
                         "(c0 int, c1 string, c2 int, c3 bigint)\n" +
@@ -284,6 +306,57 @@ public class CreateLakeTableTest {
             ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
 
             Assertions.assertNotEquals(0, resultSet.getResultRows().size());
+        }
+    }
+
+    @Test
+    public void testGsonPostProcessNormalizesLegacyLocalPkIndex() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.legacy_local_pk\n" +
+                        "(c0 int, c1 string)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 1;"));
+        LakeTable lakeTable = getLakeTable("lake_test", "legacy_local_pk");
+        // Simulate a table created before the cloud-native-only restriction: force its FE metadata
+        // back to the deprecated LOCAL persistent index.
+        lakeTable.setEnablePersistentIndex(true);
+        lakeTable.setPersistentIndexType(TPersistentIndexType.LOCAL);
+        Assertions.assertEquals(TPersistentIndexType.LOCAL, lakeTable.getPersistentIndexType());
+        // A metadata reload (gsonPostProcess) must upgrade it back to the cloud-native index.
+        lakeTable.gsonPostProcess();
+        Assertions.assertTrue(lakeTable.enablePersistentIndex());
+        Assertions.assertEquals(TPersistentIndexType.CLOUD_NATIVE, lakeTable.getPersistentIndexType());
+    }
+
+    @Test
+    public void testCreateLakeTableWithFlatJson() throws Exception {
+        // enabled: flat_json.enable and the factors are rendered
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.lake_flat_json_on (k int, j json)\n" +
+                        "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                        "properties('flat_json.enable' = 'true', 'flat_json.null.factor' = '0.15',\n" +
+                        "'flat_json.sparsity.factor' = '0.6', 'flat_json.column.max' = '30');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "lake_flat_json_on");
+            Map<String, String> properties = lakeTable.getProperties();
+            Assertions.assertEquals("true", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+        }
+
+        // disabled: only flat_json.enable is rendered, factors omitted
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.lake_flat_json_off (k int, j json)\n" +
+                        "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                        "properties('flat_json.enable' = 'false');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "lake_flat_json_off");
+            Map<String, String> properties = lakeTable.getProperties();
+            Assertions.assertEquals("false", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
         }
     }
 
@@ -390,11 +463,87 @@ public class CreateLakeTableTest {
             LakeTable lakeTable = getLakeTable("lake_test", "table_with_rollup");
             Assertions.assertEquals(2, lakeTable.getShardGroupIds().size());
 
-            Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
-                    get().getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+            Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().get()
+                    .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+                    .size());
 
         }
     }
+
+    @Test
+    public void testRangeDistributionDefault() throws Exception {
+        // The shipped default is on in shared-data mode; assert that is what we are exercising.
+        Assertions.assertTrue(Config.enable_range_distribution);
+        boolean savedConfig = Config.enable_range_distribution;
+        try {
+            // Default on: a bare CREATE (no DISTRIBUTED BY) defaults to RANGE for every keys type
+            // except a derived DUPLICATE key with no ORDER BY (the common "t(k, v)" case).
+            createTable("create table lake_test.rd_pk (c0 int, c1 int) primary key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_pk").isRangeDistribution());
+
+            createTable("create table lake_test.rd_dup (c0 int, c1 int) duplicate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_dup").isRangeDistribution());
+
+            createTable("create table lake_test.rd_derived_dup (c0 int, c1 int) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    getLakeTable("lake_test", "rd_derived_dup").getDefaultDistributionInfo().getType());
+
+            createTable("create table lake_test.rd_dup_orderby (c0 int, c1 int) order by(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_dup_orderby").isRangeDistribution());
+
+            createTable("create table lake_test.rd_agg (c0 int, c1 bigint sum) aggregate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_agg").isRangeDistribution());
+
+            createTable("create table lake_test.rd_uniq (c0 int, c1 int) unique key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_uniq").isRangeDistribution());
+
+            // Kill switch: disabling the config reverts to the previous per-keys-type default.
+            Config.enable_range_distribution = false;
+
+            createTable("create table lake_test.ks_pk (c0 int, c1 int) primary key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.HASH,
+                    getLakeTable("lake_test", "ks_pk").getDefaultDistributionInfo().getType());
+
+            createTable("create table lake_test.ks_dup (c0 int, c1 int) duplicate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    getLakeTable("lake_test", "ks_dup").getDefaultDistributionInfo().getType());
+
+            // AGG/UNIQUE without a DISTRIBUTED BY clause have no default distribution when range is off.
+            ExceptionChecker.expectThrowsWithMsg(Exception.class, "not support default distribution",
+                    () -> createTable("create table lake_test.ks_agg (c0 int, c1 bigint sum) aggregate key(c0) " +
+                            "properties('replication_num' = '1');"));
+            ExceptionChecker.expectThrowsWithMsg(Exception.class, "not support default distribution",
+                    () -> createTable("create table lake_test.ks_uniq (c0 int, c1 int) unique key(c0) " +
+                            "properties('replication_num' = '1');"));
+        } finally {
+            Config.enable_range_distribution = savedConfig;
+        }
+    }
+
+    @Test
+    public void testRangeDistributionDefaultWithRollup() throws Exception {
+        Assertions.assertTrue(Config.enable_range_distribution);
+        // A bare CREATE (no DISTRIBUTED BY) with a ROLLUP defaults the base index to RANGE and still
+        // creates the rollup index.
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.rd_table_with_rollup\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "DUPLICATE KEY(c0)\n" +
+                        "ROLLUP (mv1 (c0, c1));"));
+        LakeTable lakeTable = getLakeTable("lake_test", "rd_table_with_rollup");
+        Assertions.assertTrue(lakeTable.isRangeDistribution());
+        Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().get()
+                .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+    }
+
     @Test
     public void testRestoreColumnUniqueId() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -860,5 +1009,175 @@ public class CreateLakeTableTest {
         } finally {
             Config.lake_enable_light_weight_tablet_creation = saved;
         }
+    }
+
+    @Test
+    public void testAlterLightWeightTabletCreation() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.alter_lw (c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('light_weight_tablet_creation' = 'false')"));
+        LakeTable table = getLakeTable("lake_test", "alter_lw");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // false -> true
+        alterTable("alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+
+        // true -> false
+        alterTable("alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'false')");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // No-op (same value) is a successful no-op, not an error.
+        ExceptionChecker.expectThrowsNoException(() -> alterTable(
+                "alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'false')"));
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // Invalid value rejected by analyzer.
+        ExceptionChecker.expectThrowsWithMsg(Exception.class, "must be bool type", () -> alterTable(
+                "alter table lake_test.alter_lw set ('light_weight_tablet_creation' = 'maybe')"));
+    }
+
+    @Test
+    public void testAlterLightWeightTabletCreationTrueToFalseTriggersBackfill() throws Exception {
+        backfillSeen.set(false);
+        partitionsBackfilled.set(0);
+        new MockUp<com.starrocks.task.TabletTaskExecutor>() {
+            @Mock
+            public static void buildPartitionsSequentially(long dbId,
+                                                           com.starrocks.catalog.OlapTable t,
+                                                           List<com.starrocks.catalog.PhysicalPartition> partitions,
+                                                           int numReplicas,
+                                                           int numBackends,
+                                                           com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                           com.starrocks.task.TabletTaskExecutor.CreateTabletOption option) {
+                if (option.isBackfill()) {
+                    backfillSeen.set(true);
+                    partitionsBackfilled.set(partitions.size());
+                }
+            }
+
+            @Mock
+            public static void buildPartitionsConcurrently(long dbId,
+                                                           com.starrocks.catalog.OlapTable t,
+                                                           List<com.starrocks.catalog.PhysicalPartition> partitions,
+                                                           int numReplicas,
+                                                           int numBackends,
+                                                           com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                           com.starrocks.task.TabletTaskExecutor.CreateTabletOption option) {
+                if (option.isBackfill()) {
+                    backfillSeen.set(true);
+                    partitionsBackfilled.set(partitions.size());
+                }
+            }
+        };
+
+        createTable("create table lake_test.alter_lw_bf (c0 int) duplicate key(c0)\n" +
+                "distributed by hash(c0) buckets 2\n" +
+                "properties('light_weight_tablet_creation' = 'true')");
+        LakeTable table = getLakeTable("lake_test", "alter_lw_bf");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+
+        // true -> false: backfill triggered, all PhysicalPartitions with visibleVersion == 1.
+        alterTable("alter table lake_test.alter_lw_bf set ('light_weight_tablet_creation' = 'false')");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+        Assertions.assertTrue(backfillSeen.get(),
+                "buildPartitions[Sequentially|Concurrently] must be called with option.backfill = true");
+        Assertions.assertEquals(1, partitionsBackfilled.get(),
+                "the single unpublished physical partition should be backfilled");
+    }
+
+    @Test
+    public void testAlterLightWeightTabletCreationFalseToTrueSkipsBackfill() throws Exception {
+        backfillSeen.set(false);
+        partitionsBackfilled.set(0);
+        new MockUp<com.starrocks.task.TabletTaskExecutor>() {
+            @Mock
+            public static void buildPartitionsSequentially(long dbId,
+                                                           com.starrocks.catalog.OlapTable t,
+                                                           List<com.starrocks.catalog.PhysicalPartition> partitions,
+                                                           int numReplicas,
+                                                           int numBackends,
+                                                           com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                           com.starrocks.task.TabletTaskExecutor.CreateTabletOption option) {
+                if (option.isBackfill()) {
+                    backfillSeen.set(true);
+                }
+            }
+        };
+
+        createTable("create table lake_test.alter_lw_no_bf (c0 int) duplicate key(c0)\n" +
+                "distributed by hash(c0) buckets 2\n" +
+                "properties('light_weight_tablet_creation' = 'false')");
+        LakeTable table = getLakeTable("lake_test", "alter_lw_no_bf");
+        Assertions.assertFalse(table.isLightWeightTabletCreation());
+
+        // false -> true: no backfill needed; v1 metadata is already in object storage.
+        alterTable("alter table lake_test.alter_lw_no_bf set ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(table.isLightWeightTabletCreation());
+        Assertions.assertFalse(backfillSeen.get(),
+                "false -> true must not trigger backfill");
+    }
+
+    @Test
+    public void testIndexSchemaProcReturnsRollupSchemaForLakeTable() throws Exception {
+        // Regression: SHOW PROC '/dbs/db/tbl/index_schema/<metaId>' (IndexInfoProcDir.lookup)
+        // used to gate on `getType() == OLAP`, which excludes shared-data LakeTable
+        // (type CLOUD_NATIVE). Lake tables fell into the else branch and returned the base
+        // index schema for every rollup instead of that rollup's own declared columns.
+        createTable("create table lake_test.t_index_schema_proc " +
+                "(k1 varchar(10) not null, k2 int not null, v1 int)\n" +
+                "duplicate key(k1, k2) distributed by hash(k1) buckets 1\n" +
+                "rollup (r1(k2, k1))\n" +
+                "properties('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("lake_test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_index_schema_proc");
+        Assertions.assertTrue(table.isCloudNativeTable());
+
+        IndexInfoProcDir dir = new IndexInfoProcDir(db, table);
+
+        // rollup r1 was declared as (k2, k1): the per-index proc must report exactly those
+        // two columns in that order, not the base table's full schema (k1, k2, v1).
+        long rollupMetaId = table.getIndexMetaIdByName("r1");
+        ProcResult rollupResult = dir.lookup(String.valueOf(rollupMetaId)).fetchResult();
+        List<String> rollupColumns = new ArrayList<>();
+        for (List<String> row : rollupResult.getRows()) {
+            rollupColumns.add(row.get(0));
+        }
+        Assertions.assertEquals(List.of("k2", "k1"), rollupColumns);
+
+        // base index still reports its own full schema.
+        long baseMetaId = table.getBaseIndexMetaId();
+        ProcResult baseResult = dir.lookup(String.valueOf(baseMetaId)).fetchResult();
+        List<String> baseColumns = new ArrayList<>();
+        for (List<String> row : baseResult.getRows()) {
+            baseColumns.add(row.get(0));
+        }
+        Assertions.assertEquals(List.of("k1", "k2", "v1"), baseColumns);
+    }
+
+    @Test
+    public void testDescShowsBaseColumnsForLakeTable() throws Exception {
+        // Regression for the DESC production path: ShowStmtAnalyzer builds
+        // /dbs/<db>/<tbl>/index_schema/<baseIndexMetaId> for the base schema, and
+        // IndexInfoProcDir.lookup() must resolve the base schema for a shared-data table.
+        // Previously the analyzer passed table.getId() for non-OLAP tables and relied on the
+        // getBaseSchema() fallback; after routing cloud-native tables through
+        // getSchemaByIndexMetaId(), the analyzer must pass the base index meta id instead.
+        createTable("create table lake_test.t_desc_lake " +
+                "(k1 varchar(10) not null, k2 int not null, v1 int)\n" +
+                "duplicate key(k1, k2) distributed by hash(k1) buckets 1\n" +
+                "rollup (r1(k2, k1))\n" +
+                "properties('replication_num' = '1');");
+        DescribeStmt stmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "desc lake_test.t_desc_lake", connectContext);
+        ShowResultSet rs = ShowExecutor.execute(stmt, connectContext);
+        List<String> fields = new ArrayList<>();
+        for (List<String> row : rs.getResultRows()) {
+            fields.add(row.get(0));
+        }
+        Assertions.assertEquals(List.of("k1", "k2", "v1"), fields);
     }
 }

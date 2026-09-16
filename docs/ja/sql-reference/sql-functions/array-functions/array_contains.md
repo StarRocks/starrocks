@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_CONTAINS関数は配列が特定の要素を含んでいるかどうか確認します。"
 ---
 
 # array_contains

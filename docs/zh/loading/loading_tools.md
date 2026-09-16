@@ -1,3 +1,9 @@
+---
+displayed_sidebar: docs
+sidebar_position: 160
+description: "StarRocks 及生态伙伴提供的数据导入工具概览：SMT、DataX、CloudCanal 和 Kettle connector。"
+---
+
 # 使用工具导入
 
 除了导入章节上面重点介绍的几种导入方式外，StarRocks 和生态伙伴还提供如下工具支持帮助您轻松实现 StarRocks 与外部数据库的集成。

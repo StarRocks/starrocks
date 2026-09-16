@@ -34,22 +34,29 @@
 
 #pragma once
 
+#include <memory>
+
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column_reader.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
+namespace lake {
+class IndexDeltaGroupLoader;
+} // namespace lake
+
 class Column;
 class ColumnAccessPath;
 class ColumnPredicate;
+class Datum;
 
 class ColumnReader;
 class RandomAccessFile;
@@ -80,6 +87,24 @@ struct ColumnIteratorOptions {
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
     bool has_preaggregation = true;
+
+    // Index Delta Group (IDG) read-side context (lake-only).
+    // Mirrors the IDG fields on IndexReadOptions. Populated by
+    // SegmentIterator::_init_column_iterator_by_cid from its SegmentReadOptions.
+    // Nullptr loader keeps the iterator on the legacy footer-only path — so
+    // shared-nothing BE and pre-PR lake tablets observe the original behavior.
+    //
+    // The iterator uses this to probe, at init time, whether the owning
+    // segment has an IDG-backed index (bitmap / NGRAMBF) for this column,
+    // so that the `has_*_index()` predicates consulted by upper read-side
+    // pruning (BitmapIndexEvaluator / BloomFilterSupportChecker / the
+    // `ScalarColumnIterator::get_row_ranges_by_bloom_filter` short-circuit)
+    // return true when the IDG has it even though the segment footer does not.
+    std::shared_ptr<lake::IndexDeltaGroupLoader> idg_loader;
+    uint64_t tablet_id = 0;
+    uint32_t segment_id = 0;
+    int64_t query_version = 0;
+    int32_t col_unique_id = -1;
 };
 
 // Base iterator to read one column data
@@ -183,6 +208,11 @@ public:
     // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
     virtual int dict_lookup(const Slice& word) { return -1; }
 
+    // Batch variant of dict_lookup: for each word in |words|, append its dictionary code to
+    // |codes| if found. Codes for missing words are silently omitted.
+    // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
+    virtual void dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) {}
+
     // like `next_batch` but instead of return a batch of column values, this method returns a
     // batch of dictionary codes for dictionary encoded values.
     // this method can be invoked only if `all_page_dict_encoded` returns true.
@@ -247,6 +277,9 @@ public:
         return next_batch(range, dst);
     }
 
+    // Fills in the subfields that were left unmaterialized in an already-populated column, so an
+    // iterator without subfields of its own has nothing to do. Do NOT use it to read a column from
+    // scratch: see fetch_values_by_rowid_for_predicate_evaluate.
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
     virtual Status null_count(size_t* count) { return Status::OK(); };

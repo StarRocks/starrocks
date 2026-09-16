@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ビットマップの最小値を取得します。"
 ---
 
 # bitmap_min

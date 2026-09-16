@@ -113,6 +113,11 @@ CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 
+// `window_fun(... ) IGNORE NULLS` can be evaluated in streaming mode with
+// watermark-based eviction of the input buffer instead of materializing the whole partition.
+// Set to false to fall back to the legacy whole-partition materializing behavior.
+CONF_mBool(pipeline_analytic_enable_ignore_nulls_streaming, "true");
+
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 // the maximum number of connections in the connection pool for a single jdbc url
@@ -164,6 +169,9 @@ CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
+// Route the spillable sort (ORDER BY / TOP-N) operator onto the pipeline event scheduler instead of the busy-poller.
+CONF_mBool(enable_spill_sort_events, "false");
+
 // The max number of threads for exec_state_report thread pool.
 CONF_mInt32(exec_state_report_max_threads, "2");
 
@@ -196,6 +204,20 @@ CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
 
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+
+// Software prefetch distance (in rows) for the agg hash-map / hash-set
+// probe loop.  Default 16 is empirical for L3-resident tables; raise on
+// DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
+// per chunk; changes take effect on the next chunk.
+CONF_mInt32(agg_hash_map_prefetch_dist, "16");
+
+// Software prefetch is gated on the bucket array spilling L2: it is only
+// enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
+// Below that the table is L2-resident and prefetch is a net loss (measured by
+// agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
+// contended many-driver-per-core deployments where the effective L2 share per
+// table is smaller than the nominal per-core size.
+CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");

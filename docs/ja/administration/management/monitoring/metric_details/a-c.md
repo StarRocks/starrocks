@@ -13,7 +13,7 @@ description: "Alphabetical a - c"
 - [非同期マテリアライズドビューのメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびStarletダッシュボードのメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../Monitor_and_Alert.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
 
 :::
 
@@ -21,6 +21,27 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - 説明: Flink/Spark SQLによって作成されたスキャンタスクの総数。
+
+## `ai_http_requests_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 転送レイヤーが受け付けた AI HTTP attempt の総数です。最初の attempt と再試行 attempt の両方を含みます。`AIHttpClient::submit` が成功を返した場合にのみカウントされ、admission の待機と同期的に拒否された送信はカウントされません。
+
+## `ai_http_retries_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 受け付けられた AI HTTP 再試行 attempt の総数です。最初の attempt は含まれず、スケジュールされた後に転送レイヤーが受け付ける前にキャンセルされた再試行もカウントされません。このため、このカウンターは常に `ai_http_requests_total` 以下です。
+
+## `ai_http_timeouts_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 転送タイムアウト、または request/query deadline の期限切れによって終了した、受け付け済み AI HTTP attempt の総数です。受け付けられた各 attempt は最大 1 回だけカウントされます。キャンセル、シャットダウン、および HTTP attempt が受け付けられる前に到達した deadline はカウントされません。
 
 ## `async_delta_writer_queue_count`
 
@@ -305,6 +326,18 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 種類: カウンター
 - 説明: ブロックキャッシュミスの累積バイト数。現在、外部テーブルのキャッシュミスバイトのみがカウントされています。
 
+## `block_cache_hit_count`
+
+- 単位: 回
+- 種類: カウンター
+- 説明: ブロックキャッシュヒットの累積回数。
+
+## `block_cache_miss_count`
+
+- 単位: 回
+- 種類: カウンター
+- 説明: ブロックキャッシュミスの累積回数。
+
 ## `blocks_created_total (Deprecated)`
 
 ## `blocks_deleted_total (Deprecated)`
@@ -381,6 +414,16 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: バイト
 - 説明: レプリカクローンに使用されるメモリ。
+
+## `cluster_snapshot_consecutive_failures`
+
+- 単位: 個
+- 説明: 最後に成功してから連続して失敗した自動クラスター スナップショットジョブの数。値が増え続ける場合、スナップショットストレージボリュームの設定ミスまたはアクセス不可を示します。
+
+## `cluster_snapshot_last_finished_time`
+
+- 単位: ミリ秒
+- 説明: 最後に完了した自動クラスター スナップショットの時刻（ミリ秒のエポック時間）。完了したものがない場合は 0。
 
 ## `column_metadata_mem_bytes`
 

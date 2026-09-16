@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "若参数 expr1 成立，返回 expr2，否则返回 expr3。"
 ---
 
 # if

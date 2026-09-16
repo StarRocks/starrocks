@@ -102,6 +102,7 @@ statement
     | insertStatement
     | updateStatement
     | deleteStatement
+    | mergeIntoStatement
 
     // Routine Statement
     | createRoutineLoadStatement
@@ -243,6 +244,14 @@ statement
     | showGroupProvidersStatement
     | showCreateGroupProviderStatement
 
+    // AI Provider Statement
+    | createAIProviderStatement
+    | alterAIProviderStatement
+    | dropAIProviderStatement
+    | showAIProvidersStatement
+    | descAIProviderStatement
+    | setDefaultAIProviderStatement
+
     // Backup Restore Statement
     | backupStatement
     | cancelBackupStatement
@@ -251,6 +260,7 @@ statement
     | cancelRestoreStatement
     | showRestoreStatement
     | showSnapshotStatement
+    | dropSnapshotStatement
     | createRepositoryStatement
     | dropRepositoryStatement
 
@@ -536,7 +546,11 @@ rollupDesc
     ;
 
 rollupItem
-    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    : rollupName=identifier identifierList (dupKeys)? (rollupOrderByDesc)? (fromRollup)? properties?
+    ;
+
+rollupOrderByDesc
+    : ORDER BY identifierList
     ;
 
 dupKeys
@@ -557,6 +571,7 @@ ifNotExists:
 createTableAsSelectStatement
     : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
+        engineDesc?
         keyDesc?
         comment?
         partitionDesc?
@@ -650,7 +665,7 @@ truncateTableStatement
     ;
 
 cancelAlterTableStatement
-    : CANCEL ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')? FORCE?
     | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
     ;
 
@@ -751,7 +766,8 @@ alterMaterializedViewStatement
         modifyPropertiesClause |
         swapTableClause |
         addMVColumnClause |
-        dropMVColumnClause )
+        dropMVColumnClause |
+        reorderColumnsClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
@@ -927,7 +943,7 @@ setDefaultStorageVolumeStatement
 
 updateFailPointStatusStatement
     : ADMIN (DISABLE | ENABLE) FAILPOINT string
-      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY | PAUSE))?
       (ON (BACKEND string | FRONTEND))?
     ;
 
@@ -974,6 +990,7 @@ alterClause
     : addFrontendClause
     | dropFrontendClause
     | modifyFrontendHostClause
+    | transferLeaderClause
     | addBackendClause
     | dropBackendClause
     | decommissionBackendClause
@@ -998,6 +1015,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | alterTableDictColumnsClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
     | replacePartitionColumnClause
@@ -1044,6 +1062,10 @@ dropFrontendClause
 
 modifyFrontendHostClause
   : MODIFY FRONTEND HOST string TO string
+  ;
+
+transferLeaderClause
+  : TRANSFER LEADER TO string (FORCE)?
   ;
 
 addBackendClause
@@ -1158,6 +1180,10 @@ addColumnsClause
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+alterTableDictColumnsClause
+    : (ENABLE | DISABLE) DICTIONARY '(' identifier (',' identifier)* ')'
     ;
 
 dropPartitionColumnClause
@@ -1356,6 +1382,28 @@ deleteStatement
     : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
+mergeIntoStatement
+    : explainDesc? MERGE INTO qualifiedName (AS? targetAlias=identifier)?
+      USING relation (AS? sourceAlias=identifier)?
+      ON mergeCondition=expression
+      mergeWhenClause+
+    ;
+
+mergeWhenClause
+    : WHEN MATCHED (AND matchedCondition=expression)? THEN mergeMatchedAction       #mergeWhenMatched
+    | WHEN NOT MATCHED (AND notMatchedCondition=expression)? THEN mergeNotMatchedAction   #mergeWhenNotMatched
+    ;
+
+mergeMatchedAction
+    : UPDATE SET assignmentList      #mergeMatchedUpdate
+    | DELETE                         #mergeMatchedDelete
+    ;
+
+mergeNotMatchedAction
+    : INSERT ASTERISK_SYMBOL                                                                    #mergeNotMatchedInsertStar
+    | INSERT ('(' cols+=identifier (',' cols+=identifier)* ')')? VALUES '(' expressionList ')'   #mergeNotMatchedInsertValues
+    ;
+
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
 createRoutineLoadStatement
     : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
@@ -1380,6 +1428,7 @@ loadProperties
     : colSeparatorProperty
     | rowDelimiterProperty
     | importColumns
+    | includeMetadata
     | WHERE expression
     | partitionNames
     ;
@@ -1400,6 +1449,18 @@ columnProperties
     : '('
         (qualifiedName | assignment) (',' (qualifiedName | assignment))*
       ')'
+    ;
+
+includeMetadata
+    : INCLUDE METADATA '(' metadataItem (',' metadataItem)* ')'
+    ;
+
+metadataItem
+    : metaKey (AS alias=identifier)?
+    ;
+
+metaKey
+    : KEY | PARTITION | identifier
     ;
 
 jobProperties
@@ -1996,6 +2057,33 @@ showCreateGroupProviderStatement
     : SHOW CREATE GROUP PROVIDER identifier showPredicateClauses
     ;
 
+// ---------------------------------------- AI Provider Statement ------------------------------------------------------
+
+createAIProviderStatement
+    : CREATE AI PROVIDER (IF NOT EXISTS)? aiProviderName=identifierOrString
+          TYPE providerType=identifierOrString comment? properties
+    ;
+
+alterAIProviderStatement
+    : ALTER AI PROVIDER (IF EXISTS)? identifierOrString SET propertyList
+    ;
+
+dropAIProviderStatement
+    : DROP AI PROVIDER (IF EXISTS)? identifierOrString
+    ;
+
+showAIProvidersStatement
+    : SHOW AI PROVIDERS ((LIKE pattern=string) | (TYPE providerType=identifierOrString))?
+    ;
+
+descAIProviderStatement
+    : (DESC | DESCRIBE) AI PROVIDER identifierOrString
+    ;
+
+setDefaultAIProviderStatement
+    : SET identifierOrString AS DEFAULT AI PROVIDER
+    ;
+
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
@@ -2043,6 +2131,10 @@ createRepositoryStatement
 
 dropRepositoryStatement
     : DROP REPOSITORY identifier
+    ;
+
+dropSnapshotStatement
+    : DROP SNAPSHOT snapshotName=identifier ON repoName=identifier FORCE?
     ;
 
 // ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
@@ -2149,11 +2241,11 @@ showExportStatement
 // ------------------------------------------- Plugin Statement --------------------------------------------------------
 
 installPluginStatement
-    : INSTALL PLUGIN FROM identifierOrString properties?
+    : INSTALL PLUGIN (IF NOT EXISTS)? FROM identifierOrString properties?
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN identifierOrString
+    : UNINSTALL PLUGIN (IF EXISTS)? identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------
@@ -2784,7 +2876,6 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
-    | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
     | PARAMETER                                                                           #Parameter
     ;
@@ -3163,10 +3254,6 @@ unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
-unitBoundary
-    : FLOOR | CEIL
-    ;
-
 filesSchema
     : filesSchemaColumn (',' filesSchemaColumn)* EOF
     ;
@@ -3309,7 +3396,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | AI | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS | BOTH
     | BUILTIN | BASE | BEFORE | BASELINE
@@ -3322,11 +3409,11 @@ nonReserved
     | FUNCTIONS
     | GLOBAL | GRANTS | GROUP_CONCAT
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HOURS | HUB
-    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
+    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCLUDE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | LABEL | LAST | LEADER | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | METADATA | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
@@ -3338,7 +3425,7 @@ nonReserved
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_KW | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
-    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
+    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRANSFER | TRACE | TRANSLATE
     | TRIM_SPACE | TRAILING | TRIM
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK

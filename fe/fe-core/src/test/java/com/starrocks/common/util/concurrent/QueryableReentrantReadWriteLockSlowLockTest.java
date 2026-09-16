@@ -14,7 +14,9 @@
 
 package com.starrocks.common.util.concurrent;
 
+import com.starrocks.common.Config;
 import mockit.Expectations;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -33,10 +35,23 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     private static final long LOCK_HOLD_TIME_MS = 1500;
 
     private QueryableReentrantReadWriteLock lock;
+    private long origSlowLockLogEveryMs;
 
     @BeforeEach
     public void setUp() {
         lock = new QueryableReentrantReadWriteLock(true);
+        // This class tests the slow-lock detection mechanism itself (mocking
+        // getLockInfoToJson). The per-instance event throttle would suppress subsequent
+        // invocations within Config.slow_lock_log_l2_info_interval_ms, breaking multi-reader
+        // expectations. Disable it for these tests; throttle behavior is covered
+        // separately in QueryableReentrantReadWriteLockTest.
+        origSlowLockLogEveryMs = Config.slow_lock_log_l2_info_interval_ms;
+        Config.slow_lock_log_l2_info_interval_ms = 0;
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.slow_lock_log_l2_info_interval_ms = origSlowLockLogEveryMs;
     }
 
     /**
@@ -47,7 +62,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testSharedLockDetectingSlowLock() throws Exception {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 minTimes = 1;
             }
         };
@@ -103,7 +118,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testExclusiveLockDetectingSlowLock() throws Exception {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 minTimes = 1;
             }
         };
@@ -159,7 +174,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testSharedLockNoSlowLockWhenFast() {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 maxTimes = 0;
                 minTimes = 0;
             }
@@ -183,7 +198,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testExclusiveLockNoSlowLockWhenFast() {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 maxTimes = 0;
                 minTimes = 0;
             }
@@ -207,7 +222,7 @@ public class QueryableReentrantReadWriteLockSlowLockTest {
     public void testMultipleReadersDetectSlowLock() throws Exception {
         new Expectations(lock) {
             {
-                lock.getLockInfoToJson(null);
+                lock.getLockInfoToJson((Thread) any, (SlowLockLogDecision) any);
                 minTimes = 2;
             }
         };

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回字符串的字节长度。"
 ---
 
 # length

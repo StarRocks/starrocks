@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -109,6 +110,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
@@ -729,6 +731,12 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt statement, ConnectContext context) {
+            DMLStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         // ------------------------------------------- Cluster Management Statement ----------------------------------------
 
         @Override
@@ -935,6 +943,49 @@ public class Analyzer {
             return null;
         }
 
+        // ---------------------------------------- AI Provider Statement --------------------------------------------------
+        @Override
+        public Void visitCreateAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAIProvidersStatement(
+                com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         // -------------------------------------- Data Cache Management Statement -----------------------------------------
 
         @Override
@@ -1008,6 +1059,12 @@ public class Analyzer {
         @Override
         public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
             RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropSnapshotStatement(DropSnapshotStmt statement, ConnectContext context) {
+            DropSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
 

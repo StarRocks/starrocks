@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SQL コマンドトピックの記述要件を ADMIN SET REPLICA STATUS を例として説明。"
 unlisted: True
 ---
 

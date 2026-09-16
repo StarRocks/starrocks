@@ -15,9 +15,16 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/exec_env.h"
+#include <set>
+#include <string>
+#include <vector>
+
+#include "exec/exec_env.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard_helper.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 namespace lake {
@@ -74,9 +81,13 @@ std::shared_ptr<TxnLogPB> make_op_write_log(int64_t tablet_id, int64_t txn_id, i
     auto* rowset = opw->mutable_rowset();
     rowset->set_num_rows(num_rows);
     rowset->set_data_size(data_size);
+    // Production op_writes mint a uid at delta_writer time; emulate that here so
+    // batch-apply's strict-uid invariant in apply_op_write_batch holds.
+    tablet_reshard_helper::ensure_rowset_uid(rowset);
     for (auto& s : segments) {
-        rowset->add_segments(s);
-        rowset->add_segment_size(123); // dummy
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(s);
+        sm->set_size(123); // dummy
     }
     return log;
 }
@@ -87,15 +98,19 @@ std::shared_ptr<TxnLogPB> make_op_write_log_with_bundle(int64_t tablet_id, int64
                                                         const std::vector<int64_t>& bundle_offsets) {
     auto log = make_op_write_log(tablet_id, txn_id, num_rows, data_size, segments);
     auto* rowset = log->mutable_op_write()->mutable_rowset();
-    for (auto offset : bundle_offsets) {
-        rowset->add_bundle_file_offsets(offset);
+    for (int i = 0; i < static_cast<int>(bundle_offsets.size()); i++) {
+        if (i < rowset->segment_metas_size()) {
+            rowset->mutable_segment_metas(i)->set_bundle_file_offset(bundle_offsets[i]);
+        } else {
+            rowset->add_segment_metas()->set_bundle_file_offset(bundle_offsets[i]);
+        }
     }
     return log;
 }
 
 // Build a Tablet instance (minimal requirements for non-primary key path)
 bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
-    auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (mgr == nullptr) return false;
     auto meta = std::make_shared<TabletMetadata>();
     meta->set_id(tablet_id);
@@ -108,7 +123,7 @@ bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10001); // 修改参数顺序
     auto meta = build_non_pk_metadata(10001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -124,13 +139,144 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
     const auto& rs = meta->rowsets(0);
     EXPECT_EQ(5 + 7 + 3, rs.num_rows());
     EXPECT_EQ(100 + 140 + 60, rs.data_size());
-    EXPECT_EQ(4, rs.segments_size());
+    EXPECT_EQ(4, rs.segment_metas_size());
     EXPECT_EQ(0u, rs.id());
     EXPECT_EQ(4u, meta->next_rowset_id()); // 批量合并仍消耗3个额外rowset id
 }
 
+// Regression: a cross-published op_write whose num_rows scaled to 0 on this child (but still
+// carries a segment) must NOT be dropped, and the merged uid must be taken from it (the first
+// op_write carrying segments) so split children converge on one identity. Gating on num_rows
+// instead would skip seg_zero, set num_rows-driven uid to log1's, and diverge across children.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchZeroNumRowsKeepsSegmentAndUid) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10020);
+    auto meta = build_non_pk_metadata(10020);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log0 = make_op_write_log(10020, 20, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
+    auto log1 = make_op_write_log(10020, 21, /*num_rows=*/10, /*data_size=*/200, {"seg_data"});
+    const PUniqueId first_uid = log0->op_write().rowset().uid();
+
+    TxnLogVector logs{log0, log1};
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    EXPECT_EQ(2, rs.segment_metas_size()) << "the num_rows==0 op_write's segment must be retained";
+    EXPECT_EQ(10, rs.num_rows()) << "num_rows still summed faithfully (0 + 10)";
+    ASSERT_TRUE(rs.has_uid());
+    EXPECT_EQ(first_uid.hi(), rs.uid().hi());
+    EXPECT_EQ(first_uid.lo(), rs.uid().lo());
+}
+
+// Regression for the early-exit: if EVERY contributing op_write scaled to num_rows==0 but
+// segments are present, the merged rowset must still be created (the early-exit keys on
+// segments, not total_num_rows) — otherwise the whole cross-published txn's data is dropped.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10021);
+    auto meta = build_non_pk_metadata(10021);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    logs.push_back(make_op_write_log(10021, 22, 0, 0, {"seg_x"}));
+    logs.push_back(make_op_write_log(10021, 23, 0, 0, {"seg_y"}));
+
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size()) << "rowset must be created even when total num_rows is 0";
+    EXPECT_EQ(2, meta->rowsets(0).segment_metas_size());
+    EXPECT_EQ(0, meta->rowsets(0).num_rows());
+}
+
+// The single-log path had the hole the batch path above was already built to avoid: a cross
+// published rowset arrives with the rowset-level num_rows apportioned across the siblings, so a
+// sibling holding this tablet's rows can legitimately see 0. The per-segment counts are not
+// apportioned, so they are what settles it -- keying presence off the rowset-level count drops the
+// segments and the rows are gone while the transaction reports success.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogZeroNumRowsKeepsSegments) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10120);
+    auto meta = build_non_pk_metadata(10120);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10120, 30, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
+    log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(7);
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size()) << "a rowset whose segments hold rows must be attached whatever num_rows says";
+    EXPECT_EQ(1, meta->rowsets(0).segment_metas_size());
+    EXPECT_EQ(0, meta->rowsets(0).num_rows()) << "the apportioned statistic is kept as-is";
+}
+
+// The counterpart: nothing to attach when the op really is empty.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogNoSegmentsAttachesNothing) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10121);
+    auto meta = build_non_pk_metadata(10121);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10121, 31, /*num_rows=*/0, /*data_size=*/0, {});
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
+}
+
+// An empty write still produces a segment, and it reports 0 rows. That is not a cross publish and
+// there is nothing to attach -- the segment count alone would not tell the two apart, which is why
+// this path asks the per-segment counts. (The batch path is deliberately left as it was: it keys
+// off the segment count and merges, so an empty segment costs it a file reference, not a rowset.)
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogEmptySegmentAttachesNothing) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10122);
+    auto meta = build_non_pk_metadata(10122);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10122, 32, /*num_rows=*/0, /*data_size=*/0, {"seg_empty"});
+    log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(0);
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
+}
+
+// A legacy rowset whose segment_metas were back-filled from the deprecated parallel arrays carries
+// no per-segment count at all. Nothing proves it empty, so it is kept.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogUncountedSegmentIsKept) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10123);
+    auto meta = build_non_pk_metadata(10123);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10123, 33, /*num_rows=*/0, /*data_size=*/0, {"seg_uncounted"});
+    ASSERT_FALSE(log->op_write().rowset().segment_metas(0).has_num_rows());
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(1, meta->rowsets_size());
+    EXPECT_EQ(1, meta->rowsets(0).segment_metas_size());
+}
+
+// The primary key applier's skip predicate moved the same way, so check it did not broaden: an
+// op_write that really is empty -- a segment was written but holds no rows, no del files, no delete
+// predicate -- must still be skipped. Note the delete-only case never depended on this predicate;
+// dels_meta_size() > 0 short circuits it.
+//
+// The assertion has teeth because the skip returns BEFORE prepare_primary_index(): had the predicate
+// let this through, publish would go on to open "seg_empty", which does not exist.
+TEST(TxnLogApplierBatchTest, PrimaryKeySingleLogEmptySegmentIsSkipped) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30010);
+    auto meta = build_pk_metadata(30010);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(30010, 60, /*num_rows=*/0, /*data_size=*/0, {"seg_empty"});
+    log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(0);
+    ASSERT_EQ(0, log->op_write().dels_meta_size());
+    ASSERT_FALSE(log->op_write().rowset().has_delete_predicate());
+
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10004);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10004);
     auto meta = build_non_pk_metadata(10004);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -140,12 +286,17 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     auto* rowset = log->mutable_op_write()->mutable_rowset();
     rowset->set_num_rows(5);
     rowset->set_data_size(100);
-    rowset->add_segments("seg_sparse_a");
-    rowset->add_segments("seg_sparse_b");
-    rowset->add_segment_size(50);
-    rowset->add_segment_size(50);
-    rowset->add_segment_metas()->set_segment_idx(0);
-    rowset->add_segment_metas()->set_segment_idx(4);
+    tablet_reshard_helper::ensure_rowset_uid(rowset);
+    {
+        auto* sm0 = rowset->add_segment_metas();
+        sm0->set_filename("seg_sparse_a");
+        sm0->set_size(50);
+        sm0->set_segment_idx(0);
+        auto* sm1 = rowset->add_segment_metas();
+        sm1->set_filename("seg_sparse_b");
+        sm1->set_size(50);
+        sm1->set_segment_idx(4);
+    }
 
     TxnLogVector logs{log};
     Status st = applier->apply(logs);
@@ -157,7 +308,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10005);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10005);
     auto meta = build_non_pk_metadata(10005);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -167,9 +318,13 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
     auto* rowset1 = log1->mutable_op_write()->mutable_rowset();
     rowset1->set_num_rows(3);
     rowset1->set_data_size(30);
-    rowset1->add_segments("seg_a");
-    rowset1->add_segment_size(30);
-    rowset1->add_segment_metas()->set_segment_idx(0);
+    tablet_reshard_helper::ensure_rowset_uid(rowset1);
+    {
+        auto* sm = rowset1->add_segment_metas();
+        sm->set_filename("seg_a");
+        sm->set_size(30);
+        sm->set_segment_idx(0);
+    }
 
     auto log2 = std::make_shared<TxnLogPB>();
     log2->set_tablet_id(10005);
@@ -177,9 +332,13 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
     auto* rowset2 = log2->mutable_op_write()->mutable_rowset();
     rowset2->set_num_rows(4);
     rowset2->set_data_size(40);
-    rowset2->add_segments("seg_b");
-    rowset2->add_segment_size(40);
-    rowset2->add_segment_metas()->set_segment_idx(0);
+    tablet_reshard_helper::ensure_rowset_uid(rowset2);
+    {
+        auto* sm = rowset2->add_segment_metas();
+        sm->set_filename("seg_b");
+        sm->set_size(40);
+        sm->set_segment_idx(0);
+    }
 
     TxnLogVector logs{log1, log2};
     Status st = applier->apply(logs);
@@ -187,7 +346,6 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
 
     ASSERT_EQ(1, meta->rowsets_size());
     const auto& merged = meta->rowsets(0);
-    ASSERT_EQ(2, merged.segments_size());
     ASSERT_EQ(2, merged.segment_metas_size());
     EXPECT_EQ(0, merged.segment_metas(0).segment_idx());
     EXPECT_EQ(1, merged.segment_metas(1).segment_idx());
@@ -195,7 +353,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
     auto meta = build_non_pk_metadata(10002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -206,7 +364,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10003); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10003); // 修改参数顺序
     auto meta = build_non_pk_metadata(10003);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -218,8 +376,11 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
     auto* rowset = opw->mutable_rowset();
     rowset->set_num_rows(5);
     rowset->set_data_size(50);
-    rowset->add_segments("seg2");
-    rowset->add_segment_size(50);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("seg2");
+        sm->set_size(50);
+    }
     rowset->mutable_delete_predicate()->set_version(1);
 
     TxnLogVector logs{log1, log2};
@@ -229,7 +390,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 20001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20001); // 修改参数顺序
     auto meta = build_pk_metadata(20001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -247,7 +408,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsLogWithoutWrite) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 20002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20002); // 修改参数顺序
     auto meta = build_pk_metadata(20002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -286,8 +447,11 @@ std::shared_ptr<TxnLogPB> make_lake_replication_log_with_tablet_metadata(int64_t
     rowset->set_id(0);
     rowset->set_num_rows(num_rows);
     rowset->set_data_size(data_size);
-    rowset->add_segments("replicated_seg1");
-    rowset->add_segment_size(data_size);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("replicated_seg1");
+        sm->set_size(data_size);
+    }
 
     return log;
 }
@@ -301,7 +465,7 @@ std::shared_ptr<TxnLogPB> make_lake_replication_log_with_tablet_metadata(int64_t
 // "Already exist: FixedMutableIndex<20> insert found duplicate key, new(rssid=X rowid=0), old(rssid=Y rowid=Z)"
 // The fix: For lake pk table replication txns, finish() should just put or cache metadata, skipping pk index rebuild.
 TEST(TxnLogApplierBatchTest, PrimaryKeyLakeReplicationFinishSkipsPrepareIndex) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30001);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30001);
     // Use metadata with LOCAL persistent index enabled - this is the scenario that would
     // trigger prepare_primary_index() in finish() for normal transactions
     auto meta = build_pk_metadata_with_local_persistent_index(30001);
@@ -354,15 +518,18 @@ std::shared_ptr<TxnLogPB> make_replication_log_without_tablet_metadata(int64_t t
     rowset->set_id(0);
     rowset->set_num_rows(num_rows);
     rowset->set_data_size(data_size);
-    rowset->add_segments("trad_replicated_seg1");
-    rowset->add_segment_size(data_size);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("trad_replicated_seg1");
+        sm->set_size(data_size);
+    }
 
     return log;
 }
 
 // Test that non-PK table with lake replication log (has tablet_metadata) works correctly
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30002);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30002);
     auto meta = build_non_pk_metadata(30002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -380,10 +547,123 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
     EXPECT_EQ(15u, meta->next_rowset_id());
 }
 
+// Build an incremental replication log carrying |op_writes| plus a dcg_meta keyed by SOURCE rssids.
+// Incremental is the shape that routes through build_rssid_remap; the version arithmetic
+// (snapshot - data + base == new) has to line up or apply_replication_log rejects the log outright.
+std::shared_ptr<TxnLogPB> make_incremental_replication_log(int64_t tablet_id, int64_t txn_id, int64_t base_version,
+                                                           int64_t new_version,
+                                                           const std::vector<TxnLogPB_OpWrite>& op_writes,
+                                                           const std::vector<uint32_t>& dcg_source_rssids) {
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(tablet_id);
+    log->set_txn_id(txn_id);
+    auto* op_replication = log->mutable_op_replication();
+
+    auto* txn_meta = op_replication->mutable_txn_meta();
+    txn_meta->set_txn_id(txn_id);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_incremental_snapshot(true);
+    txn_meta->set_data_version(10);
+    txn_meta->set_snapshot_version(10 + (new_version - base_version));
+
+    for (const auto& op_write : op_writes) {
+        op_replication->add_op_writes()->CopyFrom(op_write);
+    }
+    for (uint32_t src_rssid : dcg_source_rssids) {
+        // The payload only has to be distinguishable; the column file name records which source
+        // rssid the entry came from so the assertions can follow it through the remap.
+        DeltaColumnGroupVerPB dcg_ver;
+        dcg_ver.add_column_files("src_" + std::to_string(src_rssid) + ".cols");
+        (*op_replication->mutable_dcg_meta()->mutable_dcgs())[src_rssid] = dcg_ver;
+    }
+    return log;
+}
+
+TxnLogPB_OpWrite make_replication_op_write(uint32_t source_rowset_id, int64_t rowset_num_rows,
+                                           const std::vector<int64_t>& per_segment_num_rows) {
+    TxnLogPB_OpWrite op_write;
+    auto* rowset = op_write.mutable_rowset();
+    rowset->set_id(source_rowset_id);
+    rowset->set_num_rows(rowset_num_rows);
+    for (size_t i = 0; i < per_segment_num_rows.size(); i++) {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("repl_seg_" + std::to_string(source_rowset_id) + "_" + std::to_string(i));
+        sm->set_size(123);
+        sm->set_num_rows(per_segment_num_rows[i]);
+    }
+    return op_write;
+}
+
+// build_rssid_remap decides which op_writes advance the target rssid, and it MUST reach the same
+// verdict as the applier that attaches the rowsets -- its comment says so, because the two run over
+// the same op_writes and the remap is what re-keys the replicated delta column groups. A drift makes
+// every dcg entry after the first disagreement point at an rssid no attached rowset owns: silently
+// wrong columns, no error anywhere.
+//
+// #77511 moved that predicate (num_rows alone -> ask the segments) in both places at once. This
+// pins the agreement so a future one-sided edit fails here instead of in production.
+//
+// The three op_writes below exercise all three verdicts:
+//   src 100: rowset num_rows > 0                      -> attached, step 1
+//   src 200: a segment written but holding no rows     -> skipped, must NOT advance the target id
+//   src 300: num_rows apportioned to 0, segments hold rows -> attached, step 2
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyIncrementalReplicationRssidRemapMatchesAttachedRowsets) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30010);
+    auto meta = build_non_pk_metadata(30010);
+    ASSERT_EQ(0u, meta->next_rowset_id());
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    std::vector<TxnLogPB_OpWrite> op_writes{
+            make_replication_op_write(/*source_rowset_id=*/100, /*rowset_num_rows=*/5, {5}),
+            make_replication_op_write(/*source_rowset_id=*/200, /*rowset_num_rows=*/0, {0}),
+            make_replication_op_write(/*source_rowset_id=*/300, /*rowset_num_rows=*/0, {7, 0}),
+    };
+    // One dcg per source rssid the writes own, plus one (999) that no write owns.
+    auto log = make_incremental_replication_log(30010, 70, /*base_version=*/1, /*new_version=*/2, op_writes,
+                                                {100, 200, 300, 301, 999});
+
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // Two rowsets attached at 0 and 1; the empty one contributed nothing, so 300 lands at 1 (not 2)
+    // and owns rssids 1 and 2 for its two segments.
+    ASSERT_EQ(2, meta->rowsets_size());
+    EXPECT_EQ(0u, meta->rowsets(0).id());
+    EXPECT_EQ(1u, meta->rowsets(1).id());
+    EXPECT_EQ(3u, meta->next_rowset_id());
+
+    // Every rssid the attached rowsets own.
+    std::set<uint32_t> owned_rssids;
+    for (const auto& rowset : meta->rowsets()) {
+        for (uint32_t i = 0; i < get_rowset_id_step(rowset); i++) {
+            owned_rssids.insert(rowset.id() + i);
+        }
+    }
+    EXPECT_EQ(std::set<uint32_t>({0, 1, 2}), owned_rssids);
+
+    // The dcgs of a skipped write, and of a source rssid nobody owns, are left on their source key
+    // (apply_replication_dcg_meta keeps unmapped keys unchanged), so filter to the remapped ones and
+    // require each to land on an rssid an attached rowset actually owns. This is the assertion that
+    // catches a predicate drift: including the skipped write in the remap would push 300 to 2 and 301
+    // to 3, and 3 is owned by nothing.
+    const auto& dcgs = meta->dcg_meta().dcgs();
+    auto source_of = [&](uint32_t key) {
+        auto it = dcgs.find(key);
+        return it == dcgs.end() ? std::string() : it->second.column_files(0);
+    };
+    EXPECT_EQ("src_100.cols", source_of(0)) << "source rssid 100 must be remapped onto the first attached rowset";
+    EXPECT_EQ("src_300.cols", source_of(1)) << "the skipped write must not have advanced the target rssid";
+    EXPECT_EQ("src_301.cols", source_of(2));
+    // Untouched keys: the skipped write's own rssid and the orphan one.
+    EXPECT_EQ("src_200.cols", source_of(200));
+    EXPECT_EQ("src_999.cols", source_of(999));
+    EXPECT_EQ(5u, dcgs.size()) << "no dcg entry may be dropped or collide";
+}
+
 // Test that bundle_file_offsets from multiple TxnLogs are correctly merged into the combined rowset.
 // This verifies multi-statement transaction support for file bundling.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10010);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10010);
     auto meta = build_non_pk_metadata(10010);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -400,18 +680,21 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
     const auto& rs = meta->rowsets(0);
     EXPECT_EQ(15, rs.num_rows());
     EXPECT_EQ(300, rs.data_size());
-    EXPECT_EQ(3, rs.segments_size());
+    EXPECT_EQ(3, rs.segment_metas_size());
 
     // Verify bundle_file_offsets are preserved with 1:1 correspondence
-    ASSERT_EQ(3, rs.bundle_file_offsets_size());
-    EXPECT_EQ(0, rs.bundle_file_offsets(0));
-    EXPECT_EQ(1024, rs.bundle_file_offsets(1));
-    EXPECT_EQ(2048, rs.bundle_file_offsets(2));
+    ASSERT_EQ(3, rs.segment_metas_size());
+    ASSERT_TRUE(rs.segment_metas(0).has_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(2).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(1024, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_EQ(2048, rs.segment_metas(2).bundle_file_offset());
 }
 
 // Test that when no TxnLogs have bundle_file_offsets, the merged rowset also has none.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10011);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10011);
     auto meta = build_non_pk_metadata(10011);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -424,14 +707,15 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
 
     ASSERT_EQ(1, meta->rowsets_size());
     const auto& rs = meta->rowsets(0);
-    EXPECT_EQ(2, rs.segments_size());
-    EXPECT_EQ(0, rs.bundle_file_offsets_size());
+    EXPECT_EQ(2, rs.segment_metas_size());
+    EXPECT_FALSE(rs.segment_metas(0).has_bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(1).has_bundle_file_offset());
 }
 
 // Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
 // data corruption — silently dropping offsets would leave bundled segment paths unresolvable.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10012);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10012);
     auto meta = build_non_pk_metadata(10012);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -449,7 +733,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsErr
 // Test reverse order: first TxnLog has no offsets, second has offsets.
 // This must also be detected as inconsistent and return error.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10013);
     auto meta = build_non_pk_metadata(10013);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -466,7 +750,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseRet
 
 // Test that a single TxnLog with mismatched offset/segment count returns error.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10014);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10014);
     auto meta = build_non_pk_metadata(10014);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -479,8 +763,30 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchRetu
     EXPECT_NE(std::string::npos, st.to_string().find("mismatch"));
 }
 
+// Legacy/upgrade path: a txn log written before the uid field existed carries no producer
+// uid. Batch-apply must NOT hard-fail on it (that would strand a pending multi-statement
+// txn across a rolling upgrade) — instead the merged rowset backfills a fresh uid so the
+// publish succeeds. Such a txn predates range distribution and is never cross-published, so
+// the backfilled (non-deterministic) uid is safe. We clear the uid that make_op_write_log
+// auto-stamps to simulate the legacy log.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoUidBackfills) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10015);
+    auto meta = build_non_pk_metadata(10015);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    auto log = make_op_write_log(10015, 10, 5, 100, {"seg_a"});
+    log->mutable_op_write()->mutable_rowset()->clear_uid(); // simulate a legacy pre-uid txn log
+    logs.push_back(std::move(log));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(1, meta->rowsets_size());
+    EXPECT_TRUE(meta->rowsets(0).has_uid()) << "merged rowset must backfill a uid for a legacy log";
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30003);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30003);
     auto meta = build_non_pk_metadata(30003);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -500,12 +806,16 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegm
     rowset->set_id(0);
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("rep_seg1");
-    rowset->add_segments("rep_seg2");
-    rowset->add_segment_size(50);
-    rowset->add_segment_size(50);
-    rowset->add_segment_metas()->set_segment_idx(0);
-    rowset->add_segment_metas()->set_segment_idx(6);
+    {
+        auto* sm0 = rowset->add_segment_metas();
+        sm0->set_filename("rep_seg1");
+        sm0->set_size(50);
+        sm0->set_segment_idx(0);
+        auto* sm1 = rowset->add_segment_metas();
+        sm1->set_filename("rep_seg2");
+        sm1->set_size(50);
+        sm1->set_segment_idx(6);
+    }
 
     Status st = applier->apply(*log);
     EXPECT_TRUE(st.ok()) << st.to_string();
@@ -516,7 +826,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegm
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyFullReplicationWithoutTabletMetaClearsStaleDcgMeta) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30004);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30004);
     auto meta = build_non_pk_metadata(30004);
     meta->set_next_rowset_id(10);
     auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[123];
@@ -540,8 +850,11 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyFullReplicationWithoutTabletMetaClears
     rowset->set_id(5); // source rssid base
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("rep_seg1");
-    rowset->add_segment_size(100);
+    {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("rep_seg1");
+        sm->set_size(100);
+    }
 
     auto& incoming_dcg = (*op_replication->mutable_dcg_meta()->mutable_dcgs())[5];
     incoming_dcg.add_column_files("new_dcg_file.cols");
@@ -576,7 +889,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyFullReplicationWithoutTabletMetaClears
 TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
     // --- Sub-case 1: Non-lake path (offset-based DCG remap) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50001);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50001);
         auto meta = build_pk_metadata(50001);
         meta->set_next_rowset_id(10);
         // Pre-existing stale DCG
@@ -601,10 +914,14 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
         rowset->set_id(3);
         rowset->set_num_rows(50);
         rowset->set_data_size(2048);
-        rowset->add_segments("pk_full_seg1.dat");
-        rowset->add_segments("pk_full_seg2.dat");
-        rowset->add_segment_size(1024);
-        rowset->add_segment_size(1024);
+        {
+            auto* sm0 = rowset->add_segment_metas();
+            sm0->set_filename("pk_full_seg1.dat");
+            sm0->set_size(1024);
+            auto* sm1 = rowset->add_segment_metas();
+            sm1->set_filename("pk_full_seg2.dat");
+            sm1->set_size(1024);
+        }
 
         // DCG on source rssid 4 → offset to 4 + 10 = 14
         auto& dcg = (*op_rep->mutable_dcg_meta()->mutable_dcgs())[4];
@@ -637,7 +954,7 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
 
     // --- Sub-case 2: Lake path (tablet_metadata copy) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50002);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50002);
         auto meta = build_pk_metadata(50002);
         meta->set_next_rowset_id(5);
         auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[88];
@@ -661,8 +978,11 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
         rep_rowset->set_id(0);
         rep_rowset->set_num_rows(100);
         rep_rowset->set_data_size(4096);
-        rep_rowset->add_segments("lake_pk_seg1.dat");
-        rep_rowset->add_segment_size(4096);
+        {
+            auto* sm = rep_rowset->add_segment_metas();
+            sm->set_filename("lake_pk_seg1.dat");
+            sm->set_size(4096);
+        }
         auto& lake_dcg = (*tablet_metadata->mutable_dcg_meta()->mutable_dcgs())[5];
         lake_dcg.add_column_files("lake_pk_dcg.cols");
         lake_dcg.add_versions(2);
@@ -693,7 +1013,7 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationWithDcg) {
     // from op_replication are correctly applied to metadata (pass-through without remapping).
     // The full DCG rssid remapping logic is tested by NonPKIncrementalReplicationWithDcg,
     // which uses the same shared apply_replication_dcg_meta function.
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50005);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50005);
     auto meta = build_pk_metadata(50005);
     meta->set_next_rowset_id(10);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
@@ -746,7 +1066,7 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationWithDcg) {
 TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
     // --- Sub-case 1: Non-lake path (rssid_remap) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50003);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50003);
         auto meta = build_non_pk_metadata(50003);
         meta->set_next_rowset_id(10);
         auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
@@ -767,10 +1087,14 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         rowset1->set_id(5);
         rowset1->set_num_rows(50);
         rowset1->set_data_size(200);
-        rowset1->add_segments("full_seg1");
-        rowset1->add_segments("full_seg2");
-        rowset1->add_segment_size(100);
-        rowset1->add_segment_size(100);
+        {
+            auto* sm0 = rowset1->add_segment_metas();
+            sm0->set_filename("full_seg1");
+            sm0->set_size(100);
+            auto* sm1 = rowset1->add_segment_metas();
+            sm1->set_filename("full_seg2");
+            sm1->set_size(100);
+        }
 
         // Rowset 2: source id=8, 1 seg → remap {8→12}, target→13
         auto* op_write2 = op_rep->add_op_writes();
@@ -778,8 +1102,11 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         rowset2->set_id(8);
         rowset2->set_num_rows(30);
         rowset2->set_data_size(100);
-        rowset2->add_segments("full_seg3");
-        rowset2->add_segment_size(100);
+        {
+            auto* sm = rowset2->add_segment_metas();
+            sm->set_filename("full_seg3");
+            sm->set_size(100);
+        }
 
         // DCG on source rssid 6 → remap to 11
         (*op_rep->mutable_dcg_meta()->mutable_dcgs())[6].add_column_files("nonpk_full_dcg.cols");
@@ -796,7 +1123,7 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
 
     // --- Sub-case 2: Lake path (tablet_metadata copy + stale DCG cleanup) ---
     {
-        Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 50004);
+        Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50004);
         auto meta = build_non_pk_metadata(50004);
         meta->set_next_rowset_id(10);
         auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[88];
@@ -820,8 +1147,11 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         rep_rowset->set_id(0);
         rep_rowset->set_num_rows(200);
         rep_rowset->set_data_size(8192);
-        rep_rowset->add_segments("lake_nonpk_seg1.dat");
-        rep_rowset->add_segment_size(8192);
+        {
+            auto* sm = rep_rowset->add_segment_metas();
+            sm->set_filename("lake_nonpk_seg1.dat");
+            sm->set_size(8192);
+        }
         (*tablet_metadata->mutable_dcg_meta()->mutable_dcgs())[3].add_column_files("lake_nonpk_dcg.cols");
 
         ASSERT_TRUE(applier->apply(*log).ok());
@@ -841,7 +1171,7 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 40001);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40001);
     auto meta = build_non_pk_metadata(40001);
     meta->set_next_rowset_id(10);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
@@ -863,10 +1193,14 @@ TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
     rowset1->set_id(5);
     rowset1->set_num_rows(50);
     rowset1->set_data_size(200);
-    rowset1->add_segments("seg1");
-    rowset1->add_segments("seg2");
-    rowset1->add_segment_size(100);
-    rowset1->add_segment_size(100);
+    {
+        auto* sm0 = rowset1->add_segment_metas();
+        sm0->set_filename("seg1");
+        sm0->set_size(100);
+        auto* sm1 = rowset1->add_segment_metas();
+        sm1->set_filename("seg2");
+        sm1->set_size(100);
+    }
 
     // op_write 2: empty (num_rows=0, no delete_pred) → skipped
     auto* op_write2 = op_rep->add_op_writes();
@@ -881,8 +1215,11 @@ TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
     rowset3->set_id(20);
     rowset3->set_num_rows(0);
     rowset3->set_data_size(50);
-    rowset3->add_segments("seg3");
-    rowset3->add_segment_size(50);
+    {
+        auto* sm = rowset3->add_segment_metas();
+        sm->set_filename("seg3");
+        sm->set_size(50);
+    }
     rowset3->mutable_delete_predicate()->set_version(1);
 
     // op_write 4: no rowset → skipped
@@ -909,6 +1246,234 @@ TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
     EXPECT_EQ("dcg_6.cols", meta->dcg_meta().dcgs().at(11).column_files(0));
     EXPECT_EQ("dcg_20.cols", meta->dcg_meta().dcgs().at(12).column_files(0));
     EXPECT_EQ("dcg_77.cols", meta->dcg_meta().dcgs().at(77).column_files(0));
+}
+
+// Regression for the metadata-reclaim change on the non-PK path: when
+// NonPrimaryKeyTxnLogApplier archives compaction input rowsets into
+// compaction_inputs, the delete_predicate must be dropped from the archived copy
+// (covers both the std::move(*iter) branch and the last_input_rowset branch).
+TEST(TxnLogApplierCompactionTest, NonPKCompactionDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40050);
+    auto meta = build_non_pk_metadata(40050);
+    meta->set_next_rowset_id(10);
+
+    // Two adjacent live rowsets, each carrying a delete_predicate.
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_overlapped(false);
+    r0->set_num_rows(10);
+    r0->set_data_size(100);
+    r0->add_segment_metas()->set_filename("seg0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_overlapped(false);
+    r1->set_num_rows(20);
+    r1->set_data_size(200);
+    r1->add_segment_metas()->set_filename("seg1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40050);
+    log->set_txn_id(200);
+    auto* op_compaction = log->mutable_op_compaction();
+    op_compaction->add_input_rowsets(1);
+    op_compaction->add_input_rowsets(2);
+    auto* output = op_compaction->mutable_output_rowset();
+    output->set_num_rows(30);
+    output->set_data_size(300);
+    output->add_segment_metas()->set_filename("out.dat");
+    op_compaction->set_compact_version(2);
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // Input rowsets archived into compaction_inputs must NOT retain delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+// Regression: non-PK LAKE replication (full snapshot with tablet_metadata) archives superseded old
+// rowsets into compaction_inputs via the Add path — delete_predicate must be dropped there too.
+TEST(TxnLogApplierCompactionTest, NonPKLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40060);
+    auto meta = build_non_pk_metadata(40060);
+    meta->set_next_rowset_id(10);
+    // Existing (soon-to-be-superseded) rowsets carrying delete_predicate.
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40060);
+    log->set_txn_id(300);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(300);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot -> else branch
+    // Lake replication: provide tablet_metadata with NEW rowset ids, so the old ids (1,2) are archived.
+    auto* tm = op_rep->mutable_tablet_metadata();
+    tm->set_id(40060);
+    tm->set_next_rowset_id(20);
+    auto* nr = tm->add_rowsets();
+    nr->set_id(15);
+    nr->set_num_rows(30);
+    nr->add_segment_metas()->set_filename("new0.dat");
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // The superseded old rowsets are archived into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+// Regression: non-PK NON-LAKE replication (full snapshot, no tablet_metadata) swaps all superseded
+// old rowsets into compaction_inputs — delete_predicate must be dropped across the Swap too.
+TEST(TxnLogApplierCompactionTest, NonPKNonLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40061);
+    auto meta = build_non_pk_metadata(40061);
+    meta->set_next_rowset_id(10);
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40061);
+    log->set_txn_id(301);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(301);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot, no tablet_metadata -> non-lake Swap path
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // All superseded old rowsets are swapped into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+// Regression: PK LAKE replication (full snapshot with tablet_metadata) archives superseded old rowsets
+// into compaction_inputs via the Add path — delete_predicate must be dropped there too.
+TEST(TxnLogApplierCompactionTest, PKLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40070);
+    auto meta = build_pk_metadata(40070);
+    meta->set_next_rowset_id(10);
+    // Existing (soon-to-be-superseded) rowsets carrying delete_predicate.
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40070);
+    log->set_txn_id(400);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(400);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot -> else branch
+    // Lake replication: provide tablet_metadata with NEW rowset ids, so the old ids (1,2) are archived.
+    auto* tm = op_rep->mutable_tablet_metadata();
+    tm->set_id(40070);
+    tm->set_next_rowset_id(20);
+    auto* nr = tm->add_rowsets();
+    nr->set_id(15);
+    nr->set_num_rows(30);
+    nr->add_segment_metas()->set_filename("new0.dat");
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // The superseded old rowsets are archived into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+// Regression: PK NON-LAKE replication (full snapshot, no tablet_metadata) swaps all superseded old
+// rowsets into compaction_inputs — delete_predicate must be dropped across the Swap too.
+TEST(TxnLogApplierCompactionTest, PKNonLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40071);
+    auto meta = build_pk_metadata(40071);
+    meta->set_next_rowset_id(10);
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40071);
+    log->set_txn_id(401);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(401);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot, no tablet_metadata -> non-lake Swap path
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // All superseded old rowsets are swapped into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
 }
 
 } // namespace lake

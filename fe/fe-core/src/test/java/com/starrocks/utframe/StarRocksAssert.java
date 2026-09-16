@@ -386,7 +386,7 @@ public class StarRocksAssert {
         if (functionRef.isGlobalFunction()) {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } else {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
             db.addFunction(function, true, false);
         }
     }

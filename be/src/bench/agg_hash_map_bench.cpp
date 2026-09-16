@@ -648,7 +648,7 @@ static void BM_Int16Cx1BuildOnly(benchmark::State& state) {
 //   24    -> hour-of-day (headline mid density)
 //   366   -> day-of-year
 //   1000  -> region-code-ish
-//   10000 -> ClickHouse fixed_hash_table baseline density
+//   10000 -> high-cardinality dimension (merchant/sku-ish)
 //   65536 -> array's worst-case memory locality (every slot used)
 static void RegisterArgs_SectionA(benchmark::internal::Benchmark* b) {
     b->ArgNames({"rows", "distinct", "dist"});

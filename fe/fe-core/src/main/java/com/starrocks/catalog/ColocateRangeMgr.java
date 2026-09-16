@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Manages colocate ranges for range distribution colocate groups.
@@ -131,6 +133,23 @@ public class ColocateRangeMgr {
      */
     public boolean containsColocateGroup(long colocateGroupId) {
         return colocateGroupToRanges.containsKey(colocateGroupId);
+    }
+
+    /**
+     * Returns all PACK shard group ids currently tracked across every colocate group.
+     *
+     * <p>These PACK shard groups are created by FE but are not attached to any
+     * {@code PhysicalPartition}, so callers that build the set of FE-known shard groups
+     * from partitions alone must union this in (e.g. {@code StarMgrMetaSyncer}); otherwise
+     * a live PACK shard group would be misclassified as an orphan and reaped.
+     *
+     * @return a new set of PACK shard group ids (empty if none); never null
+     */
+    public Set<Long> getAllPackShardGroupIds() {
+        return colocateGroupToRanges.values().stream()
+                .flatMap(List::stream)
+                .map(ColocateRange::getShardGroupId)
+                .collect(Collectors.toSet());
     }
 
     // ---- Initialize ----

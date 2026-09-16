@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "JSONドキュメントの長さを返します。"
 ---
 
 # json_length

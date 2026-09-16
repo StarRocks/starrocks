@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "自 4.1 版本起，StarRocks 支持创建 SQL UDF，将 SQL 表达式封装为可重用函数。"
 sidebar_position: 0.95
 ---
 

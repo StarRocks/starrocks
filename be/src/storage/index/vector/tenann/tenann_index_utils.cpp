@@ -157,6 +157,17 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
     return meta;
 }
 
+std::string resolve_vector_index_cosine_backend(const tenann::IndexMeta& meta) {
+    if (meta.index_type() == tenann::IndexType::kFaissHnsw) {
+        const int quantizer = meta.index_params().value(index::vector::QUANTIZER,
+                                                        static_cast<int>(tenann::ScalarQuantizerType::kFlat));
+        if (quantizer != static_cast<int>(tenann::ScalarQuantizerType::kFlat)) {
+            return "inner_product";
+        }
+    }
+    return config::vector_index_cosine_backend;
+}
+
 int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows) {
     int ef_base = std::max(user_ef, query_k);
     if (ef_base <= 0) return 0;
@@ -211,6 +222,15 @@ void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, 
         VLOG(2) << "Adaptive ef_search: user_ef=" << user_ef << " query_k=" << query_k << " rows=" << segment_num_rows
                 << " effective=" << eff_ef;
     }
+}
+
+Status tenann_error_to_status(const tenann::Error& e) {
+    const std::string& msg = e.message();
+    if (msg.find("Not found") != std::string::npos || msg.find("not found") != std::string::npos ||
+        msg.find("No such file") != std::string::npos) {
+        return Status::NotFound(msg);
+    }
+    return Status::InternalError(msg);
 }
 
 } // namespace starrocks

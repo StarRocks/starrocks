@@ -873,7 +873,7 @@ public class DefaultSharedDataWorkerProviderTest {
                 4, ImmutableList.of(5L),
                 5, ImmutableList.of(6L)
         );
-        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 3);
+        scanNode.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends, 3));
         List<TScanRangeLocations> scanLocations = generateScanRangeLocations(id2AllNodes, 10, bucketNum);
         WorkerProvider provider = newWorkerProvider();
 

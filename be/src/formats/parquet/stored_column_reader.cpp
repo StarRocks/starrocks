@@ -227,9 +227,9 @@ Status RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size
         _meet_first_record = false;
         DCHECK_EQ(0, rep_levels[levels_pos]);
     } // else {
-      //  means  rows_read < *num_rows, levels_pos >= _levels_decoded,
-      //  so we need to decode more levels to obtain a complete line or
-      //  we have read all the records in this column chunk.
+    //  means  rows_read < *num_rows, levels_pos >= _levels_decoded,
+    //  so we need to decode more levels to obtain a complete line or
+    //  we have read all the records in this column chunk.
     // }
 
     VLOG_ROW << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;
@@ -297,10 +297,12 @@ Status StoredColumnReader::create(const ColumnReaderOptions& opts, const Parquet
 }
 
 size_t StoredColumnReaderImpl::count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level) {
+    // gcc 12+ auto-vectorises this into the same cmpeq + popcount sequence we used
+    // to spell out by hand, on both AVX2 and NEON. Keep the loop scalar so the
+    // hot path stays readable.
     size_t count = 0;
-    for (int i = 0; i < num_parsed_levels; ++i) {
-        level_t def_level = def_levels[i];
-        if (def_level == max_def_level) {
+    for (size_t i = 0; i < num_parsed_levels; ++i) {
+        if (def_levels[i] == max_def_level) {
             count++;
         }
     }

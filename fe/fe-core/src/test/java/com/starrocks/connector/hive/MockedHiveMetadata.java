@@ -1581,7 +1581,6 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         new FieldSchema("hour", "int", null)), Maps.newHashMap(), null, null,
                 "EXTERNAL_TABLE");
         List<String> partitionNames = Lists.newArrayList("day=2012-01-01/hour=6", "day=2012-01-01/hour=06");
-        Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
 
         Map<String, ColumnStatistic> columnStatisticMap;
         List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());

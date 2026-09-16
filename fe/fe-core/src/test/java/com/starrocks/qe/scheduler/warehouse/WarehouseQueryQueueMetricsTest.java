@@ -48,6 +48,8 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class WarehouseQueryQueueMetricsTest extends SchedulerTestBase {
+    private int prevConcurrencyLevel;
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
@@ -56,6 +58,14 @@ public class WarehouseQueryQueueMetricsTest extends SchedulerTestBase {
 
     @BeforeEach
     public void before() {
+        // Query Queue V2 derives total slots from the capacity level as
+        // number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4). On this
+        // single-core test cluster the default level yields only 1 total slot, fewer than the queries
+        // this test runs concurrently. Raise the level so the queue concurrency limit (not the slot
+        // budget) is the admission gate.
+        prevConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        Config.query_queue_v2_concurrency_level = 16;
+
         GlobalVariable.setEnableGroupLevelQueryQueue(true);
 
         GlobalVariable.setQueryQueuePendingTimeoutSecond(Config.max_load_timeout_second);
@@ -84,6 +94,7 @@ public class WarehouseQueryQueueMetricsTest extends SchedulerTestBase {
                 .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
+        Config.query_queue_v2_concurrency_level = prevConcurrencyLevel;
     }
 
     @Test

@@ -35,6 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
@@ -74,6 +75,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -188,6 +190,23 @@ public class ConnectContextTest {
     }
 
     @Test
+    public void testPreSplitProfileLifecycle() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        Assertions.assertNull(ctx.getPreSplitProfile());
+        PreSplitProfile first = ctx.getOrCreatePreSplitProfile();
+        Assertions.assertSame(first, ctx.getPreSplitProfile());
+        Assertions.assertSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime();
+        Assertions.assertNull(ctx.getPreSplitProfile(), "a new statement must not reuse the previous profile");
+        Assertions.assertNotSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime(Instant.EPOCH);
+        Assertions.assertNull(ctx.getPreSplitProfile(), "the test start-time overload must reset the profile too");
+    }
+
+    @Test
     public void testSleepTimeout() {
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
@@ -240,6 +259,48 @@ public class ConnectContextTest {
         Assertions.assertTrue(ctx.isKilled());
 
         // clean up
+        ctx.cleanup();
+    }
+
+    @Test
+    public void testQueryTimeoutErrorMessageUsesMetadataCollectQueryTimeoutForMetadataContext() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+        // A metadata collection job runs its inner query under a metadata context (see
+        // MetadataCollectJob.buildConnectContext), so the timeout hint must point at metadata_collect_query_timeout.
+        ctx.setMetadataContext(true);
+
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+
+        // checkTimeout() builds the hint and passes it to executor.cancel(); capture it into the query state
+        // so we can assert on the message (mirrors testQueryTimeoutErrorMessageUsesTableQueryTimeoutHint).
+        new Expectations(executor) {
+            {
+                executor.cancel(anyString);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void cancel(String cancelledMessage) {
+                        ctx.getState().setError(cancelledMessage);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000L + 1;
+        boolean killed = ctx.checkTimeout(now);
+
+        // For query timeouts killConnection is false, so isKilled() stays false; assert the return value instead.
+        Assertions.assertTrue(killed);
+        String errorMsg = ctx.getState().getErrorMessage();
+        Assertions.assertNotNull(errorMsg);
+        Assertions.assertTrue(errorMsg.contains(SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT));
+        // Note: METADATA_COLLECT_QUERY_TIMEOUT itself contains the substring "query_timeout", so quote the
+        // bare query_timeout hint to make sure the message is not the generic query_timeout one.
+        Assertions.assertFalse(errorMsg.contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
+
         ctx.cleanup();
     }
 
@@ -1027,5 +1088,28 @@ public class ConnectContextTest {
 
         // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+
+    @Test
+    public void testWarningBufferKeepsFirstEntriesAndStaysBounded() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Recording without an intervening clear stops at the limit, and the entries kept are
+        // the first ones, so the buffer cannot grow for the lifetime of the connection.
+        for (int i = 0; i < 500; i++) {
+            ctx.addWarning(new QueryWarning("Warning", "1265", "warning " + i));
+        }
+
+        List<QueryWarning> warnings = ctx.getWarnings();
+        Assertions.assertEquals(64, warnings.size());
+        Assertions.assertEquals("warning 0", warnings.get(0).getMessage());
+        Assertions.assertEquals("warning 63", warnings.get(63).getMessage());
+
+        // The limit applies to what the buffer holds, not to the connection: the next statement
+        // clears it and records into an empty buffer again.
+        ctx.clearWarnings();
+        ctx.addWarning(QueryWarning.fromErrorState(ctx.getState()));
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        Assertions.assertEquals("Error", ctx.getWarnings().get(0).getLevel());
     }
 }

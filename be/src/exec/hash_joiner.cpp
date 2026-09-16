@@ -25,9 +25,10 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/hash_join_components.h"
 #include "exec/join/join_hash_table.h"
-#include "exec/spill/spiller.hpp"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
@@ -77,8 +78,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _other_join_conjunct_ctxs(param._other_join_conjunct_ctxs),
           _conjunct_ctxs(param._conjunct_ctxs),
           _common_expr_ctxs(param._common_expr_ctxs),
-          _build_row_descriptor(param._build_row_descriptor),
-          _probe_row_descriptor(param._probe_row_descriptor),
+          _build_record_descriptor(param._build_record_descriptor),
+          _probe_record_descriptor(param._probe_record_descriptor),
           _build_node_type(param._build_node_type),
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
@@ -166,8 +167,8 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* state) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
-    param->build_row_desc = &_build_row_descriptor;
-    param->probe_row_desc = &_probe_row_descriptor;
+    param->build_record_desc = &_build_record_descriptor;
+    param->probe_record_desc = &_probe_record_descriptor;
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->enable_late_materialization = _enable_late_materialization;

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从左向右返回参数中第一个非 NULL 表达式。"
 ---
 
 # coalesce

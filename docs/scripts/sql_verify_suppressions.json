@@ -1,0 +1,463 @@
+{
+  "version": 1,
+  "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Optional 'versions' (e.g. [\"3.5\"] or [\"3.5\",\"4.0\"]) scopes an entry to the major.minor versions where the example is durably-not-runnable; omit it (or use []) for a global entry that is suppressed on every version — the default and original behavior. Scope version-gated entries; leave illustrative/expected-error global. Entries are added by the sql-doc-autofix skill in a reviewed PR — never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
+  "suppressions": [
+    {
+      "fingerprint": "skel256:57e60902f26526ce42d76954d6c316f725e2af1d2ac58baa75949ce09cfd41e4",
+      "file": "docs/en/sql-reference/System_variable.md",
+      "line": 156,
+      "snippet": "SELECT /*+ SET_VAR ( exec_mem_limit = 515396075520, query_ti",
+      "category": "illustrative",
+      "reason": "SET_VAR hint synopsis using placeholder table name TABLE",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:6167c6c0d70ac9af4a1f0792ff68e14e8f61289ba6af6b130d6637bd8c99e633",
+      "file": "docs/en/sql-reference/data-types/numeric/DECIMAL.md",
+      "line": 135,
+      "snippet": "INSERT INTO test_decimal256(p50s48) SELECT 333",
+      "category": "expected-error",
+      "reason": "Doc explicitly documents this INSERT returns 'filtered data' on overflow",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:a9e57d6f547259a02df389323fbea6aabbb423a422c29196a0640146220a6e83",
+      "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
+      "line": 97,
+      "snippet": "insert into bitmap_table1 select id, to_bitmap(id2) from tab",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:0ea77206907154a4de191fcb9dd6917769ceb33043071c9353b1df06db7db7c4",
+      "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
+      "line": 104,
+      "snippet": "insert into bitmap_table1 select id, bitmap_hash(id2) from t",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:941751d7a8f0730a11f7b691161b4177161acd9c88d4188737fa0fd90a7ffa4b",
+      "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
+      "line": 111,
+      "snippet": "insert into bitmap_table1 select id, bitmap_hash64(id2) from",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:d5270eefc8e598deb96624b3055784959f0bd0a8a497dc6760ed647f6cc81c3f",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_intersect.md",
+      "line": 29,
+      "snippet": "-- Calculate users retention under different tags today and ",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table` in subquery",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:306365f333cc5d73c90cade9987ddc9c54521baf59907f2ab758bb74ef5f3ce2",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_intersect.md",
+      "line": 42,
+      "snippet": "--Find out users retained under different tags today and yes",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table` in subquery",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:0c24948ed5a2344d98355f3f8b8716633871aea51a3bb480a675ea740ad97474",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
+      "line": 20,
+      "snippet": "select page_id, bitmap_union(user_id) from table group by pa",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:f2124742fee3e25c91b9a2f4a6085cfcdf96b4e7a69a64ae31bc3477c196a09c",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
+      "line": 28,
+      "snippet": "select page_id, bitmap_count(bitmap_union(user_id)) from tab",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:a565a79d19a37d0c5c24892d889c882c74a381849408962b91b0cbcd4e6556d6",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
+      "line": 36,
+      "snippet": "select page_id, count(distinct user_id) from table group by ",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:b22304cea0d2874ce98f84c47c6fba7e54a7c6579a2cceb40ccb9886c0ecdc3c",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md",
+      "line": 20,
+      "snippet": "ADMIN SET FRONTEND CONFIG (\"key\" = \"value\")",
+      "category": "illustrative",
+      "reason": "Synopsis with placeholder \"key\"=\"value\" config",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:e4fe5d46e0848313125c9b570ed56bdeee4ed305530040211cb731858006583d",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/file/CREATE_FILE.md",
+      "line": 47,
+      "snippet": "CREATE FILE \"test.pem\" PROPERTIES ( \"url\" = \"https://starroc",
+      "category": "needs-setup",
+      "reason": "References an external OSS URL that an isolated run cannot fetch",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:2df98d9f85582a7aca3df5c32f84feb3783ec3e855b516a26c8372346b70ce83",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/file/DROP_FILE.md",
+      "line": 41,
+      "snippet": "DROP FILE \"ca.pem\" properties(\"catalog\" = \"kafka\")",
+      "category": "needs-setup",
+      "reason": "Depends on a file/catalog created by a prior CREATE FILE example",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:53bb62ddfb87f9f9481bb945f8760ab17d8ef1a6021fef57fce86755f1e1979c",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKEND_BLACKLIST.md",
+      "line": 20,
+      "snippet": "SHOW { BACKEND | COMPUTE NODE } BLACKLIST",
+      "category": "illustrative",
+      "reason": "Grammar synopsis using { A | B } alternation notation",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:65b309ed1ead279af05aa5819c06294d5aceecb56faaabd8d1da362ae342e174",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_SKIP_COMMITTED_TRANSACTION.md",
+      "line": 41,
+      "snippet": "ADMIN SET FRONTEND CONFIG (\"enable_admin_skip_committed_txn\"",
+      "category": "version-gated",
+      "reason": "Config enable_admin_skip_committed_txn absent in the 4.1.1 build (verified via ADMIN SHOW FRONTEND CONFIG)",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:36a0413516250995942a2210a5ce0eeb971ed0f19f43cf66ac92dd9e31514b95",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 414,
+      "snippet": "-- This will cause an error! SELECT *, array_agg(score) OVER",
+      "category": "expected-error",
+      "reason": "Doc deliberately shows an unsupported ROWS window frame returning an error",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:e4644418e55be306957b319b0a50feb7b7a46e2c69180a0337ece714edb5907f",
+      "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
+      "line": 92,
+      "snippet": "CREATE DICTIONARY dict_obj USING dict (order_uuid KEY, order",
+      "category": "needs-setup",
+      "reason": "Requires the `dict` base table and a clean dictionary namespace from earlier examples in the page",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:448111ea88f86e8e2eebb0aefd1375c1fdeb10b082805fdee05c62855b86b517",
+      "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
+      "line": 100,
+      "snippet": "SELECT dictionary_get(\"dict_obj\", \"a1\")",
+      "category": "needs-setup",
+      "reason": "dictionary_get on dict_obj, which is CANCELLED without its base table",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:8103ae5cc85cf557ac9861e4b5d4a716c0154782740d596389a4d9c7c6c393b4",
+      "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
+      "line": 165,
+      "snippet": "CREATE DICTIONARY dimension_obj USING ProductDimension (Prod",
+      "category": "needs-setup",
+      "reason": "Requires the ProductDimension base table created earlier in the page",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:47fad88a270caa73b6361eb7b2f677e359c02ed59eb5fff757ee7163e001a63c",
+      "file": "docs/en/sql-reference/sql-statements/keywords.md",
+      "line": 29,
+      "snippet": "CREATE DATABASE LIKE",
+      "category": "expected-error",
+      "reason": "Doc deliberately shows the reserved-word error for an unquoted identifier",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:6a1c8f004a20ad654a06b1cbb4f51fccee2e96436908577f4939b9bae6eb9156",
+      "file": "docs/en/sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md",
+      "line": 73,
+      "snippet": "ADMIN SET FRONTEND CONFIG (\"label_keep_max_second\" = \"value\"",
+      "category": "illustrative",
+      "reason": "Synopsis using the literal placeholder \"value\" for label_keep_max_second",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:bc50ee26dba8f570f89013469b1d77d1f22dd721d1a8431c7365ec7137cb9d22",
+      "file": "docs/en/sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md",
+      "line": 309,
+      "snippet": "\"property.security.protocol\" = \"SASL_PLAINTEXT\", -- Specify ",
+      "category": "illustrative",
+      "reason": "Kafka property-list fragment, not a complete statement",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:3bfc042a939bb67ec8f37b504febb326b0ecbfa6c2576e0f7c1b639636eddd32",
+      "file": "docs/en/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md",
+      "line": 991,
+      "snippet": "-- The partition expression of the base table contains multi",
+      "category": "illustrative",
+      "reason": "Spark/Iceberg DDL (USING ICEBERG / PARTITIONED BY), not StarRocks SQL",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:46de70a5c1e51c4e3d736801077437747944605ce29f57774a7d4e5d8bea1ad7",
+      "file": "docs/en/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 785,
+      "snippet": "DROP INDEX index_name",
+      "category": "illustrative",
+      "reason": "Syntax synopsis fragment: DROP INDEX without its ALTER TABLE prefix",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:3771a8a04197b0f4b4e61344ce853eed0924079b3a430695c0e1db1d52d1ccf1",
+      "file": "docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md",
+      "line": 953,
+      "snippet": "CREATE TABLE `t1` ( `id` int(11) COMMENT \"\", `value` varchar",
+      "category": "needs-setup",
+      "reason": "Joins the colocate group created by an earlier example with a different bucket count",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:f2c327f19e4c5f93c411261a7531b38f661396eca8fb5b7fd71e5b5d6ec12796",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 259,
+      "snippet": "SELECT *, array_agg(score) OVER ( PARTITION BY subject ORDER",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg is not an analytic function in 3.5 (isAnalyticFn=false); array_agg(...) OVER (...) added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:0b66b25c3f00656ae22ce7a1db96c301bd57633ccde3f6e7d3e070a58c35abea",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 291,
+      "snippet": "SELECT *, array_agg(DISTINCT score) OVER ( PARTITION BY subj",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "DISTINCT is rejected unconditionally in 3.5 analytic functions; array_agg(DISTINCT ...) OVER (...) added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:664575ae9970d793529d7ae40afcdd95e60fc57dd36d1c0356c848bf938eb73f",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 321,
+      "snippet": "SELECT *, array_agg(score ORDER BY score DESC) OVER ( PARTIT",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg(... ORDER BY ...) OVER (...) not an analytic function in 3.5; added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:adfb018fe1b37501b98b0d344f686cde11b1cf6723e8aabfed38864bef489c72",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 350,
+      "snippet": "SELECT *, array_agg(score) OVER ( PARTITION BY subject ORDER",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg(...) OVER (... RANGE ...) not an analytic function in 3.5; added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:dfcf349f06aaf1f8063b105e2ba8187f857053e0060720236dd84e1082433f86",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 381,
+      "snippet": "SELECT stock_symbol, closing_date, closing_price, array_agg(",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg(...) OVER (...) not an analytic function in 3.5; added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:d584bc0859de8e6cafe264e0f9e5f92d8c7c91c2ecec9a4d9c99ae6671bd5254",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 500,
+      "snippet": "SELECT id, subject, score, COUNT(DISTINCT score) OVER () AS ",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "COUNT(DISTINCT ...) OVER () rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:69b199b853b483160c98f2b3a336aafd2c4f6024e78f5e9e91451a095319ff1e",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 527,
+      "snippet": "SELECT id, subject, score, COUNT(DISTINCT score) OVER ( PART",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "COUNT(DISTINCT ...) OVER (... RANGE ...) rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:3382d572ffcfb927051e04cef84af0515dccadb10a4cace40e9c22137fd50e2b",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 1661,
+      "snippet": "SELECT id, subject, score, SUM(DISTINCT score) OVER () AS di",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "SUM(DISTINCT ...) OVER () rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:bb539982dcff54eb0df2f6a871cb354d6b9dae620ae66925b27eee2c1bf40c76",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 1688,
+      "snippet": "SELECT id, subject, score, SUM(DISTINCT score) OVER ( PARTIT",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "SUM(DISTINCT ...) OVER (... RANGE ...) rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:0792177ef5e30a5ee246c87fa07b50a893beed3969ab87bbba35ad1ed9c9d43a",
+      "file": "docs/zh/sql-reference/sql-functions/array-functions/array_map.md",
+      "line": 100,
+      "snippet": "select array_map(x -> x,[1],[2,4])",
+      "category": "expected-error",
+      "reason": "The page documents this as an error case (示例六 … 返回报错): the lambda's arity deliberately mismatches the number of input arrays. zh-only; en/ja carry no runnable SQL on this page.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:54a0480fcacfe39d885b97dea6065fb06d4aebf3f86fdc2503e548df5e5f0bfb",
+      "file": "docs/zh/sql-reference/sql-statements/materialized_view/REFRESH_MATERIALIZED_VIEW.md",
+      "line": 52,
+      "snippet": "REFRESH MATERIALIZED VIEW lo_mv1",
+      "category": "needs-setup",
+      "reason": "Refreshes lo_mv1, which the page never creates. zh-only because en/ja label the same blocks ```Plain so they are never executed; zh's ```SQL label is the convention-correct one. See issue #76813.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:edb9c3069455ba9ef07b20a13ce7a4006efb043341a66181a88962b163c60726",
+      "file": "docs/zh/sql-reference/sql-statements/materialized_view/REFRESH_MATERIALIZED_VIEW.md",
+      "line": 74,
+      "snippet": "REFRESH MATERIALIZED VIEW lo_mv1 WITH SYNC MODE",
+      "category": "needs-setup",
+      "reason": "Same as the block above: lo_mv1 is never created on this page.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:765aade78f55cb69ca2cdc10fd263a2ef6e1ab58563f8675316dc3fead59c67e",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 394,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time)",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:394 and ja:394.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:83f69aea6b6cdce8c2060961e6c8a6985eb145655e2e8d62e25b020d8a507132",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 406,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:406 and ja:406.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:389359b8e7d24ae1a552e29ed3e7632833d6d8e62eb70d5c54ce6ccfac954d6c",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 412,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id) DEFAULT BUC",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:412 and ja:412.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:3750d411867a2c8cdf12d27ca2fac4cfa5537f3482ea6310fc70cf5dbf7fb04a",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 422,
+      "snippet": "ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRI",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:422 and ja:423.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:3f323b0bb5d27a4489264a146b42613baf673ada8b7796215a9b12cc902e8441",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 438,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:438 and ja:439.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:286165ddb1c8985dd827988a84b6a998a4bf751939628d94790dbb3c5942e231",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 444,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time)",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:444 and ja:445.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    }
+  ]
+}

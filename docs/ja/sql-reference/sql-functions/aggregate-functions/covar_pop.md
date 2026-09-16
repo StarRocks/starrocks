@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2 つの式の母集団共分散を返します。"
 ---
 
 # covar_pop

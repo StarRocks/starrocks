@@ -31,6 +31,8 @@
 #include "common/system/backend_options.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/data_stream/local_pass_through_buffer.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/exchange/exchange_compression_strategy.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
@@ -38,11 +40,10 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/bucket_aware_partition.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "serde/compress_strategy.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks::pipeline {
 
@@ -311,7 +312,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
         }
     });
 
-    if (!fragment_ctx->is_canceled()) {
+    if (!fragment_ctx->runtime_state()->is_cancelled()) {
         for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
             if (_chunks[driver_sequence] != nullptr) {
                 RETURN_IF_ERROR(res = send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
@@ -421,7 +422,7 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
         TCompressionType::type type = state->query_options().transmission_compression_type;
         if (type == TCompressionType::AUTO) {
             _compress_type = CompressionTypePB::LZ4;
-            _compress_strategy = std::make_shared<serde::CompressStrategy>();
+            _compress_strategy = std::make_shared<ExchangeCompressionStrategy>();
         } else {
             _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
         }
@@ -466,6 +467,7 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _raw_input_bytes_counter = ADD_COUNTER(_unique_metrics, "RawInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
+    _compressed_input_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedInputBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
 
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
@@ -795,6 +797,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
                                          compression_time_ns);
         }
 
+        COUNTER_UPDATE(_compressed_input_bytes_counter, serialized_size * num_receivers);
         COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();
         VLOG_ROW << "chunk compression: uncompressed size: " << serialized_size

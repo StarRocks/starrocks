@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: Partition data in StarRocks
+description: "How to use expression partitioning in StarRocks to automatically create partitions based on data values."
 sidebar_position: 10
 ---
 

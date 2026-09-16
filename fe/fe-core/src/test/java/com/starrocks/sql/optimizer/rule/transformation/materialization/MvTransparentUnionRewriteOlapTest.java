@@ -309,26 +309,6 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                         "SELECT k1, k2, sum(v1), count(v2) from m1 where k1<3 group by k1, k2",
                         "SELECT k1, k2, sum(v1), count(v2) from m1 where k1<=2 group by k1, k2",
                 };
-                String[] expects = {
-                        "     TABLE: mv0\n" +
-                                "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 7: k1 = 1\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=1/3",
-                        "     TABLE: mv0\n" +
-                                "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 7: k1 < 3\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
-                        "     TABLE: mv0\n" +
-                                "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 7: k1 <= 2\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3"
-                };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);

@@ -16,8 +16,10 @@ This operation requires the SYSTEM-level PLUGIN privilege. You can follow the in
 ## Syntax
 
 ```SQL
-UNINSTALL PLUGIN <plugin_name>
+UNINSTALL PLUGIN [IF EXISTS] <plugin_name>
 ```
+
+**IF EXISTS**: If specified, the statement succeeds silently when the plugin does not exist instead of returning an error.
 
 plugin_name can be viewed through SHOW PLUGINS command
 
@@ -29,4 +31,10 @@ Only non-builtin plugins can be uninstalled.
 
     ```SQL
     UNINSTALL PLUGIN auditdemo;
+    ```
+
+2. Uninstall a plugin if it exists:
+
+    ```SQL
+    UNINSTALL PLUGIN IF EXISTS auditdemo;
     ```

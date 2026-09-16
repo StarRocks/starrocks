@@ -1,0 +1,41 @@
+// FrontmatterDescriptionFluff.tengo
+//
+// Reject `description` values that open with document meta-commentary such as
+// "This article describes …" or "In this guide you will learn …".
+// Good descriptions state what the content covers directly:
+//   "How to configure connection pooling for StarRocks shared-nothing clusters."
+// Bad descriptions talk about the document instead of the subject:
+//   "This page explains how to configure connection pooling …"
+//
+// Flagged phrases (case-insensitive, at the start of the value):
+//   This article / document / page / guide / section / tutorial / topic
+//   In this article / document / page / guide / section / tutorial / topic
+//
+// Only runs when a description: field is present; FrontmatterDescription.yml
+// handles the missing-field case.
+//
+// NOTE: text.re_find returns `undefined` (not []) on no match.  All result
+// consumption uses `for` loops to avoid calling len() on undefined.
+
+text := import("text")
+
+matches := []
+
+fm_end := -1
+for m in text.re_find("(?s)^---\r?\n.*?\n---", scope, -1) {
+    fm_end = m[0].end
+    break
+}
+
+if fm_end >= 0 {
+    // Combined pattern: anchored to a description: line, then asserts that the
+    // value starts with a document self-reference phrase.
+    // (?mi) = case-insensitive + multiline (^ matches start of each line).
+    fluff_pat := "(?mi)^description:\\s*[\"']?\\s*(this\\s+(article|document|page|guide|section|tutorial|topic)\\b|in\\s+this\\s+(article|document|page|guide|section|tutorial|topic)\\b)"
+
+    for m in text.re_find(fluff_pat, scope, -1) {
+        if m[0].begin < fm_end {
+            matches = append(matches, {begin: m[0].begin, end: m[0].end})
+        }
+    }
+}

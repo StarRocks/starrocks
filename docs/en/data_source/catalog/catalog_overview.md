@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks supports the catalog feature from v2.3 onwards."
 ---
@@ -20,18 +21,19 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
 ![figure1](../../_assets/3.8.1.png)
 
-- **Internal catalog** manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default_catalog](../catalog/default_catalog.md).
+- **Internal catalog** manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default_catalog](./default_catalog.md).
 
 - **External catalog** acts like a link to externally managed metastores, which grants StarRocks direct access to external data sources. You can query external data directly with zero data loading or migration. Currently, StarRocks supports the following types of external catalogs:
-  - [Hive catalog](../catalog/hive_catalog.md): used to query data from Hive.
-  - [Iceberg catalog](./iceberg/iceberg_catalog.md): used to query data from Iceberg.
-  - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.
-  - [Delta Lake catalog](../catalog/deltalake_catalog.md): used to query data from Delta Lake.
-  - [JDBC catalog](../catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
-  - [Benchmark catalog](../catalog/benchmark_catalog.md): used to query in-flight generated datasets for TPC-H, TPC-DS, and SSB schemas.
-  - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
-  - [Paimon catalog](../catalog/paimon_catalog.md): used to query data from Paimon. Paimon catalogs are supported from v3.1 onwards.
-  - [Unified catalog](../catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
+  - [Hive catalog](./hive_catalog.md): used to query data from Hive.
+  - [Iceberg catalog](./iceberg/iceberg.md): used to query data from Iceberg.
+  - [Hudi catalog](./hudi_catalog.md): used to query data from Hudi.
+  - [Delta Lake catalog](./deltalake_catalog.md): used to query data from Delta Lake.
+  - [JDBC catalog](./jdbc_catalog.md): used to query data from JDBC-compatible data sources.
+  - [Benchmark catalog](./benchmark_catalog.md): used to query in-flight generated datasets for TPC-H, TPC-DS, and SSB schemas.
+  - [Elasticsearch catalog](./elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
+  - [Paimon catalog](./paimon_catalog.md): used to query data from Paimon. Paimon catalogs are supported from v3.1 onwards.
+  - [Fluss catalog](./fluss_catalog.md): used to query data from Fluss.
+  - [Unified catalog](./unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
 
   StarRocks interacts with the following two components of external data sources when you query external data:
 
@@ -47,11 +49,11 @@ You can use the [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CAT
 
 ### Query internal data
 
-To query data in StarRocks, see [Default catalog](../catalog/default_catalog.md).
+To query data in StarRocks, see [Default catalog](./default_catalog.md).
 
 ### Query external data
 
-To query data from external data sources, see [Query external data](../catalog/query_external_data.md).
+To query data from external data sources, see [Query external data](./query_external_data.md).
 
 ### Cross-catalog query
 

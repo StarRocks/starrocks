@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された月数を日付に加え、月単位で正確に計算します。"
 ---
 
 # months_add

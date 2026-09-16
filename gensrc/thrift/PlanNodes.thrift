@@ -44,52 +44,62 @@ include "RuntimeFilter.thrift"
 include "CloudConfiguration.thrift"
 include "DataCache.thrift"
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TPlanNodeType {
-  OLAP_SCAN_NODE,
-  MYSQL_SCAN_NODE,
-  CSV_SCAN_NODE,
-  SCHEMA_SCAN_NODE,
-  HASH_JOIN_NODE,
-  MERGE_JOIN_NODE,
-  AGGREGATION_NODE,
-  PRE_AGGREGATION_NODE,
-  SORT_NODE,
-  EXCHANGE_NODE,
-  MERGE_NODE,
-  SELECT_NODE,
-  CROSS_JOIN_NODE,
-  META_SCAN_NODE,
-  ANALYTIC_EVAL_NODE,
-  OLAP_REWRITE_NODE,
-  KUDU_SCAN_NODE,
-  FILE_SCAN_NODE,
-  EMPTY_SET_NODE,
-  UNION_NODE,
-  ES_SCAN_NODE,
-  ES_HTTP_SCAN_NODE,
-  REPEAT_NODE,
-  ASSERT_NUM_ROWS_NODE,
-  INTERSECT_NODE,
-  EXCEPT_NODE,
-  ADAPTER_NODE,
-  HDFS_SCAN_NODE,
-  PROJECT_NODE,
-  TABLE_FUNCTION_NODE,
-  DECODE_NODE,
-  JDBC_SCAN_NODE,
-  LAKE_SCAN_NODE,
-  NESTLOOP_JOIN_NODE,
+  OLAP_SCAN_NODE = 0,
+  MYSQL_SCAN_NODE = 1,
+  CSV_SCAN_NODE = 2,
+  SCHEMA_SCAN_NODE = 3,
+  HASH_JOIN_NODE = 4,
+  MERGE_JOIN_NODE = 5,
+  AGGREGATION_NODE = 6,
+  PRE_AGGREGATION_NODE = 7,
+  SORT_NODE = 8,
+  EXCHANGE_NODE = 9,
+  MERGE_NODE = 10,
+  SELECT_NODE = 11,
+  CROSS_JOIN_NODE = 12,
+  META_SCAN_NODE = 13,
+  ANALYTIC_EVAL_NODE = 14,
+  OLAP_REWRITE_NODE = 15,
+  KUDU_SCAN_NODE = 16,
+  FILE_SCAN_NODE = 17,
+  EMPTY_SET_NODE = 18,
+  UNION_NODE = 19,
+  ES_SCAN_NODE = 20,
+  ES_HTTP_SCAN_NODE = 21,
+  REPEAT_NODE = 22,
+  ASSERT_NUM_ROWS_NODE = 23,
+  INTERSECT_NODE = 24,
+  EXCEPT_NODE = 25,
+  ADAPTER_NODE = 26,
+  HDFS_SCAN_NODE = 27,
+  PROJECT_NODE = 28,
+  TABLE_FUNCTION_NODE = 29,
+  DECODE_NODE = 30,
+  JDBC_SCAN_NODE = 31,
+  LAKE_SCAN_NODE = 32,
+  NESTLOOP_JOIN_NODE = 33,
 
-  STREAM_SCAN_NODE,
-  STREAM_JOIN_NODE,
-  STREAM_AGG_NODE,
-  LAKE_META_SCAN_NODE,
-  CAPTURE_VERSION_NODE,
-  RAW_VALUES_NODE,
-  FETCH_NODE,
-  LOOKUP_NODE,
-  BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE
+  STREAM_SCAN_NODE = 34,
+  STREAM_JOIN_NODE = 35,
+  STREAM_AGG_NODE = 36,
+  LAKE_META_SCAN_NODE = 37,
+  CAPTURE_VERSION_NODE = 38,
+  RAW_VALUES_NODE = 39,
+  FETCH_NODE = 40,
+  LOOKUP_NODE = 41,
+  BENCHMARK_SCAN_NODE = 42,
+  LAKE_CACHE_STATS_SCAN_NODE = 43,
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
+  AI_PROJECT_NODE = 45
 }
 
 // phases of an execution node
@@ -163,6 +173,7 @@ enum TFileFormatType {
     FORMAT_JSON = 9,
     FORMAT_CSV_ZSTD = 10,
     FORMAT_AVRO = 11,
+    FORMAT_ARROW = 12,
 }
 
 // CDC envelope format for JSON data
@@ -239,6 +250,27 @@ enum TFileScanType {
     FILES_QUERY
 }
 
+// Which per-message metadata field a routine-load source-metadata slot is bound to. The FE lowers the
+// INCLUDE METADATA (<KEY> AS <alias>, ...) clause into hidden source slots described by
+// TRoutineLoadMetaColumn, so the BE scanner fills the slot from the Kafka/Pulsar message rather than
+// the payload. TIMESTAMP is the Kafka record timestamp / Pulsar publish time; EVENT_TIME is the Pulsar
+// event time; HEADERS is the whole header/property map (a single value is read with element_at).
+enum TStreamSourceMetaKind {
+    TOPIC = 0,
+    PARTITION = 1,
+    OFFSET = 2,
+    MESSAGE_ID = 3,
+    TIMESTAMP = 4,
+    EVENT_TIME = 5,
+    KEY = 6,
+    HEADERS = 7
+}
+
+struct TRoutineLoadMetaColumn {
+    1: optional Types.TSlotId slot_id
+    2: optional TStreamSourceMetaKind kind
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -303,6 +335,9 @@ struct TBrokerScanRangeParams {
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
     34: optional bool schema_sample_types = true
+    // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
+    // field. Empty for non-routine-load and for jobs without an INCLUDE METADATA clause.
+    35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 
 // Broker scan range
@@ -350,6 +385,14 @@ struct TDeletionVectorDescriptor {
   5: optional i64 cardinality
 }
 
+// Extension point for THdfsScanRange. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New THdfsScanRange
+// fields belong on THdfsScanRange itself, whose remaining numbers are free.
+struct THdfsScanRangeExt {
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -394,8 +437,8 @@ struct THdfsScanRange {
     // paimon split info
     14: optional string paimon_split_info
 
-    // paimon predicate info
-    15: optional string paimon_predicate_info
+    // predicate info for JNI scanners
+    15: optional string jni_predicate_info
 
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
@@ -461,6 +504,24 @@ struct THdfsScanRange {
 
     // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
     38: optional bool use_avro_jni_reader
+
+    // whether to use JNI scanner to read data of lance table
+    39: optional bool use_lance_jni_reader
+    // lance split info (serialized fragment metadata)
+    40: optional binary lance_split_info
+
+    // whether to use JNI scanner to read data of fluss table
+    41: optional bool use_fluss_jni_reader
+
+    // fluss split info
+    42: optional string fluss_split_info
+    43: optional THdfsScanRangeExt ext
+
+    // whether to use the Paimon C++ native reader
+    44: optional bool use_paimon_native_reader
+
+    // split info serialized by org.apache.paimon.table.source.DataSplit.serialize
+    45: optional binary paimon_split_info_binary
 }
 
 struct TBinlogScanRange {
@@ -478,6 +539,14 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
+// Extension point for TScanRange. DO NOT MODIFY: do not add fields here, and
+// do not rename, renumber or remove it. The field numbers inside are allocated
+// separately, so anything added here collides with them, and renaming or
+// removing it breaks whatever fills it in. New TScanRange fields belong on
+// TScanRange itself, whose remaining numbers are free.
+struct TScanRangeExt {
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -493,6 +562,7 @@ struct TScanRange {
   30: optional TBinlogScanRange binlog_scan_range
 
   40: optional TBenchmarkScanRange benchmark_scan_range
+  41: optional TScanRangeExt ext
 }
 
 struct TMySQLScanNode {
@@ -559,6 +629,15 @@ struct TFrontend {
   1: optional string id
   2: optional string ip
   3: optional i32 http_port
+  4: optional i32 rpc_port
+}
+
+// Extension point for TSchemaScanNode. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TSchemaScanNode
+// fields belong on TSchemaScanNode itself, whose remaining numbers are free.
+struct TSchemaScanNodeExt {
 }
 
 struct TSchemaScanNode {
@@ -591,6 +670,7 @@ struct TSchemaScanNode {
   26: optional list<TFrontend> frontends;
 
   101: optional string catalog_name;
+  102: optional TSchemaScanNodeExt ext;
 }
 
 enum TAccessPathType {
@@ -619,10 +699,18 @@ struct TVectorSearchOptions {
   5: optional map<string, string> query_params;
   6: optional double vector_range;
   7: optional i32 result_order;
-  8: optional bool use_ivfpq;
+  8: optional bool use_ivfpq; // DEPRECATED: superseded by refine_distance; ordinal kept reserved.
   9: optional double pq_refine_factor;
   10: optional double k_factor;
   11: optional i32 vector_slot_id;
+  // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
+  // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
+  12: optional bool refine_distance;
+  // 13: retired (was has_complex_residual). The BE now detects a row-filtering operator placed above
+  // the ANN scan directly from the execution tree (FragmentExecutor walk -> ScanNode), instead of an
+  // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
+  // Whether vector_range is present. Kept separate because similarity metrics can have negative bounds.
+  14: optional bool has_vector_range;
 }
 
 enum SampleMethod {
@@ -634,8 +722,16 @@ struct TTableSampleOptions {
   1: optional bool enable_sampling;
   2: optional SampleMethod sample_method;
   3: optional i64 random_seed;
-  4: optional i64 probability_percent;
+  4: optional i64 probability_percent;       // kept for backward compatibility with old BE/FE; integer percent in (0, 100)
+  5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
+}
 
+// Extension point for TOlapScanNode. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TOlapScanNode
+// fields belong on TOlapScanNode itself, whose remaining numbers are free.
+struct TOlapScanNodeExt {
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -678,6 +774,10 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+  // Set by FE when a TopN RF reaches this scan only across a non-aggregation deterministic pipeline
+  // breaker (blocking sort, analytic/window); suppresses TopN back-pressure on this scan (incl. the
+  // BE lake/connector self-enable path), since the RF cannot arrive while the scan is still reading.
+  58: optional bool topn_filter_back_pressure_disabled
 
   // This field is only used for flat json to provide a uniq id
   55: optional i32 next_uniq_id
@@ -685,6 +785,7 @@ struct TOlapScanNode {
   56: optional bool enable_global_late_materialization
 
   57: optional list<Exprs.TExpr> partition_conjuncts
+  59: optional TOlapScanNodeExt ext
 }
 
 struct TJDBCScanNode {
@@ -693,6 +794,14 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+}
+
+// Extension point for TLakeScanNode. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TLakeScanNode
+// fields belong on TLakeScanNode itself, whose remaining numbers are free.
+struct TLakeScanNodeExt {
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode
@@ -725,6 +834,8 @@ struct TLakeScanNode {
   40: optional i64 back_pressure_throttle_time
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
+  // See TOlapScanNode.topn_filter_back_pressure_disabled.
+  61: optional bool topn_filter_back_pressure_disabled
 
   43: optional Descriptors.TTableSchemaKey schema_key
 
@@ -739,6 +850,13 @@ struct TLakeScanNode {
   57: optional TVectorSearchOptions vector_search_options
 
   60: optional list<Exprs.TExpr> partition_conjuncts
+
+  // Per-scan decision (session flag on AND not disabled by the duplicate-lake-table gate), made at plan
+  // build, that this lake scan should take the prepared physical split scan path. Absent means off.
+  62: optional bool use_prepared_physical_split_scan
+
+  63: optional TTableSampleOptions sample_options
+  64: optional TLakeScanNodeExt ext
 }
 
 struct TEqJoinCondition {
@@ -1026,7 +1144,7 @@ struct TSortNode {
   28: optional i64 max_buffered_bytes;
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
-  31: optional bool analytic_partition_skewed;
+  31: optional bool analytic_need_merge;
   32: optional list<Exprs.TExpr> pre_agg_exprs;
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
@@ -1132,6 +1250,9 @@ struct TAnalyticNode {
   20: optional bool has_outer_join_child
   21: optional bool use_hash_based_partition
   22: optional bool is_skewed
+  // Feed the AnalyticNode from a single globally-ordered stream via an ordered-partition
+  // local exchange instead of hash-shuffling the partition keys.
+  23: optional bool force_merge_sort
 }
 
 struct TMergeNode {
@@ -1255,6 +1376,13 @@ struct TAssertNumRowsNode {
     1: optional i64 desired_num_rows;
     2: optional string subquery_string;
     3: optional TAssertion assertion;
+}
+
+struct TEnforceUniqueRowLocatorNode {
+    // Slot ids of the unique-key columns. The BE resolves the actual chunk
+    // columns through the chunk's slot-id map, so the FE does not need to
+    // predict the physical column order of the BE chunk.
+    1: optional list<Types.TSlotId> unique_key_slot_ids
 }
 
 struct THdfsScanNode {
@@ -1477,6 +1605,30 @@ struct TLookUpNode {
   1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
 }
 
+struct TAIEndpointConfig {
+  1: optional string endpoint
+  2: optional string model
+  3: optional string provider
+}
+
+struct TAIModelConfiguration {
+  1: optional TAIEndpointConfig chat
+}
+
+struct TAIProjectNode {
+  1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
+  2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+  3: optional map<string, TAIModelConfiguration> ai_model_configs
+}
+
+// Extension point for TPlanNode. DO NOT MODIFY: do not add fields here, and do
+// not rename, renumber or remove it. The field numbers inside are allocated
+// separately, so anything added here collides with them, and renaming or
+// removing it breaks whatever fills it in. New TPlanNode fields belong on
+// TPlanNode itself, whose remaining numbers are free.
+struct TPlanNodeExt {
+}
+
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -1561,6 +1713,10 @@ struct TPlanNode {
   84: optional TBenchmarkScanNode benchmark_scan_node;
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
+
+  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+  87: optional TPlanNodeExt ext
+  88: optional TAIProjectNode ai_project_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

@@ -15,11 +15,11 @@
 #pragma once
 
 #include <boost/algorithm/string.hpp>
+#include <memory>
 #include <orc/OrcFile.hh>
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "formats/orc/column_reader.h"
 #include "formats/orc/orc_mapping.h"
@@ -34,6 +34,8 @@ class ColumnStatistics;
 namespace starrocks {
 class RandomAccessFile;
 class RuntimeState;
+struct SkipRowsContext;
+using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 } // namespace starrocks
 namespace starrocks {
 

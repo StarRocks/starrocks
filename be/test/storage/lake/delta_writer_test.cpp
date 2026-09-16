@@ -218,14 +218,14 @@ TEST_F(LakeDeltaWriterTest, test_write_with_load_id) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
-    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
 
@@ -300,7 +300,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
@@ -311,7 +311,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
-    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
 
@@ -458,7 +458,7 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(0, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(0, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(0, txnlog->op_write().rowset().num_rows());
     ASSERT_EQ(0, txnlog->op_write().rowset().data_size());
@@ -521,7 +521,7 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
@@ -574,7 +574,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
@@ -626,7 +626,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
@@ -678,7 +678,7 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
@@ -696,9 +696,9 @@ TEST_F(LakeDeltaWriterTest, test_write_oom) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    int64_t old_limit = GlobalEnv::GetInstance()->load_mem_tracker()->limit();
-    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(1);
-    GlobalEnv::GetInstance()->load_mem_tracker()->consume(100);
+    int64_t old_limit = RuntimeEnv::GetInstance()->load_mem_tracker()->limit();
+    RuntimeEnv::GetInstance()->load_mem_tracker()->set_limit(1);
+    RuntimeEnv::GetInstance()->load_mem_tracker()->consume(100);
     ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
                                                .set_tablet_id(tablet_id)
@@ -712,8 +712,8 @@ TEST_F(LakeDeltaWriterTest, test_write_oom) {
     ASSERT_OK(delta_writer->open());
     // Write and flush
     ASSERT_ERROR(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-    GlobalEnv::GetInstance()->load_mem_tracker()->release(100);
-    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(old_limit);
+    RuntimeEnv::GetInstance()->load_mem_tracker()->release(100);
+    RuntimeEnv::GetInstance()->load_mem_tracker()->set_limit(old_limit);
 }
 
 // Test parallel memtable finalize feature

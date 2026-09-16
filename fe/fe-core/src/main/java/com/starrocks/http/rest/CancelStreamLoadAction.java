@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
@@ -57,7 +58,8 @@ public class CancelStreamLoadAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response)
+            throws DdlException, AccessDeniedException {
 
         if (redirectToLeader(request, response)) {
             return;
@@ -73,8 +75,11 @@ public class CancelStreamLoadAction extends RestBaseAction {
             throw new DdlException("No label selected.");
         }
 
-        // FIXME(cmy)
-        // checkWritePriv(authInfo.fullUserName, fullDbName);
+        // The actual cancel is keyed by (dbId, label) and ignores the {table} segment in the URL,
+        // so a URL-table-based INSERT check would be a confused-deputy gate (any INSERT user on
+        // some allowed table could cancel a load against a different table in the same db).
+        // Use db-level INSERT instead — consistent with GetStreamLoadState which is also dbId+label.
+        requireDbInsertIfHttpAuthEnabled(dbName);
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {

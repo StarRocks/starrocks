@@ -465,8 +465,6 @@ protected:
                         return;
                     }
                     ASSERT_TRUE(st.ok()) << st;
-                    st = (desc.prepare_function(ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL));
-                    ASSERT_TRUE(st.ok()) << st;
                 }
 
                 if (desc.scalar_function) {
@@ -480,8 +478,6 @@ protected:
 
                 if (desc.close_function) {
                     auto st = (desc.close_function(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
-                    ASSERT_TRUE(st.ok()) << st;
-                    st = (desc.close_function(ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL));
                     ASSERT_TRUE(st.ok()) << st;
                 }
             } catch (const std::exception& e) {

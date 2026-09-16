@@ -76,6 +76,10 @@ struct FileInfo {
     std::shared_ptr<FileSystem> fs;
     // It is used to store the file offset of the bundle file.
     std::optional<int64_t> bundle_file_offset;
+    // Masked CRC32C (crc32c::Mask) of the file's logical content -- the bytes handed to append(),
+    // i.e. before encryption. Set only by producers that compute it (currently lake del files);
+    // absent means "not recorded" and consumers skip verification.
+    std::optional<uint32_t> crc32c;
 
     // Cache key uniquely identifying this FileInfo as a *slice* of a physical file. Caches keyed
     // on file identity (e.g. lake metacache for Segments) must use this rather than `path` so two
@@ -364,7 +368,7 @@ public:
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     std::string _name;
-    // for cachefs in fs_starlet
+    // for cachefs in starlet_filesystem
     bool _is_cache_hit{false};
     // Slice base offset within the underlying physical file when this RandomAccessFile wraps a
     // BundleSeekableInputStream; 0 otherwise. Used only by page_cache_key to keep slices distinct.

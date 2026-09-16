@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された値から名前付きSTRUCTまたはROW値を作成します。"
 ---
 
 # row

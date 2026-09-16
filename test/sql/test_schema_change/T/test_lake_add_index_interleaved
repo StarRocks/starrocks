@@ -1,0 +1,42 @@
+-- name: test_lake_add_index_interleaved @cloud
+create database lake_idx_iv_${uuid0};
+use lake_idx_iv_${uuid0};
+
+CREATE TABLE t1 (
+    k1 int,
+    v1 int,
+    v2 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+
+-- Single rowset before any alters. The two subsequent ADD INDEX alters each
+-- write an IDG entry on this rowset's segments (entry-stacking is exercised
+-- at read time by IndexDeltaGroupLoaderTest.VersionVisibilityFilter; the e2e
+-- here just asserts that both index reads still return correct results).
+insert into t1 values (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry'),
+                     (4, 10, 'apple'), (5, 20, 'banana');
+
+-- First fast-path ADD INDEX
+ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+select count(*) from t1 where v1 = 10;
+select count(*) from t1 where v1 = 20;
+
+-- Second fast-path ADD INDEX stacks a new IDG entry on the same base rowset.
+ALTER TABLE t1 ADD INDEX idx_v2(v2) USING BITMAP;
+function: wait_alter_table_finish()
+select count(*) from t1 where v2 = 'apple';
+select count(*) from t1 where v2 = 'banana';
+-- Queries that hit both indexes conjunctively
+select * from t1 where v1 = 10 and v2 = 'apple' order by k1;
+
+-- DROP idx_v1 is a tombstone; v1 queries must still return correct rows
+-- (just without the dropped index accelerating the filter).
+drop index idx_v1 on t1;
+function: wait_alter_table_finish()
+select count(*) from t1 where v1 = 10;
+-- idx_v2 still visible after idx_v1 drop
+select count(*) from t1 where v2 = 'apple';
+select * from t1 order by k1;
+
+drop database lake_idx_iv_${uuid0};

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回表的分区信息，以 JSON 格式呈现。"
 ---
 
 # inspect_table_partition_info

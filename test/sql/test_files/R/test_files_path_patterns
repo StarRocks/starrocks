@@ -1,0 +1,71 @@
+-- name: test_files_path_patterns
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/path_patterns/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 52. OK num: 1(upload 1 files).
+-- !result
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 34. OK num: 1(upload 1 files).
+-- !result
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- result:
+None
+-- !result
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- result:
+None
+-- !result
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/*.csv", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- result:
+None
+-- !result
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic?.csv", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- result:
+None
+-- !result
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic1.csv", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv')
+-- result:
+None
+-- !result
+function: assert_query_not_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic1.csv", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic2.csv')
+-- result:
+None
+-- !result
+function: assert_query_error_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic9*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'No files were found matching the pattern')
+-- result:
+None
+-- !result
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-13-a.csv | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 52. OK num: 1(upload 1 files).
+-- !result
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-14-b.csv | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 34. OK num: 1(upload 1 files).
+-- !result
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-13*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', '2026-06-24-13-a.csv')
+-- result:
+None
+-- !result
+function: assert_query_not_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-13*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', '2026-06-24-14-b.csv')
+-- result:
+None
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/path_patterns/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

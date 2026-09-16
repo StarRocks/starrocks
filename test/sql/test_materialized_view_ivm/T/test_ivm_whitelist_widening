@@ -4,8 +4,8 @@
 --   * AVG(DECIMAL)     — enabled by #73012 (preserve AggStateDesc on state_union)
 --   * MIN/MAX(DECIMAL) — state is the value itself; no AVG-style (sum, count) plumbing
 --   * ARRAY_AGG(arg)   — single-arg accepted; ORDER BY variant rejected
--- HLL_UNION / BITMAP_UNION remain rejected (Column.type singleton mutation bug
--- in the underlying combinator path; deferred to a separate PR).
+--   * BITMAP_UNION(to_bitmap(...)) — accepted: normalizes to bitmap_agg
+--   * HLL_UNION / BITMAP_UNION over a metric sketch (hll_hash / bitmap_hash) — accepted directly
 
 create external catalog mv_iceberg_${uuid0}
 properties
@@ -96,8 +96,7 @@ AS SELECT k, dt, ARRAY_AGG(s_short ORDER BY k) AS arr_s
    GROUP BY k, dt;
 
 -- ============================================================
--- NEGATIVE: HLL_UNION not in whitelist
--- expected: SemanticException "IVMAnalyzer does not support aggregate function: hll_union"
+-- POSITIVE: HLL_UNION(HLL_HASH(...)) IVM MV — now whitelisted (HLL state unions associatively)
 -- ============================================================
 CREATE MATERIALIZED VIEW mv_hll PARTITION BY dt
 REFRESH DEFERRED MANUAL
@@ -105,10 +104,11 @@ PROPERTIES ("refresh_mode" = "incremental")
 AS SELECT k, dt, HLL_UNION(HLL_HASH(s_short)) AS h
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
+[UC]REFRESH MATERIALIZED VIEW mv_hll WITH SYNC MODE;
+SELECT k, dt, hll_cardinality(h) AS ndv FROM mv_hll ORDER BY k, dt;
 
 -- ============================================================
--- NEGATIVE: BITMAP_UNION not in whitelist
--- expected: SemanticException "IVMAnalyzer does not support aggregate function: bitmap_union"
+-- POSITIVE: BITMAP_UNION(TO_BITMAP(...)) IVM MV — now accepted (normalizes to bitmap_agg)
 -- ============================================================
 CREATE MATERIALIZED VIEW mv_bmp PARTITION BY dt
 REFRESH DEFERRED MANUAL
@@ -116,6 +116,32 @@ PROPERTIES ("refresh_mode" = "incremental")
 AS SELECT k, dt, BITMAP_UNION(TO_BITMAP(k)) AS b
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
+[UC]REFRESH MATERIALIZED VIEW mv_bmp WITH SYNC MODE;
+SELECT k, dt, bitmap_count(b) AS dc FROM mv_bmp ORDER BY k, dt;
+
+-- ============================================================
+-- POSITIVE: BITMAP_UNION(BITMAP_HASH(...)) IVM MV — direct bitmap_union, no to_bitmap normalization
+-- ============================================================
+CREATE MATERIALIZED VIEW mv_bmp_hash PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, BITMAP_UNION(BITMAP_HASH(s_short)) AS b2
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+[UC]REFRESH MATERIALIZED VIEW mv_bmp_hash WITH SYNC MODE;
+SELECT k, dt, bitmap_count(b2) AS dc FROM mv_bmp_hash ORDER BY k, dt;
+
+-- ============================================================
+-- POSITIVE: PERCENTILE_UNION(PERCENTILE_HASH(...)) IVM MV — direct percentile_union
+-- ============================================================
+CREATE MATERIALIZED VIEW mv_pct PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, PERCENTILE_UNION(PERCENTILE_HASH(d_dec)) AS p
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+[UC]REFRESH MATERIALIZED VIEW mv_pct WITH SYNC MODE;
+SELECT k, dt, percentile_approx_raw(p, 0.5) AS p50 FROM mv_pct ORDER BY k, dt;
 
 -- cleanup
 drop database db_${uuid0} force;

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Computes the percentile value of `expr` with linear interpolation."
+description: "Computes the percentile value of expr with linear interpolation."
 ---
 
 # percentile_cont

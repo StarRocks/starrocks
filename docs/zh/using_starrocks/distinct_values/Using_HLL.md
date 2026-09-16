@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中通过 HyperLogLog 实现近似去重，在对精度要求不高的场景下减轻计算压力。"
 sidebar_position: 20
 ---
 

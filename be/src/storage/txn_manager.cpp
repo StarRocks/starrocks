@@ -47,13 +47,13 @@
 #include "common/runtime_profile.h"
 #include "common/thread/threadpool.h"
 #include "common/tracer.h"
-#include "exec/schema_scanner/schema_be_txns_scanner.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
+#include "storage_primitive/txn_info.h"
 
 namespace starrocks {
 

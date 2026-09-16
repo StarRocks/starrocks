@@ -16,6 +16,7 @@
 
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/core/auth/STSCredentialsProvider.h>
 #include <aws/core/client/SpecifiedRetryableErrorsRetryStrategy.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
@@ -29,6 +30,7 @@
 #include <aws/sts/STSClient.h>
 #include <fmt/core.h>
 
+#include <algorithm>
 #include <ctime>
 #include <limits>
 
@@ -46,7 +48,6 @@
 #include "io/direct_s3_output_stream.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
-#include "util/hdfs_util.h"
 
 namespace starrocks {
 
@@ -69,7 +70,8 @@ static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
 
 bool operator==(const Aws::Client::ClientConfiguration& lhs, const Aws::Client::ClientConfiguration& rhs) {
     return lhs.endpointOverride == rhs.endpointOverride && lhs.region == rhs.region &&
-           lhs.maxConnections == rhs.maxConnections && lhs.scheme == rhs.scheme;
+           lhs.maxConnections == rhs.maxConnections && lhs.scheme == rhs.scheme &&
+           lhs.requestTimeoutMs == rhs.requestTimeoutMs;
 }
 
 bool S3ClientFactory::ClientCacheKey::operator==(const ClientCacheKey& rhs) const {
@@ -90,6 +92,8 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
         credential_provider = std::make_shared<Aws::Auth::DefaultAWSCredentialsProviderChain>();
     } else if (aws_cloud_credential.use_instance_profile) {
         credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
+    } else if (aws_cloud_credential.use_web_identity_profile) {
+        credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleWebIdentityCredentialsProvider>();
     } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
         credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
                 aws_cloud_credential.access_key, aws_cloud_credential.secret_key, aws_cloud_credential.session_token);
@@ -117,9 +121,23 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
 
 void S3ClientFactory::close() {
     std::lock_guard l(_lock);
-    for (auto& item : _clients) {
-        item.reset();
+    _clients.clear();
+    _client_cache_keys.clear();
+}
+
+void S3ClientFactory::_put_client(const ClientCacheKey& client_cache_key, const S3ClientPtr& client, size_t max_items) {
+    // caller holds _lock
+    // Honor the (possibly reduced) capacity by evicting random victims first, so that a lowered
+    // object_storage_client_cache_size shrinks the cache instead of only overwriting entries.
+    while (!_clients.empty() && _clients.size() >= max_items) {
+        int idx = _rand.Uniform(static_cast<int>(_clients.size()));
+        std::swap(_client_cache_keys[idx], _client_cache_keys.back());
+        std::swap(_clients[idx], _clients.back());
+        _client_cache_keys.pop_back();
+        _clients.pop_back();
     }
+    _client_cache_keys.push_back(client_cache_key);
+    _clients.push_back(client);
 }
 
 // clang-format: off
@@ -127,6 +145,21 @@ static const std::vector<Aws::String> retryable_errors = {
         // tos qps limit ExceptionName
         "ExceedAccountQPSLimit", "ExceedAccountRateLimit", "ExceedBucketQPSLimit", "ExceedBucketRateLimit"};
 // clang-format: on
+
+static void set_request_timeout(Aws::Client::ClientConfiguration& client_config,
+                                S3ClientFactory::OperationType operation_type) {
+    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
+        config::object_storage_rename_file_request_timeout_ms >= 0) {
+        client_config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (config::object_storage_request_timeout_ms >= 0) {
+        // Zero explicitly disables the timeout.
+        client_config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    } else if (config::enable_poco_client_for_aws_sdk) {
+        // The SDK default and an explicit zero are both represented as zero. Preserve an unset
+        // StarRocks value with a negative sentinel so Poco can restore its own finite default.
+        client_config.requestTimeoutMs = -1;
+    }
+}
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration,
                                                          S3ClientFactory::OperationType operation_type) {
@@ -153,21 +186,17 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
 
-    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
-        config::object_storage_rename_file_request_timeout_ms >= 0) {
-        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
-    } else if (config::object_storage_request_timeout_ms >= 0) {
-        // 0 is meaningful for object_storage_request_timeout_ms
-        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
-    }
+    set_request_timeout(config, operation_type);
 
     auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
     auto aws_config = std::make_shared<AWSCloudConfiguration>(aws_cloud_configuration);
     ClientCacheKey client_cache_key{client_conf, aws_config};
+    // Snapshot the runtime-mutable cache capacity once for this creation.
+    const size_t max_items = std::max<int64_t>(1, config::object_storage_client_cache_size);
     {
         // Duplicate code for cache s3 client
         std::lock_guard l(_lock);
-        for (size_t i = 0; i < _items; i++) {
+        for (size_t i = 0; i < _client_cache_keys.size(); i++) {
             if (_client_cache_keys[i] == client_cache_key) return _clients[i];
         }
     }
@@ -181,24 +210,18 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
     {
         std::lock_guard l(_lock);
-        if (UNLIKELY(_items >= kMaxItems)) {
-            int idx = _rand.Uniform(kMaxItems);
-            _client_cache_keys[idx] = client_cache_key;
-            _clients[idx] = client;
-        } else {
-            _client_cache_keys[_items] = client_cache_key;
-            _clients[_items] = client;
-            _items++;
-        }
+        _put_client(client_cache_key, client, max_items);
     }
     return client;
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);
+    // Snapshot the runtime-mutable cache capacity once for this creation.
+    const size_t max_items = std::max<int64_t>(1, config::object_storage_client_cache_size);
     auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
     ClientCacheKey client_cache_key{client_conf, std::make_shared<AWSCloudConfiguration>()};
-    for (size_t i = 0; i < _items; i++) {
+    for (size_t i = 0; i < _client_cache_keys.size(); i++) {
         if (_client_cache_keys[i] == client_cache_key) return _clients[i];
     }
 
@@ -245,23 +268,16 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
                                                      !path_style_access);
     }
 
-    if (UNLIKELY(_items >= kMaxItems)) {
-        int idx = _rand.Uniform(kMaxItems);
-        _client_cache_keys[idx] = client_cache_key;
-        _clients[idx] = client;
-    } else {
-        _client_cache_keys[_items] = client_cache_key;
-        _clients[_items] = client;
-        _items++;
-    }
+    _put_client(client_cache_key, client, max_items);
     return client;
 }
 
 // Only use for UT
 bool S3ClientFactory::_find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
                                                              AWSCloudConfiguration* cloud_config) {
+    std::lock_guard l(_lock);
     auto aws_config = cloud_config == nullptr ? AWSCloudConfiguration{} : *cloud_config;
-    for (size_t i = 0; i < _items; i++) {
+    for (size_t i = 0; i < _client_cache_keys.size(); i++) {
         if (_client_cache_keys[i] == ClientCacheKey{std::make_shared<Aws::Client::ClientConfiguration>(config),
                                                     std::make_shared<AWSCloudConfiguration>(aws_config)})
             return true;
@@ -348,13 +364,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
 
-    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
-        config::object_storage_rename_file_request_timeout_ms >= 0) {
-        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
-    } else if (config::object_storage_request_timeout_ms >= 0) {
-        // 0 is meaningful for object_storage_request_timeout_ms
-        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
-    }
+    set_request_timeout(config, operation_type);
 
     return S3ClientFactory::instance().new_client(config, opts);
 } // namespace starrocks

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_metricsは各BEノードのメトリックに関する情報を提供します。"
 ---
 
 # be_metrics

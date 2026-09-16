@@ -55,6 +55,7 @@ public class FunctionCallExpr extends Expr {
     private FunctionRef fnRef;
     // private BuiltinAggregateFunction.Operator aggOp;
     private FunctionParams fnParams;
+    private final String aiModelConfigId;
 
     // check analytic function
     private boolean isAnalyticFnCall = false;
@@ -114,6 +115,7 @@ public class FunctionCallExpr extends Expr {
     // only used restore from readFields.
     private FunctionCallExpr() {
         super(NodePosition.ZERO);
+        aiModelConfigId = null;
     }
 
     public FunctionCallExpr(String functionName, List<Expr> params) {
@@ -140,6 +142,11 @@ public class FunctionCallExpr extends Expr {
         this(createFunctionRef(fnName, pos), params, pos);
     }
 
+    /** Constructor for planner-created AI calls carrying immutable, credential-free wire metadata. */
+    public FunctionCallExpr(String fnName, FunctionParams params, String aiModelConfigId) {
+        this(createFunctionRef(fnName, NodePosition.ZERO), params, false, NodePosition.ZERO, aiModelConfigId);
+    }
+
     public FunctionCallExpr(FunctionRef fnRef, FunctionParams params) {
         this(fnRef, params, false, NodePosition.ZERO);
     }
@@ -150,10 +157,17 @@ public class FunctionCallExpr extends Expr {
 
     private FunctionCallExpr(
             FunctionRef fnRef, FunctionParams params, boolean isMergeAggFn, NodePosition pos) {
+        this(fnRef, params, isMergeAggFn, pos, null);
+    }
+
+    private FunctionCallExpr(
+            FunctionRef fnRef, FunctionParams params, boolean isMergeAggFn, NodePosition pos,
+            String aiModelConfigId) {
         super(pos);
         this.fnRef = fnRef;
         fnParams = params;
         this.isMergeAggFn = isMergeAggFn;
+        this.aiModelConfigId = aiModelConfigId;
         if (params.exprs() != null) {
             children.addAll(params.exprs());
         }
@@ -183,6 +197,7 @@ public class FunctionCallExpr extends Expr {
         // Just inherit the function object from 'e'.
         fn = e.fn;
         this.isMergeAggFn = e.isMergeAggFn;
+        this.aiModelConfigId = e.aiModelConfigId;
         if (params.exprs() != null) {
             children.addAll(params.exprs());
         }
@@ -204,6 +219,11 @@ public class FunctionCallExpr extends Expr {
             fnParams = new FunctionParams(other.fnParams.isDistinct(), children, other.fnParams.getOrderByElements());
         }
         this.isMergeAggFn = other.isMergeAggFn;
+        this.aiModelConfigId = other.aiModelConfigId;
+    }
+
+    public String getAiModelConfigId() {
+        return aiModelConfigId;
     }
 
     public static final Set<String> NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS =

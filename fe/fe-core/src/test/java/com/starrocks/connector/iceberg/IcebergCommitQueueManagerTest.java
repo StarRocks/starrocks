@@ -997,7 +997,6 @@ public class IcebergCommitQueueManagerTest {
             ExecutorService executor = Executors.newFixedThreadPool(numQueries);
 
             for (int query = 0; query < numQueries; query++) {
-                final int queryId = query;
 
                 for (int commit = 0; commit < commitsPerQuery; commit++) {
                     executor.submit(() -> {
@@ -1494,7 +1493,7 @@ public class IcebergCommitQueueManagerTest {
         try {
             CountDownLatch taskRunning = new CountDownLatch(1);
             CountDownLatch proceedWithFirst = new CountDownLatch(1);
-            Thread submitThread = Thread.currentThread();
+            Thread.currentThread();
 
             // Submit first task that blocks and occupies the worker thread
             ExecutorService executor = Executors.newSingleThreadExecutor();

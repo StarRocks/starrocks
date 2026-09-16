@@ -532,24 +532,32 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
         }
     }
 
-    double val;
+    T val = 0;
     auto res = fast_float::from_chars(s + i, s + j + 1, val);
 
+    // 'res.ptr' is set to point right after the parsed number.
+    // If there are unparsed characters remaining, treat as failure.
+    // For example, '10.11.12.13' parsed as 10.11 leaves '.12.13' unparsed.
+    if (res.ptr != s + j + 1) {
+        *result = PARSE_FAILURE;
+        return 0;
+    }
+
     if (LIKELY(res.ec == std::errc())) {
-        // 'res.ptr' is set to point right after the parsed number.
-        // if there are some chars left, treate it as failure.
-        // for example,
-        // '10.11.12.13' is parsed as 10.11, res.ptr is '.12.13', so it is invalid.
-        if (res.ptr != s + j + 1) {
-            *result = PARSE_FAILURE;
-            return 0;
-        }
-        if (UNLIKELY(val == std::numeric_limits<T>::infinity())) {
-            *result = PARSE_OVERFLOW;
-        } else {
-            *result = PARSE_SUCCESS;
-        }
+        *result = PARSE_SUCCESS;
         return negative ? (T)-val : (T)val;
+    } else if (res.ec == std::errc::result_out_of_range) {
+        // fast_float v4.0.0+ reports overflow and underflow via result_out_of_range,
+        // matching std::strtod semantics (LWG 3081): val is set to ±infinity on
+        // overflow and ±0 on underflow. Return explicit saturated constants rather
+        // than passing through the mutated val directly.
+        if (std::isinf(val)) {
+            *result = PARSE_OVERFLOW;
+            return negative ? -std::numeric_limits<T>::infinity() : std::numeric_limits<T>::infinity();
+        } else {
+            *result = PARSE_UNDERFLOW;
+            return negative ? (T)-0.0 : (T)0.0;
+        }
     }
 
     *result = PARSE_FAILURE;

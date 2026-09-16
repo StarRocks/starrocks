@@ -38,7 +38,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScanStats g_hdfs_scan_stats;
+static FormatScannerStats g_hdfs_stats;
 using starrocks::HdfsScannerContext;
 
 class FileWriterTest : public testing::Test {
@@ -50,22 +50,26 @@ protected:
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+
+        ctx->format_scan_context.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
         std::vector<Utils::SlotDesc> slot_descs;
         for (auto& type_desc : type_descs) {
             auto type_name = type_desc.debug_string();
             slot_descs.push_back({type_name, type_desc});
         }
-        slot_descs.push_back({""});
+        slot_descs.push_back({});
 
         TupleDescriptor* tuple_desc =
                 parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
-        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = (_create_scan_range(_file_path, file_size));
-        ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &g_hdfs_scan_stats;
+        ctx->format_scan_context.scan_range_offset = ctx->scan_range->offset;
+        ctx->format_scan_context.scan_range_length = ctx->scan_range->length;
+        ctx->format_scan_context.timezone = "Asia/Shanghai";
+        ctx->format_scan_context.stats = &g_hdfs_stats;
+        ctx->format_scan_context.predicate_tree = &ctx->predicates.predicate_tree;
 
         return ctx;
     }
@@ -120,7 +124,7 @@ protected:
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), file_size);
 
-        auto st = file_reader->init(ctx);
+        auto st = file_reader->init(&ctx->format_scan_context);
         if (!st.ok()) {
             std::cout << st.to_string() << std::endl;
             return nullptr;
@@ -140,6 +144,7 @@ protected:
     std::string _file_path{"/dummy_file.parquet"};
     RuntimeState* _runtime_state;
     ObjectPool _pool;
+    HdfsScannerContext _scanner_ctx;
 };
 
 TEST_F(FileWriterTest, TestWriteIntegralTypes) {

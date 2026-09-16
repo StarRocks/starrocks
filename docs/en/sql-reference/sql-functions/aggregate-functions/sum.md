@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the sum of non-null values for `expr`."
+description: "Returns the sum of non-null values for expr."
 ---
 
 # sum

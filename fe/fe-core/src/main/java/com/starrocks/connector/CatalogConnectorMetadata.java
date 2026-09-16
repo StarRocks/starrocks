@@ -213,6 +213,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getVersionCommitTimeMillis(dbName, table, version);
+    }
+
+    @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.tableExists(context, dbName, tblName);

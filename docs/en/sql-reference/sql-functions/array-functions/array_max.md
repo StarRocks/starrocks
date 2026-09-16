@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Obtains the maximum value of all data in an ARRAY and return this result."
+description: "Returns the maximum value among all elements in an ARRAY."
 ---
 
 # array_max

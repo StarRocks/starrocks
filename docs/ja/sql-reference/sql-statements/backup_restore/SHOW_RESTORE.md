@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定したデータベース内の最後の RESTORE タスクを表示します。"
 ---
 
 # SHOW RESTORE

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW META 查看 CBO 统计信息的元数据，包括基础统计信息和直方图。"
 ---
 
 # SHOW META

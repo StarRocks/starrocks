@@ -16,13 +16,18 @@
 
 #include <string>
 
+#include "cache/cache_options.h"
+#include "cache/mem_cache/page_handle_fwd.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/schema.h"
+#include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/rowset/page_handle_fwd.h"
 #include "types/logical_type.h"
+
+namespace starrocks {
+class StoragePageCache;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 
@@ -113,7 +118,7 @@ using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 // 2. if DataCache is enabled, retrieve FileMetaData from DataCache. Otherwise, parse FileMetaData normally
 class FileMetaDataParser {
 public:
-    FileMetaDataParser(RandomAccessFile* file, const HdfsScannerContext* scanner_context, StoragePageCache* cache,
+    FileMetaDataParser(RandomAccessFile* file, const FormatScanContext* scanner_context, StoragePageCache* cache,
                        const DataCacheOptions* datacache_options, uint64_t file_size)
             : _file(file),
               _scanner_ctx(scanner_context),
@@ -127,7 +132,7 @@ private:
     StatusOr<uint32_t> _get_footer_read_size() const;
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
     RandomAccessFile* _file = nullptr;
-    const HdfsScannerContext* _scanner_ctx = nullptr;
+    const FormatScanContext* _scanner_ctx = nullptr;
     StoragePageCache* _cache = nullptr;
     const DataCacheOptions* _datacache_options = nullptr;
     uint64_t _file_size = 0;

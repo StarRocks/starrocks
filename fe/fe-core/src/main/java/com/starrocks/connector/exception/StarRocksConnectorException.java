@@ -29,19 +29,4 @@ public class StarRocksConnectorException extends RuntimeException {
         super(message, cause);
     }
 
-    public String getErrorMessage() {
-        return super.getMessage();
-    }
-
-    @Override
-    public String getMessage() {
-        return getErrorMessage();
-    }
-
-    public static void check(boolean test, String message, Object... args) {
-        if (!test) {
-            throw new StarRocksConnectorException(message, args);
-        }
-    }
-
 }

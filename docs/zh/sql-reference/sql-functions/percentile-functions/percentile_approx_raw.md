@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回给定参数对应的百分位数值。"
 ---
 
 # percentile_approx_raw

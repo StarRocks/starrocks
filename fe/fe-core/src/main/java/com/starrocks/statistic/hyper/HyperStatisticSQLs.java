@@ -202,7 +202,11 @@ public class HyperStatisticSQLs {
                             " ) %s",
                     table, tabletHint, ratio, alias);
         } else {
-            int percent = (int) (ratio * 100);
+            // Clamp into the open range (0, 100): the upper bound is 99 because the parser rejects 100, and the
+            // lower bound is 1 so floating-point noise in `ratio * 100` is never truncated to the illegal
+            // SAMPLE('percent'='0'). Matches the clamp in TableSampleClause.toThrift. The read ratios here are
+            // all >= 1%, so this clamp is purely defensive.
+            int percent = Math.max(1, Math.min(99, (int) (ratio * 100)));
             return String.format(" SELECT * FROM (SELECT * FROM %s TABLET(%s) SAMPLE('percent'='%d')) %s",
                     table, tabletHint, percent, alias);
         }

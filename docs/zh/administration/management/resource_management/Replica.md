@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "管理 StarRocks 集群中的数据副本和副本分布策略。"
 keywords: ['Fuben', 'fuzai']
 ---
 

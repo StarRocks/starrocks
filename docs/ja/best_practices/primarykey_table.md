@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+description: "主キーテーブルを使用して、StarRocks でリアルタイムデータ更新と効率的なアドホッククエリを実現する方法。"
 ---
 
 # 主キーテーブル

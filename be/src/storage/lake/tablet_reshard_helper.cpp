@@ -14,14 +14,122 @@
 
 #include "storage/lake/tablet_reshard_helper.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <numeric>
+#include <roaring/roaring.hh>
+#include <unordered_set>
 
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
+
+namespace {
+// True iff every rowid in the half-open range [range_begin, range_end) is set
+// in |gap_bits|. An empty range is trivially covered. nullptr |gap_bits| covers
+// nothing.
+bool range_fully_masked(const roaring::Roaring* gap_bits, rowid_t range_begin, rowid_t range_end) {
+    if (range_begin >= range_end) return true;
+    if (gap_bits == nullptr) return false;
+    // containsRange(x, y) tests that every value in the half-open range [x, y)
+    // is present; it does not enumerate the range.
+    return gap_bits->containsRange(static_cast<uint64_t>(range_begin), static_cast<uint64_t>(range_end));
+}
+} // namespace
+
+Status reconcile_windows_with_gap(const std::vector<DcgRowWindow>& sorted_contributors,
+                                  const roaring::Roaring* gap_bits, rowid_t num_rows,
+                                  std::vector<DcgRowWindow>* out_windows) {
+    if (num_rows <= 0) {
+        return Status::NotSupported("DCG rebuild: target segment has 0 rows");
+    }
+    out_windows->clear();
+    // The highest rowid covered so far by an emitted (contributor or gap) window.
+    rowid_t covered_up_to = 0;
+    for (const auto& contributor : sorted_contributors) {
+        const rowid_t contributor_begin = contributor.range.begin();
+        const rowid_t contributor_end = contributor.range.end();
+        // Defensive bound check (helper is exported; guard against misuse).
+        if (contributor_begin < 0 || contributor_end > num_rows || contributor_begin > contributor_end) {
+            return Status::InternalError(fmt::format("DCG rebuild: contributor window [{}, {}) out of [0, {}]",
+                                                     contributor_begin, contributor_end, num_rows));
+        }
+        if (contributor_begin > covered_up_to) {
+            // Coverage hole ahead of this contributor: accept only if fully masked.
+            if (!range_fully_masked(gap_bits, covered_up_to, contributor_begin)) {
+                return Status::NotSupported(
+                        fmt::format("DCG rebuild: row window coverage gap [{}, {}) not masked by delvec", covered_up_to,
+                                    contributor_begin));
+            }
+            out_windows->push_back(DcgRowWindow{/*old_tablet_index=*/0,
+                                                Range<rowid_t>(covered_up_to, contributor_begin),
+                                                /*is_gap=*/true});
+        } else if (contributor_begin < covered_up_to) {
+            // Overlap between distinct owners must surface, not be collapsed.
+            return Status::NotSupported(fmt::format("DCG rebuild: row window overlap at {} (covered up to {})",
+                                                    contributor_begin, covered_up_to));
+        }
+        out_windows->push_back(contributor);
+        covered_up_to = contributor_end;
+    }
+    if (covered_up_to < num_rows) {
+        if (!range_fully_masked(gap_bits, covered_up_to, num_rows)) {
+            return Status::NotSupported(
+                    fmt::format("DCG rebuild: row window coverage gap at end [{}, {}) not masked by delvec",
+                                covered_up_to, num_rows));
+        }
+        out_windows->push_back(
+                DcgRowWindow{/*old_tablet_index=*/0, Range<rowid_t>(covered_up_to, num_rows), /*is_gap=*/true});
+    }
+    return Status::OK();
+}
+
+// Generates a fresh, non-zero global rowset uid (a 128-bit PUniqueId).
+PUniqueId make_rowset_uid() {
+    return UniqueId(generate_uuid()).to_proto();
+}
+
+// Mints the rowset's global `uid` if absent; idempotent so an inherited uid
+// (CopyFrom from split / cross-publish) is preserved.
+void ensure_rowset_uid(RowsetMetadataPB* rowset_metadata) {
+    if (has_valid_uid(*rowset_metadata)) {
+        return;
+    }
+    rowset_metadata->mutable_uid()->CopyFrom(make_rowset_uid());
+}
+
+// Unconditionally assigns a fresh uid, replacing any existing one.
+void set_rowset_uid(RowsetMetadataPB* rowset_metadata) {
+    rowset_metadata->mutable_uid()->CopyFrom(make_rowset_uid());
+}
+
+// True iff the rowset carries a usable uid (present and non-zero).
+bool has_valid_uid(const RowsetMetadataPB& rowset_metadata) {
+    return rowset_metadata.has_uid() && (rowset_metadata.uid().hi() != 0 || rowset_metadata.uid().lo() != 0);
+}
+
+// True iff both rowsets carry the same valid uid (the same logical rowset).
+bool same_rowset_uid(const RowsetMetadataPB& a, const RowsetMetadataPB& b) {
+    return has_valid_uid(a) && has_valid_uid(b) && UniqueId(a.uid()) == UniqueId(b.uid());
+}
+
+// Gives |dst| the identity of |src|: copies src's uid if it has a valid one, else mints a
+// fresh uid on |dst|. The validity check keys off |src| (not |dst|, which may already hold a
+// stale or default uid, e.g. after proto MergeFrom), so this is not interchangeable with
+// ensure_rowset_uid (which keys off |dst|). Used where a rowset should adopt a source's
+// identity but the source might predate the uid field (legacy rolling-upgrade txn log, never
+// cross-published) — that case is backfilled rather than failing the in-flight publish.
+void inherit_or_set_uid(RowsetMetadataPB* dst, const RowsetMetadataPB& src) {
+    if (has_valid_uid(src)) {
+        dst->mutable_uid()->CopyFrom(src.uid());
+    } else {
+        set_rowset_uid(dst);
+    }
+}
 
 void allocate_proportionally(int64_t total, const std::vector<int64_t>& weights, std::vector<int64_t>* out) {
     DCHECK(out != nullptr);
@@ -142,9 +250,9 @@ void cap_and_redistribute_dels(const std::vector<int64_t>& rows, std::vector<int
 }
 
 void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata) {
-    auto* shared_segments = rowset_metadata->mutable_shared_segments();
-    shared_segments->Clear();
-    shared_segments->Resize(rowset_metadata->segments_size(), true);
+    for (auto& segment_meta : *rowset_metadata->mutable_segment_metas()) {
+        segment_meta.set_shared(true);
+    }
 
     for (auto& del : *rowset_metadata->mutable_del_files()) {
         del.set_shared(true);
@@ -161,12 +269,17 @@ static void set_all_data_files_shared(TxnLogPB_OpWrite* op_write) {
     for (auto& sst : *op_write->mutable_ssts()) {
         sst.set_shared(true);
     }
-    // op_write.dels is a plain string list with no per-entry shared flag; populate
-    // the parallel `shared_dels` so that apply_opwrite can transfer the shared
+    // Mark every del file as shared so that apply_opwrite can transfer the shared
     // state into RowsetMetadataPB.del_files when the txn is published on a child.
-    auto* shared_dels = op_write->mutable_shared_dels();
-    shared_dels->Clear();
-    shared_dels->Resize(op_write->dels_size(), true);
+    for (auto& del_meta : *op_write->mutable_dels_meta()) {
+        del_meta.set_shared(true);
+    }
+    // Pre-built tombstone sstables are ingested by every child during split cross-publish; mark them
+    // shared too so bulk_erase records them as shared and a child's vacuum/compaction cannot delete a
+    // file the siblings still reference.
+    for (auto& del_sst : *op_write->mutable_del_ssts()) {
+        del_sst.set_shared(true);
+    }
 }
 
 // Marks all data files referenced by an OpCompaction as shared. Used both for the
@@ -208,10 +321,21 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
         }
     }
 
+    if (txn_log->has_op_add_index()) {
+        // ADD INDEX fast-path .idx files, peer of op_schema_change above: on a split
+        // cross-publish this OpAddIndex is applied to every new tablet, so its .idx must be
+        // marked shared or one child could later reclaim a file another child still uses.
+        for (auto& se : *txn_log->mutable_op_add_index()->mutable_segment_entries()) {
+            if (se.has_entry()) {
+                se.mutable_entry()->set_shared_file(true);
+            }
+        }
+    }
+
     if (txn_log->has_op_replication()) {
         // Each replication op_write flows through the same apply_opwrite path on
         // publish (see txn_log_applier.cpp apply_write_log). Share the same rule as
-        // the top-level op_write so shared_dels / ssts are populated consistently.
+        // the top-level op_write so dels_meta[].shared / ssts are populated consistently.
         for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
             set_all_data_files_shared(&op_write);
         }
@@ -235,11 +359,7 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
     }
 }
 
-void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
-    for (auto& rowset_metadata : *tablet_metadata->mutable_rowsets()) {
-        set_all_data_files_shared(&rowset_metadata);
-    }
-
+void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
     if (!skip_delvecs && tablet_metadata->has_delvec_meta()) {
         for (auto& pair : *tablet_metadata->mutable_delvec_meta()->mutable_version_to_file()) {
             pair.second.set_shared(true);
@@ -248,9 +368,13 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
 
     if (tablet_metadata->has_dcg_meta()) {
         for (auto& dcg : *tablet_metadata->mutable_dcg_meta()->mutable_dcgs()) {
-            auto* shared_files = dcg.second.mutable_shared_files();
-            shared_files->Clear();
-            shared_files->Resize(dcg.second.column_files_size(), true);
+            set_dcg_shared(&dcg.second, true);
+        }
+    }
+
+    if (tablet_metadata->has_idg_meta()) {
+        for (auto& idg : *tablet_metadata->mutable_idg_meta()->mutable_idgs()) {
+            set_idg_shared(&idg.second, true);
         }
     }
 
@@ -259,6 +383,25 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
             sstable.set_shared(true);
         }
     }
+}
+
+void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared) {
+    auto* shared_files = dcg->mutable_shared_files();
+    shared_files->Clear();
+    shared_files->Resize(dcg->column_files_size(), shared);
+}
+
+void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared) {
+    for (auto& entry : *idg->mutable_entries()) {
+        entry.set_shared_file(shared);
+    }
+}
+
+void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
+    for (auto& rowset_metadata : *tablet_metadata->mutable_rowsets()) {
+        set_all_data_files_shared(&rowset_metadata);
+    }
+    set_non_segment_files_shared(tablet_metadata, skip_delvecs);
 }
 
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
@@ -431,7 +574,8 @@ StatusOr<std::vector<TabletRangePB>> compute_non_contributed_ranges(
     return compute_disjoint_gaps_within(unbounded, sorted_disjoint_children);
 }
 
-const TabletRangePB& effective_child_local_range(const RowsetMetadataPB& rowset, const TabletMetadataPB& ctx_metadata) {
+const TabletRangePB& effective_old_tablet_local_range(const RowsetMetadataPB& rowset,
+                                                      const TabletMetadataPB& ctx_metadata) {
     static const TabletRangePB kUnbounded;
     if (rowset.has_range()) return rowset.range();
     if (ctx_metadata.has_range()) return ctx_metadata.range();
@@ -481,29 +625,50 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
 
 void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index) {
     if (split_count <= 1) return;
-
-    if (rowset->has_num_rows()) {
-        int64_t num_rows = rowset->num_rows();
-        rowset->set_num_rows(num_rows / split_count + (split_index < num_rows % split_count ? 1 : 0));
-    }
-    if (rowset->has_data_size()) {
-        int64_t data_size = rowset->data_size();
-        rowset->set_data_size(data_size / split_count + (split_index < data_size % split_count ? 1 : 0));
-    }
+    auto apportion = [split_count, split_index](int64_t value) {
+        return value / split_count + (split_index < value % split_count ? 1 : 0);
+    };
+    if (rowset->has_num_rows()) rowset->set_num_rows(apportion(rowset->num_rows()));
+    if (rowset->has_data_size()) rowset->set_data_size(apportion(rowset->data_size()));
     if (rowset->has_num_dels()) {
-        int64_t num_dels = rowset->num_dels();
-        int64_t scaled_num_dels = num_dels / split_count + (split_index < num_dels % split_count ? 1 : 0);
-        rowset->set_num_dels(std::min<int64_t>(scaled_num_dels, rowset->num_rows()));
+        rowset->set_num_dels(std::min<int64_t>(apportion(rowset->num_dels()), rowset->num_rows()));
     }
 }
 
 namespace {
 
+// Append the output sstable file paths of |op|, skipping any that alias an input
+// sstable. The persistent-index parallel compaction "full contain / only do move"
+// optimization (LakePersistentIndexParallelCompactMgr) re-emits an input sstable as
+// its own output verbatim, keeping the same physical file and only re-stamping the
+// fileset_id. Such a file is still referenced by the base metadata and every sibling
+// tablet, so it must NOT be queued for deletion when a pending compaction is dropped
+// during a split/merge cross-publish. Templated over the op message so both
+// OpCompaction and OpParallelCompaction share it. This is the deletion-side mirror of
+// MetaFileBuilder::remove_compacted_sst, which applies the same invariant (by
+// filename) to the orphaning side of a normal compaction publish.
+template <typename OpCompactionLike>
+void append_non_reused_output_sstables(const OpCompactionLike& op, int64_t tablet_id, TabletManager* tablet_manager,
+                                       std::vector<std::string>* output_paths) {
+    std::unordered_set<std::string> input_filenames;
+    for (const auto& sstable : op.input_sstables()) {
+        input_filenames.insert(sstable.filename());
+    }
+    if (op.has_output_sstable() && !input_filenames.contains(op.output_sstable().filename())) {
+        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, op.output_sstable().filename()));
+    }
+    for (const auto& sstable : op.output_sstables()) {
+        if (!input_filenames.contains(sstable.filename())) {
+            output_paths->emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
+        }
+    }
+}
+
 // Append output-side files of a single OpCompaction. Used both for the
 // top-level op_compaction and for every op_parallel_compaction.subtask_compactions[*].
 //
 // Only files newly written by this compaction are collected. In partial
-// compaction the output_rowset.segments() list concatenates uncompacted
+// compaction the output_rowset.segment_metas() list concatenates uncompacted
 // (reused) input segments with newly written ones; the slice
 // [new_segment_offset, new_segment_offset + new_segment_count) identifies the
 // new ones. output_rowset.del_files() may likewise be carried over from input
@@ -519,7 +684,7 @@ namespace {
 void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, int64_t tablet_id,
                                     TabletManager* tablet_manager, std::vector<std::string>* output_paths) {
     if (op_compaction.has_output_rowset()) {
-        const auto& segments = op_compaction.output_rowset().segments();
+        const auto& segments = op_compaction.output_rowset().segment_metas();
         if (op_compaction.has_new_segment_count()) {
             // Normal or partial compaction: only the
             // [new_segment_offset, new_segment_offset + new_segment_count)
@@ -531,7 +696,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
             if (new_segment_offset >= 0 && new_segment_count > 0) {
                 for (int32_t idx = new_segment_offset, taken = 0; idx < segments.size() && taken < new_segment_count;
                      ++idx, ++taken) {
-                    output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segments[idx]));
+                    output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segments[idx].filename()));
                 }
             }
         } else {
@@ -540,19 +705,14 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
             // tablet_parallel_compaction_manager, whose output_rowset only
             // contains segments the subtasks newly produced. Treat all as new.
             for (const auto& segment : segments) {
-                output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segment));
+                output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segment.filename()));
             }
         }
     }
     for (const auto& file_meta : op_compaction.ssts()) {
         output_paths->emplace_back(tablet_manager->sst_location(tablet_id, file_meta.name()));
     }
-    if (op_compaction.has_output_sstable()) {
-        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, op_compaction.output_sstable().filename()));
-    }
-    for (const auto& sstable : op_compaction.output_sstables()) {
-        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
-    }
+    append_non_reused_output_sstables(op_compaction, tablet_id, tablet_manager, output_paths);
     if (op_compaction.has_lcrm_file()) {
         output_paths->emplace_back(tablet_manager->lcrm_location(tablet_id, op_compaction.lcrm_file().name()));
     }
@@ -560,7 +720,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
 
 } // namespace
 
-std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
+std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
     DCHECK(tablet_manager != nullptr);
 
     const int64_t tablet_id = txn_log.tablet_id();
@@ -574,13 +734,7 @@ std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& tx
         for (const auto& subtask : op_parallel_compaction.subtask_compactions()) {
             append_compaction_output_files(subtask, tablet_id, tablet_manager, &output_paths);
         }
-        if (op_parallel_compaction.has_output_sstable()) {
-            output_paths.emplace_back(
-                    tablet_manager->sst_location(tablet_id, op_parallel_compaction.output_sstable().filename()));
-        }
-        for (const auto& sstable : op_parallel_compaction.output_sstables()) {
-            output_paths.emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
-        }
+        append_non_reused_output_sstables(op_parallel_compaction, tablet_id, tablet_manager, &output_paths);
         // orphan_lcrm_files holds the ORIGINAL per-subtask lcrm files copied
         // by the parallel-compaction manager (tablet_parallel_compaction_manager.cpp),
         // distinct from the merged lcrm placed on each subtask_compactions[i]

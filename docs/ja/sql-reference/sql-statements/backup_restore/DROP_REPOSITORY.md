@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "リポジトリを削除します。"
 ---
 
 # DROP REPOSITORY

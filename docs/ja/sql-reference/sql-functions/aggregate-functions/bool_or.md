@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "expr のいずれかの行が true と評価された場合に true を返します。"
 ---
 
 # bool_or

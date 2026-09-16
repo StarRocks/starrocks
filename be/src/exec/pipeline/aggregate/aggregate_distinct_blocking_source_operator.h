@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/aggregator.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 class AggregateDistinctBlockingSourceOperator : public SourceOperator {

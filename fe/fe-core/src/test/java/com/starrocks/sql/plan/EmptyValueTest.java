@@ -382,4 +382,65 @@ public class EmptyValueTest extends PlanTestBase {
                 "  |  <slot 19> : 19: v2\n" +
                 "  |  <slot 21> : NULL");
     }
+
+    @Test
+    public void testConstantRefCmpConstantRef() throws Exception {
+        // Pruning the empty join replaces joined_value with NULL. Merging the projects then creates
+        // `NULL = 'foo' AND input_value <> 0` inside a nonconstant CASE expression.
+        // The constant comparison must be folded before expression statistics are calculated.
+        String sql = "select\n" +
+                "    group_key,\n" +
+                "    case\n" +
+                "        when (\n" +
+                "            joined_value = 'foo'\n" +
+                "            and input_value <> 0\n" +
+                "        ) then joined_number\n" +
+                "        else cast(0.0 as double)\n" +
+                "    end = 0.0\n" +
+                "from\n" +
+                "    (\n" +
+                "        select\n" +
+                "            source.v1 as group_key,\n" +
+                "            source.v3 as input_value,\n" +
+                "            empty_side.joined_value as joined_value,\n" +
+                "            empty_side.joined_number as joined_number\n" +
+                "        from\n" +
+                "            t0 source\n" +
+                "            left outer join (\n" +
+                "                select\n" +
+                "                    v2 as join_key,\n" +
+                "                    'foo' as joined_value,\n" +
+                "                    cast(v3 as double) as joined_number\n" +
+                "                from\n" +
+                "                    t0\n" +
+                "                where\n" +
+                "                    1 = 0\n" +
+                "            ) empty_side on empty_side.join_key = source.v2\n" +
+                "    ) t\n";
+        String plan = getFragmentPlan(sql);
+        // After the fix the folded `NULL = 'foo'` predicate is eliminated, so the
+        // CASE collapses and the plan is produced without the ConstantRef-cmp-ConstantRef error.
+        assertContains(plan, "OlapScanNode\n     TABLE: t0");
+    }
+
+    @Test
+    public void testConstantRefCmpColumnRef() throws Exception {
+        // Empty-join pruning and project merging turn coalesce(NULL, 1) = input_value into 1 = input_value.
+        // The comparison must be normalized before expression statistics are calculated.
+        String sql = "select defaulted_value = input_value and rand() >= 0.0\n" +
+                "from (\n" +
+                "    select\n" +
+                "        coalesce(empty_side.joined_value, 1) as defaulted_value,\n" +
+                "        source.v1 as input_value\n" +
+                "    from\n" +
+                "        t0 source\n" +
+                "        left outer join (\n" +
+                "            select v1 as joined_value, v2 as join_key\n" +
+                "            from t0\n" +
+                "            where 1 = 0\n" +
+                "        ) empty_side on empty_side.join_key = source.v2\n" +
+                ") projected";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "OlapScanNode\n     TABLE: t0");
+    }
 }

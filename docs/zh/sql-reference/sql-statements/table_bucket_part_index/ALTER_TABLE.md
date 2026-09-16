@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "修改现有表，包括重命名、修改分区、修改分桶、调整 Tablet 大小和修改列。"
 ---
 
 # ALTER TABLE
@@ -10,17 +11,17 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 修改现有表，包括：
 
-- [修改表名、分区名、索引名、列名](#rename-对名称进行修改)
-- [修改表注释](#修改表的注释31-版本起)
-- [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
-- [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
+- [修改表名、分区名、索引名、列名](#重命名表)
+- [修改表注释](#修改表注释从v31起)
+- [修改分区（增删分区和修改分区属性）](#添加分区)
+- [修改分桶方式和分桶数量](#修改分桶方法和桶的数量从v32起)
 - [调整 Tablet 大小](#调整-tablet-大小)
 - [修改列（增删列和修改列顺序和注释）](#修改列添加删除列改变列的顺序或注释)
-- [创建或删除 rollup index](#操作-rollup-index-语法)
-- [修改 bitmap index](#bitmap-index-修改)
-- [修改表的属性](#修改表的属性)
-- [对表进行原子替换](#swap-将两个表原子替换)
-- [手动执行 Compaction 合并表数据](#手动-compaction31-版本起)
+- [创建或删除 rollup index](#创建-rollup)
+- [修改索引](#修改索引)
+- [修改表的属性](#修改表属性)
+- [对表进行原子替换](#使用临时分区替换当前分区)
+- [手动执行 Compaction 合并表数据](#手动-compaction从31起)
 - [删除主键索引](#删除主键索引-339-版本起)
 
 :::tip
@@ -484,9 +485,19 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - Tablet 的大小**大于** `tablet_reshard_target_size`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
+  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需等到 `tablet_reshard_target_size` 即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。在 `PROPERTIES` 中指定 `tablet_reshard_target_size` 会禁用该行为，并严格按照指定的目标大小执行。如需在整个集群范围内禁用，可将 `tablet_reshard_min_split_size` 设置为大于或等于 `tablet_reshard_target_size`。
+
   - 触发合并（MERGE）的条件：
     - 两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
+
+:::note
+
+**排序键与主键不同**的范围分布主键表**不支持 MERGE**。这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。`ALTER TABLE ... MERGE TABLETS` 与基于大小的自动合并都会被拒绝，报错 `Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key`。
+
+SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。
+
+:::
 
 详细示例，参考[拆分或合并 Tablet](#拆分或合并-tablet)。
 
@@ -507,8 +518,9 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意：
 
 1. 如果向聚合表中添加值列，需要指定agg_type。
-2. 如果向非聚合表（如明细表）中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表（如明细表）中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列存在歧义，会被拒绝，因为创建键列会改变表的聚合键并重写已有数据。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `true` 可恢复早期版本将该列作为键列创建的行为。
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以重新创建 Rollup。）
+4. 在存算分离集群的 Range 分布表上，明细表（Duplicate Key）、聚合表（Aggregate）和更新表（Unique Key）自 v4.2 起支持添加键列（该列将加入 Range 排序键）。该操作会触发在线重写，新增的键列必须指定常量 `DEFAULT` 值。不支持主键表（Primary Key），以及存在 Rollup 或同步物化视图的表。
 
 #### 向指定索引添加多个列
 
@@ -538,9 +550,11 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 如果向聚合表中添加值列，需要指定`agg_type`。
 
-2. 如果向非聚合表中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列存在歧义，会被拒绝。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `true` 可恢复早期版本的行为。
 
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以创建另一个 Rollup。）
+
+4. 在存算分离集群的 Range 分布表上，明细表（Duplicate Key）、聚合表（Aggregate）和更新表（Unique Key）自 v4.2 起支持添加键列（该列将加入 Range 排序键）。该操作会触发在线重写，新增的键列必须指定常量 `DEFAULT` 值。不支持主键表（Primary Key），以及存在 Rollup 或同步物化视图的表。
 
 #### 添加生成列（从v3.1起）
 
@@ -567,6 +581,7 @@ DROP COLUMN column_name
 
 1. 不能删除分区列。
 2. 如果从基础索引中删除列，并且该列包含在 Rollup 中，也会被删除。
+3. 在存算分离集群的 Range 分布表上，明细表（Duplicate Key）和聚合表（Aggregate，仅当没有使用 `REPLACE` 或 `REPLACE_IF_NOT_NULL` 聚合类型的值列时）自 v4.2 起支持删除键列（Range 排序键列）。该操作会触发在线重写，对数据重新排序，并针对聚合表按缩减后的键重新聚合数据。不支持主键表（Primary Key）或更新表（Unique Key），不支持存在索引的列（需先删除该索引），也不支持存在 Rollup 或同步物化视图的表。
 
 #### 修改列类型、位置、注释和其他属性
 
@@ -586,9 +601,10 @@ MODIFY COLUMN <column_name>
 
 1. 如果修改聚合模型中的值列，需要指定agg_type。
 2. 如果修改非聚合模型中的键列，需要指定KEY关键字。
-3. 只能修改列的类型。列的其他属性保持不变。（即其他属性需要在语句中根据原属性显式写出，参见[列](#column)部分的示例8）。
-4. 不能修改分区列。
-5. 目前支持以下类型的转换（精度损失由用户保证）。
+3. 在修改类型、默认值、Null 属性及位置时，必须在语句中指定该列的完整定义。
+4. 仅修改列注释时——无论是通过 `MODIFY COLUMN <column_name> COMMENT “<new_column_comment>”` 语法，还是通过完整列定义但仅注释发生变化——均只更改元数据，不会触发 Schema Change 任务。此规则适用于主键列、键列和普通列。若完整定义同时修改了列的其他属性，则该语句将照常触发 Schema Change 任务。
+5. 不能修改分区列。
+6. 目前支持以下类型的转换（精度损失由用户保证）。
 
    - 将TINYINT/SMALLINT/INT/BIGINT转换为TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
    - 将TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL转换为VARCHAR。VARCHAR支持修改最大长度。
@@ -599,8 +615,8 @@ MODIFY COLUMN <column_name>
    - 将FLOAT转换为DOUBLE
    - 将INT转换为DATE（如果INT数据转换失败，原始数据保持不变）
 
-6. 不支持从NULL转换为NOT NULL。
-7. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
+7. 不支持从NULL转换为NOT NULL。
+8. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
 
 #### 重新排序指定索引的列
 
@@ -735,17 +751,31 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES：支持设置超时时间，默认超时时间为一天。
 
+`ORDER BY`：为 Rollup 定义独立于基表的排序键（可与基表排序键不同）。仅支持存算分离集群中的 Range 分布表（自 v4.2 起），可使按 Rollup 排序键前缀列进行过滤或聚合的查询命中该 Rollup。有以下限制：
+
+- 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
+- 表不能为 Colocate 表，且不能包含 AUTO_INCREMENT 列。
+- 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
+
 示例：
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+示例：在存算分离集群的 Range 分布表上创建一个具有独立排序键的 Rollup。
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### 批量创建 Rollup
@@ -1075,7 +1105,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 
@@ -1100,7 +1130,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ```sql
     ALTER TABLE example_db.my_table
     ADD COLUMN col1 INT DEFAULT "1" AFTER `k1`,
-    ADD COLUMN col2 FLOAT SUM AFTER `v2`,
+    ADD COLUMN col2 FLOAT SUM AFTER `v2`
     TO example_rollup_index;
     ```
 
@@ -1419,7 +1449,7 @@ ALTER TABLE table1 SPLIT TABLETS
 (9588955, 9588956, 9588957);
 ```
 
-- 将表中所有符合条件的 Tablet 合并，目标大小为 10 GB（默认值）。
+- 将表中所有符合条件的 Tablet 合并，目标大小为 2 GB（默认值）。
 
 ```SQL
 ALTER TABLE table1 MERGE TABLETS

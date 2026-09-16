@@ -1,6 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
-description: "From v3.3.0 onwards, StarRocks supports the BE Blacklist feature, which allows you to forbid the usage of certain BE nodes in query execution, thereby avoiding frequent query failures or other unex..."
+description: "How to configure the BE and CN Blacklist in StarRocks to exclude problematic nodes from query execution."
 ---
 
 # Manage BE and CN Blacklist
@@ -96,7 +97,7 @@ The following fields are returned:
 
 Each time a BE/CN node loses connection to the FE node, or a query fails due to timeout on a BE/CN node, the FE node adds the BE/CN node to its BE and CN Blacklist. The FE node will constantly assess the connectivity of the BE/CN node in the blacklist by counting its connection failures within a certain duration of time. StarRocks will remove a blacklisted BE/CN node only if the number of its connection failures is below a pre-specified threshold.
 
-You can configure the automatic management of the BE and CN Blacklist using the following [FE configurations](./FE_configuration.md):
+You can configure the automatic management of the BE and CN Blacklist using the following [FE configurations](../configuration/FE_parameters/FE_parameters.md):
 
 - `black_host_history_sec`: The time duration for retaining historical connection failures of BE/CN nodes in the Blacklist.
 - `black_host_connect_failures_within_time`: The threshold of connection failures allowed for a blacklisted BE/CN node.

@@ -28,35 +28,37 @@
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
-#include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
-#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/parallel_task_runner.h"
+#include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_compaction_state.h"
-#include "storage/persistent_index_parallel_publish_context.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/parallel_upsert_context.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -122,19 +124,17 @@ void PersistentIndexBlockCache::update_memory_usage() {
 
 void RssidFileInfoContainer::add_rssid_to_file(const TabletMetadata& metadata) {
     for (auto& rs : metadata.rowsets()) {
-        bool has_segment_size = (rs.segments_size() == rs.segment_size_size());
-        bool has_encryption_meta = (rs.segments_size() == rs.segment_encryption_metas_size());
-        bool has_bundle_file_offset = (rs.segments_size() == rs.bundle_file_offsets_size());
-        for (int i = 0; i < rs.segments_size(); i++) {
-            FileInfo segment_info{.path = rs.segments(i)};
-            if (has_bundle_file_offset) {
-                segment_info.bundle_file_offset = rs.bundle_file_offsets(i);
+        for (int i = 0; i < rs.segment_metas_size(); i++) {
+            const auto& segment_meta = rs.segment_metas(i);
+            FileInfo segment_info{.path = segment_meta.filename()};
+            if (segment_meta.has_bundle_file_offset()) {
+                segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
             }
-            if (LIKELY(has_segment_size)) {
-                segment_info.size = rs.segment_size(i);
+            if (LIKELY(segment_meta.has_size())) {
+                segment_info.size = segment_meta.size();
             }
-            if (LIKELY(has_encryption_meta)) {
-                segment_info.encryption_meta = rs.segment_encryption_metas(i);
+            if (LIKELY(segment_meta.has_encryption_meta())) {
+                segment_info.encryption_meta = segment_meta.encryption_meta();
             }
             uint32_t rssid = get_rssid(rs, i);
             _rssid_to_file_info[rssid] = segment_info;
@@ -144,26 +144,24 @@ void RssidFileInfoContainer::add_rssid_to_file(const TabletMetadata& metadata) {
 }
 
 void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
-                                               const std::map<int, FileInfo>& replace_segments) {
-    DCHECK(segment_idx < meta.segments_size());
+                                               const std::map<int, SegmentFileInfo>& replace_segments) {
+    DCHECK(segment_idx < meta.segment_metas_size());
     uint32_t local_segment_id = get_segment_idx(meta, static_cast<int32_t>(segment_idx));
     if (replace_segments.count(segment_idx) > 0) {
         // partial update
         _rssid_to_file_info[rowset_id + local_segment_id] = replace_segments.at(segment_idx);
         _rssid_to_rowid[rowset_id + local_segment_id] = rowset_id;
     } else {
-        bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
-        bool has_encryption_meta = (meta.segments_size() == meta.segment_encryption_metas_size());
-        bool has_bundle_file_offset = (meta.segments_size() == meta.bundle_file_offsets_size());
-        FileInfo segment_info{.path = meta.segments(segment_idx)};
-        if (has_bundle_file_offset) {
-            segment_info.bundle_file_offset = meta.bundle_file_offsets(segment_idx);
+        const auto& segment_meta = meta.segment_metas(segment_idx);
+        FileInfo segment_info{.path = segment_meta.filename()};
+        if (segment_meta.has_bundle_file_offset()) {
+            segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
         }
-        if (LIKELY(has_segment_size)) {
-            segment_info.size = meta.segment_size(segment_idx);
+        if (LIKELY(segment_meta.has_size())) {
+            segment_info.size = segment_meta.size();
         }
-        if (LIKELY(has_encryption_meta)) {
-            segment_info.encryption_meta = meta.segment_encryption_metas(segment_idx);
+        if (LIKELY(segment_meta.has_encryption_meta())) {
+            segment_info.encryption_meta = segment_meta.encryption_meta();
         }
         _rssid_to_file_info[rowset_id + local_segment_id] = segment_info;
         _rssid_to_rowid[rowset_id + local_segment_id] = rowset_id;
@@ -176,8 +174,14 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
-    // Fetch lock guard before `lake_load`
-    guard = index.fetch_guard();
+    // Fetch lock guard before `lake_load`. Acquiring this per-tablet index lock
+    // can block on a concurrent apply/compaction/point-lookup that already holds
+    // it; that wait happens before `lake_load` and is otherwise invisible in the
+    // publish trace, so time it separately from the load below.
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
+        guard = index.fetch_guard();
+    }
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
@@ -194,16 +198,9 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         return Status::InternalError(msg);
     }
     _block_cache->update_memory_usage();
-    st = index.prepare(EditVersion(new_version, 0), 0);
-    if (!st.ok()) {
-        // If prepare failed, release lock guard and remove index entry
-        guard.reset(nullptr);
-        _index_cache.remove(index_entry);
-        std::string msg =
-                strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
-        LOG(ERROR) << msg;
-        return Status::InternalError(msg);
-    }
+    // Stamps the version onto every memtable entry this publish writes. Nothing left to fail: the
+    // only way the old prepare() could was an unloaded index, and the load above succeeded.
+    index.set_publish_version(new_version);
     return index_entry;
 }
 
@@ -230,7 +227,18 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     }
 }
 
-StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata) {
+DEFINE_FAIL_POINT(skip_lake_pk_index_flush);
+DEFINE_FAIL_POINT(fail_lake_pk_index_flush);
+
+StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata,
+                                                             int64_t generation_version) {
+    // Test-only escape hatch: reshard unit tests build hand-crafted metadata with no real
+    // in-memory PK memtable, so there is nothing to flush; skip the (index-loading) flush so
+    // they exercise the metadata merge/split logic without materializing a real index.
+    FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_flush, { return metadata; });
+    // Test-only: inject a flush failure so callers can exercise their error-propagation paths.
+    FAIL_POINT_TRIGGER_EXECUTE(fail_lake_pk_index_flush,
+                               { return Status::InternalError("injected flush_pk_memtable failure"); });
     if (!is_primary_key(*metadata) || !metadata->enable_persistent_index() ||
         metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
         return metadata;
@@ -266,15 +274,20 @@ StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadat
     // DML's LakePersistentIndex::commit only flushes memtable when rebuild
     // counts are heavy; reshard needs an unconditional flush so the spliced
     // sstable_meta covers all live data.
-    RETURN_IF_ERROR(index_entry->value().sync_flush_persistent_index(
-            config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+    RETURN_IF_ERROR(
+            index_entry->value().sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
 
     // Reuse the DML publish path: commit → dump_sstable_meta →
     // MetaFileBuilder::finalize_sstable_meta writes the result into
     // mutable_metadata->sstable_meta(). builder.finalize() is NOT called
     // here — this flush does not produce its own metadata version; the
     // returned metadata is consumed by the surrounding reshard publish.
-    RETURN_IF_ERROR(index_entry->value().commit(metadata, &builder));
+    // This flush runs at base_version, but its freshly-flushed sstables first become
+    // visible to the split/merge children at the reshard publish version, so pass that
+    // as generation_version to commit(): it stamps those (new) sstables with it while
+    // inherited sstables (already present in the pre-commit sstable_meta) keep their
+    // recorded versions. The metadata version is left untouched.
+    RETURN_IF_ERROR(index_entry->value().commit(&builder, generation_version));
 
     // Success: dismiss the failure cleanup and release the cache entry.
     // write_guard is released when it goes out of scope at function return.
@@ -289,6 +302,44 @@ StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(
     LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
     unload_and_remove_primary_index(metadata->id());
     return prepare_primary_index(metadata, builder, base_version, new_version, guard);
+}
+
+// Plan for interleaving del files with segments during a primary-key publish. Per del file:
+//   - del_rssids[i]      : the rssid stamped for that delete (rowset_id + op_offset).
+//   - dels_after_segment : global segment id -> del ids that logically follow it, so each delete is
+//                          applied right after that segment's index update (preserving upsert/delete
+//                          order within the transaction).
+//   - del_applied[i]     : whether del i has been applied; a final pass handles any not consumed by
+//                          the interleave (e.g. a pure-delete op_write with no segments).
+struct DelInterleavePlan {
+    std::vector<uint32_t> del_rssids;
+    std::map<uint32_t, std::vector<uint32_t>> dels_after_segment;
+    std::vector<bool> del_applied;
+};
+
+// Build the interleave plan from an op_write's del files. A del with a recorded op_offset follows
+// that segment (mapped into the global segment-id space via assigned_global_segments +
+// get_segment_idx); otherwise it falls back to del_rebuild_rssid (after all segments).
+static DelInterleavePlan build_del_interleave_plan(const TxnLogPB_OpWrite& op_write, uint32_t rowset_id,
+                                                   uint32_t assigned_global_segments, uint32_t max_segment_id,
+                                                   uint32_t del_rebuild_rssid) {
+    const uint32_t num_del_files = op_write.dels_meta_size();
+    DelInterleavePlan plan;
+    plan.del_rssids.assign(num_del_files, del_rebuild_rssid);
+    plan.del_applied.assign(num_del_files, false);
+    for (uint32_t del_id = 0; del_id < num_del_files; ++del_id) {
+        // A del's op_offset (parallel to dels_meta) maps it to the segment it follows; when not
+        // recorded it stays at max_segment_id, i.e. applied after all segments.
+        uint32_t target_segment = max_segment_id;
+        const int64_t op_offset = del_op_offset_or_unset(op_write, del_id);
+        if (op_offset >= 0) {
+            target_segment =
+                    assigned_global_segments + get_segment_idx(op_write.rowset(), static_cast<int32_t>(op_offset));
+        }
+        plan.del_rssids[del_id] = rowset_id + target_segment;
+        plan.dels_after_segment[target_segment].push_back(del_id);
+    }
+    return plan;
 }
 
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
@@ -308,8 +359,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     auto& index = index_entry->value();
     VLOG(2) << strings::Substitute(
             "[publish_pk_tablet][begin] tablet:$0 txn:$1 base_version:$2 new_version:$3 segments:$4 dels:$5 batch:$6",
-            tablet->id(), txn_id, base_version, metadata->version(), op_write.rowset().segments_size(),
-            op_write.dels_size(), batch_apply);
+            tablet->id(), txn_id, base_version, metadata->version(), op_write.rowset().segment_metas_size(),
+            op_write.dels_meta_size(), batch_apply);
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata->next_rowset_id();
     auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -325,7 +376,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     const int64_t io_count_remote_before = state.stats().io_count_remote;
 
     std::vector<FileMetaPB> orphan_files;
-    std::map<int, FileInfo> replace_segments;
+    std::map<int, SegmentFileInfo> replace_segments;
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);
     // Init update state.
@@ -344,7 +395,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Global segment id offset assigned by builder when batch applying multiple op_write in a single publish.
     uint32_t assigned_global_segments = batch_apply ? builder->assigned_segment_idx() : 0;
     // Number of segments in the incoming rowset of this op_write.
-    uint32_t local_segments = op_write.rowset().segments_size();
+    uint32_t local_segments = op_write.rowset().segment_metas_size();
     std::vector<uint32_t> rowset_segment_ids;
     rowset_segment_ids.reserve(local_segments);
     std::unordered_set<uint32_t> new_rowset_rssids;
@@ -355,17 +406,49 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         rowset_segment_ids.push_back(global_segment_id);
         uint32_t rssid = rowset_id + global_segment_id;
         new_rowset_rssids.insert(rssid);
-        new_deletes[rssid] = {};
+        // Seed this segment's deletes with the unsort SST writer's per-segment dedup losers
+        // (separate-sort-key PK), if any. The unsort writer already resolved duplicate primary keys
+        // within the segment (the SST points at the winner); the losing rows remain in the segment and
+        // must be masked by its delete vector. The index update below appends historical-duplicate
+        // deletes on top via push_back, so this seed is preserved. Absent/empty (the sort-key==PK path,
+        // or a pre-feature writer) -> the legacy empty init below, i.e. no behavior change.
+        if (local_id < op_write.seg_delvecs_size() && !op_write.seg_delvecs(local_id).data().empty()) {
+            const auto& seg_delvec_pb = op_write.seg_delvecs(local_id);
+            DelVector writer_dv;
+            RETURN_IF_ERROR(
+                    writer_dv.load(metadata->version(), seg_delvec_pb.data().data(), seg_delvec_pb.data().size()));
+            auto& seg_deletes = new_deletes[rssid];
+            // A serialized *empty* DelVector has non-empty bytes but loads to a null roaring (empty()),
+            // so guard before dereferencing: an empty entry (a no-loser segment) is treated as empty,
+            // not a null deref. The index update below still appends historical-duplicate deletes.
+            if (!writer_dv.empty()) {
+                for (const auto rowid : *writer_dv.roaring()) {
+                    seg_deletes.push_back(rowid);
+                }
+            }
+        } else {
+            new_deletes[rssid] = {};
+        }
     }
-    // The rssid for delete files equals `rowset_id + op_offset`. Since delete currently happens after upsert,
-    // we use the max segment id as the `op_offset` for rebuild. This is a simplification until mixed
-    // upsert+delete order in a single transaction is supported.
-    // TODO: Support the actual interleaving order of upsert and delete within one transaction.
-    uint32_t max_segment_id = 0;
+    // A delete file's rssid is `rowset_id + op_offset`, where op_offset is the in-transaction segment
+    // index the delete logically follows (delete sorts after that segment via the reserved UINT32_MAX
+    // rowid). Falls back to the max segment id when the writer could not determine the order (spill /
+    // older writers / column-mode), reproducing the legacy "all deletes after all upserts" behavior.
+    // Default to this op_write's own reserved slot, not 0: rowset_segment_ids already carries
+    // assigned_global_segments, so an op_write WITH segments gets the right base from the max below --
+    // but a segmentless one (a pure-delete statement) leaves the vector empty, and falling back to 0
+    // would place its delete at the very start of the merged rowset's rssid range instead of at the
+    // slot get_rowset_id_step() reserves for it. MetaFileBuilder::add_rowset() records seg_base for
+    // exactly that case, so apply has to agree or the two diverge again for a middle or trailing
+    // pure-delete statement. Outside batch apply assigned_global_segments is 0, so this is a no-op there.
+    uint32_t max_segment_id = assigned_global_segments;
     if (!rowset_segment_ids.empty()) {
         max_segment_id = *std::max_element(rowset_segment_ids.begin(), rowset_segment_ids.end());
     }
     const uint32_t del_rebuild_rssid = rowset_id + max_segment_id;
+    // Plan how del files interleave with segments (see DelInterleavePlan / build_del_interleave_plan).
+    DelInterleavePlan del_plan =
+            build_del_interleave_plan(op_write, rowset_id, assigned_global_segments, max_segment_id, del_rebuild_rssid);
     // When too many sst files, we need to compact them early.
     int32_t current_fileset_start_idx = index.current_fileset_index();
     AsyncCompactCBPtr async_compact_cb;
@@ -375,15 +458,15 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Skip early sst compact when condition update with pregenerate sst files.
     bool skip_early_sst_compact = false;
     const bool is_row_mode_partial_update =
-            op_write.has_txn_meta() && op_write.rewrite_segments_size() > 0 && op_write.rowset().num_rows() > 0;
-    const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution && is_row_mode_partial_update &&
-                                             local_segments > 1 && use_cloud_native_pk_index(*metadata);
+            op_write.has_txn_meta() && op_write.rewrite_segments_meta_size() > 0 && op_write.rowset().num_rows() > 0;
+    const bool use_parallel_partial_update =
+            is_row_mode_partial_update && local_segments > 1 && use_cloud_native_pk_index(*metadata);
 
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
     // prevent memory accumulation. In serial mode, batch_size=1 degenerates to original logic.
     const uint32_t batch_size = use_parallel_partial_update
-                                        ? GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads()
+                                        ? RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads()
                                         : 1;
 
     for (uint32_t batch_start = 0; batch_start < local_segments; batch_start += batch_size) {
@@ -393,16 +476,16 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         if (use_parallel_partial_update && batch_end - batch_start > 1) {
             TRACE_COUNTER_SCOPE_LATENCY_US("parallel_load_rewrite_seg_latency_us");
             uint32_t batch_count = batch_end - batch_start;
-            std::vector<std::map<int, FileInfo>> per_seg_replace(batch_count);
+            std::vector<std::map<int, SegmentFileInfo>> per_seg_replace(batch_count);
             std::vector<std::vector<FileMetaPB>> per_seg_orphans(batch_count);
 
-            std::mutex status_mutex;
-            Status shared_status;
-            auto token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            auto token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
+            ParallelTaskRunner runner(token.get());
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
-                auto func = [&, i]() {
+                // Each task writes only its own per_seg_* element.
+                runner.run([&, i]() {
                     uint32_t idx = i - batch_start;
                     auto st = state.load_segment(i, params, base_version, true /*resolve conflict*/,
                                                  false /*no need lock*/);
@@ -410,20 +493,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                     if (st.ok()) {
                         st = state.rewrite_segment(i, txn_id, params, &per_seg_replace[idx], &per_seg_orphans[idx]);
                     }
+                    // Released whether or not the above succeeded: the state cache would otherwise hold
+                    // this segment's partial state for the rest of the publish.
                     state.release_segment_partial_state(i);
                     _update_state_cache.update_object_size(state_entry, state.memory_usage());
-
-                    std::lock_guard<std::mutex> l(status_mutex);
-                    shared_status.update(st);
-                };
-                auto submit_st = token->submit_func(func);
-                if (!submit_st.ok()) {
-                    std::lock_guard<std::mutex> l(status_mutex);
-                    shared_status.update(submit_st);
-                }
+                    return st;
+                });
             }
-            token->wait();
-            RETURN_IF_ERROR(shared_status);
+            RETURN_IF_ERROR(runner.join());
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
                 uint32_t idx = i - batch_start;
@@ -477,8 +554,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                           state.upserts(local_id), index, &new_deletes));
             }
             if (state.auto_increment_deletes(local_id) != nullptr) {
-                RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(local_id), &new_deletes,
-                                            del_rebuild_rssid));
+                RETURN_IF_ERROR(index.erase(*state.auto_increment_deletes(local_id), &new_deletes, del_rebuild_rssid));
             }
             _index_cache.update_object_size(index_entry, index.memory_usage());
             state.release_segment(local_id);
@@ -489,6 +565,17 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
                                                  rowset_id + global_segment_id, metadata->version(), delvec_page_pb,
                                                  dv_generated_during_merge_update));
+            }
+            // Apply del files that logically follow this segment, right after its index update, so the
+            // upsert/delete order within this transaction is preserved.
+            if (auto it = del_plan.dels_after_segment.find(global_segment_id);
+                it != del_plan.dels_after_segment.end()) {
+                for (uint32_t del_id : it->second) {
+                    RETURN_IF_ERROR(
+                            _do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
+                    _index_cache.update_object_size(index_entry, index.memory_usage());
+                    del_plan.del_applied[del_id] = true;
+                }
             }
             if (async_compact_cb) {
                 TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
@@ -505,10 +592,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             if (async_compact_cb == nullptr && !skip_early_sst_compact &&
                 index.current_fileset_index() - current_fileset_start_idx >=
                         config::pk_index_early_sst_compaction_threshold) {
+                if (_parallel_compact_mgr == nullptr) {
+                    return Status::InternalError("parallel compact manager is not initialized");
+                }
                 TRACE_COUNTER_INCREMENT("early_sst_compact_times", 1);
                 ASSIGN_OR_RETURN(async_compact_cb,
-                                 index.early_sst_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
-                                                         metadata, current_fileset_start_idx + 1 /* new fileset*/));
+                                 index.early_sst_compact(_parallel_compact_mgr, _tablet_mgr, metadata,
+                                                         current_fileset_start_idx + 1 /* new fileset*/));
             }
         } // end Phase 2 per-segment loop
     }     // end batch loop
@@ -517,13 +607,16 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         RETURN_IF_ERROR(async_compact_cb->wait_for());
     }
 
-    // 3. Handle del files one by one.
-    for (uint32_t del_id = 0; del_id < op_write.dels_size(); del_id++) {
-        RETURN_IF_ERROR(state.load_delete(del_id, params));
-        DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_rebuild_rssid));
+    // 3. Apply any del files not yet consumed by the interleave above. This covers rowsets with no
+    // segments (pure-delete op_write) and any del whose target segment was not iterated; their rssid
+    // is del_rebuild_rssid (after all segments), matching the legacy behavior.
+    for (uint32_t del_id = 0; del_id < del_plan.del_applied.size(); del_id++) {
+        if (del_plan.del_applied[del_id]) {
+            continue;
+        }
+        RETURN_IF_ERROR(_do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
         _index_cache.update_object_size(index_entry, index.memory_usage());
-        state.release_delete(del_id);
+        del_plan.del_applied[del_id] = true;
     }
 
     _block_cache->update_memory_usage();
@@ -534,8 +627,26 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     size_t new_del = 0;
     size_t total_del = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels;
+    // Separate-sort-key spill (the unsort SST writer, signalled by op_write.seg_delvecs) is the only
+    // path that can leave duplicate primary keys in one incoming segment: the writer dedups the PK
+    // INDEX (SST points at the winner), but the segment DATA file still physically holds the loser
+    // rows -- they are only masked by a delete vector, not removed. A read-only index lookup over that
+    // segment's PK column (duplicates included) can push a historical rowid into new_deletes once per
+    // occurrence, so cur_add (the raw vector size) would exceed the deduplicated bitmap cardinality and
+    // trip the "cur_old + cur_add != cur_new" consistency check below. Deduplicate the rowids here so
+    // the count matches the bitmap; the delvec content is unchanged (a roaring bitmap dedups anyway).
+    // Gated on the load carrying any seg_delvecs at all: the common sort-key==PK path (and any
+    // pre-feature writer) emits none, so seg_delvecs_size() == 0 and this stays a no-op -- unchanged
+    // behavior. (When seg_delvecs are present, deduping every entry is harmless: the new-segment entries
+    // come from a roaring bitmap and are already unique.)
+    const bool dedupe_new_deletes = op_write.seg_delvecs_size() > 0;
     for (auto& new_delete : new_deletes) {
         uint32_t rssid = new_delete.first;
+        if (dedupe_new_deletes) {
+            auto& del_ids = new_delete.second;
+            std::sort(del_ids.begin(), del_ids.end());
+            del_ids.erase(std::unique(del_ids.begin(), del_ids.end()), del_ids.end());
+        }
         if (new_rowset_rssids.contains(rssid)) {
             // it's newly added rowset's segment, do not have latest delvec yet
             new_del_vecs[idx].first = rssid;
@@ -605,8 +716,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
-    TRACE_COUNTER_INCREMENT("upserts", op_write.rowset().segments_size());
-    TRACE_COUNTER_INCREMENT("deletes", op_write.dels_size());
+    TRACE_COUNTER_INCREMENT("upserts", op_write.rowset().segment_metas_size());
+    TRACE_COUNTER_INCREMENT("deletes", op_write.dels_meta_size());
     TRACE_COUNTER_INCREMENT("new_del", new_del);
     TRACE_COUNTER_INCREMENT("total_del", total_del);
     TRACE_COUNTER_INCREMENT("upsert_rows", op_write.rowset().num_rows());
@@ -620,7 +731,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     VLOG(1) << strings::Substitute(
             "[publish_pk_tablet][end] tablet:$0 txn:$1 rowset_id:$2 upsert_segments:$3 dels:$4 new_del:$5 total_del:$6 "
             "upsert_rows:$7 base_version:$8 new_version:$9",
-            tablet->id(), txn_id, rowset_id, op_write.rowset().segments_size(), op_write.dels_size(), new_del,
+            tablet->id(), txn_id, rowset_id, op_write.rowset().segment_metas_size(), op_write.dels_meta_size(), new_del,
             total_del, op_write.rowset().num_rows(), base_version, metadata->version());
     _print_memory_stats();
     return Status::OK();
@@ -635,13 +746,14 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
 
     {
         FileInfo info;
-        info.path = op_write.rowset().segments(seg);
-        if (seg < op_write.rowset().bundle_file_offsets_size()) {
-            info.bundle_file_offset = op_write.rowset().bundle_file_offsets(seg);
-            info.size = op_write.rowset().segment_size(seg);
+        const auto& segment_meta = op_write.rowset().segment_metas(seg);
+        info.path = segment_meta.filename();
+        if (segment_meta.has_bundle_file_offset()) {
+            info.bundle_file_offset = segment_meta.bundle_file_offset();
+            info.size = segment_meta.size();
         }
-        if (seg < op_write.rowset().segment_encryption_metas_size()) {
-            info.encryption_meta = op_write.rowset().segment_encryption_metas(seg);
+        if (segment_meta.has_encryption_meta()) {
+            info.encryption_meta = segment_meta.encryption_meta();
         }
 
         FileInfo file_info{.path = tablet->segment_location(info.path), .encryption_meta = info.encryption_meta};
@@ -709,7 +821,7 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
 
 Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
-                                                 LakePrimaryIndex& index, MetaFileBuilder* builder,
+                                                 LakePersistentIndex& index, MetaFileBuilder* builder,
                                                  int64_t base_version, uint32_t rowset_id,
                                                  const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
                                                  uint32_t* new_del_rebuild_rssid) {
@@ -723,8 +835,19 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     for (size_t i = 0; i < tschema->num_key_columns(); i++) pk_cids.push_back((uint32_t)i);
     Schema pkey_schema = ChunkHelper::convert_schema(tschema, pk_cids);
 
-    std::vector<uint32_t> update_cids(op_write.txn_meta().partial_update_column_ids().begin(),
-                                      op_write.txn_meta().partial_update_column_ids().end());
+    // Resolve cid from uid against current schema; partial_update_column_ids is stale across schema drift.
+    const auto& txn_meta = op_write.txn_meta();
+    std::vector<uint32_t> update_cids;
+    update_cids.reserve(txn_meta.partial_update_column_unique_ids_size());
+    for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
+        const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
+        const auto cid = tschema->field_index(uid);
+        if (cid == -1) {
+            return Status::InternalError(strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
+                                                             tablet->tablet_id()));
+        }
+        update_cids.push_back(static_cast<uint32_t>(cid));
+    }
 
     int32_t ai_cid = -1;
     for (int i = 0; i < tschema->num_columns(); ++i) {
@@ -743,11 +866,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     uint64_t total_rows = 0;
     uint64_t total_data_size = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
+    // Rows superseded within this load, keyed by the synthesized segment they live in.
+    std::map<uint32_t, std::vector<uint32_t>> new_deletes_by_rssid;
 
-    DCHECK_EQ(insert_rowids_by_segment.size(), op_write.rowset().segments_size());
+    DCHECK_EQ(insert_rowids_by_segment.size(), op_write.rowset().segment_metas_size());
 
     ASSIGN_OR_RETURN(auto pk_encoding_type, tschema->primary_key_encoding_type_or_error());
-    for (uint32_t seg = 0; seg < op_write.rowset().segments_size(); ++seg) {
+    for (uint32_t seg = 0; seg < op_write.rowset().segment_metas_size(); ++seg) {
         // Reuse insert_rowids computed by ColumnModePartialUpdateHandler
         const auto& insert_rowids = insert_rowids_by_segment[seg];
         if (insert_rowids.empty()) {
@@ -805,52 +930,91 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         RETURN_IF_ERROR(writer.finalize(&seg_file_size, &idx_size, &footer_pos));
         segment_finalized = true; // Mark as successfully finalized
 
-        new_rows_op.mutable_rowset()->add_segments(seg_name);
-        new_rows_op.mutable_rowset()->add_segment_size(seg_file_size);
-        total_data_size += seg_file_size;
+        SegmentFileInfo seg_info;
+        seg_info.path = seg_name;
+        seg_info.size = seg_file_size;
         if (config::enable_transparent_data_encryption) {
-            new_rows_op.mutable_rowset()->add_segment_encryption_metas(writer.encryption_meta());
+            seg_info.encryption_meta = writer.encryption_meta();
         }
-        uint32_t segment_idx = new_rows_op.rowset().segments_size() - 1;
-        auto* segment_meta = new_rows_op.mutable_rowset()->add_segment_metas();
-        writer.write_sort_key_fields_to(segment_meta);
-        segment_meta->set_num_rows(writer.num_rows());
-        segment_meta->set_segment_idx(segment_idx);
+        seg_info.num_rows = writer.num_rows();
+        writer.write_sort_key_fields_to(seg_info);
+        total_data_size += seg_file_size;
+
+        uint32_t segment_idx = new_rows_op.rowset().segment_metas_size();
+        seg_info.to_proto(segment_idx, new_rows_op.mutable_rowset()->add_segment_metas());
 
         uint32_t new_segment_id = get_segment_idx(new_rows_op.rowset(), static_cast<int32_t>(segment_idx));
         PrimaryIndex::DeletesMap segment_deletes;
         RETURN_IF_ERROR(index.upsert(rowset_id + new_segment_id, 0, *pk_column_for_upsert, 0,
                                      pk_column_for_upsert->size(), &segment_deletes));
 
+        // These deletes are not necessarily empty. The index probe that classified a row as an
+        // insert runs once, before the first insert, so every occurrence of a key within this load
+        // is classified as an insert and the loop above makes them supersede each other: the upsert
+        // for a later segment returns deletes against an earlier segment of this same load. Collect
+        // them per rssid and write each segment's vector once, after the loop.
         for (auto& [rssid, del_ids] : segment_deletes) {
-            DCHECK(del_ids.empty()) << "del_ids should be empty for new row segments, but got " << del_ids.size()
-                                    << " deletes for rssid=" << rssid;
             if (del_ids.empty()) continue;
-            DelVectorPtr dv = std::make_shared<DelVector>();
-            dv->init(metadata->version(), del_ids.data(), del_ids.size());
-            builder->append_delvec(dv, rssid);
-            segment_id_to_add_dels_new_acc[rssid] += del_ids.size();
+            auto& acc = new_deletes_by_rssid[rssid];
+            acc.insert(acc.end(), del_ids.begin(), del_ids.end());
         }
+    }
+
+    // Merge into the segment's current delete vector rather than writing a fresh one, exactly like
+    // the delete half below: append_delvec() replaces _delvecs[rssid], so a fresh vector would
+    // discard marks already placed on that segment and bring those rows back to life. Collecting
+    // first and appending once per rssid also keeps the publish buffer proportional to the rows
+    // deleted -- append_delvec() only repoints the map entry and never reclaims the bytes an earlier
+    // call wrote, so appending per iteration would leave every intermediate vector in the delvec
+    // file. get_del_vec() returns an empty vector for an rssid that has none, so a segment deleted
+    // from only once is written exactly as before.
+    for (auto& [rssid, del_ids] : new_deletes_by_rssid) {
+        TabletSegmentId tsid;
+        tsid.tablet_id = tablet->id();
+        tsid.segment_id = rssid;
+        DelVectorPtr old_delvec;
+        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false, &old_delvec));
+        DelVectorPtr dv_new;
+        old_delvec->add_dels_as_new_version(del_ids, metadata->version(), &dv_new);
+        builder->append_delvec(dv_new, rssid);
+        segment_id_to_add_dels_new_acc[rssid] += del_ids.size();
     }
 
     new_rows_op.mutable_rowset()->set_num_rows(total_rows);
     new_rows_op.mutable_rowset()->set_data_size(total_data_size);
-    new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segments_size() > 1);
+    new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segment_metas_size() > 1);
     // append del files from old op to new op
-    for (int i = 0; i < op_write.dels_size(); i++) {
-        new_rows_op.add_dels(op_write.dels(i));
-    }
-    for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
-        new_rows_op.add_del_encryption_metas(op_write.del_encryption_metas(i));
-    }
     // Carry over the per-del shared flag populated by tablet-split cross-publish.
     // Without this, apply_opwrite(new_rows_op) would drop the flag and the del file
     // would be written into rowset.del_files with shared=false, exposing it to
     // premature deletion by vacuum on sibling split tablets.
-    for (int i = 0; i < op_write.shared_dels_size(); i++) {
-        new_rows_op.add_shared_dels(op_write.shared_dels(i));
+    for (const auto& del_meta : op_write.dels_meta()) {
+        new_rows_op.add_dels_meta()->CopyFrom(del_meta);
     }
-    if (new_rows_op.rowset().segments_size() > 0 || new_rows_op.dels_size() > 0) {
+    // Carry the per-del tombstone count (parallel to dels_meta) so column-upsert / partial-update
+    // delete-heavy loads still contribute their tombstone rows to need_rebuild_counts()'s
+    // rebuild-rows threshold. Unlike del_op_offsets (dropped below because column mode re-derives
+    // delete ordering), the count is path-independent and dels_meta was copied 1:1 just above, so
+    // the parallel array is copied verbatim. An absent array (size 0) stays absent, counting as 0.
+    for (int del_id = 0; del_id < op_write.del_num_rows_size(); ++del_id) {
+        new_rows_op.add_del_num_rows(op_write.del_num_rows(del_id));
+    }
+    // Column-upsert mode applies these deletes after all synthesized new-row segments
+    // (new_del_rebuild_rssid below), not interleaved by op_offset. new_rows_op intentionally carries
+    // no del_op_offsets array, so apply/persist fall back to the max segment id, keeping
+    // rebuild/recover consistent with this apply path.
+    if (new_rows_op.rowset().segment_metas_size() > 0 || new_rows_op.dels_meta_size() > 0) {
+        // Give the synthesized new_rows rowset a uid. In COLUMN_UPSERT_MODE the
+        // original op_write.rowset() never enters tablet metadata as a top-level
+        // rowset: its partial-column segments become DCG entries on existing rowsets
+        // (apply_column_mode_partial_update orphans them into orphan_files for GC), and
+        // only this new_rows_op is added via apply_opwrite below. So the uid here can't
+        // collide with any concurrent top-level rowset in this metadata.
+        // Reuse op_write.uid (minted by delta_writer at write time, preserved verbatim across
+        // cross-publish by proto CopyFrom) so every split sibling that re-runs this publish
+        // converges on the same identity. A legacy pre-uid op_write (rolling upgrade / pending
+        // txn log) is never range-distributed, hence never cross-published, so it is backfilled.
+        tablet_reshard_helper::inherit_or_set_uid(new_rows_op.mutable_rowset(), op_write.rowset());
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
             (void)builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
@@ -859,7 +1023,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     }
     // set new del_rebuild_rssid via new op
     uint32_t max_segment_id = 0;
-    for (int i = 0; i < new_rows_op.rowset().segments_size(); i++) {
+    for (int i = 0; i < new_rows_op.rowset().segment_metas_size(); i++) {
         max_segment_id = std::max(max_segment_id, get_segment_idx(new_rows_op.rowset(), i));
     }
     *new_del_rebuild_rssid = rowset_id + max_segment_id;
@@ -868,10 +1032,11 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
 }
 
 Status UpdateManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
-                                           const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
-                                           IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version,
-                                           uint32_t del_rebuild_rssid, const RowsetUpdateStateParams& params) {
-    if (op_write.dels_size() == 0) {
+                                           const TabletMetadataPtr& metadata, Tablet* tablet,
+                                           LakePersistentIndex& index, IndexEntry* index_entry,
+                                           MetaFileBuilder* builder, int64_t base_version, uint32_t del_rebuild_rssid,
+                                           const RowsetUpdateStateParams& params) {
+    if (op_write.dels_meta_size() == 0) {
         return Status::OK();
     }
 
@@ -881,10 +1046,10 @@ Status UpdateManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write, int
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     state.init(params);
-    for (uint32_t del_id = 0; del_id < op_write.dels_size(); del_id++) {
+    for (uint32_t del_id = 0; del_id < op_write.dels_meta_size(); del_id++) {
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_rebuild_rssid));
+        RETURN_IF_ERROR(index.erase(*state.deletes(del_id), &new_deletes, del_rebuild_rssid));
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_delete(del_id);
     }
@@ -940,7 +1105,10 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     const uint32_t rowset_id = metadata->next_rowset_id();
     uint32_t new_del_rebuild_rssid = rowset_id; // default value if no insert rows
 
-    auto& index = dynamic_cast<LakePrimaryIndex&>(index_entry->value());
+    // No cast: the index cache is DynamicCache<uint64_t, LakePersistentIndex>, so value() already
+    // returns one. This was a dynamic_cast to the cache's own value type from back when it held a
+    // base class, and stayed a no-op through both of the index's de-inheritance changes.
+    auto& index = index_entry->value();
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
     RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
@@ -954,12 +1122,11 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 }
 
 // Update primary index with new rows and collect rows to be deleted.
-// This method supports both serial and parallel execution modes.
 //
 // Parallel Execution:
-// When enabled (config::enable_pk_index_parallel_execution && is_cloud_native_index), this method
-// uses a thread pool to process segments concurrently, significantly improving performance
-// for large tablets during publish operations.
+// For a cloud-native index this method uses a thread pool to process segments concurrently,
+// significantly improving performance for large tablets during publish operations. A local
+// index has no parallel counterpart and runs the same code inline on the caller thread.
 //
 // Parameters:
 //   rowset_id:            Base RSSID (RowSet Segment ID) for this rowset
@@ -971,23 +1138,23 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 //   is_cloud_native_index: Whether using cloud-native persistent index
 //
 // Execution Flow:
-//   1. Setup parallel execution context if enabled (allocate thread pool token)
+//   1. Setup parallel execution context for a cloud-native index (allocate thread pool token)
 //   2. For each segment:
 //      - read_only mode: Call parallel_get() to find existing rows to delete
 //      - write mode: Call parallel_upsert() to update index and find deletes
 //   3. Wait for all parallel tasks to complete
 //   4. Flush memtable if in write mode (batch writes to sstable)
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
-                                 LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only,
+                                 LakePersistentIndex& index, DeletesMap* new_deletes, bool read_only,
                                  bool is_cloud_native_index) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
 
-    // Prepare parallel execution infrastructure if enabled
+    // Prepare parallel execution infrastructure
     std::unique_ptr<ThreadPoolToken> token;
 
     // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
-    if (config::enable_pk_index_parallel_execution && is_cloud_native_index) {
-        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+    if (is_cloud_native_index) {
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1000,6 +1167,29 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
         RETURN_IF_ERROR(index.parallel_upsert(token.get(), rowset_id + upsert_idx, upsert.get(), new_deletes));
     }
 
+    return Status::OK();
+}
+
+// Apply one del file to the primary index and collect the rows it shadows. Large del files written by a
+// current BE carry a pre-built tombstone sstable, which bulk_erase ingests directly; small del files and
+// pre-upgrade txn logs fall back to the memtable erase path.
+Status UpdateManager::_do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
+                                 RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("do_delete_latency_us");
+    RETURN_IF_ERROR(state.load_delete(del_id, params));
+    DCHECK(state.deletes(del_id) != nullptr);
+
+    const auto& op_write = params.op_write;
+    const bool has_prebuilt_del_sst = op_write.del_ssts_size() == op_write.dels_meta_size() &&
+                                      op_write.del_sst_ranges_size() == op_write.dels_meta_size() &&
+                                      !op_write.del_ssts(del_id).name().empty();
+    if (has_prebuilt_del_sst) {
+        RETURN_IF_ERROR(index.bulk_erase(*state.deletes(del_id), new_deletes, del_rssid, op_write.del_ssts(del_id),
+                                         op_write.del_sst_ranges(del_id), params.metadata->version()));
+    } else {
+        RETURN_IF_ERROR(index.erase(*state.deletes(del_id), new_deletes, del_rssid));
+    }
+    state.release_delete(del_id);
     return Status::OK();
 }
 
@@ -1020,13 +1210,18 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 // row-by-row comparison, while parallel execution scales with CPU cores.
 Status UpdateManager::_process_single_chunk_update_with_condition(
         const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-        SegmentPKIterator* segment_pk_iterator, ParallelPublishContext* context, const SegmentPKChunkRef& current,
-        const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index) {
+        SegmentPKIterator* segment_pk_iterator, ParallelUpsertContext* context, const SegmentPKChunkRef& current,
+        const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePersistentIndex& index) {
     TRACE_COUNTER_INCREMENT("process_condition_update_count", 1);
     // Extract primary key column from current chunk for index lookup
     ASSIGN_OR_RETURN(auto pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
     std::vector<uint64_t> old_rowids(pk_column->size());
     RETURN_IF_ERROR(index.get(*pk_column, &old_rowids));
+    // Same restriction as the non-SST path: a cross-published child must not resolve a sibling's key,
+    // whose location can name a rowset the split pruned away (get_column_values would fail the publish
+    // on it), and must not record either verdict for that row -- the loser branch below writes into
+    // this child's delvec, which the parent view ORs.
+    RowsetUpdateState::mask_unowned_rowids(current.owned, &old_rowids);
     // Fast path: If no existing rows found for any PK, all new rows win by default
     bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
     if (!non_old_value) {
@@ -1066,7 +1261,9 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // STEP 3: Compare condition values and generate deletion vectors
         // For each PK conflict, compare old vs new condition values to decide winner
         for (int j = 0; j < old_column->size(); ++j) {
-            if (num_default > 0 && idxes[j] == 0) {
+            if (!current.owned.empty() && current.owned[j] == 0) {
+                // A sibling's row: neither this child's new row to delete nor its old row to displace.
+            } else if (num_default > 0 && idxes[j] == 0) {
                 // EDGE CASE: Index 0 indicates default value (no old row actually exists for this PK)
                 // WHY: plan_read_by_rssid uses index 0 as sentinel for PKs with no old values
                 // ACTION: Skip comparison, new row wins by default
@@ -1075,18 +1272,14 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
                 // Returns: >0 if old > new, <0 if old < new, 0 if equal
                 int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                 if (r > 0) {
-                    // Old value wins (old > new): Delete the new row from current SST file
-                    // CRITICAL: Must lock before modifying shared delete map
-                    std::lock_guard<std::mutex> lock(*context->mutex);
-                    (*context->deletes)[rowset_id + upsert_idx].push_back(current.physical_rowid_offset +
-                                                                          static_cast<uint32_t>(j));
+                    // Old value wins (old > new): delete the new row from the current SST file.
+                    context->add_delete(rowset_id + upsert_idx,
+                                        current.physical_rowid_offset + static_cast<uint32_t>(j));
                 } else {
-                    // New value wins (old <= new): Delete the old row from its original segment
-                    // ROWID ENCODING: old_rowid = (rssid << 32) | row_offset
-                    // Extract RSSID (high 32 bits) and row offset (low 32 bits) to locate old row
-                    std::lock_guard<std::mutex> lock(*context->mutex);
+                    // New value wins (old <= new): delete the old row from its original segment.
+                    // old_rowid = (rssid << 32) | row_offset.
                     uint64_t old_rowid = old_rowids[j];
-                    (*context->deletes)[(uint32_t)(old_rowid >> 32)].push_back((uint32_t)(old_rowid & ROWID_MASK));
+                    context->add_delete((uint32_t)(old_rowid >> 32), (uint32_t)(old_rowid & ROWID_MASK));
                 }
             }
         }
@@ -1115,7 +1308,7 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
 // WHY: CPU parallelism + reduced lock contention via chunk batching
 Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateStateParams& params, uint32_t rowset_id,
                                                          int32_t upsert_idx, int32_t condition_column,
-                                                         const SegmentPKIteratorPtr& upsert, LakePrimaryIndex& index,
+                                                         const SegmentPKIteratorPtr& upsert, LakePersistentIndex& index,
                                                          DeletesMap* new_deletes) {
     RETURN_ERROR_IF_FALSE(condition_column >= 0);
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_with_condition_and_ingest_latency_us");
@@ -1123,61 +1316,26 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
-    // Obtain thread pool token for parallel execution if enabled
-    std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                ThreadPool::ExecutionMode::CONCURRENT);
-    }
+    // Obtain thread pool token for parallel execution
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
 
-    // Setup shared state protected by mutex
-    std::mutex mutex; // CRITICAL: Protects concurrent access to deletes map and status
-    Status status = Status::OK();
-
-    // Setup context shared across all parallel tasks
-    ParallelPublishContext context{.token = token.get(), .mutex = &mutex, .deletes = new_deletes, .status = &status};
+    // The helper only writes into the delete map, so the context is a pure sink here -- it carries no
+    // runner, because this path's fan-out is the local one below rather than a deferred index lookup.
+    ParallelUpsertContext context(/*runner=*/nullptr, new_deletes);
     auto* context_ptr = &context;
+    ParallelTaskRunner runner(token.get());
 
-    // Iterate through all chunks in the segment
-    // IMPORTANT: Iteration itself is serial, but chunk processing is parallelized
+    // Iteration is serial; chunk processing is not.
     for (; !upsert->done(); upsert->next()) {
-        auto current = upsert->current(); // Get current chunk (PKs + row offset)
-
-        // Lambda captures chunk data and processes condition merge
-        // CAPTURE STRATEGY: Capture context_ptr and current by value to ensure thread safety
-        auto condition_merge_func = [&, context_ptr, current]() {
-            auto st = _process_single_chunk_update_with_condition(params, rowset_id, upsert_idx, upsert.get(),
-                                                                  context_ptr, current, tablet_column, read_column_ids,
-                                                                  index);
-            if (!st.ok()) {
-                // Error handling: Update shared status under lock
-                std::lock_guard<std::mutex> lock(*context_ptr->mutex);
-                context_ptr->status->update(st);
-            }
-        };
-
-        if (token) {
-            // PARALLEL PATH: Submit chunk processing to thread pool
-            // Non-blocking: Immediately continue to next chunk while workers process this one
-            auto submit_st = token->submit_func(condition_merge_func);
-            if (!submit_st.ok()) {
-                std::lock_guard<std::mutex> lock(*context_ptr->mutex);
-                context_ptr->status->update(submit_st);
-            }
-        } else {
-            // SERIAL FALLBACK: Process chunk inline when parallelism disabled
-            condition_merge_func();
-            RETURN_IF_ERROR(status);
-        }
+        auto current = upsert->current(); // PKs + row offset
+        runner.run([&, context_ptr, current]() {
+            return _process_single_chunk_update_with_condition(params, rowset_id, upsert_idx, upsert.get(), context_ptr,
+                                                               current, tablet_column, read_column_ids, index);
+        });
     }
-
-    if (token) {
-        // Barrier: Wait for all submitted tasks to complete before proceeding
-        // IMPORTANT: Ensures all deletions are collected before returning
-        token->wait();
-    }
-
-    RETURN_IF_ERROR(status);
+    // Barrier: every deletion has to be collected before returning.
+    RETURN_IF_ERROR(runner.join());
 
     return upsert->status();
 }
@@ -1212,7 +1370,7 @@ struct ChunkCondMergeResult {
 static Status process_single_chunk_update_with_condition_no_sst(
         UpdateManager* mgr, const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
         SegmentPKIterator* segment_pk_iterator, const SegmentPKChunkRef& current, const TabletColumn& tablet_column,
-        const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index, ChunkCondMergeResult* result) {
+        const std::vector<uint32_t>& read_column_ids, LakePersistentIndex& index, ChunkCondMergeResult* result) {
     TRACE_COUNTER_INCREMENT("process_condition_update_count", 1);
     ASSIGN_OR_RETURN(result->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
     const auto chunk_size = result->pk_column->size();
@@ -1221,9 +1379,19 @@ static Status process_single_chunk_update_with_condition_no_sst(
     }
     std::vector<uint64_t> old_rowids(chunk_size);
     RETURN_IF_ERROR(index.get(*result->pk_column, &old_rowids));
-    // Fast path: no PKs in this chunk collide with the index → every new row wins.
+    // A cross-published child is handed its siblings' rows as well, and a sibling's key resolves --
+    // against the sstables this child inherited from the parent -- to a location that can name a
+    // rowset the split pruned away, which would fail get_column_values below on an unknown rssid.
+    // Blanking those answers keeps them out of the read; the walk below then skips the row outright,
+    // so it is neither upserted (claiming a key outside this child's range) nor appended to this
+    // child's delvec, which the parent view ORs -- a sibling's verdict would erase a row its owner
+    // had just decided to keep. Nothing is renumbered: chunk-local j stays segment rowid
+    // physical_rowid_offset + j for every row, owned or not.
+    RowsetUpdateState::mask_unowned_rowids(current.owned, &old_rowids);
+    // Fast path: no PKs in this chunk collide with the index → every new row wins. Only when this
+    // chunk is entirely ours; with a mask the walk below is what decides, one row at a time.
     bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int64_t id) { return -1 == id; });
-    if (non_old_value) {
+    if (non_old_value && current.owned.empty()) {
         result->winner_ranges.emplace_back(0u, static_cast<uint32_t>(chunk_size));
         return Status::OK();
     }
@@ -1259,7 +1427,15 @@ static Status process_single_chunk_update_with_condition_no_sst(
     uint32_t run_begin = 0;
     uint32_t run_step = 0;
     for (size_t j = 0; j < old_column->size(); ++j) {
-        if (num_default > 0 && idxes[j] == 0) {
+        if (!current.owned.empty() && current.owned[j] == 0) {
+            // A sibling's row: neither verdict is this child's to record. Close the run so the
+            // winners on either side of it stay contiguous.
+            if (run_step > 0) {
+                result->winner_ranges.emplace_back(run_begin, run_begin + run_step);
+            }
+            run_begin = static_cast<uint32_t>(j + 1);
+            run_step = 0;
+        } else if (num_default > 0 && idxes[j] == 0) {
             // plan_read_by_rssid uses idx 0 as sentinel for "no old row"; new row wins by default.
             run_step++;
         } else {
@@ -1301,7 +1477,7 @@ static Status process_single_chunk_update_with_condition_no_sst(
 // here, which forces the write phase to be serial.
 Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
                                                 int32_t upsert_idx, int32_t condition_column,
-                                                const SegmentPKIteratorPtr& upsert, LakePrimaryIndex& index,
+                                                const SegmentPKIteratorPtr& upsert, LakePersistentIndex& index,
                                                 DeletesMap* new_deletes) {
     RETURN_ERROR_IF_FALSE(condition_column >= 0);
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_with_condition_latency_us");
@@ -1309,16 +1485,22 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
+    // Only parallelize when the segment iterator will actually split into more than one
+    // compare chunk. SegmentPKIterator splits at pk_index_parallel_execution_min_rows, so a
+    // rowset smaller than that yields a single chunk per segment, and comparing it inline on
+    // the publish thread is cheaper than a thread-pool round-trip. The rowset-wide row count
+    // is a safe lower bound for the per-segment count: if the whole rowset is under the
+    // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    if (params.op_write.rowset().num_rows() >= min_rows_per_task) {
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
-
-    std::mutex mutex;
-    Status status = Status::OK();
-    // Per-chunk results accumulated in iteration order; consumed after the compare barrier.
+    // Per-chunk results accumulated in iteration order; consumed after the compare barrier. Each task
+    // writes only its own result, so there is no shared state to guard.
     std::vector<std::unique_ptr<ChunkCondMergeResult>> chunk_results;
+    ParallelTaskRunner compare_runner(token.get());
 
     for (; !upsert->done(); upsert->next()) {
         auto current = upsert->current();
@@ -1326,33 +1508,17 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         auto* result = chunk_results.back().get();
         result->chunk_physical_rowid_offset = current.physical_rowid_offset;
 
-        auto compare_func = [&, result, current]() {
-            auto st = process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx,
-                                                                        upsert.get(), current, tablet_column,
-                                                                        read_column_ids, index, result);
-            if (!st.ok()) {
-                std::lock_guard<std::mutex> lock(mutex);
-                status.update(st);
-            }
-        };
-
-        if (token) {
-            auto submit_st = token->submit_func(compare_func);
-            if (!submit_st.ok()) {
-                std::lock_guard<std::mutex> lock(mutex);
-                status.update(submit_st);
-            }
-        } else {
-            compare_func();
-            RETURN_IF_ERROR(status);
-        }
+        compare_runner.run([&, result, current]() {
+            return process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx, upsert.get(),
+                                                                     current, tablet_column, read_column_ids, index,
+                                                                     result);
+        });
     }
 
-    if (token) {
+    {
         TRACE_COUNTER_SCOPE_LATENCY_US("condition_update_compare_phase_us");
-        token->wait();
+        RETURN_IF_ERROR(compare_runner.join());
     }
-    RETURN_IF_ERROR(status);
     RETURN_IF_ERROR(upsert->status());
 
     // PHASE 2: apply index.upsert for each chunk's winners.
@@ -1376,10 +1542,15 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     const uint32_t rssid = rowset_id + upsert_idx;
     const bool use_parallel_upsert = (token != nullptr) && use_cloud_native_pk_index(*params.metadata);
     if (use_parallel_upsert) {
-        std::mutex upsert_mutex;
-        Status upsert_status = Status::OK();
-        ParallelPublishContext upsert_ctx{
-                .token = token.get(), .mutex = &upsert_mutex, .deletes = new_deletes, .status = &upsert_status};
+        ParallelTaskRunner upsert_runner(token.get());
+        ParallelUpsertContext upsert_ctx(&upsert_runner, new_deletes);
+        // One slot per upserted chunk; each owns the compacted key bytes its deferred lookup reads,
+        // so they all have to stay alive until the join below.
+        std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
+        // Join before unwinding: the deferred lookups point into `slots` and `upsert_ctx`, which are
+        // destroyed before `upsert_runner` on scope exit, so its own destructor would join too late.
+        // Declared last so it runs first. Covers the RETURN_IF_ERROR inside the loop.
+        DeferOp join_before_unwind([&] { (void)upsert_runner.join(); });
         for (const auto& result : chunk_results) {
             // pk_column is guaranteed non-null when the compare task returned OK; if any task
             // had failed we would have bailed at the RETURN_IF_ERROR(status) above the barrier.
@@ -1410,22 +1581,17 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
             auto winner_pk_column = result->pk_column->clone_empty();
             winner_pk_column->append_selective(*result->pk_column, winner_local_indices.data(), 0,
                                                winner_local_indices.size());
-            // Allocate the slot and move the compacted column into it BEFORE submission so the
-            // backing Slice array stays alive for the lookup task.
-            upsert_ctx.extend_slots();
-            auto* slot = upsert_ctx.slots.back().get();
+            // Move the compacted column into the slot BEFORE the upsert so the backing Slice array
+            // stays alive for the deferred lookup.
+            slots.push_back(std::make_unique<ParallelPublishSlot>());
+            auto* slot = slots.back().get();
             slot->pk_column = std::move(winner_pk_column);
-            auto st = index.upsert(rssid, winner_rowids, *slot->pk_column, /*stat=*/nullptr, &upsert_ctx);
-            if (!st.ok()) {
-                std::lock_guard<std::mutex> lock(upsert_mutex);
-                upsert_status.update(st);
-            }
+            RETURN_IF_ERROR(index.upsert(rssid, winner_rowids, *slot->pk_column, slot, &upsert_ctx));
         }
         {
             TRACE_COUNTER_SCOPE_LATENCY_US("condition_update_upsert_phase_us");
-            token->wait();
+            RETURN_IF_ERROR(upsert_runner.join());
         }
-        RETURN_IF_ERROR(upsert_status);
         // Persist the active-memtable batch built up by the parallel upserts.
         RETURN_IF_ERROR(index.flush_memtable());
     } else {
@@ -1456,7 +1622,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
 }
 
 Status UpdateManager::_handle_index_op(int64_t tablet_id, int64_t base_version, bool need_lock,
-                                       const std::function<void(LakePrimaryIndex&)>& op) {
+                                       const std::function<void(LakePersistentIndex&)>& op) {
     TRACE_COUNTER_SCOPE_LATENCY_US("handle_index_op_latency_us");
     auto index_entry = _index_cache.get(tablet_id);
     if (index_entry == nullptr) {
@@ -1486,7 +1652,7 @@ Status UpdateManager::_handle_index_op(int64_t tablet_id, int64_t base_version, 
 Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumns& upserts,
                                               std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock) {
     Status st;
-    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
+    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePersistentIndex& index) {
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
@@ -1500,7 +1666,7 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
 Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumnPtr& upsert,
                                               std::vector<uint64_t>* rss_rowids, bool need_lock) {
     Status st;
-    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
+    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePersistentIndex& index) {
         // get rss_rowids for segment's pk
         st.update(index.get(*upsert, rss_rowids));
     }));
@@ -1510,18 +1676,16 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
 Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
                                                         std::vector<SegmentPKIteratorPtr>& pk_iters,
                                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
-                                                        bool need_lock) {
+                                                        bool need_lock, std::vector<Filter>* owned_per_segment) {
     rss_rowids_per_segment->resize(pk_iters.size());
     Status st;
-    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
+    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePersistentIndex& index) {
         TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
-        std::unique_ptr<ThreadPoolToken> token;
-        if (config::enable_pk_index_parallel_execution) {
-            token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                    ThreadPool::ExecutionMode::CONCURRENT);
-        }
+        auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
-        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment));
+        st.update(
+                index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment, owned_per_segment));
     }));
     return st;
 }
@@ -1746,14 +1910,15 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
         const std::vector<uint32_t> auto_increment_col_partial_id(1, auto_increment_state->id);
         FileInfo info;
-        info.path = params.op_write.rowset().segments(segment_id);
-        if (segment_id < params.op_write.rowset().bundle_file_offsets_size()) {
+        const auto& segment_meta = params.op_write.rowset().segment_metas(segment_id);
+        info.path = segment_meta.filename();
+        if (segment_meta.has_bundle_file_offset()) {
             // use shared file offset if available
-            info.bundle_file_offset = params.op_write.rowset().bundle_file_offsets(segment_id);
-            info.size = params.op_write.rowset().segment_size(segment_id);
+            info.bundle_file_offset = segment_meta.bundle_file_offset();
+            info.size = segment_meta.size();
         }
-        if (segment_id < params.op_write.rowset().segment_encryption_metas_size()) {
-            info.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+        if (segment_meta.has_encryption_meta()) {
+            info.encryption_meta = segment_meta.encryption_meta();
         }
         RETURN_IF_ERROR(fetch_values_from_segment(info, segment_id,
                                                   // use partial segment column offset id to get the column
@@ -1843,7 +2008,7 @@ void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high
 
 size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta) {
     size_t num_dels = 0;
-    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+    for (int i = 0; i < rowset_meta.segment_metas_size(); i++) {
         DelVectorPtr delvec;
         TabletSegmentId tsid;
         tsid.tablet_id = tablet_id;
@@ -1862,7 +2027,7 @@ size_t UpdateManager::get_rowset_num_deletes(const TabletMetadata& metadata, con
     size_t num_dels = 0;
     LakeIOOptions lake_io_opts;
     lake_io_opts.fill_data_cache = false;
-    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+    for (int i = 0; i < rowset_meta.segment_metas_size(); i++) {
         DelVector delvec;
         uint32_t segment_id = get_rssid(rowset_meta, i);
         auto st = lake::get_del_vec(_tablet_mgr, metadata, segment_id, false /*fill_cache*/, lake_io_opts, &delvec);
@@ -1877,47 +2042,30 @@ size_t UpdateManager::get_rowset_num_deletes(const TabletMetadata& metadata, con
     return num_dels;
 }
 
-bool UpdateManager::_use_light_publish_primary_compaction(TabletManager* mgr,
-                                                          const TxnLogPB_OpCompaction& op_compaction, int64_t tablet_id,
-                                                          int64_t txn_id) {
+bool UpdateManager::_use_light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction) {
     // Is config enable ?
     if (!config::enable_light_pk_compaction_publish) {
         return false;
     }
 
-    // DESIGN DECISION: Determine if mapper file exists and which storage type
-    // WHY: Light publish optimization uses pre-computed rows mapper to avoid re-reading
-    // and re-processing compaction input/output rowsets during publish phase.
-    // This can reduce publish time from minutes to seconds for large compactions.
-
-    // Priority 1: Check for remote storage lcrm file (new path)
-    if (op_compaction.has_lcrm_file()) {
-        // WHY: When parallel pk execution is enabled, lcrm_file metadata is stored in txn log.
-        // Its presence guarantees the mapper file exists on remote storage (S3/HDFS).
-        // No need to check file existence - metadata is the source of truth.
-        // BENEFIT: Avoids network I/O to check file existence in S3/HDFS.
-        return true;
-    }
-
-    // Priority 2: Check for local disk crm file (legacy path)
-    // WHY: For backward compatibility with compactions created before remote storage support.
-    // These files were created on local disk and need explicit existence check.
-    auto filename_st = lake_rows_mapper_filename(tablet_id, txn_id);
-    if (!filename_st.ok()) {
-        return false;
-    }
-    return fs::path_exist(filename_st.value());
+    // WHY: Light publish optimization uses the pre-computed rows mapper to avoid re-reading
+    // and re-processing compaction input/output rowsets during publish phase. This can reduce
+    // publish time from minutes to seconds for large compactions.
+    //
+    // The rows mapper is always stored on remote storage (.lcrm) and its metadata is recorded
+    // in the txn log. Its presence guarantees the mapper file exists on remote storage (S3/HDFS),
+    // so metadata is the source of truth and no file-existence check is needed.
+    return op_compaction.has_lcrm_file();
 }
 
 Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                       const TabletMetadata& metadata, const Tablet& tablet,
+                                                       const TabletMetadataPtr& metadata, const Tablet& tablet,
                                                        IndexEntry* index_entry, MetaFileBuilder* builder,
                                                        int64_t base_version) {
     // 1. init some state
     auto& index = index_entry->value();
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, &metadata));
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
 
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
@@ -1929,32 +2077,50 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
 
     // 2. update primary index, and generate delete info.
     auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
-            &metadata, &output_rowset, _tablet_mgr, builder, &index, txn_id, base_version, op_compaction.lcrm_file(),
+            metadata.get(), &output_rowset, _tablet_mgr, builder, &index, base_version, op_compaction.lcrm_file(),
             &segment_id_to_add_dels, &delvecs);
-    if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(metadata)) {
-        RETURN_IF_ERROR(resolver->execute_without_update_index());
-    } else {
-        RETURN_IF_ERROR(resolver->execute());
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("compaction_conflict_resolve_us");
+        if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
+            RETURN_IF_ERROR(resolver->execute_without_update_index());
+        } else {
+            RETURN_IF_ERROR(resolver->execute());
+        }
     }
+    // A lost output segment (experimental_lake_ignore_lost_segment) has no data and its SST must not be
+    // ingested, otherwise the PK index would reference an rssid that scans skip. The resolver reports
+    // those positions; skip both the delvec and the SST ingest for them so the index stays consistent
+    // (the segment_metas are still kept in the output rowset -- its data is simply gone).
+    const auto& lost_segments = resolver->lost_segment_positions();
     // 3. add delvec to builder
-    for (auto&& each : delvecs) {
-        builder->append_delvec(each.second, each.first);
+    for (size_t i = 0; i < delvecs.size(); i++) {
+        if (lost_segments.count(static_cast<uint32_t>(i)) > 0) {
+            continue;
+        }
+        builder->append_delvec(delvecs[i].second, delvecs[i].first);
     }
     // 4. ingest ssts to index
     DCHECK(op_compaction.ssts_size() == 0 || delvecs.size() == op_compaction.ssts_size())
             << "delvecs.size(): " << delvecs.size() << ", op_compaction.ssts_size(): " << op_compaction.ssts_size();
-    for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(metadata); i++) {
-        uint32_t rssid = metadata.next_rowset_id() + get_segment_idx(op_compaction.output_rowset(), i);
+    for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(*metadata); i++) {
+        if (lost_segments.count(static_cast<uint32_t>(i)) > 0) {
+            continue;
+        }
+        uint32_t rssid = metadata->next_rowset_id() + get_segment_idx(op_compaction.output_rowset(), i);
         DelvecPagePB delvec_page_pb = builder->delvec_page(rssid);
-        delvec_page_pb.set_version(metadata.version());
-        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i), rssid, metadata.version(),
+        delvec_page_pb.set_version(metadata->version());
+        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i), rssid, metadata->version(),
                                          delvec_page_pb, delvecs[i].second));
     }
     _index_cache.update_object_size(index_entry, index.memory_usage());
-    // 5. update TabletMeta
+    // 5. update TabletMeta (in-memory metadata edit; not traced -- covered by the per-tablet total)
     RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
-    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    {
+        // index.apply_opcompaction opens the output index sstable(s) (footer + bloom filter), so it can do I/O.
+        TRACE_COUNTER_SCOPE_LATENCY_US("index_apply_opcompaction_us");
+        RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    }
 
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
@@ -1967,32 +2133,30 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
 
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet_compaction);
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                 const TabletMetadata& metadata, const Tablet& tablet,
+                                                 const TabletMetadataPtr& metadata, const Tablet& tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
     FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
-        ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                     input_rowsets_id, &metadata));
+        ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
         return builder->apply_opcompaction(
                 op_compaction,
                 *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
                 tablet_schema->id());
     });
-    if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, metadata, builder)) {
+    if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, *metadata, builder)) {
         // conflict happens
         return Status::OK();
     }
-    if (_use_light_publish_primary_compaction(tablet.tablet_mgr(), op_compaction, tablet.id(), txn_id)) {
+    if (_use_light_publish_primary_compaction(op_compaction)) {
         return light_publish_primary_compaction(op_compaction, txn_id, metadata, tablet, index_entry, builder,
                                                 base_version);
     }
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, &metadata));
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
@@ -2004,20 +2168,20 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
-    const uint32_t rowset_id = metadata.next_rowset_id();
+    const uint32_t rowset_id = metadata->next_rowset_id();
     // get max rowset id in input rowsets
     uint32_t max_rowset_id =
             *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
     // then get the max src rssid, to solve conflict between write and compaction
-    auto input_rowset = std::find_if(metadata.rowsets().begin(), metadata.rowsets().end(),
+    auto input_rowset = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(),
                                      [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
-    if (input_rowset == metadata.rowsets().end()) {
+    if (input_rowset == metadata->rowsets().end()) {
         LOG(ERROR) << "cannot find input rowset in tablet metadata, rowset_id: " << max_rowset_id
-                   << ", meta : " << metadata.ShortDebugString();
+                   << ", meta : " << metadata->ShortDebugString();
         return Status::InternalError("cannot find input rowset in tablet metadata");
     }
     uint32_t max_src_rssid = max_rowset_id;
-    for (int i = 0; i < input_rowset->segments_size(); ++i) {
+    for (int i = 0; i < input_rowset->segment_metas_size(); ++i) {
         max_src_rssid = std::max(max_src_rssid, get_rssid(*input_rowset, i));
     }
     std::map<uint32_t, size_t> segment_id_to_add_dels;
@@ -2039,9 +2203,9 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         }
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
-            dv->init(metadata.version(), nullptr, 0);
+            dv->init(metadata->version(), nullptr, 0);
         } else {
-            dv->init(metadata.version(), tmp_deletes.data(), tmp_deletes.size());
+            dv->init(metadata->version(), tmp_deletes.data(), tmp_deletes.size());
             total_deletes += tmp_deletes.size();
         }
         segment_id_to_add_dels[rssid] += tmp_deletes.size();
@@ -2128,7 +2292,7 @@ int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
 }
 
 Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
+    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
     int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent);
     return Status::OK();
@@ -2207,7 +2371,7 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
     // use process mem tracker instread of load mem tracker here.
-    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
                                                                                              : nullptr);
     // no need to preload if using light compaction publish
@@ -2215,7 +2379,7 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
         return;
     }
     // no need to preload if output rowset is empty.
-    const int segments_size = txnlog.op_compaction().output_rowset().segments_size();
+    const int segments_size = txnlog.op_compaction().output_rowset().segment_metas_size();
     if (segments_size <= 0) return;
     scoped_refptr<Trace> trace_guard(new Trace);
     ADOPT_TRACE(trace_guard.get());
@@ -2254,37 +2418,17 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
 }
 
-void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index) {
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        index.set_enable_persistent_index(enable_persistent_index);
-        _index_cache.release(index_entry);
-    }
-}
+DEFINE_FAIL_POINT(fail_execute_index_major_compaction);
 
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
-    if (config::enable_pk_index_parallel_compaction) {
-        return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
-                                                           metadata, txn_log);
+    // Test-only: inject an index major compaction failure so callers can exercise their
+    // error-propagation paths.
+    FAIL_POINT_TRIGGER_EXECUTE(fail_execute_index_major_compaction,
+                               { return Status::InternalError("injected index major compaction failure"); });
+    if (_parallel_compact_mgr == nullptr) {
+        return Status::InternalError("parallel compact manager is not initialized");
     }
-    return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
-}
-
-Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir) {
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry == nullptr) {
-        return Status::OK();
-    }
-    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& index = index_entry->value();
-
-    // release when function end
-    DeferOp index_defer([&]() { _index_cache.release(index_entry); });
-    _index_cache.update_object_size(index_entry, index.memory_usage());
-    RETURN_IF_ERROR(index.major_compaction(data_dir, tablet_id, index.get_index_lock()));
-    index.set_local_pk_index_write_amp_score(0.0);
-    return Status::OK();
+    return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
 }
 
 bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {

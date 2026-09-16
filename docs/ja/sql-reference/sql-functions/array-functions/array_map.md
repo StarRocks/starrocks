@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_MAP関数はラムダ関数を入力配列に適用して新しい配列を返します。"
 ---
 
 # array_map

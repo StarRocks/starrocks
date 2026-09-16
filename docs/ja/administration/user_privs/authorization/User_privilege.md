@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "RBAC・IBAC を使用してユーザー・ロール・権限を管理し、クラスターアクセス制御を実施します。"
 sidebar_position: 30
 ---
 

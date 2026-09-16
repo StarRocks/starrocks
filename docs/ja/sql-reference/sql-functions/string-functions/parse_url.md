@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "URLを解析し、ホスト、パス、クエリなど指定されたコンポーネントを抽出します。"
 ---
 
 # parse_url

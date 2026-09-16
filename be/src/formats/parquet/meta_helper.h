@@ -22,7 +22,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -48,7 +47,7 @@ public:
             : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
     virtual ~MetaHelper() = default;
 
-    virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+    virtual void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                                       const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                       std::vector<GroupReaderParam::Column>& read_cols,
                                       std::unordered_set<std::string>& existed_column_names) const = 0;
@@ -76,7 +75,7 @@ public:
             : MetaHelper(file_metadata, case_sensitive) {}
     ~ParquetMetaHelper() override = default;
 
-    void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+    void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                               const std::vector<ColumnAccessPathPtr>* column_access_paths,
                               std::vector<GroupReaderParam::Column>& read_cols,
                               std::unordered_set<std::string>& existed_column_names) const override;
@@ -96,12 +95,14 @@ public:
 
     ~LakeMetaHelper() override = default;
 
-    void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+    void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                               const std::vector<ColumnAccessPathPtr>* column_access_paths,
                               std::vector<GroupReaderParam::Column>& read_cols,
                               std::unordered_set<std::string>& existed_column_names) const override;
 
 private:
+    friend class LakeMetaHelperTest;
+
     void _init_field_mapping();
     bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
                         const TypeDescriptor* type_descriptor) const;

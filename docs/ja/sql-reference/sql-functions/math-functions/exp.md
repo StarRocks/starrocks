@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "e を x 乗した値を返します。"
 ---
 
 # exp, dexp

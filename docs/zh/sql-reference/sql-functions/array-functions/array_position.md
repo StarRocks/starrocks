@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "获取数组中某个元素的位置。"
 ---
 
 # array_position

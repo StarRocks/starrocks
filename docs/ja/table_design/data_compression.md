@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks でのデータ圧縮設定方法: LZ4、Zstandard、zlib、Snappy アルゴリズムを使用してストレージスペースを削減し I/O パフォーマンスを向上させます。"
 sidebar_position: 50
 ---
 

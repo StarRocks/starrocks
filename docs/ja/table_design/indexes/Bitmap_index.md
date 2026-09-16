@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ビットマップインデックスを StarRocks で作成・管理して低カーディナリティ列の等値・範囲クエリを高速化します。"
 sidebar_position: 20
 ---
 
@@ -289,7 +290,7 @@ IOTaskExecTime: 2s77ms // データスキャンの合計時間。ビットマッ
     DictDecode: 329.696ms // 出力行数が同じであるため、低基数最適化のための辞書デコード時間は同様です。
     BitmapIndexFilter: 419.308ms // ビットマップインデックスによるデータフィルタリングの時間。
     BitmapIndexFilterRows: 123.433M (123432975) // ビットマップインデックスによってフィルタリングされた行数。
-    ZoneMapIndexFiter: 171.580ms // ZoneMapインデックスによるデータフィルタリングの時間。
+    ZoneMapIndexFilter: 171.580ms // ZoneMapインデックスによるデータフィルタリングの時間。
 ```
 
 ##### StarRocksのデフォルト設定に基づいてビットマップインデックスを使用するかどうかを決定

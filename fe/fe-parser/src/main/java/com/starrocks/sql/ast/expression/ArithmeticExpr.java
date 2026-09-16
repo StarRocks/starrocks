@@ -192,6 +192,10 @@ public class ArithmeticExpr extends Expr {
 
     @Override
     public boolean isSelfMonotonic() {
+        if ((op == Operator.DIVIDE || op == Operator.INT_DIVIDE) && !getChild(1).isConstant()) {
+            return false;
+        }
+
         return op.isMonotonic();
     }
 }

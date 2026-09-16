@@ -160,6 +160,10 @@ public class SetStmtAnalyzer {
             checkRangeLongVariable(resolvedExpression, SessionVariable.QUERY_MEM_LIMIT, 0L, null);
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT, 0L, null);
+        }
+
         try {
             // Check variable time_zone value is valid
             if (variable.equalsIgnoreCase(SessionVariable.TIME_ZONE)) {
@@ -199,7 +203,7 @@ public class SetStmtAnalyzer {
             String rgName = resolvedExpression.getStringValue();
             if (!StringUtils.isEmpty(rgName)) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(null, rgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgName);
                 }
@@ -209,7 +213,7 @@ public class SetStmtAnalyzer {
             long rgID = resolvedExpression.getLongValue();
             if (rgID > 0) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(rgID);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(null, rgID);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgID);
                 }

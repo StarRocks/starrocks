@@ -1,6 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
-description: "This topic provides answers to some questions related to operation and maintenance."
+description: "FAQ for common StarRocks operation and maintenance questions."
 ---
 
 # Operation and Maintenance

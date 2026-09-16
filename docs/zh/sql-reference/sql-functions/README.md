@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 提供丰富的内置函数，包括 ARRAY、JSON、MAP、STRUCT 等半结构化函数以及 Lambda 高阶函数。"
 sidebar_position: 0.5
 ---
 

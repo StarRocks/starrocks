@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "fe_metrics 提供每个 FE 节点指标的信息。"
 ---
 
 # fe_metrics

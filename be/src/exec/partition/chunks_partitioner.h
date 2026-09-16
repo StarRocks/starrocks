@@ -58,8 +58,9 @@ public:
     //      The chunk added to the hash map.
     // @new_partition_cb: void(size_t partition_idx)
     //      called when coming a new key not in the hash map.
-    // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
+    // @partition_chunk_consumer: Status(size_t partition_idx, const ChunkPtr& chunk)
     //      called for each partition with enough num rows after adding chunk to the hash map.
+    //      A non-ok status aborts the offer and is returned to the caller.
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     Status offer(const ChunkPtr& chunk, NewPartitionCallback&& new_partition_cb,
                  PartitionChunkConsumer&& partition_chunk_consumer) {
@@ -74,11 +75,13 @@ public:
             }
         }
 
-        TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
-            _split_chunk_by_partition<EnablePassthrough>(
+        Status status = Status::OK();
+        TRY_CATCH_BAD_ALLOC(status = _hash_map_variant.visit([&](auto& hash_map_with_key) -> Status {
+            return _split_chunk_by_partition<EnablePassthrough>(
                     *hash_map_with_key, chunk, std::forward<NewPartitionCallback>(new_partition_cb),
                     std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
         }));
+        RETURN_IF_ERROR(status);
 
         return Status::OK();
     }
@@ -103,25 +106,29 @@ public:
 
     // Consumers consume from the hash map
     // @Params:
-    // @consumer: bool consumer(int32_t partition_idx, const ChunkPtr& chunk)
-    //      The return value of the consumer denote whether to continue or not
+    // @consumer: StatusOr<bool> consumer(int32_t partition_idx, const ChunkPtr& chunk)
+    //      The bool result denotes whether to continue consuming or not; a non-ok status aborts
+    //      consumption and is returned to the caller.
     template <typename Consumer>
     Status consume_from_hash_map(Consumer&& consumer) {
         if (is_hash_map_eos()) {
             return Status::OK();
         }
 
-        TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
+        Status status = Status::OK();
+        TRY_CATCH_BAD_ALLOC(status = _hash_map_variant.visit([&](auto& hash_map_with_key) -> Status {
             // First, fetch chunks from hash map
-            bool continue_consume;
-            _fetch_chunks_from_hash_map(*hash_map_with_key, consumer, continue_consume);
+            bool continue_consume = true;
+            RETURN_IF_ERROR(_fetch_chunks_from_hash_map(*hash_map_with_key, consumer, continue_consume));
+            // Second, fetch chunks from null_key_value if any
             if (continue_consume && _hash_map_eos) {
-                // Second, fetch chunks from null_key_value if any
                 if constexpr (std::decay_t<decltype(*hash_map_with_key)>::is_nullable) {
-                    _fetch_chunks_from_null_key_value(*hash_map_with_key, consumer);
+                    RETURN_IF_ERROR(_fetch_chunks_from_null_key_value(*hash_map_with_key, consumer));
                 }
             }
+            return Status::OK();
         }));
+        RETURN_IF_ERROR(status);
 
         if (is_hash_map_eos()) {
             _hash_map_variant.reset();
@@ -142,26 +149,27 @@ private:
 
     template <bool EnablePassthrough, typename HashMapWithKey, typename NewPartitionCallback,
               typename PartitionChunkConsumer>
-    void _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk,
-                                   NewPartitionCallback&& new_partition_cb,
-                                   PartitionChunkConsumer&& partition_chunk_consumer) {
+    Status _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk,
+                                     NewPartitionCallback&& new_partition_cb,
+                                     PartitionChunkConsumer&& partition_chunk_consumer) {
         if (!_is_passthrough) {
-            _is_passthrough = hash_map_with_key.template append_chunk<EnablePassthrough>(
-                    chunk, _partition_columns, _mem_pool, _obj_pool.get(),
-                    std::forward<NewPartitionCallback>(new_partition_cb),
-                    std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+            ASSIGN_OR_RETURN(_is_passthrough, hash_map_with_key.template append_chunk<EnablePassthrough>(
+                                                      chunk, _partition_columns, _mem_pool, _obj_pool.get(),
+                                                      std::forward<NewPartitionCallback>(new_partition_cb),
+                                                      std::forward<PartitionChunkConsumer>(partition_chunk_consumer)));
         }
         if (_is_passthrough) {
             _limited_buffer->push(chunk);
         }
+        return Status::OK();
     }
 
-    // Fetch chunks from hash map, return true if reaches eos
+    // Fetch chunks from hash map; sets continue_consume=false if the consumer asks to suspend.
     template <typename HashMapWithKey, typename Consumer>
-    void _fetch_chunks_from_hash_map(HashMapWithKey& hash_map_with_key, Consumer&& consumer, bool& continue_consume) {
+    Status _fetch_chunks_from_hash_map(HashMapWithKey& hash_map_with_key, Consumer&& consumer, bool& continue_consume) {
         continue_consume = true;
         if (_hash_map_eos) {
-            return;
+            return Status::OK();
         }
         if (!_partition_it.has_value()) {
             _partition_it = hash_map_with_key.hash_map.begin();
@@ -195,10 +203,11 @@ private:
             auto chunk_end = chunks.end();
 
             while (chunk_it != chunk_end) {
-                if (!consumer(partition_idx, *chunk_it++)) {
+                ASSIGN_OR_RETURN(bool keep_consuming, consumer(partition_idx, *chunk_it++));
+                if (!keep_consuming) {
                     // Fetch suspend, and it may proceed the next call.
                     continue_consume = false;
-                    return;
+                    return Status::OK();
                 }
             }
 
@@ -207,13 +216,14 @@ private:
             ++partition_it;
             _chunk_it.reset();
         }
+        return Status::OK();
     }
 
-    // Fetch chunks from HashMapWithKey.null_key_value, return true if reaches eos
+    // Fetch chunks from HashMapWithKey.null_key_value
     template <typename HashMapWithKey, typename Consumer>
-    void _fetch_chunks_from_null_key_value(HashMapWithKey& hash_map_with_key, Consumer&& consumer) {
+    Status _fetch_chunks_from_null_key_value(HashMapWithKey& hash_map_with_key, Consumer&& consumer) {
         if (_null_key_eos) {
-            return;
+            return Status::OK();
         }
 
         std::vector<ChunkPtr>& chunks = hash_map_with_key.null_key_value.chunks;
@@ -237,11 +247,13 @@ private:
         });
 
         while (chunk_it != chunk_end) {
-            if (!consumer(hash_map_with_key.kNullKeyPartitionIdx, *chunk_it++)) {
+            ASSIGN_OR_RETURN(bool keep_consuming, consumer(hash_map_with_key.kNullKeyPartitionIdx, *chunk_it++));
+            if (!keep_consuming) {
                 // Fetch suspend, and it may proceed the next call.
-                return;
+                return Status::OK();
             }
         }
+        return Status::OK();
     }
 
     const bool _has_nullable_partition_column;

@@ -46,10 +46,49 @@ public:
     PFailPointInfo to_pb() const;
 
 protected:
+    // Blocks until setMode() moves _mode_generation past |gen|, or |timeout_second| elapses
+    // (|timeout_second| <= 0 falls back to the failpoint layer's default).
+    // ALWAYS returns false -- a released pause continues normally and never injects.
+    bool wait_until_released(uint64_t gen, int32_t timeout_second);
+
+    // Disarm a pause that reached its timeout, but ONLY if it is still the mode installed as of
+    // |gen|. An unconditional disarm would race an operator who re-armed the failpoint in the window
+    // between the wait expiring and the disarm landing, silently replacing their new mode with
+    // DISABLE. Returns true if this call disarmed it.
+    bool disarm_expired_pause(uint64_t gen);
+
     std::string _name;
     mutable std::shared_mutex _mu;
     PFailPointTriggerMode _trigger_mode;
     std::atomic_int _n_times = 0;
+
+    // Bumped by setMode(). A pausing thread reads it together with the mode under _mu, so a
+    // setMode() that races that read is observed as "already changed" instead of being waited for.
+    std::atomic<uint64_t> _mode_generation = 0;
+    // Deliberately std, NOT bthread, primitives -- this looks like the wrong choice for a failpoint
+    // that can sit in a brpc handler, so the reason matters:
+    //
+    // shouldFail() is reached through libfiu's external callback, from inside fiu_fail(). fiu_fail
+    // increments a __thread recursion counter and takes a pthread_rwlock read lock BEFORE invoking
+    // the callback, and releases both after it returns (libfiu/fiu.c:286,295,350). A bthread that
+    // parks here yields its worker and can resume on a DIFFERENT pthread, so the counter would be
+    // incremented on one worker and decremented on another -- leaving the first worker permanently
+    // above the recursion threshold, which silently disables EVERY failpoint on it for the life of
+    // the process -- and the rwlock would be unlocked by a thread that never took it (UB).
+    // Blocking the pthread keeps both balanced.
+    //
+    // The cost is that a paused failpoint pins its thread: park more brpc handlers than the worker
+    // pool has threads and ADMIN DISABLE FAILPOINT cannot be served until the pause times out. That
+    // is bounded and visible; the bthread alternative is silent and permanent.
+    //
+    // The wait also has its own mutex so shouldFail() can drop _mu before blocking: blocking while
+    // holding _mu (even shared) would deadlock setMode(), and therefore the release RPC.
+    // Lock order is always _mu -> _pause_mu.
+    std::mutex _pause_mu;
+    std::condition_variable _pause_cv;
+
+    std::atomic<int64_t> _trigger_count = 0;
+    std::atomic<int64_t> _paused_thread_count = 0;
 };
 
 class ScopedFailPoint : public FailPoint {
@@ -68,8 +107,6 @@ public:
 private:
     FailPoint* _sfp = nullptr;
 };
-
-// @TODO need PausableFailPoint?
 
 using FailPointPtr = std::shared_ptr<FailPoint>;
 
@@ -139,6 +176,13 @@ private:
 };
 
 bool init_failpoint_from_conf(const std::string& conf_file);
+
+// Lift PUpdateFailPointStatusRequest's request-level pause discriminator into the trigger mode that
+// gets stored. Lives here rather than inline in the brpc handler so it can be unit-tested, and so
+// there is exactly one place that knows the request encoding. Uses only
+// gen_cpp/internal_service.pb.h, which this header already includes, so it does not breach the
+// be/src/base layering rule.
+PFailPointTriggerMode trigger_mode_from_request(const PUpdateFailPointStatusRequest& request);
 
 } // namespace starrocks::failpoint
 #endif

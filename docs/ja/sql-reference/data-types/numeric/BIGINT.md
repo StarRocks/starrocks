@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "8 バイトの符号付き整数型で値の範囲は -9223372036854775808 から 9223372036854775807。"
 ---
 
 # BIGINT

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and manage Bloom filter indexes in StarRocks to skip data files unlikely containing query results on high-cardinality columns."
 keywords: ['suoyin']
 sidebar_position: 30
 ---

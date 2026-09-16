@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Accelerate your queries with [generated columns](../../sql-statements/generated_columns.md)"
+description: "Accelerate your queries with generated columns"
 ---
 
 # Overview of JSON functions and operators

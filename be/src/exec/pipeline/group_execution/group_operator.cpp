@@ -14,8 +14,8 @@
 
 #include "exec/pipeline/group_execution/group_operator.h"
 
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "gutil/casts.h"
 
 namespace starrocks::pipeline {
@@ -48,7 +48,7 @@ Status GroupedExecutionSinkOperator::set_finishing(RuntimeState* state) {
 Status GroupedExecutionSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     auto res = _exchanger->accept(chunk, _driver_sequence);
     _peak_memory_usage_counter->set(_exchanger->get_memory_usage());
-    return Status::OK();
+    return res;
 }
 
 Status GroupedExecutionSinkFactory::prepare(RuntimeState* state) {

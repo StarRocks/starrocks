@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+description: "StarRocks クエリプロファイルから出力される演算子別メトリクスの権威ある参照情報。"
+keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
 ---
 
@@ -246,6 +247,24 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | SubmitTaskTime | タスクの送信にかかった時間。 |
 | PeakIOTasks | IOタスクのピーク数。 |
 | PeakScanTaskQueueSize | IOタスクキューのピークサイズ。 |
+| RuntimeFilterEvalTime | Parquetリーダー内でデコード済みの行に対してJoin Runtime Filterを評価するのにかかった時間。 |
+| RuntimeFilterInputRows | ParquetリーダーのJoin Runtime Filter評価に入力された行数。 |
+| RuntimeFilterOutputRows | ParquetリーダーのJoin Runtime Filter評価を通過した行数。`RuntimeFilterInputRows` との差が大きいほど、Lazy列がマテリアライズされる前に多くの行がフィルタリングされたことを意味します。 |
+| PaimonFSAppIOCount | Paimonファイルシステムアダプターが受け取った有効な読み取り試行回数。順次読み取り、位置指定読み取り、非同期読み取りの合計です。 |
+| PaimonFSAppIOBytes | Paimonファイルシステムアダプター境界で正常に返された読み取りバイト数。 |
+| PaimonFSAppIOTime | Paimonファイルシステムアダプター境界での読み取りのエンドツーエンド時間。 |
+| PaimonFSIOCount | Data CacheおよびShared Buffered Input Streamより下層のファイルシステム読み取り回数。リモートオブジェクトストレージのRPC回数と一致するとは限りません。 |
+| PaimonFSIOBytes | Paimon Native Scanの下層ファイルシステム読み取りで正常に返されたバイト数。 |
+| PaimonFSIOTime | Paimon Native Scanの下層ファイルシステム読み取りに費やした時間。 |
+| PaimonFSSequentialReadCount | Paimonファイルシステムアダプターの順次読み取り試行回数。 |
+| PaimonFSSequentialReadBytes | 順次読み取りで正常に返されたバイト数。 |
+| PaimonFSSequentialReadTime | 順次読み取りに費やした時間。 |
+| PaimonFSPositionalReadCount | Paimonファイルシステムアダプターの位置指定読み取り試行回数。 |
+| PaimonFSPositionalReadBytes | 位置指定読み取りで正常に返されたバイト数。 |
+| PaimonFSPositionalReadTime | 位置指定読み取りに費やした時間。 |
+| PaimonFSAsyncReadCount | Paimonファイルシステムアダプターの非同期読み取り試行回数。 |
+| PaimonFSAsyncReadBytes | 非同期読み取りで正常に返されたバイト数。 |
+| PaimonFSAsyncReadTime | 非同期読み取りに費やした時間。 |
 
 ### エクスチェンジオペレーター
 
@@ -276,7 +295,8 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | BytesPassThrough | 宛先ノードが現在のノードである場合、データはネットワーク経由で転送されません。これをパススルーデータと呼びます。このメトリックはそのパススルーデータのサイズを示します。パススルーは`enable_exchange_pass_through`によって制御されます。 |
 | PassThroughBufferPeakMemoryUsage | パススルーバッファのピークメモリ使用量。 |
 | CompressTime | 圧縮時間。 |
-| CompressedBytes | 圧縮データのサイズ。 |
+| CompressedInputBytes | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。アダプティブ圧縮戦略によってスキップされた chunk は含まれません。`CompressedInputBytes / CompressedBytes` が圧縮率であり、`SerializedBytes - CompressedInputBytes` が圧縮されなかったデータのサイズです。 |
+| CompressedBytes | 圧縮データのサイズ。実際に圧縮された chunk のみが対象です。 |
 | OverallThroughput | スループット率。 |
 | NetworkTime | データパケット転送にかかった時間（受信後の処理時間を除く）。 |
 | NetworkBandwidth | 推定ネットワーク帯域幅。 |

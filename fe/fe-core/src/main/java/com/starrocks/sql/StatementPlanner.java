@@ -48,10 +48,12 @@ import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -72,6 +74,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -123,13 +126,15 @@ public class StatementPlanner {
             }
         }
 
-        SPMPlanner spmPlanner = new SPMPlanner(session);
-        stmt = spmPlanner.plan(stmt);
-
         boolean needWholePhaseLock = true;
+        PlannerMetaLocker plannerMetaLocker = null;
         // 1. For all queries, we need db lock when analyze phase
-        PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
-        try (var guard = session.bindScope()) {
+        try (var guard = session.bindScope();
+                var ignoredBudget = StatisticsLoadBudget.openScope(session)) {
+            SPMPlanner spmPlanner = new SPMPlanner(session);
+            stmt = spmPlanner.plan(stmt);
+
+            plannerMetaLocker = new PlannerMetaLocker(session, stmt);
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
 
@@ -169,6 +174,8 @@ public class StatementPlanner {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
+            } else if (stmt instanceof MergeIntoStmt) {
+                return new MergeIntoPlanner().plan((MergeIntoStmt) stmt, session);
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
@@ -182,7 +189,7 @@ public class StatementPlanner {
             }
             throw e;
         } finally {
-            if (needWholePhaseLock) {
+            if (needWholePhaseLock && plannerMetaLocker != null) {
                 unLock(plannerMetaLocker);
             }
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
@@ -264,6 +271,24 @@ public class StatementPlanner {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
                             session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
                 }
+            }
+
+            // CTAS is not an INSERT at plan time: its target table does not exist until execution, so it
+            // cannot use the deferred-lock path above. Its SELECT still needs the same treatment as an
+            // INSERT-SELECT though -- files() schema inference does an object-store LIST plus a BE
+            // get_file_schema RPC, and running that inside the PlannerMetaLock critical section stalls
+            // every db-level DDL behind the database intention lock. Pre-resolve it here; resolveTableRef
+            // reuses the already-built TableFunctionTable once the lock is held.
+            // Unwrap SUBMIT TASK as well: it carries either an INSERT (handled above) or a CTAS.
+            CreateTableAsSelectStmt ctasStmt = null;
+            if (statement instanceof CreateTableAsSelectStmt ctas) {
+                ctasStmt = ctas;
+            } else if (statement instanceof SubmitTaskStmt submitTaskStmt) {
+                ctasStmt = submitTaskStmt.getCreateTableAsSelectStmt();
+            }
+            if (ctasStmt != null && locker != null && !locker.isEmpty()
+                    && !AnalyzerUtils.collectFileTableFunctionRelation(ctasStmt.getQueryStatement()).isEmpty()) {
+                new QueryAnalyzer(session).analyzeFilesOnly(ctasStmt.getQueryStatement());
             }
 
             if (deferredLock) {
@@ -566,6 +591,8 @@ public class StatementPlanner {
             ((DeleteStmt) stmt).setTableRef(tableRef);
         } else if (stmt instanceof UpdateStmt) {
             ((UpdateStmt) stmt).setTableRef(tableRef);
+        } else if (stmt instanceof MergeIntoStmt) {
+            ((MergeIntoStmt) stmt).setTableRef(tableRef);
         }
         String catalogName = tableRef.getCatalogName();
         String dbName = tableRef.getDbName();
@@ -598,13 +625,17 @@ public class StatementPlanner {
             label = MetaUtils.genUpdateLabel(session.getExecutionId());
         } else if (stmt instanceof DeleteStmt) {
             label = MetaUtils.genDeleteLabel(session.getExecutionId());
+        } else if (stmt instanceof MergeIntoStmt) {
+            label = MetaUtils.genMergeLabel(session.getExecutionId());
         } else {
             throw UnsupportedException.unsupportedException(
                     "Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
 
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
+        TransactionState.LoadJobSourceType sourceType = (stmt instanceof InsertStmt && ((InsertStmt) stmt).isShadowRewrite())
+                ? TransactionState.LoadJobSourceType.SHADOW_REWRITE
+                : TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = DmlStmt.INVALID_TXN_ID;
         if (targetTable instanceof ExternalOlapTable) {
             if (!(stmt instanceof InsertStmt)) {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将数组中的所有元素连接生成一个字符串。"
 ---
 
 # array_join

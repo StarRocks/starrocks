@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Applies a [Lambda expression](../Lambda_expression.md) to the keys and values of the original Map and generates a new Map."
+description: "Applies a Lambda expression to the keys and values of the original Map and generates a new Map."
 ---
 
 # map_apply

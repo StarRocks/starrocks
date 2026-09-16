@@ -24,12 +24,14 @@ import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
 import com.starrocks.catalog.system.information.PipesSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TablesConfigSystemTable;
+import com.starrocks.catalog.system.information.TabletReshardJobsTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.information.TemporaryTablesTable;
@@ -77,12 +79,14 @@ public class SystemTable extends Table {
                     .add(FeTabletSchedulesSystemTable.NAME)
                     .add(LoadTrackingLogsSystemTable.NAME)
                     .add(LoadsSystemTable.NAME)
+                    .add(MaterializedViewRefreshJobsSystemTable.NAME)
                     .add(MaterializedViewsSystemTable.NAME)
                     .add(PartitionsMetaSystemTable.NAME)
                     .add(PipesSystemTable.NAME)
                     .add(RoutineLoadJobsSystemTable.NAME)
                     .add(StreamLoadsSystemTable.NAME)
                     .add(TablesConfigSystemTable.NAME)
+                    .add(TabletReshardJobsTable.NAME)
                     .add(TaskRunsSystemTable.NAME)
                     .add(TasksSystemTable.NAME)
                     .add(TemporaryTablesTable.NAME)

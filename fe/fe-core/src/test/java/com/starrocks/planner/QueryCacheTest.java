@@ -18,11 +18,16 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.io.CharStreams;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.plan.ExecPlan;
@@ -1590,5 +1595,33 @@ public class QueryCacheTest {
                 "GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25) as t";
         Optional<PlanFragment> frag = getCachedFragment(sql0);
         Assertions.assertTrue(frag.isPresent());
+    }
+
+    @Test
+    public void testQueryCacheWithEmptySubPartition() throws Exception {
+        // Simulate a table whose logical partition has been split so that it owns an extra,
+        // empty physical sub-partition (no tablets). OlapScanNode.toNormalForm() used to
+        // re-derive physical partition ids by blindly expanding every sub-partition of each
+        // selected logical partition and zip the result positionally against a version list
+        // that only recorded actually-scanned (non-empty) sub-partitions -- a size mismatch
+        // that tripped Preconditions.checkState(). "dates" sits on the broadcast side of the
+        // join in testHashJoin, so its scan node is normalized via the
+        // !isProcessingLeftNode() branch, which is required to exercise that code path at all.
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("qc_db", "dates");
+        Partition partition = table.getPartition("dates");
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        long emptySubPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        PhysicalPartition emptyPhysicalPartition = new PhysicalPartition(emptySubPartitionId, partition.getId(),
+                new MaterializedIndex(baseIndex.getId(), MaterializedIndex.IndexState.NORMAL));
+        partition.addSubPartition(emptyPhysicalPartition);
+        try {
+            String sql = "select sum(lo_revenue) as revenue\n" +
+                    "from lineorder join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                    "where d_year = 1993";
+            Assertions.assertDoesNotThrow(() -> UtFrameUtils.getPlanAndFragment(ctx, sql));
+            Assertions.assertTrue(getCachedFragment(sql).isPresent());
+        } finally {
+            partition.removeSubPartition(emptySubPartitionId);
+        }
     }
 }

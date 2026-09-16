@@ -32,7 +32,17 @@ final class PreSplitMetrics {
      * which hook decided to skip.
      */
     static boolean shortCircuitOnSessionOptOut(SessionVariable sessionVariable) {
-        if (sessionVariable.isEnableTabletPreSplit()) {
+        return shortCircuitOnSessionOptOut(sessionVariable.isEnableTabletPreSplit());
+    }
+
+    /**
+     * Same contract for a caller that resolved the opt-out itself rather than reading it off a
+     * live {@link SessionVariable}. A Broker Load gates on the value its session held when
+     * {@code LOAD LABEL} was accepted, which is not necessarily what that session holds by the
+     * time the pending job fires its hook.
+     */
+    static boolean shortCircuitOnSessionOptOut(boolean preSplitEnabled) {
+        if (preSplitEnabled) {
             return false;
         }
         recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);
@@ -62,5 +72,48 @@ final class PreSplitMetrics {
             MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
                     .getMetric(reason.name().toLowerCase()).increase(1L);
         }
+    }
+
+    /**
+     * Record one predicted partition dropped because the grouper's per-load
+     * cap ({@code tablet_pre_split_max_partitions_per_load}) was hit.
+     */
+    static void recordPartitionCapped() {
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED.increase(1L);
+        }
+    }
+
+    /**
+     * Record that the multi-partition coordinator counted one
+     * {@link PartitionSamples} entry as part of a combined-submit pass.
+     * Incremented once per entry regardless of how the entry is later
+     * resolved (submitted into the combined job, dropped as PARTITION_NOT_*,
+     * etc.); the resolution outcomes have their own counters via
+     * {@link #recordEligibilitySkip} / {@link #recordSamplerFailed}.
+     */
+    static void recordPartitionCounted() {
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL.increase(1L);
+        }
+    }
+
+    /**
+     * Outcomes of one pre-create attempt by the multi-partition coordinator.
+     * {@link #ALREADY_EXISTS} means the partition raced into the catalog
+     * between the grouper's snapshot and the coordinator's pre-create call;
+     * {@link #SUCCEEDED} means {@code LocalMetastore.addPartitions} returned
+     * normally (whether it actually created the partition or silently
+     * deduped); {@link #FAILED} means {@code addPartitions} threw.
+     */
+    enum PreCreateResult { SUCCEEDED, FAILED, ALREADY_EXISTS }
+
+    /** Record one multi-partition pre-create attempt under its result bucket. */
+    static void recordPreCreate(PreCreateResult result) {
+        if (!MetricRepo.hasInit) {
+            return;
+        }
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_PRE_CREATE
+                .getMetric(result.name().toLowerCase()).increase(1L);
     }
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW CREATE TABLE returns the CREATE TABLE statement that was used to create a given table."
 ---
 
 # SHOW CREATE TABLE

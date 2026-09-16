@@ -42,6 +42,12 @@ cd test && python3 run.py -v
 - User-facing config or metric changes must update the matching docs in `docs/en/` and `docs/zh/` when applicable.
 - When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
 
+## Observability Awareness
+
+Before generating or modifying production code for a feature, bug fix, or performance optimization, review the existing observability of the affected end-to-end path. Follow the [Observability Awareness policy](./handbook/policies/observability-awareness.md) and the matching domain guide before deciding whether existing signals must be preserved or extended.
+
+In the final change summary or PR description, state which existing signals were reviewed, what was preserved or extended, or why no observability change was needed.
+
 ## PR Contract
 
 - Commit messages: English, imperative, concise.
@@ -49,6 +55,23 @@ cd test && python3 run.py -v
 - Fill the repository PR template completely, including behavior-change classification and test/docs checkboxes.
 - Bug-fix PRs intended for branch backports must set the version checkboxes that drive auto-backporting.
 - When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
+
+## Codex PR Review Context
+
+When performing a PR review (including `@codex review`), first inspect the PR
+comments for one beginning with `<!-- module-risk-briefing -->`.
+
+If a current briefing exists, treat it as review focus, not a finding list:
+- check the listed modules/files first;
+- validate every risk against the actual diff before reporting;
+- do not report a finding solely because the briefing cites a historical risk;
+- if the embedded `<!-- module-risk-head-sha: X -->` differs from the PR's
+  current head commit, the briefing predates the latest push: use it only as
+  historical reference, NOT as the primary review focus for the current diff,
+  and flag this in the review summary;
+- if the briefing is stale or absent, say so briefly — never silently drop the
+  historical risks, and never report one as a current finding without checking
+  the diff.
 
 ## Nested Guides
 

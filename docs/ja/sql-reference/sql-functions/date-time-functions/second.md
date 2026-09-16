@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された日付の秒の部分を返します。"
 ---
 
 # second

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE ANALYZE 创建自定义自动采集任务进行 CBO 统计信息采集。"
 ---
 
 # CREATE ANALYZE

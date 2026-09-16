@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算两个 Bitmap 之间相同元素的个数，支持通过维度列进行过滤。"
 ---
 
 # intersect_count

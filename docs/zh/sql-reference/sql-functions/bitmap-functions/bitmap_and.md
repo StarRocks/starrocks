@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算两个 Bitmap 的交集并返回新的 Bitmap。"
 ---
 
 # bitmap_and

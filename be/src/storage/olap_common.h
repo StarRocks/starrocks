@@ -52,11 +52,11 @@
 #include "base/utility/guard.h"
 #include "common/column_id.h"
 #include "common/delete_condition.h"
-#include "storage/olap_define.h"
-#include "storage/primitive/storage_enums.h"
-#include "storage/primitive/storage_ids.h"
-#include "storage/primitive/storage_stats.h"
-#include "storage/primitive/storage_version.h"
+#include "common/storage_define.h"
+#include "storage_primitive/storage_enums.h"
+#include "storage_primitive/storage_ids.h"
+#include "storage_primitive/storage_stats.h"
+#include "storage_primitive/storage_version.h"
 
 namespace starrocks {
 

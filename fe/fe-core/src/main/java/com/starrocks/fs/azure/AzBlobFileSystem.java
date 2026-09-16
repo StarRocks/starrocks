@@ -221,7 +221,7 @@ public class AzBlobFileSystem implements FileSystem {
         Map<String, String> copied = Maps.newHashMap(properties);
 
         // Put path into properties, so that we can get storage account and container from path
-        copied.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
+        copied.put(CloudConfigurationConstants.AZURE_PATH_KEY, path);
 
         CloudConfiguration cloudConfiguration = new AzureCloudConfigurationProvider().build(copied);
         if (cloudConfiguration == null) {

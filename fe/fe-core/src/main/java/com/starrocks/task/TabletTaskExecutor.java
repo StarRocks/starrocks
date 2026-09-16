@@ -68,6 +68,10 @@ public class TabletTaskExecutor {
     public static class CreateTabletOption {
         private boolean enableTabletCreationOptimization;
         private long gtid;
+        // When true, this is a backfill of v1 metadata + schema file for an existing table
+        // (e.g. light_weight_tablet_creation = true -> false). Bypasses the light-weight
+        // early-return so CreateReplicaTask is actually dispatched.
+        private boolean backfill;
 
         public boolean isEnableTabletCreationOptimization() {
             return enableTabletCreationOptimization;
@@ -84,6 +88,14 @@ public class TabletTaskExecutor {
         public void setGtid(long gtid) {
             this.gtid = gtid;
         }
+
+        public boolean isBackfill() {
+            return backfill;
+        }
+
+        public void setBackfill(boolean backfill) {
+            this.backfill = backfill;
+        }
     }
 
     public static void buildPartitionsSequentially(long dbId, OlapTable table, List<PhysicalPartition> partitions,
@@ -91,7 +103,7 @@ public class TabletTaskExecutor {
                                                    int numBackends,
                                                    ComputeResource computeResource,
                                                    CreateTabletOption option) throws DdlException {
-        if (table.isLightWeightTabletCreation()) {
+        if (table.isLightWeightTabletCreation() && !option.isBackfill()) {
             return;
         }
         // Try to bundle at least 200 CreateReplicaTask's in a single AgentBatchTask.
@@ -125,7 +137,7 @@ public class TabletTaskExecutor {
                                                    int numBackends,
                                                    ComputeResource computeResource,
                                                    CreateTabletOption option) throws DdlException {
-        if (table.isLightWeightTabletCreation()) {
+        if (table.isLightWeightTabletCreation() && !option.isBackfill()) {
             return;
         }
         long start = System.currentTimeMillis();
@@ -235,7 +247,8 @@ public class TabletTaskExecutor {
         if (physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
             option.setEnableTabletCreationOptimization(false);
         }
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index :
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, computeResource, option));
         }
         return tasks;
@@ -490,6 +503,16 @@ public class TabletTaskExecutor {
     static CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Same dispatch fence as AgentBatchTask.run(): a demoting/non-leader node must not send
+                // BE agent-task RPCs. This is the only submit_tasks call site that bypasses
+                // AgentBatchTask.run(), and AgentTaskQueue.addTask refuses by returning false (not by
+                // throwing), so without this check nothing would stop the send. The RuntimeException is
+                // the lambda's established failure mode; callers count the latch down and fail the DDL.
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+                    throw new RuntimeException("node is demoting or not the leader ("
+                            + globalStateMgr.getFeType() + "), refuse to send create-replica tasks");
+                }
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr()
                         .getClusterInfo().getBackendOrComputeNode(backendId);
                 if (computeNode == null || !computeNode.isAlive()) {
@@ -529,6 +552,16 @@ public class TabletTaskExecutor {
                     } else {
                         break;
                     }
+                }
+                // Not finished within this interval: a leader that has begun transferring/demoting closes
+                // leader-work admission, so stop waiting for BE tablet-creation this node can no longer finish
+                // (demotion must not block for the full creation timeout); the re-elected leader re-drives it
+                // from durable state. Checked after the await so an already-finished creation still succeeds.
+                if (!GlobalStateMgr.getCurrentState().isLeaderWorkAdmissionOpen()) {
+                    String errMsg = "fail to create tablet: leader work admission is closed";
+                    LOG.warn(errMsg);
+                    countDownLatch.countDownToZero(new Status(TStatusCode.CANCELLED, "leader work admission is closed"));
+                    throw new DdlException(errMsg);
                 }
 
                 timeLeft -= waitInterval;

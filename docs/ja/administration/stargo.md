@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarGo コマンドラインツールで複数 StarRocks クラスターをデプロイ、管理、アップグレード、起動/停止します。"
 ---
 
 # StarGo を使用した StarRocks のデプロイと管理
@@ -58,7 +59,7 @@ StarGo を使用して StarRocks クラスターをデプロイできます。
 
 ### 設定ファイルの作成
 
-以下の YAML テンプレートに基づいて StarRocks デプロイメントトポロジーファイルを作成します。詳細については、[Configuration](../administration/management/FE_configuration.md) を参照してください。
+以下の YAML テンプレートに基づいて StarRocks デプロイメントトポロジーファイルを作成します。詳細については、[Configuration](./configuration/FE_parameters/FE_parameters.md) を参照してください。
 
 ```yaml
 global:
@@ -490,7 +491,7 @@ StarGo を使用してクラスターをスケールアウトできます。
 
 ### 設定ファイルの作成
 
-以下のテンプレートに基づいてスケールアウトタスクのトポロジーファイルを作成します。必要に応じて FE および/または BE ノードを追加するファイルを指定できます。詳細については、[Configuration](../administration/management/FE_configuration.md) を参照してください。
+以下のテンプレートに基づいてスケールアウトタスクのトポロジーファイルを作成します。必要に応じて FE および/または BE ノードを追加するファイルを指定できます。詳細については、[Configuration](./configuration/FE_parameters/FE_parameters.md) を参照してください。
 
 ```yaml
 # FE ノードを追加します。

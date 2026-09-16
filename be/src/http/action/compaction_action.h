@@ -37,7 +37,7 @@
 #include <atomic>
 
 #include "common/status.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
@@ -58,6 +58,8 @@ public:
     ~CompactionAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
 private:
     Status _handle_show_compaction(HttpRequest* req, std::string* json_result);

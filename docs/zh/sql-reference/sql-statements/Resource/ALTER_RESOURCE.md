@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai', 'ziyuan'] 
 displayed_sidebar: docs
+description: "Use the ALTER RESOURCE statement to modify the properties of a resource."
 ---
 
 # ALTER RESOURCE

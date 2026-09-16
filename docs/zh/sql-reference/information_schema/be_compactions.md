@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_compactions 提供 Compaction 任务的统计信息。"
 ---
 
 # be_compactions

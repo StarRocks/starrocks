@@ -18,11 +18,11 @@
 #include <memory>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/segment_file_info.h"
@@ -129,6 +129,10 @@ public:
     // This method can be called concurrently and it is thread-safe.
     // After cancellation, subsequent write/flush operations will fail quickly.
     void cancel(const Status& st);
+
+    // The status passed to the first `cancel()` call, or OK if never cancelled.
+    // Callers use it to report why the writer stopped working instead of a generic error.
+    [[nodiscard]] Status cancel_status() const;
 
     [[nodiscard]] int64_t partition_id() const;
 
@@ -304,6 +308,14 @@ public:
         return *this;
     }
 
+    // Force the internal TabletWriter to build the vector index inline, overriding async
+    // index_build_mode. Used by lake schema-change conversions (SortedSchemaChange) so the
+    // shadow tablet's existing data is fully indexed within the ALTER, matching DirectSchemaChange.
+    DeltaWriterBuilder& set_force_build_vector_index_inline(bool force_build_vector_index_inline) {
+        _force_build_vector_index_inline = force_build_vector_index_inline;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -328,6 +340,7 @@ private:
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
     std::shared_ptr<const TabletSchema> _tablet_schema;
+    bool _force_build_vector_index_inline = false;
 };
 
 } // namespace starrocks::lake

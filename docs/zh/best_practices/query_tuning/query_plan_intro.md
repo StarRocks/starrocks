@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Query tuning in StarRocks follows a top-down process: identify problems, analyze query plans, and apply optimization techniques for high performance."
 sidebar_position: 10
 keywords: ['cha xun']
 ---

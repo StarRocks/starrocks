@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW FUNCTIONS queries all custom or built-in functions in a database."
 ---
 
 # SHOW FUNCTIONS

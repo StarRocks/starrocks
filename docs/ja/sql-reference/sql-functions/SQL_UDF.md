@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "バージョン 4.1 以降、StarRocks は SQL UDF の作成をサポートしています。"
 sidebar_position: 0.95
 ---
 

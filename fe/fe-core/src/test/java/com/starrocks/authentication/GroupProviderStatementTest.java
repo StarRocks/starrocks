@@ -16,30 +16,40 @@ package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 /**
  * Unit tests for Group Provider statements with IF NOT EXISTS and IF EXISTS functionality
  */
 public class GroupProviderStatementTest {
+
+    @BeforeAll
+    public static void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterAll
+    public static void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     private ConnectContext ctx;
     private AuthenticationMgr authenticationMgr;
     private static final String TEST_PROVIDER_NAME = "test_provider";
@@ -47,10 +57,6 @@ public class GroupProviderStatementTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        // Mock EditLog
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();

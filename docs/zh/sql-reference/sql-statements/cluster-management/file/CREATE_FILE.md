@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE FILE 创建文件并自动上传并持久化在 StarRocks 集群中。"
 ---
 
 # CREATE FILE
@@ -47,7 +48,7 @@ CREATE FILE "file_name" [IN database]
 CREATE FILE "test.pem"
 PROPERTIES
 (
-    "url" = "http://starrocks-public.oss-cn-xxxx.aliyuncs.com/key/test.pem",
+    "url" = "https://starrocks-public.oss-cn-xxxx.aliyuncs.com/key/test.pem",
     "catalog" = "kafka"
 );
 ```

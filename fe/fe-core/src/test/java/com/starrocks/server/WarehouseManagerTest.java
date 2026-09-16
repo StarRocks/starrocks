@@ -20,6 +20,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
@@ -431,6 +432,76 @@ public class WarehouseManagerTest {
         mgr.initDefaultWarehouse();
         Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundWarehouse(123).getId());
         Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundComputeResource(123).getWarehouseId());
+    }
+
+    // ---- getVectorIndexBuildComputeResource: explicit config > table warehouse > default ----
+
+    @Test
+    public void testVectorIndexBuildComputeResourceUsesExplicitConfigWarehouse() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+        WarehouseManager mgr = new WarehouseManager();
+        mgr.initDefaultWarehouse();
+        mgr.addWarehouse(new DefaultWarehouse(1000L, "vi_build_wh"));
+        String saved = Config.lake_vector_index_build_warehouse;
+        try {
+            // An explicit non-default config warehouse takes priority over the table's warehouse.
+            Config.lake_vector_index_build_warehouse = "vi_build_wh";
+            Assertions.assertEquals(1000L, mgr.getVectorIndexBuildComputeResource(123).getWarehouseId());
+        } finally {
+            Config.lake_vector_index_build_warehouse = saved;
+        }
+    }
+
+    @Test
+    public void testVectorIndexBuildComputeResourceFallsBackToTableWarehouse() {
+        // No explicit config warehouse -> route to the table's background compute resource
+        // (table-aware in multi-warehouse mode) instead of blindly returning the default resource.
+        ComputeResource tableResource = WarehouseComputeResource.of(2000L);
+        WarehouseManager mgr = new WarehouseManager() {
+            @Override
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                return tableResource;
+            }
+        };
+        mgr.initDefaultWarehouse();
+        String saved = Config.lake_vector_index_build_warehouse;
+        try {
+            Config.lake_vector_index_build_warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            Assertions.assertEquals(2000L, mgr.getVectorIndexBuildComputeResource(123).getWarehouseId());
+        } finally {
+            Config.lake_vector_index_build_warehouse = saved;
+        }
+    }
+
+    @Test
+    public void testVectorIndexBuildComputeResourceFallsThroughWhenConfigWarehouseMissing() {
+        // A configured-but-nonexistent warehouse falls through to the table's warehouse.
+        ComputeResource tableResource = WarehouseComputeResource.of(3000L);
+        WarehouseManager mgr = new WarehouseManager() {
+            @Override
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                return tableResource;
+            }
+        };
+        mgr.initDefaultWarehouse();
+        String saved = Config.lake_vector_index_build_warehouse;
+        try {
+            Config.lake_vector_index_build_warehouse = "nonexistent_wh";
+            Assertions.assertEquals(3000L, mgr.getVectorIndexBuildComputeResource(123).getWarehouseId());
+        } finally {
+            Config.lake_vector_index_build_warehouse = saved;
+        }
     }
 
     @Test

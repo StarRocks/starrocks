@@ -51,6 +51,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -187,6 +188,12 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
      * If the time of report handling exceeds this limit, we will log it.
      */
     private static final long MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS = 3000;
+
+    // Max time deleteFromMeta holds the table write lock before yielding it (release + re-acquire),
+    // so a long delete walk does not block other operations on the same table. Non-final so tests
+    // can force the periodic relock path.
+    @VisibleForTesting
+    protected static long maxDbWLockHoldingTimeMs = 1000L;
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
     private static final Set<ReportType> RESOURCE_REPORT_TYPES =
@@ -382,7 +389,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
     }
 
     private void putToQueue(ReportTask reportTask) throws Exception {
-        if (isStopped()) {
+        if (isStopRequested()) {
             // Demotion is in progress: reject so the caller can translate this into a NOT_MASTER
             // response (see LeaderImpl#report). Silently dropping would ACK the request as OK and
             // the BE would never retry against the new leader, losing the report update.
@@ -493,7 +500,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         // (db id, table id) -> tablet id
         ListMultimap<Pair<Long, Long>, Long> tabletSyncMap = ArrayListMultimap.create();
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
+        // (dbId, tableId) -> tabletIds, so deletion can lock a single table at a time.
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
         // tablet ids which schema hash is valid
         Set<Long> foundTabletsWithValidSchema = new HashSet<Long>();
         // storage medium -> tablet id
@@ -553,6 +561,9 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         // 11. send set table binlog config to be
         handleSetTabletBinlogConfig(backendId, backendTablets);
 
+        // 11.5. flat_json_config reconciliation — re-push when BE-reported version is behind.
+        handleSetTabletFlatJsonConfig(backendId, backendTablets);
+
         // 12. send primary index cache expire sec to be
         handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
 
@@ -575,7 +586,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
     public static void tabletReport(long backendId, Map<Long, TTablet> backendTablets,
                                     final HashMap<Long, TStorageMedium> storageMediumMap,
                                     ListMultimap<Pair<Long, Long>, Long> tabletSyncMap,
-                                    ListMultimap<Long, Long> tabletDeleteFromMeta,
+                                    Table<Long, Long, List<Long>> tabletDeleteFromMeta,
                                     Set<Long> foundTabletsWithValidSchema,
                                     ListMultimap<TStorageMedium, Long> tabletMigrationMap,
                                     Map<Long, Map<Long, Map<Long, TPartitionVersionInfo>>> transactionsToPublish,
@@ -675,6 +686,25 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         continue;
                     }
 
+                    // A replica can end up with a permanent hole in its version chain that normal publish
+                    // can never fill (BE keeps reporting version_miss with a frozen continuous version).
+                    // Route it into the existing recovery path so it is marked bad and cloned. Skip restore
+                    // tables, like needRecover above (here olapTable is already resolved, so check it directly).
+                    if (olapTable.getState() != OlapTable.OlapTableState.RESTORE) {
+                        MaterializedIndex materializedIndex = physicalPartition.getIndex(tabletMeta.getIndexId());
+                        LocalTablet localTablet = materializedIndex == null
+                                ? null : (LocalTablet) materializedIndex.getTablet(tabletId);
+                        if (localTablet != null && needRecoverVersionMiss(olapTable, localTablet, replica,
+                                physicalPartition.getVisibleVersion(), backendTabletInfo)) {
+                            LOG.warn("replica {} of tablet {} on backend {} misses version persistently and "
+                                            + "cannot self-heal, mark it for recovery. replica in FE: {}, "
+                                            + "report version {}, partition visible version {}",
+                                    replica.getId(), tabletId, backendId, replica,
+                                    backendTabletInfo.getVersion(), physicalPartition.getVisibleVersion());
+                            tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
+                        }
+                    }
+
                     TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
                     if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
                         if (storageMedium != backendTabletInfo.getStorage_medium()) {
@@ -755,7 +785,12 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                 // 2. (meta - be)
                 // may need delete from meta
                 LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
-                tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletId);
+                List<Long> tabletIds = tabletDeleteFromMeta.get(tabletMeta.getDbId(), tabletMeta.getTableId());
+                if (tabletIds == null) {
+                    tabletIds = Lists.newArrayList();
+                    tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletMeta.getTableId(), tabletIds);
+                }
+                tabletIds.add(tabletId);
             }
         } // end for replicaMetaWithBackend
 
@@ -763,7 +798,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         LOG.info("finished to do tablet diff with backend[{}]. sync: {}. metaDel: {}. foundValid: {}. "
                         + " migration: {}. found invalid transactions {}. found republish transactions {} "
                         + " cost: {} ms", backendId, tabletSyncMap.size(),
-                tabletDeleteFromMeta.size(), foundTabletsWithValidSchema.size(),
+                tabletDeleteFromMeta.values().stream().mapToInt(List::size).sum(), foundTabletsWithValidSchema.size(),
                 tabletMigrationMap.size(), transactionsToClear.size(), transactionsToPublish.size(), (end - start));
     }
 
@@ -839,6 +874,95 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
 
         // lastReportVersion should be increased monotonically.
         return backendTabletInfo.getVersion() < replicaInFe.getLastReportVersion();
+    }
+
+    /**
+     * Detect a replica that is stuck with a permanent hole in its version chain. This happens when a clone
+     * races with publish so a middle version is skipped while later versions keep landing: BE reports
+     * version_miss=true and its reported version (max_continuous_version) stays frozen below the partition's
+     * visible version. Such a replica can never catch up through normal publish, so it must be repaired by a
+     * clone. We route it through the same recovery path as a bad replica (handleRecoverTablet -> setBad), which
+     * removes it from query routing and write-target selection and lets TabletScheduler clone a fresh copy.
+     *
+     * <p>The detection is deliberately conservative: it only fires once the same below-visible continuous
+     * version has been reported with version_miss on two consecutive reports (so a transient out-of-order
+     * publish that fills quickly is not mistaken for a stuck hole), and only when another replica is
+     * genuinely caught up to act as query/clone source, so the tablet is never stranded (single-replica
+     * tablets are skipped). PK, colocate and restore tablets are excluded.
+     *
+     * <p>This method also maintains the replica's version-miss debounce baseline as a side effect, so it must
+     * be called for every (non-restore) report of a normal tablet, including healthy ones, to reset it.
+     */
+    private static boolean needRecoverVersionMiss(OlapTable olapTable, LocalTablet tablet, Replica replica,
+                                                  long visibleVersion, TTabletInfo backendTabletInfo) {
+        // Unconditional filters first: these replicas are never recovered by this path, so return before
+        // touching the debounce baseline below (no needless getter/setter).
+        if (replica.getState() != ReplicaState.NORMAL || replica.isBad()) {
+            return false;
+        }
+        // Replicas reported as unusable (used==false) are already handled by needRecover().
+        if (backendTabletInfo.isSetUsed() && !backendTabletInfo.isUsed()) {
+            return false;
+        }
+        // Primary-key tablets recover version errors through their own is_error_state path.
+        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        // Colocate bad replicas take a different scheduler route (COLOCATE_REDUNDANT force-drop), out of
+        // scope for this fix. Checked last among the filters since it takes a global read lock.
+        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())) {
+            return false;
+        }
+
+        // A version hole below the visible version that normal publish has not filled. Confirm it persists
+        // across two consecutive reports: the baseline holds the previous such report's continuous version,
+        // and is reset whenever the replica is not in this state, so a prior healthy report at the same
+        // version cannot be mistaken for a confirmation.
+        boolean versionMiss = backendTabletInfo.isSetVersion_miss() && backendTabletInfo.isVersion_miss();
+        long reportedContinuousVersion = backendTabletInfo.getVersion();
+        boolean holeBelowVisible = versionMiss && reportedContinuousVersion < visibleVersion;
+        boolean confirmedAcrossReports =
+                holeBelowVisible && replica.getVersionMissBaselineVersion() == reportedContinuousVersion;
+        replica.setVersionMissBaselineVersion(holeBelowVisible ? reportedContinuousVersion : -1L);
+        if (!confirmedAcrossReports) {
+            return false;
+        }
+        // Never strand the tablet: only recover when another replica is genuinely caught up and can serve as
+        // both query source and clone source.
+        return hasCaughtUpSourceReplicaOnAnotherBackend(tablet, replica, visibleVersion);
+    }
+
+    /**
+     * Whether the tablet has, on a backend other than the holed replica's, a healthy replica that is caught
+     * up to the visible version and can act as a query/clone source. Used by {@link #needRecoverVersionMiss}
+     * to avoid stranding a tablet that has no usable copy elsewhere.
+     *
+     * <p>The catch-up check uses {@link Replica#getLastReportVersion()}, which is set straight from the BE
+     * report, so (unlike the FE-side {@code Replica.version} that the version-miss bug inflates) it reflects
+     * the backend's true continuous version and proves the candidate genuinely holds the data.
+     */
+    private static boolean hasCaughtUpSourceReplicaOnAnotherBackend(LocalTablet tablet, Replica holedReplica,
+                                                                    long visibleVersion) {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Replica candidate : tablet.getAllReplicas()) {
+            if (candidate.getBackendId() == holedReplica.getBackendId()) {
+                continue;
+            }
+            if (candidate.isBad() || candidate.isErrorState() || candidate.getState() != ReplicaState.NORMAL
+                    || candidate.getLastFailedVersion() > 0) {
+                continue;
+            }
+            // lastReportVersion comes straight from the BE report, so (unlike the masked Replica.version) it
+            // reflects the candidate's true continuous version and proves it genuinely holds the data.
+            if (candidate.getLastReportVersion() < visibleVersion) {
+                continue;
+            }
+            Backend candidateBackend = systemInfoService.getBackend(candidate.getBackendId());
+            if (candidateBackend != null && candidateBackend.isAlive()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void taskReport(long backendId, Map<TTaskType, Set<Long>> runningTasks) {
@@ -1097,7 +1221,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         } // end for dbs
     }
 
-    protected static void deleteFromMeta(ListMultimap<Long, Long> tabletDeleteFromMeta, long backendId,
+    protected static void deleteFromMeta(Table<Long, Long, List<Long>> tabletDeleteFromMeta, long backendId,
                                        long backendReportVersion) {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -1107,35 +1231,51 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                 .getClusterInfo().getBackend(backendId).getDisks().values()) {
             hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
         }
-        final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<LocalTablet> deleteTablets = new ArrayList<>();
         List<ReplicaPersistInfo> replicaPersistInfoList = new ArrayList<>();
-        DB_TRAVERSE:
-        for (Long dbId : tabletDeleteFromMeta.keySet()) {
+        // tabletDeleteFromMeta is grouped by (dbId, tableId), so each batch of doomed tablets is
+        // table-local. Scope the WRITE to that single table with an intensive lock instead of a
+        // full DB WRITE that would block every other table on this frequent BE-report path. The
+        // genuinely destructive delete happens in a later batch-delete callback outside this lock,
+        // guarded by LocalTablet's own tablet write lock.
+        TABLE_TRAVERSE:
+        for (Table.Cell<Long, Long, List<Long>> cell : tabletDeleteFromMeta.cellSet()) {
+            long dbId = cell.getRowKey();
+            long tableId = cell.getColumnKey();
             Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
+            List<Long> tabletIds = cell.getValue();
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            boolean locked = true;
             long lockStartTime = System.currentTimeMillis();
             try {
                 int deleteCounter = 0;
-                List<Long> tabletIds = tabletDeleteFromMeta.get(dbId);
+                // Snapshot tablet metadata only after acquiring the table lock. A concurrent
+                // truncate/drop cannot run while we hold the lock, so the loop never acts on
+                // tablets that were removed from TabletInvertedIndex while we waited for the lock.
+                // Refreshed after every periodic relock for the same reason.
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {
-                    // Because we need to write bdb with db write lock hold,
+                    // Because we need to write bdb with the table write lock hold,
                     // to avoid block other threads too long, we periodically release and
-                    // acquire the db write lock (every MAX_DB_WLOCK_HOLDING_TIME_MS milliseconds).
+                    // acquire the table write lock (every maxDbWLockHoldingTimeMs milliseconds).
                     long currentTime = System.currentTimeMillis();
-                    if (currentTime - lockStartTime > MAX_DB_WLOCK_HOLDING_TIME_MS) {
-                        locker.unLockDatabase(db.getId(), LockType.WRITE);
+                    if (currentTime - lockStartTime > maxDbWLockHoldingTimeMs) {
+                        locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+                        locked = false;
                         db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
                         if (db == null) {
-                            continue DB_TRAVERSE;
+                            continue TABLE_TRAVERSE;
                         }
-                        locker.lockDatabase(db.getId(), LockType.WRITE);
+                        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+                        locked = true;
                         lockStartTime = currentTime;
+                        // Re-read metadata under the freshly re-acquired lock so we never act on
+                        // tablets that were truncated/dropped while the lock was released.
+                        tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                     }
 
                     TabletMeta tabletMeta = tabletMetaList.get(i);
@@ -1143,7 +1283,6 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         continue;
                     }
                     long tabletId = tabletIds.get(i);
-                    long tableId = tabletMeta.getTableId();
                     long partitionId = tabletMeta.getPhysicalPartitionId();
 
                     LOG.debug("delete tablet {} in partition {} of table {} in db {} from meta. backend[{}]",
@@ -1327,11 +1466,13 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                 currentBackendReportVersion);
                     }
                 } // end for tabletMetas
-                LOG.info("delete {} replica(s) from globalStateMgr in db[{}]", deleteCounter, dbId);
+                LOG.info("delete {} replica(s) from globalStateMgr in db[{}] table[{}]", deleteCounter, dbId, tableId);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                if (locked) {
+                    locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+                }
             }
-        } // end for dbs
+        } // end for (db, table) cells
 
         if (!deleteTablets.isEmpty()) {
             // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
@@ -1742,6 +1883,10 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         handleSetTabletBinlogConfig(backendId, backendTablets);
     }
 
+    public static void testHandleSetTabletFlatJsonConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        handleSetTabletFlatJsonConfig(backendId, backendTablets);
+    }
+
     private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
         List<Pair<Long, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
 
@@ -1953,31 +2098,42 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                     continue;
                 }
 
-                // already has one update scheam task, ignore to prevent send too many task
-                if (indexMeta.hasUpdateSchemaTask(backendId)) {
+                // Atomically reserve the slot for this backend to prevent sending too many tasks.
+                // The check-then-reserve is a single atomic operation, so two senders running
+                // concurrently under the shared READ lock cannot both observe "no task" and both
+                // enqueue a duplicate task. If a task is already in flight, skip this backend.
+                if (!indexMeta.addUpdateSchemaBackendIfAbsent(backendId)) {
                     continue;
                 }
 
-                List<TColumn> columnsDesc = Lists.newArrayList();
-                List<Integer> columnSortKeyUids = Lists.newArrayList();
+                try {
+                    List<TColumn> columnsDesc = Lists.newArrayList();
+                    List<Integer> columnSortKeyUids = Lists.newArrayList();
 
-                for (Column column : indexMeta.getSchema()) {
-                    TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(column.getColumnId().getId());
-                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
-                    columnsDesc.add(tColumn);
-                }
-                if (indexMeta.getSortKeyUniqueIds() != null) {
-                    columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
-                }
-                TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
-                        indexMeta.getShortKeyColumnCount());
+                    for (Column column : indexMeta.getSchema()) {
+                        TColumn tColumn = column.toThrift();
+                        tColumn.setColumn_name(column.getColumnId().getId());
+                        column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
+                        columnsDesc.add(tColumn);
+                    }
+                    if (indexMeta.getSortKeyUniqueIds() != null) {
+                        columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+                    }
+                    TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
+                            indexMeta.getShortKeyColumnCount());
 
-                UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
-                        indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
-                        columnParam);
-                updateSchemaBatchTask.addTask(task);
-                indexMeta.addUpdateSchemaBackend(backendId);
+                    UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
+                            indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                            columnParam);
+                    updateSchemaBatchTask.addTask(task);
+                } catch (RuntimeException e) {
+                    // Reservation happened before the task was built/enqueued, so release it on
+                    // failure. Otherwise this backend would stay marked forever (the finish RPC
+                    // only clears it after a task actually completes) and no future UPDATE_SCHEMA
+                    // task would ever be sent for it.
+                    indexMeta.removeUpdateSchemaBackend(backendId);
+                    throw e;
+                }
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }
@@ -2055,6 +2211,72 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
             AgentBatchTask batchTask = new AgentBatchTask();
             TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createBinlogConfigUpdateTask(
                     backendId, tabletToBinlogConfig);
+            batchTask.addTask(task);
+            AgentTaskExecutor.submit(batchTask);
+        }
+    }
+
+    private static void handleSetTabletFlatJsonConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        List<Pair<Long, FlatJsonConfig>> tabletToFlatJsonConfig = Lists.newArrayList();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                long tabletId = tabletInfo.getTablet_id();
+                // A missing version means the tablet has no flat_json config at all (the BE only
+                // reports the field when a config exists). Map it below any real version — real
+                // versions start at 0 for CREATE-time configs — so such tablets get reconciled
+                // even when the FE-side config was never bumped by an ALTER.
+                long beFlatJsonConfigVersion =
+                        tabletInfo.isSetFlat_json_config_version() ? tabletInfo.flat_json_config_version : -1;
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+                // Skip non-flat_json tables before locking so the report hot path avoids a per-tablet
+                // lock for them (cf. handleSetTabletBinlogConfig); the version compare stays under the lock.
+                if (!olapTable.containsFlatJsonConfig()) {
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+                try {
+                    FlatJsonConfig flatJsonConfig = olapTable.getFlatJsonConfig();
+                    if (flatJsonConfig == null) {
+                        // flat_json could have been removed between the lock-free check and the lock.
+                        continue;
+                    }
+                    long feFlatJsonConfigVersion = flatJsonConfig.getVersion();
+                    if (beFlatJsonConfigVersion < feFlatJsonConfigVersion) {
+                        tabletToFlatJsonConfig.add(new Pair<>(tabletId, flatJsonConfig));
+                    } else if (beFlatJsonConfigVersion > feFlatJsonConfigVersion) {
+                        LOG.warn("table {} flat_json_config version of tabletId: {}, BeId: {}, is {} " +
+                                        "greater than version of FE, which is {}",
+                                olapTable.getName(), tabletId, backendId,
+                                beFlatJsonConfigVersion, feFlatJsonConfigVersion);
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(),
+                            Lists.newArrayList(olapTable.getId()), LockType.READ);
+                }
+            }
+        }
+
+        LOG.debug("find [{}] tablets need set flat_json_config", tabletToFlatJsonConfig.size());
+        if (!tabletToFlatJsonConfig.isEmpty()) {
+            AgentBatchTask batchTask = new AgentBatchTask();
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createFlatJsonConfigUpdateTask(backendId, tabletToFlatJsonConfig);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }
@@ -2260,9 +2482,9 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
             }
             TABLET_TO_DROP_TIME.clear();
         }
-        // Stop the nested resource-report consumer as part of this handler's own shutdown,
-        // so both loops drain synchronously during leader demotion.
-        resourceReportDaemon.stopGracefully(Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
+        // Stop the nested resource-report consumer as part of this handler's own shutdown. Fire-and-
+        // forget: its worker self-cleans in onStopped() and deregisters; the re-activation gate covers it.
+        resourceReportDaemon.stopBestEffort();
     }
 
     /**

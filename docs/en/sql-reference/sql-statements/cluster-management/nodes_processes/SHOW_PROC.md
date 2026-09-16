@@ -572,5 +572,6 @@ MySQL > show proc '/global_current_queries';
 | Warehouse    | The compute warehouse processing the query.                          |
 | CustomQueryId| Custom query identifier if specified.                               |
 | ResourceGroup| The resource group assigned to the query.                           |
+| QueryType    | The type of the query: `Query`, `Statistics` (such as ANALYZE), `Task`, `MV`, or `Internal`. |
 
 ```

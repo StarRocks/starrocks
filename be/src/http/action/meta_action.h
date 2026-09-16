@@ -35,7 +35,7 @@
 #pragma once
 
 #include "common/status.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
@@ -53,6 +53,8 @@ public:
     ~MetaAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
 private:
     static Status _handle_header(HttpRequest* req, std::string* json_header);

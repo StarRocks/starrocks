@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定日期的工作日索引值，星期一为0，星期日为6。"
 ---
 
 # weekday

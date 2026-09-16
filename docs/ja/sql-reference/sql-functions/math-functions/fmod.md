@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "浮動小数点数の除算の余りを返します。"
 ---
 
 # fmod

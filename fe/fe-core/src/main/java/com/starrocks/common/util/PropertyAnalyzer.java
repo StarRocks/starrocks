@@ -93,7 +93,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -112,6 +111,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -178,6 +178,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
 
+    public static final String PROPERTIES_FLAT_JSON_VERSION = "flat_json.version";
+
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
 
@@ -205,6 +207,8 @@ public class PropertyAnalyzer {
     public static final String ENABLE_LOW_CARD_DICT_TYPE = "enable_low_card_dict";
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
+    // Comma-separated column names whose low-cardinality global dict is forbidden (column-level).
+    public static final String PROPERTIES_NO_DICT_COLUMNS = "no_dict_columns";
 
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
@@ -212,6 +216,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
+    public static final String PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER = "load_initial_open_partition_number";
 
     // default: same as cluster query_timeout
     public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
@@ -481,6 +486,25 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
+    public static int analyzeLoadInitialOpenPartitionNumber(Map<String, String> properties, boolean removeProperties) {
+        int value = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            try {
+                value = Integer.parseInt(properties.get(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new SemanticException(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + e.getMessage());
+            }
+            if (value < 0) {
+                throw new SemanticException("Illegal " + PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + value
+                        + ". Use 0 to open all partitions, or a positive integer to open the latest N partitions.");
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+            }
+        }
+        return value;
+    }
+
     public static String analyzePartitionRetentionCondition(Database db,
                                                             OlapTable olapTable,
                                                             Map<String, String> properties,
@@ -727,7 +751,7 @@ public class PropertyAnalyzer {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
             MaterializedView.RefreshMode parsed;
             try {
-                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
                         ". Only INCREMENTAL, PCT are supported.");
@@ -1661,22 +1685,6 @@ public class PropertyAnalyzer {
 
     public static boolean analyzeDataCacheEnable(Map<String, String> properties) throws AnalysisException {
         return analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
-    }
-
-    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
-        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
-            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            if (type.equalsIgnoreCase(TableProperty.LOCAL_INDEX_TYPE)) {
-                return TPersistentIndexType.LOCAL;
-            } else if (type.equalsIgnoreCase(TableProperty.CLOUD_NATIVE_INDEX_TYPE)) {
-                return TPersistentIndexType.CLOUD_NATIVE;
-            } else {
-                throw new AnalysisException("Invalid persistent index type: " + type);
-            }
-        }
-        return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
-                : TPersistentIndexType.LOCAL;
     }
 
     public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "start_rangeから始まる要素値を持つビットマップ値から指定された数の要素を抽出します。"
 ---
 
 # bitmap_subset_limit

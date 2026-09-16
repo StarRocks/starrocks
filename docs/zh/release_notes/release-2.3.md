@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.3 版本发布说明：持久化主键索引、主键表 DELETE WHERE、全局字典异步更新、异步 CREATE TABLE。"
 ---
 
 # StarRocks version 2.3

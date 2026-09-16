@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SQL Plan Manager は StarRocks でクエリプランを SQL ステートメントにバインドしてデータ更新による計画変更を防ぎパフォーマンスを安定させます。"
 sidebar_position: 11
 ---
 

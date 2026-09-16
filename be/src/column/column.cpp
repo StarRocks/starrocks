@@ -16,6 +16,12 @@
 
 #include <fmt/format.h>
 
+#if defined(__AVX2__) && !defined(__AVX512F__)
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "column/column_hash/column_hash.h"
 #include "common/statusor.h"
 
@@ -95,12 +101,73 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
         throw std::runtime_error(
                 fmt::format("inputs offsets' size {} != the column's offsets' size {}.", offsets.size(), size + 1));
     }
-    // TODO: optimize it using SIMD
-    for (auto i = 0; i < size && !need_empty; ++i) {
+#if defined(__AVX2__) && !defined(__AVX512F__)
+    // Branchless scan of 8 entries per step: a null entry that still spans a non-empty range needs emptying.
+    {
+        const uint32_t* offs = offsets.data();
+        const uint8_t* nulls = null_data.data();
+        const __m256i zero = _mm256_setzero_si256();
+        size_t i = 0;
+        for (; i + 8 <= size && !need_empty; i += 8) {
+            __m256i cur = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offs + i));
+            __m256i nxt = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offs + i + 1));
+            // eq lanes are all-ones where offset == next offset, i.e. the entry is empty.
+            __m256i eq = _mm256_cmpeq_epi32(cur, nxt);
+
+            __m128i nulls8 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(nulls + i));
+            __m256i nulls32 = _mm256_cvtepu8_epi32(nulls8);
+            // null lanes are all-ones where the entry is null.
+            __m256i nullmask = _mm256_cmpgt_epi32(nulls32, zero);
+
+            // found = (~eq) & nullmask: a null entry whose range is non-empty.
+            __m256i found = _mm256_andnot_si256(eq, nullmask);
+            need_empty = !_mm256_testz_si256(found, found);
+        }
+        // Scalar tail
+        for (; i < size && !need_empty; ++i) {
+            if (null_data[i] && offsets[i + 1] != offsets[i]) {
+                need_empty = true;
+            }
+        }
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    // Branchless scan of 8 entries per step: a null entry that still spans a non-empty range needs emptying.
+    {
+        const uint32_t* offs = offsets.data();
+        const uint8_t* nulls = null_data.data();
+        size_t i = 0;
+        for (; i + 8 <= size && !need_empty; i += 8) {
+            uint16x8_t n16 = vmovl_u8(vld1_u8(nulls + i));
+            uint32x4_t nlo = vmovl_u16(vget_low_u16(n16));
+            uint32x4_t nhi = vmovl_u16(vget_high_u16(n16));
+            // null lanes are all-ones where the entry is null.
+            uint32x4_t null_lo = vtstq_u32(nlo, nlo);
+            uint32x4_t null_hi = vtstq_u32(nhi, nhi);
+
+            // eq lanes are all-ones where offset == next offset, i.e. the entry is empty.
+            uint32x4_t eq_lo = vceqq_u32(vld1q_u32(offs + i), vld1q_u32(offs + i + 1));
+            uint32x4_t eq_hi = vceqq_u32(vld1q_u32(offs + i + 4), vld1q_u32(offs + i + 5));
+
+            // found = (~eq) & null: a null entry whose range is non-empty.
+            uint32x4_t found = vorrq_u32(vbicq_u32(null_lo, eq_lo), vbicq_u32(null_hi, eq_hi));
+            if (vmaxvq_u32(found) != 0) {
+                need_empty = true;
+            }
+        }
+        // Scalar tail
+        for (; i < size && !need_empty; ++i) {
+            if (null_data[i] && offsets[i + 1] != offsets[i]) {
+                need_empty = true;
+            }
+        }
+    }
+#else
+    for (size_t i = 0; i < size && !need_empty; ++i) {
         if (null_data[i] && offsets[i + 1] != offsets[i]) {
             need_empty = true;
         }
     }
+#endif
     // TODO: copy too much may result in worse performance.
     if (need_empty) {
         auto new_column = clone_empty();

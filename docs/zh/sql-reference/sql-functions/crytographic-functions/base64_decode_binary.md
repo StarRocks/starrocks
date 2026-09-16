@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "解码 Base64 编码的字符串并返回 VARBINARY 类型的值。"
 ---
 
 # base64_decode_binary

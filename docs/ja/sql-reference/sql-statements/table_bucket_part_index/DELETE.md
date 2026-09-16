@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Deletes data rows from a table based on the specified conditions."
 ---
 
 # DELETE

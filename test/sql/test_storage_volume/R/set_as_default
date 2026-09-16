@@ -1,4 +1,7 @@
--- name: testSetAsDefault @cloud
+-- name: testSetAsDefault @cloud @sequential
+ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="false");
+-- result:
+-- !result
 CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_default_1 type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
 -- result:
 -- !result
@@ -59,3 +62,12 @@ E: (1064, 'Getting analyzing error. Detail message: Unknown storage volume: stor
 SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;
 -- result:
 -- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_default_2;
+-- result:
+-- !result
+CLEANUP {
+SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;
+DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
+DROP STORAGE VOLUME IF EXISTS storage_volume_default_2;
+ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
+} END CLEANUP

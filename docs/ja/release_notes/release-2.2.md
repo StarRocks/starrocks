@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.2：リソースグループ管理、Java UDF フレームワーク、Primary Key テーブルの部分更新、JSON データ型および関数、Hudi サポート。"
 ---
 
 # StarRocks version 2.2

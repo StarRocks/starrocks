@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Converts `x` from an angle to a radian."
+description: "Converts x from an angle to a radian."
 ---
 
 # radians

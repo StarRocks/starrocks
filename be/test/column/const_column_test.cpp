@@ -346,7 +346,7 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
 
     ASSERT_EQ(3, c1->size());
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(2);
     offsets.emplace_back(5);

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ランダムなUUIDをLARGEINT型で返します。"
 ---
 
 # uuid_numeric

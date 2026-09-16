@@ -20,8 +20,10 @@
 #include "storage/schema_change_utils.h"
 
 namespace starrocks {
+class ExecEnv;
+class ThreadPool;
 class TxnLogPB_OpSchemaChange;
-}
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -31,7 +33,9 @@ struct SchemaChangeParams;
 
 class SchemaChangeHandler {
 public:
-    explicit SchemaChangeHandler(TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
+    explicit SchemaChangeHandler(TabletManager* tablet_manager, ThreadPool* lake_schema_change_pool = nullptr,
+                                 ExecEnv* exec_env = nullptr)
+            : _tablet_manager(tablet_manager), _lake_schema_change_pool(lake_schema_change_pool), _exec_env(exec_env) {}
     ~SchemaChangeHandler() = default;
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
@@ -44,9 +48,23 @@ private:
     Status do_process_alter_tablet(const TAlterTabletReqV2& request);
     Status convert_historical_rowsets(const SchemaChangeParams& sc_params, TxnLogPB_OpSchemaChange* op_schema_change);
 
+    // ADD INDEX fast path (lake-only). Skips data rewrite: builds standalone
+    // .idx files (Index Delta Group) per segment and emits an OpAddIndex
+    // TxnLog. Per-segment work runs in parallel on
+    // StorageEngine's lake_schema_change thread pool. Caller is expected to have already
+    // validated `request.only_add_index` and the index list.
+    Status do_process_add_index_only(const TAlterTabletReqV2& request);
+
+    // DROP INDEX fast path (lake-only). Pure metadata mutation: writes an
+    // OpDropIndex TxnLog whose tombstones are merged into existing IDG
+    // entries at publish time. Physical .idx cleanup happens at compaction.
+    Status do_process_drop_index_only(const TAlterTabletReqV2& request);
+
     Status do_process_update_tablet_meta(const TTabletMetaInfo& request, int64_t txn_id);
 
     TabletManager* _tablet_manager;
+    ThreadPool* _lake_schema_change_pool;
+    ExecEnv* _exec_env = nullptr;
 };
 
 } // namespace starrocks::lake

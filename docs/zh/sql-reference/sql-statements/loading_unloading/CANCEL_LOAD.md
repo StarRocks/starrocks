@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL LOAD cancels a Broker Load, Spark Load, or INSERT load job in progress."
 ---
 
 # CANCEL LOAD

@@ -101,14 +101,14 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetrics) {
     MetricRegistry registry("test_registry");
     metrics.install(&registry);
 
-    auto status = ThreadPoolBuilder("agent_metrics_test")
+    auto status = ThreadPoolBuilder("agent_met_test")
                           .set_min_threads(0)
                           .set_max_threads(3)
                           .set_max_queue_size(5)
                           .build(&threadpool);
     ASSERT_TRUE(status.ok()) << status;
 
-    metrics.register_thread_pool_metrics("clone", threadpool.get());
+    metrics.register_thread_pool_metrics("clone", &metrics.clone, threadpool.get());
     registry.trigger_hook();
 
     assert_metric_value(&registry, "clone_threadpool_size", "3");
@@ -118,14 +118,14 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetrics) {
 TEST(AgentMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
     std::unique_ptr<ThreadPool> threadpool;
     AgentMetrics metrics;
-    auto status = ThreadPoolBuilder("agent_metrics_test")
+    auto status = ThreadPoolBuilder("agent_met_test")
                           .set_min_threads(0)
                           .set_max_threads(3)
                           .set_max_queue_size(5)
                           .build(&threadpool);
     ASSERT_TRUE(status.ok()) << status;
 
-    metrics.register_thread_pool_metrics("clone", threadpool.get());
+    metrics.register_thread_pool_metrics("clone", &metrics.clone, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);

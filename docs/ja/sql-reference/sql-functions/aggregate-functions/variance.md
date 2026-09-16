@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "VARIANCE関数は母分散を返し、v2.5.10以降はウィンドウ関数としても使用できます。"
 ---
 
 # variance,var_pop,variance_pop

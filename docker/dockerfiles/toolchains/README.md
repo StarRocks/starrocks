@@ -32,3 +32,18 @@ DOCKER_BUILDKIT=1 docker buildx build -f toolchains-ubuntu.Dockerfile --platform
 ```
 DOCKER_BUILDKIT=1 docker build -f toolchains-ubuntu.Dockerfile -t starrocks/toolchains-ubuntu:20230306 .
 ```
+
+## 3 Build Toolchains for Rocky Linux 9
+### 3.1 Build multiarch toolchains on Rocky Linux 9 and publish to docker hub
+```
+DOCKER_BUILDKIT=1 docker buildx build -f toolchains-rocky9.Dockerfile --platform <platform_list> -t starrocks/toolchains-rocky9:<tag> --push .
+```
+E.g.:
+```shell
+DOCKER_BUILDKIT=1 docker buildx build -f toolchains-rocky9.Dockerfile --platform linux/amd64,linux/arm64 -t starrocks/toolchains-rocky9:20230306 --push .
+```
+
+### 3.2 Build a single platform toolchain for Rocky Linux 9
+```
+DOCKER_BUILDKIT=1 docker build -f toolchains-rocky9.Dockerfile -t starrocks/toolchains-rocky9:20230306 .
+```

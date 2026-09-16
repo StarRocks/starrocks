@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算输入值的 32 位哈希值并返回包含该值的 Bitmap。"
 ---
 
 # bitmap_hash

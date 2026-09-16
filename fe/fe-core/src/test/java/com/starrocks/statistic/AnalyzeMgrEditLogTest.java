@@ -30,6 +30,7 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatisticsType;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -44,8 +45,13 @@ import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 public class AnalyzeMgrEditLogTest {
     private AnalyzeMgr masterAnalyzeMgr;
@@ -1081,6 +1087,115 @@ public class AnalyzeMgrEditLogTest {
 
         // 5. Verify leader memory state remains unchanged after exception
         Assertions.assertEquals(1, exceptionAnalyzeMgr.getMultiColumnStatsMetaMap().size());
+    }
+
+    // ==================== External Stats Replay Cache Tests ====================
+
+    @Test
+    public void testReplayExternalBasicStatsCacheInvalidatesByUuidWhenEnabled() {
+        StatisticStorage mockStorage = mock(StatisticStorage.class);
+        GlobalStateMgr.getCurrentState().setStatisticStorage(mockStorage);
+
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta("catalog", "db", "table",
+                Lists.newArrayList("c1", "c2"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(),
+                StatsConstants.buildInitStatsProp());
+        meta.setTableUUID("catalog.db.table.123");
+
+        boolean origin = Config.enable_external_stats_lazy_refresh_on_replay;
+        try {
+            Config.enable_external_stats_lazy_refresh_on_replay = true;
+
+            // ADD replay -> invalidate by UUID, no external metadata resolution.
+            masterAnalyzeMgr.replayRefreshExternalBasicStatsCache(meta);
+            verify(mockStorage, times(1))
+                    .invalidateConnectorTableColumnStatistics("catalog.db.table.123", meta.getColumns());
+
+            // REMOVE replay -> invalidate by UUID as well.
+            masterAnalyzeMgr.replayExpireExternalBasicStatsCache(meta);
+            verify(mockStorage, times(2))
+                    .invalidateConnectorTableColumnStatistics("catalog.db.table.123", meta.getColumns());
+        } finally {
+            Config.enable_external_stats_lazy_refresh_on_replay = origin;
+        }
+    }
+
+    @Test
+    public void testReplayExternalBasicStatsCacheFallsBackWhenDisabled() {
+        StatisticStorage mockStorage = mock(StatisticStorage.class);
+        GlobalStateMgr.getCurrentState().setStatisticStorage(mockStorage);
+
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta("catalog", "db", "table",
+                Lists.newArrayList("c1", "c2"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(),
+                StatsConstants.buildInitStatsProp());
+        meta.setTableUUID("catalog.db.table.123");
+
+        boolean origin = Config.enable_external_stats_lazy_refresh_on_replay;
+        try {
+            // Feature disabled (default): must NOT invalidate by UUID; falls back to the legacy eager path.
+            Config.enable_external_stats_lazy_refresh_on_replay = false;
+            masterAnalyzeMgr.replayRefreshExternalBasicStatsCache(meta);
+            masterAnalyzeMgr.replayExpireExternalBasicStatsCache(meta);
+            verify(mockStorage, never()).invalidateConnectorTableColumnStatistics(anyString(), anyList());
+        } finally {
+            Config.enable_external_stats_lazy_refresh_on_replay = origin;
+        }
+    }
+
+    @Test
+    public void testReplayExternalBasicStatsCacheFallsBackWhenNoUuid() {
+        StatisticStorage mockStorage = mock(StatisticStorage.class);
+        GlobalStateMgr.getCurrentState().setStatisticStorage(mockStorage);
+
+        // Legacy journal: no tableUUID persisted.
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta("catalog", "db", "table",
+                Lists.newArrayList("c1", "c2"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(),
+                StatsConstants.buildInitStatsProp());
+
+        boolean origin = Config.enable_external_stats_lazy_refresh_on_replay;
+        try {
+            Config.enable_external_stats_lazy_refresh_on_replay = true;
+            masterAnalyzeMgr.replayRefreshExternalBasicStatsCache(meta);
+            masterAnalyzeMgr.replayExpireExternalBasicStatsCache(meta);
+            // Without a UUID we cannot invalidate by key; fall back to the legacy eager path.
+            verify(mockStorage, never()).invalidateConnectorTableColumnStatistics(anyString(), anyList());
+        } finally {
+            Config.enable_external_stats_lazy_refresh_on_replay = origin;
+        }
+    }
+
+    @Test
+    public void testReplayExternalHistogramStatsCacheInvalidatesByUuidWhenEnabled() {
+        StatisticStorage mockStorage = mock(StatisticStorage.class);
+        GlobalStateMgr.getCurrentState().setStatisticStorage(mockStorage);
+
+        ExternalHistogramStatsMeta meta = new ExternalHistogramStatsMeta("catalog", "db", "table", "c1",
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), StatsConstants.buildInitStatsProp());
+        meta.setTableUUID("catalog.db.table.123");
+
+        boolean origin = Config.enable_external_stats_lazy_refresh_on_replay;
+        try {
+            Config.enable_external_stats_lazy_refresh_on_replay = true;
+
+            masterAnalyzeMgr.replayRefreshExternalHistogramStatsCache(meta);
+            verify(mockStorage, times(1))
+                    .invalidateConnectorHistogramStatistics("catalog.db.table.123", Lists.newArrayList("c1"));
+
+            masterAnalyzeMgr.replayExpireExternalHistogramStatsCache(meta);
+            verify(mockStorage, times(2))
+                    .invalidateConnectorHistogramStatistics("catalog.db.table.123", Lists.newArrayList("c1"));
+        } finally {
+            Config.enable_external_stats_lazy_refresh_on_replay = origin;
+        }
+    }
+
+    @Test
+    public void testExternalStatsMetaPersistsTableUuid() {
+        // The UUID must survive gson serialization (journal/image round-trip) so followers can use it on replay.
+        ExternalBasicStatsMeta basicMeta = new ExternalBasicStatsMeta("catalog", "db", "table",
+                Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(),
+                StatsConstants.buildInitStatsProp());
+        basicMeta.setTableUUID("catalog.db.table.123");
+        Assertions.assertEquals("catalog.db.table.123", basicMeta.clone().getTableUUID());
     }
 }
 

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "`applicable_roles` provides information about roles that are applicable to the current user."
+description: "applicable_roles provides information about roles that are applicable to the current user."
 ---
 
 # applicable_roles

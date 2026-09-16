@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将 JSON 对象转换为 JSON 字符串。"
 ---
 
 # json_string

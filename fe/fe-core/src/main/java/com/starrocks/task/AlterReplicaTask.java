@@ -98,6 +98,23 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private List<TColumn> baseSchemaColumns;
     // baseTabletReadSchema is used for shared-data in Fast Schema Evolution v2
     private TTabletSchema baseTabletReadSchema;
+
+    // ADD INDEX fast-path flags (lake only). When onlyAddIndex is true, BE skips
+    // data rewrite and builds standalone .idx files (Index Delta Group) for each
+    // entry in indexesToAdd. See LakeTableAddIndexJob and
+    // SchemaChangeHandler::do_process_add_index_only on BE.
+    private boolean onlyAddIndex = false;
+    private List<com.starrocks.thrift.TOlapTableIndex> indexesToAdd;
+    // New schema id/version FE allocated for the ADD INDEX fast path. Sent to BE
+    // so it stamps them onto the tablet metadata schema, invalidating every by-id
+    // schema cache so future loads / compaction build the new index. 0 = unset.
+    private long newIndexSchemaId = 0;
+    private long newIndexSchemaVersion = 0;
+
+    // DROP INDEX fast-path flags (lake only). When onlyDropIndex is true, BE
+    // writes an OpDropIndex TxnLog; publish applies tombstones into IDG.
+    private boolean onlyDropIndex = false;
+    private List<com.starrocks.thrift.TDropIndexInfo> dropIndexes;
     private RollupJobV2Params rollupJobV2Params;
 
     public static class RollupJobV2Params {
@@ -313,7 +330,56 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (baseTabletReadSchema != null) {
             req.setBase_tablet_read_schema(baseTabletReadSchema);
         }
+        if (onlyAddIndex) {
+            req.setOnly_add_index(true);
+            if (indexesToAdd != null && !indexesToAdd.isEmpty()) {
+                req.setIndexes_to_add(indexesToAdd);
+            }
+            if (newIndexSchemaId > 0) {
+                req.setNew_index_schema_id(newIndexSchemaId);
+                req.setNew_index_schema_version(newIndexSchemaVersion);
+            }
+        }
+        if (onlyDropIndex) {
+            req.setOnly_drop_index(true);
+            if (dropIndexes != null && !dropIndexes.isEmpty()) {
+                req.setDrop_indexes(dropIndexes);
+            }
+        }
         return req;
+    }
+
+    /**
+     * Enable the ADD INDEX fast path on this task. Used by
+     * LakeTableAddIndexJob. Callers must pass a non-empty list; this method
+     * unconditionally flips `onlyAddIndex = true` so a null/empty list would
+     * send the fast-path flag with no payload — currently safe because BE
+     * iterates the empty list as a no-op, but the call sites guarantee
+     * non-empty by construction.
+     */
+    public void setOnlyAddIndex(List<com.starrocks.thrift.TOlapTableIndex> indexes) {
+        this.onlyAddIndex = true;
+        this.indexesToAdd = indexes;
+    }
+
+    /**
+     * Carry the new schema id/version FE allocated for the ADD INDEX fast path.
+     * BE stamps them onto the tablet metadata schema so all by-id schema caches
+     * miss and future loads / compaction build the newly-added index.
+     */
+    public void setNewIndexSchema(long schemaId, long schemaVersion) {
+        this.newIndexSchemaId = schemaId;
+        this.newIndexSchemaVersion = schemaVersion;
+    }
+
+    /**
+     * Enable the DROP INDEX fast path on this task. Used by
+     * LakeTableDropIndexJob. Same null-handling contract as
+     * {@link #setOnlyAddIndex(List)}.
+     */
+    public void setOnlyDropIndex(List<com.starrocks.thrift.TDropIndexInfo> drops) {
+        this.onlyDropIndex = true;
+        this.dropIndexes = drops;
     }
 
     /*

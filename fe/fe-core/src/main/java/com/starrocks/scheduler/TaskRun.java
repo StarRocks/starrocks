@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
@@ -32,6 +33,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -76,6 +78,9 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
     // Set on pinned-PCT batches only; value is the pinning job's START_TASK_RUN_ID.
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
+    // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
+    public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
+    public static final String SUBMIT_USER_SYSTEM = "system";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
@@ -212,8 +217,13 @@ public class TaskRun implements Comparable<TaskRun> {
         int defaultTimeoutS = Config.task_runs_timeout_second;
         if (properties != null) {
             for (Map.Entry<String, String> entry : properties.entrySet()) {
-                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
-                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                String key = entry.getKey();
+                // session variables are stored with a "session." prefix; strip it before matching
+                if (key.startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                }
+                if (key.equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || key.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
                     try {
                         int timeout = Integer.parseInt(entry.getValue());
                         if (timeout > 0) {
@@ -297,6 +307,12 @@ public class TaskRun implements Comparable<TaskRun> {
         context.setIsLastStmt(true);
         context.setMultiStmt(false);
         context.resetSessionVariable();
+        if (task instanceof OptimizeTask) {
+            // OptimizeJobV2 executes its rewrite through a new task-run context, so the
+            // submitter's ConnectContext marker cannot reach the planner. Restore the marker
+            // from the task type before parsing and planning the internal INSERT.
+            context.setOptimizeRewrite(true);
+        }
         // Preserve critical session variables from parent context if available
         // This ensures that settings like enableSingleNodeSchedule are inherited
         if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {
@@ -431,6 +447,17 @@ public class TaskRun implements Comparable<TaskRun> {
             task.incConsecutiveFailCount();
             LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
                     taskId, taskRunId, task.getConsecutiveFailCount(), e);
+            if (Constants.TaskSource.MV.equals(task.getSource())
+                    && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
+                MaterializedView mv = TaskBuilder.getMvFromTask(task);
+                // Permanent incremental breakage: inactivate the MV and rethrow. Don't kill/suspend the running
+                // refresh here -- that would eat the actionable error; the consecutive-failure path suspends the task.
+                if (mv != null && mv.isActive()) {
+                    AlterMVJobExecutor.inactiveMvAndLog(mv,
+                            MaterializedViewExceptions.inactiveReasonForIncrementalBreaking(mv.getName()));
+                    throw e;
+                }
+            }
             if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
                     task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
                 LOG.warn("Task {} has failed {} times continuously, so we disable it",
@@ -558,6 +585,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setCreateTime(created);
         status.setUser(task.getCreateUser());
         status.setUserIdentity(task.getUserIdentity());
+        status.setSubmitUser(resolveSubmitUser());
         status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
@@ -575,6 +603,23 @@ public class TaskRun implements Comparable<TaskRun> {
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
         this.status = status;
         return status;
+    }
+
+    // Batch follow-up runs inherit the leader's submitter through ExecuteOption (internal-only, unspoofable).
+    // Only a manual submission attributes to the session user: automatic refreshes (scheduled, or
+    // on-base-table-change which runs on the triggering DML's thread with a live ConnectContext) are the
+    // scheduler, so they must record "system" rather than the incidental session user.
+    private String resolveSubmitUser() {
+        if (executeOption != null && !Strings.isNullOrEmpty(executeOption.getSubmitUser())) {
+            return executeOption.getSubmitUser();
+        }
+        if (executeOption != null && executeOption.isManual()) {
+            ConnectContext context = ConnectContext.get();
+            if (context != null && !Strings.isNullOrEmpty(context.getQualifiedUser())) {
+                return context.getQualifiedUser();
+            }
+        }
+        return SUBMIT_USER_SYSTEM;
     }
 
     @Override

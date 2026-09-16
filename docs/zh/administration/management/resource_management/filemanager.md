@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文件管理器用于上传、查看和删除公钥、私钥等文件供命令引用。"
 ---
 
 # 文件管理器

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Query plans describe how SQL statements execute in StarRocks, breaking down queries into operations like scan, join, aggregate, and sort."
 sidebar_position: 20
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "获取计算所在节点的主机名。"
 ---
 
 # host_name

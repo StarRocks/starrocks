@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW TABLE STATUS displays basic information about tables in a database."
 ---
 
 # SHOW TABLE STATUS

@@ -25,23 +25,29 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "common/config_exec_fwd.h"
-#include "connector/connector.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/logging.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "connector_primitive/connector.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
+#include "platform/platform_env.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
-#include "storage/tablet_meta_manager.h"
+#include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 
 namespace starrocks::lake {
 
@@ -80,7 +86,7 @@ public:
         }
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         (void)fs::remove_all(_test_dir);
     }
 
@@ -91,7 +97,13 @@ protected:
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit,
+                                                          PlatformEnv::GetInstance()->store_path_registry())) {
+        if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+            parallel_compact_mgr != nullptr) {
+            _update_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
+            parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_mgr.get());
+        }
         PFailPointTriggerMode trigger_mode;
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
@@ -110,13 +122,6 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
-    }
-
-    void check_local_persistent_index_meta(int64_t tablet_id, int64_t expected_version) {
-        PersistentIndexMetaPB index_meta;
-        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
-        CHECK_OK(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
-        ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }
 
     StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id,
@@ -139,10 +144,15 @@ protected:
 };
 
 struct PrimaryKeyParam {
-    bool enable_persistent_index = false;
-    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
+    // Shared-data primary-key tablets support only the cloud-native persistent index; the
+    // in-memory index and the LOCAL persistent index are deprecated. Default accordingly.
+    bool enable_persistent_index = true;
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
     bool enable_transparent_data_encryption = false;
+    // When true, the tablet's sort key differs from the primary key (ORDER BY != PK), which exercises
+    // the separate-sort-key load-spill + unsort-SST-writer path.
+    bool separate_sort_key = false;
 };
 
 template <typename T>
@@ -158,6 +168,33 @@ public:
 private:
     T* _val;
     T _old_val;
+};
+
+// Drives the cold PK-index rebuild onto its single-pass fallback for the lifetime of the guard.
+// should_parallel_rebuild_prefetch() gates the parallel prefetch on the update mem tracker being
+// below pk_index_parallel_rebuild_mem_ratio percent of its limit; gating at 0 percent and holding a
+// single byte on the tracker makes that read as exceeded without perturbing any other memory check.
+class RebuildMemPressureGuard {
+public:
+    RebuildMemPressureGuard()
+            : _ratio_guard(&config::pk_index_parallel_rebuild_mem_ratio, 0),
+              _tracker(RuntimeEnv::GetInstance()->update_mem_tracker()) {
+        _tracker->consume(kHeldBytes);
+        // limit_exceeded_by_ratio() is false for an unlimited (_limit < 0) tracker no matter how much
+        // is consumed, which would leave the rebuild on its parallel path and silently turn every
+        // parallel-vs-serial equivalence test into parallel-vs-parallel -- still green, covering half
+        // of what it claims. Assert the gate actually engaged instead.
+        CHECK(_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_rebuild_mem_ratio))
+                << "RebuildMemPressureGuard did not engage the single-pass rebuild fallback; update mem "
+                   "tracker limit="
+                << _tracker->limit() << " consumption=" << _tracker->consumption();
+    }
+    ~RebuildMemPressureGuard() { _tracker->release(kHeldBytes); }
+
+private:
+    static constexpr int64_t kHeldBytes = 1;
+    ConfigResetGuard<int32_t> _ratio_guard;
+    MemTracker* _tracker;
 };
 
 inline TxnInfoPB TEST_txn_info(int64_t txn_id, int64_t commit_time, bool rebuild_pindex = false) {

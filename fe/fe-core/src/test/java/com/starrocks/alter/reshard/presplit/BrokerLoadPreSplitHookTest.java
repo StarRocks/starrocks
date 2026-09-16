@@ -14,41 +14,54 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /**
  * Detection-side coverage for {@link BrokerLoadPreSplitHook}: each early-return
  * branch is exercised and asserted via {@code MockedStatic} to never reach
- * {@link TabletPreSplitCoordinator#submitAsynchronously}. The eligible-
- * delegation path needs a full FE fixture (catalog, tablet inverted index,
- * compute-resource warehouse) and is left to integration coverage.
+ * {@link TabletPreSplitCoordinator#submitAsynchronously}. The full eligible-
+ * delegation path (sampling through an admitted reshard job) needs a full FE
+ * fixture (catalog, tablet inverted index, compute-resource warehouse) and is
+ * left to integration coverage; the relaxed per-index gate (base + rollup)
+ * is covered here with {@link TabletPreSplitCoordinator} itself mocked out.
  */
 public class BrokerLoadPreSplitHookTest {
 
     private static final long BASE_INDEX_META_ID = 200L;
+    private static final long ROLLUP_INDEX_META_ID = 210L;
 
     private boolean savedConfigBrokerLoad;
 
@@ -65,22 +78,37 @@ public class BrokerLoadPreSplitHookTest {
 
     @Test
     public void testConfigFlagOffShortCircuits() throws Exception {
+        // Cluster-wide opt-out must short-circuit before the coordinator AND
+        // record the eligibility-skip counter under disabled_by_config — the
+        // hook returns ahead of the coordinator, so checkConfigAndSession would
+        // otherwise never bump the bucket.
         Config.enable_tablet_pre_split_for_broker_load = false;
-        assertHookDoesNotDelegate(() ->
-                invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_CONFIG.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
+
+            org.junit.jupiter.api.Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "config opt-out must bump the disabled_by_config bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
     @Test
     public void testSessionOptOutShortCircuits() throws Exception {
         // SET enable_tablet_pre_split=false on the session must short-circuit
         // before the eligibility-target walk AND record the eligibility-skip
-        // counter under disabled_by_session. The hook reads
-        // ConnectContext.getSessionVariableOrDefault() (a static), so stub
-        // that directly. Resolve the SessionVariable mock before the outer
-        // mockStatic.when() — Mockito's per-thread stubbing state does not
-        // tolerate nested mock()/when() inside another when() argument.
-        SessionVariable optedOutSessionVariable = Mockito.mock(SessionVariable.class);
-        Mockito.when(optedOutSessionVariable.isEnableTabletPreSplit()).thenReturn(false);
+        // counter under disabled_by_session. The hook now takes the
+        // ConnectContext directly (parameter-threaded), so we
+        // pass an opted-out context rather than stubbing a static.
+        ConnectContext optedOutContext = mockConnectContextWithSessionPreSplit(false);
         boolean savedHasInit = MetricRepo.hasInit;
         MetricRepo.hasInit = true;
         try {
@@ -88,15 +116,61 @@ public class BrokerLoadPreSplitHookTest {
             long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
                     .getMetric(label).getValue();
 
-            try (MockedStatic<ConnectContext> contextStatic = Mockito.mockStatic(ConnectContext.class)) {
-                contextStatic.when(ConnectContext::getSessionVariableOrDefault).thenReturn(optedOutSessionVariable);
-                assertHookDoesNotDelegate(() ->
-                        invokeHook(singlePartitionOlapTable(), List.of(), List.of()));
-            }
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(optedOutContext, singlePartitionOlapTable(), List.of(), List.of()));
 
             org.junit.jupiter.api.Assertions.assertEquals(baseline + 1L,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
                     "session opt-out must bump the disabled_by_session bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void testResolvedOptOutShortCircuitsThoughTheContextSaysOtherwise() throws Exception {
+        // BrokerLoadJob fires this hook from a scheduler thread against a ConnectContext that,
+        // outside an FE failover, is the submitter's own live session. A SET issued after the
+        // statement was accepted must not re-decide the load, so the value the caller resolved
+        // wins over the one on the context.
+        ConnectContext liveOptedInContext = mockConnectContextWithSessionPreSplit(true);
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_SESSION.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(liveOptedInContext, singlePartitionOlapTable(), List.of(), List.of(), false));
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "the resolved opt-out must bump the disabled_by_session bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void testResolvedOptInIsNotUndoneByAnOptedOutContext() throws Exception {
+        // The mirror case, which is what an FE-failover replay of a load submitted with pre-split
+        // ON relies on: null file groups short-circuit AFTER the session gate, so reaching that
+        // return without bumping disabled_by_session proves the gate opened.
+        ConnectContext liveOptedOutContext = mockConnectContextWithSessionPreSplit(false);
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_SESSION.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(liveOptedOutContext, singlePartitionOlapTable(), null, List.of(), true));
+
+            Assertions.assertEquals(baseline,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "a resolved opt-in must not take the session-opt-out branch");
         } finally {
             MetricRepo.hasInit = savedHasInit;
         }
@@ -125,34 +199,102 @@ public class BrokerLoadPreSplitHookTest {
     }
 
     @Test
-    public void testSinglePartitionWithMultipleBaseTabletsShortCircuits() throws Exception {
+    public void testSinglePartitionWithMultipleBaseTabletsRecordsSkip() throws Exception {
+        // Table clears the table-level gate but its single base index already
+        // holds multiple tablets (the re-load-after-split case). The hook must
+        // record multiple_base_index_tablets and not delegate — the
+        // coordinator's maybeAct, which would otherwise record it, is never
+        // reached on the single-partition resolve-failure path.
+        OlapTable target = tablePassingTableLevelGate();
         MaterializedIndex baseIndex = mock(MaterializedIndex.class);
         when(baseIndex.getTablets()).thenReturn(List.of(mock(Tablet.class), mock(Tablet.class)));
-
         PhysicalPartition partition = mock(PhysicalPartition.class);
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
-
-        OlapTable target = mock(OlapTable.class);
-        when(target.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(target.getPhysicalPartitions()).thenReturn(List.of(partition));
 
-        assertHookDoesNotDelegate(() ->
-                invokeHook(target, List.of(mock(BrokerFileGroup.class)), List.of()));
+        assertSinglePartitionResolveRecordsSkip(target, SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
     }
 
     @Test
-    public void testMissingBaseIndexShortCircuits() throws Exception {
-        // Partition exists but the base-index lookup returns null — e.g. an
-        // alter changed the base-index id mid-load. Hook must skip.
+    public void testMissingBaseIndexRecordsSkip() throws Exception {
+        // Table clears the table-level gate but the base-index lookup returns
+        // null — e.g. an alter changed the base-index id mid-load. The hook
+        // must record metadata_not_resolved and not delegate.
+        OlapTable target = tablePassingTableLevelGate();
         PhysicalPartition partition = mock(PhysicalPartition.class);
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(null);
-
-        OlapTable target = mock(OlapTable.class);
-        when(target.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(target.getPhysicalPartitions()).thenReturn(List.of(partition));
 
-        assertHookDoesNotDelegate(() ->
-                invokeHook(target, List.of(mock(BrokerFileGroup.class)), List.of()));
+        assertSinglePartitionResolveRecordsSkip(target, SkipReason.METADATA_NOT_RESOLVED);
+    }
+
+    // ---- relaxed per-index gate: base + rollup ----
+
+    @Test
+    public void testEligibleRollupDelegatesToCoordinator() throws Exception {
+        // A base index plus a single eligible rollup (single-tablet, scalar sort key) must NOT
+        // be skipped for has_materialized_view_or_rollup and must reach the coordinator's
+        // submitAsynchronously -- the relaxed per-index gate (PreSplitTargets#resolveVisibleIndexTargets)
+        // lets it through where the old getVisibleIndexMetas().size() != 1 gate would have skipped.
+        OlapTable target = tableWithBaseAndRollup();
+        installBaseAndRollup(target, /*rollupTabletCount*/ 1);
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic = Mockito.mockStatic(DefaultPreSplitPipeline.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+            stubIndexSortKey(metaUtils, target, BASE_INDEX_META_ID, "k");
+            stubIndexSortKey(metaUtils, target, ROLLUP_INDEX_META_ID, "k2");
+            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
+                            any(), any(), any(), anyLong(), any(), any()))
+                    .thenReturn(mock(DefaultPreSplitPipeline.class));
+            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            invokeHook(target, List.of(mock(BrokerFileGroup.class)), List.of(List.<TBrokerFileStatus>of()));
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
+            Assertions.assertEquals(baseline,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "eligible base+rollup must not bump the has_materialized_view_or_rollup bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void testIneligibleRollupRecordsSkip() throws Exception {
+        // A rollup that fails per-index resolution (here: more than one tablet) must skip the
+        // whole target under has_materialized_view_or_rollup and never delegate.
+        OlapTable target = tableWithBaseAndRollup();
+        installBaseAndRollup(target, /*rollupTabletCount*/ 2);
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            stubIndexSortKey(metaUtils, target, BASE_INDEX_META_ID, "k");
+            stubIndexSortKey(metaUtils, target, ROLLUP_INDEX_META_ID, "k2");
+
+            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(target, List.of(mock(BrokerFileGroup.class)), List.of(List.<TBrokerFileStatus>of())));
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "ineligible rollup must bump the has_materialized_view_or_rollup bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
     @Test
@@ -172,13 +314,39 @@ public class BrokerLoadPreSplitHookTest {
      * mocks for {@code Database}, {@code BrokerDesc}, and {@code ComputeResource}
      * — none of which the early-return branches consult. Tests pass distinct
      * arguments for the three fields the hook actually inspects on the
-     * short-circuit paths: target table, file groups, file statuses.
+     * short-circuit paths: target table, file groups, file statuses. The
+     * default context has {@code enable_tablet_pre_split=true} so the
+     * session opt-out branch is NOT taken.
      */
     private static void invokeHook(
             OlapTable target, List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses) {
+        invokeHook(mockConnectContextWithSessionPreSplit(true), target, fileGroups, fileStatuses);
+    }
+
+    /**
+     * Overload for tests that need to drive a specific {@link ConnectContext}
+     * (e.g. the session opt-out test).
+     */
+    private static void invokeHook(
+            ConnectContext context, OlapTable target,
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses) {
         BrokerLoadPreSplitHook.maybeRunPreSplit(
-                mock(Database.class), target, mock(BrokerDesc.class),
-                fileGroups, fileStatuses, mock(ComputeResource.class));
+                context, mock(Database.class), target, mock(BrokerDesc.class),
+                fileGroups, fileStatuses, mock(ComputeResource.class), () -> false);
+    }
+
+    /**
+     * Overload for tests that drive the opt-out a deferred load resolved for itself, which is
+     * not necessarily what {@code context} carries by the time the hook fires.
+     */
+    private static void invokeHook(
+            ConnectContext context, OlapTable target,
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
+            Boolean sessionPreSplitEnabled) {
+        BrokerLoadPreSplitHook.maybeRunPreSplit(
+                context, mock(Database.class), target, mock(BrokerDesc.class),
+                fileGroups, fileStatuses, mock(ComputeResource.class), () -> false,
+                /*profile*/ null, sessionPreSplitEnabled);
     }
 
     private static OlapTable singlePartitionOlapTable() {
@@ -190,6 +358,117 @@ public class BrokerLoadPreSplitHookTest {
         when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(table.getPhysicalPartitions()).thenReturn(List.of(partition));
         return table;
+    }
+
+    /**
+     * Builds an unpartitioned {@link OlapTable} that clears the table-level
+     * eligibility gate ({@link PreSplitTargets#findEligibleTable}) so the hook
+     * proceeds into the single-partition flow. Per-partition shape (physical
+     * partitions, base index, tablets) is left to the caller to stub. The
+     * sort-key column is supplied by {@link #assertSinglePartitionResolveRecordsSkip}
+     * via a {@code MockedStatic<MetaUtils>}.
+     */
+    private static OlapTable tablePassingTableLevelGate() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(table.isRangeDistribution()).thenReturn(true);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(table.getPartitionInfo()).thenReturn(partitionInfo);
+        return table;
+    }
+
+    /**
+     * Variant of {@link #tablePassingTableLevelGate} with a second visible index (a rollup)
+     * alongside the base, so {@link PreSplitTargets#findEligibleTable}'s per-index sort-key
+     * check runs against both. Per-partition shape (physical partitions, tablets per index) is
+     * left to {@link #installBaseAndRollup}.
+     */
+    private static OlapTable tableWithBaseAndRollup() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(table.isRangeDistribution()).thenReturn(true);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getIndexMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(table.getPartitionInfo()).thenReturn(partitionInfo);
+        return table;
+    }
+
+    /**
+     * Installs {@code target}'s single physical partition with a single-tablet base index and a
+     * rollup index carrying {@code rollupTabletCount} tablets, both visible to
+     * {@link PreSplitTargets#resolveVisibleIndexTargets}.
+     */
+    private static void installBaseAndRollup(OlapTable target, int rollupTabletCount) {
+        MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
+        when(baseIndex.getTablets()).thenReturn(List.of(mock(Tablet.class)));
+        when(baseIndex.getRowCount()).thenReturn(0L);
+
+        MaterializedIndex rollupIndex = mock(MaterializedIndex.class);
+        when(rollupIndex.getMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        List<Tablet> rollupTablets = new ArrayList<>(rollupTabletCount);
+        for (int i = 0; i < rollupTabletCount; i++) {
+            rollupTablets.add(mock(Tablet.class));
+        }
+        when(rollupIndex.getTablets()).thenReturn(rollupTablets);
+
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex, rollupIndex));
+        when(target.getPhysicalPartitions()).thenReturn(List.of(partition));
+    }
+
+    /** Stub {@code MetaUtils.getRangeDistributionColumns(target, indexMetaId)} to a single scalar column. */
+    private static void stubIndexSortKey(
+            MockedStatic<MetaUtils> metaUtils, OlapTable target, long indexMetaId, String columnName) {
+        metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target, indexMetaId))
+                .thenReturn(List.of(PresplitTestSupport.bigintColumn(columnName)));
+    }
+
+    /**
+     * Invokes the hook against a table that passes the table-level gate but
+     * fails single-partition target resolution, and asserts it (a) never
+     * delegates to the coordinator and (b) bumps the {@code eligibility_skipped}
+     * counter under {@code expectedReason} exactly once. A
+     * {@code MockedStatic<MetaUtils>} supplies a scalar sort key so the
+     * table-level gate's sort-key check passes.
+     */
+    private static void assertSinglePartitionResolveRecordsSkip(
+            OlapTable target, SkipReason expectedReason) throws Exception {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(PresplitTestSupport.bigintColumn("k")));
+            String label = expectedReason.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(target, List.of(mock(BrokerFileGroup.class)),
+                            List.of(List.<TBrokerFileStatus>of())));
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                            .getMetric(label).getValue().longValue(),
+                    "single-partition resolve failure must bump the " + label + " bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
 }

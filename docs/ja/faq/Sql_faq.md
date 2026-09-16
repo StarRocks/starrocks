@@ -1,5 +1,7 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "Query Cache を使用した SQL クエリパフォーマンス最適化とキャッシング機能。"
 ---
 
 # SQL クエリ
@@ -79,7 +81,7 @@ MERGE:
 
 ## BE ログと FE ログが占めるディスクスペースを削減するにはどうすればよいですか？
 
-ログレベルと対応するパラメータを調整します。詳細は [Parameter Configuration](../administration/management/BE_configuration.md) を参照してください。
+ログレベルと対応するパラメータを調整します。詳細は [Parameter Configuration](../administration/configuration/BE_parameters/BE_parameters.md) を参照してください。
 
 ## レプリケーション数を変更しようとすると "table *** is colocate table, cannot change replicationNum" というエラーが発生する
 

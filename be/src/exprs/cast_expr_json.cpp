@@ -14,6 +14,8 @@
 
 #include <velocypack/Exception.h>
 
+#include <string_view>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_visitor_adapter.h"
@@ -103,14 +105,7 @@ public:
 
     Status do_visit(const BinaryColumn& col) {
         Slice slice = col.get_slice(_row);
-#ifdef __APPLE__
-        // On macOS, velocypack's template overload resolution may not correctly
-        // match std::string_view constructor, causing "Must give a string or char const*" error.
-        // Use std::string explicitly to avoid type ambiguity.
-        _add_element(std::string(slice.data, slice.size));
-#else
         _add_element(std::string_view(slice.data, slice.size));
-#endif
         return {};
     }
 

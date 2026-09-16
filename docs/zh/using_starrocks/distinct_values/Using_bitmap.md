@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中使用 Bitmap 类型和相关函数进行精确去重，减少存储空间并加速计算。"
 sidebar_position: 10
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET PASSWORD changes the login password for users."
 ---
 
 # SET PASSWORD

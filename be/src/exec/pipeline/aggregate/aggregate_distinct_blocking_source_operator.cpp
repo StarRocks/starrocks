@@ -14,7 +14,7 @@
 
 #include "aggregate_distinct_blocking_source_operator.h"
 
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 
 namespace starrocks::pipeline {
 
@@ -27,6 +27,7 @@ bool AggregateDistinctBlockingSourceOperator::is_finished() const {
 }
 
 Status AggregateDistinctBlockingSourceOperator::set_finished(RuntimeState* state) {
+    auto notify = _aggregator->defer_notify_sink();
     return _aggregator->set_finished();
 }
 

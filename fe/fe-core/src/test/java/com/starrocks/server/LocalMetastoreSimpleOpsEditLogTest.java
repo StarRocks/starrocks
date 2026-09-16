@@ -111,6 +111,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME;
@@ -1899,7 +1900,6 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         // For unpartitioned table, partition name should be the same as table name
         Partition partition = table.getPartition(TABLE_NAME);
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-        long initialVersion = physicalPartition.getVisibleVersion();
 
         // 2. Create AdminSetPartitionVersionStmt
         // For unpartitioned table, partition name should be the same as table name
@@ -1941,7 +1941,6 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         // For unpartitioned table, partition name should be the same as table name
         Partition followerPartition = followerTable.getPartition(TABLE_NAME);
         PhysicalPartition followerPhysicalPartition = followerPartition.getDefaultPhysicalPartition();
-        long followerInitialVersion = followerPhysicalPartition.getVisibleVersion();
 
         // Use MetaRecoveryDaemon to replay
         // Temporarily set followerMetastore to GlobalStateMgr so recoverPartitionVersion can find the database and table
@@ -2030,7 +2029,6 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         // 3. Verify master state - partition should be changed to HDD if lock was acquired
         // Note: The method uses tryLock, so it may not always succeed.
         // If lock was acquired and EditLog succeeded, the storage medium should be HDD
-        TStorageMedium actualMedium = partitionInfo.getDataProperty(partition.getId()).getStorageMedium();
 
         Assertions.assertTrue(storageMediumMap.containsKey(PARTITION_ID));
         Assertions.assertEquals(TStorageMedium.HDD, storageMediumMap.get(PARTITION_ID));
@@ -2097,5 +2095,43 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         // 4. Verify storage medium remains unchanged after exception
         // The method catches exceptions internally, so the partition should remain as SSD
         Assertions.assertEquals(TStorageMedium.SSD, partitionInfo.getDataProperty(partition.getId()).getStorageMedium());
+    }
+
+    @Test
+    public void testGetPartitionIdToStorageMediumMapTryLockTimeout() throws Exception {
+        // 1. Create table with an SSD partition whose cooldown already expired, so phase 2 of
+        //    getPartitionIdToStorageMediumMap tries to take the per-table WRITE lock.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = createOlapTable(TABLE_ID, TABLE_NAME);
+        db.registerTableUnlocked(table);
+
+        Partition partition = table.getPartition(PARTITION_ID);
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        com.starrocks.catalog.DataProperty expiredSSDProperty = new com.starrocks.catalog.DataProperty(
+                TStorageMedium.SSD, System.currentTimeMillis() - 1000); // Expired
+        partitionInfo.setDataProperty(partition.getId(), expiredSSDProperty);
+
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.SSD);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID, tabletMeta);
+
+        // 2. Make the phase-2 per-table try lock fail (as if it timed out). Phase 1 uses the
+        //    blocking lockTableWithIntensiveDbLock, which is left untouched so candidates are still
+        //    collected; only the phase-2 tryLock is forced to return false.
+        new MockUp<Locker>() {
+            @Mock
+            public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType,
+                                                           long timeout, TimeUnit unit) {
+                return false;
+            }
+        };
+
+        // 3. Execute getPartitionIdToStorageMediumMap - phase 2 cannot acquire the lock, so the
+        //    expired partition is skipped: it is neither added to the map nor changed to HDD.
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Map<Long, TStorageMedium> storageMediumMap = metastore.getPartitionIdToStorageMediumMap();
+
+        Assertions.assertFalse(storageMediumMap.containsKey(PARTITION_ID));
+        Assertions.assertEquals(TStorageMedium.SSD,
+                partitionInfo.getDataProperty(partition.getId()).getStorageMedium());
     }
 }

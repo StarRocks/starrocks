@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将数值转换为 HLL 类型，通常用于导入时映射源数据。"
 ---
 
 # hll_hash

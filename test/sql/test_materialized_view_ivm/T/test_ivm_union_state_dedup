@@ -1,0 +1,166 @@
+-- name: test_ivm_union_state_dedup
+-- A union-family aggregate (bitmap_union / hll_union / percentile_union) collapses to a single
+-- column in an incremental MV: the visible output IS the intermediate state, so no hidden
+-- __AGG_STATE_ copy is stored. This test exercises the paths that whitelist_widening does not:
+--   * delta refresh (second refresh after inserting more rows) merges into the collapsed column
+--   * mixed layout: collapsed unions alongside a finalizable sum in one MV
+--   * two same-signature unions bound to distinct source columns
+--   * a wrapped union (bitmap_count(bitmap_union(...))) that must NOT collapse
+-- Each MV's finalized output is checked against a fresh GROUP BY over the base table (diff = 0),
+-- initially and again after the delta.
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+
+create table t1 (
+  k int,
+  v int,
+  s varchar(20),
+  s2 varchar(20),
+  d decimal(10, 2),
+  dt date
+) partition by(dt);
+
+insert into t1 values
+  (1, 100, 'a', 'p', 1.00, '2023-12-01'),
+  (1, 200, 'a', 'q', 2.00, '2023-12-01'),
+  (2, 300, 'b', 'r', 3.00, '2023-12-02');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+set enable_materialized_view_rewrite = false;
+
+-- ============================================================
+-- S1: pure unions (bitmap + hll + percentile) — all collapse
+-- ============================================================
+CREATE MATERIALIZED VIEW mv_pure PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt,
+     bitmap_union(bitmap_hash(s)) AS b,
+     hll_union(hll_hash(s)) AS h,
+     percentile_union(percentile_hash(d)) AS p
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+
+-- ============================================================
+-- S2: mixed — collapsed hll + finalizable sum + collapsed bitmap
+-- ============================================================
+CREATE MATERIALIZED VIEW mv_mixed PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt,
+     hll_union(hll_hash(s)) AS h,
+     sum(v) AS ss,
+     bitmap_union(bitmap_hash(s2)) AS b
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+
+-- ============================================================
+-- S3: two same-signature bitmap_union columns on distinct sources
+-- ============================================================
+CREATE MATERIALIZED VIEW mv_two_bmp PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt,
+     bitmap_union(bitmap_hash(s)) AS b1,
+     bitmap_union(bitmap_hash(s2)) AS b2
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+
+-- ============================================================
+-- S4: wrapped union — must NOT collapse (visible output is finalized count)
+-- ============================================================
+CREATE MATERIALIZED VIEW mv_wrapped PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s2))) AS cnt
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+
+[UC]REFRESH MATERIALIZED VIEW mv_pure WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_mixed WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_two_bmp WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_wrapped WITH SYNC MODE;
+
+-- initial values (readable)
+SELECT k, dt, bitmap_count(b), hll_cardinality(h), round(percentile_approx_raw(p, 0.5), 3) FROM mv_pure ORDER BY k, dt;
+SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed ORDER BY k, dt;
+SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp ORDER BY k, dt;
+SELECT k, dt, cnt FROM mv_wrapped ORDER BY k, dt;
+
+-- initial diff = 0 (MV incremental output equals a fresh GROUP BY)
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b), hll_cardinality(h) FROM mv_pure
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), hll_cardinality(hll_union(hll_hash(s)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+SELECT count(*) FROM (
+  SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed
+  EXCEPT
+  SELECT k, dt, hll_cardinality(hll_union(hll_hash(s))), sum(v), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+SELECT count(*) FROM (
+  SELECT k, dt, cnt FROM mv_wrapped
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+
+-- ============================================================
+-- DELTA: append into both partitions, refresh incrementally
+-- ============================================================
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
+  (1, 300, 'c', 's', 4.00, '2023-12-01'),
+  (2, 400, 'b', 'r', 5.00, '2023-12-02');
+
+[UC]REFRESH MATERIALIZED VIEW mv_pure WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_mixed WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_two_bmp WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_wrapped WITH SYNC MODE;
+
+-- post-delta values (readable)
+SELECT k, dt, bitmap_count(b), hll_cardinality(h), round(percentile_approx_raw(p, 0.5), 3) FROM mv_pure ORDER BY k, dt;
+SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed ORDER BY k, dt;
+SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp ORDER BY k, dt;
+SELECT k, dt, cnt FROM mv_wrapped ORDER BY k, dt;
+
+-- post-delta diff = 0
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b), hll_cardinality(h) FROM mv_pure
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), hll_cardinality(hll_union(hll_hash(s)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+SELECT count(*) FROM (
+  SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed
+  EXCEPT
+  SELECT k, dt, hll_cardinality(hll_union(hll_hash(s))), sum(v), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+SELECT count(*) FROM (
+  SELECT k, dt, cnt FROM mv_wrapped
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+
+-- cleanup
+drop database db_${uuid0} force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;

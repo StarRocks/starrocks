@@ -44,6 +44,11 @@ namespace starrocks {
 // Utility class for parsing information from strings.
 class ParseUtil {
 public:
+    // Parses a data size and returns the size in bytes.
+    // Accepted units are B, K/KB, M/MB, G/GB, T/TB, and P/PB (case-insensitive).
+    // Returns 0 for empty, invalid, negative, or overflowing values.
+    static int64_t parse_data_size(const std::string& value_str);
+
     // Parses mem_spec_str and returns the memory size in bytes.
     // Accepted formats:
     // '<int>[bB]?'  -> bytes (default if no unit given)

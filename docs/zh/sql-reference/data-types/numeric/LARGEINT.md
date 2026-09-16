@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "LARGEINT 是 16 字节有符号整数，取值范围为 [-2^127 + 1, 2^127 - 1]。"
 ---
 
 # LARGEINT

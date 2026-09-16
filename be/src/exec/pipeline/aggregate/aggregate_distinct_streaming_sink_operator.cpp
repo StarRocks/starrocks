@@ -79,7 +79,13 @@ void AggregateDistinctStreamingSinkOperator::set_execute_mode(int performance_le
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
         _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
     }
-    _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
+    // Distinct aggregation stores keys in the hash SET and never initializes _hash_map_variant,
+    // so hash_map_memory_usage() would std::visit a default variant and dereference a null
+    // unique_ptr (latent UB, currently masked only because variant slot 0 is a SmallFixedSizeHashMap
+    // whose dump_bound() folds to a compile-time constant). memory_usage() reports the hash-set-based
+    // footprint safely; cap it by config like the aggregate-with-functions sink, and keep it > 0.
+    _limited_mem_state.limited_memory_size =
+            LimitedMemAggState::clamp_budget(_aggregator->memory_usage(), config::streaming_agg_limited_memory_size);
 }
 
 Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

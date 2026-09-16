@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class TaskRunsSystemTableTest {
@@ -46,6 +48,54 @@ public class TaskRunsSystemTableTest {
                 .map(Column::getName)
                 .anyMatch("WAREHOUSE"::equalsIgnoreCase);
         Assertions.assertTrue(hasWarehouse, "task_runs system table should have a WAREHOUSE column");
+    }
+
+    @Test
+    public void testSchemaContainsTaskSourceColumnAsLast() {
+        List<Column> schema = TaskRunsSystemTable.getInstance().getBaseSchema();
+        boolean hasTaskSource = schema.stream()
+                .map(Column::getName)
+                .anyMatch("TASK_SOURCE"::equalsIgnoreCase);
+        Assertions.assertTrue(hasTaskSource, "task_runs system table should have a TASK_SOURCE column");
+        Assertions.assertEquals("TASK_SOURCE", schema.get(schema.size() - 1).getName());
+    }
+
+    @Test
+    public void testQuerySetsTaskSourceFromStatus(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked TaskManager taskManager) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setQueryId("q3");
+        status.setTaskName("task3");
+        status.setDbName("db1");
+        status.setSource(Constants.TaskSource.MV);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getTaskManager();
+                minTimes = 0;
+                result = taskManager;
+
+                taskManager.getMatchedTaskRunStatus((TGetTasksParams) any);
+                result = Lists.newArrayList(status);
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext context, String catalogName, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        TGetTaskRunInfoResult result = TaskRunsSystemTable.query(new TGetTasksParams());
+
+        Assertions.assertEquals(1, result.getTask_runs().size());
+        Assertions.assertEquals("MV", result.getTask_runs().get(0).getTask_source());
     }
 
     @Test

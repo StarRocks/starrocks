@@ -14,11 +14,9 @@
 
 package com.starrocks.alter.reshard.presplit;
 
-import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 
 import java.util.Iterator;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -33,9 +31,11 @@ import java.util.Objects;
  * return canned rows from an in-memory list. Both share this contract:
  *
  * <ul>
- *   <li>{@code rows} streams sort-key tuples — each row is a
- *       {@code List<Variant>} whose order matches
- *       {@link SampleRequest#getSortKey}.</li>
+ *   <li>{@code rows} streams {@link SampleRow}s — each row carries a
+ *       sort-key tuple whose order matches {@link SampleRequest#getSortKey},
+ *       and an optional partition-source tuple whose order matches
+ *       {@link SampleRequest#getPartitionSourceColumns} (empty when the
+ *       request projected no partition-source columns).</li>
  *   <li>{@code estimates} carry the executor's best guess of the FULL input
  *       size (not the sample size); used downstream for tablet-count selection.</li>
  *   <li>Exceptions thrown from {@link #execute} or from the row iterator
@@ -49,7 +49,7 @@ public interface SampleSubqueryExecutor {
     SampleExecution execute(SampleRequest request) throws StarRocksException;
 
     /** One run of a sampling sub-query. */
-    record SampleExecution(Iterator<List<Variant>> rows, Estimates estimates) {
+    record SampleExecution(Iterator<SampleRow> rows, Estimates estimates) {
         public SampleExecution {
             Objects.requireNonNull(rows, "rows");
             Objects.requireNonNull(estimates, "estimates");

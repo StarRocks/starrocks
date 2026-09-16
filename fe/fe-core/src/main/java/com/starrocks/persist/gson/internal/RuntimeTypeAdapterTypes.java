@@ -19,9 +19,14 @@ import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeMvSortKeyRewriteJob;
+import com.starrocks.alter.LakeRangeRewriteSchemaChangeJob;
+import com.starrocks.alter.LakeRangeRollupJob;
 import com.starrocks.alter.LakeRollupJob;
+import com.starrocks.alter.LakeTableAddIndexJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
+import com.starrocks.alter.LakeTableDropIndexJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.MergePartitionJob;
 import com.starrocks.alter.OnlineOptimizeJobV2;
@@ -65,6 +70,7 @@ import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.BoolVariant;
 import com.starrocks.catalog.DateVariant;
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -240,9 +246,14 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
                         .registerSubtype(MergePartitionJob.class, "MergePartitionJob")
                         .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
+                        .registerSubtype(LakeRangeRewriteSchemaChangeJob.class, "LakeRangeRewriteSchemaChangeJob")
+                        .registerSubtype(LakeRangeRollupJob.class, "LakeRangeRollupJob")
+                        .registerSubtype(LakeMvSortKeyRewriteJob.class, "LakeMvSortKeyRewriteJob")
                         .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
                         .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
-                        .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
+                        .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")
+                        .registerSubtype(LakeTableAddIndexJob.class, "LakeTableAddIndexJob")
+                        .registerSubtype(LakeTableDropIndexJob.class, "LakeTableDropIndexJob");
 
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(AlterJobV2.class, alter_job_v2_type_adapter_factory);
 
@@ -449,6 +460,7 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(LargeIntVariant.class, "LargeIntVariant")
                         .registerSubtype(StringVariant.class, "StringVariant")
                         .registerSubtype(DateVariant.class, "DateVariant")
+                        .registerSubtype(DecimalVariant.class, "DecimalVariant")
                         // Canonical colocate boundaries serialized via SplittingTablet contain
                         // NullVariant suffixes; MinVariant / MaxVariant cover the unbounded
                         // sentinel cases observed in ColocateRange persistence.

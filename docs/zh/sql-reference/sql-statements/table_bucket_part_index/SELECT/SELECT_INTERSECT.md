@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INTERSECT calculates the intersection of multiple query results."
 sidebar_label: "INTERSECT"
 ---
 

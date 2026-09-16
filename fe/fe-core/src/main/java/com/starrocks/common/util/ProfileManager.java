@@ -38,11 +38,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -72,6 +74,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  */
 public class ProfileManager implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(ProfileManager.class);
+    // Dedicated profile logger writing to fe.profile.log, whose JSON layout uses the much larger
+    // sys_log_json_profile_max_string_length cap, so large profiles are not truncated (unlike fe.log,
+    // which caps the JSON message field at sys_log_json_max_string_length).
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+    // Single-line JSON, matching the query profile log written by StmtExecutor.
+    private static final Gson GSON = new Gson();
     private static ProfileManager INSTANCE = null;
     public static final String QUERY_ID             = ProfileKeyDictionary.QUERY_ID;
     public static final String START_TIME           = ProfileKeyDictionary.START_TIME;
@@ -229,7 +237,56 @@ public class ProfileManager implements MemoryTrackable {
 
         LOG.debug("push profile for query: {}, remove profile for query: {}", queryId, removedQueryId);
 
+        if (Config.enable_print_load_profile_to_log
+                && "Load".equals(element.infoStrings.get(QUERY_TYPE))) {
+            PROFILE_LOG.info(GSON.toJson(buildLoadQueryDetail(element, profileString)));
+        }
+
         return profileString;
+    }
+
+    // Build a QueryDetail for a load profile so it is logged in the same single-line JSON shape as
+    // the query profile log (StmtExecutor). Numeric execution stats that loads do not expose are left
+    // at their defaults, matching how query profiles serialize unavailable values.
+    private static QueryDetail buildLoadQueryDetail(ProfileElement element, String profileString) {
+        Map<String, String> info = element.infoStrings;
+        QueryDetail detail = new QueryDetail();
+        detail.setQueryId(info.get(QUERY_ID));
+        detail.setQuery(false);
+        detail.setStartTime(element.startTimeMs);
+        detail.setEndTime(element.endTimeMs);
+        if (element.startTimeMs > 0 && element.endTimeMs >= element.startTimeMs) {
+            detail.setLatency(element.endTimeMs - element.startTimeMs);
+        }
+        detail.setDatabase(info.get(DEFAULT_DB));
+        detail.setSql(info.get(SQL_STATEMENT));
+        detail.setUser(info.get(USER));
+        if (info.get(WAREHOUSE_CNGROUP) != null) {
+            detail.setWarehouse(info.get(WAREHOUSE_CNGROUP));
+        }
+        detail.setState(toLoadState(info.get(QUERY_STATE)));
+        detail.setProfile(profileString);
+        return detail;
+    }
+
+    // Map the QUERY_STATE string recorded by the various load paths to a QueryMemState. The state field is
+    // kept so downstream consumers of the profile log (e.g. BYOC / manager) that expect it stay compatible.
+    // Spellings differ: stream/routine load use "Finished"/"Aborted", broker load "Finished"/"Running", and
+    // merge commit the upper-case TaskState name ("FINISHED"/"ABORTED"/"CANCELLED"/...); anything not
+    // recognized as terminal success/cancel/abort maps to RUNNING. This mirrors the profile's own QUERY_STATE
+    // (the same value shown by SHOW PROFILELIST). Caveat: LoadLoadingTask records "Finished" from its finally
+    // block even when a broker load failed, so such a load is reported FINISHED here too; fixing that
+    // precisely belongs in the load task that builds the profile, not in this serializer.
+    private static QueryDetail.QueryMemState toLoadState(String state) {
+        if ("Finished".equalsIgnoreCase(state)) {
+            return QueryDetail.QueryMemState.FINISHED;
+        } else if ("Cancelled".equalsIgnoreCase(state)) {
+            return QueryDetail.QueryMemState.CANCELLED;
+        } else if ("Aborted".equalsIgnoreCase(state)) {
+            return QueryDetail.QueryMemState.FAILED;
+        } else {
+            return QueryDetail.QueryMemState.RUNNING;
+        }
     }
 
     public boolean hasProfile(String queryId) {

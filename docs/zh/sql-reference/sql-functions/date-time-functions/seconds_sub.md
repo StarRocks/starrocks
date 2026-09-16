@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从日期或日期时间中减去指定的秒数。"
 ---
 
 # seconds_sub

@@ -15,25 +15,59 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class SlotEstimatorTest extends SchedulerTestBase {
+    private String oldQueryQueueSlotsEstimatorStrategy;
+    private int oldQueryQueueV2ConcurrencyLevel;
+    private long oldQueryQueueV2MemBytesPerSlot;
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+    }
+
+    @BeforeEach
+    public void setUp() {
+        oldQueryQueueSlotsEstimatorStrategy = Config.query_queue_slots_estimator_strategy;
+        oldQueryQueueV2ConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        oldQueryQueueV2MemBytesPerSlot = Config.query_queue_v2_mem_bytes_per_slot;
+        Config.query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
+        Config.query_queue_v2_concurrency_level = 4;
+        Config.query_queue_v2_mem_bytes_per_slot = 0;
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.query_queue_slots_estimator_strategy = oldQueryQueueSlotsEstimatorStrategy;
+        Config.query_queue_v2_concurrency_level = oldQueryQueueV2ConcurrencyLevel;
+        Config.query_queue_v2_mem_bytes_per_slot = oldQueryQueueV2MemBytesPerSlot;
+        BackendResourceStat.getInstance().reset();
     }
 
     @Test
@@ -44,172 +78,217 @@ public class SlotEstimatorTest extends SchedulerTestBase {
 
     @Test
     public void testMemoryBasedSlotsEstimator() throws Exception {
-        final int numWorkers = 3;
-        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
-        QueryQueueOptions opts =
-                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(16, 3, 16, 64L * 1024 * 1024 * 1024,
+                        1024, 4096, 100));
         SlotEstimatorFactory.MemoryBasedSlotsEstimator estimator = new SlotEstimatorFactory.MemoryBasedSlotsEstimator();
 
-        DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
+        DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(pipeline_dop=8)*/ * FROM lineitem");
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(3);
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(1000000L);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
 
-        connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        connectContext.getAuditEventBuilder().setPlanMemCosts(1024L);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
 
-        connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers - 10);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        connectContext.getAuditEventBuilder().setPlanMemCosts(1024.5);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(2);
 
-        connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers + 10);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        connectContext.getAuditEventBuilder().setPlanMemCosts(1025L);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(2);
 
-        connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers * 100);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
+        connectContext.getAuditEventBuilder().setPlanMemCosts(1024L * 1000);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(12);
     }
 
     @Test
-    public void testParallelismBasedSlotsEstimator() throws Exception {
-        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator = new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
-        final int numWorkers = 3;
-        final int numCoresPerWorker = 16;
-        final int numRowsPerWorker = 4096;
-        final int dop = numCoresPerWorker / 2;
+    public void testMemoryBasedSlotsEstimatorClampsTotalPlanMemCostsByMemoryBudget() throws Exception {
+        final int numCores = 16;
+        final long memLimitBytes = 64L * 1024 * 1024 * 1024;
+        final long memBytesPerSlot = 32L * 1024 * 1024 * 1024;
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1, numCores);
+        BackendResourceStat.getInstance().setMemLimitBytesOfBe(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1, memLimitBytes);
+        Config.query_queue_slots_estimator_strategy = "MBE";
+        Config.query_queue_v2_concurrency_level = numCores;
+        Config.query_queue_v2_mem_bytes_per_slot = memBytesPerSlot;
+
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotEstimatorFactory.MemoryBasedSlotsEstimator estimator = new SlotEstimatorFactory.MemoryBasedSlotsEstimator();
+        DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(pipeline_dop=16)*/ * FROM lineitem");
+
+        connectContext.getAuditEventBuilder().setPlanMemCosts(100 * (double) memBytesPerSlot);
+
+        assertThat(opts.v2().getTotalSlots()).isEqualTo(8);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(8);
+    }
+
+    @Test
+    public void testCpuCostBasedSlotsEstimator() throws Exception {
+        SlotEstimatorFactory.CpuCostBasedSlotsEstimator estimator =
+                new SlotEstimatorFactory.CpuCostBasedSlotsEstimator();
         QueryQueueOptions opts = new QueryQueueOptions(true,
-                new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
+                new QueryQueueOptions.V2(16, 3, 16, 64L * 1024 * 1024 * 1024,
+                        0, 4096, 100));
 
-        {
-            DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(20 / 3 * 3);
-        }
+        DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(pipeline_dop=8)*/ * FROM lineitem");
 
-        String sql = "SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
-                "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: L_ORDERKEY = 18: L_ORDERKEY\n" +
-                "  |  \n" +
-                "  |----3:EXCHANGE\n" +
-                "  |    \n" +
-                "  1:EXCHANGE");
-        assertContains(plan, "  RESULT SINK\n" +
-                "\n" +
-                "  8:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(35: count)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  7:EXCHANGE");
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, 10);
-            setNodeCardinality(coordinator, 3, 10);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(20 / 3 * 3);
-        }
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
-        }
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
-        }
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * 7);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(7 * numWorkers);
-        }
-        {
-            DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(pipeline_dop=100)*/ " +
-                    "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey");
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * 100);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
-        }
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(-1L);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
 
-        {
-            DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(pipeline_dop=19)*/ " +
-                    "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey");
-            // The exchange source node of the sink node only on one BE.
-            setNodeCardinality(coordinator, 7, numRowsPerWorker * 19);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(19);
-        }
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(100L);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
 
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100. * numWorkers * dop * 1 / 4);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop / 2 * numWorkers);
-        }
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100. * numWorkers * dop * 3 / 4);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * 3 / 4 * numWorkers);
-        }
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100. * numWorkers * dop * 5 / 4);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
-        }
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(100.5);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(2);
+
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(101L);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(2);
+
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(100L * 1000);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(12);
+    }
+
+    @Test
+    public void testCpuCostBasedSlotsEstimatorClampsByPipelineDopPerWorker() throws Exception {
+        SlotEstimatorFactory.CpuCostBasedSlotsEstimator estimator =
+                new SlotEstimatorFactory.CpuCostBasedSlotsEstimator();
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(16, 3, 16, 64L * 1024 * 1024 * 1024,
+                        0, 4096, 100));
+
+        DefaultCoordinator coordinator = getScheduler("SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
+                "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey");
+        setNodeCardinality(coordinator, 1, 3 * 4096 * 100);
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(250L);
+
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(3);
+
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(100L * 1000);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(12);
+    }
+
+    @Test
+    public void testParallelismBasedSlotsEstimatorForSingleOlapScanRange() throws Exception {
+        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator =
+                new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
+        final int numWorkers = 3;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
+
+        DefaultCoordinator coordinator = getScheduler("SELECT * FROM nation");
+
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
+    }
+
+    @Test
+    public void testParallelismBasedSlotsEstimatorForOlapScanCappedByWorkers() throws Exception {
+        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator =
+                new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
+        final int numWorkers = 3;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
+
+        DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
+
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(numWorkers);
     }
 
     @Test
     public void testParallelismBasedSlotsEstimatorForConnectorScan() throws Exception {
-        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator = new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
+        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator =
+                new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
         final int numWorkers = 3;
-        final int numCoresPerWorker = 16;
-        final int numRowsPerWorker = 4096;
-        final int dop = numCoresPerWorker / 2;
         QueryQueueOptions opts = new QueryQueueOptions(true,
-                new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
+                new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
 
-        String sql = "SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
-                "count(1) FROM hive0.tpch.lineitem t1 join [shuffle] hive0.tpch.lineitem t2 on t1.l_orderkey = t2.l_orderkey";
+        DefaultCoordinator coordinator = getScheduler("SELECT * FROM hive0.tpch.lineitem");
 
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
-        }
-        {
-            DefaultCoordinator coordinator = getScheduler(sql);
-            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
-            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
-        }
+        // PBE aims for parallelism == number_of_workers; a connector/external scan's split count is not
+        // available at estimation time, so it is treated as a full-parallelism scan (number_of_workers work
+        // units) instead of collapsing to a single slot. The estimate does not depend on cardinality or on
+        // the deprecated query_queue_v2_num_rows_per_slot.
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(numWorkers);
+
+        // Cardinality changes must not change the connector estimate.
+        setNodeCardinality(coordinator, 0, 1L);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(numWorkers);
     }
 
     @Test
-    public void testMaxSlotsEstimator() {
-        SlotEstimator estimator1 = (opts, context, coord) -> 1;
-        SlotEstimator estimator2 = (opts, context, coord) -> 2;
-        SlotEstimator estimator3 = (opts, context, coord) -> 3;
+    public void testParallelismBasedSlotsEstimatorForNoScanQuery() throws Exception {
+        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator =
+                new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, 3, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
 
-        {
-            SlotEstimatorFactory.MaxSlotsEstimator estimator = new SlotEstimatorFactory.MaxSlotsEstimator(estimator1, estimator2);
-            assertThat(estimator.estimateSlots(null, null, null)).isEqualTo(2);
-        }
+        DefaultCoordinator coordinator = getScheduler("SELECT 1");
 
-        {
-            SlotEstimatorFactory.MaxSlotsEstimator estimator = new SlotEstimatorFactory.MaxSlotsEstimator(estimator1, estimator3);
-            assertThat(estimator.estimateSlots(null, null, null)).isEqualTo(3);
-        }
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
+    }
 
-        {
-            SlotEstimatorFactory.MaxSlotsEstimator estimator = new SlotEstimatorFactory.MaxSlotsEstimator(estimator2, estimator3);
-            assertThat(estimator.estimateSlots(null, null, null)).isEqualTo(3);
+    @Test
+    public void testEstimatorPolicyConfigValidationAcceptsLegacyMaxMin() throws Exception {
+        Field field = Config.class.getField("query_queue_slots_estimator_strategy");
+
+        ConfigBase.setConfigField(field, "PBE");
+        assertThat(Config.query_queue_slots_estimator_strategy).isEqualTo("PBE");
+        assertThat(SlotEstimatorFactory.getEstimatorPolicy()).isEqualTo(SlotEstimatorFactory.EstimatorPolicy.PBE);
+
+        ConfigBase.setConfigField(field, "MBE");
+        assertThat(Config.query_queue_slots_estimator_strategy).isEqualTo("MBE");
+        assertThat(SlotEstimatorFactory.getEstimatorPolicy()).isEqualTo(SlotEstimatorFactory.EstimatorPolicy.MBE);
+
+        ConfigBase.setConfigField(field, "CBE");
+        assertThat(Config.query_queue_slots_estimator_strategy).isEqualTo("CBE");
+        assertThat(SlotEstimatorFactory.getEstimatorPolicy()).isEqualTo(SlotEstimatorFactory.EstimatorPolicy.CBE);
+
+        ConfigBase.setConfigField(field, "MAX");
+        assertThat(Config.query_queue_slots_estimator_strategy).isEqualTo("MAX");
+        assertThat(SlotEstimatorFactory.getEstimatorPolicy())
+                .isEqualTo(SlotEstimatorFactory.EstimatorPolicy.createDefault());
+
+        ConfigBase.setConfigField(field, "MIN");
+        assertThat(Config.query_queue_slots_estimator_strategy).isEqualTo("MIN");
+        assertThat(SlotEstimatorFactory.getEstimatorPolicy())
+                .isEqualTo(SlotEstimatorFactory.EstimatorPolicy.createDefault());
+
+        assertThatThrownBy(() -> ConfigBase.setConfigField(field, "BAD_SET"))
+                .isInstanceOf(InvalidConfException.class)
+                .hasMessageContaining("query_queue_slots_estimator_strategy");
+        assertThatThrownBy(() -> ConfigBase.setConfigField(field, "FBE"))
+                .isInstanceOf(InvalidConfException.class)
+                .hasMessageContaining("query_queue_slots_estimator_strategy");
+    }
+
+    @Test
+    public void testPersistedEstimatorPolicyValidationAcceptsLegacyMaxMin(@TempDir Path tempDir)
+            throws Exception {
+        Field configPathField = ConfigBase.class.getDeclaredField("configPath");
+        Field isPersistedField = ConfigBase.class.getDeclaredField("isPersisted");
+        configPathField.setAccessible(true);
+        isPersistedField.setAccessible(true);
+        String oldConfigPath = (String) configPathField.get(null);
+        boolean oldIsPersisted = isPersistedField.getBoolean(null);
+
+        String initialConfig = "query_queue_slots_estimator_strategy = PBE\n";
+        Path configPath = tempDir.resolve("fe.conf");
+        Files.writeString(configPath, initialConfig);
+
+        try {
+            configPathField.set(null, configPath.toString());
+            isPersistedField.setBoolean(null, true);
+
+            ConfigBase.setMutableConfig("query_queue_slots_estimator_strategy", "MAX", true, "root");
+            assertThat(Config.query_queue_slots_estimator_strategy).isEqualTo("MAX");
+            assertThat(SlotEstimatorFactory.getEstimatorPolicy())
+                    .isEqualTo(SlotEstimatorFactory.EstimatorPolicy.createDefault());
+
+            assertThat(Files.readString(configPath)).contains("query_queue_slots_estimator_strategy = MAX");
+        } finally {
+            configPathField.set(null, oldConfigPath);
+            isPersistedField.setBoolean(null, oldIsPersisted);
         }
     }
 
@@ -222,7 +301,8 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.DefaultSlotEstimator.class);
 
         opts = new QueryQueueOptions(true, new QueryQueueOptions.V2(1, 1, 1, 1, 1, 1));
-        assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+        assertThat(SlotEstimatorFactory.create(opts))
+                .isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
     }
 
     private static void setNodeCardinality(DefaultCoordinator coordinator, int nodeId, long cardinality) {
@@ -251,29 +331,39 @@ public class SlotEstimatorTest extends SchedulerTestBase {
     @Test
     public void testCreateWithPolicy() {
         {
+            Config.query_queue_slots_estimator_strategy = "PBE";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts))
+                    .isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
+        }
+        {
             Config.query_queue_slots_estimator_strategy = "MBE";
             QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
             assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MemoryBasedSlotsEstimator.class);
         }
         {
-            Config.query_queue_slots_estimator_strategy = "PBE";
+            Config.query_queue_slots_estimator_strategy = "CBE";
             QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
-            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
+            assertThat(SlotEstimatorFactory.create(opts))
+                    .isInstanceOf(SlotEstimatorFactory.CpuCostBasedSlotsEstimator.class);
         }
         {
             Config.query_queue_slots_estimator_strategy = "MAX";
             QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
-            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+            assertThat(SlotEstimatorFactory.create(opts))
+                    .isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
         }
         {
             Config.query_queue_slots_estimator_strategy = "MIN";
             QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
-            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MinSlotsEstimator.class);
+            assertThat(SlotEstimatorFactory.create(opts))
+                    .isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
         }
         {
             Config.query_queue_slots_estimator_strategy = "BAD_SET";
             QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
-            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+            assertThat(SlotEstimatorFactory.create(opts))
+                    .isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
         }
     }
 
@@ -286,109 +376,92 @@ public class SlotEstimatorTest extends SchedulerTestBase {
     }
 
     @Test
-    public void testEstimateSlotsForExplainWithMemoryBasedPolicy() throws Exception {
-        Config.query_queue_slots_estimator_strategy = "MBE";
-        final int numWorkers = 3;
-        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
-        QueryQueueOptions opts =
-                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
-
-        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
-        ExecPlan execPlan = planPair.second;
-
-        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
-        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
-        assertThat(slots).isEqualTo(3);
-
-        connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers);
-        slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
-        assertThat(slots).isEqualTo(opts.v2().getTotalSlots());
-    }
-
-    @Test
-    public void testEstimateSlotsForExplainWithParallelBasedPolicy() throws Exception {
-        Config.query_queue_slots_estimator_strategy = "PBE";
-        final int numWorkers = 3;
-        final int numCoresPerWorker = 16;
-        final int numRowsPerWorker = 4096;
-        final int dop = numCoresPerWorker / 2;
-        QueryQueueOptions opts = new QueryQueueOptions(true,
-                new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
-
-        String sql = "SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
-                "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey";
-        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        ExecPlan execPlan = planPair.second;
-
-        // Set cardinality on scan nodes in the exec plan
-        setNodeCardinalityInExecPlan(execPlan, 1, numWorkers * numRowsPerWorker * dop);
-
-        // Set planCpuCosts high enough to not be clamped by the CPU-cost clamp
-        connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
-
-        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
-        assertThat(slots).isEqualTo(dop * numWorkers);
-    }
-
-    @Test
-    public void testEstimateSlotsForExplainWithMaxPolicy() throws Exception {
-        Config.query_queue_slots_estimator_strategy = "MAX";
-        final int numWorkers = 3;
-        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
-        QueryQueueOptions opts =
-                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
-
-        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
-        ExecPlan execPlan = planPair.second;
-
-        // Memory-based will return 3, parallelism-based will return different value
-        // MAX should return the larger of the two
-        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
-        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
-        assertThat(slots).isGreaterThanOrEqualTo(1);
-    }
-
-    @Test
-    public void testEstimateSlotsForExplainWithMinPolicy() throws Exception {
-        Config.query_queue_slots_estimator_strategy = "MIN";
-        final int numWorkers = 3;
-        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
-        QueryQueueOptions opts =
-                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
-
-        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
-        ExecPlan execPlan = planPair.second;
-
-        // MIN should return the smaller of memory-based and parallelism-based
-        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
-        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
-        assertThat(slots).isGreaterThanOrEqualTo(1);
-    }
-
-    @Test
-    public void testEstimateSlotsForExplainWithEmptyFragments() {
-        // Test with empty fragments
+    public void testEstimateSlotsForExplainWithParallelismBasedPolicy() throws Exception {
         Config.query_queue_slots_estimator_strategy = "PBE";
         final int numWorkers = 3;
         QueryQueueOptions opts = new QueryQueueOptions(true,
                 new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
 
-        // Create an exec plan with no fragments
-        ExecPlan emptyExecPlan = new ExecPlan();
-        
-        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, emptyExecPlan);
-        assertThat(slots).isEqualTo(1);
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(numWorkers);
     }
 
-    private static void setNodeCardinalityInExecPlan(ExecPlan execPlan, int nodeId, long cardinality) {
-        if (execPlan.getFragments() == null || execPlan.getFragments().isEmpty()) {
-            return;
-        }
-        PlanNode rootNode = execPlan.getFragments().get(0).getPlanRoot();
-        PlanNode node = findPlanNodeById(rootNode, nodeId);
-        if (node != null) {
-            Statistics statistics = Statistics.builder().setOutputRowCount(cardinality).build();
-            node.computeStatistics(statistics);
-        }
+    @Test
+    public void testEstimateSlotsForExplainUsesParallelismBasedPolicyByDefault() throws Exception {
+        final int numWorkers = 3;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
+
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(numWorkers);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithInvalidPolicyFallsBackToParallelismBasedPolicy() throws Exception {
+        Config.query_queue_slots_estimator_strategy = "BAD_SET";
+        final int numWorkers = 3;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
+
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(numWorkers);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithMemoryBasedPolicy() throws Exception {
+        Config.query_queue_slots_estimator_strategy = "MBE";
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(16, 3, 16, 64L * 1024 * 1024 * 1024, 1024, 4096, 100));
+
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(1);
+
+        connectContext.getAuditEventBuilder().setPlanMemCosts(1025L);
+        slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(2);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithCpuCostBasedPolicy() throws Exception {
+        Config.query_queue_slots_estimator_strategy = "CBE";
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(16, 3, 16, 64L * 1024 * 1024 * 1024, 0, 4096, 100));
+
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(-1L);
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(1);
+
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(250L);
+        slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(3);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithParallelismBasedPolicyAndEmptyFragments() {
+        Config.query_queue_slots_estimator_strategy = "PBE";
+        final int numWorkers = 3;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
+
+        ExecPlan emptyExecPlan = new ExecPlan();
+
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, emptyExecPlan);
+        assertThat(slots).isEqualTo(1);
     }
 }

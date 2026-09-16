@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "应用 Lambda 函数至 Map 的键和值，生成新的 Map。"
 ---
 
 # map_apply

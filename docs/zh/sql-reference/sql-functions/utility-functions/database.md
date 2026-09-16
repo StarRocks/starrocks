@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回当前会话所在的数据库名称。"
 ---
 
 # database

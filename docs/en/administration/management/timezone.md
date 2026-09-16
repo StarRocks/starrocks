@@ -1,6 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
-description: "This topic describes how to configure a time zone and the impacts of time zone settings."
+description: "How to configure time zone settings in StarRocks and understand their effects on data storage and queries."
 ---
 
 # Configure a time zone

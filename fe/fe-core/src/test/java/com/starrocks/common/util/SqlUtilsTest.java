@@ -14,11 +14,54 @@
 package com.starrocks.common.util;
 
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class SqlUtilsTest {
+
+    @Test
+    public void testEscapeSqlString() {
+        // Exact escaped body: backslash escaped first, then single quote doubled.
+        Assertions.assertEquals("a''b", SqlUtils.escapeSqlString("a'b"));
+        Assertions.assertEquals("a\\\\b", SqlUtils.escapeSqlString("a\\b"));
+        Assertions.assertEquals("a\\\\''b", SqlUtils.escapeSqlString("a\\'b"));
+        Assertions.assertEquals("plain", SqlUtils.escapeSqlString("plain"));
+    }
+
+    @Test
+    public void testEscapeSqlStringRoundTrips() {
+        // The security property: whatever the input, embedding escapeSqlString(input) inside a
+        // single-quoted literal must parse back to exactly input - i.e. the value can never break
+        // out of the literal. Doubling quotes alone would fail the backslash cases below.
+        String[] payloads = {
+                "t1' OR '1'='1",
+                "q1' UNION SELECT 1 -- ",
+                "x\\",                       // trailing backslash - the escapeSql bypass
+                "x\\' OR 1=1 -- ",
+                "a'b\\c'd",
+                "'; DROP TABLE x; --",
+                "no_special_chars",
+        };
+        for (String payload : payloads) {
+            String literal = "'" + SqlUtils.escapeSqlString(payload) + "'";
+            Assertions.assertEquals(payload, parseStringLiteralValue(literal),
+                    "value escaped into a SQL literal must round-trip unchanged: " + payload);
+        }
+    }
+
+    private static String parseStringLiteralValue(String singleQuotedLiteral) {
+        StatementBase stmt =
+                SqlParser.parseSingleStatement("select " + singleQuotedLiteral, SqlModeHelper.MODE_DEFAULT);
+        SelectRelation select = (SelectRelation) ((QueryStatement) stmt).getQueryRelation();
+        Expr expr = select.getSelectList().getItems().get(0).getExpr();
+        return ((StringLiteral) expr).getStringValue();
+    }
 
     @Test
     public void testIsPreQuerySQL() {

@@ -15,7 +15,9 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <string_view>
 
+#include "base/debug/trace.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "column/chunk.h"
@@ -330,11 +332,9 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
 // 3. Verify final state matches expected merge results based on max(c1) logic
 TEST_P(ConditionUpdateTest, test_condition_update_parallel) {
     // Configure test environment for parallel execution
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_parallel_compaction, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_index_parallel_execution_min_rows, 4096);
-    ConfigResetGuard<int64_t> guard4(&config::pk_index_eager_build_threshold_bytes, 1);
-    ConfigResetGuard<bool> guard5(&config::ignore_merge_condition_inside_same_transaction, true);
+    ConfigResetGuard<int64_t> guard(&config::pk_index_parallel_execution_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard3(&config::ignore_merge_condition_inside_same_transaction, true);
     ConfigResetGuard<int64_t> guard6(&config::lake_publish_version_slow_log_ms, 0);
     // Force small write buffer to ensure SST files are generated (required for parallel path)
     ConfigResetGuard<int64_t> guard7(&config::write_buffer_size, 1);
@@ -430,8 +430,6 @@ TEST_P(ConditionUpdateTest, test_condition_update_parallel) {
 // Scenario mirrors test_condition_update but the compare phase runs on the
 // pk_index_execution_thread_pool; results must be identical to the serial path.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -499,8 +497,6 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel) {
 // compare task to the shared pool, and the final index.upsert is applied per segment
 // after the barrier.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_multi_segment) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -558,8 +554,6 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_multi_segment)
 // so index.get() returns -1 for every row and the per-chunk task skips the condition-column
 // reads. Serial merge then upserts the whole chunk as a single winner range.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_all_new_keys) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
         indexes[i] = i;
@@ -625,10 +619,8 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_all_new_keys) 
 // the PR replaced. The expected merged state mixes baseline rows and update rows
 // row-by-row.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_fragmented_winners) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     const int64_t chunk_size = 5 * 4096; // 20K rows, multiple per-segment chunks
-    ConfigResetGuard<int64_t> guard2(&config::pk_index_parallel_execution_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard(&config::pk_index_parallel_execution_min_rows, 4096);
 
     auto baseline = generate_data(chunk_size, 0, 3, 4); // baseline c1=k*3, c2=k*4
     auto indexes = std::vector<uint32_t>(chunk_size);
@@ -713,6 +705,89 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_fragmented_win
                   }
                   return c1 == c0 * 4 && c2 == c0 * 9;
               }));
+}
+
+// Trace stores counters keyed by `const char*` (pointer comparison), and the literal we
+// pass here may not share an address with the one inside update_manager.cpp across
+// translation units. Match by string value so the lookup is robust against the compiler's
+// string-pooling decisions.
+static int64_t find_trace_metric(const std::map<const char*, int64_t>& metrics, std::string_view name) {
+    for (const auto& [k, v] : metrics) {
+        if (k != nullptr && name == k) {
+            return v;
+        }
+    }
+    return 0;
+}
+
+// Guards the trace-propagation fix for the non-SST parallel compare phase. With >1
+// per-segment chunk every chunk's compare task runs on pk_index_execution_thread_pool, and
+// `process_condition_update_count` is incremented only inside that worker task. Without
+// re-adopting the publish thread's trace in the worker, the counter would land on the
+// worker's (absent) trace and be lost; asserting it is visible in the adopted trace proves
+// the counters are propagated back.
+TEST_P(ConditionUpdateTest, test_condition_update_no_sst_trace_propagation) {
+    const int64_t chunk_size = 2 * 4096; // >1 per-segment chunk so the compare runs on the pool
+    ConfigResetGuard<int64_t> guard(&config::pk_index_parallel_execution_min_rows, 4096);
+
+    auto baseline = generate_data(chunk_size, 0, 3, 4); // baseline c1=k*3, c2=k*4
+    auto indexes = std::vector<uint32_t>(chunk_size);
+    for (int i = 0; i < chunk_size; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(baseline, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Condition update with c1 as the merge column: c1=k*4 > baseline k*3, so the new row
+    // wins on every key. Keys fully overlap the baseline so the compare path actually reads
+    // old condition values (not the all-new fast path).
+    auto update = generate_data(chunk_size, 0, 4, 5);
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_merge_condition("c1")
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(update, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSERT_EQ(chunk_size, check(version, [](int c0, int c1, int c2) { return c1 == c0 * 4 && c2 == c0 * 5; }));
+
+    // process_condition_update_count is incremented once per chunk inside the worker task;
+    // with >1 chunk and trace propagation working it must be visible here.
+    auto metrics = trace->metrics()->Get();
+    int64_t worker_cnt = find_trace_metric(metrics, "process_condition_update_count");
+    ASSERT_GT(worker_cnt, 0) << "worker-thread trace counters were not propagated to the publish trace";
 }
 
 INSTANTIATE_TEST_SUITE_P(ConditionUpdateTest, ConditionUpdateTest, ::testing::Values(PrimaryKeyParam{true}));

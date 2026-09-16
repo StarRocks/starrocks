@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP DATABASE deletes a database from StarRocks."
 ---
 
 # DROP DATABASE

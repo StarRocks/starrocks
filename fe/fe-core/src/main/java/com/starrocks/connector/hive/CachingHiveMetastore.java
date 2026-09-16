@@ -527,7 +527,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                 if (cause instanceof InvocationTargetException &&
                         ((InvocationTargetException) cause).getTargetException() instanceof NoSuchObjectException) {
                     invalidateTable(hiveDbName, hiveViewName);
-                    throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.");
+                    throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.", e);
                 } else {
                     throw e;
                 }
@@ -550,7 +550,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
             if (cause instanceof InvocationTargetException &&
                     ((InvocationTargetException) cause).getTargetException() instanceof NoSuchObjectException) {
                 invalidateTable(hiveDbName, hiveTblName);
-                throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.");
+                throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.", e);
             } else {
                 throw e;
             }

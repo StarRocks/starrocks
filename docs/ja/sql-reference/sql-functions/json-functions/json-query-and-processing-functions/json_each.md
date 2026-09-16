@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "JSONオブジェクトの最外層の要素をキーと値のペアに展開し、各要素ごとに1行のテーブルを返します。"
 ---
 
 # json_each

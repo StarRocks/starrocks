@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SET PARTITION VERSION manually sets a partition to a specific data version."
 ---
 
 # ADMIN SET PARTITION VERSION

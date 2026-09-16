@@ -1,0 +1,43 @@
+-- name: test_spill_hash_join_restore_error @sequential
+
+-- A non-EOF error from a spill restore IO task (e.g. ColumnarSerde::deserialize hitting
+-- a short/corrupt block, injected here via spill_restore_error) reaches the spillable
+-- hash-join probe while it loads spilled build-side partitions
+-- (SpillableHashJoinProbeOperator::_load_partition_build_side -> SpillerReader::restore).
+-- It used to leave BufferedInputStream::get_next with an empty, non-eof buffer and hit
+-- DCHECK(false) (debug/ASan abort) / return an empty chunk (release: silently dropped
+-- build rows and swallowed the error). With the fix get_next surfaces the error, so the
+-- query fails fast and the BE stays up.
+
+set enable_spill=true;
+set spill_mode="force";
+set pipeline_dop=1;
+set spill_operator_min_bytes=1024;
+set spill_mem_table_size=1024;
+
+CREATE TABLE `t0` (
+  `c0` largeint(40) NULL COMMENT "",
+  `c1` largeint(40) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 300000));
+
+admin enable failpoint 'spill_restore_error';
+
+-- Spilling hash join: the build side is spilled then restored during the probe phase;
+-- the injected restore error must fail the query gracefully instead of crashing the BE.
+[UC] select sum(l.c0), sum(r.c1) from t0 l join t0 r on l.c0 = r.c0;
+
+admin disable failpoint 'spill_restore_error';
+
+-- Sanity: with the failpoint off the same spilling join succeeds, proving the BE survived.
+select sum(l.c0), sum(r.c1) from t0 l join t0 r on l.c0 = r.c0;
+
+CLEANUP {
+  admin disable failpoint 'spill_restore_error';
+} END CLEANUP

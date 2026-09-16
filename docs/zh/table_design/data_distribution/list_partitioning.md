@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use list partitioning in StarRocks to partition data by predefined enumeration values for accelerating queries on categorical columns."
 sidebar_position: 20
 ---
 

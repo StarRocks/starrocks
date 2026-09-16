@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据ISO标准计算日期对应一年内的周数，返回1到53之间的整数。"
 ---
 
 # week_iso

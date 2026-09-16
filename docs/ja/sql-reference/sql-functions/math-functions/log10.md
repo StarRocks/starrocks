@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数値の常用対数を計算します。"
 ---
 
 # log10, dlog10

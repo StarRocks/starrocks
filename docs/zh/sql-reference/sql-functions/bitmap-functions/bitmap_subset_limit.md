@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据指定的起始值从 BITMAP 中截取指定个数的元素。"
 ---
 
 # bitmap_subset_limit

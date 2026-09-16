@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "StarRocks 2.3 release notes: persistent primary key indexes, DELETE WHERE on Primary Key tables, global dictionary updates during ingestion, async CREATE TABLE AS SELECT, and resource group enhancements."
+description: "StarRocks 2.3 release notes: persistent primary key indexes, DELETE WHERE on Primary Key tables, global dictionary updates during ingestion, async CREATE..."
 ---
 
 # StarRocks version 2.3

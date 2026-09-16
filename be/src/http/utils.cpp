@@ -41,9 +41,9 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
 
 namespace starrocks {
 

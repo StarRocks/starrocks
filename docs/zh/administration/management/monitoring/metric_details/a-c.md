@@ -13,7 +13,7 @@ description: "Alphabetical a - c"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../monitoring.md)。
 
 :::
 
@@ -21,6 +21,27 @@ description: "Alphabetical a - c"
 
 - 单位：计数
 - 描述：Flink/Spark SQL 创建的扫描任务总数。
+
+## `ai_http_requests_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：传输层已接受的 AI HTTP attempt 总数，包含首次和重试 attempt。仅当 `AIHttpClient::submit` 成功返回时计数；等待准入和同步拒绝的提交不计数。
+
+## `ai_http_retries_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：已接受的 AI HTTP 重试 attempt 总数，不包含首次 attempt。已安排但在传输层接受前被取消的重试不计数，因此该计数器始终小于或等于 `ai_http_requests_total`。
+
+## `ai_http_timeouts_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：因传输超时或 request/query deadline 到期而结束的已接受 AI HTTP attempt 总数。每个已接受 attempt 最多计数一次。取消、关闭以及 HTTP attempt 被接受前到期的 deadline 不计数。
 
 ## `async_delta_writer_queue_count`
 
@@ -305,6 +326,18 @@ description: "Alphabetical a - c"
 - 类型：计数器
 - 描述：块缓存未命中累计字节数。目前，仅计算外部表的缓存未命中字节数。
 
+## `block_cache_hit_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存命中累计次数。
+
+## `block_cache_miss_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存未命中累计次数。
+
 ## `blocks_created_total (Deprecated)`
 
 ## `blocks_deleted_total (Deprecated)`
@@ -381,6 +414,16 @@ description: "Alphabetical a - c"
 
 - 单位：字节
 - 描述：副本克隆使用的内存。
+
+## `cluster_snapshot_consecutive_failures`
+
+- 单位：个
+- 描述：自上次成功以来连续失败的自动化集群快照任务数量。该值持续增长表明快照存储卷配置错误或无法访问。
+
+## `cluster_snapshot_last_finished_time`
+
+- 单位：毫秒
+- 描述：最近一次完成的自动化集群快照的时间（毫秒时间戳）；若从未完成则为 0。
 
 ## `column_metadata_mem_bytes`
 

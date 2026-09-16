@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "dividend を divisor で割った余りを返します。"
 ---
 
 # mod

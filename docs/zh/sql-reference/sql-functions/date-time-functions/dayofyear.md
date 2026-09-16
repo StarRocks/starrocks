@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定日期为对应年中的哪一天。"
 ---
 
 # dayofyear

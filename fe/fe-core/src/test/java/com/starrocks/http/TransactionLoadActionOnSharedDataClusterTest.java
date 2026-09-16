@@ -59,6 +59,11 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
             boolean isLeader() {
                 return true;
             }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
         };
 
         new MockUp<WarehouseComputeResourceProvider>() {

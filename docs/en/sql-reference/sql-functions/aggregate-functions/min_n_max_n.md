@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Returns the `n` smallest or largest values from an expression as an array."
+description: "Returns the n smallest or largest values from an expression as an array."
 ---
 
 # MIN_N, MAX_N

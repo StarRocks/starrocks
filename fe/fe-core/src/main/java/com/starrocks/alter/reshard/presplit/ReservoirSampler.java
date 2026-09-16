@@ -32,7 +32,8 @@ import java.util.Objects;
  * row still yields a non-empty {@link SampleSet}.
  *
  * <p>The byte limit is enforced against an approximate width: the sum of each
- * value's {@code Variant.getStringValue().length()} in UTF-16 code units. For
+ * value's {@code Variant.getStringValue().length()} in UTF-16 code units (over
+ * the sort-key tuple and, when populated, the partition-source tuple). For
  * ASCII this matches the on-wire UTF-8 byte count; for multi-byte characters
  * (CJK, emoji) the real UTF-8 byte count can be 2-3x higher. The limit is a
  * soft FE-memory guard, not a precise byte counter.
@@ -45,38 +46,97 @@ public final class ReservoirSampler implements Sampler {
         this.executor = Objects.requireNonNull(executor, "executor");
     }
 
+    /**
+     * Production sampler for a single partition of an internal (OLAP) table, sampling
+     * by a (possibly new) sort key. Wraps the package-private
+     * {@link InternalPartitionSampleSubqueryExecutor} so callers outside this package
+     * (e.g. the range-rewrite schema-change job) can obtain a ready-to-use {@link Sampler}
+     * without reaching into the executor directly.
+     */
+    public static ReservoirSampler forInternalPartition() {
+        return new ReservoirSampler(new InternalPartitionSampleSubqueryExecutor());
+    }
+
     @Override
     public SampleSet sample(SampleRequest request) throws StarRocksException {
         Objects.requireNonNull(request, "request");
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
         long byteLimit = request.getSampleByteLimit();
-        Iterator<List<Variant>> rowIterator = execution.rows();
+        Iterator<SampleRow> rowIterator = execution.rows();
+        List<Long> secondaryIndexMetaIds = secondaryIndexMetaIds(request.getSecondaryIndexSortKeys());
 
-        List<Tuple> tuples = new ArrayList<>();
+        List<Tuple> sortKeyTuples = new ArrayList<>();
+        List<Tuple> partitionSourceTuples = new ArrayList<>();
+        List<List<IndexTuple>> secondaryIndexTuples = new ArrayList<>();
         long accumulatedBytes = 0L;
 
         while (rowIterator.hasNext()) {
             if (Thread.currentThread().isInterrupted()) {
                 throw new StarRocksException("Sampling interrupted");
             }
-            List<Variant> values = rowIterator.next();
-            if (values == null) {
+            SampleRow row = rowIterator.next();
+            if (row == null) {
                 throw new StarRocksException("Sampling executor returned a null row");
             }
-            long rowBytes = estimateRowBytes(values);
+            // SampleRow's compact constructor rejects null tuple fields; only emptiness
+            // distinguishes the unpartitioned path from the partitioned one here.
+            List<Variant> sortKeyValues = row.sortKeyTuple();
+            List<Variant> partitionSourceValues = row.partitionSourceTuple();
+            List<IndexTuple> rowSecondaryIndexTuples = row.secondaryIndexTuples();
+            long rowBytes = estimateRowBytes(sortKeyValues);
+            if (!partitionSourceValues.isEmpty()) {
+                rowBytes += estimateRowBytes(partitionSourceValues);
+            }
+            for (IndexTuple indexTuple : rowSecondaryIndexTuples) {
+                rowBytes += estimateRowBytes(indexTuple.values());
+            }
             // Always admit the first row so a single oversize row doesn't return an empty
             // SampleSet; for subsequent rows enforce the soft limit.
-            if (!tuples.isEmpty() && accumulatedBytes + rowBytes > byteLimit) {
+            if (!sortKeyTuples.isEmpty() && accumulatedBytes + rowBytes > byteLimit) {
                 break;
             }
             // Defensive copy: production executors may reuse the row's value list across
             // iterator calls. Wrap into an immutable copy so the stored Tuple is stable.
-            tuples.add(new Tuple(ImmutableList.copyOf(values)));
+            sortKeyTuples.add(new Tuple(ImmutableList.copyOf(sortKeyValues)));
+            if (!partitionSourceValues.isEmpty()) {
+                partitionSourceTuples.add(new Tuple(ImmutableList.copyOf(partitionSourceValues)));
+            }
+            if (!secondaryIndexMetaIds.isEmpty()) {
+                secondaryIndexTuples.add(ImmutableList.copyOf(rowSecondaryIndexTuples));
+            }
             accumulatedBytes += rowBytes;
         }
 
-        return tuples.isEmpty() ? SampleSet.EMPTY : new SampleSet(tuples, execution.estimates());
+        if (sortKeyTuples.isEmpty()) {
+            if (secondaryIndexMetaIds.isEmpty()) {
+                return SampleSet.EMPTY;
+            }
+            // A zero-row sample of a request WITH secondary specs still carries the
+            // authoritative id set -- SampleSet.EMPTY has none, which would defeat the
+            // downstream id-set check.
+            return new SampleSet(
+                    List.of(), List.of(), secondaryIndexMetaIds, List.of(), execution.estimates());
+        }
+        // partitionSourceTuples/secondaryIndexTuples are either empty (executor projected
+        // no partition-source columns / request carried no secondary specs) or filled 1:1
+        // with sortKeyTuples. The mid-stream byte-limit break preserves this invariant
+        // because the lists are appended together per row.
+        return new SampleSet(
+                sortKeyTuples, partitionSourceTuples, secondaryIndexMetaIds, secondaryIndexTuples,
+                execution.estimates());
+    }
+
+    /** Extracts the authoritative secondary index-id set, in the request's declared spec order. */
+    private static List<Long> secondaryIndexMetaIds(List<SecondaryIndexSpec> secondaryIndexSortKeys) {
+        if (secondaryIndexSortKeys.isEmpty()) {
+            return List.of();
+        }
+        List<Long> metaIds = new ArrayList<>(secondaryIndexSortKeys.size());
+        for (SecondaryIndexSpec secondaryIndexSpec : secondaryIndexSortKeys) {
+            metaIds.add(secondaryIndexSpec.indexMetaId());
+        }
+        return metaIds;
     }
 
     /**

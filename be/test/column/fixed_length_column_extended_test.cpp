@@ -20,8 +20,8 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
-#include "compute_env/sorting/sorting.h"
 #include "types/date_value.h"
 
 namespace starrocks {
@@ -650,7 +650,7 @@ TEST(FixedLengthColumnTest, test_replicate) {
     column->append(7);
     column->append(3);
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(3);
     offsets.emplace_back(5);

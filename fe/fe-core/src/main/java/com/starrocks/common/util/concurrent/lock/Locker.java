@@ -19,11 +19,8 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.util.concurrent.LockUtils;
-import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -123,48 +120,22 @@ public class Locker {
     // --------------- Database locking API ---------------
 
     /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
+     * Acquire the database lock of the given type through {@link LockManager}.
      */
-    @Deprecated
     public void lockDatabase(Long dbId, LockType lockType) {
-        if (Config.lock_manager_enabled) {
-            Preconditions.checkState(dbId != null);
-            try {
-                lock(dbId, lockType, 0);
-            } catch (LockException e) {
-                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            }
-        } else {
-            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(dbId);
-            if (database == null) {
-                // Database has been dropped
-                return;
-            }
-            QueryableReentrantReadWriteLock rwLock = database.getRwLock();
-            if (lockType.isWriteLock()) {
-                LockUtils.dbWriteLock(rwLock, database.getId(), database.getFullName(), database.getSlowLockLogStats());
-            } else {
-                LockUtils.dbReadLock(rwLock, database.getId(), database.getFullName(), database.getSlowLockLogStats());
-            }
+        Preconditions.checkState(dbId != null);
+        try {
+            lock(dbId, lockType, 0);
+        } catch (LockException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 
     /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
+     * Acquire the database lock and return whether the database still exists after the lock is held.
      */
-    @Deprecated
     public boolean lockDatabaseAndCheckExist(Database database, LockType lockType) {
-        if (Config.lock_manager_enabled) {
-            lockDatabase(database.getId(), lockType);
-        } else {
-            if (lockType.isWriteLock()) {
-                LockUtils.dbWriteLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            } else {
-                LockUtils.dbReadLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            }
-        }
+        lockDatabase(database.getId(), lockType);
         return checkExistenceInLock(database, lockType);
     }
 
@@ -172,19 +143,8 @@ public class Locker {
      * Lock table with intensive db lock and check db's existence.
      */
     public boolean lockTableAndCheckDbExist(Database database, long tableId, LockType lockType) {
-        if (Config.lock_manager_enabled) {
-            lockTableWithIntensiveDbLock(database.getId(), tableId, lockType);
-            return checkExistenceInLock(database, tableId, lockType);
-        } else {
-            if (lockType.isWriteLock()) {
-                LockUtils.dbWriteLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            } else {
-                LockUtils.dbReadLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            }
-            return checkExistenceInLock(database, lockType);
-        }
+        lockTableWithIntensiveDbLock(database.getId(), tableId, lockType);
+        return checkExistenceInLock(database, tableId, lockType);
     }
 
     private boolean checkExistenceInLock(Database database, long tableId, LockType lockType) {
@@ -197,77 +157,34 @@ public class Locker {
     }
 
     /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
+     * Try to acquire the database lock of the given type through {@link LockManager} within the timeout.
      */
-    @Deprecated
     public boolean tryLockDatabase(Long dbId, LockType lockType, long timeout, TimeUnit unit) {
-        if (Config.lock_manager_enabled) {
-            Preconditions.checkState(dbId != null);
-            try {
-                lock(dbId, lockType, timeout);
-                return true;
-            } catch (LockTimeoutException e) {
-                return false;
-            } catch (LockException e) {
-                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            }
-        } else {
-            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(dbId);
-            if (database == null) {
-                // Database has been dropped
-                return true;
-            }
-            Preconditions.checkArgument(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
-            boolean acquired = false;
-            QueryableReentrantReadWriteLock rwLock = database.getRwLock();
-            try {
-                if (lockType.isWriteLock()) {
-                    acquired = LockUtils.tryDbWriteLock(rwLock, timeout, unit, database.getId(),
-                            database.getFullName(), database.getSlowLockLogStats());
-                } else {
-                    acquired = LockUtils.tryDbReadLock(rwLock, timeout, unit, database.getId(),
-                            database.getFullName(), database.getSlowLockLogStats());
-                }
-            } catch (InterruptedException e) {
-                LOG.warn("failed to try {} lock on db[{}-{}]",
-                        lockType, database.getFullName(), database.getId(), e);
-                Thread.currentThread().interrupt();
-            }
-            return acquired;
+        Preconditions.checkState(dbId != null);
+        try {
+            lock(dbId, lockType, timeout);
+            return true;
+        } catch (LockTimeoutException e) {
+            return false;
+        } catch (LockException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 
     /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
+     * Release the database lock of the given type through {@link LockManager}.
      */
     public void unLockDatabase(Long dbId, LockType lockType) {
-        if (Config.lock_manager_enabled) {
-            Preconditions.checkState(dbId != null);
-            release(dbId, lockType);
-        } else {
-            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(dbId);
-            if (database == null) {
-                // Database has been dropped
-                return;
-            }
-            QueryableReentrantReadWriteLock rwLock = database.getRwLock();
-            if (lockType.isWriteLock()) {
-                rwLock.exclusiveUnlock();
-            } else {
-                rwLock.sharedUnlock();
-            }
-        }
+        Preconditions.checkState(dbId != null);
+        release(dbId, lockType);
     }
 
     /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
+     * With {@link LockManager}, db write-lock ownership is tracked per rid rather than per thread,
+     * so this thread-affinity check always reports true.
      */
     public boolean isDbWriteLockHeldByCurrentThread(Database database) {
-        if (Config.lock_manager_enabled) {
-            return true;
-        } else {
-            return database.getRwLock().isWriteLockHeldByCurrentThread();
-        }
+        return true;
     }
 
     private boolean checkExistenceInLock(Database database, LockType lockType) {
@@ -282,17 +199,11 @@ public class Locker {
     // --------------- Table locking API ---------------
 
     /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
+     * Acquire an intention lock on the database followed by the locks on the given tables.
      */
     public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (!Config.lock_manager_enabled) {
-            //Fallback to db lock
-            lockDatabase(dbId, lockType);
-            return;
-        }
-
         LockType intentionType = (lockType == LockType.WRITE)
                 ? LockType.INTENTION_EXCLUSIVE
                 : LockType.INTENTION_SHARED;
@@ -355,11 +266,6 @@ public class Locker {
                                                     long timeout, TimeUnit unit) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (!Config.lock_manager_enabled) {
-            // Fallback to db lock
-            return tryLockDatabase(dbId, lockType, timeout, unit);
-        }
-
         LockType intentionType = (lockType == LockType.WRITE)
                 ? LockType.INTENTION_EXCLUSIVE
                 : LockType.INTENTION_SHARED;
@@ -392,28 +298,23 @@ public class Locker {
     }
 
     /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
+     * Release the table locks and the database intention lock acquired by the intensive-db-lock API.
      */
     public void unLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
-            // Release in reverse of acquire order: tables first, then DB intention.
-            // Releasing the DB intention while still holding table locks would leave
-            // a window for a DROP-DATABASE-style X-on-DB to slip in and invalidate
-            // the table the caller is still operating on.
-            Collections.sort(tableListClone);
-            for (Long rid : tableListClone) {
-                this.release(rid, lockType);
-            }
-            if (lockType == LockType.WRITE) {
-                this.release(dbId, LockType.INTENTION_EXCLUSIVE);
-            } else {
-                this.release(dbId, LockType.INTENTION_SHARED);
-            }
+        // Release in reverse of acquire order: tables first, then DB intention.
+        // Releasing the DB intention while still holding table locks would leave
+        // a window for a DROP-DATABASE-style X-on-DB to slip in and invalidate
+        // the table the caller is still operating on.
+        Collections.sort(tableListClone);
+        for (Long rid : tableListClone) {
+            this.release(rid, lockType);
+        }
+        if (lockType == LockType.WRITE) {
+            this.release(dbId, LockType.INTENTION_EXCLUSIVE);
         } else {
-            //Fallback to db lock
-            unLockDatabase(dbId, lockType);
+            this.release(dbId, LockType.INTENTION_SHARED);
         }
     }
 
@@ -430,25 +331,20 @@ public class Locker {
      */
     public void lockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
-        if (Config.lock_manager_enabled) {
-            LockType intentionType = (lockType == LockType.WRITE)
-                    ? LockType.INTENTION_EXCLUSIVE
-                    : LockType.INTENTION_SHARED;
-            boolean dbLockHeld = false;
-            try {
-                this.lock(dbId, intentionType, 0);
-                dbLockHeld = true;
-                this.lock(tableId, lockType, 0);
-            } catch (LockException e) {
-                // Roll back the DB intention lock if step 1 succeeded but the
-                // table-lock acquisition failed (e.g. deadlock victim, interrupt).
-                // Otherwise the caller would leak an IS/IX lock on the DB.
-                rollbackPartialIntensiveLock(dbId, intentionType, dbLockHeld, Collections.emptyList(), lockType);
-                throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            }
-        } else {
-            //Fallback to db lock
-            lockDatabase(dbId, lockType);
+        LockType intentionType = (lockType == LockType.WRITE)
+                ? LockType.INTENTION_EXCLUSIVE
+                : LockType.INTENTION_SHARED;
+        boolean dbLockHeld = false;
+        try {
+            this.lock(dbId, intentionType, 0);
+            dbLockHeld = true;
+            this.lock(tableId, lockType, 0);
+        } catch (LockException e) {
+            // Roll back the DB intention lock if step 1 succeeded but the
+            // table-lock acquisition failed (e.g. deadlock victim, interrupt).
+            // Otherwise the caller would leak an IS/IX lock on the DB.
+            rollbackPartialIntensiveLock(dbId, intentionType, dbLockHeld, Collections.emptyList(), lockType);
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 

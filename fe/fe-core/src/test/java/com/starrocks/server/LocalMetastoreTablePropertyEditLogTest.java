@@ -1745,10 +1745,49 @@ public class LocalMetastoreTablePropertyEditLogTest {
         // Cover OlapTable setters/getters + getProperties export path.
         olapTable.setEnableStatisticCollectOnFirstLoad(false);
         Assertions.assertFalse(olapTable.enableStatisticCollectOnFirstLoad());
+        Assertions.assertTrue(olapTable.isSetEnableStatisticCollectOnFirstLoad());
         olapTable.setTableQueryTimeout(120);
         Assertions.assertEquals(120, olapTable.getTableQueryTimeout());
         Map<String, String> exported = olapTable.getProperties();
+        Assertions.assertEquals("false", exported.get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
         Assertions.assertEquals("120", exported.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+
+        OlapTable unsetFirstLoadTable = createHashOlapTable(TABLE_ID + 9202, TABLE_NAME + "_first_load_unset", 3);
+        Assertions.assertFalse(unsetFirstLoadTable.isSetEnableStatisticCollectOnFirstLoad());
+        Assertions.assertFalse(unsetFirstLoadTable.getProperties()
+                .containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
+
+        unsetFirstLoadTable.setEnableStatisticCollectOnFirstLoad(true);
+        Assertions.assertTrue(unsetFirstLoadTable.isSetEnableStatisticCollectOnFirstLoad());
+        Assertions.assertEquals("true", unsetFirstLoadTable.getProperties()
+                .get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
+
+        Map<String, String> legacyDefaultTrueProperties = new HashMap<>();
+        legacyDefaultTrueProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true");
+        TableProperty legacyDefaultTrueTableProperty = new TableProperty(legacyDefaultTrueProperties)
+                .buildEnableStatisticCollectOnFirstLoad();
+        Assertions.assertTrue(legacyDefaultTrueTableProperty.enableStatisticCollectOnFirstLoad());
+        Assertions.assertFalse(legacyDefaultTrueTableProperty.isSetEnableStatisticCollectOnFirstLoad());
+
+        Map<String, String> legacyExplicitFalseProperties = new HashMap<>();
+        legacyExplicitFalseProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
+        TableProperty legacyExplicitFalseTableProperty = new TableProperty(legacyExplicitFalseProperties)
+                .buildEnableStatisticCollectOnFirstLoad();
+        Assertions.assertFalse(legacyExplicitFalseTableProperty.enableStatisticCollectOnFirstLoad());
+        Assertions.assertTrue(legacyExplicitFalseTableProperty.isSetEnableStatisticCollectOnFirstLoad());
+
+        Database replayDb = new Database(DB_ID + 9202, DB_NAME + "_first_load_replay");
+        metastore.unprotectCreateDb(replayDb);
+        OlapTable replayTable = createHashOlapTable(TABLE_ID + 9203, TABLE_NAME + "_first_load_replay", 3);
+        replayDb.registerTableUnlocked(replayTable);
+
+        Map<String, String> replayProperties = new HashMap<>();
+        replayProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true");
+        ModifyTablePropertyOperationLog replayLog = new ModifyTablePropertyOperationLog(
+                replayDb.getId(), replayTable.getId(), replayProperties);
+        metastore.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, replayLog);
+        Assertions.assertTrue(replayTable.enableStatisticCollectOnFirstLoad());
+        Assertions.assertTrue(replayTable.isSetEnableStatisticCollectOnFirstLoad());
     }
 
     @Test

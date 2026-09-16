@@ -26,24 +26,15 @@
 namespace starrocks {
 
 class Status;
-class TabletColumn;
 class TabletSchema;
 
 class ChunkHelper {
 public:
-    // Convert TabletColumn to Field. This function will generate format
-    // V2 type: DATE_V2, TIMESTAMP, DECIMAL_V2
-    static Field convert_field(ColumnId id, const TabletColumn& c);
-
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
     static Schema convert_schema(const TabletSchemaCSPtr& schema);
 
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
     static Schema convert_schema(const TabletSchemaCSPtr& schema, const std::vector<ColumnId>& cids);
-
-    // Convert TabletColumns to Schema order by col_names
-    static SchemaPtr convert_schema(const std::vector<TabletColumn*>& columns,
-                                    const std::vector<std::string_view>& col_names);
 
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static Schema get_short_key_schema(const TabletSchemaCSPtr& schema);
@@ -60,29 +51,17 @@ public:
 
     // Padding one char column
     static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
-};
 
-// Accumulate small chunk into desired size
-class ChunkAccumulator {
-public:
-    // Avoid accumulate too many chunks in case that chunks' selectivity is very low
-    static inline size_t kAccumulateLimit = 64;
-
-    ChunkAccumulator() = default;
-    ChunkAccumulator(size_t desired_size);
-    void set_desired_size(size_t desired_size);
-    void reset();
-    void finalize();
-    bool empty() const;
-    bool reach_limit() const;
-    Status push(ChunkPtr&& chunk);
-    ChunkPtr pull();
-
-private:
-    size_t _desired_size;
-    ChunkPtr _tmp_chunk;
-    std::deque<ChunkPtr> _output;
-    size_t _accumulate_count = 0;
+    // Returns CapacityLimitExceed when a column in `chunk` holds more than it can address. A
+    // BinaryColumn addresses its bytes with uint32 offsets, so past 4GB they wrap and stop
+    // describing its own buffer, and a wrap is not reliably an error: reading the offsets throws
+    // when the span it produces goes negative, reads out of bounds when it does not, and copies
+    // the right number of bytes from an address 2^32 too low when the span stays inside a single
+    // wrap segment. Worth calling wherever a chunk's offsets are about to be read and the caller
+    // would rather refuse the chunk than find out which of those happens. `what` names the chunk
+    // in the message; the limit itself comes from the column, and is read from its byte size
+    // rather than from the offsets, so it stays meaningful once they have wrapped.
+    static Status reject_if_over_capacity(const Chunk& chunk, std::string_view what, int64_t tablet_id, int64_t txn_id);
 };
 
 class ChunkPipelineAccumulator {

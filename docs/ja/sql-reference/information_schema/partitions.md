@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "partitionsはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # partitions

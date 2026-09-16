@@ -26,14 +26,13 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -42,6 +41,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -431,6 +431,10 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
+    // A column addresses its bytes with uint32 offsets, so a chunk wider than that cannot be
+    // carried through to apply. Fail the load here, where the statement can still be retried with
+    // less data per batch, rather than let it commit and leave apply to fail on every retry.
+    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(chunk, "load chunk", _opt.tablet_id, _opt.txn_id));
     ADD_COUNTER_RELAXED(_stats.write_count, 1);
     ADD_COUNTER_RELAXED(_stats.row_count, size);
     int64_t start_time = MonotonicNanos();
@@ -441,7 +445,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
-            is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
+            is_tracker_hit_hard_limit(RuntimeEnv::GetInstance()->load_mem_tracker(),
                                       config::load_process_max_memory_hard_limit_ratio)) {
             return Status::MemoryLimitExceeded(
                     "memory limit exceeded, please reduce load frequency or increase config "

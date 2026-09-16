@@ -34,6 +34,8 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.QueryProgressUtils;
 import com.starrocks.http.ActionController;
@@ -57,8 +59,16 @@ public class QueryProgressAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/query/progress", new QueryProgressAction(controller));
     }
 
+    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String queryId = request.getSingleParameter("query_id");
         if (queryId == null) {
             response.getContent().append("not valid parameter");

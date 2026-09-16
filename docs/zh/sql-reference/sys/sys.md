@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks cluster maintains sys database with system-defined views for metadata information."
 ---
 
 # 系统元数据库

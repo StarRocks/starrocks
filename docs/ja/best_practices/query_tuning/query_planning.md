@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks でのクエリプランとプロファイルの理解と解釈を通じた、遅いクエリの診断と改善。"
 sidebar_position: 20
 ---
 

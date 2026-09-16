@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "共有なし/共有データクラスタでのテーブルレプリカ数の指定と管理方法について説明します。"
 sidebar_position: 70
 ---
 

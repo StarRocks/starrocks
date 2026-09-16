@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "expr 内で最も頻繁に出現する上位 k 個のアイテム値とその概算カウントを返します。"
 ---
 
 # approx_top_k

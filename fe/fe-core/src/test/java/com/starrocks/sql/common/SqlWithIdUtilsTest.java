@@ -173,7 +173,6 @@ public class SqlWithIdUtilsTest {
         String sql = "select tbl1.k1, tbl2.k2 from test.tbl1 join test.tbl2 on tbl1.k1 = tbl2.k1";
         Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table tbl1 = test.getTable("tbl1");
-        Table tbl2 = test.getTable("tbl2");
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             String encode = SqlWithIdUtils.encode(statementBase, connectContext);

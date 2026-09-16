@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "StarRocks Operator で Kubernetes クラスタ上の StarRocks クラスタをデプロイ・管理する方法。"
 ---
 
 # Operator を使用して StarRocks をデプロイする
@@ -36,7 +38,7 @@ Amazon Elastic Kubernetes Service (EKS) や Google Kubernetes Engine (GKE) ク�
 
 - 自己管理の Kubernetes クラスターを作成する
 
-  [kubeadm を使用したクラスターのブートストラップ](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) に記載された手順に従って、自己管理の Kubernetes クラスターを作成します。[Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) と [Docker Desktop](https://docs.docker.com/desktop/) を使用して、最小限の手順でシングルノードのプライベート Kubernetes クラスターを作成できます。
+  [kubeadm を使用したクラスターのブートストラップ](https://kubernetes.io/docs) に記載された手順に従って、自己管理の Kubernetes クラスターを作成します。Minikube と Docker Desktop を使用して、最小限の手順でシングルノードのプライベート Kubernetes クラスターを作成できます。
 
 ### StarRocks Operator をデプロイする
 

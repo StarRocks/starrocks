@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "JSONオブジェクトをJSON文字列に変換します。"
 ---
 
 # json_string

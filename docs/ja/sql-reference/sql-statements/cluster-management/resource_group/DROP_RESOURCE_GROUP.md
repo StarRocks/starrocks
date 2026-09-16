@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP RESOURCE GROUP は、指定されたリソースグループを削除します。"
 ---
 
 # DROP RESOURCE GROUP

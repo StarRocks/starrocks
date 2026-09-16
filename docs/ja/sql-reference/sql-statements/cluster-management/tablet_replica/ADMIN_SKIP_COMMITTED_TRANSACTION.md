@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SKIP COMMITTED TRANSACTION は、共有データテーブル上で COMMITTED 状態のままスタックしたトランザクションを強制的に解除します。"
 ---
 
 # ADMIN SKIP COMMITTED TRANSACTION

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "enginesはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # engines

@@ -1,5 +1,7 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
+description: "Query detail API 返回 FE 内存中缓存的最近查询执行详情。"
 ---
 
 # Query detail API

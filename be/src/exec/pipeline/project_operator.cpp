@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "compute_env/global_dict/parser.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"

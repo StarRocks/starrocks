@@ -41,6 +41,7 @@ import static com.starrocks.connector.hive.HiveMetastoreOperations.EXTERNAL_LOCA
 
 public class HiveUtils {
     private static final Logger LOG = LogManager.getLogger(HiveUtils.class);
+
     public static boolean isS3Url(String prefix) {
         return prefix.startsWith("oss://") || prefix.startsWith("s3n://") || prefix.startsWith("s3a://") ||
                 prefix.startsWith("s3://") || prefix.startsWith("cos://") || prefix.startsWith("cosn://") ||
@@ -174,10 +175,10 @@ public class HiveUtils {
             DecimalLiteral decimalKey = (DecimalLiteral) key;
             ScalarType type = (ScalarType) targetType;
             int scale = type.decimalScale();
-    
+
             BigDecimal scaled = decimalKey.getValue()
                     .setScale(scale, RoundingMode.HALF_UP);
-    
+
             key = new DecimalLiteral(scaled);
         }
 

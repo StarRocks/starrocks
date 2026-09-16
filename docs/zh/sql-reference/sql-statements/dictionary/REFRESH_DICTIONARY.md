@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "REFRESH DICTIONARY manually refreshes a dictionary object with latest data."
 ---
 
 # REFRESH DICTIONARY

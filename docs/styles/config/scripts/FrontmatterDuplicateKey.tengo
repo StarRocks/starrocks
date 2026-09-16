@@ -1,0 +1,40 @@
+// FrontmatterDuplicateKey.tengo
+//
+// Flag duplicate top-level keys in the YAML frontmatter of a documentation
+// page.  Docusaurus (js-yaml) fails the build with "duplicated mapping key"
+// when the same key appears twice in frontmatter, e.g. two `description:`
+// lines after a translation merge.  Each duplicate occurrence is flagged.
+//
+// NOTE: text.re_find returns `undefined` (not []) on no match, so `len()` on
+// its result is unsafe.  All result consumption uses `for` loops, which
+// Tengo iterates zero times over undefined.  A sentinel variable (fm_end=-1)
+// distinguishes "no frontmatter found" from "frontmatter found".
+
+text := import("text")
+
+matches := []
+
+// Locate the frontmatter block boundary.  (?s) lets .* cross newlines.
+fm_end := -1
+for m in text.re_find("(?s)^---\r?\n.*?\n---", scope, -1) {
+    fm_end = m[0].end
+    break   // there is only one frontmatter block
+}
+
+if fm_end >= 0 {
+    // Walk every top-level key line (column 0, no indentation) inside the
+    // frontmatter block.  Indented keys and list items are nested values, not
+    // top-level mapping keys, so they are intentionally ignored.
+    seen := {}
+    for m in text.re_find("(?m)^([A-Za-z0-9_.-]+)[ \t]*:", scope, -1) {
+        if m[0].begin >= fm_end {
+            break   // re_find returns matches in order; past frontmatter
+        }
+        key := m[1].text
+        if seen[key] {
+            matches = append(matches, {begin: m[0].begin, end: m[0].end})
+        } else {
+            seen[key] = true
+        }
+    }
+}

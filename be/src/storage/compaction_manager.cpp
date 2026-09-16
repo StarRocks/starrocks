@@ -72,7 +72,7 @@ void CompactionManager::schedule() {
     DCHECK(st.ok());
 
     _dispatch_update_candidate_thread = std::thread([this] { _dispatch_worker(); });
-    Thread::set_thread_name(_dispatch_update_candidate_thread, "dispatch_candidate");
+    Thread::set_thread_name(_dispatch_update_candidate_thread, "disp_upd_cand");
 
     st = ThreadPoolBuilder("compact_pool")
                  .set_min_threads(1)
@@ -80,7 +80,7 @@ void CompactionManager::schedule() {
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
     DCHECK(st.ok());
-    StorageMetrics::instance()->register_thread_pool_metrics("compact_pool", _compaction_pool.get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), compact_pool, _compaction_pool.get());
 
     _scheduler_thread = std::thread([this] { _schedule(); });
     Thread::set_thread_name(_scheduler_thread, "compact_sched");

@@ -27,6 +27,8 @@ namespace starrocks {
 
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index);
 
+bool is_builtin_inverted_index(const TabletIndex& tablet_index);
+
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type);
 
 InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::string& parser_str);
@@ -36,5 +38,7 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
 int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties);
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);
+
+bool get_lower_case_from_properties(const std::map<std::string, std::string>& properties);
 
 } // namespace starrocks

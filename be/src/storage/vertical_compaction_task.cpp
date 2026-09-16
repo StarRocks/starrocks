@@ -24,7 +24,6 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "runtime/current_thread.h"
-#include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
@@ -33,6 +32,7 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/row_source_mask_buffer.h"
 
 namespace starrocks {
 

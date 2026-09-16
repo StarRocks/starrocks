@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -183,6 +184,14 @@ public class SplitJoinORToUnionRule extends TransformationRule {
             return false;
         }
 
+        // The per-branch dedup predicate built in transform() is the negation of plain '=', which
+        // is NOT a correct negation of the null-safe '<=>' (EQ_FOR_NULL): for NULL operands both
+        // the join condition and the dedup predicate are true, so the row is emitted by both
+        // UNION ALL branches (duplicate rows). Refuse to rewrite null-safe-equal disjuncts.
+        if (equalPredicates.stream().anyMatch(p -> p.getBinaryType() == BinaryType.EQ_FOR_NULL)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -292,6 +301,10 @@ public class SplitJoinORToUnionRule extends TransformationRule {
     private boolean containsUnsupportedOperators(OptExpression expr) {
         if (expr == null) {
             return false;
+        }
+
+        if (expr.getOp() instanceof LogicalAIProjectOperator) {
+            return true;
         }
 
         if (expr.getOp().getOpType() == OperatorType.LOGICAL_LIMIT) {

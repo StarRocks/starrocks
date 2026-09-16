@@ -16,51 +16,131 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <string>
 #include <utility>
 
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "base/utility/defer_op.h"
+#include "common/config_exec_env_fwd.h"
+#include "common/config_llm_fwd.h"
+#include "compute_env/ai/ai_executor.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
-#include "compute_env/pipeline/observer.h"
-#include "runtime/runtime_state.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
+
 namespace {
 
-class FakePipelineObserver final : public pipeline::PipelineObserver {
+void assert_metric_value(MetricRegistry* registry, const std::string& name, const std::string& value) {
+    auto* metric = registry->get_metric(name);
+    ASSERT_NE(nullptr, metric);
+    ASSERT_EQ(value, metric->to_string());
+}
+
+class FakeDriverQueue final : public pipeline::DriverQueue {
 public:
-    explicit FakePipelineObserver(std::string debug_string) : _debug_string(std::move(debug_string)) {}
+    FakeDriverQueue() : DriverQueue(nullptr) {}
 
-    void source_trigger() override { ++source_trigger_count; }
-    void sink_trigger() override { ++sink_trigger_count; }
-    void cancel_trigger() override { ++cancel_trigger_count; }
-    void all_trigger() override { ++all_trigger_count; }
-    void runtime_filter_timeout_trigger() override { ++runtime_filter_timeout_count; }
-    std::string debug_string() const override { return _debug_string; }
-
-    int source_trigger_count = 0;
-    int sink_trigger_count = 0;
-    int cancel_trigger_count = 0;
-    int all_trigger_count = 0;
-    int runtime_filter_timeout_count = 0;
-
-private:
-    std::string _debug_string;
+    void close() override {}
+    void put_back(const pipeline::DriverRawPtr driver) override {}
+    void put_back(const std::vector<pipeline::DriverRawPtr>& drivers) override {}
+    void put_back_from_executor(const pipeline::DriverRawPtr driver) override {}
+    StatusOr<pipeline::DriverRawPtr> take(const bool block) override { return nullptr; }
+    void cancel(pipeline::DriverRawPtr driver) override {}
+    void update_statistics(const pipeline::DriverRawPtr driver) override {}
+    size_t size() const override { return 0; }
+    bool should_yield(const pipeline::DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override {
+        return false;
+    }
 };
+
+class FakeDriverExecutor final : public pipeline::DriverExecutor {
+public:
+    explicit FakeDriverExecutor(std::string name) : DriverExecutor(std::move(name)) {}
+
+    void submit(pipeline::DriverRawPtr driver) override {}
+    void cancel(pipeline::DriverRawPtr driver) override {}
+    void close() override {}
+    void report_exec_state(pipeline::QueryContext* query_ctx, pipeline::FragmentContext* fragment_ctx,
+                           const Status& status, bool done) override {}
+    void report_audit_statistics(pipeline::QueryContext* query_ctx, pipeline::FragmentContext* fragment_ctx) override {}
+    void report_audit_statistics_on_failure(pipeline::QueryContext* query_ctx,
+                                            pipeline::FragmentContext* fragment_ctx) override {}
+    void iterate_immutable_blocking_driver(const pipeline::ConstDriverConsumer& call) const override {}
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override {}
+};
+
+workgroup::WorkGroupManager::DriverQueueFactory make_fake_driver_queue_factory() {
+    return [](pipeline::DriverQueueMetrics*) { return std::make_unique<FakeDriverQueue>(); };
+}
+
+workgroup::DriverExecutorFactory make_fake_driver_executor_factory() {
+    return [](const std::string& name, const CpuUtil::CpuIds& cpuids,
+              const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads,
+              pipeline::PipelineExecutorMetrics* metrics, const workgroup::WorkGroupSchedulePolicy& schedule_policy)
+                   -> StatusOr<std::unique_ptr<pipeline::DriverExecutor>> {
+        (void)cpuids;
+        (void)borrowed_cpuids;
+        (void)num_driver_threads;
+        (void)metrics;
+        (void)schedule_policy;
+        std::unique_ptr<pipeline::DriverExecutor> executor = std::make_unique<FakeDriverExecutor>(name);
+        return executor;
+    };
+}
+
+void init_compute_env_test_context() {
+    static bool initialized = false;
+    static auto* metrics = new MetricRegistry("compute_env_global_test");
+    if (initialized) {
+        return;
+    }
+
+    config::pipeline_exec_thread_pool_thread_num = 1;
+    config::pipeline_max_num_drivers_per_exec_thread = 4;
+    const auto spill_path = std::filesystem::absolute("./ut_dir/compute_env_spill");
+    config::spill_local_storage_dir = spill_path.string() + ",medium:ssd";
+    std::error_code ec;
+    std::filesystem::create_directories(spill_path, ec);
+    ASSERT_FALSE(ec) << ec.message();
+    ASSERT_OK(RuntimeEnv::GetInstance()->init_execution_thread_pools(metrics));
+    initialized = true;
+}
+
+ComputeEnvOptions make_compute_env_options(MetricRegistry* metrics = nullptr) {
+    ComputeEnvOptions options;
+    options.runtime_env = RuntimeEnv::GetInstance();
+    options.metrics = metrics;
+    options.as_cn = true;
+    options.query_cache_capacity = 4 * 1024 * 1024;
+    options.driver_queue_factory = make_fake_driver_queue_factory();
+    options.driver_executor_factory = make_fake_driver_executor_factory();
+    return options;
+}
 
 } // namespace
 
 TEST(ComputeEnvTest, DriverLimiterLifecycle) {
+    init_compute_env_test_context();
     ComputeEnv env;
-    ComputeEnvOptions options;
-    options.max_num_pipeline_drivers = 4;
 
-    ASSERT_OK(env.init(options));
+    ASSERT_OK(env.init(make_compute_env_options()));
     ASSERT_NE(env.driver_limiter(), nullptr);
     ASSERT_NE(env.pipeline_timer(), nullptr);
     ASSERT_NE(env.stream_mgr(), nullptr);
     ASSERT_NE(env.result_mgr(), nullptr);
     ASSERT_NE(env.result_queue_mgr(), nullptr);
+    ASSERT_NE(env.load_path_mgr(), nullptr);
+    ASSERT_NE(env.workgroup_manager(), nullptr);
+    ASSERT_NE(env.cache_mgr(), nullptr);
+    ASSERT_NE(env.spill_dir_mgr(), nullptr);
+    ASSERT_NE(env.global_spill_manager(), nullptr);
 
     auto token_or = env.driver_limiter()->try_acquire(3);
     ASSERT_TRUE(token_or.ok()) << token_or.status();
@@ -81,58 +161,151 @@ TEST(ComputeEnvTest, DriverLimiterLifecycle) {
     EXPECT_EQ(env.stream_mgr(), nullptr);
     EXPECT_EQ(env.result_mgr(), nullptr);
     EXPECT_EQ(env.result_queue_mgr(), nullptr);
+    EXPECT_EQ(env.load_path_mgr(), nullptr);
+    EXPECT_EQ(env.workgroup_manager(), nullptr);
+    EXPECT_EQ(env.cache_mgr(), nullptr);
+    EXPECT_EQ(env.spill_dir_mgr(), nullptr);
+    EXPECT_EQ(env.global_spill_manager(), nullptr);
 }
 
-TEST(ComputeEnvTest, ObservableNotifiesObservers) {
-    RuntimeState state;
-    state.set_enable_event_scheduler(true);
-    pipeline::Observable observable;
-    FakePipelineObserver observer("fake_driver");
+TEST(ComputeEnvTest, DriverLimiterOwnsPipeDriversMetric) {
+    MetricRegistry registry("test_registry");
+    {
+        pipeline::DriverLimiter driver_limiter(4);
+        driver_limiter.init(&registry);
 
-    observable.add_observer(&state, &observer);
-    EXPECT_EQ(observable.num_observers(), 1);
-    EXPECT_EQ(observable.to_string(), "fake_driver\n");
+        auto token_or = driver_limiter.try_acquire(3);
+        ASSERT_TRUE(token_or.ok()) << token_or.status();
+        auto token = std::move(token_or).value();
 
-    observable.notify_source_observers();
-    observable.notify_sink_observers();
-    observable.notify_runtime_filter_timeout();
-    EXPECT_EQ(observer.source_trigger_count, 1);
-    EXPECT_EQ(observer.sink_trigger_count, 1);
-    EXPECT_EQ(observer.runtime_filter_timeout_count, 1);
+        registry.trigger_hook();
+        assert_metric_value(&registry, "pipe_drivers", "3");
 
-    observable.detach_observers();
-    EXPECT_EQ(observable.num_observers(), 0);
-    observable.notify_source_observers();
-    EXPECT_EQ(observer.source_trigger_count, 1);
+        token.reset();
+        registry.trigger_hook();
+        assert_metric_value(&registry, "pipe_drivers", "0");
+
+        auto next_token_or = driver_limiter.try_acquire(2);
+        ASSERT_TRUE(next_token_or.ok()) << next_token_or.status();
+        auto next_token = std::move(next_token_or).value();
+        registry.trigger_hook();
+        assert_metric_value(&registry, "pipe_drivers", "2");
+    }
+    registry.trigger_hook();
+    ASSERT_EQ(nullptr, registry.get_metric("pipe_drivers"));
 }
 
-TEST(ComputeEnvTest, ObservableSkipsObserversWhenEventSchedulerDisabled) {
-    RuntimeState state;
-    state.set_enable_event_scheduler(false);
-    pipeline::Observable observable;
-    FakePipelineObserver observer("fake_driver");
+TEST(ComputeEnvTest, ComputeEnvInstallsDriverLimiterMetric) {
+    init_compute_env_test_context();
+    MetricRegistry registry("test_registry");
+    ComputeEnv env;
 
-    observable.add_observer(&state, &observer);
-    EXPECT_EQ(observable.num_observers(), 0);
+    ASSERT_OK(env.init(make_compute_env_options(&registry)));
+    auto token_or = env.driver_limiter()->try_acquire(2);
+    ASSERT_TRUE(token_or.ok()) << token_or.status();
+    auto token = std::move(token_or).value();
+
+    registry.trigger_hook();
+    assert_metric_value(&registry, "pipe_drivers", "2");
+
+    token.reset();
+    env.destroy();
 }
 
-TEST(ComputeEnvTest, PipeObservableNotifiesAttachedSides) {
-    RuntimeState state;
-    state.set_enable_event_scheduler(true);
-    pipeline::PipeObservable pipe_observable;
-    FakePipelineObserver sink_observer("sink_driver");
-    FakePipelineObserver source_observer("source_driver");
+TEST(ComputeEnvTest, ComputeEnvInstallsQueryCacheMetrics) {
+    init_compute_env_test_context();
+    MetricRegistry registry("test_registry");
+    ComputeEnv env;
 
-    pipe_observable.attach_sink_observer(&state, &sink_observer);
-    pipe_observable.attach_source_observer(&state, &source_observer);
+    ASSERT_OK(env.init(make_compute_env_options(&registry)));
+    registry.trigger_hook();
+    assert_metric_value(&registry, "query_cache_capacity", "4194304");
+    assert_metric_value(&registry, "query_cache_lookup_count", "0");
 
-    { auto notify = pipe_observable.defer_notify_source(); }
-    EXPECT_EQ(source_observer.source_trigger_count, 1);
-    EXPECT_EQ(sink_observer.source_trigger_count, 0);
+    env.destroy();
+    ASSERT_EQ(nullptr, registry.get_metric("query_cache_capacity"));
+}
 
-    { auto notify = pipe_observable.defer_notify_sink(); }
-    EXPECT_EQ(sink_observer.source_trigger_count, 1);
-    EXPECT_EQ(sink_observer.sink_trigger_count, 0);
+TEST(ComputeEnvTest, LoadPathLifecycle) {
+    init_compute_env_test_context();
+    ComputeEnv env;
+    EXPECT_EQ(env.load_path_mgr(), nullptr);
+
+    ASSERT_OK(env.init(make_compute_env_options()));
+    ASSERT_NE(env.load_path_mgr(), nullptr);
+
+    std::string prefix;
+    EXPECT_FALSE(env.load_path_mgr()->allocate_dir("db", "label", &prefix).ok());
+
+    env.destroy();
+    EXPECT_EQ(env.load_path_mgr(), nullptr);
+}
+
+TEST(ComputeEnvTest, InitializesAIRuntimeFromConfigGlobals) {
+    init_compute_env_test_context();
+    SCOPED_UPDATE(int64_t, config::ai_function_request_timeout_ms, 1234);
+    SCOPED_UPDATE(int64_t, config::ai_function_connect_timeout_ms, 2345);
+    SCOPED_UPDATE(int64_t, config::ai_function_max_response_bytes, 3456);
+    SCOPED_UPDATE(int32_t, config::ai_function_worker_thread_num, 2);
+    SCOPED_UPDATE(int32_t, config::ai_function_sub_chunk_size, 8);
+    SCOPED_UPDATE(int32_t, config::ai_function_max_retries, 4);
+    SCOPED_UPDATE(int32_t, config::ai_function_max_retries_on_throttle, 6);
+    SCOPED_UPDATE(int32_t, config::ai_function_rate_limit_qps_chat, 17);
+    SCOPED_UPDATE(int32_t, config::ai_function_max_inflight, 19);
+    const std::string saved_on_error = config::ai_function_on_error.value();
+    config::ai_function_on_error = "fail";
+    DeferOp restore_on_error([&] { config::ai_function_on_error = saved_on_error; });
+
+    ComputeEnv env;
+    ASSERT_OK(env.init(make_compute_env_options()));
+    ASSERT_NE(nullptr, env.ai_executor());
+
+    const AIRuntimeConfig snapshot = env.ai_executor()->config_snapshot();
+    EXPECT_EQ(1234, snapshot.request_timeout_ms);
+    EXPECT_EQ(2345, snapshot.connect_timeout_ms);
+    EXPECT_EQ(3456, snapshot.max_response_bytes);
+    EXPECT_EQ(2, snapshot.worker_thread_num);
+    EXPECT_EQ(8, snapshot.sub_chunk_size);
+    EXPECT_EQ(4, snapshot.max_retries);
+    EXPECT_EQ(6, snapshot.max_retries_on_throttle);
+    EXPECT_EQ("fail", snapshot.on_error);
+    EXPECT_EQ(17, snapshot.rate_limit_qps_chat);
+    EXPECT_EQ(19, snapshot.max_inflight);
+
+    env.destroy();
+}
+
+TEST(ComputeEnvTest, RejectsInvalidAIConfigWithoutPartialInitialization) {
+    init_compute_env_test_context();
+    SCOPED_UPDATE(int32_t, config::ai_function_max_inflight, 0);
+    ComputeEnv env;
+
+    const Status status = env.init(make_compute_env_options());
+
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ(nullptr, env.ai_executor());
+    EXPECT_EQ(nullptr, env.driver_limiter());
+    EXPECT_EQ(nullptr, env.pipeline_timer());
+    EXPECT_EQ(nullptr, env.workgroup_manager());
+    env.destroy();
+}
+
+TEST(ComputeEnvTest, StopsBeforeDestroyingOwnedAIExecutor) {
+    init_compute_env_test_context();
+    ComputeEnv env;
+    ASSERT_OK(env.init(make_compute_env_options()));
+    AIExecutor* const executor = env.ai_executor();
+    ASSERT_NE(nullptr, executor);
+
+    env.stop();
+
+    EXPECT_EQ(executor, env.ai_executor());
+    EXPECT_TRUE(executor->update_sub_chunk_size(32).is_shutdown());
+    env.stop();
+    EXPECT_EQ(executor, env.ai_executor());
+
+    env.destroy();
+    EXPECT_EQ(nullptr, env.ai_executor());
 }
 
 } // namespace starrocks

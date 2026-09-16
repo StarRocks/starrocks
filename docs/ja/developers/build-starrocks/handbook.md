@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks のビルド方法、FE と BE の個別・全体ビルド手順。"
 ---
 
 # StarRocksのビルド方法

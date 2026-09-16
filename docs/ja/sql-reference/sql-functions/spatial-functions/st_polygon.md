@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "WKT(Well Known Text)を対応するポリゴンのメモリ形式に変換します。"
 ---
 
 # ST_Polygon,ST_PolyFromText,ST_PolygonFromText

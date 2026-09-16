@@ -15,16 +15,21 @@
 package com.starrocks.alter.reshard.presplit;
 
 /**
- * Identifies the load path calling
- * {@link TabletPreSplitCoordinator#maybeAct(com.starrocks.catalog.Database,
- *  com.starrocks.catalog.OlapTable, long, ScanContext, LoadKind)} so the
- * coordinator can gate against the correct per-path FE Config flag.
+ * Identifies the load path calling {@link TabletPreSplitCoordinator#maybeAct}
+ * so the coordinator can gate against the correct per-path FE Config flag.
  * Without this, enabling the Broker Load flag alone would also let
  * INSERT-from-FILES callers through (and vice versa).
  */
 public enum LoadKind {
     INSERT_FROM_FILES("INSERT-from-FILES"),
-    BROKER_LOAD("Broker Load");
+    INSERT_FROM_TABLE("INSERT-from-table"),
+    BROKER_LOAD("Broker Load"),
+    /**
+     * An incremental materialized view's refresh. Its boundaries come from the derived tier — the
+     * hidden row-id key's domain is known, so no sampler runs — which is why this kind never reaches
+     * {@code DefaultPreSplitPipeline}'s sampler factories.
+     */
+    MV_REFRESH("incremental MV refresh");
 
     private final String displayName;
 

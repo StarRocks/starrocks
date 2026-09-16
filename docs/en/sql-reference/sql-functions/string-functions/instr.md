@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "This function returns the position where str first appeared in substr (start counting from 1 and measured in characters)."
+description: "Returns the 1-based character position of the first occurrence of a substring within a string."
 ---
 
 # instr

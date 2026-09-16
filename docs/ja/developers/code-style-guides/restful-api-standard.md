@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks REST API 設計標準：URL フォーマット、HTTP メソッドセマンティクス、リクエスト/レスポンス規約。"
 ---
 
 # StarRocks Restful API Standard

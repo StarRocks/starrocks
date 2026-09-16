@@ -22,11 +22,11 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "exec/chunk_buffer_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "gutil/casts.h"
-#include "runtime/exec_env.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -39,14 +39,14 @@ public:
 
         _query_context = std::make_shared<QueryContext>();
         _query_context->set_query_execution_services(&_exec_env->query_execution_services());
-        _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
+        _query_context->init_mem_tracker(-1, RuntimeEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         query_options.batch_size = 4096;
         TQueryGlobals query_globals;
         _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
                                                         &_exec_env->query_execution_services(), _exec_env);
-        _runtime_state->set_query_ctx(_query_context.get());
+        _query_context->attach_to_runtime_state(_runtime_state.get());
         _runtime_state->init_instance_mem_tracker();
 
         _memory_manager = std::make_shared<ChunkBufferMemoryManager>(_dop, 1024 * 1024);

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据给定的 X、Y 坐标值返回对应的点。"
 ---
 
 # ST_Point

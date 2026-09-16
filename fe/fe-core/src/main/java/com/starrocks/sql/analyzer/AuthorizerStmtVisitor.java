@@ -132,6 +132,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -148,6 +149,11 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.MergeWhenClause;
+import com.starrocks.sql.ast.MergeWhenMatchedDeleteClause;
+import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
+import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -187,6 +193,7 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -220,8 +227,10 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
@@ -375,6 +384,100 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         TableName tableNameForSelect = TableName.fromTableRef(tableRef);
         checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableNameForSelect));
         return null;
+    }
+
+    @Override
+    public Void visitMergeIntoStatement(MergeIntoStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+
+        boolean needsInsert = false;
+        boolean needsUpdate = false;
+        boolean needsDelete = false;
+        for (MergeWhenClause clause : statement.getWhenClauses()) {
+            if (clause instanceof MergeWhenNotMatchedInsertClause) {
+                needsInsert = true;
+            } else if (clause instanceof MergeWhenMatchedUpdateClause) {
+                needsUpdate = true;
+            } else if (clause instanceof MergeWhenMatchedDeleteClause) {
+                needsDelete = true;
+            }
+        }
+
+        if (needsInsert) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.INSERT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+        if (needsUpdate) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.UPDATE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+        if (needsDelete) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+
+        TableName tableNameForSelect = TableName.fromTableRef(tableRef);
+        // The analyzer's join puts the target table on the right side, which would
+        // normally be excluded from SELECT checks because INSERT/UPDATE/DELETE on
+        // the target already passed above. But when the source references the same
+        // table as the target (self-merge, or a subquery scanning the target),
+        // excluding by TableName also skips the user-written source side — letting
+        // a user with the MERGE action but no SELECT read target columns through
+        // expressions like `SET data = s.secret`. In that case do not exclude;
+        // re-checking the target's SELECT is harmless because the target privileges
+        // already cleared above.
+        List<TableName> excludeTables = sourceReferencesTarget(statement)
+                ? Lists.newArrayList()
+                : Lists.newArrayList(tableNameForSelect);
+        checkSelectTableAction(context, statement.getQueryStatement(), excludeTables);
+        return null;
+    }
+
+    /**
+     * True when any {@link TableRelation} reachable from the source side resolves
+     * to the same {@link Table} object as the target. Comparing Table identity
+     * avoids the false-negative where the user writes the source unqualified
+     * (e.g. {@code USING t AS s} in the target db), so the source TableName lacks
+     * catalog/db and would not equal the canonical target TableName even though
+     * both sides point at the same physical table.
+     */
+    private static boolean sourceReferencesTarget(MergeIntoStmt statement) {
+        Table targetTable = statement.getTable();
+        if (targetTable == null || statement.getSourceRelation() == null) {
+            return false;
+        }
+        Set<Table> sourceTables = new HashSet<>();
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitTable(TableRelation node, Void context) {
+                Table t = node.getTable();
+                if (t != null) {
+                    sourceTables.add(t);
+                }
+                return null;
+            }
+        }.visit(statement.getSourceRelation());
+        return sourceTables.contains(targetTable);
     }
 
     public void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {
@@ -1739,6 +1842,61 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    // ---------------------------------------- AI Provider Statement ---------------------------------------
+
+    private void requireSystemOperate(ConnectContext context, String action) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    action, ObjectType.SYSTEM.name(), null);
+        }
+    }
+
+    @Override
+    public Void visitCreateAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "CREATE AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitAlterAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "ALTER AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitDropAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DROP AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitSetDefaultAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SET DEFAULT AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SHOW AI PROVIDERS");
+        return null;
+    }
+
+    @Override
+    public Void visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DESC AI PROVIDER");
+        return null;
+    }
+
     // ---------------------------------------- View Statement ---------------------------------------
 
     @Override
@@ -2206,6 +2364,36 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    // ---------------------------------------- FailPoint Statement ----------------------------------------------------
+
+    @Override
+    public Void visitUpdateFailPointStatusStatement(UpdateFailPointStatusStatement statement, ConnectContext context) {
+        // The ADMIN keyword is syntax, not a privilege. Arming a failpoint injects faults into every
+        // targeted node, and WITH PAUSE can park node threads outright, so this needs OPERATE.
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitShowFailPointStatement(ShowFailPointStatement statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
     @Override
     public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext context) {
         try {
@@ -2523,6 +2711,19 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.REPOSITORY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropSnapshotStatement(DropSnapshotStmt statement, ConnectContext context) {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.REPOSITORY);
         } catch (AccessDeniedException e) {

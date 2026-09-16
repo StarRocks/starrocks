@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "リスト内の値のインデックス(位置)を返します。"
 ---
 
 # field

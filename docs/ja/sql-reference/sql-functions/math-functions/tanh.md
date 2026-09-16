@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "引数の双曲線正接を計算します。"
 ---
 
 # tanh

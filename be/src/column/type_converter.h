@@ -1,0 +1,47 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "column/column.h"
+#include "common/status.h"
+#include "types/datum.h"
+#include "types/logical_type.h"
+#include "types/type_info_allocator.h"
+
+namespace starrocks {
+
+class TypeInfo;
+
+// Used for generic logical type conversion between columns.
+class TypeConverter {
+public:
+    TypeConverter() = default;
+    virtual ~TypeConverter() = default;
+
+    virtual Status convert(void* dest, const void* src, const TypeInfoAllocator* allocator) const = 0;
+
+    virtual Status convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
+                                  const TypeInfoAllocator* allocator) const;
+
+private:
+    friend class SchemaChangeTest;
+
+    virtual Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
+                                 const TypeInfoAllocator* allocator) const = 0;
+};
+
+const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_type);
+
+} // namespace starrocks

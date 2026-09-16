@@ -1,0 +1,23 @@
+-- name: test_jit_compile_failure_no_crash @sequential
+CREATE TABLE t (k INT, c DOUBLE) PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 1.5), (2, 2.5);
+-- result:
+-- !result
+set jit_level = -1;
+-- result:
+-- !result
+admin enable failpoint 'jit_compile_failed';
+-- result:
+-- !result
+function: assert_query_error_contains("SELECT cast(k as largeint) * 3 + k FROM t ORDER BY 1", "injected jit compile error")
+-- result:
+None
+-- !result
+admin disable failpoint 'jit_compile_failed';
+-- result:
+-- !result
+CLEANUP {
+  admin disable failpoint 'jit_compile_failed';
+} END CLEANUP

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocksがサポートする<、<=、>、>=、=、!=のJSON比較演算子。"
 ---
 
 # JSON operators

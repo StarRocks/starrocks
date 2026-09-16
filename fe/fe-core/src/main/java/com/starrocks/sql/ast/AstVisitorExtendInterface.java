@@ -219,6 +219,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitMergeIntoStatement(MergeIntoStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Routine Statement ---------------------------------------------------
 
     default R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {

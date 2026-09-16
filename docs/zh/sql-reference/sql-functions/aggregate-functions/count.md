@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "count 计算行数，支持 COUNT(*)、COUNT(expr) 和 COUNT(DISTINCT expr) 三种形式。"
 ---
 
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "地球上の2点間の球面距離をメートル単位で計算します。"
 ---
 
 # ST_Distance_Sphere

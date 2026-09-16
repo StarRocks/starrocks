@@ -208,6 +208,16 @@ endforeach()
 find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
 
+if (APPLE AND "$ENV{STARROCKS_USE_NIX_DEPS}" STREQUAL "1" AND NOT "$ENV{PCRE2_ROOT_DIR}" STREQUAL "")
+    set(PCRE2_ROOT_DIR "$ENV{PCRE2_ROOT_DIR}" CACHE PATH "PCRE2 search path" FORCE)
+    set(PCRE2_INCLUDE_DIR "$ENV{PCRE2_ROOT_DIR}/include" CACHE PATH "PCRE2 include directory" FORCE)
+    if (EXISTS "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.a")
+        set(PCRE2_LIBRARY "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.a" CACHE FILEPATH "PCRE2 library" FORCE)
+    elseif (EXISTS "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.dylib")
+        set(PCRE2_LIBRARY "$ENV{PCRE2_ROOT_DIR}/lib/libpcre2-8.dylib" CACHE FILEPATH "PCRE2 library" FORCE)
+    endif()
+endif()
+
 set(Poco_ROOT "${THIRDPARTY_DIR}" CACHE PATH "Poco search path" FORCE)
 set(Poco_ROOT_DIR "${THIRDPARTY_DIR}" CACHE PATH "Poco search path" FORCE)
 find_package(Poco REQUIRED COMPONENTS Net NetSSL)
@@ -393,7 +403,7 @@ set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
 
-starrocks_resolve_thirdparty_library(HTTP_CLIENT_CURL_LIBRARY libhttp_client_curl.a)
+starrocks_resolve_thirdparty_library(HTTP_CLIENT_CURL_LIBRARY libopentelemetry_http_client_curl.a)
 add_library(http_client_curl STATIC IMPORTED GLOBAL)
 set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${HTTP_CLIENT_CURL_LIBRARY})
 
@@ -427,7 +437,7 @@ starrocks_resolve_thirdparty_library(OPENTELEMETRY_JAEGER_LIBRARY libopentelemet
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${OPENTELEMETRY_JAEGER_LIBRARY})
 
-if (APPLE)
+if (APPLE AND NOT "$ENV{STARROCKS_USE_NIX_DEPS}" STREQUAL "1")
     add_library(libxml2 SHARED IMPORTED GLOBAL)
     set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libxml2.dylib)
 else()
@@ -475,11 +485,9 @@ get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 message(STATUS "Using gRPC ${gRPC_VERSION}")
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
-# Disable libdeflate on aarch64
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    add_library(libdeflate STATIC IMPORTED GLOBAL)
-    set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
-endif()
+starrocks_resolve_thirdparty_library(LIBDEFLATE_LIBRARY libdeflate.a)
+add_library(libdeflate STATIC IMPORTED GLOBAL)
+set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${LIBDEFLATE_LIBRARY})
 
 if (${WITH_TENANN} STREQUAL "ON")
     add_library(tenann STATIC IMPORTED GLOBAL)
@@ -488,6 +496,53 @@ if (${WITH_TENANN} STREQUAL "ON")
     else()
         set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle.a)
     endif()
+endif()
+
+if (${WITH_PAIMON_CPP} STREQUAL "ON")
+    set(PAIMON_CPP_DIR "${THIRDPARTY_DIR}/paimon-cpp")
+    find_library(PAIMON_SHARED_LIBRARY NAMES paimon
+                 PATHS ${PAIMON_CPP_DIR}/lib NO_DEFAULT_PATH)
+    if (NOT PAIMON_SHARED_LIBRARY)
+        message(FATAL_ERROR "libpaimon.so not found under ${PAIMON_CPP_DIR}/lib, "
+                            "run thirdparty/build-thirdparty.sh paimon_cpp first")
+    endif()
+    # paimon-cpp ships its file formats, file/global indexes, and the local
+    # filesystem as plugin shared libraries that register themselves into
+    # libpaimon's FactoryCreator via load-time constructors. Nothing references
+    # their symbols, so they must be linked explicitly (as DT_NEEDED of the
+    # libstarrocks_paimon.so shim; their constructors run when the shim is
+    # dlopen()ed) or FileFormatFactory finds no parquet/orc/avro at runtime.
+    set(PAIMON_CPP_PLUGINS
+        paimon_parquet_file_format
+        paimon_orc_file_format
+        paimon_avro_file_format
+        paimon_blob_file_format
+        paimon_file_index
+        paimon_global_index
+        paimon_local_file_system)
+    foreach(PAIMON_PLUGIN ${PAIMON_CPP_PLUGINS})
+        find_library(${PAIMON_PLUGIN}_SHARED_LIBRARY NAMES ${PAIMON_PLUGIN}
+                     PATHS ${PAIMON_CPP_DIR}/lib NO_DEFAULT_PATH)
+        if (NOT ${PAIMON_PLUGIN}_SHARED_LIBRARY)
+            message(FATAL_ERROR "lib${PAIMON_PLUGIN}.so not found under ${PAIMON_CPP_DIR}, "
+                                "run thirdparty/build-thirdparty.sh paimon_cpp first")
+        endif()
+        add_library(${PAIMON_PLUGIN} SHARED IMPORTED GLOBAL)
+        set_target_properties(${PAIMON_PLUGIN} PROPERTIES
+            IMPORTED_LOCATION ${${PAIMON_PLUGIN}_SHARED_LIBRARY})
+    endforeach()
+    add_library(paimon SHARED IMPORTED GLOBAL)
+    # Headers install under <prefix>/include/paimon/..., so consumers write
+    # #include <paimon/predicate/literal.h>. The include path rides on the
+    # imported target (treated as SYSTEM by default) instead of the global
+    # include path, so only targets that link `paimon` can see the headers.
+    # The plugins ride on INTERFACE_LINK_LIBRARIES so every consumer of
+    # `paimon` links them without listing them itself.
+    set_target_properties(paimon PROPERTIES
+        IMPORTED_LOCATION ${PAIMON_SHARED_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES "${PAIMON_CPP_DIR}/include"
+        INTERFACE_LINK_LIBRARIES "${PAIMON_CPP_PLUGINS}")
+    message(STATUS "link paimon-cpp from ${PAIMON_SHARED_LIBRARY}")
 endif()
 
 set(BUNDLED_JAVA_HOME ${THIRDPARTY_DIR}/open_jdk)

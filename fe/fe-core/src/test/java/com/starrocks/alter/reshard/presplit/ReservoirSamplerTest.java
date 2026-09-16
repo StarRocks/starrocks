@@ -49,7 +49,23 @@ public class ReservoirSamplerTest {
 
         @Override
         public SampleExecution execute(SampleRequest request) {
-            return new SampleExecution(rows.iterator(), estimates);
+            // The fake executor models the pre-partition-source row shape — each canned row
+            // is sort-key only. SampleRow.ofSortKey wraps it with an empty partition-source
+            // tuple so the executor contract matches the production type.
+            Iterator<List<Variant>> sourceIterator = rows.iterator();
+            Iterator<SampleRow> rowIterator = new Iterator<>() {
+                @Override
+                public boolean hasNext() {
+                    return sourceIterator.hasNext();
+                }
+
+                @Override
+                public SampleRow next() {
+                    List<Variant> next = sourceIterator.next();
+                    return next == null ? null : SampleRow.ofSortKey(next);
+                }
+            };
+            return new SampleExecution(rowIterator, estimates);
         }
     }
 
@@ -183,7 +199,7 @@ public class ReservoirSamplerTest {
         List<Variant> reusableBuffer = new ArrayList<>();
         reusableBuffer.add(Variant.of(IntegerType.BIGINT, "1"));
         SampleSubqueryExecutor mutatingExecutor = request -> {
-            Iterator<List<Variant>> iter = new Iterator<>() {
+            Iterator<SampleRow> iter = new Iterator<>() {
                 int remaining = 2;
 
                 @Override
@@ -192,10 +208,10 @@ public class ReservoirSamplerTest {
                 }
 
                 @Override
-                public List<Variant> next() {
+                public SampleRow next() {
                     reusableBuffer.set(0, Variant.of(IntegerType.BIGINT, Integer.toString(3 - remaining)));
                     remaining--;
-                    return reusableBuffer;
+                    return SampleRow.ofSortKey(reusableBuffer);
                 }
             };
             return new SampleSubqueryExecutor.SampleExecution(iter, new Estimates(100L, 2L));
@@ -220,5 +236,45 @@ public class ReservoirSamplerTest {
         SampleSet result = sampler.sample(requestWithByteLimit(1024L, List.of(bigintColumn("k"))));
 
         Assertions.assertEquals(fullInput, result.getEstimates());
+    }
+
+    @Test
+    public void testCountsSecondaryTupleBytes() throws Exception {
+        // Each cell's string value is 1 char wide. Row bytes = sortKey(1) + secondary(1) = 2.
+        // With byteLimit=3: row 0 is always admitted (2 bytes, accumulated=2); row 1 would push
+        // accumulated to 4 > 3, so only 1 row survives -- proving the secondary cell counted
+        // against the limit (without it, each row would be 1 byte and both would fit).
+        SecondaryIndexSpec secondarySpec = new SecondaryIndexSpec(7L, List.of(bigintColumn("r")));
+        SampleSubqueryExecutor executor = request -> {
+            List<SampleRow> rows = List.of(
+                    new SampleRow(bigintRow(0), List.of(), List.of(new IndexTuple(7L, bigintRow(1)))),
+                    new SampleRow(bigintRow(2), List.of(), List.of(new IndexTuple(7L, bigintRow(3)))));
+            return new SampleSubqueryExecutor.SampleExecution(rows.iterator(), new Estimates(1024L, 2L));
+        };
+        Sampler sampler = new ReservoirSampler(executor);
+        SampleRequest request = new SampleRequest(
+                DUMMY_CONTEXT, List.of(bigintColumn("k")), List.of(secondarySpec), List.of(), 3L, 0L);
+
+        SampleSet result = sampler.sample(request);
+
+        Assertions.assertEquals(1, result.getTuples().size(),
+                "secondary tuple bytes must count against the byte limit, stopping before the 2nd row");
+    }
+
+    @Test
+    public void testZeroRowsWithSecondarySpecsPreservesMetaIds() throws Exception {
+        SecondaryIndexSpec secondarySpec = new SecondaryIndexSpec(7L, List.of(bigintColumn("r")));
+        Sampler sampler = new ReservoirSampler(new FakeExecutor(Collections.emptyList(), Estimates.ZERO));
+        SampleRequest request = new SampleRequest(
+                DUMMY_CONTEXT, List.of(bigintColumn("k")), List.of(secondarySpec), List.of(), 1024L, 0L);
+
+        SampleSet result = sampler.sample(request);
+
+        Assertions.assertNotSame(SampleSet.EMPTY, result,
+                "zero-row sample WITH secondary specs must not collapse to the bare EMPTY constant "
+                        + "(it would drop the authoritative id set)");
+        Assertions.assertTrue(result.isEmpty());
+        Assertions.assertEquals(List.of(7L), result.getSecondaryIndexMetaIds());
+        Assertions.assertTrue(result.getSecondaryIndexTuples().isEmpty());
     }
 }

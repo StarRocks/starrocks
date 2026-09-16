@@ -22,10 +22,10 @@
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec/runtime_filter_compat/runtime_filter_port.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/current_thread.h"
-#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -233,6 +233,8 @@ HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(
           _partial_rf_merger(std::move(partial_rf_merger)),
           _distribution_mode(distribution_mode),
           _spill_channel_factory(std::move(spill_channel_factory)) {}
+
+HashJoinBuildOperatorFactory::~HashJoinBuildOperatorFactory() = default;
 
 Status HashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));

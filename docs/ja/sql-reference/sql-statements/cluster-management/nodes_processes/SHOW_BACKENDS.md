@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW BACKENDS は、クラスタ内のすべての BE ノードの情報を表示します。"
 ---
 
 # SHOW BACKENDS

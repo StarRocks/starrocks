@@ -15,6 +15,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UDFInternalClassLoader;
@@ -1138,6 +1140,53 @@ public class CreateFunctionStmtAnalyzerTest {
         Assertions.assertEquals("inline", stmt.getFunction().getLocation().toString(),
                 "Analyzer must auto-set location to 'inline' when file property is omitted");
     }
+
+    private CreateFunctionStmt createPyInlineStmtWithServiceUrl(String serviceUrl) {
+        Config.enable_udf = true;
+        String createFunctionSql = String.format("CREATE FUNCTION ABC.MY_PY_UDF_SVC(string) \n"
+                + "RETURNS string \n"
+                + "type = 'Python'\n"
+                + "symbol = 'echo'\n"
+                + "service_url = '%s'\n"
+                + "AS $$\n"
+                + "def echo(b):\n"
+                + "   return b\n"
+                + "$$;", serviceUrl);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(createFunctionSql, 32).get(0);
+    }
+
+    @Test
+    public void testPyInlineUDFWithServiceUrl() {
+        try {
+            Config.enable_udf = true;
+            String url = "grpc+tcp://192.168.1.10:8815";
+            CreateFunctionStmt stmt = createPyInlineStmtWithServiceUrl(url);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Function fn = stmt.getFunction();
+            Assertions.assertInstanceOf(ScalarFunction.class, fn);
+            Assertions.assertEquals(url, ((ScalarFunction) fn).getServiceUrl(),
+                    "service_url property must be carried onto the ScalarFunction");
+            Assertions.assertEquals(url, fn.toThrift().getService_url(),
+                    "service_url must be shipped to the BE via TFunction");
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testPyInlineUDFWithoutServiceUrl() {
+        try {
+            Config.enable_udf = true;
+            CreateFunctionStmt stmt = createPyInlineStmtNoFile("a");
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertNull(((ScalarFunction) stmt.getFunction()).getServiceUrl(),
+                    "service_url must be null (local spawn) when not specified");
+            Assertions.assertFalse(stmt.getFunction().toThrift().isSetService_url(),
+                    "TFunction.service_url must be unset when no service_url is specified");
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
     public static class DateEval {
         public java.time.LocalDateTime evaluate(java.time.LocalDate d, java.time.LocalDateTime ts) {
             return ts;
@@ -1593,7 +1642,110 @@ public class CreateFunctionStmtAnalyzerTest {
         }
     }
 
-    // Varargs UDF with at least one fixed parameter ahead of the varargs slot.
+    @Test
+    public void testCreateRejectsUnsizedVarcharArg() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "varchar"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedCharArg() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "char"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Char size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharReturnType() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("varchar", "int"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharInsideArray() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "array<varchar>"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateAcceptsSizedVarcharInsideArray() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(NestedArrayEval.class);
+            CreateFunctionStmt stmt = (CreateFunctionStmt)
+                    com.starrocks.sql.parser.SqlParser.parse(
+                            buildFunction("array<int>", "array<varchar(65500)>"), 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharAsMapKey() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "map<varchar, int>"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
+
+    @Test
+    public void testCreateRejectsUnsizedVarcharAsMapValue() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = (CreateFunctionStmt)
+                        com.starrocks.sql.parser.SqlParser.parse(buildFunction("int", "map<int, varchar>"), 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+        Assertions.assertTrue(ex.getMessage().contains("Varchar size must be > 0"), ex.getMessage());
+    }
     // Covers checkVarargsParametersGeneric's `for (i = 0; i < length - 1; i++)`
     // body which only fires when declaredArgTypes.length >= 2 (existing varargs
     // tests use a single varargs-only signature, so this loop stays cold).

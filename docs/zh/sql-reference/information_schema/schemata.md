@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "schemata 提供数据库的信息。"
 ---
 
 # schemata

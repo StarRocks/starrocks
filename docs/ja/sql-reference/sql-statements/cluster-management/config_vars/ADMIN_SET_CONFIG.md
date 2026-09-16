@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "クラスタの FE 動的設定項目を実行時に設定します。"
 ---
 
 # ADMIN SET CONFIG

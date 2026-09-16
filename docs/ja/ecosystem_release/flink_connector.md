@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Flink のリリースノート・変更履歴。"
 ---
 
 # StarRocks Connector for Flink のリリース
@@ -28,10 +29,10 @@ displayed_sidebar: docs
 
 | コネクタ   | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 以降       | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -40,6 +41,24 @@ displayed_sidebar: docs
 ## リリースノート
 
 ### 1.2
+
+#### 1.2.15
+
+リリース日：2026年6月18日
+
+##### 機能
+
+- マルチテーブルトランザクションの Stream Load サポートを追加しました。[#487](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/487)
+
+##### 改善点
+
+- Merge Commit でデータ品質エラーメッセージのログ記録に対応しました。[#484](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/484)
+
+##### バグ修正
+
+- マルチテーブルトランザクションの並行処理を修正：テーブルごとのロードをシリアル化し、テーブル間のコミットを同期化しました。[#491](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/491)
+- PREPARE状態の残留トランザクションでロールバックが失敗した場合、FEのキャンセルAPIにフォールバックするようにしました。[#488](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/488)
+- カラム作成ステートメントを生成する際、DEFAULT句内のCURRENT_TIMESTAMPを引用符で囲まない。[#486](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/486)
 
 #### 1.2.14
 

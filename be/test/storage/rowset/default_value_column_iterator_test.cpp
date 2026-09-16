@@ -16,10 +16,10 @@
 
 #include "column/column_helper.h"
 #include "gtest/gtest.h"
-#include "storage/column_predicate.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 class DefaultValueColumnIteratorTest : public testing::Test {

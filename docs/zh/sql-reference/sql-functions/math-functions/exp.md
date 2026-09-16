@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回e的x次幂。"
 ---
 
 # exp, dexp

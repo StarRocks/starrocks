@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 toc_max_heading_level: 2
-description: "How to configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in shared-data clusters and data lake analytics."
+description: "How to configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in..."
 ---
 
 import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
@@ -28,11 +28,11 @@ You can configure Data Cache using the following CN(BE) configuration items:
 
 ### Cache directory
 
-- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
+- [storage_root_path](../../administration/configuration/BE_parameters/BE_parameters.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
 
 ### Cache disk size
 
-- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
+- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
 
 ## View Data Cache status
 

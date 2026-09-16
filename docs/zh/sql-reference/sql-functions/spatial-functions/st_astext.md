@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将几何图形转换为 WKT（Well Known Text）格式。"
 ---
 
 # ST_AsText, ST_AsWKT

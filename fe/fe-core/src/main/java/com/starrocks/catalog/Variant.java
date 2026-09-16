@@ -30,6 +30,7 @@ import java.util.List;
 /*
  * Variant is used to store a value ​​of various types,
  * currently supporting type: BOOLEAN, INT (TINYINT, SMALLINT, INT, BIGINT and LARGEINT),
+ * DECIMAL (DECIMALV2 and DECIMAL32/64/128/256),
  * DATETIME (DATE, DATETIME and TIME), STRING (CHAR, VARCHAR, BINARY, VARBINARY and HLL)
  */
 public abstract class Variant implements Comparable<Variant> {
@@ -133,6 +134,12 @@ public abstract class Variant implements Comparable<Variant> {
             case DATETIME:
             case TIME:
                 return new DateVariant(type, value);
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMAL256:
+                return new DecimalVariant(type, value);
             default:
                 throw new IllegalArgumentException("Type[" + type.toSql() + "] not supported.");
         }

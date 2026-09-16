@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Calculates the average value of all data in an ARRAY and return this result."
+description: "Returns the average of all elements in an ARRAY, ignoring NULL values."
 ---
 
 # array_avg

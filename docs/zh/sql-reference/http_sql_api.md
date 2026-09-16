@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HTTP SQL API 允许用户通过 HTTP 协议执行 SELECT、SHOW、EXPLAIN、KILL 语句。"
 ---
 
 # HTTP SQL API

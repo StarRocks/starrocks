@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "系统视图，列出StarRocks集群中引用行访问策略和列掩码策略的对象。"
 ---
 
 # policy_references

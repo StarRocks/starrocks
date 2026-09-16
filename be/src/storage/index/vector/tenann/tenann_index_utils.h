@@ -19,9 +19,12 @@
 #include <boost/algorithm/string.hpp>
 #include <iostream>
 #include <memory>
+#include <string>
 
+#include "common/status.h"
 #include "common/statusor.h"
 #include "storage/tablet_index.h"
+#include "tenann/common/error.h"
 #include "tenann/store/index_meta.h"
 #include "tenann/store/index_type.h"
 
@@ -53,6 +56,9 @@ namespace starrocks {
 StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& tablet_index,
                                             const std::map<std::string, std::string>& query_params);
 
+// Resolve the physical backend used to build a logical cosine index.
+std::string resolve_vector_index_cosine_backend(const tenann::IndexMeta& meta);
+
 // Compute the effective ef_search for a single segment.
 //
 //   ef_base = max(user_ef, query_k)                      // faiss max(ef,k) floor
@@ -69,6 +75,12 @@ int compute_adaptive_ef_search(int user_ef, int query_k, size_t segment_num_rows
 //   - `user_set_ef` (user explicitly specified ef in query -> skip)
 //   - Missing efSearch in meta (non-HNSW indexes -> skip)
 void apply_adaptive_ef_search(tenann::IndexMeta* meta, size_t segment_num_rows, int query_k, bool user_set_ef);
+
+// Translate a tenann::Error to a starrocks::Status. Uses e.message() (the raw
+// message) rather than e.what() (which wraps the message with file:line
+// boilerplate). Messages matching common "not found" substrings map to
+// Status::NotFound; everything else becomes Status::InternalError.
+Status tenann_error_to_status(const tenann::Error& e);
 } // namespace starrocks
 
 #endif

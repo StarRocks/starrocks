@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列内でパターンが出現する回数をカウントします。"
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

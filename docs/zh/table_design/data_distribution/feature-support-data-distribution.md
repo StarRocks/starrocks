@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Reference for partitioning and bucketing feature support in StarRocks: expression, range, list partitioning, and random bucketing capabilities."
 sidebar_label: "能力边界"
 sidebar_position: 50
 ---

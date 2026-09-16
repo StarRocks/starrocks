@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "EXCEPT/MINUS returns distinct results from left query not appearing in right query."
 sidebar_label: "EXCEPT/MINUS"
 ---
 

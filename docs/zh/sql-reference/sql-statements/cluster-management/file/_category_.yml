@@ -3,4 +3,5 @@ label: '文件'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: file

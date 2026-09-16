@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW DELETE queries successful historical DELETE operations on Duplicate Key, Unique Key, and Aggregate tables."
 ---
 
 # SHOW DELETE

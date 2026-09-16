@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Apache Kafka からメッセージを継続的に消費し StarRocks にロードします。"
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -15,7 +16,7 @@ Routine Load は Apache Kafka® からメッセージを継続的に消費し、
 このトピックでは、CREATE ROUTINE LOAD ステートメントの構文、パラメーター、および例について説明します。
 
 :::note
-- Routine Load の適用シナリオ、原則、および基本操作については、 [Load data using Routine Load](../../../../loading/Loading_intro.md) を参照してください。
+- Routine Load の適用シナリオ、原則、および基本操作については、 [Load data using Routine Load](../../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 - StarRocks テーブルにデータをロードするには、その StarRocks テーブルに対して INSERT 権限を持つユーザーとしてのみ可能です。INSERT 権限を持っていない場合は、 [GRANT](../../account-management/GRANT.md) の指示に従って、StarRocks クラスターに接続するために使用するユーザーに INSERT 権限を付与してください。
 :::
 
@@ -111,7 +112,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `desired_concurrent_number`
 
 **必須**: いいえ\
-**説明**: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。実際のタスク並行性は、複数のパラメーターの最小値によって決定されます: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。 <ul><li>`alive_be_number`: 生存している BE ノードの数。</li><li>`partition_number`: 消費されるパーティションの数。</li><li>`desired_concurrent_number`: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。</li><li>`max_routine_load_task_concurrent_num`: Routine Load ジョブのデフォルトの最大タスク並行性で、`5` です。 [FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) を参照してください。</li></ul>最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数によって決定されます。<br/>
+**説明**: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。実際のタスク並行性は、複数のパラメーターの最小値によって決定されます: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。 <ul><li>`alive_be_number`: 生存している BE ノードの数。</li><li>`partition_number`: 消費されるパーティションの数。</li><li>`desired_concurrent_number`: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。</li><li>`max_routine_load_task_concurrent_num`: Routine Load ジョブのデフォルトの最大タスク並行性で、`5` です。 [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) を参照してください。</li></ul>最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数によって決定されます。<br/>
 
 #### `max_batch_interval`
 
@@ -136,7 +137,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `strict_mode`      
 
 **必須**: いいえ\
-**説明**: [strict mode](../../../../loading/load_concept/strict_mode.md) を有効にするかどうかを指定します。有効な値: `true` と `false`。デフォルト値: `false`。strict mode が有効な場合、ロードされたデータのカラムの値が `NULL` であり、ターゲットテーブルがこのカラムに `NULL` 値を許可しない場合、データ行はフィルタリングされます。
+**説明**: [strict mode](../../../../loading/strict_mode.md) を有効にするかどうかを指定します。有効な値: `true` と `false`。デフォルト値: `false`。strict mode が有効な場合、ロードされたデータのカラムの値が `NULL` であり、ターゲットテーブルがこのカラムに `NULL` 値を許可しない場合、データ行はフィルタリングされます。
 
 #### `log_rejected_record_num`
 
@@ -166,7 +167,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **必須**: いいえ\
-**説明**: データファイルが CSV 形式の場合、カラムセパレーターの前後のスペースを削除するかどうかを指定します。タイプ: BOOLEAN。デフォルト値: `false`。<br />一部のデータベースでは、データを CSV 形式のデータファイルとしてエクスポートする際に、カラムセパレーターにスペースが追加されます。これらのスペースは、その位置に応じて先行スペースまたは後続スペースと呼ばれます。`trim_space` パラメーターを設定することで、StarRocks がデータロード中にこれらの不要なスペースを削除するようにできます。<br />StarRocks は、`enclose` で指定された文字で囲まれたフィールド内のスペース（先行スペースおよび後続スペースを含む）を削除しないことに注意してください。たとえば、次のフィールド値は、カラムセパレーターとしてパイプ (<code class="language-text">&#124;</code>) を使用し、`enclose` で指定された文字として二重引用符 (`"`) を使用しています: <code class="language-text">&#124; "Love StarRocks" &#124;</code>。`trim_space` を `true` に設定すると、StarRocks は前述のフィールド値を <code class="language-text">&#124;"Love StarRocks"&#124;</code> として処理します。
+**説明**: データファイルが CSV 形式の場合、カラムセパレーターの前後のスペースを削除するかどうかを指定します。タイプ: BOOLEAN。デフォルト値: `false`。<br />一部のデータベースでは、データを CSV 形式のデータファイルとしてエクスポートする際に、カラムセパレーターにスペースが追加されます。これらのスペースは、その位置に応じて先行スペースまたは後続スペースと呼ばれます。`trim_space` パラメーターを設定することで、StarRocks がデータロード中にこれらの不要なスペースを削除するようにできます。<br />StarRocks は、`enclose` で指定された文字で囲まれたフィールド内のスペース（先行スペースおよび後続スペースを含む）を削除しないことに注意してください。たとえば、次のフィールド値は、カラムセパレーターとしてパイプ (`|`) を使用し、`enclose` で指定された文字として二重引用符 (`"`) を使用しています: `| "Love StarRocks" |`。`trim_space` を `true` に設定すると、StarRocks は前述のフィールド値を `|"Love StarRocks"|` として処理します。
 
 #### `enclose`
 
@@ -201,12 +202,12 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `task_consume_second`
 
 **必須**: いいえ\
-**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクがデータを消費する最大時間。単位: 秒。 [FE dynamic parameters](../../../../administration/management/FE_configuration.md) `routine_load_task_consume_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。<ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> </ul>
+**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクがデータを消費する最大時間。単位: 秒。 [FE dynamic parameters](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。<ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> </ul>
 
 #### `task_timeout_second`
 
 **必須**: いいえ\
-**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクのタイムアウト期間。単位: 秒。 [FE dynamic parameter](../../../../administration/management/FE_configuration.md) `routine_load_task_timeout_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。 <ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> </ul>
+**説明**: 指定された Routine Load ジョブ内の各 Routine Load タスクのタイムアウト期間。単位: 秒。 [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second`（クラスター内のすべての Routine Load ジョブに適用される）とは異なり、このパラメーターは個々の Routine Load ジョブに特有であり、より柔軟です。このパラメーターは v3.1.0 以降でサポートされています。 <ul> <li>`task_consume_second` と `task_timeout_second` が設定されていない場合、StarRocks は FE 動的パラメーター `routine_load_task_consume_second` と `routine_load_task_timeout_second` を使用してロード動作を制御します。</li> <li>`task_timeout_second` のみが設定されている場合、`task_consume_second` のデフォルト値は `task_timeout_second`/4 として計算されます。</li> <li>`task_consume_second` のみが設定されている場合、`task_timeout_second` のデフォルト値は `task_consume_second` * 4 として計算されます。</li> </ul>
 
 #### `pause_on_fatal_parse_error`
 
@@ -253,7 +254,12 @@ FROM <data_source>
 #### `property.kafka_default_offsets`
 
 **必須**: いいえ\
-**説明**: すべての消費者パーティションのデフォルトの開始オフセット。このプロパティのサポートされる値は `kafka_offsets` プロパティと同じです。
+**説明**: すべての消費者パーティションのデフォルトの開始オフセット。このプロパティのサポートされる値は `kafka_offsets` プロパティと同じです。ジョブが既に消費進捗を持った後に発見されたパーティション（たとえば、後から Kafka トピックに追加されたパーティション）は、このオフセットから消費を開始します。このプロパティが指定されていない場合は `OFFSET_BEGINNING` から消費を開始します。
+
+#### `property.kafka_partition_discovery`
+
+**必須**: いいえ\
+**説明**: `kafka_partitions` が指定されている場合でも、Routine Load ジョブが新しい Kafka パーティションを自動的に発見し続けるかどうか。有効な値: `true` および `false`（デフォルト）。デフォルトでは、`kafka_partitions` を指定するとジョブはリストされたパーティションのみを消費し、後からトピックに追加されたパーティションは消費されません。このプロパティを `true` に設定すると、`kafka_partitions` と `kafka_offsets` はリストされたパーティションの開始オフセットの指定にのみ使用され、ジョブは後から追加されたパーティションを含むトピックのすべてのパーティションを消費します。`kafka_partitions` にリストされていないパーティションは、`property.kafka_default_offsets` で指定されたオフセットから消費を開始します。`property.kafka_default_offsets` が指定されていない場合は `OFFSET_BEGINNING` から消費を開始します。リストされていないパーティションを最新のオフセットから消費させたい場合は、`property.kafka_default_offsets` を `OFFSET_END` に明示的に設定してください。このプロパティは `kafka_partitions` と一緒にのみ使用できます。
 
 #### `confluent.schema.registry.url`
 
@@ -341,7 +347,7 @@ Kafka に関連する追加のデータソースプロパティを指定でき�
 
 ### FE と BE の設定項目
 
-Routine Load に関連する FE と BE の設定項目については、 [configuration items](../../../../administration/management/FE_configuration.md) を参照してください。
+Routine Load に関連する FE と BE の設定項目については、 [configuration items](../../../../administration/configuration/FE_parameters/FE_parameters.md) を参照してください。
 
 ## カラムマッピング
 
@@ -818,8 +824,8 @@ CREATE TABLE example_db.example_tbl3 (
     country varchar(26) NULL, 
     pay_time bigint(20) NULL, 
     price double SUM NULL) 
-AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 ENGINE=OLAP
+AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 DISTRIBUTED BY HASH(commodity_id); 
 ```
 
@@ -964,7 +970,7 @@ CREATE TABLE sensor.sensor_log2 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
@@ -1044,7 +1050,7 @@ CREATE TABLE sensor.sensor_log3 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 

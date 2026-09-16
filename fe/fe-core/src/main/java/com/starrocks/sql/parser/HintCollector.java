@@ -127,6 +127,15 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
     }
 
     @Override
+    public Void visitMergeIntoStatement(StarRocksParser.MergeIntoStatementContext context) {
+        extractHintToRight(context, context.MERGE().getSymbol().getTokenIndex());
+        if (context.relation() != null) {
+            visit(context.relation());
+        }
+        return null;
+    }
+
+    @Override
     public Void visitLoadStatement(StarRocksParser.LoadStatementContext context) {
         extractHintToRight(context);
         return null;

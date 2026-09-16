@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW CREATE CATALOG queries the creation statement of an external catalog."
 ---
 
 # SHOW CREATE CATALOG
@@ -11,7 +12,7 @@ displayed_sidebar: docs
 当前支持查看如下 External Catalog:
 
 - [Hive Catalog](../../../data_source/catalog/hive_catalog.md)
-- [Iceberg Catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md)
+- [Iceberg Catalog](../../../data_source/catalog/iceberg/iceberg.md)
 - [Hudi Catalog](../../../data_source/catalog/hudi_catalog.md)
 - [Delta Lake Catalog](../../../data_source/catalog/deltalake_catalog.md)
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md) (自 3.0 版本起)

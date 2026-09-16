@@ -1,6 +1,7 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
-description: "This topic provides answers to some frequently asked questions about deployment."
+description: "FAQ for common StarRocks deployment questions."
 ---
 
 # Deployment

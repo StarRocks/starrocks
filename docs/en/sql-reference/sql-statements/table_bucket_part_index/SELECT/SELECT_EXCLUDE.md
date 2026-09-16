@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "EXCLUDE"
-description: "This feature is supported starting from version 4.0."
+description: "EXCLUDE keyword filters specified columns from SELECT * results, available from StarRocks v4.0."
 ---
 
 # EXCLUDE

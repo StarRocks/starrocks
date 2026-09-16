@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CONVERT_TZ 関数のドキュメント記述要件とガイドラインを説明。"
 unlisted: True
 ---
 

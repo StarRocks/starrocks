@@ -44,6 +44,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "base/debug/debug_action.h"
@@ -56,6 +57,7 @@
 #include "runtime/arena_allocator.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_context_lifetime.h"
 
 namespace starrocks {
 
@@ -69,18 +71,19 @@ class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
-class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterPort;
 class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
+class LoadPathStateHelper;
 class RuntimeStateHelper;
 class RejectedRecordWriter;
-using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
+class QueryRuntimeState;
+class FragmentRuntimeState;
 class FragmentContext;
 } // namespace pipeline
 
@@ -134,10 +137,29 @@ public:
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
-    void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
+    ObjectPool* global_obj_pool() const { return _query_obj_pool == nullptr ? _obj_pool.get() : _query_obj_pool; }
+    void set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state,
+                       ObjectPool* query_obj_pool);
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    const pipeline::QueryContext* query_ctx() const { return _query_ctx; }
+    // For contexts without a QueryContext (ExecRuntime-level tests); production code attaches both via
+    // set_query_ctx so that query_runtime_state() is always set together with query_ctx().
+    void set_query_runtime_state(pipeline::QueryRuntimeState* query_runtime_state) {
+        _query_runtime_state = query_runtime_state;
+    }
+    pipeline::QueryRuntimeState* query_runtime_state() { return _query_runtime_state; }
+    const pipeline::QueryRuntimeState* query_runtime_state() const { return _query_runtime_state; }
+    void set_fragment_runtime_state(pipeline::FragmentRuntimeState* fragment_runtime_state) {
+        _fragment_runtime_state = fragment_runtime_state;
+    }
+    pipeline::FragmentRuntimeState* fragment_runtime_state() { return _fragment_runtime_state; }
+    const pipeline::FragmentRuntimeState* fragment_runtime_state() const { return _fragment_runtime_state; }
+    void set_query_ctx_lifetime(QueryContextLifetimeWeakPtr lifetime) { _query_ctx_lifetime = std::move(lifetime); }
+    QueryContextLifetimeWeakPtr query_ctx_lifetime() const { return _query_ctx_lifetime; }
     pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
-    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx);
+    const pipeline::FragmentContext* fragment_ctx() const { return _fragment_ctx; }
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx,
+                          pipeline::FragmentRuntimeState* fragment_runtime_state);
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
@@ -283,7 +305,7 @@ public:
     // JSON Lines for the sync daemon to ship to
     // `_statistics_.rejected_records`. Returns nullptr when the writer has
     // not been created; callers should go through
-    // `RuntimeStateHelper::rejected_record_writer(state)` which handles
+    // `LoadPathStateHelper::rejected_record_writer(state)` which handles
     // lazy construction under lock.
     RejectedRecordWriter* rejected_record_writer_or_null() const { return _rejected_record_writer.get(); }
 
@@ -565,6 +587,12 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+    double lake_tablet_internal_parallel_skew_split_ratio() const {
+        return _query_options.__isset.lake_tablet_internal_parallel_skew_split_ratio
+                       ? _query_options.lake_tablet_internal_parallel_skew_split_ratio
+                       : 1.5;
+    }
+
     bool enable_wait_dependent_event() const {
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
@@ -587,20 +615,6 @@ public:
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
-    void set_non_broadcast_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
-        this->_non_broadcast_rf_ids = std::move(filter_ids);
-    }
-
-    const std::unordered_set<int32_t>& non_broadcast_rf_ids() const { return this->_non_broadcast_rf_ids; }
-
-    void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
-        this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
-    }
-
-    const BroadcastJoinRightOffsprings& broadcast_join_right_offsprings() const {
-        return this->_broadcast_join_right_offsprings;
-    }
-
     bool enable_event_scheduler() const { return _enable_event_scheduler; }
     void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
 
@@ -618,6 +632,10 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool ngram_search_support_utf8() const {
+        return _query_options.__isset.ngram_search_support_utf8 && _query_options.ngram_search_support_utf8;
+    }
+
     bool enable_global_late_materialization() const {
         return _query_options.__isset.enable_global_late_materialization &&
                _query_options.enable_global_late_materialization;
@@ -628,6 +646,7 @@ public:
     void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
+    friend class LoadPathStateHelper;
     friend class RuntimeStateHelper;
 
     // Set per-query state.
@@ -652,13 +671,10 @@ private:
     // gone but the mutex keeps the historical name so call sites remain
     // stable across the deletion.
     std::mutex _rejected_record_lock;
-    // Writer. Lazily constructed by RuntimeStateHelper on first
+    // Writer. Lazily constructed by LoadPathStateHelper on first
     // append so enabled-but-never-triggered loads pay no allocation cost.
     // Held via shared_ptr so this header does not need RejectedRecordWriter's
-    // complete type for destruction. Letting unique_ptr destruct here would
-    // force runtime_state.cpp (RuntimeCore layer) to include the writer
-    // header, which lives in the higher Runtime layer and breaks the module
-    // boundary check.
+    // complete type for destruction.
     std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
@@ -674,6 +690,7 @@ private:
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
     const QueryExecutionServices* _query_execution_services = nullptr;
+    QueryContextLifetimeWeakPtr _query_ctx_lifetime;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
@@ -695,6 +712,7 @@ private:
     std::unique_ptr<MemPoolResource> _mem_resource;
 
     std::shared_ptr<ObjectPool> _obj_pool;
+    ObjectPool* _query_obj_pool = nullptr;
 
     // if true, execution should stop with a CANCELLED status
     std::atomic<bool> _is_cancelled{false};
@@ -772,12 +790,11 @@ private:
     FragmentDictState* _fragment_dict_state = nullptr;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+    pipeline::QueryRuntimeState* _query_runtime_state = nullptr;
+    pipeline::FragmentRuntimeState* _fragment_runtime_state = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
-
-    std::unordered_set<int32_t> _non_broadcast_rf_ids;
-    BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 
     std::optional<TSpillOptions> _spill_options;
 

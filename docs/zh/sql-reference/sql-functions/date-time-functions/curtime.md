@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "获取当前的时间，以 TIME 类型返回。"
 ---
 
 # curtime,current_time

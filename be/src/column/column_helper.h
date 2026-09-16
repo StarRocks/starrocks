@@ -17,8 +17,8 @@
 // NOTE: This file is included by a large number of files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <utility>
 
+#include "base/simd/filter.h"
 #include "base/simd/simd.h"
-#include "column/column_filter_range.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
@@ -661,19 +661,14 @@ public:
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
 
-    template <typename T, bool avx512f>
-    static size_t t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to) {
-        return column_filter_range::t_filter_range<T, avx512f>(filter, dst_data, src_data, from, to);
-    }
-
     template <typename T>
     static size_t filter_range(const Filter& filter, T* data, size_t from, size_t to) {
-        return column_filter_range::filter_range<T>(filter, data, from, to);
+        return SIMD::Filter::filter_range(data, data, filter.data(), from, to);
     }
 
     template <typename T>
     static size_t filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to) {
-        return column_filter_range::filter_range<T>(filter, dst_data, src_data, from, to);
+        return SIMD::Filter::filter_range(dst_data, src_data, filter.data(), from, to);
     }
 
     template <typename T>

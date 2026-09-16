@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "pipes 提供当前或指定数据库下所有 Pipe 的详细信息。"
 ---
 
 # pipes
@@ -8,7 +9,7 @@ displayed_sidebar: docs
 
 :::note
 
-您可以通过 [SHOW PIPES](../../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md) 命令查看当前数据库或指定数据库下 Pipe。该命令也是从 3.2 版本开始支持。
+您可以通过 [SHOW PIPES](../sql-statements/loading_unloading/pipe/SHOW_PIPES.md) 命令查看当前数据库或指定数据库下 Pipe。该命令也是从 3.2 版本开始支持。
 
 :::
 

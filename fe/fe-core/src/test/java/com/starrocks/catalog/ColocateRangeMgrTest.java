@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 public class ColocateRangeMgrTest {
 
@@ -300,5 +301,41 @@ public class ColocateRangeMgrTest {
         // Find in group 2
         ColocateRange found2 = colocateRangeMgr.getColocateRange(groupId2, makeTuple(100));
         Assertions.assertEquals(2001L, found2.getShardGroupId());
+    }
+
+    // ---- getAllPackShardGroupIds ----
+
+    @Test
+    public void testGetAllPackShardGroupIdsEmpty() {
+        Assertions.assertTrue(colocateRangeMgr.getAllPackShardGroupIds().isEmpty());
+    }
+
+    @Test
+    public void testGetAllPackShardGroupIdsSingleGroup() {
+        colocateRangeMgr.initColocateGroup(COLOCATE_GROUP_ID, 1001L);
+        Assertions.assertEquals(Set.of(1001L), colocateRangeMgr.getAllPackShardGroupIds());
+    }
+
+    @Test
+    public void testGetAllPackShardGroupIdsMultiRange() {
+        List<ColocateRange> ranges = Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(100)), 1001L),
+                new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 1002L),
+                new ColocateRange(Range.ge(makeTuple(200)), 1003L));
+        colocateRangeMgr.setColocateRanges(COLOCATE_GROUP_ID, ranges);
+        Assertions.assertEquals(Set.of(1001L, 1002L, 1003L), colocateRangeMgr.getAllPackShardGroupIds());
+    }
+
+    @Test
+    public void testGetAllPackShardGroupIdsMultiGroup() {
+        colocateRangeMgr.initColocateGroup(100L, 1001L);
+        colocateRangeMgr.setColocateRanges(200L, Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(50)), 2001L),
+                new ColocateRange(Range.ge(makeTuple(50)), 2002L)));
+        Assertions.assertEquals(Set.of(1001L, 2001L, 2002L), colocateRangeMgr.getAllPackShardGroupIds());
+
+        // After removing one group, only the other group's PACK ids remain.
+        colocateRangeMgr.removeColocateGroup(100L);
+        Assertions.assertEquals(Set.of(2001L, 2002L), colocateRangeMgr.getAllPackShardGroupIds());
     }
 }

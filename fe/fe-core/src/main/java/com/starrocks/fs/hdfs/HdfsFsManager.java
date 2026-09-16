@@ -28,7 +28,6 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -716,7 +715,7 @@ public class HdfsFsManager {
     public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws StarRocksException {
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
-        loadProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
+        loadProperties.put(CloudConfigurationConstants.AZURE_PATH_KEY, path);
 
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
@@ -1199,7 +1198,7 @@ public class HdfsFsManager {
             }
             return fileSystem;
         } catch (Exception e) {
-            LOG.error("errors while connect to " + path, e);
+            LOG.error("error while connecting to {}", path, e);
             throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();

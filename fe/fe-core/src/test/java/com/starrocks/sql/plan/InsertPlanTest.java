@@ -15,9 +15,12 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -28,10 +31,14 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -81,6 +88,65 @@ public class InsertPlanTest extends PlanTestBase {
                 "DUPLICATE KEY(id)\n" +
                 "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
                 "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE insert_online_optimize_shadow_generated_column (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v int NOT NULL,\n" +
+                "  tags json NULL,\n" +
+                "  g varchar(32) NULL AS get_json_string(tags, '$.vendorId')\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY (pk)\n" +
+                "DISTRIBUTED BY HASH (pk) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+    }
+
+    @Test
+    public void testOnlineOptimizeRewriteExcludesStaleGeneratedColumns() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("insert_online_optimize_shadow_generated_column");
+        List<Column> originalFullSchema = table.getFullSchema();
+        List<Column> schemaWithStaleGeneratedColumns = new ArrayList<>(originalFullSchema);
+        for (Column column : table.getBaseSchema()) {
+            if (column.isGeneratedColumn()) {
+                schemaWithStaleGeneratedColumns.add(column.deepCopy());
+                Column shadowColumn = column.deepCopy();
+                shadowColumn.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + column.getName());
+                schemaWithStaleGeneratedColumns.add(shadowColumn);
+            }
+        }
+
+        String sql = "insert into insert_online_optimize_shadow_generated_column (pk, v, tags) " +
+                "select pk, v, tags from insert_online_optimize_shadow_generated_column";
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode())
+                .get(0);
+        boolean originalOptimizeRewrite = connectContext.isOptimizeRewrite();
+        connectContext.setOptimizeRewrite(true);
+        try {
+            connectContext.setQueryId(UUIDUtil.genUUID());
+            connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+            connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            connectContext.getDumpInfo().setOriginStmt(sql);
+            Analyzer.analyze(insertStmt, connectContext);
+            AnalyzerUtils.collectAllDatabase(connectContext, insertStmt);
+
+            // Simulate fullSchema changing after analysis but before sink planning, as can happen when
+            // an online optimize job publishes or cleans up a shadow schema concurrently with DML.
+            table.setNewFullSchema(schemaWithStaleGeneratedColumns);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, insertStmt);
+            StatementPlanner.lock(locker);
+            try {
+                ExecPlan execPlan = new InsertPlanner(locker, true).plan(insertStmt, connectContext);
+                OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                Assertions.assertEquals(originalFullSchema.size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertTrue(sink.getTupleDescriptor().getSlots().stream()
+                        .noneMatch(slot -> slot.getColumn().isShadowColumn()));
+            } finally {
+                StatementPlanner.unLock(locker);
+            }
+        } finally {
+            connectContext.setOptimizeRewrite(originalOptimizeRewrite);
+            table.setNewFullSchema(originalFullSchema);
+        }
     }
 
     @Test
@@ -429,12 +495,15 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     private static String getInsertExecPlan(StatementBase statementBase, String originStmt) throws Exception {
+        return getInsertExecPlanObject(statementBase, originStmt).getExplainString(TExplainLevel.NORMAL);
+    }
+
+    private static ExecPlan getInsertExecPlanObject(StatementBase statementBase, String originStmt) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         connectContext.getDumpInfo().setOriginStmt(originStmt);
-        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
-        return execPlan.getExplainString(TExplainLevel.NORMAL);
+        return new StatementPlanner().plan(statementBase, connectContext);
     }
 
     public static void containsKeywords(String plan, String... keywords) throws Exception {
@@ -654,7 +723,7 @@ public class InsertPlanTest extends PlanTestBase {
         String sql = "explain insert into t0 select * from t0";
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+        new StatementPlanner().plan(statementBase, connectContext);
         Assertions.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }
 
@@ -1054,7 +1123,7 @@ public class InsertPlanTest extends PlanTestBase {
 
         String sql = "insert into iceberg_catalog_lineage.iceberg_db.iceberg_lineage_table select 1, 2, 3, 4";
         InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true, false);
 
         String actualRes = getInsertExecPlan(rewriteStmt, sql);
         Assertions.assertTrue(actualRes.contains(IcebergTable.ROW_ID), actualRes);
@@ -1294,6 +1363,130 @@ public class InsertPlanTest extends PlanTestBase {
                 Lists.newArrayList(data, k2), Lists.newArrayList(data), Arrays.asList(0),
                 "select data, id from iceberg_shuffle_src");
         assertHashPartitionedByExpression(actualRes, "__iceberg_transform_truncate");
+    }
+
+    @Test
+    public void testInsertHiveWithGlobalShuffle() throws Exception {
+        Column c1 = new Column("c1", IntegerType.INT);
+        Column p1 = new Column("p1", IntegerType.INT);
+        String actualRes = getHiveInsertExecPlanWithGlobalShuffle(
+                "hive_catalog_shuffle", "hive_table",
+                Lists.newArrayList(c1, p1),
+                Lists.newArrayList("p1"),
+                "select 1, 2 from t0",
+                ConnectorSinkShuffleMode.FORCE);
+        // FORCE mode + partitioned hive ⇒ HASH_PARTITIONED by partition column p1
+        Assertions.assertTrue(actualRes.contains("HASH_PARTITIONED:") && actualRes.contains("p1"),
+                "Expected HASH_PARTITIONED by p1, got:\n" + actualRes);
+        Assertions.assertTrue(actualRes.contains("Hive TABLE SINK"),
+                "Expected Hive TABLE SINK, got:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertHiveNeverModeNoShuffle() throws Exception {
+        Column c1 = new Column("c1", IntegerType.INT);
+        Column p1 = new Column("p1", IntegerType.INT);
+        String actualRes = getHiveInsertExecPlanWithGlobalShuffle(
+                "hive_catalog_never", "hive_table",
+                Lists.newArrayList(c1, p1),
+                Lists.newArrayList("p1"),
+                "select 1, 2 from t0",
+                ConnectorSinkShuffleMode.NEVER);
+        // NEVER mode ⇒ no global shuffle, single fragment co-located with scan
+        Assertions.assertFalse(actualRes.contains("HASH_PARTITIONED:"),
+                "NEVER mode should not produce HASH_PARTITIONED, got:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertHiveUnpartitionedNoShuffle() throws Exception {
+        Column c1 = new Column("c1", IntegerType.INT);
+        Column c2 = new Column("c2", IntegerType.INT);
+        String actualRes = getHiveInsertExecPlanWithGlobalShuffle(
+                "hive_catalog_unpart", "hive_table",
+                Lists.newArrayList(c1, c2),
+                Lists.newArrayList(),       // empty partition columns
+                "select 1, 2 from t0",
+                ConnectorSinkShuffleMode.FORCE);
+        // Even with FORCE, no partition columns ⇒ no shuffle (hashing key would be empty)
+        Assertions.assertFalse(actualRes.contains("HASH_PARTITIONED:"),
+                "Unpartitioned hive should not produce HASH_PARTITIONED, got:\n" + actualRes);
+    }
+
+    private String getHiveInsertExecPlanWithGlobalShuffle(String catalogName, String tableName,
+                                                          List<Column> fullSchema,
+                                                          List<String> partitionColumnNames,
+                                                          String selectSql,
+                                                          ConnectorSinkShuffleMode mode) throws Exception {
+        String createHiveCatalogStmt = String.format(
+                "create external catalog %s properties (\"type\"=\"hive\", " +
+                        "\"hive.metastore.uris\"=\"thrift://hms:9083\")", catalogName);
+        starRocksAssert.withCatalog(createHiveCatalogStmt);
+
+        List<String> dataColumnNames = fullSchema.stream()
+                .map(Column::getName)
+                .filter(n -> !partitionColumnNames.contains(n))
+                .collect(java.util.stream.Collectors.toList());
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setId(com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
+                .setTableName(tableName)
+                .setCatalogName(catalogName)
+                .setResourceName(com.starrocks.server.CatalogMgr.ResourceMappingCatalog
+                        .toResourceName(catalogName, "hive"))
+                .setHiveDbName("hive_db")
+                .setHiveTableName(tableName)
+                .setPartitionColumnNames(partitionColumnNames)
+                .setDataColumnNames(dataColumnNames)
+                .setFullSchema(fullSchema)
+                .setTableLocation("hdfs://fake_location/" + tableName)
+                .setProperties(new HashMap<>())
+                .setStorageFormat(com.starrocks.connector.hive.HiveStorageFormat.PARQUET)
+                .setCreateTime(System.currentTimeMillis())
+                .build();
+
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+        long tableId = hiveTable.getId();
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, catalogName, "hive_db");
+                result = new Database(tableId, "hive_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, catalogName, "hive_db", tableName);
+                result = hiveTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+                return mode;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String currentCatalogName, String dbName) {
+                return new Database(tableId, "hive_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName currentTableName) {
+                return hiveTable;
+            }
+        };
+
+        boolean enableMaterializedViewRewrite =
+                connectContext.getSessionVariable().isEnableMaterializedViewRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        try {
+            return getInsertExecPlan(String.format(
+                    "explain insert into %s.hive_db.%s %s", catalogName, tableName, selectSql));
+        } finally {
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(enableMaterializedViewRewrite);
+        }
     }
 
     private String getIcebergInsertExecPlanWithGlobalShuffle(String catalogName, String tableName, long tableId,

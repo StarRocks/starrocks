@@ -1,20 +1,18 @@
--- name: test_column_default
-CREATE TABLE `test_column_default` (
-  `date` date NOT NULL DEFAULT "1970-01-01" COMMENT "",
-  `device_id` varchar(150) NOT NULL DEFAULT "" COMMENT "",
-  `server_ip` varchar(150) NOT NULL DEFAULT "" COMMENT "",
-  `id` int(11) NOT NULL COMMENT "",
-  `device_type` tinyint(4) NOT NULL COMMENT ""
+-- name: test_column_datetime_precision
+CREATE TABLE `test_column_datetime_precision` (
+  `id` int NOT NULL COMMENT "",
+  `dt` datetime NOT NULL COMMENT "",
+  `d` date NOT NULL COMMENT ""
 ) ENGINE=OLAP
-DUPLICATE KEY(`date`, `device_id`)
-DISTRIBUTED BY RANDOM
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
 "replication_num" = "1"
 );
-show full columns from test_column_default;
-select COLUMN_NAME, DATA_TYPE, NUMERIC_SCALE, COLUMN_DEFAULT, COLUMN_COMMENT AS DESCRIPTION, COLUMN_TYPE
+-- DATETIME_PRECISION must be non-NULL for DATETIME columns so MySQL-protocol
+-- clients (e.g. Trino's mysql connector) can derive COLUMN_SIZE; DATE and
+-- non-temporal columns stay NULL.
+select COLUMN_NAME, DATA_TYPE, DATETIME_PRECISION
 from INFORMATION_SCHEMA.COLUMNS
-where table_name = 'test_column_default';
-
--- query information_schema.columns without db
-select if(count(*) > 1, "OK", "FAILED") from INFORMATION_SCHEMA.COLUMNS;
+where table_name = 'test_column_datetime_precision' order by ORDINAL_POSITION;
+drop table test_column_datetime_precision;

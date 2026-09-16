@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "How to view and interpret materialized view refresh task run details in StarRocks to understand refresh behavior, troubleshoot failures, and monitor refresh performance."
+description: "How to view and interpret materialized view refresh task run details in StarRocks to understand refresh behavior, troubleshoot failures, and monitor refresh..."
 ---
 
 # Understand Materialized View Task Runs

@@ -1,0 +1,67 @@
+-- name: test_query_cache_light_schema_change
+CREATE TABLE ls1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL,
+  x int NOT NULL DEFAULT "1"
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+INSERT INTO ls1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 1, 1
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;
+-- result:
+620
+-- !result
+ALTER TABLE ls1 DROP COLUMN x;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE ls1 ADD COLUMN x int NOT NULL DEFAULT "7";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;
+-- result:
+4340
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;
+-- result:
+4340
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select sum(s) from (select c1, sum(x) s from ls1 where dt >= '2022-01-01' group by c1) x;
+-- result:
+4340
+-- !result

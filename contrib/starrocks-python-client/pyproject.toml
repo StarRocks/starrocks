@@ -66,9 +66,13 @@ test = [
     "pytest",
     "pytest-xdist",
     "mock",
+    "sqlglot>=25",
 ]
 alembic = [
-    "alembic>=1.14.0"
+    "alembic>=1.14.0",
+    # Optional: enables AST-based canonicalization of view/MV definitions during
+    # autogenerate (starrocks.common.sql_canonical). Falls back to regex if absent.
+    "sqlglot>=25",
 ]
 
 [project.urls]

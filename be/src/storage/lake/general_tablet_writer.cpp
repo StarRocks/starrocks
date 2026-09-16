@@ -22,24 +22,25 @@
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "serde/column_array_serde.h"
+#include "storage/index/vector/vector_index_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/vector_index_utils.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
-namespace {
 // async/sync is a table-level setting (every vector index on a given schema shares the
 // same index_build_mode). Returning bool from "any vector index has async mode" is
 // equivalent to "the table is in async mode" for this purpose.
@@ -80,23 +81,9 @@ uint32_t get_vector_index_build_threshold(const TabletSchemaCSPtr& schema) {
         if (it == tablet_index.end()) {
             continue;
         }
-        const auto& props = it->second.common_properties();
-        auto threshold_it = props.find("index_build_threshold");
-        if (threshold_it != props.end()) {
-            // Use a checked parse: atoi() silently treats malformed strings as 0 and would
-            // wrap a negative int into a huge uint32_t after the cast, neither of which is
-            // a sensible build threshold. Fall back to the config default on parse failure
-            // or out-of-range values.
-            char* end = nullptr;
-            errno = 0;
-            unsigned long parsed = std::strtoul(threshold_it->second.c_str(), &end, 10);
-            if (errno == 0 && end != threshold_it->second.c_str() && *end == '\0' &&
-                parsed <= std::numeric_limits<uint32_t>::max()) {
-                return static_cast<uint32_t>(parsed);
-            }
-            LOG(WARNING) << "ignoring invalid index_build_threshold='" << threshold_it->second
-                         << "', falling back to config_vector_index_default_build_threshold";
-        }
+        // Single source of truth shared with the inline build path so async and sync resolve
+        // the same threshold, including the IVFPQ nlist floor.
+        return resolve_vector_index_build_threshold(it->second);
     }
     return config::config_vector_index_default_build_threshold;
 }
@@ -125,7 +112,7 @@ Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tab
                                 column.unique_id()));
         }
         int64_t index_id = it->second.index_id();
-        std::string vi_name = gen_vector_index_filename(segment_name, index_id);
+        std::string vi_name = gen_vector_index_filename(segment_name, tablet_id, index_id);
         std::string full_path;
         if (location_provider && fs) {
             full_path = location_provider->segment_location(tablet_id, vi_name);
@@ -136,7 +123,6 @@ Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tab
     }
     return Status::OK();
 }
-} // namespace
 
 void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer) {
     if (segment_writer == nullptr) {
@@ -200,9 +186,9 @@ Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void HorizontalGeneralTabletWriter::close() {
-    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty() && _del_ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size() + _del_ssts.size());
         for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
@@ -230,11 +216,26 @@ void HorizontalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // Pre-built tombstone sstables live at sst_location like _ssts. Del files below the SST threshold
+        // append an empty FileInfo placeholder to stay aligned with _dels, so skip empty paths.
+        for (const auto& f : _del_ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
     _segments.clear();
     _dels.clear();
     _ssts.clear();
+    _del_ssts.clear();
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() const {
@@ -243,6 +244,13 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() c
                                                             _flush_pool, _bundle_file_context, _global_dicts);
     RETURN_IF_ERROR(writer->open());
     writer->set_auto_flush(auto_flush());
+    // Propagate the force-inline flag: spilled sorted schema changes merge through cloned writers
+    // (LoadSpillPipelineMergeIterator). Without this, clones default to false and defer .vi building
+    // even though the schema-change job stamped the shadow tablets' vibv as already built, so the
+    // existing rows would publish without inline-built vector files and never get rescheduled.
+    if (_force_build_vector_index_inline) {
+        writer->force_set_build_vector_index_inline();
+    }
     return writer;
 }
 
@@ -261,7 +269,9 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
 
     opts.global_dicts = _global_dicts;
 
-    opts.defer_vector_index_build = has_async_vector_index(_schema);
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
@@ -283,10 +293,17 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
         // then we will create a shared file for this segment writer.
         RETURN_IF_ERROR(_bundle_file_context->try_create_bundle_file(create_file_fn));
         of = std::make_unique<BundleWritableFile>(_bundle_file_context, wopts.encryption_info);
-        // Bundle segments skip vector index: the segment filename in metadata is the
-        // shared bundle filename, which differs from the independent segment name used
-        // to generate .vi file paths. Vector indexes will be built after compaction.
-        opts.skip_vector_index = true;
+        // Bundle segments share one physical file across the partition's tablets, so the .vi
+        // path must derive from the shared bundle filename (what metadata records) -- not the
+        // independent `name`. gen_vector_index_filename adds this tablet's id so tablets sharing
+        // the bundle get distinct .vi files instead of overwriting each other.
+        RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, basename(_bundle_file_context->filename()),
+                                                     _tablet_mgr, _location_provider.get(), _fs.get(), opts));
+        // Async mode defers the build to the lake build task (no inline write into the bundle
+        // path); sync mode builds the .vi inline now, which the unambiguous naming makes safe.
+        if (opts.defer_vector_index_build) {
+            opts.skip_vector_index = true;
+        }
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
         RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
@@ -297,6 +314,34 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
     return Status::OK();
+}
+
+void HorizontalGeneralTabletWriter::record_segment_vector_index_ids(SegmentFileInfo& segment_file_info,
+                                                                    SegmentWriter* seg_writer) const {
+    // Record which vector indexes need a .vi file for this segment. Shared by the duplicate-key
+    // flush path and the primary-key override (HorizontalPkTabletWriter) so the two cannot
+    // silently diverge: the PK override previously omitted this, dropping vector index builds
+    // for shared-data primary-key tables.
+    if (seg_writer->defer_vector_index_build()) {
+        // Async: only skip segments below the deferred-build threshold. Bundle-file segments are
+        // supported now -- their .vi is named per-tablet (gen_vector_index_filename includes the
+        // tablet id) and built by the deferred task from this tablet's bundle slice.
+        if (segment_file_info.num_rows < seg_writer->vector_index_build_threshold()) {
+            return;
+        }
+    } else if (!seg_writer->has_vector_index_written()) {
+        // Sync: record only when .vi files were actually produced inline.
+        return;
+    }
+    for (const auto& [index_id, _] : seg_writer->vector_index_file_paths()) {
+        segment_file_info.vector_index_ids.push_back(index_id);
+    }
+    // Record the tablet id that produced these .vi files (fill_vector_index_file_paths embeds it
+    // in the filename); readers must use this recorded id, not their own, so a segment shared
+    // across tablets after a split resolves the same .vi.
+    if (!segment_file_info.vector_index_ids.empty()) {
+        segment_file_info.segment_vector_index_uid = _tablet_id;
+    }
 }
 
 Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
@@ -316,34 +361,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
-        // Record which vector indexes need .vi files
-        // Skip bundled segments: .vi files don't support bundle format yet
-        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
-        if (_seg_writer->defer_vector_index_build()) {
-            if (is_bundled) {
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " SKIPPED (bundled segment)";
-            } else if (segment_file_info.num_rows >= _seg_writer->vector_index_build_threshold()) {
-                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-                    segment_file_info.vector_index_ids.push_back(index_id);
-                }
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " num_rows=" << segment_file_info.num_rows
-                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " recorded "
-                        << segment_file_info.vector_index_ids.size() << " index_ids";
-            } else {
-                VLOG(3) << "Async vector index: tablet=" << _tablet_id << " segment=" << segment_file_info.path
-                        << " num_rows=" << segment_file_info.num_rows
-                        << " threshold=" << _seg_writer->vector_index_build_threshold() << " SKIPPED (below threshold)";
-            }
-        } else {
-            // Sync mode: record vector index IDs only when .vi files were actually produced.
-            if (_seg_writer->has_vector_index_written()) {
-                for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-                    segment_file_info.vector_index_ids.push_back(index_id);
-                }
-            }
-        }
+        record_segment_vector_index_ids(segment_file_info, _seg_writer.get());
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
@@ -500,6 +518,10 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
                 }
             }
         }
+        // Record the owning tablet id for .vi naming, mirroring record_segment_vector_index_ids.
+        if (!segment_file_info.vector_index_ids.empty()) {
+            segment_file_info.segment_vector_index_uid = _tablet_id;
+        }
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
@@ -514,9 +536,9 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void VerticalGeneralTabletWriter::close() {
-    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty() && _del_ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size() + _del_ssts.size());
         for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
@@ -544,11 +566,26 @@ void VerticalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // Tombstone sstables live at sst_location like _ssts; skip empty-path placeholders (see the
+        // horizontal writer). Always empty for the vertical (non-PK) writer, kept for symmetry.
+        for (const auto& f : _del_ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
     _segments.clear();
     _dels.clear();
     _ssts.clear();
+    _del_ssts.clear();
 }
 
 StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
@@ -580,7 +617,9 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
 
     RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
                                                  _fs.get(), opts));
-    opts.defer_vector_index_build = has_async_vector_index(_schema);
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));

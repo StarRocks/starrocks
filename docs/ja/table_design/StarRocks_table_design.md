@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks テーブル設計の原則: カラムナストレージ、ソートキー、データ編成、およびクエリパフォーマンス最適化。"
 sidebar_position: 10
 ---
 

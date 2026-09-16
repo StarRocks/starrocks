@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use sorted streaming aggregate in StarRocks (available from v2.5) to optimize GROUP BY queries on pre-sorted data, reducing memory overhead compared to hash aggregation."
 sidebar_position: 90
 ---
 

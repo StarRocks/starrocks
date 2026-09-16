@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "MAP値の要素数を返します。"
 ---
 
 # map_size

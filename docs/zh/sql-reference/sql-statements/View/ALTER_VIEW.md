@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai', 'shitu'] 
 displayed_sidebar: docs
+description: "ALTER VIEW modifies the definition of a view."
 ---
 
 # ALTER VIEW

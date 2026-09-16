@@ -48,6 +48,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TabletTaskExecutorTest {
 
@@ -397,6 +398,11 @@ public class TabletTaskExecutorTest {
             public NodeMgr getNodeMgr() {
                 return nodeMgr;
             }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return true;
+            }
         };
 
         // Create a timed-out CountDownLatch (count > 0 indicates unfinished tasks)
@@ -451,6 +457,11 @@ public class TabletTaskExecutorTest {
             @Mock
             public NodeMgr getNodeMgr() {
                 return nodeMgr;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return true;
             }
         };
 
@@ -518,6 +529,11 @@ public class TabletTaskExecutorTest {
             public NodeMgr getNodeMgr() {
                 return nodeMgr;
             }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return true;
+            }
         };
 
         // Create CountDownLatch with multiple unfinished tasks
@@ -560,5 +576,62 @@ public class TabletTaskExecutorTest {
             Deencapsulation.invoke(TabletTaskExecutor.class, "waitForFinished",
                     countDownLatch, 10L);
         });
+    }
+
+    @Test
+    public void testWaitForFinishedAbortsWhenLeaderAdmissionCloses(@Mocked GlobalStateMgr globalStateMgr) {
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(1);
+        countDownLatch.addMark(10001L, 20001L);
+        AtomicInteger admissionCheckCount = new AtomicInteger();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return admissionCheckCount.getAndIncrement() == 0;
+            }
+        };
+
+        long startMs = System.currentTimeMillis();
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            Deencapsulation.invoke(TabletTaskExecutor.class, "waitForFinished",
+                    countDownLatch, 10L);
+        });
+
+        Assertions.assertTrue(exception.getMessage().contains("leader work admission is closed"));
+        Assertions.assertTrue(System.currentTimeMillis() - startMs < 5000,
+                "waitForFinished should not wait for the full tablet creation timeout after leader transfer");
+    }
+
+    @Test
+    public void testWaitForFinishedAbortsWhenLeaderAdmissionAlreadyClosed(@Mocked GlobalStateMgr globalStateMgr) {
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(1);
+        countDownLatch.addMark(10001L, 20001L);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return false;
+            }
+        };
+
+        long startMs = System.currentTimeMillis();
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            Deencapsulation.invoke(TabletTaskExecutor.class, "waitForFinished",
+                    countDownLatch, 10L);
+        });
+
+        Assertions.assertTrue(exception.getMessage().contains("leader work admission is closed"));
+        Assertions.assertTrue(System.currentTimeMillis() - startMs < 5000,
+                "waitForFinished should not wait for tablet creation timeout if admission is already closed");
     }
 }

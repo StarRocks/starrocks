@@ -105,6 +105,10 @@ public:
 
     const std::vector<std::string>& encryption_metas() const { return _encryption_metas; }
 
+    // Per-file size of each `.cols` file, 1:1 with relative_column_files(). May be empty (and
+    // individual entries may be 0) for data written before the size field existed.
+    const std::vector<int64_t>& column_file_sizes() const { return _column_file_sizes; }
+
     int64_t file_size() const { return _file_size; }
 
 private:
@@ -115,6 +119,7 @@ private:
     std::vector<std::vector<ColumnUID>> _column_uids;
     std::vector<std::string> _column_files;
     std::vector<std::string> _encryption_metas;
+    std::vector<int64_t> _column_file_sizes; // per-file size, 1:1 with _column_files; 0/empty = unknown
     size_t _memory_usage = 0;
     int64_t _file_size = 0; // file size of all column files
 };

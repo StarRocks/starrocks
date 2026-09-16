@@ -28,7 +28,10 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -127,6 +130,22 @@ public class MaterializedViewAnalyzerTest {
             Assertions.assertTrue(e.getMessage().
                     contains("Do not support create materialized view when base iceberg table partition transform "));
         }
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithVariantColumnRejected() throws Exception {
+        starRocksAssert.useDatabase("test");
+        // A materialized view is stored as a native OLAP table, so a VARIANT value column projected
+        // from an external (Iceberg) base table must be rejected at analysis: the generated MV column
+        // path does not go through ColumnDefAnalyzer, and a native VARIANT column would abort the BE
+        // on refresh (storage LogicalType dispatch LOG(FATAL)). A native VARIANT base column can no
+        // longer be created, so an external catalog is the only way to reach this path.
+        analyzeFail("CREATE MATERIALIZED VIEW test.mv_variant\n" +
+                        "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                        "AS SELECT id, v FROM iceberg0.unpartitioned_db.variant_t0;",
+                "VARIANT is not supported as a column type for materialized views");
     }
 
     @Test
@@ -538,6 +557,7 @@ public class MaterializedViewAnalyzerTest {
     @Test
     public void testCreateMVForceRange() throws Exception {
         boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        boolean oldEnableMvRangeDistribution = Config.enable_mv_range_distribution;
         Config.enable_range_distribution = false;
         try {
             // set default config for async mvs
@@ -560,13 +580,22 @@ public class MaterializedViewAnalyzerTest {
                 starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(false);
             }
 
-            // 3. Set Config to true: should be range distribution even if session variable is false
+            // 3. Set Config to true: a materialized view also needs enable_mv_range_distribution,
+            // so the table-level config alone selects nothing.
             Config.enable_range_distribution = true;
             CreateMaterializedViewStatement stmt3 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
-            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+            Assertions.assertFalse(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // 4. Set both configs to true: the config-driven default only takes effect in shared-data
+            // mode (range distribution is shared-data only), so the outcome tracks the current run mode.
+            Config.enable_mv_range_distribution = true;
+            CreateMaterializedViewStatement stmt4 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+            Assertions.assertEquals(RunMode.isSharedDataMode(),
+                    stmt4.getDistributionDesc() instanceof RangeDistributionDesc);
 
         } finally {
             Config.enable_range_distribution = oldEnableRangeDistribution;
+            Config.enable_mv_range_distribution = oldEnableMvRangeDistribution;
         }
     }
 
@@ -613,5 +642,33 @@ public class MaterializedViewAnalyzerTest {
         String sql = "create materialized view mv_on_iceberg_view refresh manual as " +
                 "SELECT id, data, date FROM `iceberg0`.`view_db`.`iceberg_view` as a;";
         analyzeFail(sql, "Create/Rebuild materialized view do not support the table type: ICEBERG_VIEW");
+    }
+
+    /**
+     * Report the distribution the DDL asked for only when it differs from the one the MV gets: a
+     * reconstructed DDL already names the key columns and must stay quiet.
+     */
+    @Test
+    public void testDescribeReplacedDistribution() {
+        List<String> keyColumns = Arrays.asList("__ROW_ID__", "id");
+
+        Assertions.assertEquals("DISTRIBUTED BY HASH(id)",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new HashDistributionDesc(8, Lists.newArrayList("id")), keyColumns));
+        Assertions.assertEquals("DISTRIBUTED BY RANDOM",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new RandomDistributionDesc(), keyColumns));
+        Assertions.assertEquals("DISTRIBUTED BY HASH(id, __ROW_ID__)",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new HashDistributionDesc(8, Lists.newArrayList("id", "__ROW_ID__")), keyColumns),
+                "a different column order is a different distribution");
+
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new HashDistributionDesc(8, Lists.newArrayList("__ROW_ID__", "id")), keyColumns));
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new HashDistributionDesc(8, Lists.newArrayList("__row_id__", "ID")), keyColumns),
+                "column names are case-insensitive");
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new RangeDistributionDesc(), keyColumns));
     }
 }

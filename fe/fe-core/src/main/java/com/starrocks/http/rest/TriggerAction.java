@@ -15,6 +15,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.clone.DynamicPartitionScheduler;
@@ -52,7 +53,9 @@ public class TriggerAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String triggerType = request.getSingleParameter("type");
 
         if (Strings.isNullOrEmpty(triggerType)) {

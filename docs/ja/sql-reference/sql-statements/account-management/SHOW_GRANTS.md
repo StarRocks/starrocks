@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW GRANTS displays all privileges and roles granted to a user or role."
 ---
 
 # SHOW GRANTS

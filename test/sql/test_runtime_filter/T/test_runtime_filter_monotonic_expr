@@ -1,0 +1,91 @@
+-- name: test_runtime_filter_monotonic_expr
+
+create table rf_expr_probe_${uuid0} (
+    id int not null,
+    c_bigint bigint null,
+    c_date date null
+)
+duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num" = "1");
+
+create table rf_expr_build_${uuid0} (
+    id int not null,
+    k_slot bigint null,
+    k_subtract bigint null,
+    k_multiply bigint null,
+    k_divide bigint null,
+    k_nested bigint null,
+    k_negative bigint null,
+    k_year smallint null
+)
+duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num" = "1");
+
+insert into rf_expr_probe_${uuid0}
+select g,
+       cast(g as bigint),
+       date_add('2000-01-01', interval g year)
+from table(generate_series(1, 20)) t(g);
+
+-- Keep a NULL Probe row in every query. Ordinary equality must never match it.
+insert into rf_expr_probe_${uuid0} values (21, null, null);
+
+-- The two non-NULL Build rows produce narrow runtime-filter bounds.
+-- The NULL key is ignored by every ordinary-equality runtime filter below.
+insert into rf_expr_build_${uuid0} values
+    (1, 10, 9, 20, 5, 22, -10, 2010),
+    (2, 14, 13, 28, 7, 30, -14, 2014),
+    (3, null, null, null, null, null, null, null);
+
+-- Verify the result types used to decode runtime-filter bounds.
+select typeof(c_bigint - 1),
+       typeof(c_bigint * 2),
+       typeof(c_bigint div 2),
+       typeof((c_bigint + 1) * 2),
+       typeof(c_bigint * -1),
+       typeof(year(c_date))
+from rf_expr_probe_${uuid0}
+where id = 1;
+
+-- Existing SlotRef path as a control.
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint = b.k_slot
+order by p.id, b.id;
+
+-- Supported monotonic single-column arithmetic expressions.
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint - 1 = b.k_subtract
+order by p.id, b.id;
+
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint * 2 = b.k_multiply
+order by p.id, b.id;
+
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint div 2 = b.k_divide
+order by p.id, b.id;
+
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on (p.c_bigint + 1) * 2 = b.k_nested
+order by p.id, b.id;
+
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on p.c_bigint * -1 = b.k_negative
+order by p.id, b.id;
+
+-- year() is the function currently recognized as monotonic by the RF expression path.
+select p.id, b.id
+from rf_expr_probe_${uuid0} p join rf_expr_build_${uuid0} b
+on year(p.c_date) = b.k_year
+order by p.id, b.id;
+
+drop table rf_expr_probe_${uuid0};
+drop table rf_expr_build_${uuid0};

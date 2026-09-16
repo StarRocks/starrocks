@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AWS IAM 策略声明对特定 AWS 资源的访问权限，用于 StarRocks 集成 AWS 的身份认证。"
 ---
 
 # AWS IAM 策略
@@ -8,7 +9,7 @@ IAM 策略用于声明特定 AWS 资源的一组访问权限。创建 IAM 策略
 
 在 StarRocks 中，不同的操作涉及的 AWS 资源也不同。因此，您需要根据要访问的 AWS 资源来创建 IAM 策略。
 
-本文介绍在不同场景下选择 [Instance Profile、Assumed Role、及 IAM User 鉴权方式](../integrations/authenticate_to_aws_resources.md#准备工作)时，为确保 StarRocks 能够正确访问所涉及的 AWS 资源需要配置哪些 IAM 策略。
+本文介绍在不同场景下选择 [Instance Profile、Assumed Role、及 IAM User 鉴权方式](../integrations/csp_auth/authenticate_to_aws_resources.md#准备工作)时，为确保 StarRocks 能够正确访问所涉及的 AWS 资源需要配置哪些 IAM 策略。
 
 ## 从 AWS S3 批量导入数据
 

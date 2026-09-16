@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "获取当前的日期，以 DATE 类型返回。"
 ---
 
 # curdate,current_date

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HiveでBitmapデータを生成および処理するために直接使用できるUDFを提供します。"
 sidebar_position: 0.9
 ---
 

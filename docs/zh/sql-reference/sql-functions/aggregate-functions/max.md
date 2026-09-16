@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "max 返回表达式的最大值。"
 ---
 
 # max

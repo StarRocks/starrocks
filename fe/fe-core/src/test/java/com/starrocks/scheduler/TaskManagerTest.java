@@ -359,6 +359,60 @@ public class TaskManagerTest {
     }
 
     @Test
+    public void testTaskRunMergePreservesOldSubmitUser() {
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+
+        long taskId = 1;
+        long now = System.currentTimeMillis();
+
+        TaskRun oldTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        oldTaskRun.initStatus("1", now);
+        oldTaskRun.getStatus().setSubmitUser("alice");
+
+        TaskRun newTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        newTaskRun.initStatus("2", now + 10);
+
+        taskRunManager.arrangeTaskRun(oldTaskRun);
+        taskRunManager.arrangeTaskRun(newTaskRun);
+
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+        Assertions.assertTrue(taskRuns != null);
+        assertEquals(1, taskRuns.size());
+        assertEquals(now, taskRuns.get(0).getStatus().getCreateTime());
+        assertEquals("alice", taskRuns.get(0).getStatus().getSubmitUser());
+    }
+
+    @Test
+    public void testTaskRunMergeKeepsFallbackWhenOldSubmitUserAbsent() {
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+
+        long taskId = 1;
+        long now = System.currentTimeMillis();
+
+        TaskRun oldTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        oldTaskRun.initStatus("1", now);
+        oldTaskRun.getStatus().setSubmitUser(null);
+
+        TaskRun newTaskRun = makeTaskRun(taskId, task, DEFAULT_MERGE_OPTION);
+        newTaskRun.initStatus("2", now + 10);
+
+        taskRunManager.arrangeTaskRun(oldTaskRun);
+        taskRunManager.arrangeTaskRun(newTaskRun);
+
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+        Assertions.assertTrue(taskRuns != null);
+        assertEquals(1, taskRuns.size());
+        assertEquals(now, taskRuns.get(0).getStatus().getCreateTime());
+        assertEquals(TaskRun.SUBMIT_USER_SYSTEM, taskRuns.get(0).getStatus().getSubmitUser());
+    }
+
+    @Test
     public void testTaskRunNotMerge() {
 
         TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
@@ -427,6 +481,45 @@ public class TaskManagerTest {
 
         TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
         assertEquals(1, taskRunScheduler.getRunningTaskCount());
+    }
+
+    @Test
+    public void testReplayCreateTaskRunKeepsSystemFallbackWhenSubmitUserAbsent() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("submit_user_replay_absent");
+        task.setDefinition("select 1");
+        taskManager.replayCreateTask(task);
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus("q-old", System.currentTimeMillis());
+        // Simulate a run persisted before submitUser existed.
+        taskRun.getStatus().setSubmitUser(null);
+
+        taskManager.replayCreateTaskRun(taskRun.getStatus());
+
+        List<TaskRun> recovered = Lists.newArrayList(
+                taskManager.getTaskRunScheduler().getPendingTaskRunsByTaskId(task.getId()));
+        assertEquals(1, recovered.size());
+        assertEquals(TaskRun.SUBMIT_USER_SYSTEM, recovered.get(0).getStatus().getSubmitUser());
+    }
+
+    @Test
+    public void testReplayCreateTaskRunPreservesPersistedSubmitUser() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("submit_user_replay_present");
+        task.setDefinition("select 1");
+        taskManager.replayCreateTask(task);
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus("q-new", System.currentTimeMillis());
+        taskRun.getStatus().setSubmitUser("alice");
+
+        taskManager.replayCreateTaskRun(taskRun.getStatus());
+
+        List<TaskRun> recovered = Lists.newArrayList(
+                taskManager.getTaskRunScheduler().getPendingTaskRunsByTaskId(task.getId()));
+        assertEquals(1, recovered.size());
+        assertEquals("alice", recovered.get(0).getStatus().getSubmitUser());
     }
 
     @Test
@@ -962,7 +1055,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldCancelLongRunningTasks() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -983,20 +1075,23 @@ public class TaskManagerTest {
                 return ImmutableSet.of(taskRun);
             }
         };
+        final String[] capturedReason = {null};
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 assertEquals(status, taskRun.getStatus());
+                capturedReason[0] = errorMessage;
+                return true;
             }
         };
 
         TaskManager taskManager = new TaskManager();
         taskManager.removeExpiredTaskRuns(false);
+        assertEquals("killed by TaskCleaner due to timeout", capturedReason[0]);
     }
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelTasksWithoutTimeout() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -1020,8 +1115,9 @@ public class TaskManagerTest {
         };
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 Assertions.fail("Task without timeout should not be canceled");
+                return true;
             }
         };
 
@@ -1031,7 +1127,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelNonExpiredTasks() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 1000);
@@ -1054,8 +1149,9 @@ public class TaskManagerTest {
         };
         new MockUp<TaskRunManager>() {
             @Mock
-            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+            boolean killRunningTaskRun(TaskRun taskRun, boolean force, String errorMessage) {
                 Assertions.fail("Non-expired task should not be canceled");
+                return true;
             }
         };
 
@@ -1171,7 +1267,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskTriggerImmediately() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1211,7 +1306,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1249,7 +1343,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1287,7 +1380,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_ctas");
         task.setSource(Constants.TaskSource.CTAS);
         TaskSchedule schedule = new TaskSchedule();
@@ -1424,8 +1516,6 @@ public class TaskManagerTest {
             }
         };
 
-        TaskManager tm = new TaskManager();
-        TaskRunManager taskRunManager = tm.getTaskRunManager();
 
         // Simulate the dispatch scheduler callback logic from TaskManager.start()
         // This is the same guard that was added in the fix
@@ -1453,5 +1543,77 @@ public class TaskManagerTest {
         }
         Assertions.assertTrue(dispatched[0],
                 "Dispatch scheduler should proceed when leader");
+    }
+
+    @Test
+    public void testStopShutsDownSchedulersAndStartRebuilds() throws Exception {
+        // TaskManager owns two ScheduledExecutorService instances; stop() must shut both down
+        // so worker threads exit on demotion and start() must rebuild them for re-election.
+        // periodFutureMap holds futures scheduled on the old pool - it must be empty after
+        // stop() so a re-registered periodic task on the new leader does not collide with
+        // stale futures.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+
+        java.util.concurrent.ScheduledExecutorService periodBefore = mgr.periodScheduler;
+        java.util.concurrent.ScheduledExecutorService dispatchBefore = mgr.dispatchScheduler;
+
+        mgr.stop(5000L);
+        Assertions.assertTrue(periodBefore.isShutdown(), "periodScheduler must be shut down by stop()");
+        Assertions.assertTrue(dispatchBefore.isShutdown(), "dispatchScheduler must be shut down by stop()");
+        Assertions.assertTrue(periodBefore.isTerminated(),
+                "periodScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(dispatchBefore.isTerminated(),
+                "dispatchScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(mgr.periodFutureMap.isEmpty(), "periodFutureMap must be cleared by stop()");
+
+        // Second start() rebuilds both pools.
+        mgr.start();
+        Assertions.assertNotSame(periodBefore, mgr.periodScheduler,
+                "periodScheduler must be rebuilt on re-election");
+        Assertions.assertNotSame(dispatchBefore, mgr.dispatchScheduler,
+                "dispatchScheduler must be rebuilt on re-election");
+        Assertions.assertFalse(mgr.periodScheduler.isShutdown());
+        Assertions.assertFalse(mgr.dispatchScheduler.isShutdown());
+
+        mgr.stop();
+    }
+
+    @Test
+    public void testStopIsNoOpWhenNotStarted() {
+        // stop() guards with isStart.compareAndSet(true, false); a TaskManager that never
+        // started must not throw when stop is called.
+        TaskManager mgr = new TaskManager();
+        Assertions.assertDoesNotThrow(() -> mgr.stop());
+    }
+
+    @Test
+    public void testStopWithTimeoutLogsWhenSchedulerRefusesToTerminate() throws Exception {
+        // stop(timeoutMs) must call awaitTermination on both pools; when the await returns
+        // false (a worker ignored shutdownNow's interrupt) it logs a warning and proceeds
+        // rather than blocking forever. This test covers the LOG.warn branches by injecting
+        // a scheduler whose worker ignores interrupts long enough to outlast the budget.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+        // Replace periodScheduler with a pool whose single worker spins ignoring interrupt.
+        java.util.concurrent.ScheduledThreadPoolExecutor stuckSched =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        stuckSched.execute(() -> {
+            long deadline = System.currentTimeMillis() + 2000L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible work
+                }
+            }
+        });
+        mgr.periodScheduler = stuckSched;
+
+        mgr.stop(50L);
+
+        Assertions.assertTrue(stuckSched.isShutdown(), "scheduler must be shutdown by stop");
+        // worker is still running but stop() returned within budget; cleanup
+        stuckSched.shutdownNow();
     }
 }

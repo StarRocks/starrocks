@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DATE値またはDATETIME値をUnixタイムスタンプに変換します。"
 ---
 
 # unix_timestamp

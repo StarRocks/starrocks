@@ -107,4 +107,48 @@ void simd_dict_gather_double(double* __restrict dest, const double* __restrict d
 void simd_widen_int8_to_int32(int32_t* __restrict dest, const int8_t* __restrict src, int32_t count);
 void simd_widen_int16_to_int32(int32_t* __restrict dest, const int16_t* __restrict src, int32_t count);
 
+// ============================================================================
+// Generic template wrappers. Keep call sites free of size dispatch; the
+// constexpr ladder here either routes to a typed primitive above or falls
+// through to a scalar loop the compiler can auto-vectorise.
+// ============================================================================
+
+template <typename T>
+inline void simd_minmax(const T* __restrict data, int32_t count, T& out_min, T& out_max) {
+    if constexpr (sizeof(T) == 4) {
+        int32_t mn = std::numeric_limits<int32_t>::max();
+        int32_t mx = std::numeric_limits<int32_t>::min();
+        simd_minmax_int32(reinterpret_cast<const int32_t*>(data), count, mn, mx);
+        // Round-trip through int32 preserves the value bits; callers that
+        // care about signed vs unsigned interpretation cast back themselves.
+        out_min = static_cast<T>(mn);
+        out_max = static_cast<T>(mx);
+    } else {
+        T mn = std::numeric_limits<T>::max();
+        T mx = std::numeric_limits<T>::min();
+        for (int32_t i = 0; i < count; ++i) {
+            mn = std::min(mn, data[i]);
+            mx = std::max(mx, data[i]);
+        }
+        out_min = mn;
+        out_max = mx;
+    }
+}
+
+// dst[i] = dict[indices[i]] for i in [0, count). Indices must be 32-bit and
+// already bounds-checked by the caller.
+template <typename DstT, typename SrcT, typename IdxT>
+inline void simd_dict_gather(DstT* __restrict dst, const SrcT* __restrict dict, const IdxT* __restrict indices,
+                             int32_t count) {
+    if constexpr (sizeof(IdxT) == 4 && sizeof(SrcT) == 4) {
+        simd_dict_gather_int32(reinterpret_cast<int32_t*>(dst), reinterpret_cast<const int32_t*>(dict),
+                               reinterpret_cast<const uint32_t*>(indices), count);
+    } else if constexpr (sizeof(IdxT) == 4 && sizeof(SrcT) == 8) {
+        simd_dict_gather_int64(reinterpret_cast<int64_t*>(dst), reinterpret_cast<const int64_t*>(dict),
+                               reinterpret_cast<const uint32_t*>(indices), count);
+    } else {
+        for (int32_t i = 0; i < count; ++i) dst[i] = dict[indices[i]];
+    }
+}
+
 } // namespace starrocks

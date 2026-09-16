@@ -20,7 +20,6 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
-import com.starrocks.thrift.TFileFormatType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 
@@ -38,9 +37,10 @@ import java.util.List;
  * <p>Format detection follows Broker Load's own rule
  * ({@link Load#getFormatType}): the file group's declared
  * {@code FileFormat} takes precedence; when absent we fall back to the
- * file-extension inference the load uses at scan time. Any non-Parquet
- * file makes the provider throw {@link MetaTierUnavailableException} so the
- * pipeline falls back to data tier.
+ * file-extension inference the load uses at scan time. The resolved format is
+ * dispatched to the matching {@link MetaTierFormat} reader (Parquet or ORC);
+ * any other format makes the provider throw {@link MetaTierUnavailableException}
+ * so the pipeline falls back to data tier.
  *
  * <p>Only direct HDFS-style loads (no broker) are supported today. When
  * {@code brokerDesc.hasBroker()} is true the real load reads through the
@@ -49,6 +49,13 @@ import java.util.List;
  * back to data tier rather than risk a credentialed-via-broker source that
  * FE-local access cannot reach. Routing footer reads through a
  * broker-backed seekable input is a deliberate follow-up.
+ *
+ * <p>Non-identity file groups (per-group {@code WHERE}, {@code SET}/explicit
+ * column list, {@code columns_from_path}, negative-load, or legacy hadoop
+ * functions) map or filter the sort key, so the raw footer column would diverge
+ * from the loaded value; they are rejected before any footer read (reusing the
+ * data tier's {@code rejectNonIdentityFileGroups} guard) and fall back to data
+ * tier, which skips pre-split for the same shapes.
  *
  * <p>Hadoop-side wiring (configuration build, broker → Hadoop file-status
  * conversion) is shared with the INSERT-from-FILES provider via
@@ -63,10 +70,18 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
         rejectIfBrokerBacked(brokerDesc);
         List<BrokerFileGroup> fileGroups = context.fileGroups();
         List<List<TBrokerFileStatus>> fileStatusesPerGroup = context.fileStatusesPerGroup();
-        // ParquetMetadataSampler.rejectCompositeSortKey runs upstream in tryPlan
-        // before this provider is invoked, so a single-element sort key is the
-        // contract by the time we get here.
-        Column sortKeyColumn = request.getSortKey().get(0);
+        List<Column> sortKeyColumns = request.getSortKey();
+
+        // A non-identity file group (per-group WHERE / SET / columns_from_path / negative-load / hadoop
+        // functions) maps or filters the sort key, so the raw footer column diverges from the value the
+        // load actually inserts and footer-derived boundaries would be skewed. Reuse the data tier's
+        // identity guard as the single source of truth; on rejection defer to the data tier, which
+        // rejects the same shapes and skips pre-split.
+        try {
+            BrokerLoadSampleSubqueryExecutor.rejectNonIdentityFileGroups(fileGroups);
+        } catch (StarRocksException nonIdentity) {
+            throw new MetaTierUnavailableException(nonIdentity.getMessage());
+        }
 
         Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(brokerDesc.getProperties());
 
@@ -81,10 +96,12 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
                 if (brokerFileStatus.isDir) {
                     continue;
                 }
-                rejectIfNotParquet(declaredFormat, brokerFileStatus.path);
+                // Follow Broker Load's own scan-time decision (declared FileFormat
+                // wins; otherwise the file extension), then pick the reader.
+                MetaTierFormat format = MetaTierFormat.fromBrokerFormatType(
+                        Load.getFormatType(declaredFormat, brokerFileStatus.path), brokerFileStatus.path);
                 FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-                aggregated.addAll(
-                        ParquetRowGroupStatisticsReader.read(hadoopFileStatus, hadoopConfig, sortKeyColumn));
+                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumns, context.loadTimeZone()));
             }
         }
         return aggregated;
@@ -119,18 +136,5 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
                     "Broker Load pre-split sample request is missing BrokerDesc");
         }
         return brokerDesc;
-    }
-
-    private static void rejectIfNotParquet(String declaredFormat, String filePath) throws MetaTierUnavailableException {
-        // Load.getFormatType matches Broker Load's own scan-time decision:
-        // declared FileFormat wins; otherwise the file extension is consulted.
-        // Both `*.parquet`-without-FORMAT-AS-PARQUET and explicit-Parquet groups
-        // route through meta tier here.
-        TFileFormatType formatType = Load.getFormatType(declaredFormat, filePath);
-        if (formatType != TFileFormatType.FORMAT_PARQUET) {
-            throw new MetaTierUnavailableException(String.format(
-                    "meta tier supports Parquet sources only; Broker Load file \"%s\" resolved to format %s",
-                    filePath, formatType));
-        }
     }
 }

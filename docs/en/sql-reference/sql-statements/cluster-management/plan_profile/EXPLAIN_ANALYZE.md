@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "EXPLAIN ANALYZE executes the specified SQL statement, and shows the query profile of this statement."
+description: "EXPLAIN ANALYZE runs a SQL statement and returns its query profile with per-operator execution statistics."
 ---
 
 # EXPLAIN ANALYZE

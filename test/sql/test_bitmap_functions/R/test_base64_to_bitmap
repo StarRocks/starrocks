@@ -1,0 +1,98 @@
+-- name: test_base64_to_bitmap
+select base64_to_bitmap(null);
+-- result:
+None
+-- !result
+select base64_to_bitmap('');
+-- result:
+None
+-- !result
+select base64_to_bitmap('!!!invalid!!!');
+-- result:
+None
+-- !result
+select base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAA');
+-- result:
+None
+-- !result
+select bitmap_to_string(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+-- result:
+90,91,92,93,94,95,96,97,98,99,100
+-- !result
+select bitmap_count(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+-- result:
+11
+-- !result
+select bitmap_min(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+-- result:
+90
+-- !result
+select bitmap_max(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'));
+-- result:
+100
+-- !result
+select bitmap_contains(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), 95);
+-- result:
+1
+-- !result
+select bitmap_contains(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), 200);
+-- result:
+0
+-- !result
+select bitmap_to_string(bitmap_and(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA')));
+-- result:
+90,91,92,93,94,95,96,97,98,99,100
+-- !result
+create table t_base64_bitmap_test (k int);
+-- result:
+-- !result
+insert into t_base64_bitmap_test values (1), (2), (3);
+-- result:
+-- !result
+select k, bitmap_to_string(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA')) from t_base64_bitmap_test order by k;
+-- result:
+1	90,91,92,93,94,95,96,97,98,99,100
+2	90,91,92,93,94,95,96,97,98,99,100
+3	90,91,92,93,94,95,96,97,98,99,100
+-- !result
+drop table t_base64_bitmap_test;
+-- result:
+-- !result
+create table t_base64_bitmap_pred (k int) properties('replication_num'='1');
+-- result:
+-- !result
+insert into t_base64_bitmap_pred values (90), (95), (100), (200), (50);
+-- result:
+-- !result
+select k from t_base64_bitmap_pred where bitmap_contains(base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAAA'), k) order by k;
+-- result:
+90
+95
+100
+-- !result
+drop table t_base64_bitmap_pred;
+-- result:
+-- !result
+set sql_mode='ALLOW_THROW_EXCEPTION';
+-- result:
+-- !result
+select base64_to_bitmap('CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAA');
+-- result:
+[REGEX].*base64_to_bitmap.*failed to deserialize bitmap
+-- !result
+create table t_base64_bitmap_nonconst (k int, b varchar(200));
+-- result:
+-- !result
+insert into t_base64_bitmap_nonconst values (1, 'CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAAYgAAAAAAAABjAAAAAAAAAGQAAAAAAAA');
+-- result:
+-- !result
+select k, bitmap_to_string(base64_to_bitmap(b)) from t_base64_bitmap_nonconst order by k;
+-- result:
+[REGEX].*base64_to_bitmap.*failed to deserialize bitmap
+-- !result
+drop table t_base64_bitmap_nonconst;
+-- result:
+-- !result
+set sql_mode='';
+-- result:
+-- !result

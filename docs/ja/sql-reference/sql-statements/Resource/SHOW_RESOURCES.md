@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW RESOURCES displays resources that users have permission to use."
 ---
 
 # SHOW RESOURCES

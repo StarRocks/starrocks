@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたトークナイザに基づいてテキストをトークンに分割します。"
 ---
 
 # tokenize

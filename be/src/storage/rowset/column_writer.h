@@ -36,22 +36,23 @@
 
 #include <memory> // for unique_ptr
 
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"      // for Status
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/global_dict/types_fwd_decl.h"
-#include "storage/primitive/flat_json_config.h"
+#include "storage_primitive/flat_json_config.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif
 #include "base/bit/bitmap.h"   // for BitmapChange
 #include "base/string/slice.h" // for OwnedSlice
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/binary_dict_page.h"
-#include "storage/rowset/page_pointer.h" // for PagePointer
-#include "storage/tablet_schema.h"       // for TabletColumn
+#include "storage/rowset/ordinal_page_index.h" // DeferredOrdinalIndex, OrdinalIndexWriter
+#include "storage/rowset/page_pointer.h"       // for PagePointer
+#include "storage/tablet_schema.h"             // for TabletColumn
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
@@ -176,6 +177,19 @@ public:
 
     virtual Status write_inverted_index() { return Status::OK(); }
 
+    // Hand the ordinal-index builder(s) of this column to the caller, so that the writer itself can
+    // be destroyed on schedule while the index is written later, next to the footer
+    // (config::lake_enable_segment_tail_index_region). A composite writer contributes one per leaf, in
+    // the same order write_ordinal_index() would have written them.
+    //
+    // Taking only what has to survive, rather than keeping the whole writer and freeing the rest,
+    // is deliberate: every other builder is already flushed by this point and holds memory that
+    // finish() does not return -- BitmapIndexWriterImpl::finish() empties its map but keeps its
+    // MemPool -- and a vertical writer would otherwise carry one per indexed column of every
+    // column group until the footer. This way that memory goes back exactly when it always did,
+    // and a builder added here later cannot be retained by accident.
+    virtual void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) {}
+
     virtual Status write_vector_index(uint64_t* index_size) { return Status::OK(); }
 
     virtual ordinal_t get_next_rowid() const = 0;
@@ -231,6 +245,10 @@ public:
     Status write_ordinal_index() override;
     Status write_zone_map() override;
     Status write_bitmap_index() override;
+
+    // Defined out of line: OrdinalIndexWriter is only forward declared in this header, and moving
+    // a unique_ptr of it needs a complete type.
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override;
     Status write_bloom_filter_index() override;
     Status write_inverted_index() override;
 

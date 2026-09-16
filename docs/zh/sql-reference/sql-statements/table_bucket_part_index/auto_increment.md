@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AUTO_INCREMENT column attribute automatically assigns unique integer IDs to new records."
 keywords: ['zizeng']
 ---
 
@@ -378,6 +379,12 @@ mysql > SELECT * FROM test_tbl3 ORDER BY id;
     +------+------+--------+------+
     3 rows in set (0.01 sec)
     ```
+
+## 使用说明
+
+默认情况下，系统会允许优化器选择 `COUNT(DISTINCT)` 的实现方式。
+
+对低基数和中等基数的列进行去重时，可以通过查询 Hint 将 `count_distinct_implementation` 设置为 `multi_count_distinct`，以验证 `multi_distinct_count` 实现是否能够进行精确计数。但是，对于高基数列的去重，请勿使用 `multi_distinct_count` 实现，因为其 HashSet 状态以及最终合并过程可能导致过高的内存消耗，甚至引发 OOM。
 
 ## 使用限制
 

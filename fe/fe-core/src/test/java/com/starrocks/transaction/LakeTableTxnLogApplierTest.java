@@ -14,10 +14,30 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangeDistributionInfo;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TStorageMedium;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     @Test
@@ -71,6 +91,167 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     }
 
     @Test
+    public void testApplyVisibleLogUpdatesLakeTabletAndEnqueues() {
+        // Build a table with two tablets in the index: one WITH a matching stat entry, one WITHOUT.
+        MaterializedIndex index = new MaterializedIndex(indexId);
+        LakeTablet lakeTablet = new LakeTablet(tabletId[0]);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId[0], tabletMeta);
+        index.addTablet(lakeTablet, tabletMeta);
+
+        // Second tablet has no entry in tabletStats — verifies per-tablet selectivity.
+        LakeTablet noStatTablet = new LakeTablet(tabletId[1]);
+        TabletMeta noStatMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId[1], noStatMeta);
+        index.addTablet(noStatTablet, noStatMeta);
+
+        LakeTable table = buildLakeTableWithIndex(index);
+        // Range distribution is required for the publish-driven reshard path to evaluate the table.
+        table.setDefaultDistributionInfo(new RangeDistributionInfo());
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        long versionTime = System.currentTimeMillis();
+        partitionCommitInfo.setVersionTime(versionTime);
+
+        // Populate tabletStats for tabletId[0] only — tabletId[1] is intentionally absent.
+        // Oversize tabletId[0] so the precomputed split signal crosses the threshold and the
+        // table is enqueued as a reshard candidate.
+        long oversize = Config.tablet_reshard_target_size * 2;
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 5L;
+        stat.dataSize = oversize;
+        Map<Long, TabletStatPB> stats = new HashMap<>();
+        stats.put(tabletId[0], stat);
+        partitionCommitInfo.getTabletStats().putAll(stats);
+
+        // Mock leader=true, checkpoint=false; intercept addReshardCandidate to count calls
+        AtomicInteger addCandidateCalls = new AtomicInteger(0);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
+        };
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
+                addCandidateCalls.incrementAndGet();
+            }
+        };
+
+        Database db = new Database(dbId, "test_db");
+        applier.applyVisibleLog(state, tableCommitInfo, db);
+
+        // Tablet with a stat entry: fields must be updated.
+        Assertions.assertEquals(oversize, lakeTablet.getDataSize(true));
+        Assertions.assertEquals(5L, lakeTablet.getRowCount(0));
+        Assertions.assertEquals(versionTime, lakeTablet.getDataSizeUpdateTime());
+        Assertions.assertEquals(1, addCandidateCalls.get(), "addReshardCandidate should be called once");
+
+        // Tablet WITHOUT a stat entry: must remain at default values (per-tablet selectivity).
+        Assertions.assertEquals(0L, noStatTablet.getDataSizeUpdateTime(),
+                "tablet absent from tabletStats must not have its update-time modified");
+        Assertions.assertEquals(0L, noStatTablet.getDataSize(true),
+                "tablet absent from tabletStats must not have its data-size modified");
+    }
+
+    @Test
+    public void testApplyVisibleLogSkippedOnNonLeader() {
+        // Use indexId+100 to avoid any ID collision with the positive test's index (indexId).
+        long negativeIndexId = indexId + 100;
+        MaterializedIndex index = new MaterializedIndex(negativeIndexId);
+        LakeTablet lakeTablet = new LakeTablet(tabletId[1]);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId[1], tabletMeta);
+        index.addTablet(lakeTablet, tabletMeta);
+
+        LakeTable table = buildLakeTableWithIndex(index);
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 10L;
+        stat.dataSize = 888L;
+        partitionCommitInfo.getTabletStats().put(tabletId[1], stat);
+
+        // Mock leader=false; intercept addReshardCandidate to prove it is never called.
+        AtomicInteger addCandidateCalls = new AtomicInteger(0);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
+                addCandidateCalls.incrementAndGet();
+            }
+        };
+
+        long beforeUpdateTime = lakeTablet.getDataSizeUpdateTime();
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        // LakeTablet fields must be unchanged on a non-leader node.
+        Assertions.assertEquals(beforeUpdateTime, lakeTablet.getDataSizeUpdateTime());
+        Assertions.assertEquals(0L, lakeTablet.getDataSize(true));
+        // addReshardCandidate must not have been invoked at all.
+        Assertions.assertEquals(0, addCandidateCalls.get(),
+                "addReshardCandidate must not be called on a non-leader node");
+    }
+
+    @Test
+    public void testShadowRewriteTxnApplyLogsDoNotTouchPartitionVersion() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        // Shadow-rewrite txns are now identified by LoadJobSourceType.SHADOW_REWRITE on the txn.
+        TransactionState state = new TransactionState(dbId, Lists.newArrayList(tableId), nextTxnId++,
+                "label_shadow", null, TransactionState.LoadJobSourceType.SHADOW_REWRITE, null, 0, 60_000);
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+
+        // PartitionCommitInfo uses sentinel version -1; no per-partition isShadowRewrite marker needed.
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, -1, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        long vis0 = table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion();
+        long next0 = table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion();
+
+        // applyCommitLog must not bump nextVersion for a shadow-rewrite txn.
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(vis0, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(next0, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+
+        // applyVisibleLog must not advance visibleVersion for a shadow-rewrite txn.
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+        Assertions.assertEquals(vis0, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(next0, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+    }
+
+    @Test
     public void testApplyCommitLogWithDroppedPartition() {
         LakeTable table = buildLakeTable();
         LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
@@ -88,5 +269,174 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
         Assertions.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+    }
+
+    @Test
+    public void testApplyVisibleLogRecordsLastUpdateTimeForUserWrite() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        // A routine-load (user write) visible txn must advance lastUpdateTime on the shared-data path.
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        long versionTime = System.currentTimeMillis();
+        partitionCommitInfo.setVersionTime(versionTime);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+        Assertions.assertEquals(versionTime,
+                table.getPartition(partitionId).getDefaultPhysicalPartition().getLastUpdateTime());
+    }
+
+    @Test
+    public void testApplyVisibleLogSkipsLastUpdateTimeForCompaction() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        // Compaction is not a user write: it advances the visible version but must NOT touch
+        // lastUpdateTime, which must stay 0 (its initial value).
+        TransactionState state = newCompactionTransactionState();
+        state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(true));
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+        Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(0L,
+                table.getPartition(partitionId).getDefaultPhysicalPartition().getLastUpdateTime());
+    }
+
+    @Test
+    public void testApplyVisibleLogBatchPublishesOnlyTheFinalVersion() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+
+        // Record every version the partition is ever made visible at, in order.
+        List<Long> publishedVersions = Lists.newArrayList();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void setVisibleVersion(Invocation invocation, long visibleVersion, long visibleVersionTime) {
+                publishedVersions.add(visibleVersion);
+                invocation.proceed(visibleVersion, visibleVersionTime);
+            }
+        };
+
+        // Three batched load transactions taking the partition from version 1 to version 4.
+        long baseVersionTime = System.currentTimeMillis();
+        List<TransactionState> states = Lists.newArrayList();
+        for (long version = 2; version <= 4; version++) {
+            TransactionState state = newTransactionState();
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, version, 0);
+            partitionCommitInfo.setVersionTime(baseVersionTime + version);
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+            state.putIdToTableCommitInfo(tableId, tableCommitInfo);
+            states.add(state);
+        }
+
+        applier.applyVisibleLogBatch(new TransactionStateBatch(states), /*unused*/null);
+
+        // Versions 2 and 3 get no tablet metadata object of their own, so they must never become
+        // visible: the partition jumps straight from 1 to the batch's final version.
+        Assertions.assertEquals(Lists.newArrayList(4L), publishedVersions);
+        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        Assertions.assertEquals(4, partition.getVisibleVersion());
+        Assertions.assertEquals(baseVersionTime + 4, partition.getVisibleVersionTime());
+    }
+
+    @Test
+    public void testApplyVisibleLogBatchCutsOverUnshareLayoutAfterPublishingTheVersion() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        // Pin the parent layout, the way an in-flight UNSHARE does.
+        partition.pinQueryableIndex(indexId, indexId);
+        Assertions.assertTrue(partition.isUnsharing());
+
+        // Visible version the partition carried at the moment the query-layout cutover ran.
+        List<Long> versionAtCutover = Lists.newArrayList();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean finishUnshare(Invocation invocation) {
+                PhysicalPartition self = invocation.getInvokedInstance();
+                versionAtCutover.add(self.getVisibleVersion());
+                return invocation.proceed();
+            }
+        };
+
+        // Batch of three: a load at version 2, an UNSHARE compaction at version 3, a load at version 4.
+        long baseVersionTime = System.currentTimeMillis();
+        List<TransactionState> states = Lists.newArrayList();
+        for (long version = 2; version <= 4; version++) {
+            TransactionState state;
+            if (version == 3) {
+                state = newCompactionTransactionState();
+                state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(false, true));
+            } else {
+                state = newTransactionState();
+            }
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, version, 0);
+            partitionCommitInfo.setVersionTime(baseVersionTime + version);
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+            state.putIdToTableCommitInfo(tableId, tableCommitInfo);
+            states.add(state);
+        }
+
+        applier.applyVisibleLogBatch(new TransactionStateBatch(states), /*unused*/null);
+
+        // The planner resolves the queryable layout BEFORE it reads the visible version, so a cutover
+        // that ran while the partition still carried a pre-batch version would let a lock-free plan pair
+        // the child layout with a version whose child tablets have no metadata object. The cutover must
+        // therefore run once, and only after the batch's final version is already published.
+        Assertions.assertEquals(1, versionAtCutover.size(), "unshare cutover should run exactly once");
+        Assertions.assertEquals(4L, versionAtCutover.get(0),
+                "unshare cutover must not run before the batch's final version is visible");
+        Assertions.assertEquals(4, partition.getVisibleVersion());
+        Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared by the batch");
+    }
+
+    @Test
+    public void testApplyVisibleLogCutsOverUnshareLayoutInTheSameTransaction() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        partition.pinQueryableIndex(indexId, indexId);
+
+        List<Long> versionAtCutover = Lists.newArrayList();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean finishUnshare(Invocation invocation) {
+                PhysicalPartition self = invocation.getInvokedInstance();
+                versionAtCutover.add(self.getVisibleVersion());
+                return invocation.proceed();
+            }
+        };
+
+        TransactionState state = newCompactionTransactionState();
+        state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(false, true));
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        long schemaUpdateBefore = table.lastSchemaUpdateTime.get();
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        // Unbatched, the cutover runs inline - and already after the version it belongs to. This is the
+        // ordering applyVisibleLogBatch has to reproduce for a batched UNSHARE.
+        Assertions.assertEquals(1, versionAtCutover.size(), "unshare cutover should run exactly once");
+        Assertions.assertEquals(2L, versionAtCutover.get(0),
+                "unshare cutover must run after its own version is visible");
+        Assertions.assertEquals(2, partition.getVisibleVersion());
+        Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared");
+        Assertions.assertTrue(table.lastSchemaUpdateTime.get() > schemaUpdateBefore,
+                "the layout cutover must invalidate optimistic plans that captured the parent layout");
     }
 }

@@ -35,8 +35,11 @@
 
 #include <glog/logging.h>
 
+#include <cstring>
+
 #include "base/bit/bit_stream_utils.inline.h"
 #include "base/bit/bit_util.h"
+#include "base/simd/rle_simd.h"
 #include "gutil/port.h"
 
 namespace starrocks {
@@ -427,7 +430,7 @@ inline bool RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
 
         if (PREDICT_TRUE(repeat_count_ > 0)) {
             read_this_time = std::min((size_t)repeat_count_, read_this_time);
-            std::fill(vals, vals + read_this_time, current_value_);
+            std::fill_n(vals, read_this_time, current_value_);
             vals += read_this_time;
             repeat_count_ -= read_this_time;
             read_num += read_this_time;
@@ -914,9 +917,7 @@ inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
         if (num_repeats > 0) {
             int32_t num_repeats_to_set = std::min(num_repeats, batch_num - num_consumed);
             T repeated_value = GetRepeatedValue(num_repeats_to_set);
-            for (int i = 0; i < num_repeats_to_set; ++i) {
-                values[num_consumed + i] = repeated_value;
-            }
+            std::fill_n(values + num_consumed, num_repeats_to_set, repeated_value);
             num_consumed += num_repeats_to_set;
             continue;
         }
@@ -965,13 +966,11 @@ static inline bool IndexInRange(T idx, int32_t dictionary_length) {
 
 template <typename T>
 static inline bool IndicesInRange(const T* values, int32_t length, int32_t dictionary_length) {
-    T min_index = std::numeric_limits<T>::max();
-    T max_index = std::numeric_limits<T>::min();
-    for (int x = 0; x < length; x++) {
-        min_index = std::min(values[x], min_index);
-        max_index = std::max(values[x], max_index);
-    }
-
+    // For sizeof(T)==4 simd_minmax reads through a signed int32 view: any T value
+    // > INT32_MAX would emerge as a negative min, which IndexInRange rejects —
+    // preserving the original semantics.
+    T min_index, max_index;
+    simd_minmax(values, length, min_index, max_index);
     return IndexInRange(min_index, dictionary_length) && IndexInRange(max_index, dictionary_length);
 }
 
@@ -991,9 +990,7 @@ inline int RleBatchDecoder<T>::GetBatchWithDict(const TV* dictionary, int32_t di
                 return -1;
             }
             TV value = dictionary[repeated_value];
-            for (int i = 0; i < num_repeats_to_set; ++i) {
-                values[num_consumed + i] = value;
-            }
+            std::fill_n(values + num_consumed, num_repeats_to_set, value);
             num_consumed += num_repeats_to_set;
             continue;
         }
@@ -1014,9 +1011,7 @@ inline int RleBatchDecoder<T>::GetBatchWithDict(const TV* dictionary, int32_t di
         if (UNLIKELY(!IndicesInRange(indices, num_literals_to_set, dictionary_length))) {
             return -1;
         }
-        for (int i = 0; i < num_literals_to_set; ++i) {
-            values[num_consumed + i] = dictionary[indices[i]];
-        }
+        simd_dict_gather(values + num_consumed, dictionary, indices, num_literals_to_set);
         num_consumed += num_literals_to_set;
     }
     return num_consumed;

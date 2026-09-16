@@ -60,6 +60,8 @@ public enum ErrorCode {
             "Illegal column/field reference '%s' of semi-/anti-join"),
     ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
+    ERR_TOO_LONG_IDENT(1059, new byte[] {'4', '2', '0', '0', '0'},
+            "Identifier name '%s' is too long, the maximum length is %s"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
     ERR_NONUNIQ_TABLE(1066, new byte[] {'4', '2', '0', '0', '0'}, "Not unique table/alias: '%s'"),
     ERR_NO_SUCH_THREAD(1094, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown thread id: %d"),
@@ -283,6 +285,8 @@ public enum ErrorCode {
             "Explicit transaction only support single update/delete before insert statement"),
     ERR_EXPLICIT_TXN_SELECT_ON_MODIFIED_TABLE(5307, new byte[] {'2', '5', 'P', '0', '1'},
             "SELECT cannot read table '%s' modified earlier in the same transaction"),
+    ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE(5308, new byte[] {'2', '5', 'P', '0', '1'},
+            "Partial update cannot be applied to table '%s' modified earlier in the same transaction"),
 
     /**
      * 5400 - 5499: Internal error
@@ -370,6 +374,9 @@ public enum ErrorCode {
 
     ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
             "The interval of the Multi-Range Partition must be greater than 0"),
+
+    ERR_GET_PARTITION_ACCESS_TIME(5704, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Failed to get partition access time: %s"),
 
     /**
      * 5800 - 5899: Pipe
