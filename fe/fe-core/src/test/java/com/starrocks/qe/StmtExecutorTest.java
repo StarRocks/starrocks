@@ -22,15 +22,19 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
@@ -48,6 +52,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -116,6 +121,10 @@ public class StmtExecutorTest {
         return execPlan;
     }
 
+    // StatementPlanner.plan and ProfilingExecPlan.buildFrom are static, so a fake of either cannot
+    // capture a local; the plans they see have to land on static fields.
+    private static final List<ExecPlan> PLANNED_PLANS = Lists.newArrayList();
+    private static final List<ExecPlan> PROFILED_PLANS = Lists.newArrayList();
     @Test
     public void testIsForwardToLeader(@Mocked ConnectContext ctx) {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
@@ -2004,5 +2013,122 @@ public class StmtExecutorTest {
         Assertions.assertEquals("existing", state.getInfoMessage());
         StmtExecutor.attachDeleteOkInfo(state, "");
         Assertions.assertEquals("existing", state.getInfoMessage());
+    }
+
+    /**
+     * A retry that went through ExecuteExceptionHandler runs the plan that was rebuilt for it, so the
+     * profile and the EXPLAIN ANALYZE rendering that close the statement have to describe that plan.
+     * Reporting the plan the first attempt ran pairs the new coordinator's runtime counters with an
+     * operator tree the query never executed, which shows up as missing or misattributed fragments.
+     */
+    @Test
+    public void testProfileAndExplainAnalyzeAfterRetryUseTheReplannedPlan(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        PLANNED_PLANS.clear();
+        PROFILED_PLANS.clear();
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            // Keep the statement off the FE-side constant fast path so it goes through a coordinator.
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            String sql = "EXPLAIN ANALYZE SELECT 1";
+            StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            stmt.setOrigStmt(new OriginStatement(sql, 0));
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            // This harness has no leader elected, so keep execute() on the local path.
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+
+            // No warehouse is registered in this harness; the counter is not what is under test.
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+
+            // A fresh plan per planning round, so the assertions can tell them apart by identity.
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    ExecPlan plan = buildMinimalExecPlan(1);
+                    PLANNED_PLANS.add(plan);
+                    return plan;
+                }
+            };
+
+            // Both the profile (ExecPlan#getProfilingPlan) and the EXPLAIN ANALYZE rendering reach the
+            // plan through this one conversion, so it records every plan the wrap-up reports on.
+            new MockUp<ProfilingExecPlan>() {
+                @Mock
+                public static ProfilingExecPlan buildFrom(ExecPlan execPlan) {
+                    PROFILED_PLANS.add(execPlan);
+                    return null;
+                }
+            };
+
+            // The faked conversion above hands it a null plan, which the real analyzer cannot render.
+            new MockUp<ExplainAnalyzer>() {
+                @Mock
+                public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile,
+                                             List<Integer> planNodeIds, boolean colorExplainOutput) {
+                    return "";
+                }
+            };
+
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                }
+
+                // Non-null so the wrap-up actually walks into profile processing.
+                @Mock
+                public RuntimeProfile getQueryProfile() {
+                    return new RuntimeProfile("Execution");
+                }
+
+                @Mock
+                public RowBatch getNext() throws Exception {
+                    if (attempts.incrementAndGet() == 1) {
+                        throw new StarRocksException(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR,
+                                "Backend node not found. Check if any backend node is down.");
+                    }
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the failed attempt should have been retried");
+            Assertions.assertEquals(2, PLANNED_PLANS.size(), "the retry must rebuild the exec plan");
+            ExecPlan retriedPlan = PLANNED_PLANS.get(1);
+            // One conversion for the profile, one for the EXPLAIN ANALYZE rendering.
+            Assertions.assertEquals(2, PROFILED_PLANS.size(), "both wrap-up paths must have run");
+            for (ExecPlan profiled : PROFILED_PLANS) {
+                Assertions.assertSame(retriedPlan, profiled,
+                        "profile and EXPLAIN ANALYZE must describe the plan the retry actually ran");
+            }
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
     }
 }
