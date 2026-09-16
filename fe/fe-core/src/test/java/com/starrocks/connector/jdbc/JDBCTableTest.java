@@ -89,6 +89,17 @@ public class JDBCTableTest {
     }
 
     @Test
+    public void testDerivedQueryDoesNotReuseOriginalTypeNames() throws Exception {
+        JDBCTable table = buildJDBCTable("jdbc:postgresql://host:5432/db");
+        table.setOriginalJdbcColumnTypeNames(Map.of("createdAt", "timestamp"));
+        JDBCTable queryTable = new JDBCTable(table);
+        Assertions.assertEquals(table.getOriginalJdbcColumnTypeNames(), queryTable.getOriginalJdbcColumnTypeNames());
+        queryTable.setPushDownQuery("SELECT max(timestamptz_column) AS \"createdAt\" FROM test");
+        Assertions.assertTrue(queryTable.getOriginalJdbcColumnTypeNames().isEmpty());
+        Assertions.assertEquals(Map.of("createdAt", "timestamp"), table.getOriginalJdbcColumnTypeNames());
+    }
+
+    @Test
     public void testJDBCPredicateRewrite() {
         {
             Expr left = new SlotRef(new TableName("db", "tbl"), "k1");

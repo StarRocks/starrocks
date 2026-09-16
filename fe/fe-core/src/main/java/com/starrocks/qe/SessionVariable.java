@@ -1046,6 +1046,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
     public static final String ENABLE_JDBC_JOIN_PUSH_DOWN = "enable_jdbc_join_push_down";
     public static final String ENABLE_JDBC_AGG_PUSH_DOWN = "enable_jdbc_agg_push_down";
+    public static final String ENABLE_JDBC_TOPN_PUSH_DOWN = "enable_jdbc_topn_push_down";
     public static final String ENABLE_JDBC_PROJECT_PUSH_DOWN = "enable_jdbc_project_push_down";
     public static final String JDBC_PREDICATE_PUSHDOWN_MAX_IN_LIST_SIZE = "jdbc_predicate_pushdown_max_in_list_size";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
@@ -3281,6 +3282,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_JDBC_AGG_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableJdbcAggPushDown = true;
+
+    @VarAttr(name = ENABLE_JDBC_TOPN_PUSH_DOWN)
+    private boolean enableJdbcTopNPushDown = true;
 
     @VarAttr(name = ENABLE_JDBC_PROJECT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableJdbcProjectPushDown = true;
@@ -6152,6 +6156,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setJdbcPredicatePushdownMaxInListSize(int jdbcPredicatePushdownMaxInListSize) {
         this.jdbcPredicatePushdownMaxInListSize = jdbcPredicatePushdownMaxInListSize;
+    }
+
+    public boolean isEnableJdbcTopNPushDown() {
+        return enableJdbcTopNPushDown;
+    }
+
+    public void setEnableJdbcTopNPushDown(boolean enableJdbcTopNPushDown) {
+        this.enableJdbcTopNPushDown = enableJdbcTopNPushDown;
     }
 
     public boolean isEnableJdbcProjectPushDown() {

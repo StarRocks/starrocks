@@ -68,6 +68,15 @@ public class JDBCTable extends Table {
     // Used for Oracle datetime predicate pushdown to determine TO_DATE/TO_TIMESTAMP wrapping.
     private transient Map<String, Integer> originalJdbcColumnTypes;
 
+    // JDBC type codes alone cannot distinguish PostgreSQL timestamp from timestamptz.
+    // Keys use the normalized column names exposed in fullSchema, preserving case and quotes.
+    private transient Map<String, String> originalJdbcColumnTypeNames;
+
+    // Set only on the query-local copy a TopN pushdown creates: the remote ORDER BY already
+    // sorted the result and no local TopN remains to restore that order, so the scan has to
+    // deliver its rows in the order it received them.
+    private transient boolean preserveRemoteOrder;
+
     // Transient: marker for {@link com.starrocks.connector.jdbc.JDBCMetadata#getTableComment}
     // dedup. Once REMARKS has been fetched for this cached instance, further calls return the
     // already-stored comment without another remote round-trip. Reset when the cache entry is
@@ -113,6 +122,8 @@ public class JDBCTable extends Table {
         this.dbName = other.dbName;
         this.partitionColumns = other.partitionColumns;
         this.originalJdbcColumnTypes = other.originalJdbcColumnTypes;
+        this.originalJdbcColumnTypeNames = other.originalJdbcColumnTypeNames;
+        this.preserveRemoteOrder = other.preserveRemoteOrder;
     }
 
     @Override
@@ -185,6 +196,22 @@ public class JDBCTable extends Table {
         }
     }
 
+    public Map<String, String> getOriginalJdbcColumnTypeNames() {
+        return originalJdbcColumnTypeNames == null ? Map.of() : originalJdbcColumnTypeNames;
+    }
+
+    public void setOriginalJdbcColumnTypeNames(Map<String, String> columnTypeNames) {
+        originalJdbcColumnTypeNames = Map.copyOf(columnTypeNames);
+    }
+
+    public boolean isPreserveRemoteOrder() {
+        return preserveRemoteOrder;
+    }
+
+    public void setPreserveRemoteOrder(boolean preserveRemoteOrder) {
+        this.preserveRemoteOrder = preserveRemoteOrder;
+    }
+
     public boolean isCommentFetched() {
         return commentFetched;
     }
@@ -214,6 +241,8 @@ public class JDBCTable extends Table {
     public void setPushDownQuery(String query) {
         jdbcTable = query;
         inlineTable = true;
+        // Derived aliases no longer necessarily identify the original remote column types.
+        originalJdbcColumnTypeNames = null;
     }
 
     public static String normalizePassThroughQuery(String query) {

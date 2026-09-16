@@ -1,0 +1,200 @@
+[
+  {
+    "name": "integer_topn",
+    "sql": "SELECT id, amount FROM {table} ORDER BY amount DESC NULLS LAST, id ASC LIMIT 7",
+    "topn_limit": 7
+  },
+  {
+    "name": "mixed_direction_and_null_order",
+    "sql": "SELECT id, grp, amount FROM {table} ORDER BY grp ASC NULLS FIRST, amount ASC NULLS LAST, id DESC LIMIT 13",
+    "topn_limit": 13
+  },
+  {
+    "name": "bigint_boundaries",
+    "sql": "SELECT id, big_key FROM {table} ORDER BY big_key DESC NULLS LAST, id ASC LIMIT 9",
+    "topn_limit": 9
+  },
+  {
+    "name": "hidden_timestamp_order_key",
+    "sql": "SELECT id FROM {table} ORDER BY created_at DESC NULLS LAST, id ASC LIMIT 11",
+    "topn_limit": 11
+  },
+  {
+    "name": "date_null_and_ad_boundaries",
+    "sql": "SELECT id, created_date FROM {table} ORDER BY created_date ASC NULLS FIRST, id DESC LIMIT 13",
+    "topn_limit": 13
+  },
+  {
+    "name": "timestamp_cutover_and_microseconds",
+    "sql": "SELECT id, created_at FROM {table} WHERE created_at IS NOT NULL ORDER BY created_at ASC NULLS LAST, id ASC LIMIT 12",
+    "topn_limit": 12
+  },
+  {
+    "name": "sum_having_topn",
+    "sql": "SELECT grp, SUM(amount) AS total FROM {table} GROUP BY grp HAVING SUM(amount) >= 0 ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3",
+    "aggregate": "group",
+    "topn_requires_aggregate": true,
+    "topn_limit": 3,
+    "remote_having": true
+  },
+  {
+    "name": "hidden_count_having_order_key",
+    "sql": "SELECT grp FROM {table} GROUP BY grp HAVING COUNT(*) > 1 ORDER BY COUNT(*) DESC NULLS FIRST, grp ASC NULLS FIRST LIMIT 4",
+    "aggregate": "group",
+    "topn_requires_aggregate": true,
+    "topn_limit": 4,
+    "remote_having": true
+  },
+  {
+    "name": "group_min_max",
+    "sql": "SELECT grp, MIN(amount) AS lo, MAX(amount) AS hi FROM {table} GROUP BY grp ORDER BY hi DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 4",
+    "aggregate": "group",
+    "topn_requires_aggregate": true,
+    "topn_limit": 4
+  },
+  {
+    "name": "count_distinct_having",
+    "sql": "SELECT grp, COUNT(DISTINCT customer_id) AS n FROM {table} GROUP BY grp HAVING COUNT(DISTINCT customer_id) > 1 ORDER BY n DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 5",
+    "aggregate": "group",
+    "topn_requires_aggregate": true,
+    "topn_limit": 5,
+    "remote_having": true
+  },
+  {
+    "name": "distinct_topn",
+    "sql": "SELECT DISTINCT grp FROM {table} ORDER BY grp ASC NULLS FIRST LIMIT 4",
+    "aggregate": "group",
+    "topn_requires_aggregate": true,
+    "topn_limit": 4
+  },
+  {
+    "name": "scalar_empty_input",
+    "sql": "SELECT COUNT(*), SUM(amount), MIN(amount), MAX(amount) FROM {table} WHERE id < 0",
+    "aggregate": "scalar"
+  },
+  {
+    "name": "group_empty_input",
+    "sql": "SELECT grp, SUM(amount) AS total FROM {table} WHERE id < 0 GROUP BY grp ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 4",
+    "aggregate": "group",
+    "topn_requires_aggregate": true,
+    "topn_limit": 4
+  },
+  {
+    "name": "all_null_aggregate_group",
+    "sql": "SELECT grp, SUM(amount) AS total, COUNT(amount) AS n FROM {table} WHERE grp = 2 GROUP BY grp ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3",
+    "aggregate": "group",
+    "topn_requires_aggregate": true,
+    "topn_limit": 3
+  },
+  {
+    "name": "scalar_avg_exact",
+    "sql": "SELECT AVG(id), COUNT(amount), SUM(amount) FROM {table}",
+    "aggregate": "scalar"
+  },
+  {
+    "name": "multiple_count_distinct",
+    "sql": "SELECT COUNT(DISTINCT customer_id), COUNT(DISTINCT grp) FROM {table}",
+    "aggregate": "scalar"
+  },
+  {
+    "name": "residual_filter_fallback",
+    "sql": "SELECT id FROM {table} WHERE MD5(name) = MD5('name_1') ORDER BY amount DESC NULLS LAST, id ASC LIMIT 7"
+  },
+  {
+    "name": "residual_having_fallback",
+    "sql": "SELECT grp, SUM(amount) AS total FROM {table} GROUP BY grp HAVING ABS(SUM(amount)) > 1 ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3"
+  },
+  {
+    "name": "text_c_collation_key_topn",
+    "sql": "SELECT id, name FROM {table} ORDER BY name ASC NULLS FIRST, id ASC LIMIT 7",
+    "topn_limit": 7,
+    "remote_collate": 1
+  },
+  {
+    "name": "float_order_fallback",
+    "sql": "SELECT id FROM {table} ORDER BY ratio ASC NULLS FIRST, id ASC LIMIT 7"
+  },
+  {
+    "name": "bounded_numeric_hidden_key_topn",
+    "sql": "SELECT id FROM {table} ORDER BY price DESC NULLS LAST, id ASC LIMIT 7",
+    "topn_limit": 7
+  },
+  {
+    "name": "timestamptz_order_fallback",
+    "sql": "SELECT id FROM {table} ORDER BY created_z ASC NULLS FIRST, id ASC LIMIT 7"
+  },
+  {
+    "name": "offset_fallback",
+    "sql": "SELECT id FROM {table} ORDER BY amount DESC NULLS LAST, id ASC LIMIT 5 OFFSET 2"
+  },
+  {
+    "name": "aggregate_offset_fallback",
+    "sql": "SELECT grp, SUM(amount) AS total FROM {table} GROUP BY grp ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3 OFFSET 1",
+    "aggregate": "group"
+  },
+  {
+    "name": "derived_timestamp_order_fallback",
+    "sql": "SELECT grp, MAX(created_at) AS latest FROM {table} GROUP BY grp ORDER BY latest DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3",
+    "aggregate": "group"
+  },
+  {
+    "name": "integer_project_topn",
+    "sql": "SELECT id, amount + 1 AS shifted FROM {table} ORDER BY shifted DESC NULLS LAST, id ASC LIMIT 7",
+    "topn_limit": 7
+  },
+  {
+    "name": "aggregate_above_limited_input",
+    "sql": "SELECT grp, SUM(amount) AS total FROM (SELECT grp, amount FROM {table} ORDER BY id ASC NULLS FIRST LIMIT 12) s GROUP BY grp ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3",
+    "topn_limit": 12
+  },
+  {
+    "name": "text_default_collation_topn",
+    "sql": "SELECT id, label FROM {table} ORDER BY label ASC NULLS LAST, id ASC LIMIT 15",
+    "topn_limit": 15,
+    "remote_collate": 1,
+    "pg_sql": "SELECT id, label FROM {table} ORDER BY label COLLATE \"C\" ASC NULLS LAST, id ASC LIMIT 15"
+  },
+  {
+    "name": "text_c_collation_topn",
+    "sql": "SELECT id, name FROM {table} ORDER BY name DESC NULLS FIRST, id ASC LIMIT 11",
+    "topn_limit": 11,
+    "remote_collate": 1
+  },
+  {
+    "name": "varchar_hidden_order_key",
+    "sql": "SELECT id FROM {table} ORDER BY label DESC NULLS LAST, id DESC LIMIT 9",
+    "topn_limit": 9,
+    "remote_collate": 1,
+    "pg_sql": "SELECT id FROM {table} ORDER BY label COLLATE \"C\" DESC NULLS LAST, id DESC LIMIT 9"
+  },
+  {
+    "name": "boolean_topn",
+    "sql": "SELECT id FROM {table} ORDER BY active DESC NULLS LAST, id ASC LIMIT 13",
+    "topn_limit": 13
+  },
+  {
+    "name": "bounded_numeric_topn",
+    "sql": "SELECT id, price FROM {table} ORDER BY price DESC NULLS LAST, id ASC LIMIT 10",
+    "topn_limit": 10
+  },
+  {
+    "name": "unbounded_numeric_order_fallback",
+    "sql": "SELECT id, unbounded_amount FROM {table} ORDER BY unbounded_amount ASC NULLS FIRST, id ASC LIMIT 14"
+  },
+  {
+    "name": "mixed_text_and_numeric_keys",
+    "sql": "SELECT id, label, price FROM {table} ORDER BY label ASC NULLS LAST, price DESC NULLS FIRST, id ASC LIMIT 12",
+    "topn_limit": 12,
+    "remote_collate": 1,
+    "pg_sql": "SELECT id, label, price FROM {table} ORDER BY label COLLATE \"C\" ASC NULLS LAST, price DESC NULLS FIRST, id ASC LIMIT 12"
+  },
+  {
+    "name": "double_order_fallback",
+    "sql": "SELECT id, ratio FROM {table} ORDER BY ratio DESC NULLS LAST, id ASC LIMIT 7"
+  },
+  {
+    "name": "text_min_aggregate_order_fallback",
+    "sql": "SELECT grp, MIN(label) AS first_label FROM {table} GROUP BY grp ORDER BY first_label ASC NULLS LAST, grp ASC NULLS FIRST LIMIT 4",
+    "aggregate": "group"
+  }
+]

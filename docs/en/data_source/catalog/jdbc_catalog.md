@@ -231,6 +231,10 @@ DROP Catalog jdbc0;
 
 <JoinPushdown />
 
+### PostgreSQL date and timestamp values
+
+PostgreSQL `date` and `timestamp without time zone` values retain their calendar fields when read through a JDBC catalog. The JVM's default time zone does not shift these values, and timestamps retain microsecond precision. The supported year range is 0001 through 9999 AD. Reading a BC date, `infinity`, `-infinity`, or a value outside this range fails with an error instead of changing its era or value.
+
 ## Query JDBC data with native SQL
 
 From v4.1 onwards, StarRocks supports querying JDBC data with database-native `SELECT` statements by using the [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) table function.

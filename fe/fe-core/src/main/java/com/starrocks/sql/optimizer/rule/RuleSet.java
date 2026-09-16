@@ -172,6 +172,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRu
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToJDBCScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNToJDBCScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNToPreAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
@@ -282,14 +283,15 @@ public class RuleSet {
     ));
 
     // JDBC pushdown: rewrite same-catalog INNER JOINs into one merged JDBC scan, then fold
-    // aggregations onto it. Applied iteratively (after CTE inlining and the final
+    // aggregations and TopN onto it. Applied iteratively (after CTE inlining and the final
     // MergeProjectWithChildRule pass): the join merge happens first, and the following
     // iteration lets the agg rule see the merged scan as its direct child.
     public static final Rule JDBC_PUSHDOWN_RULES = new CombinationRule(RuleType.GP_JDBC_PUSHDOWN,
             ImmutableList.of(
                     new PushDownProjectToJDBCScanRule(),
                     new PushDownJoinToJDBCRule(),
-                    new PushDownAggToJDBCScanRule()
+                    new PushDownAggToJDBCScanRule(),
+                    new PushDownTopNToJDBCScanRule()
             ));
 
     public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(

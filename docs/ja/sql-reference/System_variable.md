@@ -706,6 +706,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: Boolean
 * **導入バージョン**: v3.5.16, v4.0.9
 
+### enable_jdbc_topn_push_down
+
+* **説明**: 条件を満たす `ORDER BY ... LIMIT` 操作を PostgreSQL JDBC Catalog にプッシュダウンするかどうかを指定します。`RESOURCE` を使用して作成した従来の JDBC 外部テーブルでは、TopN は StarRocks 内で実行されます。有効な値は `true` と `false` です。`TINYINT`、`SMALLINT`、`INT`、`BIGINT` のソートキー（プッシュダウンされた集計の対応する型の結果を含む）をサポートします。さらに、元の型が確認できる場合は、次の PostgreSQL カラム型もサポートします: `date` および `timestamp without time zone`、`boolean`、`text` および `varchar`、精度が 38 以下で宣言された `numeric`/`decimal`。日付・時刻の範囲は西暦 0001 年から 9999 年までです。プッシュダウンされた式や集計の日付・時刻の結果はサポートされません。`text` と `varchar` のソートキーは、StarRocks のバイト順に合わせるためリモートで `COLLATE "C"` を使用してソートされます。そのため、別の collation で作成されたインデックスを PostgreSQL が使用できなくなる場合があります。リモートの ORDER BY はローカル TopN の入力ではなくその代わりとなり、スキャンは読み取った行の順序を保持します。OFFSET、既存のスキャン行数制限、またはローカルで実行する必要があるフィルターや集計を含むクエリはプッシュダウンされません。浮動小数点数、`char`/`bpchar`、`enum`、`timestamp with time zone`、および精度が 38 を超える `numeric` のソートキーはサポートされません。FE、すべての BE/CN ノード、およびその JDBC Bridge を同時にアップグレードしてください。本機能より古い BE/CN は読み取った行を並べ替えますが、順序を復元するためのローカル TopN はもう存在しません。日付・時刻のソートにはさらに、Bridge の PostgreSQL 日付・時刻を損失なく読み取る実装が必要です。
+* **デフォルト**: true
+* **データ型**: Boolean
+
 ### enable_lake_prepared_physical_split_scan
 
 * **説明**: 共有データクラスタ内のクラウドネイティブ（レイク）テーブルに対して Prepared Physical Split Scan を有効にするかどうか。有効にすると、各セグメントは一度だけプルーニングされ、その Prepared Read State が同一タブレットの Split 子タスク間で共有されるため、大きい、またはデータが偏ったタブレットのスキャンを高速化できます。この最適化はスキャンノードごとに判断され、さらにクラウドネイティブテーブルであることと Query Cache が無効であることを必要とします。共有データクラスタでのみ有効です。

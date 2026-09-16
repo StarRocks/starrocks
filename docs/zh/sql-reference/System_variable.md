@@ -712,6 +712,12 @@ FROM test;
 * 数据类型：Boolean
 * 引入版本：v3.5.16、v4.0.9
 
+### enable_jdbc_topn_push_down
+
+* **描述**：是否向 PostgreSQL JDBC Catalog 下推满足条件的 `ORDER BY ... LIMIT` 操作。通过 `RESOURCE` 创建的 JDBC 外表保留在 StarRocks 中执行 TopN。有效值：`true` 和 `false`。支持 `TINYINT`、`SMALLINT`、`INT`、`BIGINT` 排序键（包括已下推聚合的对应类型结果）。此外，在已知源类型的前提下，还支持以下 PostgreSQL 列类型：`date` 和 `timestamp without time zone`；`boolean`；`text` 和 `varchar`；以及声明精度不超过 38 的 `numeric`/`decimal`。支持的日期时间范围为公元 0001 至 9999 年。不支持已下推表达式或聚合的日期时间结果。`text` 和 `varchar` 排序键在远端使用 `COLLATE "C"` 排序，以匹配 StarRocks 的字节序；这可能导致 PostgreSQL 无法使用按其他 collation 建立的索引。远端 ORDER BY 取代本地 TopN，而非作为其输入；Scan 保持读取到的行序。包含 OFFSET、Scan 已有限制行数，或需要在本地执行过滤或聚合的查询不下推。不支持浮点数、`char`/`bpchar`、`enum`、`timestamp with time zone`，以及声明精度超过 38 的 `numeric` 排序键。需同时升级 FE、所有 BE/CN 节点及其 JDBC Bridge。早于本特性的 BE/CN 会重排读取到的行，而此时已不存在用于恢复顺序的本地 TopN；日期时间排序还依赖 Bridge 中无损读取 PostgreSQL 日期时间的实现。
+* **默认值**：true
+* **数据类型**：Boolean
+
 ### enable_lake_prepared_physical_split_scan
 
 * 描述：是否为存算分离集群中的云原生表开启 Prepared Physical Split Scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 Split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。

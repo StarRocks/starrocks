@@ -488,6 +488,7 @@ public class JDBCMetadataTest {
         Assertions.assertEquals("id", jdbcTable.getFullSchema().get(0).getName());
         Assertions.assertEquals(Types.INTEGER, jdbcTable.getOriginalJdbcColumnTypes().get("id"));
         Assertions.assertEquals(Types.VARCHAR, jdbcTable.getOriginalJdbcColumnTypes().get("name"));
+        Assertions.assertEquals(Map.of("id", "INTEGER", "name", "VARCHAR"), jdbcTable.getOriginalJdbcColumnTypeNames());
         Assertions.assertEquals(IntegerType.INT, jdbcTable.getFullSchema().get(0).getType());
         Assertions.assertEquals("name", jdbcTable.getFullSchema().get(1).getName());
         Assertions.assertEquals(TypeFactory.createVarcharType(20), jdbcTable.getFullSchema().get(1).getType());

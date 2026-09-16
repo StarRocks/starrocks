@@ -22,10 +22,12 @@ import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.PrimitiveType;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -68,6 +70,8 @@ public class JDBCPushDownSQLBuilder {
             "SELECT$topClause $columns FROM $table$whereClause$limitClause";
     private static final String ORACLE_LIMIT_QUERY_TEMPLATE =
             "SELECT * FROM ($query) WHERE ROWNUM <= $limit";
+    private static final String TOPN_QUERY_TEMPLATE =
+            "$query ORDER BY $orderBy LIMIT $limit$offsetClause";
     private static final String JOIN_QUERY_TEMPLATE =
             "SELECT $selectList FROM $fromList$whereClause";
     private static final String AGGREGATE_QUERY_TEMPLATE =
@@ -381,6 +385,52 @@ public class JDBCPushDownSQLBuilder {
         context.put("groupByClause", renderClause(" GROUP BY ", ", ", groupBys, renderer));
         context.put("havingClause", renderClause(" HAVING ", " AND ", havings, renderer));
         return build(context, AGGREGATE_QUERY_TEMPLATE);
+    }
+
+    /**
+     * Bound a PostgreSQL scan after its filters and any previously pushed aggregation/HAVING.
+     * The caller has checked ordering compatibility and rejected a scan-local LIMIT. Select every
+     * scan column, including order keys absent from the user's SELECT list: the rows arrive in the
+     * remote order and the operators above still reference those columns.
+     */
+    public static String buildTopNQuery(LogicalJDBCScanOperator scan, List<Ordering> orderings,
+                                        long limit, long offset) {
+        JDBCTable table = (JDBCTable) scan.getTable();
+        Preconditions.checkArgument(table.getProtocolType() == JDBCTable.ProtocolType.POSTGRES);
+        // A scan carrying its own LIMIT would render as "... LIMIT k ORDER BY ...", which is not
+        // valid SQL. PushDownTopNToJDBCScanRule keeps those local; see its comment for why no query
+        // reaches this rule in that shape anyway.
+        Preconditions.checkArgument(!scan.hasLimit() && limit > 0 && offset >= 0 && !orderings.isEmpty());
+        String quote = JDBCScanNode.getIdentifierSymbol(table.getJdbcUri());
+        Map<ColumnRefOperator, String> columnNames = buildRawColumnNameMap(scan, quote);
+        List<String> orderingSql = new ArrayList<>();
+        for (Ordering ordering : orderings) {
+            String columnName = columnNames.get(ordering.getColumnRef());
+            Preconditions.checkArgument(columnName != null, "order column %s is not in scan", ordering.getColumnRef());
+            orderingSql.add(columnName + collateFor(ordering) + (ordering.isAscending() ? " ASC" : " DESC")
+                    + (ordering.isNullsFirst() ? " NULLS FIRST" : " NULLS LAST"));
+        }
+        VelocityContext context = new VelocityContext();
+        context.put("query", buildSelectQuery(scan, new ArrayList<>(scan.getColRefToColumnMetaMap().keySet())));
+        context.put("orderBy", Joiner.on(", ").join(orderingSql));
+        context.put("limit", limit);
+        // PostgreSQL applies OFFSET after ORDER BY and before LIMIT, which is what a TopN with an
+        // offset asks for, so the remote returns exactly the rows the dropped TopN would have kept.
+        context.put("offsetClause", offset > 0 ? " OFFSET " + offset : "");
+        return build(context, TOPN_QUERY_TEMPLATE);
+    }
+
+    /**
+     * StarRocks compares strings byte by byte, while PostgreSQL compares them under the column's
+     * collation, so a database created with e.g. en_US.UTF-8 orders 'B' before 'a'. Sorting the
+     * pushed key under COLLATE "C" selects PostgreSQL's byte order and makes the remote TopN keep
+     * the rows the local TopN would have kept. PushDownTopNToJDBCScanRule only admits a VARCHAR key
+     * whose source type is text or varchar. Note that this can stop PostgreSQL from using an index
+     * built under another collation; the remote ORDER BY remains correct, only its plan changes.
+     */
+    private static String collateFor(Ordering ordering) {
+        return ordering.getColumnRef().getType().getPrimitiveType() == PrimitiveType.VARCHAR
+                ? " COLLATE \"C\"" : "";
     }
 
     private static Map<ColumnRefOperator, String> buildQualifiedNameMap(List<LogicalJDBCScanOperator> scans,

@@ -16,6 +16,7 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
@@ -190,6 +191,7 @@ public class PostgresSchemaResolverTest {
             Assertions.assertTrue(table.getColumn("n").getType().isTime());
             Assertions.assertTrue(table.getColumn("o").getType().isJsonType());
             Assertions.assertTrue(table.getColumn("p").getType().isJsonType());
+            Assertions.assertEquals("TIMESTAMP", ((JDBCTable) table).getOriginalJdbcColumnTypeNames().get("k"));
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assertions.fail();
@@ -203,6 +205,24 @@ public class PostgresSchemaResolverTest {
                 Table.TableType.JDBC, Lists.newArrayList()));
         Assertions.assertEquals(partitions.size(), 1);
         Assertions.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
+    }
+
+    @Test
+    public void testPreserveTimestampTypeNamesAndQuotedColumnNames() throws SQLException {
+        MockResultSet columns = new MockResultSet("temporal_columns");
+        columns.addColumn("COLUMN_NAME", List.of("createdAt", "createdat"));
+        columns.addColumn("DATA_TYPE", List.of(Types.TIMESTAMP, Types.TIMESTAMP));
+        columns.addColumn("TYPE_NAME", List.of("timestamp", "timestamptz"));
+        columns.addColumn("COLUMN_SIZE", List.of(29, 35));
+        columns.addColumn("DECIMAL_DIGITS", List.of(6, 6));
+        columns.addColumn("IS_NULLABLE", List.of("YES", "YES"));
+        Map<String, String> typeNames = new HashMap<>();
+        List<Column> schema = new PostgresSchemaResolver().convertToSRTable(
+                columns, new HashMap<>(), typeNames);
+        Assertions.assertEquals(Map.of("\"createdAt\"", "timestamp", "createdat", "timestamptz"), typeNames);
+        Assertions.assertEquals("\"createdAt\"", schema.get(0).getName());
+        Assertions.assertEquals("createdat", schema.get(1).getName());
+        Assertions.assertTrue(schema.stream().allMatch(column -> column.getType().isDatetime()));
     }
 
     @Test

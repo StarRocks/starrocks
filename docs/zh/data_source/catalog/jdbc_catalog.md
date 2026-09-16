@@ -232,6 +232,10 @@ DROP Catalog jdbc0;
 
 <JoinPushdown />
 
+### PostgreSQL 日期和时间戳
+
+通过 JDBC Catalog 读取 PostgreSQL 的 `date` 和 `timestamp without time zone` 时，会保留原始年月日和时间字段，不会因 JVM 默认时区而发生偏移；时间戳保留微秒精度。支持的年份范围为公元 0001 至 9999 年。读取到公元前日期、`infinity`、`-infinity` 或超出该范围的值时会报错，避免静默改变年代或数值。
+
 ## 使用原生 SQL 查询 JDBC 数据
 
 自 v4.1 起，StarRocks 支持通过 [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) 表函数，使用数据库原生 `SELECT` 语句查询 JDBC 数据。

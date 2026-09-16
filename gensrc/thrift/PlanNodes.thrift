@@ -951,6 +951,10 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+  // A pushed-down ORDER BY makes the remote result already sorted, and the plan no longer
+  // carries a TopN to restore that order, so the scan must deliver its rows in the order it
+  // received them. See JDBCDataSourceProvider::insert_local_exchange_operator.
+  6: optional bool preserve_remote_order
 }
 
 // Extension point for TLakeScanNode. DO NOT MODIFY: do not add fields here,

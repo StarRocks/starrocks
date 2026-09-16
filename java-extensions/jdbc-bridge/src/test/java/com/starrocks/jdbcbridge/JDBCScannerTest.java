@@ -14,6 +14,7 @@
 
 package com.starrocks.jdbcbridge;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -25,14 +26,222 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class JDBCScannerTest {
+
+    @Test
+    public void testOpenInitializesPostgresTemporalStorageAndRetainsJdbcClasses() throws Exception {
+        assertOpenTemporalColumns("org.postgresql.Driver", true);
+    }
+
+    @Test
+    public void testOpenKeepsNonPostgresTemporalStorage() throws Exception {
+        assertOpenTemporalColumns("com.mysql.cj.jdbc.Driver", false);
+    }
+
+    private void assertOpenTemporalColumns(String driverClassName, boolean postgres) throws Exception {
+        List<String> typeNames = List.of("date", "timestamp", "int4");
+        List<String> classNames = List.of("java.sql.Date", "java.sql.Timestamp", "java.lang.Integer");
+        LocalDate date = LocalDate.of(1582, 10, 10);
+        LocalDateTime timestamp = LocalDateTime.of(2026, 3, 8, 2, 30, 0, 123456000);
+        AtomicInteger row = new AtomicInteger(-1);
+        AtomicInteger typedReads = new AtomicInteger();
+        List<String> closed = new ArrayList<>();
+        ResultSetMetaData metadata = proxy(ResultSetMetaData.class, (method, args) -> {
+            switch (method.getName()) {
+                case "getColumnCount":
+                    return typeNames.size();
+                case "getColumnTypeName":
+                    return typeNames.get((int) args[0] - 1);
+                case "getColumnClassName":
+                    return classNames.get((int) args[0] - 1);
+                default:
+                    return defaultValue(method);
+            }
+        });
+        ResultSet resultSet = proxy(ResultSet.class, (method, args) -> {
+            switch (method.getName()) {
+                case "getMetaData":
+                    return metadata;
+                case "next":
+                    return row.incrementAndGet() < 2;
+                case "getObject":
+                    int column = (int) args[0];
+                    if (column == 3) {
+                        Assertions.assertEquals(1, args.length);
+                        return row.get() + 7;
+                    }
+                    if (postgres) {
+                        Assertions.assertEquals(2, args.length, "PG temporal reads must use java.time");
+                        Assertions.assertEquals(column == 1 ? LocalDate.class : LocalDateTime.class, args[1]);
+                        typedReads.incrementAndGet();
+                        return row.get() == 1 ? null : (column == 1 ? date : timestamp);
+                    }
+                    Assertions.assertEquals(1, args.length, "Other drivers retain ordinary JDBC reads");
+                    return row.get() == 1 ? null : (column == 1
+                            ? java.sql.Date.valueOf(date) : Timestamp.valueOf(timestamp));
+                case "close":
+                    closed.add("resultSet");
+                    return null;
+                default:
+                    return defaultValue(method);
+            }
+        });
+        PreparedStatement statement = proxy(PreparedStatement.class, (method, args) -> {
+            if ("executeQuery".equals(method.getName()) || "getResultSet".equals(method.getName())) {
+                return resultSet;
+            }
+            if ("close".equals(method.getName())) {
+                closed.add("statement");
+            }
+            return defaultValue(method);
+        });
+        Connection connection = proxy(Connection.class, (method, args) -> {
+            if ("prepareStatement".equals(method.getName())) {
+                return statement;
+            }
+            if ("close".equals(method.getName())) {
+                closed.add("connection");
+            }
+            return defaultValue(method);
+        });
+        JDBCScanContext context = new JDBCScanContext();
+        context.setDriverClassName(driverClassName);
+        context.setJdbcURL("jdbc:test:" + UUID.randomUUID());
+        context.setUser("test");
+        context.setPassword("");
+        context.setSql("SELECT d, ts, id FROM temporal_test");
+        context.setQueryTimeZone("America/New_York");
+        context.setStatementFetchSize(2);
+        String cacheKey = context.getUser() + "/" + context.getPassword() + "/" + context.getJdbcURL();
+        HikariDataSource source = new HikariDataSource() {
+            @Override
+            public Connection getConnection() {
+                return connection;
+            }
+        };
+        DataSourceCache cache = DataSourceCache.getInstance();
+        cache.getSource(cacheKey, () -> new DataSourceCache.DataSourceCacheItem(source, getClass().getClassLoader()));
+        JDBCScanner scanner = new JDBCScanner("unused", context);
+        try {
+            scanner.open();
+            Assertions.assertEquals(classNames, scanner.getResultColumnClassNames(),
+                    "BE type validation must still see the original JDBC classes");
+            Assertions.assertTrue(scanner.hasNext());
+            List<Object[]> chunk = scanner.getNextChunk();
+            Assertions.assertEquals(2, scanner.getResultNumRows());
+            if (postgres) {
+                Assertions.assertInstanceOf(String[].class, chunk.get(0));
+                Assertions.assertInstanceOf(String[].class, chunk.get(1));
+                Assertions.assertEquals("1582-10-10", chunk.get(0)[0]);
+                Assertions.assertEquals("2026-03-08 02:30:00.123456", chunk.get(1)[0]);
+                Assertions.assertEquals(4, typedReads.get());
+            } else {
+                Assertions.assertInstanceOf(java.sql.Date[].class, chunk.get(0));
+                Assertions.assertInstanceOf(Timestamp[].class, chunk.get(1));
+                Assertions.assertEquals(java.sql.Date.valueOf(date), chunk.get(0)[0]);
+                Assertions.assertEquals(Timestamp.valueOf(timestamp), chunk.get(1)[0]);
+                Assertions.assertEquals(0, typedReads.get());
+            }
+            Assertions.assertNull(chunk.get(0)[1]);
+            Assertions.assertNull(chunk.get(1)[1]);
+            Assertions.assertArrayEquals(new Integer[] {7, 8}, chunk.get(2));
+            Assertions.assertFalse(scanner.hasNext());
+        } finally {
+            try {
+                scanner.close();
+            } finally {
+                Field sources = DataSourceCache.class.getDeclaredField("sources");
+                sources.setAccessible(true);
+                ((Map<?, ?>) sources.get(cache)).remove(cacheKey);
+                source.close();
+            }
+        }
+        Assertions.assertEquals(List.of("resultSet", "statement", "connection"), closed);
+    }
+
+    @Test
+    public void testPostgresLocalTemporalReadPreservesWallClockAndFraction() throws Exception {
+        for (String zone : List.of("UTC", "America/New_York", "Asia/Shanghai")) {
+            JDBCScanner scanner = localTemporalScanner(LocalDateTime.class,
+                    LocalDateTime.of(2026, 3, 8, 2, 30, 0, 123456000), zone);
+            Assertions.assertEquals("2026-03-08 02:30:00.123456", scanner.getNextChunk().get(0)[0]);
+            Assertions.assertEquals(1, scanner.getResultNumRows());
+            scanner = localTemporalScanner(LocalDate.class, LocalDate.of(1582, 10, 10), zone);
+            Assertions.assertEquals("1582-10-10", scanner.getNextChunk().get(0)[0]);
+            scanner = localTemporalScanner(LocalDateTime.class, LocalDateTime.of(1, 1, 1, 0, 0), zone);
+            Assertions.assertEquals("0001-01-01 00:00:00.000000", scanner.getNextChunk().get(0)[0]);
+        }
+    }
+
+    @Test
+    public void testPostgresLocalTemporalReadRejectsEraLossAndInfinity() throws Exception {
+        for (LocalDate date : List.of(LocalDate.of(0, 1, 1), LocalDate.of(-1, 1, 1),
+                LocalDate.of(10000, 1, 1), LocalDate.MIN, LocalDate.MAX)) {
+            JDBCScanner dateScanner = localTemporalScanner(LocalDate.class, date, "UTC");
+            SQLException failure = Assertions.assertThrows(SQLException.class, dateScanner::getNextChunk);
+            Assertions.assertTrue(failure.getMessage().contains("outside the supported range"));
+            JDBCScanner timestampScanner = localTemporalScanner(LocalDateTime.class, date.atStartOfDay(), "UTC");
+            Assertions.assertThrows(SQLException.class, timestampScanner::getNextChunk);
+        }
+    }
+
+    @Test
+    public void testPostgresLocalTemporalReadPreservesNull() throws Exception {
+        for (Class<?> type : List.of(LocalDate.class, LocalDateTime.class)) {
+            JDBCScanner scanner = localTemporalScanner(type, null, "UTC");
+            Assertions.assertNull(scanner.getNextChunk().get(0)[0]);
+            Assertions.assertEquals(1, scanner.getResultNumRows());
+        }
+    }
+
+    @Test
+    public void testPostgresLocalTemporalReadIsRestrictedToUnzonedPostgresTypes() throws Exception {
+        Method classify = JDBCScanner.class.getDeclaredMethod("getPostgresLocalTemporalClass", String.class);
+        classify.setAccessible(true);
+        JDBCScanner pgScanner = createScanner("org.postgresql.Driver", "UTC", 1);
+        Assertions.assertEquals(LocalDate.class, classify.invoke(pgScanner, "date"));
+        Assertions.assertEquals(LocalDateTime.class, classify.invoke(pgScanner, "TIMESTAMP"));
+        Assertions.assertEquals(LocalDateTime.class, classify.invoke(pgScanner, "timestamp without time zone"));
+        for (String typeName : List.of("timestamptz", "timestamp with time zone", "timetz", "time", "text")) {
+            Assertions.assertNull(classify.invoke(pgScanner, typeName));
+        }
+        for (String driver : List.of("oracle.jdbc.OracleDriver", "com.mysql.cj.jdbc.Driver")) {
+            JDBCScanner scanner = createScanner(driver, "UTC", 1);
+            Assertions.assertNull(classify.invoke(scanner, "date"));
+            Assertions.assertNull(classify.invoke(scanner, "timestamp"));
+        }
+    }
+
+    private JDBCScanner localTemporalScanner(Class<?> type, Object value, String timeZone) throws Exception {
+        JDBCScanner scanner = createScanner("org.postgresql.Driver", timeZone, 1);
+        setField(scanner, "resultSetMetaData", singleColumnMetaData());
+        List<Object[]> chunk = new ArrayList<>();
+        chunk.add(new String[1]);
+        setField(scanner, "resultChunk", chunk);
+        setField(scanner, "postgresLocalTemporalColumns", List.of(type));
+        setField(scanner, "resultSet", proxy(ResultSet.class, (method, args) -> {
+            if ("getObject".equals(method.getName())) {
+                Assertions.assertEquals(2, args.length, "Must bypass legacy Calendar-based getObject");
+                Assertions.assertEquals(type, args[1]);
+                return value;
+            }
+            return defaultValue(method);
+        }));
+        return scanner;
+    }
 
     @Test
     public void testOracleVarcharColumnDoesNotUseTemporalConversion() throws Exception {

@@ -389,7 +389,9 @@ public class JDBCMetadata implements ConnectorMetadata {
                     try (Connection connection = getConnection();
                             ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
                         Map<String, Integer> originalJdbcTypes = new HashMap<>();
-                        List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet, originalJdbcTypes);
+                        Map<String, String> originalJdbcTypeNames = new HashMap<>();
+                        List<Column> fullSchema = schemaResolver.convertToSRTable(
+                                columnSet, originalJdbcTypes, originalJdbcTypeNames);
                         List<Column> partitionColumns = Lists.newArrayList();
                         if (schemaResolver.isSupportPartitionInformation()) {
                             partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
@@ -405,6 +407,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                         if (table != null) {
                             if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
                                 ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
+                                ((JDBCTable) table).setOriginalJdbcColumnTypeNames(originalJdbcTypeNames);
                             }
                         }
                         return table;
@@ -438,7 +441,9 @@ public class JDBCMetadata implements ConnectorMetadata {
 
             try (ResultSet resultSet = statement.executeQuery(metadataQuery)) {
                 Map<String, Integer> originalJdbcTypes = new HashMap<>();
-                List<Column> fullSchema = schemaResolver.convertToSRTable(resultSet.getMetaData(), originalJdbcTypes);
+                Map<String, String> originalJdbcTypeNames = new HashMap<>();
+                List<Column> fullSchema = schemaResolver.convertToSRTable(
+                        resultSet.getMetaData(), originalJdbcTypes, originalJdbcTypeNames);
                 if (fullSchema.isEmpty()) {
                     throw new StarRocksConnectorException("pass-through query returned no columns");
                 }
@@ -449,6 +454,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 queryTable.setPassThroughQuery(normalizedQuery);
                 if (!originalJdbcTypes.isEmpty()) {
                     queryTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
+                    queryTable.setOriginalJdbcColumnTypeNames(originalJdbcTypeNames);
                 }
                 return queryTable;
             }

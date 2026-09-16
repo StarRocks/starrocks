@@ -231,6 +231,10 @@ DROP Catalog jdbc0;
 
 <JoinPushdown />
 
+### PostgreSQL の日付とタイムスタンプ
+
+JDBC catalog を通じて PostgreSQL の `date` と `timestamp without time zone` を読み取る場合、元の年月日と時刻が保持されます。JVM のデフォルトタイムゾーンによる時刻の変更はなく、タイムスタンプはマイクロ秒精度を保持します。サポートされる年の範囲は西暦 0001 年から 9999 年です。紀元前の日付、`infinity`、`-infinity`、または範囲外の値を読み取ると、年代や値を暗黙に変更せずエラーを返します。
+
 ## ネイティブ SQL で JDBC データをクエリする
 
 v4.1 以降、StarRocks は [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) テーブル関数を使用して、データベースネイティブの `SELECT` 文で JDBC データをクエリできます。

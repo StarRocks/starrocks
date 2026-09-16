@@ -166,17 +166,26 @@ public abstract class JDBCSchemaResolver {
     }
 
     public List<Column> convertToSRTable(ResultSet columnSet, Map<String, Integer> originalJdbcTypes) throws SQLException {
+        return convertToSRTable(columnSet, originalJdbcTypes, null);
+    }
+
+    public List<Column> convertToSRTable(ResultSet columnSet, Map<String, Integer> originalJdbcTypes,
+                                       Map<String, String> originalJdbcTypeNames) throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         while (columnSet.next()) {
             int dataType = columnSet.getInt("DATA_TYPE");
             String columnName = columnSet.getString("COLUMN_NAME");
+            String typeName = columnSet.getString("TYPE_NAME");
             Type type = convertColumnType(dataType,
-                    columnSet.getString("TYPE_NAME"),
+                    typeName,
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
 
             if (originalJdbcTypes != null) {
                 originalJdbcTypes.put(columnName.toLowerCase(java.util.Locale.ROOT), dataType);
+            }
+            if (originalJdbcTypeNames != null && typeName != null) {
+                originalJdbcTypeNames.put(normalizeColumnName(columnName), typeName);
             }
 
             String comment = "";
@@ -199,10 +208,16 @@ public abstract class JDBCSchemaResolver {
 
     public List<Column> convertToSRTable(ResultSetMetaData metaData, Map<String, Integer> originalJdbcTypes)
             throws SQLException {
+        return convertToSRTable(metaData, originalJdbcTypes, null);
+    }
+
+    public List<Column> convertToSRTable(ResultSetMetaData metaData, Map<String, Integer> originalJdbcTypes,
+                                       Map<String, String> originalJdbcTypeNames) throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         for (int i = 1; i <= metaData.getColumnCount(); i++) {
+            String typeName = metaData.getColumnTypeName(i);
             Type type = convertColumnType(metaData.getColumnType(i),
-                    metaData.getColumnTypeName(i),
+                    typeName,
                     metaData.getPrecision(i),
                     metaData.getScale(i));
             String columnName = metaData.getColumnLabel(i);
@@ -211,6 +226,9 @@ public abstract class JDBCSchemaResolver {
             }
             if (originalJdbcTypes != null) {
                 originalJdbcTypes.put(columnName.toLowerCase(java.util.Locale.ROOT), metaData.getColumnType(i));
+            }
+            if (originalJdbcTypeNames != null && typeName != null) {
+                originalJdbcTypeNames.put(normalizeColumnName(columnName), typeName);
             }
             boolean nullable = metaData.isNullable(i) != ResultSetMetaData.columnNoNulls;
             fullSchema.add(new Column(normalizeColumnName(columnName), type, nullable));

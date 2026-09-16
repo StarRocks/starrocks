@@ -183,6 +183,9 @@ public class JDBCScanNode extends ScanNode {
         msg.jdbc_scan_node.setColumns(columns);
         msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
+        if (table.isPreserveRemoteOrder()) {
+            msg.jdbc_scan_node.setPreserve_remote_order(true);
+        }
 
         setConnectorCatalogType(msg);
     }

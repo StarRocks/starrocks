@@ -44,7 +44,11 @@ public:
     JDBCDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
-    bool insert_local_exchange_operator() const override { return true; }
+    // A JDBC scan has no scan ranges, so it runs at dop 1 and would cap the operators above it.
+    // Fanning its output out lifts that cap, but PassthroughExchanger round-robins whole chunks
+    // across the receiving drivers, which reorders them. When the FE pushed an ORDER BY down and
+    // kept no TopN to put the rows back in order, that trade is not available.
+    bool insert_local_exchange_operator() const override { return !_jdbc_scan_node.preserve_remote_order; }
     bool accept_empty_scan_ranges() const override { return false; }
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 

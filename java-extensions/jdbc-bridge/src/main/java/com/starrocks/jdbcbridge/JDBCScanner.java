@@ -28,6 +28,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.DateTimeException;
@@ -66,6 +67,7 @@ public class JDBCScanner {
     private List<String> resultColumnClassNames;
     private List<Boolean> postgresTimeWithTimezoneColumns;
     private List<Boolean> postgresTimestampWithTimezoneColumns;
+    private List<Class<?>> postgresLocalTemporalColumns;
     private List<Object[]> resultChunk;
     private int resultNumRows = 0;
     private final boolean isOracleDriver;
@@ -129,6 +131,7 @@ public class JDBCScanner {
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresTimeWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresTimestampWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
+        postgresLocalTemporalColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
             String typeName = resultSetMetaData.getColumnTypeName(i);
@@ -137,11 +140,18 @@ public class JDBCScanner {
             boolean isPostgresTimestampWithTimezone = isPostgresTimestampWithTimezoneTypeName(typeName);
             postgresTimeWithTimezoneColumns.add(isPostgresTimeWithTimezone);
             postgresTimestampWithTimezoneColumns.add(isPostgresTimestampWithTimezone);
+            Class<?> postgresLocalTemporalClass = getPostgresLocalTemporalClass(typeName);
+            postgresLocalTemporalColumns.add(postgresLocalTemporalClass);
             // Keep the original className for type checking (getResultColumnClassNames),
             // but use the appropriate array type for data storage.
             resultColumnClassNames.add(className);
             String arrayClassName = className;
-            if (isPostgresTimestampWithTimezone) {
+            if (postgresLocalTemporalClass != null) {
+                // The BE already stages Date/Timestamp columns through VARCHAR. Formatting
+                // java.time values here preserves wall-clock fields without Calendar/DST or
+                // era conversion, while retaining the original JDBC class for type checking.
+                arrayClassName = String.class.getName();
+            } else if (isPostgresTimestampWithTimezone) {
                 arrayClassName = Timestamp.class.getName();
             } else if (isPostgresTimeWithTimezone) {
                 arrayClassName = Time.class.getName();
@@ -237,6 +247,43 @@ public class JDBCScanner {
                 && postgresTimeWithTimezoneColumns.get(columnIndex);
     }
 
+    private Class<?> getPostgresLocalTemporalClass(String typeName) {
+        if (!isPostgresDriver || typeName == null) {
+            return null;
+        }
+        switch (typeName.trim().toLowerCase(Locale.ROOT)) {
+            case "date":
+                return LocalDate.class;
+            case "timestamp":
+            case "timestamp without time zone":
+                return LocalDateTime.class;
+            default:
+                return null;
+        }
+    }
+
+    private String readPostgresLocalTemporalValue(int columnIndex, Class<?> temporalClass) throws SQLException {
+        LocalDate date;
+        LocalDateTime timestamp = null;
+        if (temporalClass == LocalDate.class) {
+            date = resultSet.getObject(columnIndex + 1, LocalDate.class);
+        } else {
+            timestamp = resultSet.getObject(columnIndex + 1, LocalDateTime.class);
+            date = timestamp == null ? null : timestamp.toLocalDate();
+        }
+        if (date == null) {
+            return null;
+        }
+        // BC dates must not silently lose their era through java.sql.Date/Timestamp.toString().
+        // pgJDBC also represents +/-infinity with java.time's extreme values.
+        if (date.getYear() < 1 || date.getYear() > 9999) {
+            throw new SQLException("PostgreSQL temporal value on column " + (columnIndex + 1)
+                    + " is outside the supported range 0001-01-01 through 9999-12-31: "
+                    + (timestamp == null ? date : timestamp));
+        }
+        return timestamp == null ? date.toString() : DATETIME_FORMATTER.format(timestamp);
+    }
+
     private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
             put("com.clickhouse.data.value.UnsignedByte", Short.class);
             put("com.clickhouse.data.value.UnsignedShort", Integer.class);
@@ -267,6 +314,12 @@ public class JDBCScanner {
         do {
             for (int i = 0; i < columnCount; i++) {
                 Object[] dataColumn = resultChunk.get(i);
+                Class<?> localTemporalClass = postgresLocalTemporalColumns == null
+                        ? null : postgresLocalTemporalColumns.get(i);
+                if (localTemporalClass != null) {
+                    dataColumn[resultNumRows] = readPostgresLocalTemporalValue(i, localTemporalClass);
+                    continue;
+                }
                 Object resultObject = resultSet.getObject(i + 1);
                 // in some cases, the real java class type of result is not consistent with the type from
                 // resultSetMetadata,
