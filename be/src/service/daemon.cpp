@@ -42,7 +42,6 @@
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_metrics_fwd.h"
 #include "common/config_path_fwd.h"
-#include "common/configbase.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/util/minidump.h"
@@ -362,12 +361,6 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
         exit(-1);
     }
     init_runtime_logging_hooks();
-
-    // Config parsing runs before logging exists, so values it had to reject are reported here.
-    for (const auto& fallback : config::take_config_fallbacks()) {
-        LOG(ERROR) << "invalid config '" << fallback.name << "'='" << fallback.rejected_value << "', using '"
-                   << fallback.effective_value << "' instead; valid values: " << fallback.allowed_values;
-    }
 
     LOG(INFO) << get_version_string(false);
 

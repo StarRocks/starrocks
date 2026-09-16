@@ -260,6 +260,13 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     logging_initialized = true;
 
+    // Config parsing runs before logging exists, so values it had to reject are reported here, where
+    // every caller of init_glog gets it rather than only the ones that remember to ask.
+    for (const auto& fallback : config::take_config_fallbacks()) {
+        LOG(ERROR) << "invalid config '" << fallback.name << "'='" << fallback.rejected_value << "', using '"
+                   << fallback.effective_value << "' instead; valid values: " << fallback.allowed_values;
+    }
+
     return true;
 }
 
