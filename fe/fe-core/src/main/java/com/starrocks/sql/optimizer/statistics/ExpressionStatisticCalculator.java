@@ -1406,7 +1406,7 @@ public class ExpressionStatisticCalculator {
                         }
                     }
 
-                    final var histogram = buildIfMcv(condStat, thenStat, elseStat);
+                    final var histogram = buildIfMcv(condStat, thenStat, elseStat, minValue, maxValue);
 
                     return ColumnStatistic.builder() //
                             .setMinValue(minValue) //
@@ -1448,7 +1448,9 @@ public class ExpressionStatisticCalculator {
 
         private Histogram buildIfMcv(ColumnStatistic condStat,
                                      ColumnStatistic thenStat,
-                                     ColumnStatistic elseStat) {
+                                     ColumnStatistic elseStat,
+                                     double minValue,
+                                     double maxValue) {
             if (condStat.getHistogram() == null) {
                 return null;
             }
@@ -1482,7 +1484,13 @@ public class ExpressionStatisticCalculator {
             scaleBranchMcvAndMerge(thenStat.getHistogram().getMCV(), trueRows, mcvs);
             scaleBranchMcvAndMerge(elseStat.getHistogram().getMCV(), falseRows, mcvs);
 
-            return mcvs.isEmpty() ? null : new Histogram(Collections.emptyList(), mcvs);
+            if (mcvs.isEmpty()) {
+                return null;
+            }
+
+            final double nonNullRows = trueRows * (1 - thenStat.getNullsFraction())
+                    + falseRows * (1 - elseStat.getNullsFraction());
+            return Histogram.ofSingleBucket(minValue, maxValue, nonNullRows, mcvs);
         }
 
         private void scaleBranchMcvAndMerge(Map<String, Long> branchMcv, long branchRows,
