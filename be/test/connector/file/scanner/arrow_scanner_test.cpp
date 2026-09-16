@@ -1600,6 +1600,41 @@ static std::vector<uint8_t> make_schema_plus_junk_ipc_stream(const std::shared_p
     return result;
 }
 
+// Build a stream with one valid int32 batch followed by junk. The writer's EOS
+// marker is removed so Open succeeds, the first ReadNext succeeds, and the
+// second ReadNext fails while reading the corrupt continuation.
+static std::vector<uint8_t> make_batch_plus_junk_ipc_stream(const std::shared_ptr<arrow::Schema>& schema,
+                                                            const std::vector<int32_t>& values) {
+    arrow::Int32Builder builder;
+    auto append_status = builder.AppendValues(values);
+    EXPECT_TRUE(append_status.ok()) << append_status.ToString();
+    if (!append_status.ok()) return {};
+    std::shared_ptr<arrow::Array> array;
+    auto finish_status = builder.Finish(&array);
+    EXPECT_TRUE(finish_status.ok()) << finish_status.ToString();
+    if (!finish_status.ok()) return {};
+    auto batch = arrow::RecordBatch::Make(schema, values.size(), {array});
+
+    auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+    auto write_status = writer->WriteRecordBatch(*batch);
+    EXPECT_TRUE(write_status.ok()) << write_status.ToString();
+    if (!write_status.ok()) return {};
+    auto close_status = writer->Close();
+    EXPECT_TRUE(close_status.ok()) << close_status.ToString();
+    if (!close_status.ok()) return {};
+    auto buf = stream->Finish().ValueOrDie();
+
+    constexpr size_t kEosSize = 8;
+    EXPECT_GT(buf->size(), kEosSize);
+    if (buf->size() <= kEosSize) return {};
+    std::vector<uint8_t> result(buf->data(), buf->data() + buf->size() - kEosSize);
+    for (int i = 0; i < 32; i++) {
+        result.push_back(static_cast<uint8_t>(0xDE + i));
+    }
+    return result;
+}
+
 // Helper: build a stream scanner context backed by a StreamLoadPipe with one slot.
 // RuntimeServices and QueryExecutionServices are members (not stack-locals) so they
 // outlive the helper function and the RuntimeState pointer to them stays valid.
@@ -1621,7 +1656,8 @@ struct StreamScannerContext {
 };
 
 static StatusOr<std::unique_ptr<StreamScannerContext>> make_stream_scanner_context(
-        const SlotTypeDescInfoArray& slot_infos, UniqueId load_id, std::shared_ptr<StreamLoadPipe> pipe) {
+        const SlotTypeDescInfoArray& slot_infos, UniqueId load_id, std::shared_ptr<StreamLoadPipe> pipe,
+        int32_t batch_size = 0) {
     auto ctx = std::make_unique<StreamScannerContext>();
     ctx->load_id = load_id;
     ctx->pipe = pipe;
@@ -1636,6 +1672,9 @@ static StatusOr<std::unique_ptr<StreamScannerContext>> make_stream_scanner_conte
 
     TQueryOptions query_options;
     query_options.query_type = TQueryType::LOAD;
+    if (batch_size != 0) {
+        query_options.__set_batch_size(batch_size);
+    }
     TQueryGlobals query_globals;
     query_globals.time_zone = "UTC";
     ctx->runtime_services.load_stream_mgr = &ctx->load_stream_mgr;
@@ -1780,6 +1819,67 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextFailure) {
     }
     ASSERT_EQ((std::vector<int32_t>{7, 8, 9}), recovered_values);
     EXPECT_EQ(1, ctx->counter->num_rows_filtered);
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsMessageWithLateReadNextFailure) {
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, load_id, pipe, /*batch_size=*/1);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    auto schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+
+    // The first message has a valid batch followed by a corrupt continuation.
+    {
+        auto buf = make_batch_plus_junk_ipc_stream(schema, {1, 2, 3});
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf.size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+
+    // The second message is complete and valid.
+    {
+        arrow::Int32Builder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({7, 8}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 2, {array});
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner->open());
+
+    std::vector<int32_t> values;
+    while (true) {
+        auto result = scanner->get_next();
+        if (result.status().is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(result.status());
+        ASSERT_NE(nullptr, result.value());
+        const auto& column = result.value()->columns()[0];
+        for (size_t row = 0; row < result.value()->num_rows(); ++row) {
+            values.emplace_back(column->get(row).get_int32());
+        }
+    }
+    EXPECT_EQ((std::vector<int32_t>{7, 8}), values);
+    EXPECT_EQ(4, ctx->counter->num_rows_filtered);
     scanner->close();
 }
 
