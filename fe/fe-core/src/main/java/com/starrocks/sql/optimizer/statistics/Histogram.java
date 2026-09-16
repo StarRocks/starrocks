@@ -44,12 +44,12 @@ public class Histogram {
 
     public static Histogram ofSingleBucket(double minValue, double maxValue, double nonNullRowCount,
                                           Map<String, Long> mcv) {
-        if (Double.isInfinite(minValue) || Double.isInfinite(maxValue)
-                || Double.isNaN(minValue) || Double.isNaN(maxValue)) {
-            return new Histogram(List.of(), mcv);
-        }
         long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
         long nonMcvRows = Math.max(0L, Math.round(nonNullRowCount) - mcvRows);
+        if (nonMcvRows == 0 || !Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
+            return new Histogram(List.of(
+                    new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, nonMcvRows, 0L)), mcv);
+        }
         return new Histogram(List.of(new Bucket(minValue, maxValue, nonMcvRows, 0L)), mcv);
     }
 

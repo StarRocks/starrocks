@@ -151,16 +151,42 @@ public class HistogramTest {
 
     @Test
     public void testSingleBucketWithInfiniteBounds() {
-        // Given 1000 rows whose bounds are unknown
-        // CASE WHEN the bounds are not finite THEN no bucket is built END
+        // Given 1000 rows of which 100 sit in the MCVs, over a column whose bounds are unknown
+        // CASE WHEN the bounds are not finite THEN the bucket still carries the non-MCV rows, with
+        // the inert bounds that statistics collection also writes, so the rows reach getTotalRows()
+        // without the bucket answering per-value lookups END
 
         final Map<String, Long> mcv = Map.of("a", 100L);
         final double totalRows = 1000;
+        final long expectedNonMcvRows = 900L;
+        final long expectedTotalRows = 1000L;
 
         final Histogram actualHistogram = Histogram.ofSingleBucket(
                 Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, totalRows, mcv);
+        final List<Bucket> actualBuckets = actualHistogram.getBuckets();
 
-        Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
+        Assertions.assertEquals(1, actualBuckets.size());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualBuckets.get(0).getLower());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualBuckets.get(0).getUpper());
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
+        Assertions.assertTrue(actualHistogram.getRowCountInBucket(42.0, 10.0, false).isEmpty());
+    }
+
+    @Test
+    public void testSingleBucketWithNoRowsIsInert() {
+        // Given a total that the MCVs already account for in full, over finite bounds
+        // CASE WHEN the bucket would carry no rows THEN it gets the inert bounds instead of the
+        // given ones, so a bucket holding nothing is never read as positional information END
+
+        final Map<String, Long> mcv = Map.of("a", 1000L);
+        final double totalRows = 1000;
+
+        final List<Bucket> actualBuckets =
+                Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv).getBuckets();
+
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualBuckets.get(0).getLower());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualBuckets.get(0).getUpper());
     }
 
     @Test
