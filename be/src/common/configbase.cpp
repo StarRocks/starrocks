@@ -22,6 +22,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <set>
 #include <string>
 
@@ -158,7 +159,7 @@ inline bool parse_key_value_pairs(std::istream& input) {
                                      field->name());
         }
         assigned_fields.insert(field);
-        if (bool r = field->set_value(kv.second); !r) {
+        if (bool r = field->set_value(kv.second, /*allow_fallback=*/true); !r) {
             std::cerr << fmt::format("Invalid value of config '{}': '{}'\n", kv.first, kv.second);
             return false;
         }
@@ -175,21 +176,23 @@ std::optional<Field*> Field::get(const std::string& name_or_alias) {
     return ret;
 }
 
-bool Field::set_value(std::string value) {
+bool Field::set_value(std::string value, bool allow_fallback) {
     if (auto st = replaceenv(value); !st.ok()) {
         return false;
     }
     StripWhiteSpace(&value);
-    bool success = parse_value(value);
+    bool success = parse_value(value, allow_fallback);
     if (success) {
         _last_set_val.swap(_current_set_val);
-        _current_set_val = value;
+        // Read the value back instead of remembering what was passed in: a field may normalize what
+        // it stores, and a fallback stores something else entirely.
+        _current_set_val = this->value();
     }
     return success;
 }
 
 bool Field::rollback() {
-    bool success = parse_value(_last_set_val);
+    bool success = parse_value(_last_set_val, /*allow_fallback=*/false);
     if (success) {
         _current_set_val.swap(_last_set_val);
         _last_set_val.clear();
@@ -212,7 +215,8 @@ bool init(const char* filename) {
 
 inline bool init_from_default_values() {
     for (const auto& [name, field] : Field::fields()) {
-        if (!field->set_value(field->defval())) {
+        // A declared default that the field cannot accept is a programming error, never a fallback.
+        if (!field->set_value(field->defval(), /*allow_fallback=*/false)) {
             std::cerr << fmt::format("Invalid default value of config '{}': '{}'\n", name, field->defval());
             return false;
         }
@@ -236,7 +240,7 @@ Status set_config(const std::string& field, const std::string& value) {
     if (!it->second->valmutable()) {
         return Status::NotSupported(fmt::format("'{}' is immutable", field));
     }
-    if (!it->second->set_value(value)) {
+    if (!it->second->set_value(value, /*allow_fallback=*/false)) {
         return Status::InvalidArgument(fmt::format("Invalid value of config '{}': '{}'", field, value));
     }
     return Status::OK();
@@ -269,6 +273,32 @@ std::vector<ConfigInfo> list_configs() {
 
 void TEST_clear_configs() {
     Field::clear_fields();
+    (void)take_config_fallbacks();
+}
+
+namespace {
+std::mutex g_fallback_mutex;
+std::vector<ConfigFallback> g_fallbacks;
+} // namespace
+
+void record_config_fallback(ConfigFallback fallback) {
+    std::lock_guard guard(g_fallback_mutex);
+    g_fallbacks.emplace_back(std::move(fallback));
+}
+
+std::vector<ConfigFallback> take_config_fallbacks() {
+    std::lock_guard guard(g_fallback_mutex);
+    std::vector<ConfigFallback> taken;
+    taken.swap(g_fallbacks);
+    return taken;
+}
+
+std::optional<std::string> default_value_of(const std::string& field) {
+    auto it = Field::fields().find(field);
+    if (it == Field::fields().end()) {
+        return std::nullopt;
+    }
+    return std::string(it->second->defval());
 }
 
 } // namespace starrocks::config

@@ -36,12 +36,14 @@
 #include "common/config_llm_fwd.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_merge_commit_fwd.h"
+#include "common/config_path_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_runtime_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/glog_init.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
@@ -150,6 +152,8 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     const auto* runtime_env_ptr = &runtime_env;
 
     register_ai_config_update_hooks(exec_env);
+
+    registry->register_callback("sys_log_level", []() -> Status { return update_logging(); });
 
     registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
         refresh_core_dump_resource_releaser_config();

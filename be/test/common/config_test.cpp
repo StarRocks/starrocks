@@ -277,6 +277,70 @@ TEST_F(ConfigTest, test_string_enum_empty_value) {
     }
 }
 
+TEST_F(ConfigTest, test_mutable_string_enum) {
+    CONF_mString_enum(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = warning
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("WARNING", cfg_level.value());
+    }
+    // A mutable enum can be set at runtime, and the declared spelling is what it ends up holding.
+    ASSERT_TRUE(config::set_config("cfg_level", "Error").ok());
+    EXPECT_EQ("ERROR", cfg_level.value());
+    ASSERT_TRUE(config::rollback_config("cfg_level").ok());
+    EXPECT_EQ("WARNING", cfg_level.value());
+
+    // A value matching no enum is rejected and leaves the config alone. It is a caller error, not
+    // something to paper over with the default, because the caller is told about it.
+    Status st = config::set_config("cfg_level", "WARN");
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_EQ("WARNING", cfg_level.value());
+    EXPECT_TRUE(config::take_config_fallbacks().empty());
+}
+
+TEST_F(ConfigTest, test_string_enum_or_default) {
+    CONF_mString_enum_or_default(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    // A value from the config file that matches no enum falls back to the declared default, and the
+    // rejection is recorded for whoever can report it once logging exists.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = WARN
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("INFO", cfg_level.value());
+
+        std::vector<ConfigFallback> fallbacks = config::take_config_fallbacks();
+        ASSERT_EQ(1, fallbacks.size());
+        EXPECT_EQ("cfg_level", fallbacks[0].name);
+        EXPECT_EQ("WARN", fallbacks[0].rejected_value);
+        EXPECT_EQ("INFO", fallbacks[0].effective_value);
+        EXPECT_THAT(fallbacks[0].allowed_values, HasSubstr("WARNING"));
+        // Taking them clears them, so the same fallback is never reported twice.
+        EXPECT_TRUE(config::take_config_fallbacks().empty());
+    }
+    // A value that does match is still used as-is.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = fatal
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("FATAL", cfg_level.value());
+        EXPECT_TRUE(config::take_config_fallbacks().empty());
+    }
+    // Falling back is only for the config file. At runtime the caller gets the error instead.
+    Status st = config::set_config("cfg_level", "WARN");
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_EQ("FATAL", cfg_level.value());
+    EXPECT_TRUE(config::take_config_fallbacks().empty());
+}
+
 TEST_F(ConfigTest, test_invalid_default_value) {
     CONF_Int32(cfg_int32, "false");
     ASSERT_FALSE(config::init(nullptr));

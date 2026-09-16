@@ -39,6 +39,7 @@
 #include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config_diagnostic_fwd.h"
+#include "common/configbase.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_metrics_fwd.h"
 #include "common/config_path_fwd.h"
@@ -55,6 +56,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <iostream>
 
 #include "base/time/monotime.h"
 #include "base/time/time.h"
@@ -352,12 +354,20 @@ void init_minidump() {
 
 void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetricsRegistry* process_metrics_registry) {
     DCHECK(process_metrics_registry != nullptr);
-    if (as_cn) {
-        init_glog("cn", true);
-    } else {
-        init_glog("be", true);
+    if (!init_glog(as_cn ? "cn" : "be", true)) {
+        // init_glog has already explained the problem on stderr. Carrying on would leave glog
+        // uninitialized, which sends every log line to stderr instead of the log dir, with none of
+        // the configured rolling or cleanup.
+        std::cerr << "failed to initialize logging, exiting" << std::endl;
+        exit(-1);
     }
     init_runtime_logging_hooks();
+
+    // Config parsing runs before logging exists, so values it had to reject are reported here.
+    for (const auto& fallback : config::take_config_fallbacks()) {
+        LOG(ERROR) << "invalid config '" << fallback.name << "'='" << fallback.rejected_value << "', using '"
+                   << fallback.effective_value << "' instead; valid values: " << fallback.allowed_values;
+    }
 
     LOG(INFO) << get_version_string(false);
 

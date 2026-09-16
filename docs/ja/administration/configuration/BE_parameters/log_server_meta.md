@@ -84,7 +84,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: String
 - 単位: -
 - 変更可能: はい (v3.3.0、v3.2.7、v3.1.12 から)
-- 説明: システムログエントリが分類される重大度レベル。 有効な値: INFO、WARNING、ERROR、FATAL。この項目は v3.3.0、v3.2.7、v3.1.12 以降、動的設定に変更されました。
+- 説明: システムログエントリが分類される重大度レベル。 有効な値: INFO、WARNING、ERROR、FATAL。設定値がこれらのいずれでもない場合、その値がログに報告され INFO が使用されるため、無効な値によって BE のログ機能が失われることはありません。この項目は v3.3.0、v3.2.7、v3.1.12 以降、動的設定に変更されました。
 - 導入バージョン: -
 
 ### sys_log_roll_mode
@@ -93,7 +93,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ
-- 説明: システムログがログロールに分割されるモード。有効な値には `TIME-DAY`、`TIME-HOUR`、および `SIZE-MB-` サイズが含まれます。デフォルト値は、各ロールが 1 GB であるログロールに分割されることを示します。
+- 説明: システムログがログロールに分割されるモード。有効な値には `TIME-DAY`、`TIME-HOUR`、および `SIZE-MB-` サイズが含まれます。デフォルト値は、各ロールが 1 GB であるログロールに分割されることを示します。設定値を解析できない場合、その値がログに報告されデフォルト値が使用されます。
 - 導入バージョン: -
 
 ### sys_log_roll_num
