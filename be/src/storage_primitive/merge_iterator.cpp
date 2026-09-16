@@ -204,6 +204,9 @@ thread_local bool tls_in_merge_prefill = false;
 
 class MergeIterator : public ChunkIterator {
 public:
+    // See MergeIteratorOptions::compaction_merge; the factories set it before the first get_next().
+    void set_compaction_merge(bool v) { _compaction_merge = v; }
+
     explicit MergeIterator(std::vector<ChunkIteratorPtr> children)
             : ChunkIterator(children[0]->schema(), children[0]->chunk_size()), _children(std::move(children)) {
         _bufs.reserve(_children.size());
@@ -267,6 +270,9 @@ protected:
     };
 
     Status init();
+    // Runs inside init() right after the slots are allocated and before any pump can start. A
+    // subclass with per-slot state sizes it here, so nothing resizes under a running pump.
+    virtual void on_slots_allocated(size_t nslots) {}
     void close_child(size_t child);
 
     // The read half touches only this child's own iterator and its own slot, so different children
@@ -296,6 +302,7 @@ protected:
     // pool, whose job under the IO/decode split is the IO half alone.
     std::vector<uint8_t> _bytes_resident;
     ThreadPool* _pool = nullptr;
+    bool _compaction_merge = false;
     MemTracker* _mem_tracker = nullptr;
     size_t _buffers = 1;
     size_t _merged_rows = 0;
@@ -307,10 +314,14 @@ inline Status MergeIterator::init() {
     DCHECK_EQ(_children.size(), _bufs.size());
     _mem_tracker = tls_thread_status.mem_tracker();
     _buffers = std::max(1, config::compaction_merge_child_buffers);
-    // The pool is the master switch's resource: with enable_compaction_parallel_merge_init off there
-    // is no prefill and no read-ahead pump, whatever compaction_merge_child_buffers says, so the
-    // documented "takes effect only with the switch" holds and an idle BE never builds the pool.
-    _pool = (config::enable_compaction_parallel_merge_init && !tls_in_merge_prefill) ? merge_prefill_pool() : nullptr;
+    // The pool is the compaction switch's resource: only a merge a compaction reader opted in
+    // (MergeIteratorOptions::compaction_merge) and only with enable_compaction_parallel_merge_init
+    // on gets a prefill and a read-ahead pump, whatever compaction_merge_child_buffers says. Query,
+    // load and other merges share this class, so the switch must not reach them, the documented
+    // "takes effect only with the switch" holds, and an idle BE never builds the pool.
+    _pool = (_compaction_merge && config::enable_compaction_parallel_merge_init && !tls_in_merge_prefill)
+                    ? merge_prefill_pool()
+                    : nullptr;
 
     const size_t nslots = pipelined() ? _buffers : 1;
     for (auto& buf : _bufs) {
@@ -325,6 +336,8 @@ inline Status MergeIterator::init() {
             }
         }
     }
+
+    on_slots_allocated(nslots);
 
     _bytes_resident.assign(_children.size(), 0);
     const bool parallel = config::enable_compaction_parallel_merge_init && _children.size() > 1 && _pool != nullptr;
@@ -605,11 +618,16 @@ protected:
     }
     Status read_slot(size_t child, size_t slot) override;
     Status commit_slot(size_t child, size_t slot) override;
+    void on_slots_allocated(size_t nslots) override {
+        for (auto& v : _rssid_slots) {
+            v.assign(nslots, nullptr);
+        }
+    }
 
 private:
     // rssid/rowid buffer per (child, slot), produced by read_slot and handed to the heap in
-    // commit_slot. Only one reader touches a given child at a time, so the inner vector needs no
-    // lock of its own.
+    // commit_slot. Sized once in on_slots_allocated(): the pump fills later slots while the merge
+    // thread reads an earlier one, so the outer vector must never reallocate after that point.
     std::vector<std::vector<std::shared_ptr<vector<uint64_t>>>> _rssid_slots;
 
     template <typename T, typename Container = std::vector<T>>
@@ -715,9 +733,7 @@ inline Status HeapMergeIterator::read_slot(size_t child, size_t slot) {
     chunk->reset();
     if (need_rssid_rowids) {
         auto& v = _rssid_slots[child];
-        if (v.size() <= slot) {
-            v.resize(slot + 1);
-        }
+        DCHECK_LT(slot, v.size());
         v[slot] = std::make_shared<vector<uint64_t>>();
         b.st[slot] = _children[child]->get_next(chunk, v[slot].get());
     } else {
@@ -755,7 +771,8 @@ inline Status HeapMergeIterator::commit_slot(size_t child, size_t slot) {
     return Status::OK();
 }
 
-ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children) {
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
+                                         const MergeIteratorOptions& opts) {
     DCHECK(!children.empty());
     if (children.size() == 1) {
         return children[0];
@@ -766,20 +783,22 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     const static size_t kMaxChildrenSize = std::numeric_limits<uint16_t>::max();
 
     if (children.size() <= kMaxChildrenSize) {
-        return std::make_shared<HeapMergeIterator>(children);
+        auto heapMergeIterator = std::make_shared<HeapMergeIterator>(children);
+        heapMergeIterator->set_compaction_merge(opts.compaction_merge);
+        return heapMergeIterator;
     }
     std::vector<ChunkIteratorPtr> sub_merge_iterators;
     sub_merge_iterators.reserve((children.size() + kMaxChildrenSize - 1) / kMaxChildrenSize);
     for (size_t i = 0; i < children.size(); i += kMaxChildrenSize) {
         size_t j = std::min(i + kMaxChildrenSize, children.size());
         std::vector<ChunkIteratorPtr> v(children.begin() + i, children.begin() + j);
-        sub_merge_iterators.emplace_back(new_heap_merge_iterator(v));
+        sub_merge_iterators.emplace_back(new_heap_merge_iterator(v, opts));
     }
-    return new_heap_merge_iterator(sub_merge_iterators);
+    return new_heap_merge_iterator(sub_merge_iterators, opts);
 }
 
 ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         const std::string& merge_condition) {
+                                         const std::string& merge_condition, const MergeIteratorOptions& opts) {
     DCHECK(!children.empty());
     if (children.size() == 1) {
         return children[0];
@@ -792,6 +811,7 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     if (children.size() <= kMaxChildrenSize) {
         auto heapMergeIterator = std::make_shared<HeapMergeIterator>(children);
         heapMergeIterator->merge_condition = merge_condition;
+        heapMergeIterator->set_compaction_merge(opts.compaction_merge);
         return heapMergeIterator;
     }
     std::vector<ChunkIteratorPtr> sub_merge_iterators;
@@ -799,12 +819,13 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     for (size_t i = 0; i < children.size(); i += kMaxChildrenSize) {
         size_t j = std::min(i + kMaxChildrenSize, children.size());
         std::vector<ChunkIteratorPtr> v(children.begin() + i, children.begin() + j);
-        sub_merge_iterators.emplace_back(new_heap_merge_iterator(v, merge_condition));
+        sub_merge_iterators.emplace_back(new_heap_merge_iterator(v, merge_condition, opts));
     }
-    return new_heap_merge_iterator(sub_merge_iterators, merge_condition);
+    return new_heap_merge_iterator(sub_merge_iterators, merge_condition, opts);
 }
 
-ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children, const bool need_rssid_rowids) {
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children, const bool need_rssid_rowids,
+                                         const MergeIteratorOptions& opts) {
     DCHECK(!children.empty());
     if (children.size() == 1) {
         return children[0];
@@ -817,6 +838,7 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     if (children.size() <= kMaxChildrenSize) {
         auto heapMergeIterator = std::make_shared<HeapMergeIterator>(children);
         heapMergeIterator->need_rssid_rowids = need_rssid_rowids;
+        heapMergeIterator->set_compaction_merge(opts.compaction_merge);
         return heapMergeIterator;
     }
     std::vector<ChunkIteratorPtr> sub_merge_iterators;
@@ -824,9 +846,9 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     for (size_t i = 0; i < children.size(); i += kMaxChildrenSize) {
         size_t j = std::min(i + kMaxChildrenSize, children.size());
         std::vector<ChunkIteratorPtr> v(children.begin() + i, children.begin() + j);
-        sub_merge_iterators.emplace_back(new_heap_merge_iterator(v, need_rssid_rowids));
+        sub_merge_iterators.emplace_back(new_heap_merge_iterator(v, need_rssid_rowids, opts));
     }
-    return new_heap_merge_iterator(sub_merge_iterators, need_rssid_rowids);
+    return new_heap_merge_iterator(sub_merge_iterators, need_rssid_rowids, opts);
 }
 
 // Merge iterator based on source masks.
@@ -1027,12 +1049,15 @@ inline Status MaskMergeIterator::commit_slot(size_t child, size_t slot) {
 }
 
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         RowSourceMaskBuffer* mask_buffer, RowSourceMaskBuffer* selection_buffer) {
+                                         RowSourceMaskBuffer* mask_buffer, RowSourceMaskBuffer* selection_buffer,
+                                         const MergeIteratorOptions& opts) {
     if (children.size() == 1 && selection_buffer == nullptr) {
         return children[0];
     }
     DCHECK(!children.empty() && children.size() <= RowSourceMask::MAX_SOURCES);
-    return std::make_shared<MaskMergeIterator>(children, mask_buffer, selection_buffer);
+    auto iter = std::make_shared<MaskMergeIterator>(children, mask_buffer, selection_buffer);
+    iter->set_compaction_merge(opts.compaction_merge);
+    return iter;
 }
 
 } // namespace starrocks

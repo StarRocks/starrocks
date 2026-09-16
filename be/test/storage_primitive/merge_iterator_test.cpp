@@ -30,6 +30,9 @@
 
 namespace starrocks {
 
+// The prefill / read-ahead tests exercise the compaction opt-in; everything else stays a plain merge.
+static const MergeIteratorOptions kCompactionMerge{.compaction_merge = true};
+
 template <typename T>
 static inline std::string to_string(const std::vector<T>& v) {
     std::stringstream ss;
@@ -275,7 +278,7 @@ protected:
             sub->chunk_size(7); // force many refills
             subs.push_back(sub);
         }
-        auto iter = new_heap_merge_iterator(subs);
+        auto iter = new_heap_merge_iterator(subs, kCompactionMerge);
         EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         return drain(iter);
     }
@@ -302,7 +305,7 @@ protected:
             sub->chunk_size(7);
             subs.push_back(sub);
         }
-        auto iter = new_mask_merge_iterator(subs, &mask_buffer);
+        auto iter = new_mask_merge_iterator(subs, &mask_buffer, nullptr, kCompactionMerge);
         EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         return drain(iter);
     }
@@ -464,7 +467,8 @@ protected:
         config::enable_compaction_parallel_merge_init = parallel;
         config::compaction_merge_child_buffers = buffers;
 
-        auto iter = new_heap_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, typed));
+        auto iter = new_heap_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, typed),
+                                            kCompactionMerge);
         EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         return drain(iter);
     }
@@ -484,8 +488,8 @@ protected:
         EXPECT_TRUE(mask_buffer.flush().ok());
         EXPECT_TRUE(mask_buffer.flip_to_read().ok());
 
-        auto iter =
-                new_mask_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, nullptr), &mask_buffer);
+        auto iter = new_mask_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, nullptr),
+                                            &mask_buffer, nullptr, kCompactionMerge);
         EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         return drain(iter);
     }
@@ -501,7 +505,7 @@ protected:
             sub->chunk_size(7);
             subs.push_back(sub);
         }
-        auto iter = new_heap_merge_iterator(subs);
+        auto iter = new_heap_merge_iterator(subs, kCompactionMerge);
         EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         return drain(iter);
     }
@@ -588,7 +592,7 @@ TEST_F(MergePrefetchEquivalenceTest, heap_merge_prefetch_error_surfaces_in_child
     auto modes = all_resident();
     modes[2] = Mode::IO_ERROR;
     std::vector<std::shared_ptr<PrefetchModeIterator>> children;
-    auto iter = new_heap_merge_iterator(make_prefetch_children(inputs(), modes, 0, &children));
+    auto iter = new_heap_merge_iterator(make_prefetch_children(inputs(), modes, 0, &children), kCompactionMerge);
     ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
@@ -627,7 +631,7 @@ TEST_F(MergePrefetchEquivalenceTest, heap_merge_prefetch_empty_child_matches_ser
     config::enable_compaction_parallel_merge_init = true;
     config::compaction_merge_child_buffers = 3;
     std::vector<Mode> modes(vs.size(), Mode::RESIDENT);
-    auto iter = new_heap_merge_iterator(make_prefetch_children(vs, modes, 0, nullptr));
+    auto iter = new_heap_merge_iterator(make_prefetch_children(vs, modes, 0, nullptr), kCompactionMerge);
     ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
     const Output got = drain(iter);
 
