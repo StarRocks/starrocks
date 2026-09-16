@@ -53,13 +53,13 @@ SchemaRunningTransactionsScanner::~SchemaRunningTransactionsScanner() = default;
 Status SchemaRunningTransactionsScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
     TGetRunningTxnsParams txn_params;
-    if (nullptr != _param->db) {
-        txn_params.__set_db(*(_param->db));
+    if (nullptr != _param->running_txn_db) {
+        txn_params.__set_db(*(_param->running_txn_db));
     } else if (std::string db_name; _parse_expr_predicate("DATABASE_NAME", db_name)) {
         txn_params.__set_db(db_name);
     }
-    if (nullptr != _param->label) {
-        txn_params.__set_label(*(_param->label));
+    if (nullptr != _param->running_txn_label) {
+        txn_params.__set_label(*(_param->running_txn_label));
     } else if (std::string label; _parse_expr_predicate("LABEL", label)) {
         txn_params.__set_label(label);
     }
