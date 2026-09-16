@@ -143,17 +143,20 @@ public class ProfileManagerTest {
         ProfileManager manager = ProfileManager.getInstance();
         assertTrue(manager.getAllProfileElements().isEmpty());
 
+        int original = Config.profile_info_reserved_num;
         Config.profile_info_reserved_num = 1;
+        try {
+            RuntimeProfile profile1 = buildRuntimeProfile("123", "Query");
+            manager.pushProfile(null, profile1);
 
-        RuntimeProfile profile1 = buildRuntimeProfile("123", "Query");
-        manager.pushProfile(null, profile1);
+            RuntimeProfile profile2 = buildRuntimeProfile("124", "Query");
+            manager.pushProfile(null, profile2);
 
-        RuntimeProfile profile2 = buildRuntimeProfile("124", "Query");
-        manager.pushProfile(null, profile2);
-
-        assertEquals(1, manager.getAllQueries().size());
-
-        manager.clearProfiles();
+            assertEquals(1, manager.getAllQueries().size());
+        } finally {
+            Config.profile_info_reserved_num = original;
+            manager.clearProfiles();
+        }
     }
 
     @Test
@@ -176,21 +179,24 @@ public class ProfileManagerTest {
     @Test
     public void testCustomQueryIdEvictionDoesNotClobberNewerMapping() {
         ProfileManager manager = ProfileManager.getInstance();
+        int original = Config.profile_info_reserved_num;
         Config.profile_info_reserved_num = 1;
+        try {
+            RuntimeProfile profile1 = buildRuntimeProfile("223", "Query", "shared-id");
+            manager.pushProfile(null, profile1);
 
-        RuntimeProfile profile1 = buildRuntimeProfile("223", "Query", "shared-id");
-        manager.pushProfile(null, profile1);
+            RuntimeProfile profile2 = buildRuntimeProfile("224", "Query", "shared-id");
+            manager.pushProfile(null, profile2);
 
-        RuntimeProfile profile2 = buildRuntimeProfile("224", "Query", "shared-id");
-        manager.pushProfile(null, profile2);
-
-        // profile1 (query 223) was evicted; "shared-id" must still resolve to the surviving profile2 (224).
-        assertFalse(manager.hasProfile("223"), "Evicted profile should be gone");
-        assertTrue(manager.hasProfile("224"), "Surviving profile should remain");
-        assertTrue(manager.hasProfile("shared-id"), "Custom query id should still resolve");
-        assertEquals("224", manager.getProfileElement("shared-id").infoStrings.get(ProfileManager.QUERY_ID));
-
-        manager.clearProfiles();
+            // profile1 (query 223) was evicted; "shared-id" must still resolve to the surviving profile2 (224).
+            assertFalse(manager.hasProfile("223"), "Evicted profile should be gone");
+            assertTrue(manager.hasProfile("224"), "Surviving profile should remain");
+            assertTrue(manager.hasProfile("shared-id"), "Custom query id should still resolve");
+            assertEquals("224", manager.getProfileElement("shared-id").infoStrings.get(ProfileManager.QUERY_ID));
+        } finally {
+            Config.profile_info_reserved_num = original;
+            manager.clearProfiles();
+        }
     }
 }
 
