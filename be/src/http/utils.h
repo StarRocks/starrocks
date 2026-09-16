@@ -46,6 +46,11 @@ std::string get_content_type(const std::string& file_name);
 // than int64_t does not have to repeat the check and cannot silently truncate.
 // A value that overflows int64_t is reported the same way as one that misses
 // those bounds, since from the client's side it is the same mistake.
+//
+// The message names the parameter and the accepted range but never the rejected
+// value. The status reaches a WARNING log on a load path that does not require
+// authentication, so echoing the value there would let any client write bytes of
+// its choosing into the log.
 Status parse_int64_param(const std::string& name, const std::string& value, int64_t* result,
                          int64_t min = std::numeric_limits<int64_t>::min(),
                          int64_t max = std::numeric_limits<int64_t>::max());

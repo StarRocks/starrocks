@@ -165,12 +165,11 @@ Status parse_int64_param(const std::string& name, const std::string& value, int6
     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
     int64_t parsed = StringParser::string_to_int<int64_t>(value.data(), value.length(), &parse_result);
     if (parse_result == StringParser::PARSE_FAILURE) {
-        return Status::InvalidArgument(
-                fmt::format("Invalid parameter {}. The value must be an integer, but is {}", name, value));
+        return Status::InvalidArgument(fmt::format("Invalid parameter {}. The value must be an integer", name));
     }
     if (parse_result != StringParser::PARSE_SUCCESS || parsed < min || parsed > max) {
-        return Status::InvalidArgument(fmt::format(
-                "Invalid parameter {}. The value must be between {} and {}, but is {}", name, min, max, value));
+        return Status::InvalidArgument(
+                fmt::format("Invalid parameter {}. The value must be between {} and {}", name, min, max));
     }
     *result = parsed;
     return Status::OK();

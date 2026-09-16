@@ -51,6 +51,7 @@
 #include "common/config_diagnostic_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/configbase.h"
+#include "common/logging.h"
 #include "exec/exec_env.h"
 #include "http/action/profile_utils.h"
 #include "http/utils.h"
@@ -133,6 +134,7 @@ void MemTrackerWebPageHandler::handle(const RuntimeEnv& runtime_env, MemTracker*
         if (st.ok()) {
             upper_level = static_cast<size_t>(requested_level);
         } else {
+            LOG(WARNING) << st;
             (*output) << "<p><strong>Invalid upper_level.</strong> Showing " << upper_level << " levels.</p>\n";
         }
     }
