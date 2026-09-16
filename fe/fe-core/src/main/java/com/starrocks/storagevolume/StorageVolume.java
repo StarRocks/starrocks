@@ -410,11 +410,19 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (!RunMode.isSharedDataMode()) {
             return;
         }
-        Map<String, String> restored = getParamsFromFileStoreInfo(configuration.toFileStoreInfo());
+        FileStoreInfo persisted = configuration.toFileStoreInfo();
+        Map<String, String> restored = getParamsFromFileStoreInfo(persisted);
         preprocessAuthenticationIfNeeded(restored);
         CloudConfiguration restoredConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(restored, true);
-        if (!isValidCloudConfiguration(svt, restoredConfiguration)) {
+        // The factory picks the credential subtype from the properties, not the declared volume type: an AZBLOB
+        // volume given ADLS2 properties (or vice versa) builds the other Azure subtype, and both are
+        // CloudType.AZURE, so neither isValidCloudConfiguration nor the property comparison below tells them
+        // apart. Left to slip through it only fails when StorageVolume#toFileStoreInfo refuses to write the
+        // mismatched subtype with an unchecked IllegalStateException (including on the snapshot-restore path);
+        // reject it cleanly here, using the same fsType == svt test that guard uses.
+        boolean subtypeMismatch = persisted == null || !persisted.getFsType().name().equals(svt.name());
+        if (subtypeMismatch || !isValidCloudConfiguration(svt, restoredConfiguration)) {
             Map<String, String> maskedParams = new HashMap<>(params);
             addMaskForCredential(maskedParams);
             throw new SemanticException(String.format(

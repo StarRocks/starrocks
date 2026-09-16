@@ -868,6 +868,19 @@ public class StorageVolumeTest {
     }
 
     @Test
+    public void testAzureSubtypeMismatchRejectedCleanly() {
+        // An ADLS2 volume given AZBLOB properties builds an AZBLOB credential (both are CloudType.AZURE), so it
+        // slips past isValidCloudConfiguration and the property comparison but serialises to an AZBLOB file
+        // store. It must be rejected here with a SemanticException, not later with the unchecked
+        // IllegalStateException that StorageVolume#toFileStoreInfo raises on a subtype mismatch.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
+        Assertions.assertThrows(SemanticException.class, () ->
+                new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"), storageParams, true, ""));
+    }
+
+    @Test
     public void testAzureBlobInvalidCredential() {
         Map<String, String> storageParams = new HashMap<>();
         Assertions.assertThrows(SemanticException.class, () ->
