@@ -46,7 +46,7 @@ bool hardware_crc_available() {
 #if defined(__SSE4_2__)
     base::CPU cpu;
     return cpu.has_sse42();
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
     return true;
 #else
     return false;

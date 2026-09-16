@@ -16,7 +16,7 @@
 
 #if defined(__SSE4_2__)
 #include <nmmintrin.h>
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
 #endif
 
@@ -33,7 +33,7 @@ namespace starrocks {
 // Forward declarations for SSE4.2 implementations (only used within this file)
 static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash);
 static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash);
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 static uint32_t crc_hash_arm64(const void* data, int32_t bytes, uint32_t hash);
 static uint64_t crc_hash64_arm64(const void* data, int32_t bytes, uint64_t hash);
 #endif
@@ -79,10 +79,7 @@ static void init_hash_functions() {
         g_crc32_func = crc_hash_sse42;
         g_crc64_func = crc_hash64_sse42;
     }
-#elif defined(__aarch64__)
-    // ARM64 builds require -march=armv8-a+crc (enforced in be/CMakeLists.txt).
-    // CRC instructions are unconditionally available when this macro is defined.
-    static_assert(__ARM_FEATURE_CRC32, "ARM64 build must enable CRC extensions (-march=armv8-a+crc)");
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
     g_hash32_func = crc_hash_arm64;
     g_hash64_func = crc_hash64_arm64;
     g_crc32_func = crc_hash_arm64;
@@ -177,7 +174,7 @@ static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash)
 }
 #endif
 
-#if defined(__aarch64__)
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 static uint32_t crc_hash_arm64(const void* data, int32_t bytes, uint32_t hash) {
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % sizeof(uint32_t);
