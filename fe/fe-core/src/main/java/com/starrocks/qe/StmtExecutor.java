@@ -1157,6 +1157,15 @@ public class StmtExecutor {
                     try {
                         //reset query id for each retry
                         if (i > 0) {
+                            // Re-read the cancellation flag: a KILL can land between the gate below and
+                            // here, because the finally block does real work in between (profile cleanup,
+                            // compute-resource re-acquisition). Without this, a query stopped in that
+                            // window still gets a fresh coordinator and is redeployed. This narrows the
+                            // window rather than closing it -- cancel() and the coord handoff inside
+                            // handleQueryStmt are still not atomic, which predates this path.
+                            if (isCancelled()) {
+                                throw new StarRocksException("Query has been cancelled");
+                            }
                             uuid = UUIDUtil.genUUID();
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
@@ -1175,7 +1184,11 @@ public class StmtExecutor {
                         ExecuteExceptionHandler.handle(e, retryContext);
                         // sync lastExecPlan in case rebuildExecPlan produced a new plan
                         lastExecPlan = retryContext.getExecPlan();
-                        if (!context.getMysqlChannel().isSend()) {
+                        // Two things make a retry unsafe. Results already on the wire (isSend), and a
+                        // cancellation that has reached this statement: KILL QUERY or a closed client
+                        // sets `cancelled`, and without this check a retryable failure recorded before
+                        // the KILL would still start a whole new execution of a query someone stopped.
+                        if (!context.getMysqlChannel().isSend() && !isCancelled()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
                                 originStmt = parsedStmt.getOrigStmt().originStmt;

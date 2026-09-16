@@ -34,6 +34,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.extension.ExtensionManager;
+import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
@@ -114,6 +115,9 @@ public class StmtExecutorTest {
             // no-op for unit tests
         }
     }
+
+    // Counts StatementPlanner.plan() calls from a faked static method, which cannot capture a local.
+    private static final AtomicInteger PLAN_COUNT = new AtomicInteger();
 
     private static ExecPlan buildMinimalExecPlan(long cardinality) {
         ExecPlan execPlan = new ExecPlan();
@@ -672,6 +676,238 @@ public class StmtExecutorTest {
                 Assertions.assertSame(retriedPlan, profiled,
                         "profile and EXPLAIN ANALYZE must describe the plan the retry actually ran");
             }
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * A lake metadata-version miss reported before any row reaches the client must degrade into a
+     * retry, and that retry has to go through the whole planning flow again: redelivering the old
+     * fragments would reuse scan ranges that still name the version BE could not read.
+     */
+    @Test
+    public void testLakeMetaVersionNotFoundReplansAndRetriesWithNewQueryId(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            // Keep the statement off the FE-side constant fast path so it goes through a coordinator.
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            // This harness has no leader elected, so keep execute() on the local path.
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+
+            // No warehouse is registered in this harness; the counter is not what is under test.
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            List<TUniqueId> executionIds = Lists.newArrayList();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                    executionIds.add(context.getExecutionId());
+                }
+
+                @Mock
+                public RowBatch getNext() {
+                    if (attempts.incrementAndGet() == 1) {
+                        throw new LakeMetaVersionNotFoundException(
+                                "lake tablet metadata version not found, tablet_id=10001, partition_id=10002, "
+                                        + "version=144847: Not found");
+                    }
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the failed attempt should have been retried");
+            // One plan for the first attempt plus a full re-plan for the retry.
+            Assertions.assertEquals(2, PLAN_COUNT.get(), "the retry must rebuild the exec plan");
+            Assertions.assertEquals(2, executionIds.size());
+            Assertions.assertNotEquals(executionIds.get(0), executionIds.get(1),
+                    "the retry must run under a new query id");
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * The reverse ordering of the guard in DefaultCoordinator: the retryable failure is recorded
+     * first and the KILL lands afterwards, so queryStatus still holds the retryable code. The retry
+     * must be refused anyway -- a cancellation that reached this statement is terminal, otherwise a
+     * KILL would silently start a second, full execution of the query the user just stopped.
+     */
+    @Test
+    public void testCancelledStatementIsNotRetriedAfterARetryableFailure(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public RowBatch getNext() {
+                    attempts.incrementAndGet();
+                    // The KILL lands while this fragment is failing, i.e. after the retryable status.
+                    executor.cancel("killed by user");
+                    throw new LakeMetaVersionNotFoundException(
+                            "lake tablet metadata version not found, tablet_id=10001, partition_id=10002, "
+                                    + "version=144847: Not found");
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(1, attempts.get(), "a cancelled statement must not be retried");
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * The narrow window after the retry gate accepts: the finally block still does real work
+     * (profile cleanup, compute-resource re-acquisition) before the next attempt deploys, and a KILL
+     * landing there used to be missed entirely -- the loop reset the query id and handed a fresh
+     * coordinator to a query the user had already stopped. The start of each retry must re-observe it.
+     */
+    @Test
+    public void testCancellationDuringTheRetryWindowStopsTheRedeploy(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+            // Runs in the retry window: after the gate accepted, before the next attempt deploys.
+            new MockUp<ConnectContext>() {
+                @Mock
+                public void ensureCurrentComputeResourceAvailable() {
+                    executor.cancel("killed by user");
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public RowBatch getNext() {
+                    attempts.incrementAndGet();
+                    throw new LakeMetaVersionNotFoundException(
+                            "lake tablet metadata version not found, tablet_id=10001, partition_id=10002, "
+                                    + "version=144847: Not found");
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(1, attempts.get(),
+                    "a KILL landing in the retry window must stop the redeploy");
         } finally {
             Config.max_query_retry_time = oldRetryTime;
         }
