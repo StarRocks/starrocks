@@ -50,14 +50,18 @@ public class CredentialUtil {
         // Mask for aws's credential
         doMask(properties, CloudConfigurationConstants.AWS_S3_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_S3_SECRET_KEY);
+        doMask(properties, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN);
         doMask(properties, CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_GLUE_SECRET_KEY);
+        doMask(properties, CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN);
 
         // Mask for azure's credential
         doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY);
         doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN);
+        doMask(properties, CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY);
+        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET);
 
         // Mask for gcs's credential
@@ -94,6 +98,13 @@ public class CredentialUtil {
         // Mask for odps catalog credential
         doMask(properties, OdpsProperties.ACCESS_ID);
         doMask(properties, OdpsProperties.ACCESS_KEY);
+
+        // Mask for hdfs credential. The *_KEYTAB keys hold a path rather than the credential
+        // itself, so only the inline keytab content and the password are masked. The deprecated
+        // bare "password" key needs no entry: doMask already removes it as JDBCResource.PASSWORD.
+        doMask(properties, CloudConfigurationConstants.HDFS_PASSWORD);
+        doMask(properties, CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT);
+        doMask(properties, CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {

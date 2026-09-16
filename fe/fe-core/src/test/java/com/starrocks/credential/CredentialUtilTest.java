@@ -196,4 +196,53 @@ public class CredentialUtilTest {
         // the source map may be live configuration, so it must be left untouched
         Assertions.assertEquals("supersecrettoken", properties.get(key));
     }
+
+    @Test
+    public void testMaskCredentialCoversSessionTokensAndSecrets() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, "supersecretvalue");
+        properties.put(CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN, "supersecretvalue");
+        properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, "supersecretvalue");
+        properties.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, "supersecretvalue");
+        properties.put(CloudConfigurationConstants.HDFS_PASSWORD, "supersecretvalue");
+        properties.put(CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT, "supersecretvalue");
+        properties.put(CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED,
+                "supersecretvalue");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        for (Map.Entry<String, String> entry : masked.entrySet()) {
+            Assertions.assertEquals("su******ue", entry.getValue(),
+                    "expected " + entry.getKey() + " to be masked");
+        }
+    }
+
+    @Test
+    public void testMaskCredentialLeavesPathValuedKeysAlone() {
+        // These name a file on disk rather than carrying the credential, so masking them would
+        // only make a misconfiguration harder to diagnose.
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB, "/etc/security/a.keytab");
+        properties.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE, "/var/run/token");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        Assertions.assertEquals("/etc/security/a.keytab",
+                masked.get(CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB));
+        Assertions.assertEquals("/var/run/token",
+                masked.get(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE));
+    }
+
+    @Test
+    public void testMaskCredentialRemovesDeprecatedBarePassword() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED, "supersecretvalue");
+        properties.put("type", "hive");
+
+        Map<String, String> masked = CredentialUtil.maskedCopy(properties);
+
+        // doMask drops this key outright as JDBCResource.PASSWORD, so it never needs masking.
+        Assertions.assertFalse(masked.containsKey(CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED));
+        Assertions.assertEquals("hive", masked.get("type"));
+    }
 }
