@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/system/mem_info.h"
+#include "util/mem_info.h"
 
 #include <unistd.h>
 
