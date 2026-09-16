@@ -33,4 +33,9 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch);
 
 void update_logging();
 
+// Reports every config value that had to be replaced by its default, on stderr as well as through
+// glog, and clears them so each is reported once. init_glog calls this as soon as logging is up;
+// anything that sets up glog without init_glog has to call it too, or the replacement is silent.
+void report_config_fallbacks();
+
 } // namespace starrocks

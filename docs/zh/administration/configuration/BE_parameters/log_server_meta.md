@@ -99,7 +99,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：String
 - 单位：-
 - 是否动态：是（自 v3.3.0、v3.2.7 及 v3.1.12 起）
-- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。
+- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。启动时，若配置文件中的取值不是上述取值之一，BE 会在日志中报告该值并改用 INFO，因此无效取值不会导致日志功能不可用。运行时设置无效取值则会被拒绝并返回错误，当前生效的级别保持不变。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。
 - 引入版本：-
 
 ### sys_log_roll_mode
@@ -108,7 +108,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：系统日志分卷的模式。有效值包括 `TIME-DAY`、`TIME-HOUR` 和 `SIZE-MB-` 大小。默认值表示日志被分割成大小为 1GB 的日志卷。
+- 描述：系统日志分卷的模式。有效值包括 `TIME-DAY`、`TIME-HOUR` 和 `SIZE-MB-` 大小。默认值表示日志被分割成大小为 1GB 的日志卷。若配置值无法解析，BE 会在日志中报告该值并改用默认值。
 - 引入版本：-
 
 ### sys_log_roll_num
