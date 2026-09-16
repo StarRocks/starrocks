@@ -119,6 +119,55 @@ public class BrokerLoadPreSplitHookTest {
     }
 
     @Test
+    public void testResolvedOptOutShortCircuitsThoughTheContextSaysOtherwise() throws Exception {
+        // BrokerLoadJob fires this hook from a scheduler thread against a ConnectContext that,
+        // outside an FE failover, is the submitter's own live session. A SET issued after the
+        // statement was accepted must not re-decide the load, so the value the caller resolved
+        // wins over the one on the context.
+        ConnectContext liveOptedInContext = mockConnectContextWithSessionPreSplit(true);
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_SESSION.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(liveOptedInContext, singlePartitionOlapTable(), List.of(), List.of(), false));
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "the resolved opt-out must bump the disabled_by_session bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void testResolvedOptInIsNotUndoneByAnOptedOutContext() throws Exception {
+        // The mirror case, which is what an FE-failover replay of a load submitted with pre-split
+        // ON relies on: null file groups short-circuit AFTER the session gate, so reaching that
+        // return without bumping disabled_by_session proves the gate opened.
+        ConnectContext liveOptedOutContext = mockConnectContextWithSessionPreSplit(false);
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = SkipReason.DISABLED_BY_SESSION.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(liveOptedOutContext, singlePartitionOlapTable(), null, List.of(), true));
+
+            Assertions.assertEquals(baseline,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "a resolved opt-in must not take the session-opt-out branch");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
     public void testNullFileGroupsShortCircuits() throws Exception {
         assertHookDoesNotDelegate(() ->
                 invokeHook(singlePartitionOlapTable(), null, List.of()));
@@ -206,6 +255,20 @@ public class BrokerLoadPreSplitHookTest {
         BrokerLoadPreSplitHook.maybeRunPreSplit(
                 context, mock(Database.class), target, mock(BrokerDesc.class),
                 fileGroups, fileStatuses, mock(ComputeResource.class), () -> false);
+    }
+
+    /**
+     * Overload for tests that drive the opt-out a deferred load resolved for itself, which is
+     * not necessarily what {@code context} carries by the time the hook fires.
+     */
+    private static void invokeHook(
+            ConnectContext context, OlapTable target,
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
+            Boolean sessionPreSplitEnabled) {
+        BrokerLoadPreSplitHook.maybeRunPreSplit(
+                context, mock(Database.class), target, mock(BrokerDesc.class),
+                fileGroups, fileStatuses, mock(ComputeResource.class), () -> false,
+                sessionPreSplitEnabled);
     }
 
     private static OlapTable singlePartitionOlapTable() {

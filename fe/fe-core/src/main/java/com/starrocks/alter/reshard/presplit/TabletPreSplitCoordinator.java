@@ -54,9 +54,8 @@ import java.util.function.BooleanSupplier;
 /**
  * FE-side orchestrator for Sample-Based Tablet Pre-Split.
  *
- * <p>{@link #maybeAct(Database, OlapTable, long, ScanContext, LoadKind)} is the
- * eligibility gate — every check that fails produces a specific
- * {@link SkipReason} for downstream bvar labels.
+ * <p>{@link #maybeAct} is the eligibility gate — every check that fails
+ * produces a specific {@link SkipReason} for downstream bvar labels.
  * {@link #runPreSplit(Database, OlapTable, long, ScanContext, LoadKind, PreSplitPipeline, int)}
  * is the full entry point used by the integrating load path (INSERT-from-FILES,
  * Broker Load): it runs the eligibility gate, then drives the
@@ -93,15 +92,23 @@ public final class TabletPreSplitCoordinator {
      * @param scanContext          integration-point scan context (used by the sampling stage).
      * @param loadKind             which integration path is calling — picks the right
      *                             per-path FE Config flag for the eligibility gate.
+     * @param sessionPreSplitEnabled the {@code enable_tablet_pre_split} opt-out as the calling load
+     *                             resolved it, or {@code null} to read it off the session this call
+     *                             runs under. Only a load whose session-var value and whose execution
+     *                             are separated in time passes it: a Broker Load fires its hook from
+     *                             a scheduler thread while the submitter's session is still live and
+     *                             free to {@code SET} the variable again, so it resolves the value
+     *                             from the snapshot taken when the statement was accepted.
      */
     public static PreSplitOutcome maybeAct(
-            Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext, LoadKind loadKind) {
+            Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext,
+            LoadKind loadKind, Boolean sessionPreSplitEnabled) {
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(scanContext, "scanContext");
         Objects.requireNonNull(loadKind, "loadKind");
 
-        SkipReason gateReason = checkConfigAndSession(loadKind);
+        SkipReason gateReason = checkConfigAndSession(loadKind, sessionPreSplitEnabled);
         if (gateReason != null) {
             return skipEligibility(gateReason);
         }
@@ -144,9 +151,10 @@ public final class TabletPreSplitCoordinator {
 
     /**
      * Picks the per-path Config flag that gates the caller's load kind, then checks the
-     * session opt-out. Returns {@code null} when both gates are open.
+     * session opt-out -- the value the caller resolved when it passed one, otherwise the
+     * session this call runs under. Returns {@code null} when both gates are open.
      */
-    private static SkipReason checkConfigAndSession(LoadKind loadKind) {
+    private static SkipReason checkConfigAndSession(LoadKind loadKind, Boolean sessionPreSplitEnabled) {
         boolean configEnabled = switch (loadKind) {
             case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
             case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
@@ -155,7 +163,10 @@ public final class TabletPreSplitCoordinator {
         if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
         }
-        if (!ConnectContext.getSessionVariableOrDefault().isEnableTabletPreSplit()) {
+        boolean sessionEnabled = sessionPreSplitEnabled != null
+                ? sessionPreSplitEnabled
+                : ConnectContext.getSessionVariableOrDefault().isEnableTabletPreSplit();
+        if (!sessionEnabled) {
             return SkipReason.DISABLED_BY_SESSION;
         }
         return null;
@@ -210,15 +221,18 @@ public final class TabletPreSplitCoordinator {
      *
      * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse
      *                               (passed to the pipeline's internal tablet-count selector).
+     * @param sessionPreSplitEnabled see {@link #maybeAct}.
      */
     public static PreSplitOutcome submitAsynchronously(
             Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext,
-            LoadKind loadKind, PreSplitPipeline pipeline, int activeComputeNodeCount) {
+            LoadKind loadKind, PreSplitPipeline pipeline, int activeComputeNodeCount,
+            Boolean sessionPreSplitEnabled) {
         Objects.requireNonNull(pipeline, "pipeline");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        PreSplitOutcome eligibility = maybeAct(database, table, physicalPartitionId, scanContext, loadKind);
+        PreSplitOutcome eligibility = maybeAct(database, table, physicalPartitionId, scanContext, loadKind,
+                sessionPreSplitEnabled);
         if (!(eligibility instanceof PreSplitOutcome.Eligible)) {
             return eligibility;
         }
@@ -289,7 +303,7 @@ public final class TabletPreSplitCoordinator {
             LoadKind loadKind, PreSplitPipeline pipeline, int activeComputeNodeCount)
             throws PreSplitPostSubmitTimeoutException {
         PreSplitOutcome outcome = submitAsynchronously(database, table, physicalPartitionId, scanContext,
-                loadKind, pipeline, activeComputeNodeCount);
+                loadKind, pipeline, activeComputeNodeCount, /*sessionPreSplitEnabled*/ null);
         // submitAsynchronously only emits Skipped or Submitted — Finished is reached after the await below.
         if (!(outcome instanceof PreSplitOutcome.Submitted submitted)) {
             return outcome;

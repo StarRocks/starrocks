@@ -62,7 +62,11 @@ import java.util.function.BooleanSupplier;
  * cluster-wide. The session variable {@code enable_tablet_pre_split}
  * (also default {@code true}) provides a per-session opt-out checked
  * early in this hook so a session-opt-out load does not pay the
- * eligibility-target walk and scan-context build.
+ * eligibility-target walk and scan-context build. The Broker Load caller
+ * resolves that opt-out from the value {@code BulkLoadJob} persisted when the
+ * statement was accepted and hands it to {@code maybeRunPreSplit}, so a load
+ * that has sat pending is not re-decided by whatever its submitter's session
+ * holds now.
  */
 public final class BrokerLoadPreSplitHook {
 
@@ -100,9 +104,26 @@ public final class BrokerLoadPreSplitHook {
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
             ComputeResource computeResource, BooleanSupplier shouldAbort) {
+        maybeRunPreSplit(context, database, targetTable, brokerDesc, fileGroups, fileStatuses,
+                computeResource, shouldAbort, null);
+    }
+
+    /**
+     * @param sessionPreSplitEnabled the {@code enable_tablet_pre_split} opt-out as the calling load
+     *                               resolved it, or {@code null} to read it off {@code context}.
+     *                               {@code BrokerLoadJob} passes the submit-time snapshot: outside an
+     *                               FE failover {@code context} is the submitter's own still-live
+     *                               session, so reading it here would let a {@code SET} issued while
+     *                               the job sat pending re-decide a load already accepted — and after
+     *                               a failover the recreated context carries only the default.
+     */
+    public static void maybeRunPreSplit(
+            ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
+            ComputeResource computeResource, BooleanSupplier shouldAbort, Boolean sessionPreSplitEnabled) {
         try {
             tryRunPreSplit(context, database, targetTable, brokerDesc, fileGroups, fileStatuses,
-                    computeResource, shouldAbort);
+                    computeResource, shouldAbort, sessionPreSplitEnabled);
         } catch (Throwable unexpected) {
             LOG.warn("Sample-Based Tablet Pre-Split hook failed for Broker Load; proceeding without pre-split",
                     unexpected);
@@ -112,7 +133,7 @@ public final class BrokerLoadPreSplitHook {
     private static void tryRunPreSplit(
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
-            ComputeResource computeResource, BooleanSupplier shouldAbort) {
+            ComputeResource computeResource, BooleanSupplier shouldAbort, Boolean sessionPreSplitEnabled) {
         Objects.requireNonNull(context, "context");
         if (!Config.enable_tablet_pre_split_for_broker_load) {
             // Record here: the coordinator's checkConfigAndSession is never
@@ -121,12 +142,14 @@ public final class BrokerLoadPreSplitHook {
             return;
         }
         // Honor the per-session opt-out before target resolution + scan-context
-        // build. The caller (BrokerLoadJob.firePreSplitHooks) passes the load's
-        // ConnectContext directly so we read the load's session variable rather
-        // than relying on thread-local state. The helper bumps the
-        // disabled_by_session bvar — the coordinator never sees this skip, but
-        // operators still need the bvar.
-        if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
+        // build. sessionPreSplitEnabled is the value the submitting session held when
+        // LOAD LABEL was accepted; null means no caller resolved it, so fall back to the
+        // session this hook runs under. The helper bumps the disabled_by_session bvar —
+        // the coordinator never sees this skip, but operators still need the bvar.
+        boolean preSplitEnabled = sessionPreSplitEnabled != null
+                ? sessionPreSplitEnabled
+                : context.getSessionVariable().isEnableTabletPreSplit();
+        if (PreSplitMetrics.shortCircuitOnSessionOptOut(preSplitEnabled)) {
             return;
         }
         // BrokerLoadJob.createLoadingTask guarantees database / targetTable / computeResource are
@@ -155,7 +178,8 @@ public final class BrokerLoadPreSplitHook {
                 MetaUtils.getRangeDistributionColumns(targetTable),
                 targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn()),
                 sumFileBytes(fileStatuses),
-                computeResource);
+                computeResource,
+                preSplitEnabled);
         PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context);
     }
 

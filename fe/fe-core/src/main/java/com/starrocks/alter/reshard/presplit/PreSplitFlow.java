@@ -70,11 +70,23 @@ final class PreSplitFlow {
      * Source-resolved inputs the flow needs. sortKeyColumns / partitionColumns are TARGET
      * columns (boundary planning + per-row partition projection); estimatedBytes sizes the
      * requested tablet count; computeResource sizes the active CN count; scanContext carries
-     * the source-specific scan inputs.
+     * the source-specific scan inputs; sessionPreSplitEnabled is the enable_tablet_pre_split
+     * opt-out the calling load resolved for itself, or null to leave every gate below reading
+     * the session the flow runs under.
      */
     record Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
                     List<Column> partitionColumns, long estimatedBytes,
-                    ComputeResource computeResource) {
+                    ComputeResource computeResource, Boolean sessionPreSplitEnabled) {
+
+        /**
+         * For a caller planning on the very session that decided the opt-out -- every INSERT shape.
+         * A deferred load resolves the value itself and uses the canonical constructor.
+         */
+        Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
+                 List<Column> partitionColumns, long estimatedBytes,
+                 ComputeResource computeResource) {
+            this(scanContext, sortKeyColumns, partitionColumns, estimatedBytes, computeResource, null);
+        }
     }
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,
@@ -118,7 +130,7 @@ final class PreSplitFlow {
                 prepared.computeResource());
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitAsynchronously(
                 target.database(), target.olapTable(), target.partitionId(), prepared.scanContext(),
-                loadKind, pipeline, activeComputeNodeCount);
+                loadKind, pipeline, activeComputeNodeCount, prepared.sessionPreSplitEnabled());
         LOG.info("Sample-Based Tablet Pre-Split ({}) outcome for table {}: {}",
                 loadKind, target.olapTable().getName(), outcome);
         if (outcome instanceof PreSplitOutcome.Submitted submitted) {
