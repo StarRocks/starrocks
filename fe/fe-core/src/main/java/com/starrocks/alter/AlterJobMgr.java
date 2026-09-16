@@ -309,14 +309,40 @@ public class AlterJobMgr {
         }
     }
 
+    /**
+     * The fallible half of an ACTIVE transition: install the freshly resolved base tables and rebuild the
+     * MV's relationship. This re-analyses partition exprs and re-checks every base table, so it can leave
+     * the MV inactive in two different shapes -- by throwing (getBaseTablePartitionColumnMapImpl), or by
+     * reporting a clean negative verdict without throwing at all (checkIsActiveOnLoadBlocking). Callers
+     * must therefore judge the outcome by {@link MaterializedView#isActive()}, never by the absence of an
+     * exception.
+     *
+     * <p>The leader runs this BEFORE journaling. {@link com.starrocks.persist.WALApplier}'s contract is
+     * "apply can not fail", and a journal entry is durable and unrevocable: recording the activation first
+     * would leave the log claiming active while memory says inactive, and a permanently broken MV would
+     * add one such entry per MVActiveChecker round, without bound.
+     */
+    public void rebuildRelationshipForActivate(
+            MaterializedView materializedView, AlterMaterializedViewStatusContext context) {
+        materializedView.setBaseTableInfos(context.baseTableInfos());
+        materializedView.fixRelationship();
+    }
+
+    /**
+     * The pure in-memory half of an ACTIVE transition: resume the MV's refresh scheduler. Safe to run
+     * inside a WAL applier, unlike {@link #rebuildRelationshipForActivate}.
+     */
+    public void resumeTaskForActivate(AlterMaterializedViewStatusContext context, boolean isReplay) {
+        // resume the mv scheduler
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.resumeTask(context.task(), isReplay);
+    }
+
     public void applyAlterMaterializedViewStatus(
             MaterializedView materializedView, AlterMaterializedViewStatusContext context, boolean isReplay) {
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(context.status())) {
-            materializedView.setBaseTableInfos(context.baseTableInfos());
-            materializedView.fixRelationship();
-            // resume the mv scheduler
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            taskManager.resumeTask(context.task(), isReplay);
+            rebuildRelationshipForActivate(materializedView, context);
+            resumeTaskForActivate(context, isReplay);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(context.status())) {
             materializedView.setInactiveAndReason(context.reason());
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -477,8 +503,16 @@ public class AlterJobMgr {
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
+            if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus()) && !mv.isActive()) {
+                // The leader journals ACTIVE only once the activation actually succeeded, so failing to
+                // reproduce it here is a real divergence between this FE and the leader, not the expected
+                // outcome of replaying a doomed retry. Loud and searchable on purpose.
+                LOG.error("replayed ACTIVE for materialized view {} but could not rebuild its base-table "
+                                + "relationship, so this FE's metadata has diverged from the leader's: {}",
+                        mv.getName(), mv.getInactiveReason());
+            }
         } catch (Throwable e) {
-            LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
+            LOG.error("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
