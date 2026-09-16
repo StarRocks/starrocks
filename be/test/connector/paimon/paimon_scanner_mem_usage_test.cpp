@@ -59,13 +59,8 @@ TEST_F(PaimonScannerMemUsageTest, zero_peak_reports_no_observation) {
     ASSERT_EQ(0, estimate_with_peak(std::make_shared<FixedPeakMemoryPool>(0)));
 }
 
-TEST_F(PaimonScannerMemUsageTest, small_peak_is_raised_to_floor) {
-    ASSERT_EQ(16 * kMiB, estimate_with_peak(std::make_shared<FixedPeakMemoryPool>(1 * kMiB)));
-    ASSERT_EQ(16 * kMiB, estimate_with_peak(std::make_shared<FixedPeakMemoryPool>(16 * kMiB)));
-}
-
-TEST_F(PaimonScannerMemUsageTest, large_peak_is_reported_as_is) {
-    ASSERT_EQ(16 * kMiB + 1, estimate_with_peak(std::make_shared<FixedPeakMemoryPool>(16 * kMiB + 1)));
+TEST_F(PaimonScannerMemUsageTest, peak_is_reported_as_is) {
+    ASSERT_EQ(1 * kMiB, estimate_with_peak(std::make_shared<FixedPeakMemoryPool>(1 * kMiB)));
     ASSERT_EQ(640 * kMiB, estimate_with_peak(std::make_shared<FixedPeakMemoryPool>(640 * kMiB)));
 }
 

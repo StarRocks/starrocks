@@ -31,8 +31,6 @@ class Expr;
 class PaimonFileSystem;
 
 class PaimonScanner final : public HdfsScanner {
-    friend class PaimonScannerMemUsageTest;
-
 public:
     PaimonScanner() = default;
     ~PaimonScanner() override;
