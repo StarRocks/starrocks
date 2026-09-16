@@ -1333,4 +1333,43 @@ TEST_F(ThreadPoolTest, TestThreadCreationThrowIsContained) {
     _pool->shutdown();
 }
 
+// A pool whose minimum threads cannot all be started must fail to build without hanging. init() sets
+// _num_threads_pending_start to the whole minimum up front and, on a failure, calls shutdown(), which
+// waits for that count to drain -- but the thread that failed and the ones never attempted have nobody
+// to take their slots. Covered for a creation failure reported as a Status and for one that throws,
+// which create_thread() turns into a Status as well.
+TEST_F(ThreadPoolTest, TestInitFailureDoesNotHangShutdown) {
+    for (bool throwing : {false, true}) {
+        std::atomic<int> attempts{0};
+        SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [&](void* arg) {
+            // The first thread starts; the second one fails.
+            if (attempts.fetch_add(1) == 0) {
+                return;
+            }
+            if (throwing) {
+                throw std::bad_alloc();
+            }
+            *static_cast<Status*>(arg) =
+                    Status::RuntimeError("Could not create thread: Resource temporarily unavailable");
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        SCOPED_CLEANUP({
+            SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        // Hangs inside init()'s shutdown() if the failed slots are not given up.
+        Status s = rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(3).set_max_threads(3));
+        ASSERT_FALSE(s.ok());
+        ASSERT_EQ(2, attempts.load());
+        // The one thread that did start has taken its slot and exited; nothing is left pending.
+        ASSERT_EQ(0, _pool->_num_threads_pending_start);
+        ASSERT_EQ(0, _pool->num_threads());
+    }
+
+    // The fixture's pool is usable again once thread creation works.
+    ASSERT_OK(rebuild_pool_with_min_max(1, 1));
+    _pool->shutdown();
+}
+
 } // namespace starrocks

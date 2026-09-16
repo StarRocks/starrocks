@@ -288,6 +288,14 @@ Status ThreadPool::init() {
     for (int i = 0; i < _min_threads; i++) {
         Status status = create_thread();
         if (!status.ok()) {
+            {
+                // This thread and the ones not attempted yet will never start, so nobody is going to take
+                // their pending slots: give them up here, or shutdown() below waits for them forever. The
+                // threads created before this one take theirs as they start, and exit once they see the
+                // pool shut down.
+                std::lock_guard l(_lock);
+                _num_threads_pending_start -= _min_threads - i;
+            }
             shutdown();
             return status;
         }
