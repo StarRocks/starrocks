@@ -331,7 +331,7 @@ public final class BookmarkScopedTableResolver {
         private static PhysicalPartitionMeta livePhysicalMeta(PhysicalPartition physical, MaterializedIndex baseIndex) {
             return new PhysicalPartitionMeta(
                     baseIndex.getId(), baseIndex.getMetaId(),
-                    physical.getVisibleVersion(), physical.getVisibleVersionTime());
+                    physical.getVisibleVersion(), physical.getVisibleVersionTime(), physical.getDataVersion());
         }
     }
 

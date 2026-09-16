@@ -39,11 +39,11 @@ public class BookmarkChangeTvrAdapterTest {
     private static final long BASE_INDEX_META_ID = 500L;
 
     private static PhysicalPartitionMeta meta(long visibleVersion) {
-        return new PhysicalPartitionMeta(BASE_INDEX_ID, BASE_INDEX_META_ID, visibleVersion, 0L);
+        return new PhysicalPartitionMeta(BASE_INDEX_ID, BASE_INDEX_META_ID, visibleVersion, 0L, 0L);
     }
 
     private static PhysicalPartitionMeta metaWithIndex(long indexId, long indexMetaId, long visibleVersion) {
-        return new PhysicalPartitionMeta(indexId, indexMetaId, visibleVersion, 0L);
+        return new PhysicalPartitionMeta(indexId, indexMetaId, visibleVersion, 0L, 0L);
     }
 
     /** Physical partition with a two-generation reshard chain: {@code BASE_INDEX_ID} (metaId

@@ -120,6 +120,39 @@ public class IvmMvPartitionPruningTest {
     }
 
     @Test
+    public void testCompactedPartitionsStayOutOfTheScan() throws Exception {
+        MaterializedView mv = createMv("mv_compacted", "SELECT dt, k, SUM(v) AS total FROM fact GROUP BY dt, k");
+        seedBaseline(mv, "fact");
+
+        bumpVersion("fact", "p2");
+        compact("fact", "p1");
+        compact("fact", "p4");
+        assertMvScanPartitions(explainRefresh(mv), "partitions=1/4");
+    }
+
+    @Test
+    public void testCompactionAloneScansNothing() throws Exception {
+        MaterializedView mv = createMv("mv_compact_only", "SELECT dt, k, SUM(v) AS total FROM fact GROUP BY dt, k");
+        seedBaseline(mv, "fact");
+
+        // The delta carries no row, so there is no state to merge into and nothing to read.
+        compact("fact", "p3");
+        assertMvScanPartitions(explainRefresh(mv), "partitions=0/4");
+    }
+
+    @Test
+    public void testPartitionWithoutARecordedDataVersionIsKept() throws Exception {
+        MaterializedView mv = createMv("mv_no_data_version", "SELECT dt, k, SUM(v) AS total FROM fact GROUP BY dt, k");
+        // What a bookmark written before the data version was recorded reads back as.
+        physicalPartition("fact", "p1").setDataVersion(0L);
+        seedBaseline(mv, "fact");
+
+        bumpVersion("fact", "p2");
+        compact("fact", "p1");
+        assertMvScanPartitions(explainRefresh(mv), "partitions=2/4");
+    }
+
+    @Test
     public void testNonRefBaseTableChangeKeepsFullScan() throws Exception {
         MaterializedView mv = createMv("mv_join",
                 "SELECT f.dt, f.k, SUM(f.v * d.w) AS total FROM fact f JOIN dim d ON f.k = d.k GROUP BY f.dt, f.k");
@@ -268,10 +301,22 @@ public class IvmMvPartitionPruningTest {
                 .put(baseTableInfo, TvrTableSnapshot.of(bookmarkId));
     }
 
+    /** A load: both versions move. */
     private static void bumpVersion(String tableName, String partitionName) {
-        OlapTable table = (OlapTable) db.getTable(tableName);
-        PhysicalPartition partition = table.getPartition(partitionName).getDefaultPhysicalPartition();
+        PhysicalPartition partition = physicalPartition(tableName, partitionName);
         partition.setVisibleVersion(partition.getVisibleVersion() + 1, System.currentTimeMillis());
+        partition.setDataVersion(partition.getDataVersion() + 1);
+    }
+
+    /** A compaction: the visible version moves, the data version does not. */
+    private static void compact(String tableName, String partitionName) {
+        PhysicalPartition partition = physicalPartition(tableName, partitionName);
+        partition.setVisibleVersion(partition.getVisibleVersion() + 1, System.currentTimeMillis());
+    }
+
+    private static PhysicalPartition physicalPartition(String tableName, String partitionName) {
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        return table.getPartition(partitionName).getDefaultPhysicalPartition();
     }
 
     /** Plan through a real task run, so the caller can inspect the processor that planned it. */

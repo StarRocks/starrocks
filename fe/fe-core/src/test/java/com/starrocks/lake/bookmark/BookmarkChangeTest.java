@@ -60,7 +60,7 @@ public class BookmarkChangeTest {
             long metaId = parts[i + 3];
             long ver = parts[i + 4];
             m.computeIfAbsent(log, k -> new HashMap<>())
-                    .put(phys, new PhysicalPartitionMeta(idxId, metaId, ver, 0L));
+                    .put(phys, new PhysicalPartitionMeta(idxId, metaId, ver, 0L, 0L));
         }
         return new Bookmark(DB_ID, TABLE_ID, bookmarkId, 1000L, m);
     }
@@ -275,8 +275,8 @@ public class BookmarkChangeTest {
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getPhysicalPartition(10L)).thenReturn(pp);
 
-        PhysicalPartitionMeta baseMeta = new PhysicalPartitionMeta(100, 50, 5, 1000);
-        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 2000);
+        PhysicalPartitionMeta baseMeta = new PhysicalPartitionMeta(100, 50, 5, 1000, 0L);
+        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 2000, 0L);
         Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
         changes.put(1L, List.of(new TabletReshard(1L, 10L, baseMeta, headMeta)));
         BookmarkChange change = new BookmarkChange(OptionalLong.of(1), 2, changes);
@@ -297,8 +297,8 @@ public class BookmarkChangeTest {
         OlapTable table = Mockito.mock(OlapTable.class);
         Mockito.when(table.getPhysicalPartition(10L)).thenReturn(null);
 
-        PhysicalPartitionMeta baseMeta = new PhysicalPartitionMeta(100, 50, 5, 1000);
-        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 2000);
+        PhysicalPartitionMeta baseMeta = new PhysicalPartitionMeta(100, 50, 5, 1000, 0L);
+        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 2000, 0L);
         TabletReshard reshard = new TabletReshard(1L, 10L, baseMeta, headMeta);
         Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
         changes.put(1L, List.of(reshard));

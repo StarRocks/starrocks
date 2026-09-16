@@ -3182,6 +3182,26 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         else:
             tools.assert_true(False, "wait compaction timeout")
 
+    def wait_partition_compaction_published(self, table_name: str, timeout_sec: int = 180):
+        """
+        Wait until a compaction has published a new version on some partition of table_name.
+
+        ALTER TABLE ... COMPACT only raises the partition's compaction priority and returns, so a caller
+        that needs the compacted version to exist has to wait for it. Compaction advances a partition's
+        visible version and leaves its data version where it was, which is what tells it from a load.
+        """
+        sql = (
+            "SELECT COUNT(*) FROM information_schema.partitions_meta WHERE DB_NAME = database() "
+            f"AND TABLE_NAME = '{table_name}' AND VISIBLE_VERSION > DATA_VERSION"
+        )
+        for _ in range(timeout_sec):
+            res = self.execute_sql(sql, True)
+            tools.assert_true(res["status"], f'Fail to read partitions_meta, error=[{res["msg"]}]')
+            if int(res["result"][0][0]) > 0:
+                return
+            time.sleep(1)
+        tools.assert_true(False, f"no compaction published on {table_name} within {timeout_sec}s")
+
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.
 

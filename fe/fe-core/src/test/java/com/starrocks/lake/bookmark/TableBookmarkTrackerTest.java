@@ -335,10 +335,10 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
 
         // Seed two bookmarks via the replay path so the tracker doesn't need a real OlapTable.
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsA = new HashMap<>();
-        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L, 0L)));
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsB = new HashMap<>();
-        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
-        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L, 0L)));
+        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L, 0L)));
 
         Bookmark b1 = new Bookmark(1L, 2L, 100L, 1_000L, partsA);
         Bookmark b2 = new Bookmark(1L, 2L, 200L, 2_000L, partsB);

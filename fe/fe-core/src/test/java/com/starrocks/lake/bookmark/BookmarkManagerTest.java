@@ -560,10 +560,10 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         // (db=1, table=3) holds bookmark@200 with two references @ 2_100 and 2_200.
         BookmarkManager mgr = new BookmarkManager();
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsA = new HashMap<>();
-        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L, 0L)));
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsB = new HashMap<>();
-        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
-        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L, 0L)));
+        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L, 0L)));
 
         Bookmark bA = new Bookmark(1L, 2L, 100L, 1_000L, partsA);
         Bookmark bB = new Bookmark(1L, 3L, 200L, 2_000L, partsB);
@@ -619,10 +619,10 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("repcc_h2");
 
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsA = new HashMap<>();
-        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+        partsA.put(10L, Collections.singletonMap(11L, new PhysicalPartitionMeta(1L, 1L, 1L, 0L, 0L)));
         Map<Long, Map<Long, PhysicalPartitionMeta>> partsB = new HashMap<>();
-        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
-        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L)));
+        partsB.put(20L, Collections.singletonMap(21L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L, 0L)));
+        partsB.put(22L, Collections.singletonMap(23L, new PhysicalPartitionMeta(2L, 2L, 1L, 0L, 0L)));
 
         Bookmark bA = new Bookmark(fakeDbId, fakeTableId, fakeBookmarkIdA, 1_000L, partsA);
         Bookmark bB = new Bookmark(fakeDbId, fakeTableId, fakeBookmarkIdB, 2_000L, partsB);

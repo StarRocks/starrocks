@@ -179,7 +179,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         long phantomPhysicalId = 999_002L;
         Map<Long, Map<Long, PhysicalPartitionMeta>> baseParts = liveSnapshot(live);
         baseParts.computeIfAbsent(phantomLogicalId, k -> new HashMap<>())
-                .put(phantomPhysicalId, new PhysicalPartitionMeta(1L, 1L, 1L, 0L));
+                .put(phantomPhysicalId, new PhysicalPartitionMeta(1L, 1L, 1L, 0L, 0L));
         Bookmark base = synthesizeAndRegister(tableId, baseParts);
         Bookmark head = synthesizeAndRegister(tableId, liveSnapshot(live));
 
@@ -257,12 +257,12 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         // over at version 20 -- the same shape ReshardEpochResolverTest/BookmarkChangeTest use.
         MaterializedIndex secondGeneration = new MaterializedIndex(101, 50, MaterializedIndex.IndexState.NORMAL, 7);
         List<IndexEpoch> epochs = List.of(new IndexEpoch(secondGeneration, 5, 35));
-        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 0L);
+        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 0L, 0L);
 
         // base at the empty initial version: net-fold short-circuits to a head-only FULL_SCAN even
         // across the reshard.
         PhysicalPartitionMeta emptyBaseMeta =
-                new PhysicalPartitionMeta(100, 50, PhysicalPartition.PARTITION_INIT_VERSION, 0L);
+                new PhysicalPartitionMeta(100, 50, PhysicalPartition.PARTITION_INIT_VERSION, 0L, 0L);
         BookmarkChange.ReshardedDataChanged emptyBaseChange =
                 new BookmarkChange.ReshardedDataChanged(1L, 10L, emptyBaseMeta, headMeta, epochs);
         assertTrue(ChangesScanBuilder.useHeadOnlyFullScan(emptyBaseChange, true));
@@ -274,7 +274,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         assertEquals(35, shortcut.getHead_version());
 
         // base at a non-empty version: no single spec -- the scan node builds one per epoch.
-        PhysicalPartitionMeta nonEmptyBaseMeta = new PhysicalPartitionMeta(100, 50, 5, 0L);
+        PhysicalPartitionMeta nonEmptyBaseMeta = new PhysicalPartitionMeta(100, 50, 5, 0L, 0L);
         BookmarkChange.ReshardedDataChanged nonEmptyBaseChange =
                 new BookmarkChange.ReshardedDataChanged(1L, 10L, nonEmptyBaseMeta, headMeta, epochs);
         assertFalse(ChangesScanBuilder.useHeadOnlyFullScan(nonEmptyBaseChange, true));
@@ -1175,7 +1175,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                 MaterializedIndex idx = pp.getLatestBaseIndex();
                 inner.put(pp.getId(), new PhysicalPartitionMeta(
                         idx.getId(), idx.getMetaId(),
-                        pp.getVisibleVersion(), pp.getVisibleVersionTime()));
+                        pp.getVisibleVersion(), pp.getVisibleVersionTime(), pp.getDataVersion()));
             }
             parts.put(p.getId(), inner);
         }
@@ -1200,7 +1200,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                     indexId += 1;
                 }
                 e.setValue(new PhysicalPartitionMeta(indexId, metaId,
-                        m.getVisibleVersion(), m.getVisibleVersionTimeMs()));
+                        m.getVisibleVersion(), m.getVisibleVersionTimeMs(), m.getDataVersion()));
                 return e.getKey();
             }
         }

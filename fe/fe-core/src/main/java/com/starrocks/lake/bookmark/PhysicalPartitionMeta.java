@@ -32,13 +32,16 @@ public final class PhysicalPartitionMeta {
     private final long visibleVersion;
     @SerializedName("vt")
     private final long visibleVersionTimeMs;
+    @SerializedName("dv")
+    private final long dataVersion;
 
     public PhysicalPartitionMeta(long baseMaterializedIndexId, long baseMaterializedIndexMetaId,
-                                 long visibleVersion, long visibleVersionTimeMs) {
+                                 long visibleVersion, long visibleVersionTimeMs, long dataVersion) {
         this.baseMaterializedIndexId = baseMaterializedIndexId;
         this.baseMaterializedIndexMetaId = baseMaterializedIndexMetaId;
         this.visibleVersion = visibleVersion;
         this.visibleVersionTimeMs = visibleVersionTimeMs;
+        this.dataVersion = dataVersion;
     }
 
     public long getBaseMaterializedIndexId() {
@@ -55,5 +58,13 @@ public final class PhysicalPartitionMeta {
 
     public long getVisibleVersionTimeMs() {
         return visibleVersionTimeMs;
+    }
+
+    /**
+     * The version counting only transactions that wrote rows; compaction advances the visible version
+     * but not this one. Reads 0 in bookmarks written before it was recorded -- versions start at 1.
+     */
+    public long getDataVersion() {
+        return dataVersion;
     }
 }

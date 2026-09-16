@@ -196,7 +196,7 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
                 }
                 inner.put(pp.getId(), new PhysicalPartitionMeta(
                         indexId, metaId,
-                        pp.getVisibleVersion(), pp.getVisibleVersionTime()));
+                        pp.getVisibleVersion(), pp.getVisibleVersionTime(), pp.getDataVersion()));
             }
             parts.put(p.getId(), inner);
         }
@@ -303,7 +303,7 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
             PhysicalPartition pp = p.getDefaultPhysicalPartition();
             MaterializedIndex base = pp.getLatestBaseIndex();
             PhysicalPartitionMeta head = new PhysicalPartitionMeta(
-                    base.getId(), base.getMetaId(), versionSeed++, timeSeed++);
+                    base.getId(), base.getMetaId(), versionSeed++, timeSeed++, 0L);
             List<PhysicalPartitionChange> row = new ArrayList<>();
             if (first) {
                 row.add(new PartitionAdded(logicalId, pp.getId(), head));
@@ -311,7 +311,7 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
             } else {
                 PhysicalPartitionMeta basePartitionMeta = new PhysicalPartitionMeta(
                         base.getId(), base.getMetaId(),
-                        pp.getVisibleVersion(), pp.getVisibleVersionTime());
+                        pp.getVisibleVersion(), pp.getVisibleVersionTime(), pp.getDataVersion());
                 row.add(new DataChanged(logicalId, pp.getId(), basePartitionMeta, head));
             }
             changes.put(logicalId, row);
@@ -414,7 +414,7 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
         Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
         List<PhysicalPartitionChange> row = new ArrayList<>();
         row.add(new PartitionAdded(phantomLogicalId, phantomPhysicalId,
-                new PhysicalPartitionMeta(1L, 1L, 1L, 0L)));
+                new PhysicalPartitionMeta(1L, 1L, 1L, 0L, 0L)));
         changes.put(phantomLogicalId, row);
         BookmarkChange diff = new BookmarkChange(OptionalLong.empty(), 42L, changes);
 
@@ -477,7 +477,7 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
                 firstShifted = true;
             }
             PhysicalPartitionMeta head = new PhysicalPartitionMeta(
-                    indexId, metaId, versionSeed++, timeSeed++);
+                    indexId, metaId, versionSeed++, timeSeed++, 0L);
             List<PhysicalPartitionChange> row = new ArrayList<>();
             row.add(new PartitionAdded(logicalId, pp.getId(), head));
             changes.put(logicalId, row);

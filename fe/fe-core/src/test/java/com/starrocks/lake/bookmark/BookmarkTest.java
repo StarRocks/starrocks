@@ -30,11 +30,11 @@ public class BookmarkTest {
     public void testValues() {
         Map<Long, Map<Long, PhysicalPartitionMeta>> parts = new HashMap<>();
         Map<Long, PhysicalPartitionMeta> inner10 = new HashMap<>();
-        inner10.put(100L, new PhysicalPartitionMeta(1L, 1L, 5L, 1000L));
-        inner10.put(101L, new PhysicalPartitionMeta(2L, 2L, 7L, 1100L));
+        inner10.put(100L, new PhysicalPartitionMeta(1L, 1L, 5L, 1000L, 0L));
+        inner10.put(101L, new PhysicalPartitionMeta(2L, 2L, 7L, 1100L, 0L));
         parts.put(10L, inner10);
         Map<Long, PhysicalPartitionMeta> inner20 = new HashMap<>();
-        inner20.put(200L, new PhysicalPartitionMeta(3L, 3L, 1L, 1200L));
+        inner20.put(200L, new PhysicalPartitionMeta(3L, 3L, 1L, 1200L, 0L));
         parts.put(20L, inner20);
 
         Bookmark b = new Bookmark(1L, 2L, 30L, 9999L, parts);

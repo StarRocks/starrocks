@@ -144,14 +144,30 @@ public final class MvBookmarkOps {
             return Optional.empty();
         }
         Set<String> names = Sets.newHashSet();
-        for (long partitionId : BookmarkChange.computeChanges(from, to.get()).getChanges().keySet()) {
-            Partition partition = baseTable.getPartition(partitionId);
+        for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
+                BookmarkChange.computeChanges(from, to.get()).getChanges().entrySet()) {
+            Partition partition = baseTable.getPartition(entry.getKey());
             if (partition == null) {
                 return Optional.empty();
             }
-            names.add(partition.getName());
+            if (!entry.getValue().stream().allMatch(MvBookmarkOps::isCompactionOnly)) {
+                names.add(partition.getName());
+            }
         }
         return Optional.of(names);
+    }
+
+    /**
+     * An unmoved data version means no rows landed here, so this partition contributes nothing to the
+     * delta. Two unknowns (0) are not equal versions and leave the partition in.
+     */
+    private static boolean isCompactionOnly(BookmarkChange.PhysicalPartitionChange change) {
+        if (!(change instanceof BookmarkChange.DataChanged dataChanged)) {
+            return false;
+        }
+        long base = dataChanged.getBasePartition().getDataVersion();
+        long head = dataChanged.getHeadPartition().getDataVersion();
+        return base > 0 && head > 0 && base == head;
     }
 
     /** Release every bookmark {@code mv} pins on its internal-catalog base tables. */

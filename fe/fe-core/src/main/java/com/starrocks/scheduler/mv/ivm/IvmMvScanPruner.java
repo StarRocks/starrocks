@@ -87,11 +87,13 @@ public final class IvmMvScanPruner {
                 .collect(Collectors.groupingBy(relation -> relation.getTable().getId(), Collectors.counting()));
         Map<Table, PCellSetMapping> mvPartitionsByBaseTable = topology.getRefBaseTableMVIntersectedPartitions();
         Set<String> result = partitionNameSet();
+        boolean sawDelta = false;
         for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables) {
             TvrVersionRange delta = deltas.get(snapshotInfo.getBaseTableInfo());
             if (delta == null || delta.isEmpty()) {
                 continue;
             }
+            sawDelta = true;
             Table baseTable = snapshotInfo.getBaseTable();
             PCellSetMapping mvPartitionsByBasePartition = mvPartitionsByBaseTable.get(baseTable);
             if (mvPartitionsByBasePartition == null || !baseTable.isCloudNativeTableOrMaterializedView()) {
@@ -118,7 +120,9 @@ public final class IvmMvScanPruner {
                 result.addAll(mvPartitions.getPartitionNames());
             }
         }
-        return result.isEmpty() ? null : result;
+        // A delta whose partitions all turned out to be compaction leaves nothing to merge, so the
+        // empty set means read no partition at all -- not that the bookmarks could not decide.
+        return sawDelta ? result : null;
     }
 
     /** Partition names compare case-insensitively across the partition code; these sets have to match that. */

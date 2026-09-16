@@ -106,7 +106,7 @@ public final class Bookmark {
                 MaterializedIndex base = pp.getLatestBaseIndex();
                 inner.put(pp.getId(), new PhysicalPartitionMeta(
                         base.getId(), base.getMetaId(),
-                        pp.getVisibleVersion(), pp.getVisibleVersionTime()));
+                        pp.getVisibleVersion(), pp.getVisibleVersionTime(), pp.getDataVersion()));
             }
             parts.put(p.getId(), inner);
         }
