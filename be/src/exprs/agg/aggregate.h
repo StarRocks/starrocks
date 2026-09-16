@@ -200,6 +200,12 @@ public:
         return std::nullopt;
     }
 
+    // Whether `is_window_result_ready` below can ever return false for this function. The analytor
+    // collects the functions that answer true once during prepare, so the per-row readiness check
+    // costs nothing for the functions (and the queries) that never wait.
+    // Must be overridden together with `is_window_result_ready`.
+    virtual bool needs_window_result_ready_check() const { return false; }
+
     // For streaming window evaluation whose result can depend on data not yet in the physical frame
     // (e.g. `lead ... IGNORE NULLS`). Return false to keep `_current_row_position` unmoved until more
     // input arrives or the partition is known complete. Default true: the physical frame is enough.

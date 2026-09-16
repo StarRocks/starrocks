@@ -228,6 +228,7 @@ private:
     void _update_window_batch_removable_cumulatively();
     bool _are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
                                    int64_t frame_end) const;
+    bool _has_window_result_ready_check() const { return !_window_result_ready_function_index.empty(); }
 
     Status _output_result_chunk(ChunkPtr* chunk);
 
@@ -318,6 +319,10 @@ private:
     // The max align size for all window aggregate state
     size_t _max_agg_state_align_size = 1;
     std::vector<bool> _is_lead_lag_functions;
+    // Indices of the functions that reported `needs_window_result_ready_check()`, i.e. those whose
+    // result can depend on rows beyond the physical frame (currently `lead ... IGNORE NULLS`).
+    // Empty for every other query, so the per-row readiness check is skipped entirely.
+    std::vector<size_t> _window_result_ready_function_index;
     std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const AggregateFunction*> _agg_functions;
     std::vector<ManagedFunctionStatesPtr<Analytor>> _managed_fn_states;
@@ -378,6 +383,9 @@ private:
 
     // Refer to the position of current row.
     int64_t _current_row_position = 0;
+    // Whether the one-time window state initialization for the first partition has run.
+    // See PRE_PROCESSING().
+    bool _window_state_initialized = false;
 
     Segment _partition;
     SegmentStatistics _partition_statistics;
