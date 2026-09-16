@@ -252,6 +252,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：bRPC 最大的包容量。
 - 引入版本：-
 
+### brpc_max_connection_pool_size
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：客户端为每个远程服务器端点缓存的空闲连接数。仅在 `brpc_connection_type` 为 `"pooled"` 时生效。该值是空闲连接缓存的容量，而非连接数上限：没有空闲连接可用时总是会新建连接，归还连接时若池中已有该数量的连接则将其关闭。若该值低于对单个对端的在途 RPC 峰值，超出的部分会被反复建立和关闭，效果类似短连接，并消耗临时端口，因此建议不低于该峰值。增大该值会增加文件描述符数量以及空闲连接占用的内存。取值为 `0` 或负数时将禁用连接复用，此时 `"pooled"` 的行为等同于 `"short"`。修改该值立即生效，且仅影响此后归还的连接。
+- 引入版本：v4.2.0
+
 ### brpc_max_connections_per_server
 
 - 默认值：1
