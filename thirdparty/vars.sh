@@ -353,10 +353,10 @@ BENCHMARK_SOURCE=benchmark-1.9.5
 BENCHMARK_MD5SUM="12c6c0c228fc07106c62634222bd2541"
 
 # fast-float
-FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
-FAST_FLOAT_NAME="fast-float-3.5.1.tar.gz"
-FAST_FLOAT_SOURCE="fast-float-3.5.1"
-FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
+FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v8.2.10.tar.gz"
+FAST_FLOAT_NAME="fast-float-8.2.10.tar.gz"
+FAST_FLOAT_SOURCE="fast-float-8.2.10"
+FAST_FLOAT_MD5SUM="ddcf64ffe15f1e1ed964a355db7a04f3"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
