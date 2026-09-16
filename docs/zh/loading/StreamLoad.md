@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "从本地文件系统使用 Stream Load 同步导入或 Broker Load 异步导入数据到 StarRocks，支持多种文件格式。"
 keywords: ['Stream Load']
@@ -23,7 +24,7 @@ StarRocks 提供了两种从本地文件系统导入数据的方法：
 - 您可以使用 UTF-8 字符串作为文本分隔符，例如逗号（,）、制表符或管道符（|），其长度不超过 50 字节。
 - 空值用 `\N` 表示。例如，一个数据文件由三列组成，其中一条记录在第一列和第三列有数据，但第二列没有数据。在这种情况下，您需要在第二列使用 `\N` 表示空值。这意味着记录必须编写为 `a,\N,b` 而不是 `a,,b`。`a,,b` 表示记录的第二列包含一个空字符串。
 
-Stream Load 和 Broker Load 都支持在数据导入时进行数据转换，并支持在数据导入时通过 UPSERT 和 DELETE 操作进行数据更改。有关更多信息，请参见 [在导入时转换数据](../loading/Etl_in_loading.md) 和 [通过导入更改数据](../loading/Load_to_Primary_Key_tables.md)。
+Stream Load 和 Broker Load 都支持在数据导入时进行数据转换，并支持在数据导入时通过 UPSERT 和 DELETE 操作进行数据更改。有关更多信息，请参见 [在导入时转换数据](./Etl_in_loading.md) 和 [通过导入更改数据](./Load_to_Primary_Key_tables.md)。
 
 ## 开始之前
 
@@ -33,7 +34,7 @@ Stream Load 和 Broker Load 都支持在数据导入时进行数据转换，并�
 
 #### 检查网络配置
 
-确保您要导入数据的机器可以通过 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认：`8030`）和 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（默认：`8040`）访问 StarRocks 集群的 FE 和 BE 节点。
+确保您要导入数据的机器可以通过 [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（默认：`8030`）和 [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port)（默认：`8040`）访问 StarRocks 集群的 FE 和 BE 节点。
 
 ## 通过 Stream Load 从本地文件系统导入
 
@@ -332,7 +333,7 @@ Stream Load 不允许您取消加载作业。如果加载作业超时或遇到�
 
 本节描述了一些系统参数，您需要配置这些参数以选择 Stream Load 作为加载方法。这些参数配置对所有 Stream Load 作业生效。
 
-- `streaming_load_max_mb`：您要加载的每个数据文件的最大大小。默认最大大小为 10 GB。有关更多信息，请参见 [配置 BE 或 CN 动态参数](../administration/management/BE_configuration.md)。
+- `streaming_load_max_mb`：您要加载的每个数据文件的最大大小。默认最大大小为 10 GB。有关更多信息，请参见 [配置 BE 或 CN 动态参数](../administration/configuration/BE_parameters/BE_parameters.md)。
   
   我们建议您一次不要加载超过 10 GB 的数据。如果数据文件的大小超过 10 GB，我们建议您将数据文件拆分为小于 10 GB 的小文件，然后逐个加载这些文件。如果您无法拆分大于 10 GB 的数据文件，可以根据文件大小增加此参数的值。
 
@@ -348,7 +349,7 @@ Stream Load 不允许您取消加载作业。如果加载作业超时或遇到�
 
   :::
 
-- `stream_load_default_timeout_second`：每个加载作业的超时时间。默认超时时间为 600 秒。有关更多信息，请参见 [配置 FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。
+- `stream_load_default_timeout_second`：每个加载作业的超时时间。默认超时时间为 600 秒。有关更多信息，请参见 [配置 FE 动态参数](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。
   
   如果您创建的许多加载作业超时，您可以根据以下公式计算结果增加此参数的值：
 

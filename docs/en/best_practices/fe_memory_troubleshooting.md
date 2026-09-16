@@ -103,7 +103,7 @@ The specific monitoring indicators are as follows:
 | `jvm_old_gc{type="count"}` | Full GC count.                          |
 | `jvm_old_gc{type="time"}`  | Full GC time.                           |
 
-Monitoring information for these metrics and others is at [Monitoring and alerting](../administration/management/monitoring/Monitor_and_Alert.md)
+Monitoring information for these metrics and others is at [Monitoring and alerting](../administration/management/monitoring/monitoring.md)
 
 Memory profile can analyze sudden heap increases. It is necessary to confirm whether it works properly after the service installation is completed.
 
@@ -220,7 +220,7 @@ During the long-term operation of the FE, the in-heap memory usage may abnormall
 
 ### Process of On-site Investigation
 
-Open your monitoring tool: [Monitoring and alerting](../administration/management/monitoring/Monitor_and_Alert.md)
+Open your monitoring tool: [Monitoring and alerting](../administration/management/monitoring/monitoring.md)
 
 **Step 1: Check the following monitoring**
 

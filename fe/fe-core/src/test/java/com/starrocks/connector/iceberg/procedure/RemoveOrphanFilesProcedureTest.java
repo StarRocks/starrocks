@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
+import com.starrocks.common.Config;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
@@ -43,6 +44,8 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -83,6 +86,175 @@ public class RemoveOrphanFilesProcedureTest {
                 () -> procedure.execute(context, Collections.emptyMap()));
 
         assertTrue(ex.getMessage().contains("table location is empty"));
+    }
+
+    /**
+     * An `older_than` in the future puts every existing file before the expiration cutoff, so the scan
+     * deletes the data files a concurrent INSERT has already written but not yet committed. The committed
+     * snapshot then references files that no longer exist and the table becomes unreadable, so such an
+     * interval must be rejected before anything is scanned.
+     */
+    @Test
+    void testFutureOlderThanThrows() {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.OLDER_THAN,
+                ConstantOperator.createDatetime(LocalDateTime.now().plusYears(4)));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> procedure.execute(context, args));
+
+        assertTrue(ex.getMessage().contains(RemoveOrphanFilesProcedure.OLDER_THAN),
+                "message should name the offending argument; got: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("minimum retention"),
+                "message should explain the minimum retention; got: " + ex.getMessage());
+    }
+
+    /**
+     * A recent-but-past `older_than` is just as unsafe as a future one: an INSERT that started seconds ago
+     * has its data files inside the window, so the retention interval - not just the sign of it - is what
+     * has to be checked.
+     */
+    @Test
+    void testOlderThanWithinMinRetentionThrows() {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.OLDER_THAN,
+                ConstantOperator.createDatetime(LocalDateTime.now().minusMinutes(1)));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> procedure.execute(context, args));
+
+        assertTrue(ex.getMessage().contains("minimum retention"),
+                "an interval of one minute must be rejected; got: " + ex.getMessage());
+    }
+
+    /**
+     * The minimum has to stay well below the procedure's own 7 day default, the way Iceberg's Spark
+     * procedure keeps a 24 hour minimum below its 3 day default. Two reasons: cleaning up orphans from a
+     * failed load a couple of days ago is a legitimate operation that must not require a configuration
+     * change, and a minimum equal to the default leaves the two on a knife edge - the default cutoff is
+     * computed with its own timezone conversion, so it does not land exactly 7 days back.
+     */
+    @Test
+    void testOlderThanTwoDaysAgoPassesValidation() {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.OLDER_THAN,
+                ConstantOperator.createDatetime(LocalDateTime.now().minusDays(2)));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        Throwable t = assertThrows(Throwable.class, () -> procedure.execute(context, args));
+        String msg = t.getMessage();
+        assertFalse(msg != null && msg.contains("minimum retention"),
+                "two days must be beyond the default minimum retention; got: " + msg);
+    }
+
+    @Test
+    void testOlderThanBeyondMinRetentionPassesValidation() {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        Table table = Mockito.mock(Table.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put(RemoveOrphanFilesProcedure.OLDER_THAN,
+                ConstantOperator.createDatetime(LocalDateTime.now().minusDays(30)));
+
+        IcebergTableProcedureContext context = createContext(table);
+
+        // Retention validation passes; any exception comes from later logic (metadata/filesystem).
+        Throwable t = assertThrows(Throwable.class, () -> procedure.execute(context, args));
+        String msg = t.getMessage();
+        assertFalse(msg != null && msg.contains("minimum retention"),
+                "30 days is beyond the minimum retention and must pass; got: " + msg);
+    }
+
+    /**
+     * The configuration is parsed as a plain long, so a negative value is accepted by the config layer. A
+     * negative minimum would turn the retention check into a window that reaches into the future and would
+     * silently admit exactly the `older_than` values this guard exists to reject, so refuse to run instead.
+     */
+    @Test
+    void testNegativeMinRetentionConfigThrows() {
+        long savedMinRetention = Config.iceberg_remove_orphan_files_min_retention_seconds;
+        Config.iceberg_remove_orphan_files_min_retention_seconds = -Duration.ofDays(1).getSeconds();
+        try {
+            RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+            Table table = Mockito.mock(Table.class);
+            Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+            when(table.location()).thenReturn(TABLE_LOCATION);
+            when(table.currentSnapshot()).thenReturn(snapshot);
+
+            Map<String, ConstantOperator> args = new HashMap<>();
+            args.put(RemoveOrphanFilesProcedure.OLDER_THAN,
+                    ConstantOperator.createDatetime(LocalDateTime.now().plusHours(1)));
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                    () -> procedure.execute(context, args));
+
+            assertTrue(ex.getMessage().contains("iceberg_remove_orphan_files_min_retention_seconds"),
+                    "message should name the offending configuration; got: " + ex.getMessage());
+            assertTrue(ex.getMessage().contains("negative"),
+                    "message should say the configuration must not be negative; got: " + ex.getMessage());
+        } finally {
+            Config.iceberg_remove_orphan_files_min_retention_seconds = savedMinRetention;
+        }
+    }
+
+    /**
+     * The minimum retention bounds the explicit argument only. Omitting `older_than` keeps the procedure's
+     * own 7 day default, so raising the configuration past that default must not break the default call.
+     */
+    @Test
+    void testDefaultOlderThanIgnoresMinRetentionConfig() {
+        long savedMinRetention = Config.iceberg_remove_orphan_files_min_retention_seconds;
+        Config.iceberg_remove_orphan_files_min_retention_seconds = Duration.ofDays(3650).getSeconds();
+        try {
+            RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+            Table table = Mockito.mock(Table.class);
+            Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+            when(table.location()).thenReturn(TABLE_LOCATION);
+            when(table.currentSnapshot()).thenReturn(snapshot);
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            Throwable t = assertThrows(Throwable.class, () -> procedure.execute(context, Collections.emptyMap()));
+            String msg = t.getMessage();
+            assertFalse(msg != null && msg.contains("minimum retention"),
+                    "the default older_than must not be bounded by the configuration; got: " + msg);
+        } finally {
+            Config.iceberg_remove_orphan_files_min_retention_seconds = savedMinRetention;
+        }
     }
 
     @Test

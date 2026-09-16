@@ -16,6 +16,9 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -29,12 +32,16 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -87,5 +94,37 @@ public class SqlToScalarOperatorTranslatorTest {
         ColumnRefOperator second = secondFactory.computeLambdaArgRefIfAbsent(arg,
                 n -> secondFactory.create(n.getName(), n.getType(), n.isNullable(), true));
         assertNotSame(first, second, "re-plan with a new factory must allocate a new ref");
+    }
+
+    @Test
+    public void testAICompleteCallsHaveDistinctHiddenOccurrenceIds() {
+        FunctionSet functionSet = new FunctionSet();
+        functionSet.init();
+        Function function = functionSet.getFunction(
+                new Function(new FunctionName("ai_complete"), new com.starrocks.type.Type[] {VarcharType.VARCHAR},
+                        InvalidType.INVALID, false),
+                Function.CompareMode.IS_IDENTICAL);
+        assertNotNull(function);
+        assertEquals(1, function.getNumArgs());
+
+        FunctionCallExpr firstExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same")));
+        firstExpr.setFn(function);
+        firstExpr.setType(VarcharType.VARCHAR);
+        FunctionCallExpr secondExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same")));
+        secondExpr.setFn(function);
+        secondExpr.setType(VarcharType.VARCHAR);
+
+        ColumnRefFactory factory = new ColumnRefFactory();
+        ExpressionMapping mapping = new ExpressionMapping(null, Collections.emptyList());
+        CallOperator first = (CallOperator) SqlToScalarOperatorTranslator.translate(firstExpr, mapping, factory);
+        CallOperator second = (CallOperator) SqlToScalarOperatorTranslator.translate(secondExpr, mapping, factory);
+
+        assertEquals(2, first.getArguments().size());
+        assertEquals(2, second.getArguments().size());
+        assertEquals(1, first.getFunction().getNumArgs());
+        assertEquals(1, second.getFunction().getNumArgs());
+        int firstOccurrenceId = ((ConstantOperator) first.getArguments().get(1)).getInt();
+        int secondOccurrenceId = ((ConstantOperator) second.getArguments().get(1)).getInt();
+        assertNotEquals(firstOccurrenceId, secondOccurrenceId);
     }
 }

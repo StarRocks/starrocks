@@ -43,6 +43,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -53,6 +54,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -62,13 +64,15 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -219,6 +223,71 @@ public abstract class AlterJobV2 implements Writable {
 
     public boolean isExpire() {
         return isDone() && (System.currentTimeMillis() - finishedTimeMs) / 1000 > Config.history_job_keep_max_second;
+    }
+
+    /**
+     * The pre-alter schemas this job retired from the catalog, kept resolvable so that a load which
+     * was already bound to one of them when the alter finished can still resolve it at publish time
+     * (see {@code TableSchemaService}). Empty for jobs that retire no schema.
+     */
+    public Optional<OlapTableHistorySchema> getHistorySchema() {
+        return Optional.empty();
+    }
+
+    /**
+     * Snapshot the current schemas of {@code indexMetaIds} as a history schema, tagged with a freshly
+     * allocated transaction id as its threshold.
+     * <p>
+     * The caller must already hold the table WRITE lock it is about to flip the catalog under, and must
+     * call this BEFORE {@code persistStateChange} so {@code copyForPersist} journals the result: a load
+     * can only be bound to a retired schema if it finished planning its sink (under the table READ lock)
+     * before that WRITE lock was taken, so every such transaction id is below the threshold.
+     */
+    protected static OlapTableHistorySchema buildHistorySchema(OlapTable table, Collection<Long> indexMetaIds) {
+        OlapTableHistorySchema.Builder builder = OlapTableHistorySchema.newBuilder();
+        for (long indexMetaId : indexMetaIds) {
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
+            if (indexMeta == null) {
+                continue;
+            }
+            builder.addIndexSchema(new IndexSchemaInfo(indexMetaId, table.getIndexNameByMetaId(indexMetaId),
+                    SchemaInfo.fromMaterializedIndex(table, indexMetaId, indexMeta)));
+        }
+        builder.setHistoryTxnIdThreshold(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId());
+        return builder.build();
+    }
+
+    /**
+     * Shared expiry rule for {@link #getHistorySchema()}: the retired schemas must stay resolvable until
+     * every transaction that can still be bound to them has reached a terminal state, and are released
+     * (payload dropped) as soon as that holds. Returns whether the history schema holds nothing anymore,
+     * which is one of the two conditions for cleaning the job up.
+     */
+    protected boolean expireHistorySchema(OlapTableHistorySchema historySchema) {
+        if (historySchema == null || historySchema.isExpired()) {
+            return true;
+        }
+        boolean expired = true;
+        try {
+            GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            // isPreviousTransactionsFinished scans only DatabaseTransactionMgr.idToRunningTransactionState.
+            // A multi-statement Stream Load is missing from it while its first sub-task runs, yet that
+            // sub-task's sink is already bound to a schema id -- releasing the payload here would strand its
+            // publish exactly like StarRocksTest#12167. Hold the snapshot until it is registered too.
+            expired = txnMgr.isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId,
+                            Lists.newArrayList(tableId))
+                    && !txnMgr.hasRunningExplicitTransactionBefore(historySchema.getHistoryTxnIdThreshold(), dbId);
+        } catch (Exception e) {
+            // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
+            // so could clean the history schema safely
+        }
+        if (expired) {
+            historySchema.setExpire();
+            LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
+                    jobId, tableName, historySchema.getHistoryTxnIdThreshold());
+        }
+        return expired;
     }
 
     public boolean isDone() {
@@ -559,17 +628,25 @@ public abstract class AlterJobV2 implements Writable {
 
     protected boolean publishVersion() {
         if (publishVersionFuture == null) {
-            Callable<Boolean> task = () -> {
-                return lakePublishVersion();
-            };
-            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
+            try {
+                publishVersionFuture = executor.submit(this::lakePublishVersion);
+            } catch (RejectedExecutionException e) {
+                LOG.warn("failed to submit publish task for job: {}: activeCount={}, poolSize={}, maximumPoolSize={}",
+                        jobId, executor.getActiveCount(), executor.getPoolSize(), executor.getMaximumPoolSize(), e);
+                return false;
+            }
             LOG.info("submit publish task for job: {}", jobId);
             return false;
         } else {
             if (publishVersionFuture.isDone()) {
                 try {
                     return publishVersionFuture.get();
-                } catch (InterruptedException | ExecutionException e) {
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                } catch (ExecutionException e) {
+                    LOG.warn("failed to publish version for job: {}", jobId, e.getCause());
                     return false;
                 } finally {
                     publishVersionFuture = null;

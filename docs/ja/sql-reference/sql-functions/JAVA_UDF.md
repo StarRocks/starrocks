@@ -20,7 +20,7 @@ sidebar_position: 0.9
 
 - サーバーに JDK 17 をインストールしています。
 
-- Java UDF 機能が有効になっています。この機能を有効にするには、FE 設定ファイル **fe/conf/fe.conf** の FE 設定項目 `enable_udf` を `true` に設定し、FE ノードを再起動して設定を有効にします。詳細については、[パラメーター設定](../../administration/management/FE_configuration.md)を参照してください。
+- Java UDF 機能が有効になっています。この機能を有効にするには、FE 設定ファイル **fe/conf/fe.conf** の FE 設定項目 `enable_udf` を `true` に設定し、FE ノードを再起動して設定を有効にします。詳細については、[パラメーター設定](../../administration/configuration/FE_parameters/FE_parameters.md)を参照してください。
 
 ## UDF の開発と使用
 
@@ -294,7 +294,7 @@ public class WindowSumInt {
 
 | メソッド                                                   | 説明                                                  |
 | -------------------------------------------------------- | ------------------------------------------------------------ |
-| void windowUpdate(State state, int, int, int , int, ...) | ウィンドウのデータを更新します。UDWF の詳細については、[ウィンドウ関数](../sql-functions/Window_function.md)を参照してください。入力として行を入力するたびに、このメソッドはウィンドウ情報を取得し、中間結果を適宜更新します。<ul><li>`peer_group_start`: 現在のパーティションの開始位置。`PARTITION BY` は、OVER 句でパーティション列を指定するために使用されます。パーティション列の値が同じ行は、同じパーティションに属すると見なされます。</li><li>`peer_group_end`: 現在のパーティションの終了位置。</li><li>`frame_start`: 現在のウィンドウフレームの開始位置。ウィンドウフレーム句は、計算範囲を指定し、現在の行と現在の行に対して指定された距離内の行をカバーします。例えば、`ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` は、現在の行、現在の行の前の行、および現在の行の後の行をカバーする計算範囲を指定します。</li><li>`frame_end`: 現在のウィンドウフレームの終了位置。</li><li>`inputs`: ウィンドウへの入力として入力されるデータ。データは特定のデータ型のみをサポートする配列パッケージです。この例では、INT 値が入力として入力され、配列パッケージは Integer[] です。</li></ul> |
+| void windowUpdate(State state, int, int, int , int, ...) | ウィンドウのデータを更新します。UDWF の詳細については、[ウィンドウ関数](./Window_function.md)を参照してください。入力として行を入力するたびに、このメソッドはウィンドウ情報を取得し、中間結果を適宜更新します。<ul><li>`peer_group_start`: 現在のパーティションの開始位置。`PARTITION BY` は、OVER 句でパーティション列を指定するために使用されます。パーティション列の値が同じ行は、同じパーティションに属すると見なされます。</li><li>`peer_group_end`: 現在のパーティションの終了位置。</li><li>`frame_start`: 現在のウィンドウフレームの開始位置。ウィンドウフレーム句は、計算範囲を指定し、現在の行と現在の行に対して指定された距離内の行をカバーします。例えば、`ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` は、現在の行、現在の行の前の行、および現在の行の後の行をカバーする計算範囲を指定します。</li><li>`frame_end`: 現在のウィンドウフレームの終了位置。</li><li>`inputs`: ウィンドウへの入力として入力されるデータ。データは特定のデータ型のみをサポートする配列パッケージです。この例では、INT 値が入力として入力され、配列パッケージは Integer[] です。</li></ul> |
 
 #### UDTF をコンパイル
 

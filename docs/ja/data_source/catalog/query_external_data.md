@@ -1,4 +1,5 @@
 ---
+sidebar_position: 160
 displayed_sidebar: docs
 description: "External catalog を使用して StarRocks から外部データソースのデータをクエリする方法。"
 ---
@@ -9,7 +10,7 @@ description: "External catalog を使用して StarRocks から外部データ�
 
 ## 前提条件
 
-external catalog は外部データソースに基づいて作成されます。サポートされている external catalog の種類については、[Catalog](../catalog/catalog_overview.md#catalog) を参照してください。
+external catalog は外部データソースに基づいて作成されます。サポートされている external catalog の種類については、[Catalog](./catalog_overview.md#catalog) を参照してください。
 
 ## 手順
 
@@ -64,4 +65,4 @@ SELECT * FROM hive1.hive_db.hive_table limit 1;
 
 ## 参考文献
 
-StarRocks クラスターからデータをクエリするには、[Default catalog](../catalog/default_catalog.md) を参照してください。
+StarRocks クラスターからデータをクエリするには、[Default catalog](./default_catalog.md) を参照してください。

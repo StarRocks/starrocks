@@ -1,4 +1,5 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 description: "StarRocks Flink コネクタは DataStream API・Table API & SQL・Python API に対応し、Flink から StarRocks への継続的なデータロードを実現します。"
 ---
@@ -140,7 +141,7 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 - **必須**: いいえ
 - **デフォルト値**: AUTO
 - **説明**: データのロードに使用されるインターフェース。このパラメータは、Flink connector バージョン 1.2.4 以降でサポートされています。有効な値:
-  - `V1`: [Stream Load](../loading/StreamLoad.md) インターフェースを使用してデータをロードします。1.2.4 より前のコネクタは、このモードのみをサポートしています。
+  - `V1`: [Stream Load](./StreamLoad.md) インターフェースを使用してデータをロードします。1.2.4 より前のコネクタは、このモードのみをサポートしています。
   - `V2`: [Stream Load transaction](./Stream_Load_transaction_interface.md) インターフェースを使用してデータをロードします。StarRocks のバージョンが 2.4 以上である必要があります。メモリ使用量を最適化し、より安定した exactly-once の実装を提供するため、`V2` を推奨します。
   - `AUTO`: StarRocks のバージョンがトランザクション Stream Load をサポートしている場合、自動的に `V2` を選択し、そうでない場合は `V1` を選択します。
 
@@ -481,7 +482,7 @@ DISTRIBUTED BY HASH(`id`);
 
 #### ネットワーク設定
 
-Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
+Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
 
 ### Flink SQL で実行
 

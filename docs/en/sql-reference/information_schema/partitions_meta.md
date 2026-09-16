@@ -25,7 +25,7 @@ The following fields are provided in `partitions_meta`:
 | PARTITION_KEY                 | Partition key of the partition.                              |
 | PARTITION_VALUE               | Partition value of the partition (e.g., `Range` or `List`).  |
 | DISTRIBUTION_KEY              | Distribution key of the partition.                           |
-| BUCKETS                       | Number of buckets in the partition.                          |
+| BUCKETS                       | Number of buckets in the partition. For a table with range distribution, this is the actual number of tablets in the partition's base index, which changes as tablets are split and merged. A rollup index in the same partition can have a different number of tablets. |
 | REPLICATION_NUM               | Replication number of the partition.                         |
 | STORAGE_MEDIUM                | Storage medium of the partition.                             |
 | COOLDOWN_TIME                 | Cooldown time of the partition.                              |

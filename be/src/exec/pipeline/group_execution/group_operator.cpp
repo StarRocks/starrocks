@@ -48,7 +48,7 @@ Status GroupedExecutionSinkOperator::set_finishing(RuntimeState* state) {
 Status GroupedExecutionSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     auto res = _exchanger->accept(chunk, _driver_sequence);
     _peak_memory_usage_counter->set(_exchanger->get_memory_usage());
-    return Status::OK();
+    return res;
 }
 
 Status GroupedExecutionSinkFactory::prepare(RuntimeState* state) {

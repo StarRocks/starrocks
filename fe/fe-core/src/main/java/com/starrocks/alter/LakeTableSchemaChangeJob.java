@@ -412,7 +412,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            lightWeight = table.isLightWeightTabletCreation();
+            // Light-weight's on-demand shadow schema reads the table's index/BF set, written back only at job finish.
+            lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange;
 
             // disable tablet creation optimaization to avoid overwriting files with the same name.
             if (table.isFileBundling()) {

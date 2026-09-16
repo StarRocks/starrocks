@@ -3025,8 +3025,14 @@ StatusOr<ColumnPtr> StringFunctions::strpos_instance(FunctionContext* context, c
                 from_index = pos + 1;
             }
 
-            int abs_instance = std::abs(instance_value);
-            if (abs_instance <= static_cast<int>(positions.size())) {
+            // Widened on purpose. instance_value is int32_t, so std::abs(INT32_MIN) is undefined and
+            // in practice yields INT32_MIN again -- still negative, because +2147483648 does not fit
+            // in an int32. The bounds check below then passes for a negative value, and
+            // positions.size() - abs_instance converts it to size_t, ADDING 2^31 instead of
+            // subtracting. With 4-byte elements that indexes 2^33 bytes past the vector, which is
+            // exactly the SIGSEGV @0x200000000 this was first reported as.
+            int64_t abs_instance = std::abs(static_cast<int64_t>(instance_value));
+            if (abs_instance <= static_cast<int64_t>(positions.size())) {
                 builder.append(positions[positions.size() - abs_instance] + 1);
             } else {
                 builder.append(0);

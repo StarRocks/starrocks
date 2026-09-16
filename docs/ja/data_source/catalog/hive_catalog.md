@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "Hive catalog は Hive データを StarRocks に手動作成なしで直接クエリおよび変換ロード。"
 toc_max_heading_level: 5
@@ -48,7 +49,7 @@ Hive クラスターでの SQL ワークロードを成功させるためには�
   - Parquet および ORC ファイルは、以下の圧縮形式をサポートしています：NO_COMPRESSION、SNAPPY、LZ4、ZSTD、GZIP。
   - Textfile ファイルは、NO_COMPRESSION 圧縮形式をサポートしています。
 
-  テーブルプロパティ [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに使用する圧縮アルゴリズムを指定できます。
+  テーブルプロパティ [`compression_codec`](./hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに使用する圧縮アルゴリズムを指定できます。
 
   Hive テーブルへの書き込み時、テーブルのプロパティに圧縮コーデックが含まれている場合、StarRocks は書き込みデータの圧縮にそのアルゴリズムを優先的に使用します。そうでない場合、システム変数 `connector_sink_compression_codec` で設定された圧縮アルゴリズムが使用されます。
 
@@ -68,7 +69,7 @@ Hive クラスターがストレージとして AWS S3 を使用している場�
 
 上記の三つの認証方法の中で、インスタンスプロファイルが最も広く使用されています。
 
-詳細については、[AWS IAM での認証準備](../../integrations/authenticate_to_aws_resources.md#preparations)を参照してください。
+詳細については、[AWS IAM での認証準備](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparations)を参照してください。
 
 ### HDFS
 
@@ -207,7 +208,7 @@ Hive データをクエリする前に、Hive メタストアノードのホス�
 | hive.metastore.glue.catalogid | No       | 使用する AWS Glue Data Catalog の ID。指定しない場合、現在の AWS アカウントのカタログが使用されます。別の AWS アカウントの Glue Data Catalog にアクセスする（クロスアカウントアクセス）必要がある場合は、このパラメータを指定する必要があります。 |
 | aws.glue.resource_share_type  | No       | AWS Glue の `GetDatabases` API に送信される `ResourceShareType` を設定することで、`SHOW DATABASES` が一覧表示するデータベースを制御します。大文字小文字を区別しません。有効な値：`FOREIGN`（AWS Resource Access Manager 経由で他のアカウントからあなたのアカウントに共有されたデータベース）、`FEDERATED`（JDBC 接続など、外部データソースを参照するデータベース）、`ALL`（ローカルデータベースに加えて前述の両方）。指定しない場合、ローカルデータベースのみが一覧表示されます。このパラメータは一覧表示にのみ影響します。StarRocks がデータベースにクエリを実行する際は、`hive.metastore.glue.catalogid` で設定された単一のアカウントが引き続き使用されるため、一覧に表示された `FOREIGN` データベースは、`hive.metastore.glue.catalogid` をその所有者アカウントに設定するか、自身の Data Catalog にその[resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html) を作成しない限りクエリできません。また `FEDERATED` データベースは Hive 互換のデータベースではないため、この Catalog 経由ではクエリできません。 |
 
-AWS Glue にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue にアクセスするための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
+AWS Glue にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue にアクセスするための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
 
 #### StorageCredentialParams
 
@@ -255,7 +256,7 @@ Hive クラスターのストレージとして AWS S3 を選択した場合、�
 | aws.s3.access_key           | No       | IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | No       | IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS S3 にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS S3 にアクセスするための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS S3 にアクセスするための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
 
 ##### S3 互換ストレージシステム
 
@@ -1295,13 +1296,13 @@ REFRESH EXTERNAL TABLE は、FEs にキャッシュされたテーブルとパ�
 
 ## メタデータキャッシュを定期的に更新する
 
-v2.5.5 以降、StarRocks は頻繁にアクセスされる Hive catalog のキャッシュされたメタデータを定期的に更新してデータの変更を認識できます。次の [FE パラメータ](../../administration/management/FE_configuration.md) を通じて Hive メタデータキャッシュの更新を構成できます：
+v2.5.5 以降、StarRocks は頻繁にアクセスされる Hive catalog のキャッシュされたメタデータを定期的に更新してデータの変更を認識できます。次の [FE パラメータ](../../administration/configuration/FE_parameters/FE_parameters.md) を通じて Hive メタデータキャッシュの更新を構成できます：
 
 | Configuration item                                           | Default                              | Description                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | 定期的な Hive メタデータキャッシュの更新を有効にするかどうか。 有効にすると、StarRocks は Hive クラスターのメタストア（Hive Metastore または AWS Glue）をポーリングし、頻繁にアクセスされる Hive catalog のキャッシュされたメタデータを更新してデータの変更を認識します。 `true` は Hive メタデータキャッシュの更新を有効にし、`false` は無効にします。この項目は [FE 動的パラメータ](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
-| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | 二つの連続した Hive メタデータキャッシュの更新の間隔です。単位：ミリ秒。この項目は [FE 動的パラメータ](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | Hive メタデータキャッシュ更新タスクの有効期限です。アクセスされた Hive catalog に対して、指定された時間を超えてアクセスされていない場合、StarRocks はそのキャッシュされたメタデータの更新を停止します。アクセスされていない Hive catalog に対して、StarRocks はそのキャッシュされたメタデータを更新しません。単位：秒。この項目は [FE 動的パラメータ](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | 定期的な Hive メタデータキャッシュの更新を有効にするかどうか。 有効にすると、StarRocks は Hive クラスターのメタストア（Hive Metastore または AWS Glue）をポーリングし、頻繁にアクセスされる Hive catalog のキャッシュされたメタデータを更新してデータの変更を認識します。 `true` は Hive メタデータキャッシュの更新を有効にし、`false` は無効にします。この項目は [FE 動的パラメータ](../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | 二つの連続した Hive メタデータキャッシュの更新の間隔です。単位：ミリ秒。この項目は [FE 動的パラメータ](../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | Hive メタデータキャッシュ更新タスクの有効期限です。アクセスされた Hive catalog に対して、指定された時間を超えてアクセスされていない場合、StarRocks はそのキャッシュされたメタデータの更新を停止します。アクセスされていない Hive catalog に対して、StarRocks はそのキャッシュされたメタデータを更新しません。単位：秒。この項目は [FE 動的パラメータ](../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
 
 定期的な Hive メタデータキャッシュの更新機能とメタデータ自動非同期更新ポリシーを組み合わせて使用することで、データアクセスが大幅に高速化され、外部データソースからの読み取り負荷が軽減され、クエリパフォーマンスが向上します。
 

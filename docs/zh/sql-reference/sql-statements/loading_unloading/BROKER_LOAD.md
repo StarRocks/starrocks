@@ -10,7 +10,7 @@ import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 ## 功能
 
-Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持。有关 Broker Load 的背景信息、基本原理、支持的数据文件格式、如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作、以及如何查看导入作业的结果等信息，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/objectstorage.mdx)。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持。有关 Broker Load 的背景信息、基本原理、支持的数据文件格式、如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作、以及如何查看导入作业的结果等信息，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/objectstorage/objectstorage.mdx)。
 
 > **注意**
 >
@@ -368,7 +368,7 @@ StarRocks 访问存储系统的认证配置。
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
 #### Google GCS
 
@@ -718,7 +718,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `strict_mode`
 
-  是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br />关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。
+  是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br />关于该模式的介绍，参见[严格模式](../../../loading/strict_mode.md)。
 
 - `timezone`
 
@@ -726,7 +726,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `priority`
 
-   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` 指定 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
+   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../../../administration/configuration/FE_parameters/FE_parameters.md) `max_broker_load_job_concurrency` 指定 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
 
    已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](ALTER_LOAD.md) 语句修改该作业的优先级。
 
@@ -808,7 +808,7 @@ StarRocks 自 3.2.3 版本起支持导入 JSON 格式的数据，相关参数如
 
 ## 相关配置项
 
-[FE 配置项](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
+[FE 配置项](../../../administration/configuration/FE_parameters/FE_parameters.md) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
 
 StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
 
@@ -822,7 +822,7 @@ StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Loa
 
 - 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
 
-每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE（或 CN）上并行执行。实例的拆分由 FE 配置参数 [`min_bytes_per_broker_scanner`](../../../administration/management/FE_configuration.md) 和 BE（或 CN）节点数量决定，可以使用如下公式计算单个子任务的实例总数：
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE（或 CN）上并行执行。实例的拆分由 FE 配置参数 [`min_bytes_per_broker_scanner`](../../../administration/configuration/FE_parameters/FE_parameters.md) 和 BE（或 CN）节点数量决定，可以使用如下公式计算单个子任务的实例总数：
 
 单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`, BE/CN 节点数量）
 

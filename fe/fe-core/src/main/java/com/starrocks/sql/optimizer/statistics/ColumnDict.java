@@ -32,10 +32,11 @@ import java.util.Map;
 public final class ColumnDict extends StatsVersion {
     /**
      * Unsigned-byte lexicographic comparator. BE sorts dictionary strings via memcmp, which the C
-     * standard defines to compare bytes as unsigned char. ByteBuffer.compareTo on JDK 8 instead
-     * compares bytes as signed (Java 9 fixed this to unsigned), so any UTF-8 string with a high-bit
-     * byte (Cyrillic, CJK, etc.) sorts the opposite way on the two sides. Always use this comparator
-     * when ordering dictionary keys on the FE so the result matches BE regardless of JDK version.
+     * standard defines to compare bytes as unsigned char. ByteBuffer.compareTo instead compares
+     * bytes as signed (it is specified in terms of Byte.compare, on every JDK including 17 and 21),
+     * so any UTF-8 string with a high-bit byte (Cyrillic, CJK, etc.) sorts the opposite way on the
+     * two sides. Never order dictionary keys with ByteBuffer's natural order (sorted(), TreeSet,
+     * TreeMap); always use this comparator so the result matches BE.
      */
     public static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
         int aPos = a.position();

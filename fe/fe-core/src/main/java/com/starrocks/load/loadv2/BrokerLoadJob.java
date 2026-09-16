@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.presplit.BrokerLoadPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -109,6 +110,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     private static final Logger LOG = LogManager.getLogger(BrokerLoadJob.class);
     private ConnectContext context;
+    private transient PreSplitProfile preSplitProfile = new PreSplitProfile();
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
     private long writeDurationMs = 0;
     private LoadStmt stmt;
@@ -297,6 +299,7 @@ public class BrokerLoadJob extends BulkLoadJob {
         BrokerDesc brokerDesc = newBrokerDescFromPersistInfo();
         ensureConnectContext(db);
         List<PreSplitHookInput> perTableInputs = snapshotPerTableInputsUnderReadLock(db, attachment);
+        PreSplitProfile currentPreSplitProfile = getOrCreatePreSplitProfile();
 
         // Fire the hook OUTSIDE the DB lock (sampling can take seconds).
         // See unprotectedExecute() for why T_load is deferred until after this returns.
@@ -304,12 +307,12 @@ public class BrokerLoadJob extends BulkLoadJob {
         // (processTimeout, user cancel), the hook releases the pending-task scheduler
         // slot promptly instead of holding it until the post-submit deadline expires.
         firePreSplitHooks(context, db, brokerDesc, computeResource, perTableInputs, sessionVariables,
-                this::isTxnDone);
+                this::isTxnDone, currentPreSplitProfile);
 
         if (!beginTransaction()) {
             return;
         }
-        buildLoadingTasksUnderReadLock(db, perTableInputs, brokerDesc);
+        buildLoadingTasksUnderReadLock(db, perTableInputs, brokerDesc, currentPreSplitProfile);
         // Submit outside the DB lock; submit() can block when the loading-task scheduler queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
             submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
@@ -464,7 +467,8 @@ public class BrokerLoadJob extends BulkLoadJob {
      * fail the load cleanly rather than planning against the wrong object.
      */
     private void buildLoadingTasksUnderReadLock(
-            Database db, List<PreSplitHookInput> perTableInputs, BrokerDesc brokerDesc) throws StarRocksException {
+            Database db, List<PreSplitHookInput> perTableInputs, BrokerDesc brokerDesc,
+            PreSplitProfile currentPreSplitProfile) throws StarRocksException {
         TPartialUpdateMode partialUpdateThriftMode = resolvePartialUpdateThriftMode(partialUpdateMode);
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -507,6 +511,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
                         .setComputeResource(computeResource)
+                        .setPreSplitProfile(currentPreSplitProfile)
                         .build();
 
                 task.prepare();
@@ -520,16 +525,30 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+    private PreSplitProfile getOrCreatePreSplitProfile() {
+        if (preSplitProfile == null) {
+            preSplitProfile = new PreSplitProfile();
+        }
+        return preSplitProfile;
+    }
+
     /**
      * Fire the Sample-Based Tablet Pre-Split hook for each per-table input
      * snapshot. The hook sync-awaits the reshard daemon's FINISHED transition
      * (single- and multi-partition paths) — see
      * {@link BrokerLoadPreSplitHook}. We bind the job's {@link ConnectContext}
-     * so the coordinator's session-var check sees the load's session, not
-     * whatever stale thread-local is set. We also apply the persisted opt-out
-     * value so a submit-time {@code SET enable_tablet_pre_split = false}
-     * survives FE failover (the recreated context otherwise has the default
-     * value).
+     * so everything below reads the load's session, not whatever stale
+     * thread-local is set, and we hand the hook the persisted
+     * {@code enable_tablet_pre_split} value so every gate on the way down
+     * decides with what the session held at submit time.
+     *
+     * <p>That value is read out and passed, never written back onto
+     * {@code context}: only an FE failover makes {@code context} a fresh
+     * object, so on the normal path it is the submitter's own live session
+     * (DDLStmtExecutor -> LoadMgr.createLoadJobFromStmt ->
+     * BulkLoadJob.fromLoadStmt hand the very same one down). Writing to it
+     * would undo a {@code SET enable_tablet_pre_split} the user issued after
+     * submitting, silently, from a scheduler thread.
      *
      * <p>{@code shouldAbort} is threaded through each per-table hook so the
      * sync-await releases its scheduler slot promptly when the calling load
@@ -544,14 +563,15 @@ public class BrokerLoadJob extends BulkLoadJob {
     static void firePreSplitHooks(
             ConnectContext context, Database db, BrokerDesc brokerDesc, ComputeResource computeResource,
             List<PreSplitHookInput> preSplitInputs, Map<String, String> sessionVariables,
-            BooleanSupplier shouldAbort) {
+            BooleanSupplier shouldAbort, PreSplitProfile preSplitProfile) {
         if (preSplitInputs.isEmpty()) {
             return;
         }
-        String persistedPreSplitOptOut = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
-        if (persistedPreSplitOptOut != null) {
-            context.getSessionVariable().setEnableTabletPreSplit(Boolean.parseBoolean(persistedPreSplitOptOut));
-        }
+        // Null when the map has no entry for the key -- a job persisted before it existed, or one
+        // created outside a session -- which leaves the hook reading the session it runs under,
+        // the behaviour such a job has always had.
+        String persistedPreSplit = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
+        Boolean sessionPreSplitEnabled = persistedPreSplit == null ? null : Boolean.valueOf(persistedPreSplit);
         try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
             for (PreSplitHookInput input : preSplitInputs) {
                 if (shouldAbort.getAsBoolean()) {
@@ -559,7 +579,8 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
                 BrokerLoadPreSplitHook.maybeRunPreSplit(
                         context, db, input.targetTable(), brokerDesc,
-                        input.fileGroups(), input.fileStatuses(), computeResource, shouldAbort);
+                        input.fileGroups(), input.fileStatuses(), computeResource, shouldAbort, preSplitProfile,
+                        sessionPreSplitEnabled);
             }
         }
     }
@@ -656,6 +677,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     @Override
     protected void reset() {
         super.reset();
+        preSplitProfile = new PreSplitProfile();
         if (context != null) {
             context.setStartTime();
             createTimestamp = context.getStartTime();

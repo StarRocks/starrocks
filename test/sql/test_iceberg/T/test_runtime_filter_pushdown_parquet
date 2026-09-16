@@ -1,0 +1,40 @@
+-- name: test_runtime_filter_pushdown_parquet
+create external catalog rf_pushdown_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+-- Join runtime filters are evaluated against decoded rows inside the parquet reader.
+-- The filter can only ever remove rows the join would drop anyway, so every query
+-- below must return exactly the same result with the feature off and on.
+
+-- The fixture tables are tiny, so without these the optimizer would skip building a
+-- runtime filter altogether and the test would not exercise the reader at all.
+-- `explain verbose` must show "probe runtime filters" on the IcebergScanNode.
+set global_runtime_filter_build_min_size=0;
+set global_runtime_filter_probe_min_size=0;
+set global_runtime_filter_probe_min_selectivity=0;
+
+update information_schema.be_configs set value = "false" where name= "parquet_runtime_filter_push_down_enable";
+
+-- int join key
+select t1.l_orderkey, t1.l_partkey from rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.partsupp_no_bucket as t2 on t1.l_partkey = t2.ps_partkey order by t1.l_orderkey, t1.l_partkey;
+
+-- string join key: exercises the dict-encoded string probe path
+select t1.l_orderkey, t1.l_shipdate from rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t2 on t1.l_shipdate = t2.l_shipdate where t2.l_suppkey = 2 order by t1.l_orderkey, t1.l_shipdate;
+
+-- nullable join key
+select count(*) from rf_pushdown_${uuid0}.iceberg_oss_db.in_runtime_filter_t1 as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.in_runtime_filter_t2 as t2 on t1.c1<=>t2.c1;
+
+-- probe column absent from the select list: it must still be materialized on demand
+-- for the probe, then filtered correctly
+select count(*) from rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.partsupp_no_bucket as t2 on t1.l_partkey = t2.ps_partkey;
+
+update information_schema.be_configs set value = "true" where name= "parquet_runtime_filter_push_down_enable";
+
+select t1.l_orderkey, t1.l_partkey from rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.partsupp_no_bucket as t2 on t1.l_partkey = t2.ps_partkey order by t1.l_orderkey, t1.l_partkey;
+
+select t1.l_orderkey, t1.l_shipdate from rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t2 on t1.l_shipdate = t2.l_shipdate where t2.l_suppkey = 2 order by t1.l_orderkey, t1.l_shipdate;
+
+select count(*) from rf_pushdown_${uuid0}.iceberg_oss_db.in_runtime_filter_t1 as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.in_runtime_filter_t2 as t2 on t1.c1<=>t2.c1;
+
+select count(*) from rf_pushdown_${uuid0}.iceberg_oss_db.lineitem_two_bucket as t1 join rf_pushdown_${uuid0}.iceberg_oss_db.partsupp_no_bucket as t2 on t1.l_partkey = t2.ps_partkey;
+
+drop catalog rf_pushdown_${uuid0};

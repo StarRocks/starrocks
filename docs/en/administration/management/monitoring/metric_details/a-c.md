@@ -13,7 +13,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../Monitor_and_Alert.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
 
 :::
 
@@ -21,6 +21,27 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Total number of scan tasks created by Flink/Spark SQL.
+
+## `ai_http_requests_total`
+
+- Type: Counter
+- Labels: None
+- Unit: Count
+- Description: Total AI HTTP attempts accepted by the transport, including initial and retry attempts. An attempt is counted only when `AIHttpClient::submit` returns success; admission waits and synchronously rejected submissions are not counted.
+
+## `ai_http_retries_total`
+
+- Type: Counter
+- Labels: None
+- Unit: Count
+- Description: Total accepted AI HTTP retry attempts. The initial attempt is excluded, and a retry scheduled but cancelled before transport acceptance is not counted. This counter is therefore always less than or equal to `ai_http_requests_total`.
+
+## `ai_http_timeouts_total`
+
+- Type: Counter
+- Labels: None
+- Unit: Count
+- Description: Total accepted AI HTTP attempts terminated by a transport timeout or an expired request/query deadline. Each accepted attempt is counted at most once. Cancellation, shutdown, and deadlines reached before an HTTP attempt is accepted are not counted.
 
 ## `async_delta_writer_queue_count`
 
@@ -523,4 +544,3 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: ms
 - Description: Total time spent on cumulative compactions.
-

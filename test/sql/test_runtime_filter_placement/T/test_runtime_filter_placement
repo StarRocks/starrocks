@@ -1,0 +1,145 @@
+-- name: test_runtime_filter_placement
+-- Where the planner puts a runtime filter, and whether a LOCAL runtime in-filter actually
+-- reaches an operator at run time.
+--
+-- Why these two signals and not the row counters: a global bloom filter is waited for with a
+-- timeout, so how many rows it removes depends on whether it arrived before the scan ran --
+-- asserting JoinRuntimeFilterInputRows/OutputRows is inherently racy. A local in-filter has
+-- NO timeout (PipelineDriver::local_rf_block() only checks holder->is_ready()), so
+-- RuntimeInFilterNum is deterministic and is the only place a dropped local filter shows up:
+-- losing one changes no query result, just the work done.
+DROP DATABASE IF EXISTS test_runtime_filter_placement;
+CREATE DATABASE test_runtime_filter_placement;
+USE test_runtime_filter_placement;
+
+CREATE TABLE big (
+  d date,
+  k1 varchar(50),
+  k2 varchar(50),
+  p  varchar(50),
+  v  int
+) ENGINE=OLAP DUPLICATE KEY(d, k1, k2, p)
+DISTRIBUTED BY HASH(d, k1, k2, p) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE small (
+  d date,
+  k1 varchar(50),
+  k2 varchar(50),
+  p  varchar(50),
+  v  int
+) ENGINE=OLAP DUPLICATE KEY(d, k1, k2, p)
+DISTRIBUTED BY HASH(d, k1, k2, p) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE narrow (
+  a int,
+  b bigint,
+  c smallint
+) ENGINE=OLAP DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO big
+SELECT date_add('2024-01-01', interval (generate_series % 7) day),
+       concat('u', generate_series % 200),
+       concat('d', generate_series % 20),
+       concat('p', generate_series % 5),
+       generate_series
+FROM table(generate_series(1, 4000));
+
+INSERT INTO small
+SELECT date_add('2024-01-01', interval (generate_series % 7) day),
+       concat('u', generate_series % 10),
+       concat('d', generate_series % 5),
+       concat('p', generate_series % 5),
+       generate_series
+FROM table(generate_series(1, 40));
+
+INSERT INTO narrow
+SELECT generate_series, generate_series, generate_series % 100
+FROM table(generate_series(1, 500));
+
+-- Pin everything the placement decisions depend on, so plans and counters are reproducible.
+SET pipeline_dop = 1;
+SET global_runtime_filter_build_min_size = 0;
+SET global_runtime_filter_probe_min_size = 0;
+SET enable_profile = true;
+SET enable_async_profile = false;
+
+--------------------------------------------------------------------------------
+-- Part 1: where the planner puts the filter
+--------------------------------------------------------------------------------
+
+-- A shuffle join makes the filter global and it must reach the scan.
+function: assert_explain_verbose_contains("SELECT count(*) FROM big JOIN [shuffle] small ON big.k1 = small.k1", "remote = true")
+
+-- A broadcast join keeps it local to the fragment.
+function: assert_explain_verbose_contains("SELECT count(*) FROM big JOIN [broadcast] small ON big.k1 = small.k1", "remote = false")
+
+-- Mismatched integer widths put an implicit widening CAST in a projection. The filter must
+-- descend past it rather than stop on the projection, whose operator evaluates nothing and
+-- consumes no local in-filter.
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT a AS k FROM narrow) x JOIN [shuffle] narrow c ON x.k = c.b", "probe_expr = (CAST(")
+
+-- A filter may cross a window only when the probe column is a PARTITION BY column: only then
+-- does it delete whole partitions, leaving every surviving row's window value untouched.
+-- Here it is, so both filters cross the exchange and land on the scan as global filters.
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT * FROM (SELECT k1, k2, first_value(k1) OVER (PARTITION BY k1, k2 ORDER BY k2) AS rz FROM big) t WHERE rz = 'u1') a JOIN [shuffle] small ON a.k1 = small.k1 AND a.k2 = small.k2", "remote = true")
+
+-- Same query with multi-column global filters switched off: the exchange now refuses them,
+-- so they must climb back to the ANALYTIC, whose source operator does evaluate a filter.
+-- They must NOT settle on the SORT below it -- neither the partition-sort sink nor the
+-- merge-sort source evaluates a bloom filter or consumes a local in-filter, so a filter
+-- parked there is never applied while the driver still waits for it.
+SET enable_multicolumn_global_runtime_filter = false;
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT * FROM (SELECT k1, k2, first_value(k1) OVER (PARTITION BY k1, k2 ORDER BY k2) AS rz FROM big) t WHERE rz = 'u1') a JOIN [shuffle] small ON a.k1 = small.k1 AND a.k2 = small.k2", "3:ANALYTIC")
+function: assert_explain_verbose_not_contains("SELECT count(*) FROM (SELECT * FROM (SELECT k1, k2, first_value(k1) OVER (PARTITION BY k1, k2 ORDER BY k2) AS rz FROM big) t WHERE rz = 'u1') a JOIN [shuffle] small ON a.k1 = small.k1 AND a.k2 = small.k2", "2:SORT\n  |  order by: [2, VARCHAR(50), true] ASC, [3, VARCHAR(50), true] ASC\n  |  analytic partition by: [2: k1, VARCHAR(50), true], [3: k2, VARCHAR(50), true]\n  |  offset: 0\n  |  cardinality: 1\n  |  probe runtime filters:")
+SET enable_multicolumn_global_runtime_filter = true;
+
+--------------------------------------------------------------------------------
+-- Part 2: does a LOCAL runtime in-filter actually reach an operator?
+--
+-- Each block reports whether any operator bound a local in-filter. A placement suppressed by
+-- mistake flips it to \"no\" and shows up nowhere else. Deliberately not a count: the number of
+-- operators holding a filter moves with the backend count, the fragment-instance count and
+-- whether a scan decomposes into a separate prepare operator.
+--------------------------------------------------------------------------------
+
+-- Broadcast join: the probe-side scan must pick the in-filter up.
+SELECT count(*) FROM big JOIN [broadcast] small ON big.k1 = small.k1;
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
+  AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
+
+-- GROUPING SETS puts a REPEAT below the join; repeat_operator consumes local in-filters.
+SELECT count(*) FROM (SELECT k1, k2 FROM big GROUP BY GROUPING SETS ((k1), (k1, k2))) a JOIN [broadcast] small ON a.k1 = small.k1;
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
+  AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
+
+-- A nested-loop join; nljoin_probe_operator consumes local in-filters.
+SELECT count(*) FROM big JOIN [broadcast] small ON big.v > small.v AND big.k1 = small.k1;
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
+  AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
+
+-- The global bloom filter reaches the probe scan. Assert only that it was delivered, never
+-- how many rows it removed: that races with the wait timeout.
+SELECT count(*) FROM big JOIN [shuffle] small ON big.k1 = small.k1;
+SELECT if(count(1) > 0, "yes", "no") AS bloom_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeFilterDesc: %";
+
+DROP DATABASE test_runtime_filter_placement;

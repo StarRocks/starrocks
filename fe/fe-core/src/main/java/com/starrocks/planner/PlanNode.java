@@ -94,6 +94,7 @@ import java.util.stream.Collectors;
  * its children (= are bound by tupleIds).
  */
 abstract public class PlanNode extends TreeNode<PlanNode> {
+
     protected String planNodeName;
 
     protected PlanNodeId id;  // unique w/in plan tree; assigned by planner
@@ -748,13 +749,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return candidates;
     }
 
-    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(List<Expr> partitionByExprs) {
+    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(List<Expr> partitionByExprs,
+                                                                            DescriptorTable descTbl) {
         if (CollectionUtils.isEmpty(partitionByExprs)) {
             return Optional.of(Lists.newArrayList());
         }
 
-        // rf be crossed exchange when partitionByExprs are slot refs and bound by the plan node.
-        return candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr());
+        // rf be crossed exchange when partitionByExprs are bound by the plan node.
+        return candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl));
     }
 
     /**
@@ -769,7 +771,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
 
         Optional<List<List<Expr>>> optCandidatePartitionByExprs =
-                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs, descTbl);
         if (!optCandidatePartitionByExprs.isPresent()) {
             return false;
         }
@@ -800,7 +802,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (accept) {
             return true;
         }
-        if (isBound && description.canProbeUse(this, context)) {
+        if (isBound && canEvaluateRuntimeFilter() && description.canProbeUse(this, context)) {
             description.addProbeExpr(id.asInt(), probeExpr);
             description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
@@ -813,8 +815,39 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return (Expr expr) -> couldBound(expr, rfDesc, descTbl);
     }
 
-    protected Function<Expr, Boolean> couldBoundForPartitionExpr() {
-        return (Expr expr) -> ExprUtils.isBoundByTupleIds(expr, getTupleIds());
+
+
+
+    /**
+     * Whether a probe runtime filter parked on this node has any effect at runtime. A placement is
+     * useful if the node's operator does either of two things:
+     *
+     * 1. evaluates the global bloom filter -- `Operator::eval_runtime_bloom_filters()` is the only
+     *    consumer of a RuntimeFilterProbeCollector, and only scan, exchange source, aggregate
+     *    source and analytic source operators call it;
+     * 2. consumes a LOCAL runtime in-filter -- `Operator::eval_conjuncts_and_in_filters()`. This
+     *    one matters even when the global filter itself is thrown away: fillLocalRfWaitingSet()
+     *    derives localRfWaitingSet from probeRuntimeFilters, and that set is what tells the
+     *    operator which build node's local in-filter to wait for. Select, repeat and join
+     *    operators rely on this.
+     *
+     * When neither holds, the filter is silently never applied, the pipeline driver still blocks
+     * waiting for the global filter to arrive, and the profile reports a non-zero RuntimeFilterNum.
+     *
+     * Defaults to true so unverified node types keep their current behaviour; override to false
+     * only where the operator is known to do neither.
+     */
+    public boolean canEvaluateRuntimeFilter() {
+        return true;
+    }
+
+    protected Function<Expr, Boolean> couldBoundForPartitionExpr(DescriptorTable descTbl) {
+        // Use the same slot-id based criterion as couldBound(). Tuple-id based binding is wrong
+        // here: a ProjectNode re-resolves a passed-through slot onto its OWN output tuple, so an
+        // expression it produced (typically an implicit widening CAST of a join key) looks
+        // "unbound" to the child even though every slot it uses is available there. That made
+        // runtime filters stop descending at the projection.
+        return (Expr expr) -> getSlotIds(descTbl).contains(ExprUtils.getUsedSlotIds(expr));
     }
 
     private RoaringBitmap cachedSlotIds = null;
@@ -914,7 +947,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (accept) {
             return true;
         }
-        if (isBound && addProbeInfo && description.canProbeUse(this, context)) {
+        if (isBound && addProbeInfo && canEvaluateRuntimeFilter()
+                && description.canProbeUse(this, context)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);

@@ -19,8 +19,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
@@ -150,7 +153,58 @@ final class PreSplitTargets {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
         }
-        MaterializedIndex baseIndex = uniquePartition.getIndex(olapTable.getBaseIndexMetaId());
+        return resolveFromPhysicalPartition(database, olapTable, uniquePartition);
+    }
+
+    /**
+     * Sibling of {@link #findEligibleTarget} for a static {@code INSERT OVERWRITE}, whose write
+     * lands in a temporary partition rather than in the table's visible partition. Applies the
+     * same per-partition slice (one physical partition, one base tablet) to the temporary
+     * partition named {@code tempPartitionName} and records the same {@link SkipReason}s, so the
+     * two gates cannot drift.
+     *
+     * @return the resolved {@link EligibleTarget} whose {@code partitionId} is the temporary
+     *         partition's physical partition id, or {@code null} after recording the failing
+     *         {@link SkipReason} -- the same reasons {@link #findEligibleTarget} records for the
+     *         same situations.
+     */
+    static EligibleTarget findEligibleTemporaryTarget(Database database, OlapTable olapTable, String tempPartitionName) {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        try {
+            // Resolve through the temp-scoped by-name accessor: it is the only lookup that cannot
+            // return a live partition. OlapTable.getPartition(long) and getPhysicalPartition(long)
+            // search both the visible and the temporary namespace, and getPartition(String) searches
+            // only the visible one, so an id-based or unscoped lookup could resolve a partition that
+            // is still serving queries -- and resharding that one is never what the overwrite asked for.
+            Partition partition = olapTable.getPartition(tempPartitionName, true);
+            if (partition == null) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            // Same single-physical-partition contract findUniquePhysicalPartition applies on the
+            // visible side; taking the default sub-partition would silently ignore the others.
+            Collection<PhysicalPartition> physicalPartitions = partition.getSubPartitions();
+            if (physicalPartitions.size() != 1) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            return resolveFromPhysicalPartition(database, olapTable, physicalPartitions.iterator().next());
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        }
+    }
+
+    /**
+     * The per-partition slice both resolvers apply once they have a physical partition: one base-index
+     * tablet, and every visible index resolvable. Shared rather than repeated so the visible-partition
+     * and temporary-partition gates cannot drift apart — they must accept and reject the same shapes for
+     * the same recorded reasons, or an operator reading the skip metric would be told different stories
+     * about the same table.
+     */
+    private static EligibleTarget resolveFromPhysicalPartition(
+            Database database, OlapTable olapTable, PhysicalPartition partition) {
+        MaterializedIndex baseIndex = partition.getIndex(olapTable.getBaseIndexMetaId());
         if (baseIndex == null) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
@@ -159,12 +213,12 @@ final class PreSplitTargets {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
             return null;
         }
-        List<IndexPreSplitTarget> indexTargets = resolveVisibleIndexTargets(olapTable, uniquePartition);
+        List<IndexPreSplitTarget> indexTargets = resolveVisibleIndexTargets(olapTable, partition);
         if (indexTargets == null) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
             return null;
         }
-        return new EligibleTarget(database, olapTable, uniquePartition.getId(), indexTargets);
+        return new EligibleTarget(database, olapTable, partition.getId(), indexTargets);
     }
 
     /**

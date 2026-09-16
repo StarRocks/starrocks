@@ -28,6 +28,17 @@ import java.io.File;
  * while querying supported columns on the same table works fine.
  */
 public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
+    @Test
+    public void testGeographyProjectionAndPredicatesFail() {
+        for (String sql : new String[] {
+                "SELECT geography_col FROM iceberg0.unpartitioned_db.t_unknown_types",
+                "SELECT id FROM iceberg0.unpartitioned_db.t_unknown_types WHERE geography_col IS NULL",
+                "SELECT CAST(geo_col AS VARBINARY) FROM iceberg0.unpartitioned_db.t_unknown_types"}) {
+            SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+            Assertions.assertTrue(ex.getMessage().contains("not supported"), ex.getMessage());
+        }
+    }
+
     @TempDir
     public static File temp;
 
@@ -42,6 +53,12 @@ public class IcebergUnsupportedTypeQueryTest extends ConnectorPlanTestBase {
                 getFragmentPlan("SELECT geo_col FROM iceberg0.unpartitioned_db.t_unknown_types"));
         Assertions.assertTrue(ex.getMessage().contains("not supported"),
                 "Expected 'not supported' error, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testSupportedProjectionStillWorks() throws Exception {
+        String plan = getFragmentPlan("SELECT id FROM iceberg0.unpartitioned_db.t_unknown_types");
+        Assertions.assertTrue(plan.contains("IcebergScanNode"));
     }
 
     @Test

@@ -20,7 +20,7 @@ sidebar_position: 0.9
 
 - [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
 - 在服务器上安装 JDK 17。
-- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/management/FE_configuration.md)。
+- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/configuration/FE_parameters/FE_parameters.md)。
 
 ## 开发并使用 UDF
 

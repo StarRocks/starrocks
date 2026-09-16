@@ -57,6 +57,8 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.Util;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
@@ -516,8 +518,14 @@ public class EditLog {
                     DropFrontendInfo dropFrontendInfo = (DropFrontendInfo) journal.data();
                     globalStateMgr.getNodeMgr().replayDropFrontend(dropFrontendInfo);
                     if (dropFrontendInfo.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
-                        throw new JournalInconsistentException("current fe "
-                                + dropFrontendInfo.getNodeName() + " is removed. will exit");
+                        // The removed frontend must exit by itself, and it must NOT be raised as a
+                        // JournalInconsistentException: OP_REMOVE_FRONTEND_V2 is an ignorable operation,
+                        // so the exception would be swallowed by canSkipBadReplayedJournal() when
+                        // metadata_journal_ignore_replay_failure is true (the default).
+                        String errMsg = "current fe " + dropFrontendInfo.getNodeName() + " is removed. will exit";
+                        LOG.error(errMsg);
+                        Util.stdoutWithTime(errMsg);
+                        System.exit(-1);
                     }
                     break;
                 }
@@ -789,6 +797,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+                case OperationType.OP_MODIFY_NO_DICT_COLUMNS:
                 case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
@@ -1184,6 +1193,26 @@ public class EditLog {
                 case OperationType.OP_UPDATE_TABLE_STORAGE_INFOS: {
                     TableStorageInfos tableStorageInfos = (TableStorageInfos) journal.data();
                     globalStateMgr.getStorageVolumeMgr().replayUpdateTableStorageInfos(tableStorageInfos);
+                    break;
+                }
+                case OperationType.OP_CREATE_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayCreateProvider(provider);
+                    break;
+                }
+                case OperationType.OP_ALTER_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayAlterProvider(provider);
+                    break;
+                }
+                case OperationType.OP_DROP_AI_PROVIDER: {
+                    DropAIProviderLog log = (DropAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayDropProvider(log);
+                    break;
+                }
+                case OperationType.OP_SET_DEFAULT_AI_PROVIDER: {
+                    SetDefaultAIProviderLog log = (SetDefaultAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replaySetDefaultProvider(log);
                     break;
                 }
                 case OperationType.OP_PIPE: {
@@ -1963,6 +1992,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info, walApplier);
     }
 
+    public void logModifyNoDictColumns(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_NO_DICT_COLUMNS, info, walApplier);
+    }
+
     public void logSetHasDelete(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SET_HAS_DELETE, info, walApplier);
     }
@@ -2361,6 +2394,22 @@ public class EditLog {
 
     public void logUpdateTableStorageInfos(TableStorageInfos tableStorageInfos, WALApplier walApplier) {
         logJsonObject(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos, walApplier);
+    }
+
+    public void logCreateAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logAlterAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logDropAIProvider(DropAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_AI_PROVIDER, log, walApplier);
+    }
+
+    public void logSetDefaultAIProvider(SetDefaultAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SET_DEFAULT_AI_PROVIDER, log, walApplier);
     }
 
     public void logReplicationJob(ReplicationJob replicationJob, WALApplier walApplier) {

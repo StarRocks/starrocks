@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "FE 节点异常时恢复 StarRocks 集群元数据的方法和步骤。"
 ---
@@ -720,6 +721,6 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
 :::
 
-- [bdbje_reset_election_group](./management/FE_configuration.md#bdbje_reset_election_group)
-- [metadata_enable_recovery_mode](./management/FE_configuration.md#metadata_enable_recovery_mode)
-- [metadata_ignore_unknown_operation_type](./management/FE_configuration.md#metadata_ignore_unknown_operation_type)
+- [bdbje_reset_election_group](./configuration/FE_parameters/FE_parameters.md#bdbje_reset_election_group)
+- [metadata_enable_recovery_mode](./configuration/FE_parameters/FE_parameters.md#metadata_enable_recovery_mode)
+- [metadata_ignore_unknown_operation_type](./configuration/FE_parameters/FE_parameters.md#metadata_ignore_unknown_operation_type)
