@@ -917,6 +917,53 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCoalesceCarriesNonMcvRowsInABucket() {
+        // Given COALESCE(input1, input2) over 1000 rows, where input1 is 20% null with 300 rows in
+        // one MCV and input2 is 50% null with no MCV, so the result is 10% null and 900 rows survive
+        // CASE WHEN the coalesce propagates MCVs THEN it also carries the 600 non-MCV rows in a
+        // bucket over the merged range, instead of reporting only its MCV rows END
+
+        final long rowCount = 1000;
+        final double input1NullFraction = 0.2;
+        final double input2NullFraction = 0.5;
+        final Map<String, Long> input1Mcv = Map.of("1", 300L);
+        final double expectedLowerBound = 0.0;
+        final double expectedUpperBound = 200.0;
+        final long expectedNonMcvRows = 600L;
+        final long expectedUpperRepeats = 0L;
+        final long expectedTotalRows = 900L;
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(100)
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(10)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setMinValue(50).setMaxValue(200)
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(20)
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        final List<Bucket> actualBuckets = actualStatistic.getHistogram().getBuckets();
+        Assertions.assertEquals(1, actualBuckets.size());
+        Assertions.assertEquals(expectedLowerBound, actualBuckets.get(0).getLower(), 0.001);
+        Assertions.assertEquals(expectedUpperBound, actualBuckets.get(0).getUpper(), 0.001);
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertEquals(expectedUpperRepeats, actualBuckets.get(0).getUpperRepeats());
+        Assertions.assertEquals(expectedTotalRows, actualStatistic.getHistogram().getTotalRows());
+    }
+
+    @Test
     public void testCoalesceMcvScalingWhenMaxRowCountIsReached() {
         // Given COALESCE(colA, colB)
         // CASE WHEN accumulated MCV rows reach the row count THEN scale the remaining input's MCVs to fit END
