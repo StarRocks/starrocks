@@ -174,19 +174,19 @@ public class HistogramTest {
     }
 
     @Test
-    public void testSingleBucketWithNoRowsIsInert() {
+    public void testSingleBucketWithNoRows() {
         // Given a total that the MCVs already account for in full, over finite bounds
-        // CASE WHEN the bucket would carry no rows THEN it gets the inert bounds instead of the
-        // given ones, so a bucket holding nothing is never read as positional information END
+        // CASE WHEN there are no rows left to carry THEN no bucket is built, because a bucket holding
+        // nothing describes neither rows nor position END
 
         final Map<String, Long> mcv = Map.of("a", 1000L);
         final double totalRows = 1000;
+        final long expectedTotalRows = 1000L;
 
-        final List<Bucket> actualBuckets =
-                Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv).getBuckets();
+        final Histogram actualHistogram = Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv);
 
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualBuckets.get(0).getLower());
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualBuckets.get(0).getUpper());
+        Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
+        Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
     }
 
     @Test
@@ -198,11 +198,11 @@ public class HistogramTest {
 
         final Map<String, Long> mcv = Map.of("a", 800L, "b", 400L);
         final double totalRows = 1000;
-        final long expectedNonMcvRows = 0L;
+        final long expectedTotalRows = 1200L;
 
-        final List<Bucket> actualBuckets =
-                Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv).getBuckets();
+        final Histogram actualHistogram = Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv);
 
-        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
+        Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
     }
 }
