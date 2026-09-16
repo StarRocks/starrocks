@@ -20,8 +20,16 @@
 #include <base/testutil/assert.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <unordered_set>
+
 #include "base/failpoint/fail_point.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 
 namespace starrocks {
 
@@ -32,8 +40,10 @@ public:
     void SetUp() override {
         _saved_brpc_max_connections_per_server = config::brpc_max_connections_per_server;
         _saved_brpc_stub_expire_s = config::brpc_stub_expire_s;
+        _saved_brpc_connection_type = config::brpc_connection_type;
         config::brpc_max_connections_per_server = 1;
         config::brpc_stub_expire_s = 3600;
+        config::brpc_connection_type = "single";
         _timer = std::make_unique<BthreadTimer>();
         ASSERT_OK(_timer->start());
     }
@@ -41,12 +51,14 @@ public:
         _timer.reset();
         config::brpc_max_connections_per_server = _saved_brpc_max_connections_per_server;
         config::brpc_stub_expire_s = _saved_brpc_stub_expire_s;
+        config::brpc_connection_type = _saved_brpc_connection_type;
     }
 
 private:
     std::unique_ptr<BthreadTimer> _timer;
     int32_t _saved_brpc_max_connections_per_server = 0;
     int32_t _saved_brpc_stub_expire_s = 0;
+    std::string _saved_brpc_connection_type;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {
@@ -315,5 +327,184 @@ TEST_F(BrpcStubCacheTest, lake_singleton_reinitialize_rebinds_pipeline_timer) {
     cache->shutdown();
 }
 #endif
+
+TEST_F(BrpcStubCacheTest, acquire_least_loaded_stub) {
+    config::brpc_max_connections_per_server = 3;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    auto stub0 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub0);
+
+    auto first_or = cache.acquire_least_loaded_stub(stub0->endpoint());
+    ASSERT_OK(first_or.status());
+    auto first = std::move(first_or).value();
+    ASSERT_EQ(stub0.get(), first.reservation.stub());
+    ASSERT_EQ(0, first.reservation.in_flight_before());
+    ASSERT_FALSE(first.created_on_contention);
+    ASSERT_FALSE(first.selected_at_connection_limit);
+
+    auto second_or = cache.acquire_least_loaded_stub(stub0->endpoint());
+    ASSERT_OK(second_or.status());
+    auto second = std::move(second_or).value();
+    ASSERT_NE(stub0.get(), second.reservation.stub());
+    ASSERT_EQ(0, second.reservation.in_flight_before());
+    ASSERT_TRUE(second.created_on_contention);
+    ASSERT_FALSE(second.selected_at_connection_limit);
+
+    auto third_or = cache.acquire_least_loaded_stub(stub0->endpoint());
+    ASSERT_OK(third_or.status());
+    auto third = std::move(third_or).value();
+    ASSERT_NE(stub0.get(), third.reservation.stub());
+    ASSERT_NE(second.reservation.stub(), third.reservation.stub());
+    ASSERT_EQ(0, third.reservation.in_flight_before());
+    ASSERT_TRUE(third.created_on_contention);
+    ASSERT_FALSE(third.selected_at_connection_limit);
+
+    auto least_loaded_or = cache.acquire_least_loaded_stub(stub0->endpoint());
+    ASSERT_OK(least_loaded_or.status());
+    auto least_loaded = std::move(least_loaded_or).value();
+    ASSERT_EQ(stub0.get(), least_loaded.reservation.stub());
+    ASSERT_EQ(1, least_loaded.reservation.in_flight_before());
+    ASSERT_FALSE(least_loaded.created_on_contention);
+    ASSERT_TRUE(least_loaded.selected_at_connection_limit);
+}
+
+TEST_F(BrpcStubCacheTest, acquire_least_loaded_stub_prefers_lower_payload_load) {
+    config::brpc_max_connections_per_server = 2;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    auto stub0 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub0);
+    const int64_t batch_bytes = std::max<int64_t>(config::max_transmit_batched_bytes, 1);
+
+    auto first_or = cache.acquire_least_loaded_stub(stub0->endpoint(), 2 * batch_bytes);
+    ASSERT_OK(first_or.status());
+    auto first = std::move(first_or).value();
+    ASSERT_EQ(stub0.get(), first.reservation.stub());
+
+    auto second_or = cache.acquire_least_loaded_stub(stub0->endpoint(), batch_bytes);
+    ASSERT_OK(second_or.status());
+    auto second = std::move(second_or).value();
+    ASSERT_NE(stub0.get(), second.reservation.stub());
+
+    auto selected_or = cache.acquire_least_loaded_stub(stub0->endpoint());
+    ASSERT_OK(selected_or.status());
+    auto selected = std::move(selected_or).value();
+    ASSERT_EQ(second.reservation.stub(), selected.reservation.stub());
+    ASSERT_EQ(1, selected.reservation.in_flight_before());
+    ASSERT_TRUE(selected.selected_at_connection_limit);
+}
+
+TEST_F(BrpcStubCacheTest, dynamic_selection_requires_single_connection_type) {
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub);
+
+    for (const auto* connection_type : {"pooled", "short"}) {
+        config::brpc_connection_type = connection_type;
+        auto selection = cache.acquire_least_loaded_stub(stub->endpoint());
+        ASSERT_FALSE(selection.ok());
+        ASSERT_TRUE(selection.status().is_not_supported());
+    }
+}
+
+TEST_F(BrpcStubCacheTest, concurrent_acquire_does_not_exceed_limit) {
+    config::brpc_max_connections_per_server = 4;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    auto initial_stub = cache.get_stub(address);
+    ASSERT_NE(nullptr, initial_stub);
+    auto initial_reservation = initial_stub->reserve_rpc();
+
+    std::atomic<bool> succeeded = true;
+    std::mutex selections_mutex;
+    std::vector<BrpcStubCache::StubSelection> selections;
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 16; ++i) {
+        threads.emplace_back([&]() {
+            auto result = cache.acquire_least_loaded_stub(initial_stub->endpoint());
+            if (!result.ok()) {
+                succeeded = false;
+                return;
+            }
+            std::lock_guard lock(selections_mutex);
+            selections.emplace_back(std::move(result).value());
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    ASSERT_TRUE(succeeded);
+    ASSERT_EQ(16, selections.size());
+    size_t created_on_contention = 0;
+    std::unordered_set<PInternalService_RecoverableStub*> selected_stubs{initial_stub.get()};
+    for (const auto& selection : selections) {
+        created_on_contention += selection.created_on_contention;
+        selected_stubs.insert(selection.reservation.stub());
+    }
+    ASSERT_EQ(3, created_on_contention);
+    ASSERT_EQ(config::brpc_max_connections_per_server, selected_stubs.size());
+}
+
+TEST_F(BrpcStubCacheTest, get_or_create_pool_returns_stable_pool) {
+    config::brpc_max_connections_per_server = 2;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    auto stub0 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub0);
+
+    auto pool = cache.get_or_create_pool(stub0->endpoint());
+    ASSERT_NE(nullptr, pool);
+    // Repeated lookups renew the deadline and return the same pool instance rather than recreating it.
+    ASSERT_EQ(pool.get(), cache.get_or_create_pool(stub0->endpoint()).get());
+
+    // Selecting through the cached pool yields the stub already created via get_stub.
+    auto selected = pool->acquire_least_loaded(stub0->endpoint(), 0);
+    ASSERT_OK(selected.status());
+    ASSERT_EQ(stub0.get(), std::move(selected).value().reservation.stub());
+}
+
+TEST_F(BrpcStubCacheTest, cached_pool_stays_usable_after_map_expiry) {
+    config::brpc_stub_expire_s = 1;
+    config::brpc_max_connections_per_server = 2;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    auto stub = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub);
+    const auto endpoint = stub->endpoint();
+    auto pool = cache.get_or_create_pool(endpoint);
+    ASSERT_NE(nullptr, pool);
+
+    // Let the cleanup task evict the pool from the map after the expiry window.
+    sleep(2);
+
+    // The retained shared_ptr keeps the pool and its stubs alive and selectable.
+    auto selected = pool->acquire_least_loaded(endpoint, 0);
+    ASSERT_OK(selected.status());
+    ASSERT_EQ(stub.get(), std::move(selected).value().reservation.stub());
+
+    // A fresh lookup re-registers a new, distinct pool for the endpoint.
+    auto fresh = cache.get_or_create_pool(endpoint);
+    ASSERT_NE(pool.get(), fresh.get());
+}
 
 } // namespace starrocks

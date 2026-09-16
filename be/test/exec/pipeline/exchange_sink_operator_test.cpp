@@ -28,6 +28,7 @@
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/system/backend_options.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -68,6 +69,7 @@ public:
 class ExchangeSinkOperatorTest : public ::testing::Test {
 public:
     void SetUp() override {
+        _saved_brpc_connection_type = config::brpc_connection_type;
         BackendOptions::set_localhost("0.0.0.0");
 
         _exec_env = ExecEnv::GetInstance();
@@ -115,7 +117,10 @@ public:
         _factory->set_runtime_state(_runtime_state.get());
     }
 
-    void TearDown() override { _query_context->set_query_execution_services(nullptr); }
+    void TearDown() override {
+        _query_context->set_query_execution_services(nullptr);
+        config::brpc_connection_type = _saved_brpc_connection_type;
+    }
 
     // Build a minimal single-column INT chunk.
     static ChunkPtr make_chunk() {
@@ -137,6 +142,7 @@ protected:
     TPlanFragmentDestination _destination;
 
     AlwaysOverflowCodec _overflow_codec;
+    std::string _saved_brpc_connection_type;
 };
 
 // When enable_rpc_compress_overflow_skip=true and the codec reports overflow,
@@ -245,6 +251,7 @@ protected:
 // never responds, then cancel and assert the buffer reaches the finished state quickly (i.e. the
 // failure callback fired with ECANCELED) rather than blocking until the RPC timeout.
 TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
+    config::brpc_connection_type = "pooled";
     brpc::Server server;
     HangingInternalService service;
     brpc::ServerOptions options;
@@ -271,6 +278,7 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
 
     // Wait until the server has actually received the RPC, guaranteeing it is in-flight.
     ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
+    EXPECT_EQ(1, stub->num_in_flight_rpcs());
     EXPECT_FALSE(buffer->is_finished());
 
     const auto cancel_start = std::chrono::steady_clock::now();
@@ -283,6 +291,14 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     EXPECT_TRUE(buffer->is_finished());
+    EXPECT_EQ(0, stub->num_in_flight_rpcs());
+
+    RuntimeProfile profile("pooled exchange");
+    buffer->update_profile(&profile);
+    EXPECT_EQ(0, profile.get_counter("RpcBusyStubSelectionCount")->value());
+    EXPECT_EQ(0, profile.get_counter("RpcSelectedStubInflightMax")->value());
+    EXPECT_EQ(0, profile.get_counter("RpcStubCreatedOnContentionCount")->value());
+    EXPECT_EQ(0, profile.get_counter("RpcSelectionAtConnectionLimitCount")->value());
 
     const auto elapsed =
             std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - cancel_start);

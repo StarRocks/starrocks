@@ -28,6 +28,8 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
@@ -196,12 +198,20 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     RuntimeProfile::Counter* buffer_full_timer = ADD_CHILD_TIMER(profile, "BufferFullTime", "WaitTime");
     RuntimeProfile::Counter* pending_finish_timer = ADD_CHILD_TIMER(profile, "PendingFinishTime", "WaitTime");
     RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
+    auto* busy_stub_selection_count = ADD_COUNTER(profile, "RpcBusyStubSelectionCount", TUnit::UNIT);
+    auto* selected_stub_inflight_max = ADD_PEAK_COUNTER(profile, "RpcSelectedStubInflightMax", TUnit::UNIT);
+    auto* stub_created_on_contention_count = ADD_COUNTER(profile, "RpcStubCreatedOnContentionCount", TUnit::UNIT);
+    auto* selection_at_connection_limit_count = ADD_COUNTER(profile, "RpcSelectionAtConnectionLimitCount", TUnit::UNIT);
 
     COUNTER_SET(rpc_count, _rpc_count.load());
     COUNTER_SET(rpc_avg_timer, _rpc_cumulative_time / std::max(_rpc_count.load(), static_cast<int64_t>(1)));
 
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
+    COUNTER_SET(busy_stub_selection_count, _rpc_busy_stub_selection_count);
+    selected_stub_inflight_max->set(_rpc_selected_stub_inflight_max);
+    COUNTER_SET(stub_created_on_contention_count, _rpc_stub_created_on_contention_count);
+    COUNTER_SET(selection_at_connection_limit_count, _rpc_selection_at_connection_limit_count);
 
     const int64_t buffer_full_time = _full_time.load();
     const int64_t pending_finish_time = MonotonicNanos() - _pending_timestamp;
@@ -535,7 +545,54 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         res.value()->transmit_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
     } else {
         closure->cntl.request_attachment().append(request.attachment);
-        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+        if (config::brpc_connection_type != "single") {
+            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+            return Status::OK();
+        }
+
+        PInternalService_RecoverableStub::RpcInFlightGuard reservation;
+        const int64_t payload_bytes = static_cast<int64_t>(request.attachment.size() + request.params->ByteSizeLong());
+        // _send_rpc runs under SinkContext::mutex (held by _try_to_send_rpc), so the cached pool below is race-free.
+        auto& context = sink_ctx(request.fragment_instance_id.lo);
+        auto* cache = _fragment_ctx->runtime_state()->exec_env()->brpc_stub_cache();
+        const int64_t now_ns = MonotonicNanos();
+        if (cache != nullptr && (context.stub_pool == nullptr || now_ns >= context.stub_pool_next_renew_ns)) {
+            // Rare (throttled): take the process-global cache lock to (re-)resolve the pool and renew its expiry
+            // deadline so concurrent queries to the same endpoint keep sharing it. The per-chunk selection below
+            // then touches only the per-endpoint pool mutex.
+            context.stub_pool = cache->get_or_create_pool(request.brpc_stub->endpoint());
+            context.stub_pool_next_renew_ns =
+                    now_ns + static_cast<int64_t>(config::brpc_stub_expire_s) * 1000 * 1000 * 1000 / 2;
+        }
+        if (context.stub_pool != nullptr) {
+            auto selected = context.stub_pool->acquire_least_loaded(request.brpc_stub->endpoint(), payload_bytes);
+            if (selected.ok()) {
+                auto selection = std::move(selected).value();
+                reservation = std::move(selection.reservation);
+                if (selection.created_on_contention) {
+                    _rpc_stub_created_on_contention_count.fetch_add(1, std::memory_order_relaxed);
+                }
+                if (selection.selected_at_connection_limit) {
+                    _rpc_selection_at_connection_limit_count.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+        }
+        // The pool can expire after a Channel retained its stub. Keep the old dispatch behavior as a safe fallback.
+        if (reservation.stub() == nullptr) {
+            reservation = request.brpc_stub->reserve_rpc(payload_bytes);
+        }
+
+        const int64_t selected_inflight = reservation.in_flight_before();
+        if (selected_inflight > 0) {
+            _rpc_busy_stub_selection_count.fetch_add(1, std::memory_order_relaxed);
+        }
+        int64_t current_max = _rpc_selected_stub_inflight_max.load(std::memory_order_relaxed);
+        while (selected_inflight > current_max && !_rpc_selected_stub_inflight_max.compare_exchange_weak(
+                                                          current_max, selected_inflight, std::memory_order_relaxed)) {
+        }
+        auto* selected_stub = reservation.stub();
+        selected_stub->transmit_chunk(std::move(reservation), &closure->cntl, request.params.get(), &closure->result,
+                                      closure);
     }
     return Status::OK();
 }

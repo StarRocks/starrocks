@@ -117,12 +117,42 @@ private:
 
 class BrpcStubCache {
 public:
+    struct StubSelection {
+        PInternalService_RecoverableStub::RpcInFlightGuard reservation;
+        bool created_on_contention = false;
+        bool selected_at_connection_limit = false;
+    };
+
+    // StubPool is used to store all stubs with a single endpoint, and the client in the same BE process maintains up to
+    // brpc_max_connections_per_server single connections with each server.
+    // These connections will be created during the first few accesses and will be reused later.
+    struct StubPool {
+        StubPool();
+        ~StubPool();
+        std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
+        StatusOr<StubSelection> acquire_least_loaded(const butil::EndPoint& endpoint, int64_t payload_bytes);
+
+        std::shared_ptr<PInternalService_RecoverableStub> _create_stub_locked(const butil::EndPoint& endpoint);
+
+        std::mutex _mutex;
+        std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
+        int64_t _idx = -1;
+        int64_t _selection_idx = -1;
+        std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
+    };
+
     explicit BrpcStubCache(BthreadTimer* timer, MetricRegistry* metrics = nullptr);
     ~BrpcStubCache();
 
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port);
+    StatusOr<StubSelection> acquire_least_loaded_stub(const butil::EndPoint& endpoint, int64_t payload_bytes = 0);
+
+    // Returns the StubPool for an endpoint, creating and scheduling its cleanup task if absent, and renews its expiry
+    // deadline. Takes _lock internally. Callers on the hot path cache the returned pool and call
+    // pool->acquire_least_loaded(...) directly, avoiding the global _lock on every RPC send.
+    std::shared_ptr<StubPool> get_or_create_pool(const butil::EndPoint& endpoint);
 
 private:
     friend class EndpointCleanupTask<BrpcStubCache>;
@@ -143,16 +173,6 @@ private:
                                      std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task);
 
     struct Metrics;
-    struct StubPool {
-        StubPool();
-        ~StubPool();
-        std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
-
-        std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
-        int64_t _idx{-1};
-        std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
-    };
-
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<StubPool>> _stub_map;
     BthreadTimer* _timer;

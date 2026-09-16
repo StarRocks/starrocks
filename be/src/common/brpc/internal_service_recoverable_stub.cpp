@@ -20,6 +20,43 @@
 
 namespace starrocks {
 
+namespace {
+
+class InternalServiceRecoverableClosure : public google::protobuf::Closure {
+public:
+    InternalServiceRecoverableClosure(std::shared_ptr<PInternalService_RecoverableStub> stub,
+                                      google::protobuf::RpcController* controller, google::protobuf::Closure* done)
+            : InternalServiceRecoverableClosure(stub->reserve_rpc(), controller, done) {}
+
+    InternalServiceRecoverableClosure(PInternalService_RecoverableStub::RpcInFlightGuard reservation,
+                                      google::protobuf::RpcController* controller, google::protobuf::Closure* done)
+            : _reservation(std::move(reservation)),
+              _controller(controller),
+              _done(done),
+              _next_connection_group(_reservation.stub()->connection_group() + 1) {}
+
+    void Run() override {
+        auto* cntl = static_cast<brpc::Controller*>(_controller);
+        if (cntl->Failed() && cntl->ErrorCode() == EHOSTDOWN) {
+            auto st = _reservation.stub()->reset_channel(_next_connection_group);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to reset channel: " << st.to_string();
+            }
+        }
+        _reservation.reset();
+        _done->Run();
+        delete this;
+    }
+
+private:
+    PInternalService_RecoverableStub::RpcInFlightGuard _reservation;
+    google::protobuf::RpcController* _controller;
+    google::protobuf::Closure* _done;
+    int64_t _next_connection_group;
+};
+
+} // namespace
+
 // RecoverableChannel intercepts every RPC call and wraps the user-supplied done
 // closure with a RecoverableClosure so that channel errors trigger an automatic
 // channel reset on the owning stub.
@@ -32,8 +69,7 @@ public:
                     google::protobuf::Closure* done) override {
         google::protobuf::Closure* closure = done;
         if (done != nullptr) {
-            closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
-                                                                                   controller, done);
+            closure = new InternalServiceRecoverableClosure(_owner->shared_from_this(), controller, done);
         }
         _owner->stub()->CallMethod(method, controller, request, response, closure);
     }
@@ -50,6 +86,51 @@ PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::
           _protocol(std::move(protocol)) {}
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
+
+PInternalService_RecoverableStub::RpcInFlightGuard::RpcInFlightGuard(
+        std::shared_ptr<PInternalService_RecoverableStub> stub, int64_t payload_bytes)
+        : _stub(std::move(stub)),
+          _in_flight_before(_stub->_num_in_flight_rpcs.fetch_add(1)),
+          _payload_bytes(payload_bytes) {
+    _stub->_in_flight_payload_bytes.fetch_add(_payload_bytes);
+}
+
+PInternalService_RecoverableStub::RpcInFlightGuard::~RpcInFlightGuard() {
+    reset();
+}
+
+PInternalService_RecoverableStub::RpcInFlightGuard::RpcInFlightGuard(RpcInFlightGuard&& other) noexcept
+        : _stub(std::move(other._stub)),
+          _in_flight_before(other._in_flight_before),
+          _payload_bytes(other._payload_bytes) {}
+
+PInternalService_RecoverableStub::RpcInFlightGuard& PInternalService_RecoverableStub::RpcInFlightGuard::operator=(
+        RpcInFlightGuard&& other) noexcept {
+    if (this != &other) {
+        reset();
+        _stub = std::move(other._stub);
+        _in_flight_before = other._in_flight_before;
+        _payload_bytes = other._payload_bytes;
+    }
+    return *this;
+}
+
+void PInternalService_RecoverableStub::RpcInFlightGuard::reset() {
+    if (_stub != nullptr) {
+        _stub->_num_in_flight_rpcs.fetch_sub(1);
+        _stub->_in_flight_payload_bytes.fetch_sub(_payload_bytes);
+        _stub.reset();
+    }
+}
+
+void PInternalService_RecoverableStub::transmit_chunk(RpcInFlightGuard reservation,
+                                                      google::protobuf::RpcController* controller,
+                                                      const PTransmitChunkParams* request,
+                                                      PTransmitChunkResult* response, google::protobuf::Closure* done) {
+    DCHECK_EQ(reservation.stub(), this);
+    auto* closure = new InternalServiceRecoverableClosure(std::move(reservation), controller, done);
+    stub()->transmit_chunk(controller, request, response, closure);
+}
 
 Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_group) {
     if (next_connection_group == 0) {
