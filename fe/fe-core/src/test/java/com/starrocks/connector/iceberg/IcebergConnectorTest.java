@@ -55,4 +55,15 @@ public class IcebergConnectorTest {
         Assertions.assertSame(properties, result);
         Assertions.assertFalse(result.containsKey(S3FileIOProperties.SSE_TYPE));
     }
+
+    @Test
+    public void testWithIcebergSsePropertiesRejectsMismatchedMd5() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AWS_S3_SSE_TYPE, "sse-c");
+        properties.put(CloudConfigurationConstants.AWS_S3_SSE_KEY, VALID_SSE_C_KEY);
+        properties.put(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5, "wrong-md5");
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> IcebergConnector.withIcebergSseProperties(properties));
+    }
 }

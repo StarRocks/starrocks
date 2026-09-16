@@ -338,6 +338,81 @@ public class AwsCloudConfigurationTest {
     }
 
     @Test
+    public void testSseCSuppliedMatchingMd5Accepted() {
+        String correctMd5 = AwsSseCUtil.computeMd5(Base64.getDecoder().decode(VALID_SSE_C_KEY));
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.sse.type", "sse-c");
+        properties.put("aws.s3.sse.customer_key", VALID_SSE_C_KEY);
+        properties.put("aws.s3.sse.customer_key_md5", correctMd5);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        Assertions.assertEquals(correctMd5,
+                tCloudConfiguration.getCloud_properties().get("aws.s3.sse.customer_key_md5"));
+    }
+
+    @Test
+    public void testSseCSuppliedMismatchedMd5Rejected() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.sse.type", "sse-c");
+        properties.put("aws.s3.sse.customer_key", VALID_SSE_C_KEY);
+        properties.put("aws.s3.sse.customer_key_md5", "not-the-right-md5");
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
+    }
+
+    @Test
+    public void testCopySseCFromReattachesToVendedConfiguration() {
+        // Catalog configuration carries SSE-C.
+        Map<String, String> catalogProps = new HashMap<>();
+        catalogProps.put("aws.s3.access_key", "ak");
+        catalogProps.put("aws.s3.secret_key", "sk");
+        catalogProps.put("aws.s3.sse.type", "sse-c");
+        catalogProps.put("aws.s3.sse.customer_key", VALID_SSE_C_KEY);
+        AwsCloudConfiguration catalog = (AwsCloudConfiguration)
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(catalogProps);
+        Assertions.assertTrue(catalog.isEnableSseC());
+
+        // Vended configuration rebuilt from only the session credentials drops SSE-C.
+        Map<String, String> vendedProps = new HashMap<>();
+        vendedProps.put("aws.s3.access_key", "session-ak");
+        vendedProps.put("aws.s3.secret_key", "session-sk");
+        AwsCloudConfiguration vended = (AwsCloudConfiguration)
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(vendedProps);
+        Assertions.assertFalse(vended.isEnableSseC());
+
+        vended.copySseCFrom(catalog);
+        Assertions.assertTrue(vended.isEnableSseC());
+
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        vended.toThrift(tCloudConfiguration);
+        Map<String, String> thriftProperties = tCloudConfiguration.getCloud_properties();
+        Assertions.assertEquals("sse-c", thriftProperties.get("aws.s3.sse.type"));
+        Assertions.assertEquals(VALID_SSE_C_KEY, thriftProperties.get("aws.s3.sse.customer_key"));
+        String expectedMd5 = AwsSseCUtil.computeMd5(Base64.getDecoder().decode(VALID_SSE_C_KEY));
+        Assertions.assertEquals(expectedMd5, thriftProperties.get("aws.s3.sse.customer_key_md5"));
+    }
+
+    @Test
+    public void testCopySseCFromNoopWhenSourceHasNone() {
+        Map<String, String> props = new HashMap<>();
+        props.put("aws.s3.access_key", "ak");
+        props.put("aws.s3.secret_key", "sk");
+        AwsCloudConfiguration target = (AwsCloudConfiguration)
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(props);
+        AwsCloudConfiguration source = (AwsCloudConfiguration)
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>(props));
+
+        target.copySseCFrom(source);
+        Assertions.assertFalse(target.isEnableSseC());
+    }
+
+    @Test
     public void testEnablePartitionedPrefixConfiguration() {
         Map<String, String> properties = new HashMap<>();
         properties.put("aws.s3.access_key", "ak");

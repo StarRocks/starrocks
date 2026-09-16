@@ -77,6 +77,22 @@ public class AwsCloudConfiguration extends CloudConfiguration {
         return this.awsCloudCredential;
     }
 
+    public boolean isEnableSseC() {
+        return this.enableSseC;
+    }
+
+    // Re-attach SSE-C material from another AWS configuration when this one has none. Used for the vended
+    // credentials path, where the configuration is rebuilt from only the session credentials/region/endpoint
+    // and would otherwise drop the catalog's SSE-C key, so BE data reads would stop sending the SSE-C headers.
+    public void copySseCFrom(AwsCloudConfiguration source) {
+        if (this.enableSseC || source == null || !source.enableSseC) {
+            return;
+        }
+        this.enableSseC = true;
+        this.sseCKey = source.sseCKey;
+        this.sseCKeyMd5 = source.sseCKeyMd5;
+    }
+
     @Override
     public void applyToConfiguration(Configuration configuration) {
         super.applyToConfiguration(configuration);
@@ -140,14 +156,14 @@ public class AwsCloudConfiguration extends CloudConfiguration {
             enablePathStyleAccess = Boolean.parseBoolean(
                 properties.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS));
         }
-        // Validate SSE-C material eagerly so a bad key fails catalog creation with a clear message.
-        // validateAndGetKeyMd5 returns the caller-supplied MD5 or a freshly computed one, and null when
+        // Validate SSE-C material eagerly so a bad key (or a supplied MD5 that does not match the key) fails
+        // catalog creation with a clear message. validateAndGetKeyMd5 returns the validated MD5, and null when
         // SSE-C is not requested.
-        String computedMd5 = AwsSseCUtil.validateAndGetKeyMd5(properties);
+        String keyMd5 = AwsSseCUtil.validateAndGetKeyMd5(properties);
         enableSseC = AwsSseCUtil.isSseCEnabled(properties);
         if (enableSseC) {
             sseCKey = properties.get(CloudConfigurationConstants.AWS_S3_SSE_KEY).trim();
-            sseCKeyMd5 = properties.getOrDefault(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5, computedMd5);
+            sseCKeyMd5 = keyMd5;
         }
     }
 
