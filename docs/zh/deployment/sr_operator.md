@@ -120,16 +120,18 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 >
 > 如果部分 Pod 长时间仍无法启动，您可以通过 `kubectl logs -n starrocks <pod_name>` 查看日志信息或者通过 `kubectl -n starrocks describe pod <pod_name>` 查看 Event 信息，以定位问题。
 
-### 收集 CN Core Dump
+### 配置 BE 和 CN Core Dump 收集与重启行为
 
-CN 容器入口脚本可以监控、压缩并上传 Core Dump。请在 CN 容器中配置以下环境变量：
+BE 和 CN 容器入口脚本可以监控、压缩并上传 Core Dump，也支持为了调试而重启组件。请在 BE 或 CN 容器中配置以下环境变量：
 
 | 变量 | 可选值和默认值 | 说明 |
 | ---- | -------------- | ---- |
-| `COREDUMP_ENABLED` | 设置为 `true` 时启用。其他值（包括未设置）均表示禁用。 | 启动 Core Dump 上传进程。当 CN 因 `SIGABRT`（退出状态码 `134`）或 `SIGSEGV`（退出状态码 `139`）退出时，入口脚本会重启 CN，使上传进程继续运行。 |
-| `CN_RESTART_WAIT_SECONDS` | 正整数。默认值：`5`。 | CN 因上述信号崩溃后，等待多少秒再重启。仅在 `COREDUMP_ENABLED=true` 时生效。 |
+| `COREDUMP_ENABLED` | 设置为 `true` 时启用。其他值（包括未设置）均表示禁用。 | 启动 Core Dump 上传进程。当组件因 `SIGABRT`（退出状态码 `134`）或 `SIGSEGV`（退出状态码 `139`）退出时，入口脚本会重启组件，使上传进程继续运行。 |
+| `DEBUG_MODE` | 设置为 `true` 时启用。其他值（包括未设置）均表示禁用调试重启行为。 | 组件每次退出后都会重启。此行为仅用于调试。 |
+| `BE_RESTART_WAIT_SECONDS` | 正整数。默认值：`5`。 | BE 重启前等待的秒数。在 `COREDUMP_ENABLED=true` 或 `DEBUG_MODE=true` 时使用。 |
+| `CN_RESTART_WAIT_SECONDS` | 正整数。默认值：`5`。 | CN 重启前等待的秒数。在 `COREDUMP_ENABLED=true` 或 `DEBUG_MODE=true` 时使用。 |
 
-Core Dump 收集要求容器镜像中包含 `inotifywait`、`pigz` 和 `rclone`。标准非精简版 Ubuntu BE/CN 镜像包含这些命令；精简版 Ubuntu 镜像和 UBI 镜像不包含。如果启用了 Core Dump 收集但缺少必需命令，CN 将拒绝启动，并在容器日志中报告缺少的命令。
+Core Dump 收集要求容器镜像中包含 `inotifywait`、`pigz` 和 `rclone`。标准非精简版 Ubuntu BE/CN 镜像包含这些命令；精简版 Ubuntu 镜像和 UBI 镜像不包含。如果启用了 Core Dump 收集但缺少必需命令，BE 或 CN 将拒绝启动，并在容器日志中报告缺少的命令。
 
 ## 访问 StarRocks 集群
 

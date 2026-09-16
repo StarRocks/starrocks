@@ -2,6 +2,7 @@
 
 # Notes:
 # COREDUMP_ENABLED=true enables coredump collection and restarts the CN process after a crash.
+# DEBUG_MODE=true restarts the CN process after every exit.
 # CN_RESTART_WAIT_SECONDS sets the restart delay in seconds and defaults to 5.
 
 HOST_TYPE=${HOST_TYPE:-"IP"}
@@ -22,25 +23,23 @@ log_stderr()
     echo "[`date`] $@" >&2
 }
 
-check_coredump_configuration()
+check_restart_configuration()
 {
-    if [[ "$COREDUMP_ENABLED" != "true" ]]; then
-        return 0
-    fi
+    if [[ "$COREDUMP_ENABLED" == "true" ]]; then
+        local missing_dependencies=()
+        for dependency in inotifywait pigz rclone; do
+            if ! command -v "$dependency" >/dev/null 2>&1; then
+                missing_dependencies+=("$dependency")
+            fi
+        done
 
-    local missing_dependencies=()
-    for dependency in inotifywait pigz rclone; do
-        if ! command -v "$dependency" >/dev/null 2>&1; then
-            missing_dependencies+=("$dependency")
+        if [[ ${#missing_dependencies[@]} -ne 0 ]]; then
+            log_stderr "COREDUMP_ENABLED=true requires these commands: ${missing_dependencies[*]}"
+            return 1
         fi
-    done
-
-    if [[ ${#missing_dependencies[@]} -ne 0 ]]; then
-        log_stderr "COREDUMP_ENABLED=true requires these commands: ${missing_dependencies[*]}"
-        return 1
     fi
 
-    if [[ ! "$CN_RESTART_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    if [[ ("$COREDUMP_ENABLED" == "true" || "$DEBUG_MODE" == "true") && ! "$CN_RESTART_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
         log_stderr "CN_RESTART_WAIT_SECONDS must be a positive integer, got: $CN_RESTART_WAIT_SECONDS"
         return 1
     fi
@@ -181,7 +180,7 @@ if [[ "x$svc_name" == "x" ]] ; then
 fi
 
 CN_RESTART_WAIT_SECONDS=${CN_RESTART_WAIT_SECONDS:-5}
-check_coredump_configuration || exit $?
+check_restart_configuration || exit $?
 
 update_conf_from_configmap
 collect_env_info
@@ -205,19 +204,39 @@ while true; do
     $STARROCKS_HOME/bin/start_cn.sh $addition_args
     ret=$?
 
+    if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
+        nol=50
+        log_stderr "Last $nol lines of cn.INFO ..."
+        tail -n $nol $STARROCKS_HOME/log/cn.INFO
+        log_stderr "Last $nol lines of cn.out ..."
+        tail -n $nol $STARROCKS_HOME/log/cn.out
+    fi
+
+    # Repeat launching the CN process in the two scenarios:
+    #  a. DEBUG_MODE is true;
+    #  b. coredump is enabled, and the error code is SIGABRT(6) or SIGSEGV(11);
+    # otherwise the CN process should still exit.
+    should_exit=true
+    if [[ "$DEBUG_MODE" == "true" ]]; then
+        should_exit=false
+    fi
+
     if [[ "$COREDUMP_ENABLED" == "true" && ($ret -eq 134 || $ret -eq 139) ]]; then
-        log_stderr "starrocks_be CN process exited with status: $ret"
-        log_stderr "Restarting the CN process after $CN_RESTART_WAIT_SECONDS seconds ..."
-        sleep "$CN_RESTART_WAIT_SECONDS"
-        continue
+        should_exit=false
     fi
 
-    if [[ $ret -eq 0 || $ret -eq 137 ]] ; then
-        # The reason why we need to sleep here is to avoid the pod being killed by k8s before the preStop hook is exited.
-        # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
-        sleep 5
+    if [[ "$should_exit" == "true" ]]; then
+        if [[ $ret -eq 0 || $ret -eq 137 ]] ; then
+            # The reason why we need to sleep here is to avoid the pod being killed by k8s before the preStop hook is exited.
+            # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
+            sleep 5
+        fi
+
+        # Keep the same return code from start_cn.sh.
+        exit $ret
     fi
 
-    # Keep the same return code from start_cn.sh.
-    exit $ret
+    log_stderr "starrocks CN process exited with status: $ret"
+    log_stderr "Restarting the CN process after $CN_RESTART_WAIT_SECONDS seconds ..."
+    sleep "$CN_RESTART_WAIT_SECONDS"
 done
