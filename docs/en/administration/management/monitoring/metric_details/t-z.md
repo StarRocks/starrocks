@@ -119,6 +119,18 @@ description: "Alphabetical t - z"
 - Type: Instantaneous
 - Description: Milliseconds since the FE Thrift accept loop last returned a connection. A wedged acceptor makes this climb, but so does an FE with no Thrift traffic, so read it together with the connection arrival rate rather than alerting on it alone. `0` also covers the case where no acceptor is running at all, before the Thrift server starts and after it stops, so a threshold alert on this metric cannot tell a dead Thrift service from a healthy one.
 
+## `thrift_server_expired_connections_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of connections that the FE Thrift server closed without serving because they had waited in the pending queue longer than `thrift_server_queue_timeout_ms`. That check is disabled by default, so this counter stays at 0 until an operator arms the timeout. A rising value means the FE was working through a backlog of connections whose callers had almost certainly given up already; read it together with `thrift_server_queue_wait_ms` to see how far behind the queue had fallen.
+
+## `thrift_server_queue_wait_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Quantiles of how long connections waited in the FE Thrift server pending queue before a worker thread picked them up. Sampled for every dequeued connection, including the ones then dropped as expired, so the distribution is not truncated at `thrift_server_queue_timeout_ms`. This is the leading indicator of Thrift saturation: it climbs while the worker pool is still keeping up, well before `thrift_server_rejected_connections_total` starts to move.
+
 ## `thrift_server_rejected_connections_total`
 
 - Unit: Count
