@@ -383,6 +383,7 @@ public abstract class ScalarOperator implements Cloneable {
         return false;
     }
 
+<<<<<<< HEAD
     public static void updateLiteralPredicates(ScalarOperator predicate, List<Expr> exprs) {
         if (predicate instanceof CompoundPredicateOperator) {
             updateCompoundLiteralPredicate((CompoundPredicateOperator) predicate, exprs);
@@ -404,5 +405,9 @@ public abstract class ScalarOperator implements Cloneable {
         if (constantOperator.isPresent()) {
             predicate.setChild(1, constantOperator.get());
         }
+=======
+    public Stream<ScalarOperator> asStream() {
+        return Stream.concat(Stream.of(this), this.getChildren().stream().flatMap(ScalarOperator::asStream));
+>>>>>>> effa880 ([BugFix] Bind prepared parameters by column instead of AND-tree position (#78979))
     }
 }
