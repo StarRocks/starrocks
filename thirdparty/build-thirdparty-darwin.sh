@@ -1656,8 +1656,31 @@ build_simdjson() {
     sync_lib64_links
 }
 
+snappy_version() {
+    local prefix="$1"
+    local header
+
+    for header in "${prefix}/include/snappy/snappy-stubs-public.h" "${prefix}/include/snappy-stubs-public.h"; do
+        [[ -f "${header}" ]] || continue
+        local major minor patch
+        major="$(sed -n -E 's/^#define[[:space:]]+SNAPPY_MAJOR[[:space:]]+([0-9]+).*/\1/p' "${header}" | head -n 1)"
+        minor="$(sed -n -E 's/^#define[[:space:]]+SNAPPY_MINOR[[:space:]]+([0-9]+).*/\1/p' "${header}" | head -n 1)"
+        patch="$(sed -n -E 's/^#define[[:space:]]+SNAPPY_PATCHLEVEL[[:space:]]+([0-9]+).*/\1/p' "${header}" | head -n 1)"
+        if [[ -n "${major}" && -n "${minor}" && -n "${patch}" ]]; then
+            echo "${major}.${minor}.${patch}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 build_snappy() {
-    if [[ -f "${TP_INSTALL_DIR}/lib/libsnappy.a" && -f "${TP_INCLUDE_DIR}/snappy.h" ]]; then
+    local expected_version="${SNAPPY_SOURCE#snappy-}"
+    local installed_version
+    installed_version="$(snappy_version "${TP_INSTALL_DIR}" || true)"
+
+    if [[ -f "${TP_INSTALL_DIR}/lib/libsnappy.a" && -f "${TP_INCLUDE_DIR}/snappy.h" && "${installed_version}" == "${expected_version}" ]]; then
         return 0
     fi
 
@@ -1667,12 +1690,19 @@ build_snappy() {
     mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
     rm -rf CMakeCache.txt CMakeFiles/
+    local machine_type
+    machine_type="$(uname -m)"
+    local snappy_cxx_flags="${CXXFLAGS:-}"
+    if [[ "${machine_type}" == "arm64" ]]; then
+        snappy_cxx_flags="${snappy_cxx_flags} -march=armv8-a+crc"
+    fi
     "${CMAKE_CMD}" .. \
         -G "${CMAKE_GENERATOR}" \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_INCLUDEDIR=include/snappy \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_FLAGS="${snappy_cxx_flags}" \
         -DSNAPPY_BUILD_TESTS=OFF \
         -DSNAPPY_BUILD_BENCHMARKS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
