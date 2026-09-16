@@ -76,6 +76,12 @@ Status SchemaScanContext::_prepare_params(RuntimeState* state, const std::vector
     if (_tnode.schema_scan_node.__isset.job_id) {
         _param->job_id = _tnode.schema_scan_node.job_id;
     }
+    if (_tnode.schema_scan_node.__isset.running_txn_db) {
+        _param->running_txn_db = _obj_pool.add(new std::string(_tnode.schema_scan_node.running_txn_db));
+    }
+    if (_tnode.schema_scan_node.__isset.running_txn_label) {
+        _param->running_txn_label = _obj_pool.add(new std::string(_tnode.schema_scan_node.running_txn_label));
+    }
     if (_tnode.schema_scan_node.__isset.label) {
         _param->label = _obj_pool.add(new std::string(_tnode.schema_scan_node.label));
     }

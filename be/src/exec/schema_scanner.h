@@ -57,6 +57,10 @@ struct SchemaScannerParam {
     bool without_db_table{false};
 
     const std::string* label = nullptr;
+    // running_transactions filters, kept separate from the shared db/label above so those keep one
+    // meaning regardless of which scanner reads them.
+    const std::string* running_txn_db{nullptr};
+    const std::string* running_txn_label{nullptr};
     int64_t job_id = -1;
 
     int64_t table_id{-1};

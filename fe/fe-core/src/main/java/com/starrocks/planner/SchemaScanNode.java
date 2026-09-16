@@ -82,6 +82,8 @@ public class SchemaScanNode extends ScanNode {
     private int frontendPort;
     private Long jobId;
     private String label;
+    private String runningTxnDb;
+    private String runningTxnLabel;
 
     // only used for BE related schema scans
     private Long beId = null;
@@ -128,6 +130,14 @@ public class SchemaScanNode extends ScanNode {
 
     public void setFrontendPort(int frontendPort) {
         this.frontendPort = frontendPort;
+    }
+
+    public void setRunningTxnDb(String runningTxnDb) {
+        this.runningTxnDb = runningTxnDb;
+    }
+
+    public void setRunningTxnLabel(String runningTxnLabel) {
+        this.runningTxnLabel = runningTxnLabel;
     }
 
     public void setLabel(String label) {
@@ -235,6 +245,12 @@ public class SchemaScanNode extends ScanNode {
 
         if (label != null) {
             msg.schema_scan_node.setLabel(label);
+        }
+        if (runningTxnDb != null) {
+            msg.schema_scan_node.setRunning_txn_db(runningTxnDb);
+        }
+        if (runningTxnLabel != null) {
+            msg.schema_scan_node.setRunning_txn_label(runningTxnLabel);
         }
         if (txnId != null) {
             msg.schema_scan_node.setTxn_id(txnId);
