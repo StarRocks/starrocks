@@ -35,8 +35,10 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnLogApplier.class);
@@ -71,6 +73,17 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+        applyVisibleLog(txnState, commitInfo, db, null);
+    }
+
+    /**
+     * @param deferredPublishes when non-null, the mutation a reader could pair inconsistently - the
+     *                          visible version - is not applied here but recorded per physical partition
+     *                          id, for {@link #applyVisibleLogBatch} to apply once the whole batch has
+     *                          been applied.
+     */
+    private void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db,
+                                 @Nullable Map<Long, DeferredPublish> deferredPublishes) {
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
@@ -88,13 +101,25 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
 
+            DeferredPublish pending = deferredPublishes == null ? null
+                    : deferredPublishes.computeIfAbsent(partitionId, k -> new DeferredPublish());
+
+            // Within a batch the earlier transactions have not published their version yet, so the
+            // continuity check must compare against the version this partition is going to end up on.
+            long currentVisibleVersion = pending != null && pending.finalCommitInfo != null
+                    ? pending.finalCommitInfo.getVersion() : partition.getVisibleVersion();
+
             // The version of a replication transaction may not continuously
             Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
                     || txnState.isVersionOverwrite()
                     || partitionCommitInfo.isDoubleWrite()
-                    || version == partition.getVisibleVersion() + 1);
+                    || version == currentVisibleVersion + 1);
 
-            partition.updateVisibleVersion(version, versionTime);
+            if (pending != null) {
+                pending.finalCommitInfo = partitionCommitInfo;
+            } else {
+                partition.updateVisibleVersion(version, versionTime);
+            }
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 partition.setDataVersion(partitionCommitInfo.getDataVersion());
                 if (partitionCommitInfo.getVersionEpoch() > 0) {
@@ -203,14 +228,36 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         tabletStats.clear();
     }
 
+    /** Partition state a batch publish holds back until the whole batch has been applied. */
+    private static class DeferredPublish {
+        // Commit info of the last transaction in the batch that touched this partition.
+        private PartitionCommitInfo finalCommitInfo;
+    }
+
+    /**
+     * A batch publish materializes a tablet metadata object for the batch's FINAL version only; the
+     * versions in between never get one. Advancing the partition's visible version transaction by
+     * transaction would briefly expose such an intermediate version, and a query that captured it -
+     * planning reads the shared mutable PhysicalPartition after releasing the db lock when
+     * {@code cbo_use_lock_db} is off - would then ask the BE for an object that will never exist and
+     * fail the query. So collect each partition's target version while applying the batch and advance
+     * the partition straight from its pre-batch version to the batch's final version.
+     */
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+        Map<Long, DeferredPublish> deferredPublishes = new LinkedHashMap<>();
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
             TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(table.getId());
             if (tableCommitInfo == null) {
                 // in a multi-table batch this txn does not write this applier's table
                 continue;
             }
-            applyVisibleLog(txnState, tableCommitInfo, db);
+            applyVisibleLog(txnState, tableCommitInfo, db, deferredPublishes);
+        }
+        for (Map.Entry<Long, DeferredPublish> entry : deferredPublishes.entrySet()) {
+            // Resolved under the same table write lock that resolved it above, so it is still present.
+            PhysicalPartition partition = table.getPhysicalPartition(entry.getKey());
+            PartitionCommitInfo partitionCommitInfo = entry.getValue().finalCommitInfo;
+            partition.updateVisibleVersion(partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionTime());
         }
     }
 }
