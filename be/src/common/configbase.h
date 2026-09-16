@@ -160,7 +160,9 @@ std::vector<ConfigFallback> take_config_fallbacks();
 // records the fallback. Returns false if there is no such config, or if its declared default cannot
 // be parsed either. Keeping the config variable in step matters because list_configs() publishes it
 // through information_schema.be_configs and /varz.
-bool fall_back_to_default(const std::string& field, const std::string& rejected_value,
+// rejected_value is taken by value because callers naturally pass the config variable itself, which
+// this overwrites.
+bool fall_back_to_default(const std::string& field, std::string rejected_value,
                           const std::string& allowed_values);
 
 } // namespace config

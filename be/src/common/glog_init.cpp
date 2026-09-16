@@ -234,8 +234,8 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     // than failing: unusable logging is a worse outcome than logging that rolls differently than
     // asked, and the fallback is reported once logging is up.
     if (!apply_roll_mode(config::sys_log_roll_mode)) {
-        std::string rejected = config::sys_log_roll_mode;
-        if (!config::fall_back_to_default("sys_log_roll_mode", rejected, "TIME-DAY,TIME-HOUR,SIZE-MB-nnn") ||
+        if (!config::fall_back_to_default("sys_log_roll_mode", config::sys_log_roll_mode,
+                                          "TIME-DAY,TIME-HOUR,SIZE-MB-nnn") ||
             !apply_roll_mode(config::sys_log_roll_mode)) {
             std::cerr << "sys_log_roll_mode needs to be TIME-DAY, TIME-HOUR, SIZE-MB-nnn" << std::endl;
             return false;

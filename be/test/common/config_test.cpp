@@ -385,6 +385,7 @@ TEST_F(ConfigTest, test_fall_back_to_default) {
     EXPECT_TRUE(config::init(ss));
     EXPECT_EQ("SIZE-MB-abc", cfg_roll_mode);
 
+    // Deliberately passing the config variable itself, which fall_back_to_default overwrites.
     ASSERT_TRUE(config::fall_back_to_default("cfg_roll_mode", cfg_roll_mode, "SIZE-MB-nnn"));
     // The config variable now holds what is actually in use, because list_configs() publishes it.
     EXPECT_EQ("SIZE-MB-1024", cfg_roll_mode);

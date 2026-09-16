@@ -309,16 +309,18 @@ void TEST_clear_configs() {
     (void)take_config_fallbacks();
 }
 
-bool fall_back_to_default(const std::string& field, const std::string& rejected_value,
+bool fall_back_to_default(const std::string& field, std::string rejected_value,
                           const std::string& allowed_values) {
     auto it = Field::fields().find(field);
     if (it == Field::fields().end()) {
         return false;
     }
+    // rejected_value is already a copy, so set_value overwriting the config variable cannot change
+    // what gets recorded below.
     if (!it->second->set_value(it->second->defval(), /*allow_fallback=*/false)) {
         return false;
     }
-    record_config_fallback({field, rejected_value, it->second->value(), allowed_values});
+    record_config_fallback({field, std::move(rejected_value), it->second->value(), allowed_values});
     return true;
 }
 
