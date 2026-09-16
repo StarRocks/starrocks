@@ -71,6 +71,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "util/bthreads/executor.h"
+#include "util/logging.h"
 #include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
@@ -415,6 +416,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+
+        // Without this, changing sys_log_level at runtime reports success and changes nothing.
+        _config_callback.emplace("sys_log_level", []() -> Status { return update_logging(); });
 
 #ifdef USE_STAROS
 #define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                           \

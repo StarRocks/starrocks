@@ -20,6 +20,7 @@
 #include <string>
 
 #include "common/logging.h"
+#include "common/status.h"
 #include "gutil/walltime.h"
 
 namespace starrocks {
@@ -35,6 +36,8 @@ void shutdown_logging();
 // Format a timestamp in the same format as used by GLog.
 std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch);
 
-void update_logging();
+// Applies the current sys_log_level to the running process. Returns an error if it names no known
+// severity.
+Status update_logging();
 
 } // namespace starrocks
