@@ -18,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.PrepareStmtContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -406,6 +407,46 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                     // the behaviour under review: the plan handed back bounds the result to the session limit
                     () -> Assertions.assertEquals(1L, physicalLimit(second)),
                     () -> Assertions.assertEquals(physicalLimit(fresh), physicalLimit(second)));
+        } finally {
+            connectContext.getSessionVariable().setSqlSelectLimit(oldLimit);
+        }
+    }
+
+    @Test
+    public void testSelectLimitClearedAfterExecuteLeavesNoStaleLimit() throws Exception {
+        long oldLimit = connectContext.getSessionVariable().getSqlSelectLimit();
+        String sql = "select v from pq_dup3 where k1 = ? and k2 = ? and k3 = ?";
+        try {
+            PreparedQuery limitFirst = prepare(sql);
+            connectContext.getSessionVariable().setSqlSelectLimit(10);
+            ExecPlan underLimit = execute(limitFirst, List.of(intLit(1), intLit(2), intLit(3)));
+
+            PreparedQuery cachedFirst = prepare(sql);
+            connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+            execute(cachedFirst, List.of(intLit(1), intLit(2), intLit(3)));
+            connectContext.getSessionVariable().setSqlSelectLimit(10);
+            ExecPlan afterGate = execute(cachedFirst, List.of(intLit(2), intLit(3), intLit(4)));
+
+            // the limit lands above the filter, so the shape check keeps a limit-bearing plan out of the cache
+            Assertions.assertAll(
+                    () -> Assertions.assertEquals(10L, physicalLimit(underLimit)),
+                    () -> Assertions.assertFalse(limitFirst.context().isCached()),
+                    () -> Assertions.assertNull(limitFirst.context().getExecPlan()),
+                    () -> Assertions.assertEquals(10L, physicalLimit(afterGate)),
+                    () -> Assertions.assertFalse(cachedFirst.context().isCached()),
+                    () -> Assertions.assertNull(cachedFirst.context().getExecPlan()));
+
+            connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+            ExecPlan clearedLimitFirst = execute(limitFirst, List.of(intLit(4), intLit(5), intLit(6)));
+            ExecPlan clearedCachedFirst = execute(cachedFirst, List.of(intLit(4), intLit(5), intLit(6)));
+            ExecPlan fresh = execute(prepare(sql), List.of(intLit(4), intLit(5), intLit(6)));
+
+            Assertions.assertAll(
+                    () -> Assertions.assertEquals(Operator.DEFAULT_LIMIT, physicalLimit(fresh)),
+                    () -> Assertions.assertEquals(Operator.DEFAULT_LIMIT, physicalLimit(clearedLimitFirst)),
+                    () -> Assertions.assertEquals(Operator.DEFAULT_LIMIT, physicalLimit(clearedCachedFirst)),
+                    () -> Assertions.assertEquals(scanBindings(fresh), scanBindings(clearedLimitFirst)),
+                    () -> Assertions.assertEquals(scanBindings(fresh), scanBindings(clearedCachedFirst)));
         } finally {
             connectContext.getSessionVariable().setSqlSelectLimit(oldLimit);
         }

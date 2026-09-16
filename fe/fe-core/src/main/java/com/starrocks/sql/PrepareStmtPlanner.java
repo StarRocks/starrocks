@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -153,7 +154,8 @@ public class PrepareStmtPlanner {
 
         Map<String, Integer> slotByColumn = paramSlotByColumn(queryStmt);
         if (slotByColumn == null) {
-            return rejectCaching(executeStmt, "where clause is not a conjunction of column = parameter");
+            return rejectCaching(executeStmt,
+                    "query is not a single-table select whose where clause is a conjunction of column = parameter");
         }
 
         int paramCount = executeStmt.getParamsExpr().size();
@@ -244,7 +246,7 @@ public class PrepareStmtPlanner {
         return rewritten.getChild(0) == candidateColumn ? (ConstantOperator) rewritten.getChild(1) : null;
     }
 
-    // the exact shape rePlanOptimizedPlan walks unguarded: project -> filter -> project -> olap scan
+    // the hops rePlanOptimizedPlan walks unguarded: root -> filter -> ? -> olap scan; the ? is never touched
     private static LogicalFilterOperator rebindableFilter(LogicalPlan logicalPlan) {
         OptExpression root = logicalPlan.getRoot();
         if (root.getInputs().isEmpty() || !(root.inputAt(0).getOp() instanceof LogicalFilterOperator)) {
@@ -269,10 +271,22 @@ public class PrepareStmtPlanner {
         return (ColumnRefOperator) conjunct.getChild(0);
     }
 
+    // isPointQuery() guarantees this shape today, but it is the gate this cache is expected to outgrow
+    private static SelectRelation rebindableRelation(QueryStatement queryStmt) {
+        if (!(queryStmt.getQueryRelation() instanceof SelectRelation)) {
+            return null;
+        }
+        SelectRelation selectRelation = (SelectRelation) queryStmt.getQueryRelation();
+        return selectRelation.getRelation() instanceof TableRelation ? selectRelation : null;
+    }
+
     private static Map<String, Integer> paramSlotByColumn(QueryStatement queryStmt) {
+        SelectRelation selectRelation = rebindableRelation(queryStmt);
+        if (selectRelation == null) {
+            return null;
+        }
         Map<String, Integer> slotByColumn = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        Expr predicate = ((SelectRelation) queryStmt.getQueryRelation()).getPredicate();
-        return collectParamSlots(predicate, slotByColumn) ? slotByColumn : null;
+        return collectParamSlots(selectRelation.getPredicate(), slotByColumn) ? slotByColumn : null;
     }
 
     private static boolean collectParamSlots(Expr predicate, Map<String, Integer> slotByColumn) {
