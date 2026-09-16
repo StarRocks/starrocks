@@ -58,13 +58,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction (should be reduced, typically to 1)
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_parallel_2;
@@ -138,13 +140,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction (should be reduced)
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_parallel_5;
@@ -215,13 +219,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM dup_parallel;
@@ -292,13 +298,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction (aggregated results should be same)
 SELECT COUNT(*) FROM agg_parallel;
@@ -369,13 +377,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction (unique results should be same)
 SELECT COUNT(*) FROM uniq_parallel;
@@ -561,13 +571,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_with_updates;
@@ -637,13 +649,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_large_data;
@@ -714,14 +728,15 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction (should be reduced for each bucket)
 [UC]rowset_after=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- Parallel compaction does not leave one rowset per subtask: each subtask writes segments and
--- tablet_parallel_compaction_manager merges them into a single output rowset (see the
--- merged_compaction->mutable_output_rowset() path, .cpp:1265-1345). The rowset count therefore
--- settles at 1 whether or not the work was split, and only the segment count records that it was.
--- Without this the case still passes when lake_compaction_max_parallel stops taking effect.
--- Three buckets compact independently, so a serial run settles at one segment each.
-[UC]segment_after=SELECT SUM(NUM_SEGMENT) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
-SELECT ${segment_after} > 3 as parallel_compaction_triggered;
+-- NOTE: nothing below distinguishes a parallel compaction from a serial one. Both settle at a
+-- single output rowset (each subtask writes segments and tablet_parallel_compaction_manager merges
+-- them into one, .cpp:1265-1345), and at this data size the split path is unreachable anyway:
+-- _is_large_rowset_for_split needs data_size >= 2 * lake_compaction_max_rowset_size, i.e. 8GiB by
+-- default (.cpp:1755,1770), while these tables hold a handful of rows. Measured runs come back with
+-- one rowset and one segment, so assertions on either shape pass unchanged if
+-- lake_compaction_max_parallel stops taking effect. Covering that needs a direct observation of the
+-- subtask count, or the setup test_pk_large_rowset_split uses (it lowers lake_compaction_max_rowset_size
+-- to 2MB first).
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_multi_buckets;

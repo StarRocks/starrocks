@@ -79,11 +79,6 @@ SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
 -- !result
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
--- result:
-1
--- !result
 SELECT COUNT(*) FROM pk_parallel_2;
 -- result:
 10
@@ -203,11 +198,6 @@ SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
 -- !result
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
--- result:
-1
--- !result
 SELECT COUNT(*) FROM pk_parallel_5;
 -- result:
 16
@@ -318,11 +308,6 @@ SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
 -- !result
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
--- result:
-1
--- !result
 SELECT COUNT(*) FROM dup_parallel;
 -- result:
 10
@@ -423,11 +408,6 @@ SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
 -- !result
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
--- result:
-1
--- !result
 SELECT COUNT(*) FROM agg_parallel;
 -- result:
 6
@@ -522,11 +502,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- result:
-1
--- !result
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
 -- result:
 1
 -- !result
@@ -854,11 +829,6 @@ SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
 -- !result
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
--- result:
-1
--- !result
 SELECT COUNT(*) FROM pk_with_updates;
 -- result:
 7
@@ -947,11 +917,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- result:
-1
--- !result
-[UC]segment_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
-SELECT ${segment_after} > 1 as parallel_compaction_triggered;
 -- result:
 1
 -- !result
@@ -1052,11 +1017,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- !result
 [UC]rowset_after=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
--- result:
-1
--- !result
-[UC]segment_after=SELECT SUM(NUM_SEGMENT) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
-SELECT ${segment_after} > 3 as parallel_compaction_triggered;
 -- result:
 1
 -- !result
