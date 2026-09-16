@@ -125,4 +125,58 @@ public class HistogramTest {
 
         Assertions.assertEquals(Optional.of(expectedRowCount), actualRowCount);
     }
+
+    @Test
+    public void testSingleBucketCarriesNonMcvRows() {
+        // Given 1000 rows over [100, 200] of which 300 sit in the MCVs
+        // CASE WHEN a single-bucket histogram is built THEN the bucket spans the given bounds and
+        // carries the rows left outside the MCVs END
+
+        final Map<String, Long> mcv = Map.of("a", 100L, "b", 200L);
+        final double lowerBound = 100.0;
+        final double upperBound = 200.0;
+        final double totalRows = 1000;
+        final long expectedNonMcvRows = 700L;
+        final long expectedUpperRepeats = 0L;
+
+        final List<Bucket> actualBuckets =
+                Histogram.ofSingleBucket(lowerBound, upperBound, totalRows, mcv).getBuckets();
+
+        Assertions.assertEquals(1, actualBuckets.size());
+        Assertions.assertEquals(lowerBound, actualBuckets.get(0).getLower());
+        Assertions.assertEquals(upperBound, actualBuckets.get(0).getUpper());
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertEquals(expectedUpperRepeats, actualBuckets.get(0).getUpperRepeats());
+    }
+
+    @Test
+    public void testSingleBucketWithInfiniteBounds() {
+        // Given 1000 rows whose bounds are unknown
+        // CASE WHEN the bounds are not finite THEN no bucket is built END
+
+        final Map<String, Long> mcv = Map.of("a", 100L);
+        final double totalRows = 1000;
+
+        final Histogram actualHistogram = Histogram.ofSingleBucket(
+                Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, totalRows, mcv);
+
+        Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
+    }
+
+    @Test
+    public void testSingleBucketClampsNonMcvRowsAtZero() {
+        // Given MCVs holding 1200 rows against a total of 1000, which the collection scales can
+        // produce because MCV counts are not rescaled below their source
+        // CASE WHEN the MCVs hold more rows than the total THEN the bucket count clamps at zero
+        // rather than going negative END
+
+        final Map<String, Long> mcv = Map.of("a", 800L, "b", 400L);
+        final double totalRows = 1000;
+        final long expectedNonMcvRows = 0L;
+
+        final List<Bucket> actualBuckets =
+                Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv).getBuckets();
+
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+    }
 }

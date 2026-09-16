@@ -42,6 +42,17 @@ public class Histogram {
         }
     }
 
+    public static Histogram ofSingleBucket(double minValue, double maxValue, double nonNullRowCount,
+                                          Map<String, Long> mcv) {
+        if (Double.isInfinite(minValue) || Double.isInfinite(maxValue)
+                || Double.isNaN(minValue) || Double.isNaN(maxValue)) {
+            return new Histogram(List.of(), mcv);
+        }
+        long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
+        long nonMcvRows = Math.max(0L, Math.round(nonNullRowCount) - mcvRows);
+        return new Histogram(List.of(new Bucket(minValue, maxValue, nonMcvRows, 0L)), mcv);
+    }
+
     public long getTotalRows() {
         long totalRows = 0;
         if (!buckets.isEmpty()) {
