@@ -48,10 +48,6 @@ public:
 
     void close() override;
 
-    static Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc,
-                             MutableColumnPtr* column, ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool,
-                             bool strict_mode);
-
 private:
     Status open_next_reader();
     Status next_batch();

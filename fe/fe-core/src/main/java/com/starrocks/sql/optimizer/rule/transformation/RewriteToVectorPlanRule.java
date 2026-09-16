@@ -129,8 +129,8 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
         // Note: a residual that the optimizer cannot push into the scan (e.g. cat + tag > 50) ends up
         // as a SELECT above the ANN scan. The BE detects that from the execution tree (FragmentExecutor
-        // walk -> ScanNode::is_filtered_above_iterator) and routes to exact brute-force, so the rewrite
-        // does not need to predict it here.
+        // walk -> ScanNode::is_filtered_above_iterator) and applies the configured underfill fallback
+        // policy, so the rewrite does not need to predict it here.
 
         opts.setEnableUseANN(true);
         opts.setRefineDistance(doRefine);

@@ -50,6 +50,8 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService.RangeSpec;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -4772,6 +4774,74 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    // Convenience wrapper used by the dictionary thrash guard: add one column to the persisted forbid set.
+    public void disableGlobalDictForColumn(long dbId, long tableId, String columnName) {
+        updateNoDictColumns(dbId, tableId, java.util.Collections.singleton(columnName),
+                java.util.Collections.emptySet(), true);
+    }
+
+    // Persist a column-level global-dictionary forbid change: newSet = (existing UNION add) MINUS drop.
+    // Idempotent (no-op + no journal write when the set is unchanged). Runs on the leader; the WRITE lock
+    // and edit log mirror setHasForbiddenGlobalDict above. Both the thrash guard (add one) and the
+    // ALTER TABLE ... DISABLE/ENABLE DICTIONARY clause (add/drop several) funnel through this.
+    public void updateNoDictColumns(long dbId, long tableId, Set<String> add, Set<String> drop) {
+        updateNoDictColumns(dbId, tableId, add, drop, false);
+    }
+
+    // fromThrashGuard: this add was queued asynchronously by the dictionary thrash guard. If an explicit
+    // ALTER TABLE ... ENABLE DICTIONARY has cleared the column's in-memory forbid in the meantime, that
+    // ENABLE wins: the column must not be re-persisted here, otherwise the late guard write would silently
+    // resurrect a forbid the operator just removed. Both callers take the table WRITE lock below, so the
+    // "still forbidden?" check and any ENABLE clear are serialized.
+    public void updateNoDictColumns(long dbId, long tableId, Set<String> add, Set<String> drop, boolean fromThrashGuard) {
+        Database db = getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
+            Table table = getTable(dbId, tableId);
+            if (!(table instanceof OlapTable olapTable)) {
+                return;
+            }
+            // ENABLE must clear the in-memory forbid for these columns even when the persisted set does not
+            // change (e.g. a thrash-guard add is still pending and has not been written yet). hasGlobalDict
+            // checks the in-memory set first, so clearing only on a persisted change would leave the column
+            // disabled. Followers do the same in replayModifyTableProperty. Clearing a non-forbidden column
+            // is a no-op.
+            if (drop != null && !drop.isEmpty()) {
+                IDictManager.getInstance().clearForbiddenColumns(tableId, drop);
+            }
+            Set<String> effectiveAdd = add;
+            if (fromThrashGuard && add != null && !add.isEmpty()) {
+                effectiveAdd = new HashSet<>();
+                for (String c : add) {
+                    if (IDictManager.getInstance().isColumnForbidden(tableId, c)) {
+                        effectiveAdd.add(c);
+                    }
+                }
+            }
+            Set<String> newSet = new HashSet<>(olapTable.getNoDictColumns());
+            boolean changed = false;
+            if (effectiveAdd != null) {
+                changed |= newSet.addAll(effectiveAdd);
+            }
+            if (drop != null) {
+                changed |= newSet.removeAll(drop);
+            }
+            if (!changed) {
+                return;
+            }
+            Map<String, String> property = new HashMap<>();
+            property.put(PropertyAnalyzer.PROPERTIES_NO_DICT_COLUMNS, String.join(",", newSet));
+            ModifyTablePropertyOperationLog info =
+                    new ModifyTablePropertyOperationLog(dbId, tableId, property);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyNoDictColumns(info, wal -> {
+                olapTable.setNoDictColumns(newSet);
+            });
+            LOG.info("persist no-dict columns, table:{} add:{} drop:{} result:{}", tableId, effectiveAdd, drop, newSet);
+        }
+    }
+
     public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {
         if (info.getDbName() == null) {
             return;
@@ -4841,6 +4911,26 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     } else {
                         olapTable.setHasForbiddenGlobalDict(false);
                         IDictManager.getInstance().enableGlobalDict(olapTable.getId());
+                    }
+                }
+            } else if (opCode == OperationType.OP_MODIFY_NO_DICT_COLUMNS) {
+                if (olapTable != null) {
+                    String cols = properties.get(PropertyAnalyzer.PROPERTIES_NO_DICT_COLUMNS);
+                    Set<String> set = new HashSet<>();
+                    if (cols != null && !cols.isEmpty()) {
+                        for (String c : cols.split(",")) {
+                            if (!c.isEmpty()) {
+                                set.add(c);
+                            }
+                        }
+                    }
+                    // Columns removed from the forbid set (an ENABLE) must also have their in-memory forbid
+                    // cleared, so hasGlobalDict stops short-circuiting on this FE.
+                    Set<String> dropped = new HashSet<>(olapTable.getNoDictColumns());
+                    dropped.removeAll(set);
+                    olapTable.setNoDictColumns(set);
+                    if (!dropped.isEmpty()) {
+                        IDictManager.getInstance().clearForbiddenColumns(olapTable.getId(), dropped);
                     }
                 }
             } else if (opCode == OperationType.OP_SET_HAS_DELETE) {
@@ -5621,6 +5711,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
         }
+    }
+
+    public String getRangeDistributionTopology(String databaseName, String tableName) throws StarRocksException {
+        return new RangeDistributionMigrationService().getTopology(databaseName, tableName);
+    }
+
+    public long submitRangeDistributionSplit(String databaseName, String tableName,
+                                             Map<Long, List<RangeSpec>> parentTabletIdToRanges)
+            throws StarRocksException {
+        return new RangeDistributionMigrationService().submitSplit(
+                databaseName, tableName, parentTabletIdToRanges);
     }
 
     public void onEraseDatabase(long dbId) {

@@ -60,6 +60,8 @@ public enum ErrorCode {
             "Illegal column/field reference '%s' of semi-/anti-join"),
     ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
+    ERR_TOO_LONG_IDENT(1059, new byte[] {'4', '2', '0', '0', '0'},
+            "Identifier name '%s' is too long, the maximum length is %s"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
     ERR_NONUNIQ_TABLE(1066, new byte[] {'4', '2', '0', '0', '0'}, "Not unique table/alias: '%s'"),
     ERR_NO_SUCH_THREAD(1094, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown thread id: %d"),

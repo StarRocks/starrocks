@@ -168,7 +168,8 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
                 int pos = fieldIdToPos.get(fieldId);
                 Type fieldType = partitionData.getType(pos);
                 Object partitionValue = partitionData.get(pos);
-                if (partitionField.transform().isIdentity() && Types.TimestampType.withZone().equals(fieldType)) {
+                if (partitionValue != null && partitionField.transform().isIdentity()
+                        && Types.TimestampType.withZone().equals(fieldType)) {
                     partitionValue = ((long) partitionValue) / 1000;
                 }
                 reusedRecord.setField(name, partitionValue);

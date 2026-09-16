@@ -470,8 +470,12 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
 // The order of rows is determinate by mask sequence.
 class MaskMergeIterator final : public MergeIterator {
 public:
-    explicit MaskMergeIterator(std::vector<ChunkIteratorPtr> children, RowSourceMaskBuffer* mask_buffer)
-            : MergeIterator(std::move(children)), _chunks(_children.size()), _mask_buffer(mask_buffer) {
+    explicit MaskMergeIterator(std::vector<ChunkIteratorPtr> children, RowSourceMaskBuffer* mask_buffer,
+                               RowSourceMaskBuffer* selection_buffer)
+            : MergeIterator(std::move(children)),
+              _chunks(_children.size()),
+              _mask_buffer(mask_buffer),
+              _selection_buffer(selection_buffer) {
         DCHECK(_mask_buffer);
     }
 
@@ -483,6 +487,11 @@ protected:
 private:
     std::vector<MergingChunk> _chunks;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+    // Optional row-selection stream aligned one-to-one with _mask_buffer. A non-zero
+    // source number means keep the row; zero means consume it from the source iterator
+    // without appending it. Vertical UNSHARE compaction records this stream while
+    // processing the key group and replays it for every value group.
+    RowSourceMaskBuffer* _selection_buffer = nullptr;
 };
 
 inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
@@ -496,6 +505,12 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
     if (!st_or.ok()) {
         return st_or.status();
     }
+    if (_selection_buffer != nullptr) {
+        ASSIGN_OR_RETURN(bool selection_remaining, _selection_buffer->has_remaining());
+        if (selection_remaining != st_or.value()) {
+            return Status::InternalError("row-source mask and selection buffers have different lengths");
+        }
+    }
     while (st_or.value() && rows < _chunk_size) {
         RowSourceMask mask = _mask_buffer->current();
         uint16_t child = mask.get_source_num();
@@ -506,10 +521,38 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         }
         DCHECK_GT(min_chunk.remaining_rows(), 0);
 
+        // A filtered row is still represented in the source mask so every value-group
+        // child advances over exactly the same physical rows as the key group. It is not
+        // emitted to the output chunk.
+        if (_selection_buffer != nullptr && _selection_buffer->current().get_source_num() == 0) {
+            min_chunk.advance(1);
+            _mask_buffer->advance();
+            _selection_buffer->advance();
+            if (min_chunk.remaining_rows() == 0) {
+                st = fill(child);
+                if (!st.ok() && !st.is_end_of_file()) {
+                    return st;
+                }
+            }
+            st_or = _mask_buffer->has_remaining();
+            if (!st_or.ok()) {
+                return st_or.status();
+            }
+            ASSIGN_OR_RETURN(bool selection_remaining, _selection_buffer->has_remaining());
+            if (selection_remaining != st_or.value()) {
+                return Status::InternalError("row-source mask and selection buffers have different lengths");
+            }
+            continue;
+        }
+
         size_t offset = min_chunk.compared_row();
         size_t min_chunk_num_rows = min_chunk._chunk->num_rows();
         size_t append_row_num = 0;
         size_t max_same_source_count = _mask_buffer->max_same_source_count(child, min_chunk.remaining_rows());
+        if (_selection_buffer != nullptr) {
+            max_same_source_count = std::min(max_same_source_count, _selection_buffer->max_same_source_count(
+                                                                            /*source=*/1, max_same_source_count));
+        }
         if (max_same_source_count == min_chunk_num_rows) {
             DCHECK(offset == 0);
             // all rows in |min_chunk| are from the same source chunk and |min_chunk|'s current offset is 0,
@@ -521,6 +564,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
                         source_masks->emplace_back(_mask_buffer->current());
                     }
                     _mask_buffer->advance();
+                    if (_selection_buffer != nullptr) {
+                        _selection_buffer->advance();
+                    }
                 }
                 return fill(child);
             } else {
@@ -546,6 +592,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
                 source_masks->emplace_back(_mask_buffer->current());
             }
             _mask_buffer->advance();
+            if (_selection_buffer != nullptr) {
+                _selection_buffer->advance();
+            }
         }
 
         DCHECK_LE(rows, _chunk_size);
@@ -560,6 +609,12 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         st_or = _mask_buffer->has_remaining();
         if (!st_or.ok()) {
             return st_or.status();
+        }
+        if (_selection_buffer != nullptr) {
+            ASSIGN_OR_RETURN(bool selection_remaining, _selection_buffer->has_remaining());
+            if (selection_remaining != st_or.value()) {
+                return Status::InternalError("row-source mask and selection buffers have different lengths");
+            }
         }
     }
     if (!st.ok()) {
@@ -601,12 +656,12 @@ inline Status MaskMergeIterator::fill(size_t child) {
 }
 
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         RowSourceMaskBuffer* mask_buffer) {
-    if (children.size() == 1) {
+                                         RowSourceMaskBuffer* mask_buffer, RowSourceMaskBuffer* selection_buffer) {
+    if (children.size() == 1 && selection_buffer == nullptr) {
         return children[0];
     }
-    DCHECK(children.size() > 1 && children.size() <= RowSourceMask::MAX_SOURCES);
-    return std::make_shared<MaskMergeIterator>(children, mask_buffer);
+    DCHECK(!children.empty() && children.size() <= RowSourceMask::MAX_SOURCES);
+    return std::make_shared<MaskMergeIterator>(children, mask_buffer, selection_buffer);
 }
 
 } // namespace starrocks

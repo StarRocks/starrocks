@@ -34,6 +34,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedView.MvRefreshScheme;
 import com.starrocks.catalog.MaterializedViewRefreshType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -258,33 +259,57 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
     @Test
     public void testRangeDistributionMvDefault() throws Exception {
-        // The shipped default is on in shared-data mode; assert that is what we are exercising.
+        // The shipped defaults in shared-data mode are on for tables and off for materialized
+        // views; assert that is what we are exercising.
         Assertions.assertTrue(Config.enable_range_distribution);
+        Assertions.assertFalse(Config.enable_mv_range_distribution);
         boolean savedConfig = Config.enable_range_distribution;
+        boolean savedMvConfig = Config.enable_mv_range_distribution;
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         try {
-            // Default on: an async MV without a DISTRIBUTED BY clause defaults to RANGE.
+            // Shipped defaults: a table without a DISTRIBUTED BY clause is range-distributed, while
+            // an async MV without one keeps the previous default (RANDOM).
+            starRocksAssert.withTable("create table rd_table_default (k1 date, k2 int)\n" +
+                    "duplicate key(k1)");
+            OlapTable rangeTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "rd_table_default");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANGE,
+                    rangeTable.getDefaultDistributionInfo().getType());
+
             starRocksAssert.withMaterializedView("create materialized view rd_mv_default\n" +
                     "refresh async\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
-            MaterializedView rangeMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+            MaterializedView randomMv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(db.getFullName(), "rd_mv_default");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    randomMv.getDefaultDistributionInfo().getType());
+            starRocksAssert.dropMaterializedView("rd_mv_default");
+            starRocksAssert.dropTable("rd_table_default");
+
+            // Both configs on: the MV joins the table default and selects RANGE.
+            Config.enable_mv_range_distribution = true;
+            starRocksAssert.withMaterializedView("create materialized view rd_mv_range\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView rangeMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "rd_mv_range");
             Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANGE,
                     rangeMv.getDefaultDistributionInfo().getType());
-            starRocksAssert.dropMaterializedView("rd_mv_default");
+            starRocksAssert.dropMaterializedView("rd_mv_range");
 
-            // Kill switch: with the config disabled, it falls back to the previous default (RANDOM).
+            // Kill switch: the MV config alone selects nothing once the table config is disabled.
             Config.enable_range_distribution = false;
             starRocksAssert.withMaterializedView("create materialized view rd_mv_killswitch\n" +
                     "refresh async\n" +
                     "as select k2, sum(k3) as total from base_table group by k2;");
-            MaterializedView randomMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+            MaterializedView killSwitchMv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(db.getFullName(), "rd_mv_killswitch");
             Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
-                    randomMv.getDefaultDistributionInfo().getType());
+                    killSwitchMv.getDefaultDistributionInfo().getType());
             starRocksAssert.dropMaterializedView("rd_mv_killswitch");
         } finally {
             Config.enable_range_distribution = savedConfig;
+            Config.enable_mv_range_distribution = savedMvConfig;
         }
     }
 

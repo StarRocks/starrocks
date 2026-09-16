@@ -42,19 +42,20 @@ Each resource group is a set of computing resources from a specific BE. You can 
 
 You can specify CPU and memory resource quotas for a resource group on a BE by using the following parameters:
 
-| Parameter                  | Description                                                    | Value Range                                                    | Default |
-| -------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
-| cpu_weight                 | The CPU scheduling weight of this resource group on a BE node. | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0       |
-| cpu_weight_percent         | The CPU scheduling weight percentage of this resource group on a BE node. Supported from v4.1. | [0, 100] (takes effect when greater than 0)     | 0       |
-| exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0       |
-| exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1. | [0, 100] (takes effect when greater than 0) | 0       |
-| mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node. | (0, 1] (required)               | -       |
-| mem_pool                   | Groups resource groups to share a memory limit.                | String                                                         | default_mem_pool |
-| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.         | (0, 1]                                                         | 1.0     |
-| concurrency_limit          | Maximum number of concurrent queries in this resource group.   | Integer (takes effect when greater than 0)                     | 0       |
-| big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.   | Integer (takes effect when greater than 0)               | 0       |
-| big_query_scan_rows_limit  | Maximum number of rows big query tasks can scan on each BE node.   | Integer (takes effect when greater than 0)                 | 0       |
-| big_query_mem_limit        | Maximum memory big query tasks can use on each BE node.        | Integer (takes effect when greater than 0)                     | 0       |
+| Parameter                  | Description                                                                                                    | Value Range                                                    | Default          |
+|----------------------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|------------------|
+| cpu_weight                 | The CPU scheduling weight of this resource group on a BE node.                                                 | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0                |
+| cpu_weight_percent         | The CPU scheduling weight percentage of this resource group on a BE node. Supported from v4.1.                 | [0, 100] (takes effect when greater than 0)                    | 0                |
+| exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.                                                          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0                |
+| exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1.                                    | [0, 100] (takes effect when greater than 0)                    | 0                |
+| mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node.                  | (0, 1] (required)                                              | -                |
+| mem_pool                   | Groups resource groups to share a memory limit.                                                                | String                                                         | default_mem_pool |
+| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1]                                                         | 1.0              |
+| concurrency_limit          | Maximum number of concurrent queries in this resource group.                                                   | Integer (takes effect when greater than 0)                     | 0                |
+| mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. Only available when `enable_query_queue_v2` is `false`. | [0, 1] (takes effect when greater than 0)                      | 0                |
+| big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.                                             | Integer (takes effect when greater than 0)                     | 0                |
+| big_query_scan_rows_limit  | Maximum number of rows big query tasks can scan on each BE node.                                               | Integer (takes effect when greater than 0)                     | 0                |
+| big_query_mem_limit        | Maximum memory big query tasks can use on each BE node.                                                        | Integer (takes effect when greater than 0)                     | 0                |
 
 #### CPU resource parameters
 
@@ -151,6 +152,12 @@ Defines the memory usage threshold that triggers spilling to disk. The value ran
 
 Defines the maximum number of concurrent queries in the resource group to prevent system overload. Effective only when greater than 0, with a default value of 0.
 
+##### `mem_used_pct_limit`
+
+Defines the memory usage percentage limit in this resource group on a BE node above which the resource group is treated as overloaded. The value range is [0, 1]. Effective only when greater than 0, with a default value of 0.
+If the resource group uses a shared `mem_pool` (not `default_mem_pool`), the limit is evaluated against the pool-level memory usage and limit on that BE node.
+This parameter only takes effect for resource-group-level query queues, which additionally require the global session variable `enable_group_level_query_queue` to be set to `true`. It is only available when the FE configuration item `enable_query_queue_v2` is `false`.
+
 #### Big query resource parameters
 
 You can configure resource limits specifically for large queries using the following parameters:
@@ -190,6 +197,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 - `big_query_scan_rows_limit`: 0.
 - `big_query_mem_limit`: 0.
 - `spill_mem_limit_threshold`: 1.
+- `mem_used_pct_limit`: 0.
 
 ##### default_mv_wg
 
@@ -199,6 +207,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 - `mem_limit`: 80%.
 - `concurrency_limit`: 0.
 - `spill_mem_limit_threshold`: 80%.
+- `mem_used_pct_limit`: 0.
 
 ### classifier
 
@@ -320,15 +329,15 @@ Example:
 
 ```plain
 mysql> SHOW RESOURCE GROUPS ALL;
-+---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+
-| name          | id    | cpu_weight | exclusive_cpu_cores | mem_limit | big_query_cpu_second_limit | big_query_scan_rows_limit | big_query_mem_limit | concurrency_limit | spill_mem_limit_threshold | classifiers                            |
-+---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+
-| default_mv_wg | 3     | 1          | 0                   | 80.0%     | 0                          | 0                         | 0                   | null              | 80%                       | (id=0, weight=0.0)                     |
-| default_wg    | 2     | 1          | 0                   | 100.0%    | 0                          | 0                         | 0                   | null              | 100%                      | (id=0, weight=0.0)                     |
-| rge1          | 15015 | 0          | 6                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15016, weight=1.0, user=rg1_user)  |
-| rgs1          | 15017 | 8          | 0                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15018, weight=1.0, user=rgs1_user) |
-| rgs2          | 15019 | 8          | 0                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15020, weight=1.0, user=rgs2_user) |
-+---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+
++---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+---------------------+
+| name          | id    | cpu_weight | exclusive_cpu_cores | mem_limit | big_query_cpu_second_limit | big_query_scan_rows_limit | big_query_mem_limit | concurrency_limit | spill_mem_limit_threshold | classifiers                            | mem_used_pct_limit  |
++---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+---------------------+
+| default_mv_wg | 3     | 1          | 0                   | 80.0%     | 0                          | 0                         | 0                   | null              | 80%                       | (id=0, weight=0.0)                     | null                |
+| default_wg    | 2     | 1          | 0                   | 100.0%    | 0                          | 0                         | 0                   | null              | 100%                      | (id=0, weight=0.0)                     | null                |
+| rge1          | 15015 | 0          | 6                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15016, weight=1.0, user=rg1_user)  | null                |
+| rgs1          | 15017 | 8          | 0                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15018, weight=1.0, user=rgs1_user) | null                |
+| rgs2          | 15019 | 8          | 0                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15020, weight=1.0, user=rgs2_user) | null                |
++---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+---------------------+
 ```
 
 > **NOTE**

@@ -34,6 +34,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `db` VARCHAR(96) COMMENT "查询所在数据库",
   `state` VARCHAR(8) COMMENT "查询状态（EOF，ERR，OK）",
   `errorCode` VARCHAR(512) COMMENT "错误码",
+  `errorMessage` VARCHAR(1048576) NULL COMMENT "返回给客户端的错误信息",
   `queryTime` BIGINT COMMENT "查询执行时间（毫秒）",
   `scanBytes` BIGINT COMMENT "查询扫描的字节数",
   `scanRows` BIGINT COMMENT "查询扫描的记录行数",
@@ -69,6 +70,19 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 ```
 
 待分区创建完成后，您可以继续下一步。
+
+:::note
+
+如果该表是由早期版本创建的，请补齐此后新增的列，否则导入审计日志时对应字段会被静默丢弃。例如 `errorMessage` 自 v4.2.0 起引入：
+
+```SQL
+ALTER TABLE starrocks_audit_db__.starrocks_audit_tbl__
+ADD COLUMN `errorMessage` VARCHAR(1048576) NULL COMMENT "返回给客户端的错误信息" AFTER `errorCode`;
+```
+
+请在 AuditLoader 的 `filter` 属性引用该列之前先完成加列，因为该过滤条件是基于表的列进行计算的。
+
+:::
 
 ## 下载并配置 AuditLoader
 

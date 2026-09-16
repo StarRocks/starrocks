@@ -49,6 +49,8 @@ set(EXPR_FILES
   sort_exec_exprs.cpp
   array_element_expr.cpp
   array_expr.cpp
+  ai/ai_function_call_expr.cpp
+  ai/ai_provider_options_builder.cpp
   ai_functions.cpp
   array_functions.cpp
   array_map_expr.cpp
@@ -136,6 +138,7 @@ set(EXPR_FILES
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
+  ds_theta_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)

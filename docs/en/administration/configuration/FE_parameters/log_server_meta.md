@@ -92,6 +92,15 @@ This topic introduces the following types of FE configurations:
 - Description: When true, the generated Log4j2 configuration appends a ".gz" postfix to rotated audit log filenames (fe.audit.log.*) so that Log4j2 will produce compressed (.gz) archived audit log files on rollover. The setting is read during FE startup in Log4jConfig.initLogging and is applied to the RollingFile appender for audit logs; it only affects rotated/archived files, not the active audit log. Because the value is initialized at startup, changing it requires restarting the FE to take effect. Use alongside audit log rotation settings (`audit_log_dir`, `audit_log_roll_interval`, `audit_roll_maxsize`, `audit_log_roll_num`).
 - Introduced in: 3.2.12
 
+### `audit_log_error_message_max_length`
+
+- Default: 1024
+- Type: Int
+- Unit: Characters
+- Is mutable: Yes
+- Description: The maximum length of the `ErrorMessage` field recorded in the audit log for a failed statement, counted in UTF-16 code units, so a character outside the Basic Multilingual Plane such as an emoji counts as two. A longer message is truncated and suffixed with `... /* truncated, audit_log_error_message_max_length=<value> */`; the suffix is not counted against the limit. Set it to `0` to stop recording error messages altogether, in which case the field is omitted from the audit record. Error messages are also omitted when `enable_sql_desensitize_in_log` is `true` or when `enable_audit_sql` is `false`, because an error message quotes the statement that failed, down to the values and the offending token.
+- Introduced in: 4.2.0
+
 ### `audit_log_json_format`
 
 - Default: false
@@ -1224,8 +1233,21 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+- Description: How many connections can wait for a worker thread while all `thrift_server_max_worker_threads` workers are busy. This bounds what the pending queue can hold, not what it will serve: a connection arriving once the queue is full is closed immediately instead of being retried, and a queued connection that waits longer than `thrift_server_queue_timeout_ms` is closed without being served once a worker reaches it. The two cases are counted separately, by `starrocks_fe_thrift_server_rejected_connections_total` and `starrocks_fe_thrift_server_expired_connections_total`.
 - Introduced in: -
+
+### `thrift_server_queue_timeout_ms`
+
+- Default: 0
+- Type: Long
+- Unit: ms
+- Is mutable: Yes
+- Description: The maximum time a connection may wait in the Thrift server pending queue before a worker thread picks it up. A connection that has waited longer is closed without being served, on the assumption that its caller has abandoned it and serving it only holds a worker away from work someone is still waiting for. When armed, this also bounds how long the queue takes to drain after a burst, however deep it grew.
+
+  `0`, the default, disables the check: every queued connection is served no matter how long it waited. The check is off by default because that assumption does not hold for every caller, and a queued connection carries no deadline the server can read. The deadlines callers actually use span four orders of magnitude. Plain FE-internal RPCs give up after `thrift_rpc_timeout_ms` (10 seconds), but a statement forwarded from a follower to the leader waits the session's execution timeout plus `thrift_rpc_timeout_ms` -- about 310 seconds at the default `query_timeout`, and about four hours at the default `insert_timeout` -- and BE stream-load and transaction-commit RPCs wait `stream_load_thrift_rpc_timeout_ms` (60 seconds) or a quarter of the load's own `timeout_second`, whichever is larger. Because `query_timeout`, `insert_timeout` and `timeout_second` are all user-settable and unbounded, no fixed value is safe for every cluster: a timeout short enough to speed up recovery can also cut off a forwarded statement whose client is still waiting, during exactly the saturation it was meant to shorten.
+
+  Arm it per cluster, at a value above the largest deadline that cluster's clients rely on -- derive it from that cluster's `query_timeout` and `insert_timeout`. Each drop is counted in `starrocks_fe_thrift_server_expired_connections_total` and reported by a rate-limited WARN naming the peer. `starrocks_fe_thrift_server_queue_wait_ms` reports queue waits whether or not the check is armed, so use it to size the value before arming it.
+- Introduced in: v4.2.0
 
 ## Metadata and cluster management
 
@@ -1687,6 +1709,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FEs stops providing services.
 - Introduced in: -
+
+### `meta_freshness_check_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval at which a Follower or Observer FE re-evaluates whether its metadata is still fresh enough to serve reads, as defined by `meta_delay_toleration_second`. Values outside the range [10, 5000] are clamped. This check runs on a dedicated thread rather than on the metadata replay thread, so that the node still stops serving stale metadata while a single journal entry is taking a long time to apply, for example when a replay operation is waiting for a database lock.
+- Introduced in: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- Default: 30
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: A metadata journal entry that has been applying for longer than this duration is reported in **fe.log** as a stuck replay, together with the stack of the replay thread, so that you can identify what is blocking metadata replay. Set this item to `0` to disable the report.
+- Introduced in: v4.2
 
 ### `meta_dir`
 

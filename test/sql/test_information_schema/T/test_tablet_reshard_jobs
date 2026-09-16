@@ -1,2 +1,6 @@
 -- name: test_tablet_reshard_jobs
-SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs;
+-- The view is cluster-global: any reshard anywhere -- another case splitting a tablet, or the
+-- background split/merge daemon -- lands a row here, so recording an unfiltered row set asserts
+-- something this case does not own. Scope it to an impossible job id: the view is still scanned and
+-- its columns still projected, which is what this smoke test is for.
+SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs WHERE JOB_ID < 0;

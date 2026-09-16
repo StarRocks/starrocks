@@ -16,17 +16,25 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -51,6 +59,17 @@ public class PreSplitTargetsTest {
 
     private static final long BASE_INDEX_META_ID = 10L;
     private static final long ROLLUP_INDEX_META_ID = 20L;
+
+    private static final long DB_ID = 900L;
+    private static final long TABLE_ID = 901L;
+    private static final String VISIBLE_PARTITION_NAME = "p0";
+    private static final long VISIBLE_PARTITION_ID = 910L;
+    private static final long VISIBLE_PHYSICAL_PARTITION_ID = 911L;
+    private static final long VISIBLE_TABLET_ID = 912L;
+    private static final String TEMP_PARTITION_NAME = "p0_tmp";
+    private static final long TEMP_PARTITION_ID = 920L;
+    private static final long TEMP_PHYSICAL_PARTITION_ID = 921L;
+    private static final long TEMP_TABLET_ID = 922L;
 
     private static OlapTable tableThatPassesUpTo() {
         OlapTable table = mock(OlapTable.class);
@@ -397,6 +416,112 @@ public class PreSplitTargetsTest {
                     .thenReturn(List.of(sortKey));
             Assertions.assertNotNull(PreSplitTargets.resolveVisibleIndexTargets(table, partition),
                     "row count must not be checked by the resolver");
+        }
+    }
+
+    // ---------- findEligibleTemporaryTarget ----------
+
+    /**
+     * A real {@link OlapTable} carrying one visible and one temporary partition, the temporary one
+     * holding {@code tempPartitionTabletCount} base tablets. Built from real catalog objects rather
+     * than mocks on purpose: the visible/temporary namespace split lives inside {@link OlapTable},
+     * so a stubbed {@code getPartition()} would prove nothing about the lookup's scoping.
+     */
+    private static OlapTable tableWithVisibleAndTempPartition(int tempPartitionTabletCount) {
+        OlapTable table = new OlapTable(TABLE_ID, "t", List.of(new Column("k", IntegerType.BIGINT)),
+                KeysType.DUP_KEYS, new SinglePartitionInfo(), null);
+        table.setBaseIndexMetaId(BASE_INDEX_META_ID);
+        table.addPartition(partitionWithTablets(VISIBLE_PARTITION_ID, VISIBLE_PHYSICAL_PARTITION_ID,
+                VISIBLE_PARTITION_NAME, List.of(VISIBLE_TABLET_ID)));
+        List<Long> tempTabletIds = new ArrayList<>();
+        for (int i = 0; i < tempPartitionTabletCount; i++) {
+            tempTabletIds.add(TEMP_TABLET_ID + i);
+        }
+        table.addTempPartition(partitionWithTablets(TEMP_PARTITION_ID, TEMP_PHYSICAL_PARTITION_ID,
+                TEMP_PARTITION_NAME, tempTabletIds));
+        return table;
+    }
+
+    private static Partition partitionWithTablets(long partitionId, long physicalPartitionId, String name,
+                                                  List<Long> tabletIds) {
+        MaterializedIndex baseIndex = new MaterializedIndex(BASE_INDEX_META_ID, MaterializedIndex.IndexState.NORMAL);
+        for (long tabletId : tabletIds) {
+            TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, physicalPartitionId, BASE_INDEX_META_ID,
+                    TStorageMedium.HDD);
+            // Do not touch the tablet inverted index: it is a cluster-wide singleton this test never sets up.
+            baseIndex.addTablet(new LocalTablet(tabletId), tabletMeta, false);
+        }
+        return new Partition(partitionId, physicalPartitionId, name, baseIndex, null);
+    }
+
+    @Test
+    public void resolvesTemporaryPartitionByName() {
+        OlapTable table = tableWithVisibleAndTempPartition(1);
+        Column sortKey = new Column("k", IntegerType.BIGINT);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedConstruction<Locker> ignored = Mockito.mockConstruction(Locker.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(sortKey));
+            PreSplitTargets.EligibleTarget target = PreSplitTargets.findEligibleTemporaryTarget(
+                    mock(Database.class), table, TEMP_PARTITION_NAME);
+            Assertions.assertNotNull(target);
+            Assertions.assertEquals(TEMP_PHYSICAL_PARTITION_ID, target.partitionId(),
+                    "the target must be the temporary partition's physical partition");
+            Assertions.assertEquals(TEMP_TABLET_ID, target.oldTabletId(),
+                    "the base-index target must be the temporary partition's tablet");
+        }
+    }
+
+    @Test
+    public void skipsVisiblePartitionName() {
+        // The lookup is temp-scoped, so the name of a live partition must not resolve: splitting a
+        // partition that is still serving queries is never what an overwrite asked for.
+        assertTemporaryResolveSkips(tableWithVisibleAndTempPartition(1), VISIBLE_PARTITION_NAME,
+                SkipReason.METADATA_NOT_RESOLVED);
+    }
+
+    @Test
+    public void skipsUnknownPartitionName() {
+        assertTemporaryResolveSkips(tableWithVisibleAndTempPartition(1), "no_such_partition",
+                SkipReason.METADATA_NOT_RESOLVED);
+    }
+
+    @Test
+    public void skipsTemporaryPartitionWithMultipleBaseTablets() {
+        // This is also what makes a range-colocate temporary partition skip cleanly: such a partition
+        // is created with one tablet per colocate range (LocalMetastore.createRangeColocateLakeTablets),
+        // not with the single tablet RangeDistributionInfo.getBucketNum() reports.
+        assertTemporaryResolveSkips(tableWithVisibleAndTempPartition(2), TEMP_PARTITION_NAME,
+                SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
+    }
+
+    @Test
+    public void findUniquePhysicalPartitionIgnoresTemporaryPartitions() {
+        // Regression guard for the visible-side resolver: OlapTable.getPhysicalPartitions() excludes
+        // temporary partitions, so a table with one visible and one temporary partition still has a
+        // unique visible physical partition.
+        PhysicalPartition unique = PreSplitTargets.findUniquePhysicalPartition(tableWithVisibleAndTempPartition(1));
+        Assertions.assertNotNull(unique);
+        Assertions.assertEquals(VISIBLE_PHYSICAL_PARTITION_ID, unique.getId());
+    }
+
+    /**
+     * Asserts {@code findEligibleTemporaryTarget} returns {@code null} and bumps the
+     * {@code eligibility_skipped} counter under {@code expectedReason} exactly once, the same way
+     * {@link #assertResolveSkips} pins the visible-partition resolver's skips.
+     */
+    private static void assertTemporaryResolveSkips(OlapTable table, String partitionName, SkipReason expectedReason) {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (MockedConstruction<Locker> ignored = Mockito.mockConstruction(Locker.class)) {
+            long baseline = skipBucket(expectedReason);
+            Assertions.assertNull(
+                    PreSplitTargets.findEligibleTemporaryTarget(mock(Database.class), table, partitionName),
+                    "ineligible temporary target must resolve to null");
+            Assertions.assertEquals(baseline + 1L, skipBucket(expectedReason),
+                    expectedReason.name().toLowerCase() + " bucket must increment by one");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
         }
     }
 }

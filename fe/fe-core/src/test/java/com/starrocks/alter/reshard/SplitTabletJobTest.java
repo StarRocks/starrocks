@@ -72,6 +72,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -163,6 +164,34 @@ public class SplitTabletJobTest {
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+    }
+
+    @Test
+    public void testPkOrderByFactoryLeavesBoundarySelectionToBePkIndex() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE pk_order_by_split "
+                + "(pk1 int not null, pk2 int not null, sort_col int not null) "
+                + "PRIMARY KEY(pk1, pk2) ORDER BY(sort_col) "
+                + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'true')");
+        OlapTable pkOrderByTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "pk_order_by_split");
+        PhysicalPartition physicalPartition = pkOrderByTable.getAllPhysicalPartitions().iterator().next();
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob job = (SplitTabletJob) new SplitTabletJobFactory(db, pkOrderByTable, clause)
+                .createTabletReshardJob();
+
+        SplittingTablet splittingTablet = job.getReshardingPhysicalPartitions().values().stream()
+                .flatMap(partition -> partition.getReshardingIndexes().values().stream())
+                .flatMap(index -> index.getReshardingTablets().stream())
+                .map(ReshardingTablet::getSplittingTablet)
+                .filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow();
+        Assertions.assertTrue(splittingTablet.getNewTabletRanges().isEmpty(),
+                "ordinary split must let BE derive PK boundaries from the cloud-native PK index");
+        Assertions.assertTrue(splittingTablet.getNewTabletIds().size() > 1);
     }
 
     @Test
@@ -336,6 +365,7 @@ public class SplitTabletJobTest {
             }
         };
 
+        AtomicReference<Boolean> actualPreferSharedInitialMetadata = new AtomicReference<>();
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
@@ -343,8 +373,10 @@ public class SplitTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
                 actualResource.set(computeResource);
+                actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }
         };
 
@@ -366,6 +398,79 @@ public class SplitTabletJobTest {
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
             Assertions.assertSame(expectedResource, actualResource.get());
+            // The job must forward exactly what the predicate says for THIS partition at the publish's base
+            // version (visibleVersion == commitVersion - 1). The shared test table may already be past
+            // version 1 here; the positive case is testRunRunningHintsSharedInitialMetadataAtVersionOne.
+            Assertions.assertEquals(
+                    Utils.preferSharedInitialMetadata(table, physicalPartition, physicalPartition.getVisibleVersion()),
+                    actualPreferSharedInitialMetadata.get());
+        } finally {
+            splitJob.replayAbortedJob();
+            physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
+        }
+    }
+
+    /**
+     * A partition still at version 1 -- the pre-split of an empty file_bundling partition ahead of its first
+     * load -- keeps its tablets' version-1 metadata only in the partition-shared object, so the reshard
+     * publish must carry the same hint a normal load does; otherwise every old tablet 404s on a per-tablet
+     * key that was never written. Needs a table of its own: the shared test table has been published past
+     * version 1 by the other tests.
+     */
+    @Test
+    public void testRunRunningHintsSharedInitialMetadataAtVersionOne() throws Exception {
+        starRocksAssert.withTable("create table fresh_bundled_split (key1 int, key2 varchar(10))\n"
+                + "order by(key1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable freshTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "fresh_bundled_split");
+        PhysicalPartition physicalPartition = freshTable.getAllPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION, physicalPartition.getVisibleVersion());
+        Assertions.assertEquals(Boolean.TRUE, freshTable.isFileBundling());
+
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob splitJob = (SplitTabletJob) new SplitTabletJobFactory(db, freshTable, clause)
+                .createTabletReshardJob();
+        splitJob.init();
+
+        AtomicReference<Long> actualBaseVersion = new AtomicReference<>();
+        AtomicReference<Boolean> actualPreferSharedInitialMetadata = new AtomicReference<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
+                                       long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                       Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                       Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
+                actualBaseVersion.set(baseVersion);
+                actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
+            }
+        };
+
+        // Isolate the publish assertion from StarOS shard creation (which would otherwise run against the
+        // mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+            }
+        };
+
+        try {
+            splitJob.run();
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
+            Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION, actualBaseVersion.get());
+            Assertions.assertEquals(Boolean.TRUE, actualPreferSharedInitialMetadata.get());
         } finally {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
@@ -745,7 +850,8 @@ public class SplitTabletJobTest {
         };
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) {
                 excludeTxnIdsArg.set(excludeTransactionIds);
                 return false;
@@ -765,6 +871,115 @@ public class SplitTabletJobTest {
         splitJob.runCleaningJob();
         Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
         Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+    }
+
+    @Test
+    public void testCleaningClearsPlacementPreferenceBeforeFinishing() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.init();   // reserves the table: NORMAL -> TABLET_RESHARD
+        try {
+            splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            splitJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinishedForReshard(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+
+            AtomicReference<List<List<Long>>> cleared = new AtomicReference<>();
+            AtomicReference<TabletReshardJob.JobState> stateAtCall = new AtomicReference<>();
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) {
+                    // Capture only; assert outside the mock so a binding failure cannot hide a
+                    // failed assertion.
+                    calls.incrementAndGet();
+                    cleared.set(new ArrayList<>(preferenceMembers));
+                    stateAtCall.set(splitJob.getJobState());
+                }
+            };
+
+            List<List<Long>> expected = new ArrayList<>();
+            for (ReshardingPhysicalPartition partition : splitJob.getReshardingPhysicalPartitions().values()) {
+                for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                    for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                        for (long oldId : tablet.getOldTabletIds()) {
+                            for (long newId : tablet.getNewTabletIds()) {
+                                expected.add(List.of(oldId, newId));
+                            }
+                        }
+                    }
+                }
+            }
+            Assertions.assertFalse(expected.isEmpty(), "test fixture must produce preference members");
+
+            splitJob.runCleaningJob();
+
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+            Assertions.assertEquals(1, calls.get(), "the finish path must clear the pin exactly once");
+            Assertions.assertEquals(expected, cleared.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, stateAtCall.get(),
+                    "the pin must be cleared before the job is marked FINISHED");
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                splitJob.replayAbortedJob();   // restores NORMAL on the shared table fixture
+            }
+        }
+    }
+
+    @Test
+    public void testCleaningStillFinishesWhenClearingPlacementPreferenceFails() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.init();
+        try {
+            splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            splitJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinishedForReshard(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) throws DdlException {
+                    calls.incrementAndGet();
+                    throw new DdlException("simulated StarOS failure");
+                }
+            };
+
+            // Best-effort: clearing the pin is an optimization, so a StarOS failure must not keep
+            // the job from finishing.
+            splitJob.runCleaningJob();
+
+            Assertions.assertEquals(1, calls.get(), "the failing mock must actually have been invoked");
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                splitJob.replayAbortedJob();
+            }
+        }
     }
 
     private TabletReshardJob createTabletReshardJob() throws Exception {

@@ -132,6 +132,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -192,6 +193,7 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -228,6 +230,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
@@ -1839,6 +1842,61 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    // ---------------------------------------- AI Provider Statement ---------------------------------------
+
+    private void requireSystemOperate(ConnectContext context, String action) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    action, ObjectType.SYSTEM.name(), null);
+        }
+    }
+
+    @Override
+    public Void visitCreateAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "CREATE AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitAlterAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "ALTER AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitDropAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DROP AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitSetDefaultAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SET DEFAULT AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SHOW AI PROVIDERS");
+        return null;
+    }
+
+    @Override
+    public Void visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DESC AI PROVIDER");
+        return null;
+    }
+
     // ---------------------------------------- View Statement ---------------------------------------
 
     @Override
@@ -2306,6 +2364,36 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    // ---------------------------------------- FailPoint Statement ----------------------------------------------------
+
+    @Override
+    public Void visitUpdateFailPointStatusStatement(UpdateFailPointStatusStatement statement, ConnectContext context) {
+        // The ADMIN keyword is syntax, not a privilege. Arming a failpoint injects faults into every
+        // targeted node, and WITH PAUSE can park node threads outright, so this needs OPERATE.
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitShowFailPointStatement(ShowFailPointStatement statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
     @Override
     public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext context) {
         try {
@@ -2623,6 +2711,19 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.REPOSITORY);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropSnapshotStatement(DropSnapshotStmt statement, ConnectContext context) {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.REPOSITORY);
         } catch (AccessDeniedException e) {

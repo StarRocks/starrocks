@@ -415,9 +415,10 @@ Status ArraySortLambdaExpr::check_lambda_only_depends_on_args(const LambdaFuncti
 // Validate strict weak ordering properties of the lambda comparator
 Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, Chunk* chunk,
                                                           const ArrayColumn* array_col) {
-    // Check cache first to avoid duplicate validation
-    if (_comparator_validated) {
-        return _comparator_validation_status;
+    // A comparator that already passed validation is not checked again. Errors are never
+    // cached (see the declaration of _comparator_validated).
+    if (_comparator_validated.load(std::memory_order_relaxed)) {
+        return Status::OK();
     }
 
     const auto& element_col = array_col->elements_column();
@@ -465,11 +466,7 @@ Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, 
     for (size_t i = 0; i < unique_indices.size(); ++i) {
         ASSIGN_OR_RETURN(bool result, compare(i, i));
         if (result) {
-            Status error = Status::InvalidArgument(
-                    "Comparator violates irreflexivity: cmp(a, a) returned true for an element");
-            _comparator_validated = true;
-            _comparator_validation_status = error;
-            return error;
+            return Status::InvalidArgument("Comparator violates irreflexivity: cmp(a, a) returned true for an element");
         }
     }
 
@@ -480,11 +477,8 @@ Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, 
             ASSIGN_OR_RETURN(bool cmp_ji, compare(j, i));
 
             if (cmp_ij && cmp_ji) {
-                Status error = Status::InvalidArgument(
+                return Status::InvalidArgument(
                         "Comparator violates asymmetry: both cmp(a, b) and cmp(b, a) returned true");
-                _comparator_validated = true;
-                _comparator_validation_status = error;
-                return error;
             }
         }
     }
@@ -508,12 +502,9 @@ Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, 
                 // If cmp(i,j)=true and cmp(j,k)=true, then cmp(i,k) must be true
                 if ((cmp_ij && cmp_jk && !cmp_ik) || (cmp_ji && cmp_ik && !cmp_jk) || (cmp_jk && cmp_ki && !cmp_ji) ||
                     (cmp_kj && cmp_ji && !cmp_ki) || (cmp_ik && cmp_kj && !cmp_ij) || (cmp_ki && cmp_ij && !cmp_kj)) {
-                    Status error = Status::InvalidArgument(
+                    return Status::InvalidArgument(
                             "Comparator violates transitivity: cmp(a, b)=true and cmp(b, c)=true but "
                             "cmp(a, c)=false");
-                    _comparator_validated = true;
-                    _comparator_validation_status = error;
-                    return error;
                 }
 
                 // Check equivalence transitivity: if all comparisons between i, j, k are false,
@@ -521,21 +512,16 @@ Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, 
                 if ((!cmp_ij && !cmp_ji && !cmp_jk && !cmp_kj && (cmp_ik || cmp_ki)) ||
                     (!cmp_ij && !cmp_ji && !cmp_ik && !cmp_ki && (cmp_jk || cmp_kj)) ||
                     (!cmp_jk && !cmp_kj && !cmp_ik && !cmp_ki && (cmp_ij || cmp_ji))) {
-                    Status error = Status::InvalidArgument(
+                    return Status::InvalidArgument(
                             "Comparator violates incomparability transitivity: elements a, b, c are equivalent "
                             "(cmp(a,b)=false, cmp(b,a)=false, cmp(b,c)=false, cmp(c,b)=false) but "
                             "cmp(a,c) or cmp(c,a) returned true");
-                    _comparator_validated = true;
-                    _comparator_validation_status = error;
-                    return error;
                 }
             }
         }
     }
 
-    // Cache the validation result
-    _comparator_validated = true;
-    _comparator_validation_status = Status::OK();
+    _comparator_validated.store(true, std::memory_order_relaxed);
     return Status::OK();
 }
 
@@ -579,11 +565,25 @@ std::string ArraySortLambdaExpr::debug_string() const {
 }
 
 int ArraySortLambdaExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
-    int num = Expr::get_slot_ids(slot_ids);
+    std::vector<SlotId> collected;
+    Expr::get_slot_ids(&collected);
+    // The columns the extracted common expressions depend on are genuine captures.
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        slot_ids->push_back(slot_id);
+        expr->get_slot_ids(&collected);
+    }
+    int num = 0;
+    for (SlotId id : collected) {
+        // Drop the synthetic slot ids assigned to the extracted common expressions themselves:
+        // each is produced and consumed inside this expression's own evaluation (in its private
+        // tmp_chunk) and never exists in an enclosing chunk. It can reach here through the child
+        // lambda's captured slots after extraction rewrote the body to reference it; surfacing it
+        // to an enclosing lambda makes it look the slot up via Chunk::get_column_by_slot_id on the
+        // input chunk and crash the BE (nested lambda capturing the outer lambda argument).
+        if (_outer_common_exprs.find(id) != _outer_common_exprs.end()) {
+            continue;
+        }
+        slot_ids->push_back(id);
         num++;
-        num += (expr->get_slot_ids(slot_ids));
     }
     return num;
 }

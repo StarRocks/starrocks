@@ -16,5 +16,54 @@ FROM
 
 CACHE SELECT c1, c2, c3 FROM t1 WHERE c3 >= utc_timestamp() - INTERVAL 2 month ;
 
+-- CACHE SELECT over a table with complex-type columns while a predicate on a
+-- subset of columns reorders the read schema. The reorder must not misalign the
+-- per-column scratch buffer used by get_io_range_vec, otherwise the array/map
+-- iterator is paired with a scalar column and the CN crashes.
+CREATE TABLE t2 (
+    k1 int NOT NULL,
+    v_arr array<bigint> NOT NULL,
+    v_map map<int, string> NOT NULL,
+    dtm int NOT NULL
+)
+DUPLICATE KEY(k1)
+PARTITION BY RANGE(dtm) (PARTITION p20260630 VALUES [("20260630"), ("20260701")))
+DISTRIBUTED BY HASH(k1) BUCKETS 1;
+
+INSERT INTO t2
+SELECT generate_series, [generate_series, generate_series * 2], map{generate_series: 'v'}, 20260630
+FROM TABLE(generate_series(1, 1000));
+
+CACHE SELECT * FROM t2 WHERE dtm = 20260630;
+
 -- clean up
 DROP DATABASE cache_select_db_${uuid0} FORCE;
+
+-- name: test_shared_data_cache_select_array_reorder @cloud
+
+CREATE DATABASE cache_select_array_crash_${uuid0};
+USE cache_select_array_crash_${uuid0};
+
+CREATE TABLE t_array (
+    c1  INT NOT NULL,
+    arr ARRAY<BIGINT> NOT NULL,
+    c3  DATETIME NOT NULL
+)
+PARTITION BY date_trunc('month', c3)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO t_array VALUES
+    (1, [10, 11], '2025-12-24 00:00:00'),
+    (2, [20, 21, 22], '2025-12-25 00:00:00');
+
+-- Buggy CN should crash in ArrayColumnIterator::get_io_range_vec().
+-- Fixed CN should execute successfully.
+CACHE SELECT c1, arr, c3
+FROM t_array
+WHERE c3 >= '2025-12-23 00:00:00';
+
+DROP DATABASE cache_select_array_crash_${uuid0} FORCE;

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ADD_BE_BENCH(${SRC_DIR}/bench/analytor_lag_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/agg_hash_map_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)

@@ -36,6 +36,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `db` VARCHAR(96) COMMENT "クエリが実行されるデータベース",
   `state` VARCHAR(8) COMMENT "クエリ状態（EOF、ERR、OK）",
   `errorCode` VARCHAR(512) COMMENT "エラーコード",
+  `errorMessage` VARCHAR(1048576) NULL COMMENT "クライアントに返されたエラーメッセージ",
   `queryTime` BIGINT COMMENT "クエリ実行時間（ミリ秒）",
   `scanBytes` BIGINT COMMENT "クエリでスキャンされたバイト数",
   `scanRows` BIGINT COMMENT "クエリでスキャンされた行数",
@@ -70,6 +71,19 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 ```
 
 パーティションが作成されたら、次のステップに進むことができます。
+
+:::note
+
+テーブルが以前のバージョンで作成済みの場合は、その後に追加されたカラムを追加してください。追加しないと、監査ログのロード時に該当フィールドが通知なく破棄されます。たとえば `errorMessage` は v4.2.0 で導入されました。
+
+```SQL
+ALTER TABLE starrocks_audit_db__.starrocks_audit_tbl__
+ADD COLUMN `errorMessage` VARCHAR(1048576) NULL COMMENT "クライアントに返されたエラーメッセージ" AFTER `errorCode`;
+```
+
+AuditLoader の `filter` プロパティでこのカラムを参照する前に、カラムを追加してください。このフィルタはテーブルのカラムに対して評価されるためです。
+
+:::
 
 ## AuditLoader のダウンロードと設定
 

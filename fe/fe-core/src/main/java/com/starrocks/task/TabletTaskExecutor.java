@@ -247,7 +247,8 @@ public class TabletTaskExecutor {
         if (physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
             option.setEnableTabletCreationOptimization(false);
         }
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index :
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, computeResource, option));
         }
         return tasks;

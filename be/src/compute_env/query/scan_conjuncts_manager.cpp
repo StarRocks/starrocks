@@ -924,8 +924,9 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             if (rf->has_null()) {
                 normalized_rf_with_null<SlotType, MappingType, Decoder>(rf, &slot, std::forward<Args>(args)...);
             } else {
+                // No offset: this path normalizes a slot-ref probe, whose key IS the column value.
                 detail::RuntimeColumnPredicateBuilder::build_minmax_range<RangeType, SlotType, MappingType, Decoder>(
-                        *range, rf, _opts.obj_pool, std::forward<Args>(args)...);
+                        *range, rf, _opts.obj_pool, {}, std::forward<Args>(args)...);
             }
         }
 

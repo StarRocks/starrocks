@@ -1,4 +1,4 @@
--- name: test_iceberg_delete_partitioned @sequential
+-- name: test_iceberg_delete_partitioned @sequential @slow
 create external catalog iceberg_del_part_${uuid0}
 PROPERTIES ( "type"  =  "iceberg",
     "iceberg.catalog.type"  =  "hive",

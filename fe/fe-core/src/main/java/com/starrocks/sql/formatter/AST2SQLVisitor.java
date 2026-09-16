@@ -238,7 +238,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                     if (!item.getExcludedColumns().isEmpty()) {
                         tmp += " EXCLUDE ( ";
                         tmp += item.getExcludedColumns().stream()
-                                .map(col -> "\"" + col + "\"")
+                                .map(ParseUtil::backquote)
                                 .collect(Collectors.joining(","));
                         tmp += " ) ";
                     }
@@ -344,10 +344,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
 
         // ORDER BY clause
         if (queryRelation.hasOrderByClause()) {
-            java.util.List<com.starrocks.sql.ast.OrderByElement> sortClause = queryRelation.getOrderBy();
-            String orderByStr = Joiner.on(", ").join(
-                    sortClause.stream().map(this::visit).collect(java.util.stream.Collectors.toList()));
-            sqlBuilder.append(" ORDER BY ").append(orderByStr).append(" ");
+            sqlBuilder.append(" ORDER BY ").append(visitOrderByClause(queryRelation)).append(" ");
         }
 
         // LIMIT clause

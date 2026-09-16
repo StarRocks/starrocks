@@ -1,0 +1,35 @@
+---
+displayed_sidebar: docs
+description: "在 SQL 中使用 AI 函数，并通过 TopN 下推减少 AI 输入行数。"
+sidebar_position: 10
+---
+
+# AI 函数
+
+AI 函数支持在 SQL 中调用已配置的模型服务。文本生成函数参见 [ai_complete](ai_complete.md)。
+
+## 减少 AI 输入行数 {/* #reducing-ai-input-rows */}
+
+对于 `LIMIT` 为正数且不含 `OFFSET` 的 `ORDER BY ... LIMIT` 查询，当排序列未经修改地穿过 AI 投影及其间的普通 Project 时，StarRocks 可以先筛选候选行，再执行 AI 投影。
+
+[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) 根据 SQL 的 `LIMIT N` 选择策略：
+
+- `N` 小于或等于阈值（默认 `1000`）：使用全局候选 TopN，将改写后的 AI 投影的输入限制为全局最多 `N` 行。
+- `N` 大于阈值：使用局部候选 TopN，将该 AI 投影的输入限制为每个 fragment instance 最多 `N` 行，而非每个 BE 或 pipeline driver 最多 `N` 行。
+
+全局策略可能以跨实例的 AI 并行度换取全局行数上限。局部策略不会在 AI 执行前增加全局汇聚，但实例内的局部归并可能降低并行度。两种策略都会保留 AI 投影上方原有的 TopN，以保证输出顺序和行数限制。可以使用 `EXPLAIN` 检查执行计划。
+
+行数上限仅作用于被改写的 AI 投影，而非查询中的全部 AI 工作：嵌套调用中的内层 AI 仍可能处理更多行。它不是 HTTP 请求数或 Token 上限。被裁剪的行不会执行 AI 调用。
+
+该优化不会将 TopN 移至排序或过滤所依赖的 AI 调用下方，不会跨越已有的 Limit 或不安全的投影、谓词边界，也不适用于分区 TopN、`RANK` 或 `DENSE_RANK`。
+
+### 选择策略
+
+阈值支持 `SET`、对后续会话生效的 `SET GLOBAL` 和语句级 `SET_VAR` Hint，无需重启。该参数不影响不含 AI 投影的查询。设为 `0` 表示仅使用局部裁剪，而不是关闭裁剪。
+
+```sql
+-- LIMIT <= 1000 时使用全局裁剪，更大的 LIMIT 使用局部裁剪。
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- 仅使用局部裁剪。
+SET ai_topn_pushdown_max_global_limit = 0;
+```

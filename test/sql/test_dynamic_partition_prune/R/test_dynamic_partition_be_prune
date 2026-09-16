@@ -719,3 +719,192 @@ drop table t_null_combined force;
 drop database test_dyn_prune_${uuid0} force;
 -- result:
 -- !result
+-- name: test_range_partition_prune_multi_column
+create database test_dyn_prune_${uuid0};
+-- result:
+-- !result
+use test_dyn_prune_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_range_multi (
+    id1 INT NOT NULL,
+    id2 INT NOT NULL,
+    name VARCHAR(25) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1, id2) (
+    PARTITION p0 VALUES [("0", "0"), ("10", "10")),
+    PARTITION p1 VALUES [("10", "10"), ("20", "20")),
+    PARTITION p2 VALUES [("20", "20"), ("30", "30"))
+)
+DISTRIBUTED BY HASH(name) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_range_multi VALUES (11, 0, 'a'), (11, 1, 'b'), (5, 9, 'c'), (25, 3, 'd'), (10, 10, 'e'), (19, 25, 'f'), (3, 3, 'g');
+-- result:
+-- !result
+SELECT name FROM t_range_multi WHERE id2 <= 8 ORDER BY name;
+-- result:
+a
+b
+d
+g
+-- !result
+SELECT name FROM t_range_multi WHERE id2 = 25 ORDER BY name;
+-- result:
+f
+-- !result
+SELECT count(*) FROM t_range_multi WHERE id2 > 8;
+-- result:
+3
+-- !result
+SELECT name FROM t_range_multi WHERE id1 <= 8 ORDER BY name;
+-- result:
+c
+g
+-- !result
+SELECT name FROM t_range_multi WHERE id1 = 11 AND id2 <= 8 ORDER BY name;
+-- result:
+a
+b
+-- !result
+SELECT count(*) FROM t_range_multi;
+-- result:
+7
+-- !result
+drop table t_range_multi force;
+-- result:
+-- !result
+drop database test_dyn_prune_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_range_partition_prune_multi_column_pinned_prefix
+create database test_dyn_prune_${uuid0};
+-- result:
+-- !result
+use test_dyn_prune_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_range_multi_fixed (
+    id1 INT NOT NULL,
+    id2 INT NOT NULL,
+    name VARCHAR(25) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1, id2) (
+    PARTITION p0 VALUES [("5", "0"), ("5", "10")),
+    PARTITION p1 VALUES [("5", "10"), ("5", "20")),
+    PARTITION p2 VALUES [("6", "0"), ("7", "0"))
+)
+DISTRIBUTED BY HASH(name) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_range_multi_fixed VALUES (5, 3, 'a'), (5, 15, 'b'), (6, 15, 'c'), (6, 3, 'd');
+-- result:
+-- !result
+SELECT name FROM t_range_multi_fixed WHERE id2 <= 8 ORDER BY name;
+-- result:
+a
+d
+-- !result
+SELECT name FROM t_range_multi_fixed WHERE id2 > 8 ORDER BY name;
+-- result:
+b
+c
+-- !result
+SELECT name FROM t_range_multi_fixed WHERE id1 = 5 AND id2 > 8 ORDER BY name;
+-- result:
+b
+-- !result
+drop table t_range_multi_fixed force;
+-- result:
+-- !result
+drop database test_dyn_prune_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_range_partition_prune_multi_column_null_partition @native
+create database test_dyn_prune_${uuid0};
+-- result:
+-- !result
+use test_dyn_prune_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_range_multi_null (
+    id1 TINYINT NULL,
+    id2 TINYINT NOT NULL,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1, id2) (
+    PARTITION p0 VALUES LESS THAN ("-128", "10"),
+    PARTITION p1 VALUES LESS THAN ("50", "0")
+)
+DISTRIBUTED BY HASH(v) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_range_multi_null VALUES (NULL, 100, 1), (-100, 5, 2), (20, 3, 3);
+-- result:
+-- !result
+SELECT v FROM t_range_multi_null WHERE id2 = 100;
+-- result:
+1
+-- !result
+SELECT v FROM t_range_multi_null WHERE id2 <= 5 ORDER BY v;
+-- result:
+2
+3
+-- !result
+SELECT count(*) FROM t_range_multi_null;
+-- result:
+3
+-- !result
+drop table t_range_multi_null force;
+-- result:
+-- !result
+drop database test_dyn_prune_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_range_partition_prune_open_upper_bound
+create database test_dyn_prune_${uuid0};
+-- result:
+-- !result
+use test_dyn_prune_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_range_maxvalue (
+    id1 INT NOT NULL,
+    name VARCHAR(25) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1) (
+    PARTITION p0 VALUES [("-200"), ("-100")),
+    PARTITION p1 VALUES [("-100"), (MAXVALUE))
+)
+DISTRIBUTED BY HASH(name) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_range_maxvalue VALUES (-150, 'a'), (-50, 'b'), (50, 'c');
+-- result:
+-- !result
+SELECT name FROM t_range_maxvalue WHERE id1 > 0 ORDER BY name;
+-- result:
+c
+-- !result
+SELECT name FROM t_range_maxvalue WHERE id1 > -60 ORDER BY name;
+-- result:
+b
+c
+-- !result
+drop table t_range_maxvalue force;
+-- result:
+-- !result
+drop database test_dyn_prune_${uuid0} force;
+-- result:
+-- !result

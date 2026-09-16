@@ -1822,15 +1822,21 @@ TEST_F(EvaluatePredTreeBitmapTest, delete_survivors_unreadable_column_is_error) 
 class VectorResidualPrefilterTest : public testing::Test {
 protected:
     void SetUp() override {
+        _saved_topk_underfill_fallback = config::enable_vector_index_topk_underfill_fallback;
+        config::enable_vector_index_topk_underfill_fallback = true;
         CHECK_OK(fs::remove_all(kDir));
         CHECK_OK(fs::create_directories(kDir));
         ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(kDir));
     }
-    void TearDown() override { (void)fs::remove_all(kDir); }
+    void TearDown() override {
+        config::enable_vector_index_topk_underfill_fallback = _saved_topk_underfill_fallback;
+        (void)fs::remove_all(kDir);
+    }
 
     const std::string kDir = "vector_residual_prefilter_test";
     static constexpr int64_t kIndexId = 100;
     std::shared_ptr<FileSystem> _fs;
+    bool _saved_topk_underfill_fallback = false;
 
     TabletSchemaPB base_schema_pb() {
         TabletSchemaPB pb;
@@ -2313,24 +2319,37 @@ TEST_F(VectorResidualPrefilterTest, fractional_k_factor_clamps_k_to_one) {
     EXPECT_EQ(res.ids, (std::vector<int64_t>{0})) << "clamped k=1 must return the nearest row, not an empty set";
 }
 
-TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {
+TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute_when_fallback_enabled) {
     // A predicate is evaluated above the iterator -> the resolver must route to exact brute-force
-    // (completeness, design doc §2/§4): a segment-level ANN k-limit would under-return. Brute returns
-    // ALL matching rows {4,5,6,7}; PRE would return only {4,5,6}. Brute pre-narrowing must confine
-    // the read loop to the 4 surviving rows (raw_rows_read), not the full 8-row segment.
+    // when the underfill fallback is enabled: a segment-level ANN k-limit would under-return. Brute
+    // returns ALL matching rows {4,5,6,7}; PRE would return only {4,5,6}. Brute pre-narrowing must
+    // confine the read loop to the 4 surviving rows (raw_rows_read), not the full 8-row segment.
     std::unique_ptr<ColumnPredicate> pred;
     ResidualCaseResult res;
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &res);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
     EXPECT_EQ(res.raw_rows_read, 4) << "brute read loop was not narrowed to the residual survivors";
+    EXPECT_EQ(res.search_ns, 0) << "above-iterator predicate should have routed to brute-force";
 }
 
-TEST_F(VectorResidualPrefilterTest, residual_runtime_filter_routes_to_brute) {
-    // A runtime filter post-filters the top-k above the per-segment search, so even though
+TEST_F(VectorResidualPrefilterTest, above_predicate_allows_ann_when_fallback_disabled) {
+    config::enable_vector_index_topk_underfill_fallback = false;
+
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/true, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
+    EXPECT_GT(res.search_ns, 0) << "disabled underfill fallback should allow ANN with an above-iterator predicate";
+}
+
+TEST_F(VectorResidualPrefilterTest, residual_runtime_filter_routes_to_brute_when_fallback_enabled) {
+    // A runtime filter is evaluated above the per-segment top-k search, so even though
     // `filter_col >= 4` is a plain in-iterator residual (which alone would PRE-filter), the presence of
-    // a runtime filter must route AUTO to exact BRUTE -- and brute must still pre-narrow the read loop by
-    // the residual. Markers: brute returns ALL matching rows {4,5,6,7} (PRE would return the k=3 nearest
-    // {4,5,6}), and the read loop touches only the 4 residual survivors, not the full 8-row segment.
+    // a runtime filter must route AUTO to exact BRUTE when the underfill fallback is enabled -- and brute
+    // must still pre-narrow the read loop by the residual. Markers: brute returns ALL matching rows
+    // {4,5,6,7} (PRE would return the k=3 nearest {4,5,6}), and the read loop touches only the 4 residual
+    // survivors, not the full 8-row segment.
     std::unique_ptr<ColumnPredicate> pred;
     ResidualCaseResult res;
     ResidualCaseConfig cfg;
@@ -2338,6 +2357,19 @@ TEST_F(VectorResidualPrefilterTest, residual_runtime_filter_routes_to_brute) {
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7})) << "a runtime filter must route AUTO to BRUTE, not PRE";
     EXPECT_EQ(res.raw_rows_read, 4) << "brute read loop was not narrowed by the residual under a runtime filter";
+    EXPECT_EQ(res.search_ns, 0) << "runtime filter should have routed to brute-force";
+}
+
+TEST_F(VectorResidualPrefilterTest, runtime_filter_allows_ann_when_fallback_disabled) {
+    config::enable_vector_index_topk_underfill_fallback = false;
+
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    ResidualCaseConfig cfg;
+    cfg.with_runtime_filter = true;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(res.search_ns, 0) << "disabled underfill fallback should allow ANN with a runtime filter";
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_or_predicate_prefilters_ann) {

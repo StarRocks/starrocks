@@ -162,7 +162,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### `col_name`
 
-Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) to `TRUE`.
+Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. For native tables, the names of virtual columns (`_tablet_id_`, `_segment_id_`, `_rss_id_`, `_source_id_`, `_row_id_`, `_rowset_id_`, and `_dynamic_rssid_`) are reserved as well, because a table column of the same name shadows the virtual column and makes both of them impossible to reference in a query. External tables do not expose virtual columns, so they may keep such a column name. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) to `TRUE`.
 
 ### `col_type`
 
