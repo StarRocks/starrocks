@@ -19,9 +19,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_2' and TABLE_SCHEMA='test_parallel_compaction_pk_${uuid0}';
--- result:
-11495
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -45,9 +42,6 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 5
 -- !result
 [UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
--- result:
-5
--- !result
 SELECT COUNT(*) FROM pk_parallel_2;
 -- result:
 10
@@ -69,15 +63,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
--- result:
-6
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_parallel_2 COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("pk_parallel_2", ${version_before})
 -- result:
 None
@@ -86,9 +75,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
--- result:
-3
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
@@ -137,9 +123,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_5' and TABLE_SCHEMA='test_parallel_compaction_pk_high_${uuid0}';
--- result:
-11453
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -172,9 +155,6 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 8
 -- !result
 [UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
--- result:
-8
--- !result
 SELECT COUNT(*) FROM pk_parallel_5;
 -- result:
 16
@@ -202,15 +182,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
--- result:
-9
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_parallel_5 COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("pk_parallel_5", ${version_before})
 -- result:
 None
@@ -219,9 +194,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
--- result:
-4
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
@@ -276,9 +248,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='dup_parallel' and TABLE_SCHEMA='test_parallel_compaction_dup_${uuid0}';
--- result:
-11406
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -302,9 +271,6 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 5
 -- !result
 [UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
--- result:
-5
--- !result
 SELECT COUNT(*) FROM dup_parallel;
 -- result:
 10
@@ -326,15 +292,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
--- result:
-6
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE dup_parallel COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("dup_parallel", ${version_before})
 -- result:
 None
@@ -343,9 +304,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
--- result:
-3
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
@@ -394,9 +352,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='agg_parallel' and TABLE_SCHEMA='test_parallel_compaction_agg_${uuid0}';
--- result:
-11354
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -420,9 +375,6 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 5
 -- !result
 [UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
--- result:
-5
--- !result
 SELECT COUNT(*) FROM agg_parallel;
 -- result:
 6
@@ -440,15 +392,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
--- result:
-6
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE agg_parallel COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("agg_parallel", ${version_before})
 -- result:
 None
@@ -457,9 +404,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
--- result:
-3
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
@@ -504,9 +448,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='uniq_parallel' and TABLE_SCHEMA='test_parallel_compaction_uniq_${uuid0}';
--- result:
-11547
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -530,9 +471,6 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 5
 -- !result
 [UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
--- result:
-5
--- !result
 SELECT COUNT(*) FROM uniq_parallel;
 -- result:
 7
@@ -551,15 +489,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
--- result:
-6
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE uniq_parallel COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("uniq_parallel", ${version_before})
 -- result:
 None
@@ -568,9 +501,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
--- result:
-3
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
@@ -616,9 +546,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_no_parallel' and TABLE_SCHEMA='test_parallel_compaction_disabled_${uuid0}';
--- result:
-11388
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -659,15 +586,10 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 10	10	j	1000
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
--- result:
-6
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_no_parallel COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("pk_no_parallel", ${version_before})
 -- result:
 None
@@ -844,9 +766,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_with_updates' and TABLE_SCHEMA='test_parallel_compaction_pk_upd_${uuid0}';
--- result:
-11523
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -876,9 +795,6 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 7
 -- !result
 [UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
--- result:
-7
--- !result
 SELECT COUNT(*) FROM pk_with_updates;
 -- result:
 7
@@ -897,15 +813,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
--- result:
-8
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_with_updates COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("pk_with_updates", ${version_before})
 -- result:
 None
@@ -914,9 +825,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
--- result:
-4
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
@@ -961,9 +869,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_large_data' and TABLE_SCHEMA='test_parallel_compaction_pk_large_${uuid0}';
--- result:
-11473
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -987,9 +892,6 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 5
 -- !result
 [UC]rowset_before=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
--- result:
-5
--- !result
 SELECT COUNT(*) FROM pk_large_data;
 -- result:
 5000
@@ -1002,15 +904,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
--- result:
-6
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_large_data COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("pk_large_data", ${version_before})
 -- result:
 None
@@ -1019,9 +916,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
--- result:
-3
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
@@ -1061,9 +955,6 @@ PROPERTIES (
 -- result:
 -- !result
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_multi_buckets' and TABLE_SCHEMA='test_parallel_compaction_buckets_${uuid0}';
--- result:
-11423
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
@@ -1087,9 +978,6 @@ SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.
 10
 -- !result
 [UC]rowset_before=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
--- result:
-10
--- !result
 SELECT COUNT(*) FROM pk_multi_buckets;
 -- result:
 15
@@ -1116,15 +1004,10 @@ UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compacti
 -- result:
 -- !result
 [UC]version_before=SELECT MAX(MAX_VERSION) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
--- result:
-11
--- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
 -- !result
 [UC]ALTER TABLE pk_multi_buckets COMPACT;
--- result:
--- !result
 function: wait_compaction_committed("pk_multi_buckets", ${version_before})
 -- result:
 None
@@ -1133,9 +1016,6 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- result:
 -- !result
 [UC]rowset_after=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
--- result:
-8
--- !result
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
 -- result:
 1
