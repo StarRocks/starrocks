@@ -32,6 +32,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -84,18 +85,19 @@ public class BrokerLoadJobPreSplitFiringTest {
             BrokerLoadJob.firePreSplitHooks(
                     context, db, brokerDesc, computeResource, List.of(input), Map.of(), () -> false);
 
-            // No persisted opt-out → session variable left untouched.
-            verify(sessionVariable, never()).setEnableTabletPreSplit(Mockito.anyBoolean());
+            // No persisted value → nothing resolved for the hook, which falls back to the
+            // session it runs under.
+            verifyNoInteractions(sessionVariable);
             // Hook fired once, against the load's bound context.
             verify(context, times(1)).bindScope();
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
                     eq(context), eq(db), eq(targetTable), eq(brokerDesc),
-                    eq(fileGroups), eq(fileStatuses), eq(computeResource), any()));
+                    eq(fileGroups), eq(fileStatuses), eq(computeResource), any(), isNull()));
         }
     }
 
     @Test
-    public void testPersistedOptOutFalseAppliedBeforeHookFires() {
+    public void testPersistedOptOutFalseHandedToHookWithoutTouchingTheSubmitterSession() {
         ConnectContext context = Mockito.mock(ConnectContext.class);
         SessionVariable sessionVariable = Mockito.mock(SessionVariable.class);
         Mockito.when(context.getSessionVariable()).thenReturn(sessionVariable);
@@ -115,11 +117,43 @@ public class BrokerLoadJobPreSplitFiringTest {
                     List.of(input),
                     Map.of(SessionVariable.ENABLE_TABLET_PRE_SPLIT, "false"), () -> false);
 
-            // Persisted opt-out should be re-applied to the recreated context
-            // so the load's submit-time SET survives FE failover.
-            verify(sessionVariable).setEnableTabletPreSplit(false);
+            // The submit-time opt-out reaches the hook as a value. It must NOT be written back
+            // onto the context: outside an FE failover that context is the submitter's own live
+            // session, so writing it would undo a SET the user issued after submitting.
+            verifyNoInteractions(sessionVariable);
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()));
+                    any(), any(), any(), any(), any(), any(), any(), any(), eq(Boolean.FALSE)));
+        }
+    }
+
+    @Test
+    public void testPersistedOptInSurvivesASessionThatOptedOutAfterSubmitting() {
+        // The direction that made the old write-back visible to users: the load was accepted with
+        // pre-split on, the submitter then SET it off in the same session. The job keeps deciding
+        // with its own snapshot, and the session it borrows is left alone.
+        ConnectContext context = Mockito.mock(ConnectContext.class);
+        SessionVariable sessionVariable = Mockito.mock(SessionVariable.class);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessionVariable);
+        Mockito.when(sessionVariable.isEnableTabletPreSplit()).thenReturn(false);
+        ConnectContext.ScopeGuard scopeGuard = Mockito.mock(ConnectContext.ScopeGuard.class);
+        Mockito.when(context.bindScope()).thenReturn(scopeGuard);
+
+        Database db = Mockito.mock(Database.class);
+        BrokerDesc brokerDesc = Mockito.mock(BrokerDesc.class);
+        ComputeResource computeResource = Mockito.mock(ComputeResource.class);
+        BrokerLoadJob.PreSplitHookInput input = new BrokerLoadJob.PreSplitHookInput(
+                Mockito.mock(OlapTable.class), List.of(), List.of());
+
+        try (MockedStatic<BrokerLoadPreSplitHook> hookStatic =
+                     Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
+            BrokerLoadJob.firePreSplitHooks(
+                    context, db, brokerDesc, computeResource,
+                    List.of(input),
+                    Map.of(SessionVariable.ENABLE_TABLET_PRE_SPLIT, "true"), () -> false);
+
+            verify(sessionVariable, never()).setEnableTabletPreSplit(Mockito.anyBoolean());
+            hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
+                    any(), any(), any(), any(), any(), any(), any(), any(), eq(Boolean.TRUE)));
         }
     }
 
@@ -146,7 +180,7 @@ public class BrokerLoadJobPreSplitFiringTest {
                     List.of(firstInput, secondInput), Map.of(), () -> false);
 
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()), times(2));
+                    any(), any(), any(), any(), any(), any(), any(), any(), isNull()), times(2));
         }
     }
 
@@ -176,7 +210,7 @@ public class BrokerLoadJobPreSplitFiringTest {
             // After the first per-table hook fires, flip abort so the outer
             // loop short-circuits before invoking the second table's hook.
             hookStatic.when(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()))
+                    any(), any(), any(), any(), any(), any(), any(), any(), isNull()))
                     .thenAnswer(invocation -> {
                         abort.set(true);
                         return null;
@@ -189,7 +223,7 @@ public class BrokerLoadJobPreSplitFiringTest {
             // Only the first table's hook fires; the outer-loop guard prevents
             // the second table from invoking the hook at all.
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()), times(1));
+                    any(), any(), any(), any(), any(), any(), any(), any(), isNull()), times(1));
         }
     }
 }

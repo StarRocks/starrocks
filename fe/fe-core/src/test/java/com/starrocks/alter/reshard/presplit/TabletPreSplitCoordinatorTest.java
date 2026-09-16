@@ -145,7 +145,7 @@ public class TabletPreSplitCoordinatorTest {
 
     private PreSplitOutcome invokeMaybeAct() {
         return TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, /*sessionPreSplitEnabled*/ null);
     }
 
     private static void assertSkipped(PreSplitOutcome outcome, SkipReason expected) {
@@ -182,7 +182,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_broker_load = true;
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD, /*sessionPreSplitEnabled*/ null);
         Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, outcome);
     }
 
@@ -193,7 +193,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_broker_load = false;
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD, /*sessionPreSplitEnabled*/ null);
         assertSkipped(outcome, SkipReason.DISABLED_BY_CONFIG);
     }
 
@@ -480,6 +480,26 @@ public class TabletPreSplitCoordinatorTest {
 
     private static final PreSplitPipeline.PreparedReshardJob FAKE_PREPARED_JOB =
             new PreSplitPipeline.PreparedReshardJob(new Object());
+
+    @Test
+    public void testResolvedOptOutBeatsAnOptedInBoundSession() {
+        // A deferred load resolves this gate from the value its session held when the statement was
+        // accepted. The session bound here is the submitter's own live one, which it is free to SET
+        // again while the job sits pending; the resolved value is what must decide.
+        ConnectContext.get().getSessionVariable().setEnableTabletPreSplit(true);
+
+        assertSkipped(TabletPreSplitCoordinator.maybeAct(
+                        database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, false),
+                SkipReason.DISABLED_BY_SESSION);
+    }
+
+    @Test
+    public void testResolvedOptInBeatsAnOptedOutBoundSession() {
+        ConnectContext.get().getSessionVariable().setEnableTabletPreSplit(false);
+
+        Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, true));
+    }
 
     private static class FakePipeline implements PreSplitPipeline {
         Optional<PreparedReshardJob> preSubmitReturn = Optional.of(FAKE_PREPARED_JOB);

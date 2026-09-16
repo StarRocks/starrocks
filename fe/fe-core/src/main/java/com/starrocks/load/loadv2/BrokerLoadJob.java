@@ -525,11 +525,18 @@ public class BrokerLoadJob extends BulkLoadJob {
      * snapshot. The hook sync-awaits the reshard daemon's FINISHED transition
      * (single- and multi-partition paths) — see
      * {@link BrokerLoadPreSplitHook}. We bind the job's {@link ConnectContext}
-     * so the coordinator's session-var check sees the load's session, not
-     * whatever stale thread-local is set. We also apply the persisted opt-out
-     * value so a submit-time {@code SET enable_tablet_pre_split = false}
-     * survives FE failover (the recreated context otherwise has the default
-     * value).
+     * so everything below reads the load's session, not whatever stale
+     * thread-local is set, and we hand the hook the persisted
+     * {@code enable_tablet_pre_split} value so every gate on the way down
+     * decides with what the session held at submit time.
+     *
+     * <p>That value is read out and passed, never written back onto
+     * {@code context}: only an FE failover makes {@code context} a fresh
+     * object, so on the normal path it is the submitter's own live session
+     * (DDLStmtExecutor -> LoadMgr.createLoadJobFromStmt ->
+     * BulkLoadJob.fromLoadStmt hand the very same one down). Writing to it
+     * would undo a {@code SET enable_tablet_pre_split} the user issued after
+     * submitting, silently, from a scheduler thread.
      *
      * <p>{@code shouldAbort} is threaded through each per-table hook so the
      * sync-await releases its scheduler slot promptly when the calling load
@@ -548,10 +555,11 @@ public class BrokerLoadJob extends BulkLoadJob {
         if (preSplitInputs.isEmpty()) {
             return;
         }
-        String persistedPreSplitOptOut = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
-        if (persistedPreSplitOptOut != null) {
-            context.getSessionVariable().setEnableTabletPreSplit(Boolean.parseBoolean(persistedPreSplitOptOut));
-        }
+        // Null when the map has no entry for the key -- a job persisted before it existed, or one
+        // created outside a session -- which leaves the hook reading the session it runs under,
+        // the behaviour such a job has always had.
+        String persistedPreSplit = sessionVariables.get(SessionVariable.ENABLE_TABLET_PRE_SPLIT);
+        Boolean sessionPreSplitEnabled = persistedPreSplit == null ? null : Boolean.valueOf(persistedPreSplit);
         try (ConnectContext.ScopeGuard ignored = context.bindScope()) {
             for (PreSplitHookInput input : preSplitInputs) {
                 if (shouldAbort.getAsBoolean()) {
@@ -559,7 +567,8 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
                 BrokerLoadPreSplitHook.maybeRunPreSplit(
                         context, db, input.targetTable(), brokerDesc,
-                        input.fileGroups(), input.fileStatuses(), computeResource, shouldAbort);
+                        input.fileGroups(), input.fileStatuses(), computeResource, shouldAbort,
+                        sessionPreSplitEnabled);
             }
         }
     }
