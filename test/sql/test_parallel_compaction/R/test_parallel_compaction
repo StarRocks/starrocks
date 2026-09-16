@@ -556,13 +556,19 @@ INSERT INTO pk_no_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
 INSERT INTO pk_no_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
 -- result:
 -- !result
+INSERT INTO pk_no_parallel VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+-- result:
+-- !result
+INSERT INTO pk_no_parallel VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+-- result:
+-- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
 -- result:
-3
+5
 -- !result
 SELECT COUNT(*) FROM pk_no_parallel;
 -- result:
-6
+10
 -- !result
 SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 -- result:
@@ -572,6 +578,14 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 4	4	d	400
 5	5	e	500
 6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+-- !result
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
+-- result:
+6
 -- !result
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 -- result:
@@ -579,17 +593,17 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 [UC]ALTER TABLE pk_no_parallel COMPACT;
 -- result:
 -- !result
-SELECT sleep(30);
+function: wait_compaction_committed("pk_no_parallel", ${version_before})
 -- result:
-1
+None
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT COUNT(*) FROM pk_no_parallel;
 -- result:
-6
+10
 -- !result
 SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 -- result:
@@ -599,6 +613,10 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 4	4	d	400
 5	5	e	500
 6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
 -- !result
 DROP DATABASE test_parallel_compaction_disabled_${uuid0} FORCE;
 -- result:

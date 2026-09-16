@@ -323,10 +323,15 @@ PROPERTIES (
 [UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_no_parallel' and TABLE_SCHEMA='test_parallel_compaction_disabled_${uuid0}';
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 
--- Insert multiple batches
+-- Insert multiple batches. Five of them, like the parallel cases above: below
+-- lake_pk_compaction_min_input_segments (BE default 5) PrimaryCompactionPolicy::pick_rowset_indexes
+-- picks no rowset at all, so with three batches the compaction triggered below never runs and
+-- every assertion after it passes without exercising anything.
 INSERT INTO pk_no_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
 INSERT INTO pk_no_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
 INSERT INTO pk_no_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+INSERT INTO pk_no_parallel VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+INSERT INTO pk_no_parallel VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
 
 -- Check rowset count before compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
@@ -335,15 +340,22 @@ SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.table
 SELECT COUNT(*) FROM pk_no_parallel;
 SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
+
 -- Re-enable compaction for this table
 ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
 
 -- Manually trigger compaction (will use normal compaction, not parallel)
 [UC]ALTER TABLE pk_no_parallel COMPACT;
 
--- Wait for compaction to complete
-SELECT sleep(30);
+-- ALTER TABLE ... COMPACT is fire-and-forget: CompactionHandler only raises the partition's
+-- priority to MANUAL_COMPACT, CompactionScheduler dispatches it on a 1s loop, and the CN runs it
+-- asynchronously. Poll for the commit rather than guessing a duration -- a fixed sleep is what
+-- froze half-finished rowset counts into the expected results of the parallel cases in this file.
+function: wait_compaction_committed("pk_no_parallel", ${version_before})
 
+-- max_parallel = 0 attaches no parallelConfig (CompactionScheduler.java:496), so the input merges
+-- into a single output rowset, unlike the parallel cases above which leave one rowset per subtask.
 -- Check rowset count after compaction
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
 
