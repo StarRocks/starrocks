@@ -14,12 +14,29 @@
 
 #include "exec/pipeline/hashjoin/spillable_hash_join_probe_operator.h"
 
+#include <unistd.h>
+
 #include <algorithm>
 #include <memory>
 #include <mutex>
 #include <numeric>
 
+<<<<<<< HEAD
 #include "common/config.h"
+=======
+#include "base/failpoint/fail_point.h"
+#include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/operator_mem_resource_manager.h"
+#include "compute_env/spill/partition.h"
+#include "compute_env/spill/spill_components.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller.hpp"
+#include "compute_env/spill/task_executor.h"
+#include "compute_env/spill/yield.h"
+>>>>>>> 0fb4193 ([BugFix] Guard spillable join probe against a released build-side spiller after cancel (#79085))
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
@@ -37,6 +54,10 @@
 namespace starrocks::pipeline {
 
 DEFINE_FAIL_POINT(spill_hash_join_throw_bad_alloc)
+// Test-only hook: hold a spill IO task after it has been scheduled so that a cancel issued in the
+// meantime runs SpillableHashJoinProbeOperator::close() -> HashJoiner::close() first. This makes the
+// task observe a released build-side spiller, which is the window the null guard in _status() covers.
+DEFINE_FAIL_POINT(spill_hash_join_probe_load_partition_sleep)
 
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
@@ -268,8 +289,22 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
                 return Status::Cancelled("cancelled");
             }
 
+<<<<<<< HEAD
             RETURN_IF_ERROR(reader->trigger_restore<spill::SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker)));
             auto chunk_st = reader->restore<spill::SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker));
+=======
+            RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker)));
+            // Cancellation (or a restore-task I/O error) can land *during* trigger_restore's IO
+            // task -- after the is_cancelled() check above -- leaving the stream with neither a
+            // buffered chunk nor EOF. Re-check both here so we bail cleanly instead of consuming
+            // an empty/not-eof stream (which would otherwise hit BufferedInputStream::get_next's
+            // no-data path).
+            if (state->is_cancelled()) {
+                return Status::Cancelled("cancelled");
+            }
+            RETURN_IF_ERROR(_status());
+            auto chunk_st = reader->restore<SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker));
+>>>>>>> 0fb4193 ([BugFix] Guard spillable join probe against a released build-side spiller after cancel (#79085))
 
             FAIL_POINT_TRIGGER_EXECUTE(spill_hash_join_throw_bad_alloc, { throw std::bad_alloc(); });
 
@@ -301,6 +336,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
     auto query_ctx = state->query_ctx()->weak_from_this();
     for (size_t i = 0; i < _processing_partitions.size(); ++i) {
         std::shared_ptr<spill::SpillerReader> reader = std::move(spill_readers[i]);
+<<<<<<< HEAD
         auto task = [this, state, reader, i, query_ctx, driver_id](auto& yield_ctx) {
             if (auto acquired = query_ctx.lock()) {
                 SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
@@ -311,6 +347,19 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                 });
                 if (!_status().ok()) {
                     return;
+=======
+        auto guard = TRACKER_WITH_SPILLER_RES_GUARD(state, _join_builder->spiller());
+        auto task = [this, state, reader, i, query_ctx, driver_id, guard](auto& yield_ctx) {
+            auto yield_defer = yield_ctx.defer_finished();
+            RETURN_IF(!guard.scoped_begin(), (void)0);
+            DEFER_GUARD_END(guard);
+            FAIL_POINT_TRIGGER_EXECUTE(spill_hash_join_probe_load_partition_sleep, { sleep(3); });
+            SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+            SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
+            auto defer = CancelableDefer([&]() {
+                if (_latch.count_down() && _is_finished) {
+                    _reset_load_partitions();
+>>>>>>> 0fb4193 ([BugFix] Guard spillable join probe against a released build-side spiller after cancel (#79085))
                 }
                 if (!yield_ctx.task_context_data.has_value()) {
                     yield_ctx.task_context_data = std::make_shared<spill::SpillIOTaskContext>();
@@ -342,7 +391,17 @@ void SpillableHashJoinProbeOperator::_update_status(Status&& status) const {
 }
 
 Status SpillableHashJoinProbeOperator::_status() const {
-    RETURN_IF_ERROR(_join_builder->spiller()->task_status());
+    // HashJoiner::close() releases the build-side spiller. A spill IO task that was still queued when
+    // the query got cancelled reaches this point afterwards and would dereference a null shared_ptr:
+    // its resource guard only keeps the Spiller object alive, it cannot stop the joiner from dropping
+    // its own reference. Take a copy so the null check and the use below see the same pointer.
+    auto build_spiller = _join_builder->spiller();
+    if (build_spiller == nullptr) {
+        LOG(WARNING) << "build side spiller already released, skip spill IO task. query_id="
+                     << print_id(get_factory()->runtime_state()->query_id());
+        return Status::Cancelled("build side spiller has been released");
+    }
+    RETURN_IF_ERROR(build_spiller->task_status());
     std::lock_guard guard(_mutex);
     return _operator_status;
 }
@@ -472,7 +531,8 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
 }
 
 bool SpillableHashJoinProbeOperator::spilled() const {
-    return _join_builder->spiller()->spilled();
+    auto build_spiller = _join_builder->spiller();
+    return build_spiller != nullptr && build_spiller->spilled();
 }
 
 void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
