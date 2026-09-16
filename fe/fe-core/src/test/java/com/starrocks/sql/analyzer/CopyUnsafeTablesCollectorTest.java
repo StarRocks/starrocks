@@ -15,11 +15,15 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.StarRocksExternalTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -28,8 +32,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -178,6 +184,128 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
     @Test
     public void testExternalOlapTableIsLockable() {
         Assertions.assertTrue(new ExternalOlapTable().isMetaLockTarget());
+    }
+
+    /**
+     * Runs {@code body} with {@code test.t0} carrying one more related MV than
+     * {@code skip_whole_phase_lock_mv_limit} allows, which is what puts a native table over that limit in
+     * production. Synthetic MvIds rather than real MVs on purpose: the predicate only reads the set's size,
+     * and real MVs would drag MV rewrite into a test about how long a lock is held.
+     */
+    private static void withT0OverTheMvLimit(Executable body) throws Throwable {
+        int limit = Config.skip_whole_phase_lock_mv_limit;
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId();
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        List<MvId> added = Lists.newArrayList();
+        for (int i = 0; i <= limit; i++) {
+            MvId mvId = new MvId(dbId, 10086L + i);
+            t0.addRelatedMaterializedView(mvId);
+            added.add(mvId);
+        }
+        try {
+            Assertions.assertTrue(t0.getRelatedMaterializedViews().size() > limit,
+                    "the fixture did not put t0 over the limit, the assertions below prove nothing");
+            body.execute();
+        } finally {
+            added.forEach(t0::removeRelatedMaterializedView);
+        }
+    }
+
+    /**
+     * A native table over skip_whole_phase_lock_mv_limit keeps holding the lock for the whole planning phase
+     * when nothing else in the statement makes that expensive. The limit trades snapshot cost against
+     * lock-held time, and for a purely local statement both sides are CPU, so the trade stands.
+     */
+    @Test
+    public void testNativeTableOverTheMvLimitStillHoldsTheLockForALocalStatement() throws Throwable {
+        withT0OverTheMvLimit(() -> {
+            Assertions.assertFalse(isCopySafe("select * from test.t0"));
+            Assertions.assertFalse(isCopySafe("select * from test.t0 join test.t1 on test.t0.v1 = test.t1.v4"));
+        });
+    }
+
+    /**
+     * ... but not when the statement also reads through a connector. Then the lock would be held across
+     * partition listing, statistics and file listing on a system the FE does not control, while protecting
+     * nothing on that side -- an external table is never in the lock set. The snapshot is the cheaper half of
+     * that trade, so the limit does not get to decide.
+     *
+     * <p>Asserted in both orders because the verdict for the native table depends on a table the collector may
+     * not have reached yet.
+     */
+    @Test
+    public void testNativeTableOverTheMvLimitYieldsToAConnectorTable() throws Throwable {
+        withT0OverTheMvLimit(() -> {
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test.t0 join hive0.tpch.lineitem on test.t0.v1 = l_orderkey"));
+            Assertions.assertTrue(isCopySafe(
+                    "select * from hive0.tpch.lineitem join test.t0 on test.t0.v1 = l_orderkey"));
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test.t1 join test.t0 on test.t1.v4 = test.t0.v1 "
+                            + "join jdbc0.partitioned_db0.tbl0 on true"));
+        });
+    }
+
+    /**
+     * A connector table rescues the MV limit, never a table the lock does have to protect for the whole phase.
+     * ENGINE=MYSQL has no snapshot to plan against, so the statement stays copy-unsafe whatever else it reads.
+     */
+    @Test
+    public void testAConnectorTableDoesNotRescueATableWithNoSnapshot() throws Throwable {
+        withT0OverTheMvLimit(() -> Assertions.assertFalse(isCopySafe(
+                "select * from test.t0 join test.mysql_ext_tbl on test.t0.v1 = mysql_ext_tbl.k1 "
+                        + "join hive0.tpch.lineitem on true")));
+    }
+
+    /**
+     * The connector table is found wherever it sits in the statement, not just in a top-level join. Each shape
+     * reaches visitTable by a different route through AstTraverser, and the MV-limit verdict is only taken
+     * after the walk, so a shape that hides the connector table from the walk would silently keep the lock.
+     */
+    @Test
+    public void testAConnectorTableIsFoundInEveryStatementShape() throws Throwable {
+        withT0OverTheMvLimit(() -> {
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test.t0 where v1 in (select l_orderkey from hive0.tpch.lineitem)"),
+                    "IN subquery");
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test.t0 where v1 > (select max(l_orderkey) from hive0.tpch.lineitem)"),
+                    "scalar subquery");
+            Assertions.assertTrue(isCopySafe(
+                    "with c as (select l_orderkey from hive0.tpch.lineitem) "
+                            + "select * from test.t0 join c on test.t0.v1 = c.l_orderkey"),
+                    "CTE");
+            Assertions.assertTrue(isCopySafe(
+                    "select v1 from test.t0 union all select l_orderkey from hive0.tpch.lineitem"),
+                    "union all");
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test.t0 join (select l_orderkey from hive0.tpch.lineitem) d "
+                            + "on test.t0.v1 = d.l_orderkey"),
+                    "derived table");
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test.lock_scope_view v join hive0.tpch.lineitem on v.v1 = l_orderkey"),
+                    "view over the over-the-limit table");
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test.t0 join jdbc0.partitioned_db0.tbl0 on true "
+                            + "join paimon0.pmn_db1.unpartitioned_table on true"),
+                    "several catalogs at once");
+        });
+    }
+
+    /**
+     * An INSERT target is put into the copy-unsafe set by TableCollector.visitInsertStatement before
+     * visitTable ever runs, so no INSERT has ever been copy-safe and StatementPlanner.isLockFreeInsertStmt has
+     * always answered false. Pinned as it stands rather than changed here: making the INSERT path lock-free is
+     * a separate question about the target table's own protection, not about the MV limit this change is
+     * concerned with. It is also why the MV limit is unreachable for an INSERT, with or without this change.
+     */
+    @Test
+    public void testInsertIsCopyUnsafeRegardlessOfWhatItReads() throws Throwable {
+        Assertions.assertFalse(isCopySafe("insert into test.t0 select v4, v5, v6 from test.t1"));
+        Assertions.assertFalse(isCopySafe(
+                "insert into test.t0 select l_orderkey, l_partkey, l_suppkey from hive0.tpch.lineitem"));
+        withT0OverTheMvLimit(() -> Assertions.assertFalse(isCopySafe(
+                "insert into test.t0 select l_orderkey, l_partkey, l_suppkey from hive0.tpch.lineitem")));
     }
 
     /**
