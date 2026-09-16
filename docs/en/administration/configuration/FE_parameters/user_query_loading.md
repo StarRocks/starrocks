@@ -292,15 +292,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
 - Introduced in: v3.2.0
 
-### `enable_batch_insert_histogram_statistics`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to batch inserts when collecting histograms for multiple columns. This parameter applies to both StarRocks tables and external tables. If this parameter is set to `false`, StarRocks inserts histogram statistics separately for each column.
-- Introduced in: -
-
 ### `enable_collect_full_statistic`
 
 - Default: true
@@ -1170,8 +1161,8 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 4 * 3600
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
+- Is mutable: Yes
+- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. The value must be greater than 0. A value of 0 or less is rejected, both by `ADMIN SET FRONTEND CONFIG` and when the FE loads `fe.conf` at startup.
 - Introduced in: -
 
 ### `label_keep_max_num`
@@ -1245,6 +1236,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`.
+- Introduced in: -
+
+### `max_get_loads_result_count`
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of load records that FE returns in one response when a BE or CN scans `information_schema.loads`. When a scan matches more records than this, FE returns a page and a cursor, and the BE or CN requests the next page until all records are read; query results are unaffected, only the number of RPC round-trips behind one scan changes. A page is cut at a job boundary, so one load job's rows are never split across two pages and a page can slightly exceed this value. Raising it reduces round-trips but grows each response, which risks exceeding the message size limit of the BE-side RPC client; lowering it bounds each response at the cost of more round-trips. Paging applies only when the BE or CN is new enough to send the cursor; an older one still receives the whole result set in a single response.
 - Introduced in: -
 
 ### `max_load_initial_open_partition_number`

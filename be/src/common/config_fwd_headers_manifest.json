@@ -676,6 +676,11 @@
         "starlet_fs_read_prefetch_enable",
         "starlet_fs_read_prefetch_threadpool_size",
         "starlet_fs_stream_buffer_size_bytes",
+        "starlet_fslib_azure_storage_max_single_part_size",
+        "starlet_fslib_azure_storage_min_upload_part_size",
+        "starlet_fslib_gcs_max_single_part_size",
+        "starlet_fslib_s3_max_single_part_size",
+        "starlet_fslib_s3_min_upload_part_size",
         "starlet_fslib_s3client_connect_timeout_ms",
         "starlet_fslib_s3client_nonread_max_retries",
         "starlet_fslib_s3client_nonread_retry_scale_factor",
@@ -723,7 +728,6 @@
         "enable_rowset_verify",
         "vertical_compaction_max_columns_per_group",
         "enable_size_tiered_compaction_strategy",
-        "enable_pk_index_parallel_compaction",
         "size_tiered_max_compaction_level",
         "size_tiered_min_level_size",
         "size_tiered_level_multiple",
@@ -757,7 +761,8 @@
         "enable_sdcg_compaction_conflict_replay",
         "enable_lake_compaction_use_partial_segments",
         "enable_lake_compaction_range_split",
-        "lake_compaction_chunk_size"
+        "lake_compaction_chunk_size",
+        "lake_compaction_hold_input_segments"
       ]
     },
     {
@@ -788,7 +793,6 @@
         "pk_index_target_file_size",
         "pk_index_compaction_score_ratio",
         "pk_index_early_sst_compaction_threshold",
-        "enable_pk_index_parallel_execution",
         "pk_index_parallel_execution_min_rows",
         "lake_rows_mapper_read_parallelism",
         "lake_rows_mapper_sub_chunk_bytes",
@@ -812,7 +816,7 @@
         "lake_pk_preload_memory_limit_percent",
         "lake_pk_index_sst_min_compaction_versions",
         "lake_pk_index_sst_max_compaction_versions",
-        "lake_pk_index_cumulative_base_compaction_ratio",
+        "lake_pk_index_sst_verify_checksum",
         "lake_pk_index_block_cache_limit_percent",
         "cloud_native_pk_index_rebuild_files_threshold",
         "primary_key_compaction_replace_batch_rows",
@@ -852,13 +856,11 @@
     {
       "path": "be/src/common/config_rowset_fwd.h",
       "configs": [
-        "segment_sort_key_sample_row_interval",
-        "enable_full_sort_key_index",
-        "enable_full_sort_key_index_read",
-        "sort_key_limit_size",
+        "sort_key_max_samples_per_tablet",
         "enable_transparent_data_encryption",
         "default_num_rows_per_column_file_block",
         "data_page_size",
+        "lake_enable_segment_tail_index_region",
         "enable_bitmap_index_memory_page_cache",
         "enable_zonemap_index_memory_page_cache",
         "enable_ordinal_index_memory_page_cache",
@@ -922,6 +924,9 @@
         "lake_tablet_stat_slow_log_ms",
         "lake_metadata_fetch_thread_count",
         "lake_metadata_cache_limit",
+        "lake_dump_tablet_metadata_per_request_memory_limit_bytes",
+        "lake_dump_tablet_metadata_per_request_json_size_limit_bytes",
+        "lake_dump_tablet_metadata_max_concurrency",
         "lake_cache_select_in_physical_way",
         "lake_service_max_concurrency",
         "lake_enable_orphan_delvec_cleanup_on_compaction"

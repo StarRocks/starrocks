@@ -19,6 +19,7 @@
 #include "base/types/int256.h"
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
+#include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
@@ -88,6 +89,10 @@ template <>
 inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_VARIANT> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_GEOGRAPHY> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_GEOMETRY> = false;
 
 template <LogicalType logical_type>
 constexpr bool isSliceLT = false;
@@ -100,6 +105,10 @@ inline constexpr bool isSliceLT<TYPE_VARCHAR> = true;
 
 template <>
 inline constexpr bool isSliceLT<TYPE_VARBINARY> = true;
+template <>
+inline constexpr bool isSliceLT<TYPE_GEOGRAPHY> = true;
+template <>
+inline constexpr bool isSliceLT<TYPE_GEOMETRY> = true;
 
 template <LogicalType logical_type>
 struct RunTimeTypeTraits {};
@@ -333,6 +342,16 @@ struct RunTimeTypeTraits<TYPE_STRUCT> {
 };
 
 template <>
+struct RunTimeTypeTraits<TYPE_GEOGRAPHY> {
+    using CppType = Slice;
+    using ColumnType = GeoColumn;
+    using ImmContainerType = ColumnType::ImmContainer;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_GEOMETRY> : RunTimeTypeTraits<TYPE_GEOGRAPHY> {};
+
+template <>
 struct RunTimeTypeTraits<TYPE_MAP> {
     using CppType = DatumMap;
     using ColumnType = MapColumn;
@@ -532,6 +551,16 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type min_value();
     static value_type max_value();
 };
+
+template <>
+struct RunTimeTypeLimits<TYPE_GEOGRAPHY> {
+    using value_type = RunTimeCppType<TYPE_GEOGRAPHY>;
+    static value_type min_value() { return GeoColumn::min_value(); }
+    static value_type max_value() { return GeoColumn::max_value(); }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_GEOMETRY> : RunTimeTypeLimits<TYPE_GEOGRAPHY> {};
 
 template <>
 struct RunTimeTypeLimits<TYPE_VARIANT> {

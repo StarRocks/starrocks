@@ -108,6 +108,7 @@ public class TabletCollector extends LeaderDaemon {
                     client -> client.get_tablets_info(new TGetTabletsInfoRequest()));
 
             if (result.getStatus().getStatus_code() == TStatusCode.OK) {
+                updateTabletMaxCompactionScore(backend, result);
                 GlobalStateMgr.getCurrentState().getReportHandler()
                         .putTabletReportTask(backend.getId(), result.getReport_version(), result.getTablets());
                 LOG.debug("collect tablet from backend {} successfully, time used: {}ms", backend.getId(),
@@ -127,6 +128,12 @@ public class TabletCollector extends LeaderDaemon {
         // otherwise it will block the collection of other backends.
         collectStat.lastCollectTime = System.currentTimeMillis();
         collectQueue.add(collectStat);
+    }
+
+    static void updateTabletMaxCompactionScore(Backend backend, TGetTabletsInfoResult result) {
+        if (result.isSetTablet_max_compaction_score()) {
+            backend.setTabletMaxCompactionScore(result.getTablet_max_compaction_score());
+        }
     }
 
     public static class CollectStat implements Comparable<CollectStat> {

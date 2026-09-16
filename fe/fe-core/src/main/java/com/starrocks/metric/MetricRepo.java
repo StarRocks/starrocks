@@ -61,6 +61,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.ThriftServer;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
@@ -496,6 +497,10 @@ public final class MetricRepo {
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
+    public static GaugeMetric<Long> GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS;
+    public static Histogram HISTO_THRIFT_SERVER_QUEUE_WAIT_MS;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -521,6 +526,27 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
         GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
         GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
+
+        GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS = new GaugeMetric<>(
+                "thrift_server_acceptor_stall_ms", MetricUnit.MILLISECONDS,
+                "milliseconds since the thrift accept loop last made progress") {
+            @Override
+            public Long getValue() {
+                return ThriftServer.getAcceptorStallTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS);
+
+        COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_rejected_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed because its worker pool was saturated");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS);
+
+        COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_expired_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed unserved because they waited in the pending "
+                        + "queue longer than thrift_server_queue_timeout_ms");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS);
 
         // 1. gauge
         // build info
@@ -627,6 +653,19 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
+
+        // metadata freshness of this node. Reported by every node, and unlike max_journal_replay_lag
+        // below it is visible on the lagging node itself; it keeps growing while a single journal entry
+        // is stuck in the applier, which is precisely when the node is serving frozen metadata.
+        GaugeMetric<Long> metaReplayLagSecond = (GaugeMetric<Long>) new GaugeMetric<Long>(
+                "meta_replay_lag_second", MetricUnit.SECONDS,
+                "seconds by which the metadata replayed by this frontend lags behind the leader's clock") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getMetaReplayLagSecond();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(metaReplayLagSecond);
 
         // journal replay lag of the slowest follower/observer.
         // Leader-only: it is the only node that knows both the write frontier and, via heartbeat,
@@ -1167,6 +1206,12 @@ public final class MetricRepo {
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
+        // How long connections sat in the thrift server pending queue before a worker reached them,
+        // sampled whether the connection was then served or dropped as expired. This is the leading
+        // indicator of thrift saturation: it rises while the pool is still keeping up, well before
+        // rejections start.
+        HISTO_THRIFT_SERVER_QUEUE_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("thrift_server", "queue_wait", "ms"));
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
         HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(

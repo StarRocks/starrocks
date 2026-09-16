@@ -26,9 +26,7 @@
 #include "compute_env/query/query_runtime_state.h"
 #include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/iceberg_global_late_materialization_context.h"
-#ifdef WITH_PAIMON_CPP
-#include "connector/hive/paimon/paimon_scanner.h"
-#endif
+#include "connector/hive/paimon/paimon_cpp_loader.h"
 #include "connector/hive/scanner/cache_select_scanner.h"
 #include "connector/hive/scanner/hdfs_scanner_avro.h"
 #include "connector/hive/scanner/hdfs_scanner_json.h"
@@ -934,13 +932,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (_scanner_ctx.format_scan_context.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_native_reader) {
-#ifdef WITH_PAIMON_CPP
-        scanner = new PaimonScanner();
-#else
-        // Native scan ranges also carry the JNI payload so BEs built without
-        // paimon-cpp support can fall back safely.
-        scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
-#endif
+        // Loads the paimon-cpp shim on first use; fails the query with an
+        // actionable error (suggesting paimon_reader_mode='JNI') when the
+        // paimon libraries are absent from be/lib/paimon-cpp-lib.
+        ASSIGN_OR_RETURN(scanner, create_paimon_cpp_scanner());
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
     } else if (use_fluss_jni_reader) {

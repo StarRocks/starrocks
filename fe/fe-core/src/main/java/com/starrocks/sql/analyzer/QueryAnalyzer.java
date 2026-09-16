@@ -426,12 +426,21 @@ public class QueryAnalyzer {
     }
 
     private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
-        // for recursive cte analyze
-        private String currentRecursiveCTE = null;
+        // Names of the recursive CTEs whose recursive members are currently being analyzed, innermost
+        // on top. A stack, not a single value: a recursive CTE nested inside another one must not
+        // overwrite the outer name and then clear it, or a reference back to the outer CTE stops being
+        // recognized as recursive and its definition gets expanded without end (StackOverflowError /
+        // hang in the table collectors).
+        private final Deque<String> recursiveCteStack = new ArrayDeque<>();
         // Fallback for cyclic view detection when there is no session; the shared path lives on the
         // session (see viewExpansionStack()) so it survives the fresh QueryAnalyzer that each
         // scalar/IN/EXISTS subquery spawns.
         private final Set<String> localViewExpansionStack = new HashSet<>();
+        // Fallback for the recursive-CTE analysis path when there is no session; see
+        // recursiveCteAnalysisPath(). recursiveCteStack above is per-Visitor and cannot see a
+        // recursive reference that a subquery resolves in its own fresh Visitor, so the shared path
+        // on the session is what catches those.
+        private final Set<String> localRecursiveCtePath = new HashSet<>();
         private final Deque<AnalyzeState> queryBlockAnalyzeStates = new ArrayDeque<>();
 
         public Visitor() {
@@ -442,6 +451,14 @@ public class QueryAnalyzer {
         // still observed; only when session is null do we fall back to the per-Visitor set.
         private Set<String> viewExpansionStack() {
             return session != null ? session.getViewExpansionPath() : localViewExpansionStack;
+        }
+
+        // Names of the recursive CTEs currently being analyzed, shared via the session so a recursive
+        // reference routed through a scalar/IN/EXISTS subquery (which gets its own QueryAnalyzer/Visitor,
+        // hence an empty recursiveCteStack) is still observed; only when session is null do we fall back
+        // to the per-Visitor set.
+        private Set<String> recursiveCteAnalysisPath() {
+            return session != null ? session.getRecursiveCteAnalysisPath() : localRecursiveCtePath;
         }
 
         public Scope process(ParseNode node, Scope scope) {
@@ -532,27 +549,38 @@ public class QueryAnalyzer {
             withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(cteOutputs)));
             cteScope.addCteQueries(cteName, withQuery);
             int outputSize = anchorScope.getRelationFields().size();
-            this.currentRecursiveCTE = cteName;
-            for (int i = 1; i < unionRelation.getRelations().size(); ++i) {
-                Scope relation = process(unionRelation.getRelations().get(i), cteScope);
-                if (relation.getRelationFields().size() != outputSize) {
-                    throw new SemanticException("Operands have unequal number of columns");
+            this.recursiveCteStack.push(cteName);
+            // Also mark it on the session-shared path so a reference resolved inside a subquery's own
+            // Visitor can still tell this CTE is mid-analysis. addedToPath guards a same-named CTE
+            // nested inside another so only the outermost occurrence clears the entry.
+            boolean addedToPath = recursiveCteAnalysisPath().add(cteName);
+            try {
+                for (int i = 1; i < unionRelation.getRelations().size(); ++i) {
+                    Scope relation = process(unionRelation.getRelations().get(i), cteScope);
+                    if (relation.getRelationFields().size() != outputSize) {
+                        throw new SemanticException("Operands have unequal number of columns");
+                    }
+                    for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
+                        Field field = relation.getRelationFields().getAllFields().get(fieldIdx);
+                        Type fieldType = field.getType();
+                        if (fieldType.isOnlyMetricType() && !unionRelation.getQualifier().equals(SetQualifier.ALL)) {
+                            throw new SemanticException("%s not support set operation", fieldType);
+                        }
+                        Type childRelationType = relation.getRelationFields().getFieldByIndex(fieldIdx).getType();
+                        if (!childRelationType.matchesType(outputTypes[fieldIdx])
+                                && !TypeManager.canCastTo(childRelationType, outputTypes[fieldIdx])) {
+                            throw new SemanticException(
+                                    String.format("Unequality return types '%s' and '%s' in recursive cte",
+                                            outputTypes[fieldIdx], childRelationType));
+                        }
+                    }
                 }
-                for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
-                    Field field = relation.getRelationFields().getAllFields().get(fieldIdx);
-                    Type fieldType = field.getType();
-                    if (fieldType.isOnlyMetricType() && !unionRelation.getQualifier().equals(SetQualifier.ALL)) {
-                        throw new SemanticException("%s not support set operation", fieldType);
-                    }
-                    Type childRelationType = relation.getRelationFields().getFieldByIndex(fieldIdx).getType();
-                    if (!childRelationType.matchesType(outputTypes[fieldIdx])
-                            && !TypeManager.canCastTo(childRelationType, outputTypes[fieldIdx])) {
-                        throw new SemanticException(String.format("Unequality return types '%s' and '%s' in recursive cte",
-                                outputTypes[fieldIdx], childRelationType));
-                    }
+            } finally {
+                this.recursiveCteStack.pop();
+                if (addedToPath) {
+                    recursiveCteAnalysisPath().remove(cteName);
                 }
             }
-            this.currentRecursiveCTE = null;
             if (!withQuery.isRecursive()) {
                 return false;
             }
@@ -811,9 +839,30 @@ public class QueryAnalyzer {
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
                                 new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
-                        if (currentRecursiveCTE != null && currentRecursiveCTE.equals(tableName.getTbl())) {
-                            newCteRelation.setRecursive(true);
-                            withRelation.setRecursive(true);
+                        if (!recursiveCteStack.isEmpty() && recursiveCteStack.contains(tableName.getTbl())) {
+                            if (tableName.getTbl().equals(recursiveCteStack.peek())) {
+                                // Direct self-reference in the recursive member of the CTE being analyzed.
+                                newCteRelation.setRecursive(true);
+                                withRelation.setRecursive(true);
+                            } else {
+                                // Reference to an OUTER recursive CTE from inside a nested CTE/subquery. This
+                                // cross-scope recursive reference is not supported (and left the analyzer to
+                                // expand it forever); reject it instead of hanging. Use the same message as
+                                // RecursiveCTEAstCheck (the enable_recursive_cte=true path) so multi-level
+                                // recursive CTEs are rejected consistently however they reach the analyzer.
+                                throw new SemanticException("Doesn't support multi-level recursive CTE",
+                                        tableRelation.getPos());
+                            }
+                        } else if (recursiveCteAnalysisPath().contains(tableName.getTbl())) {
+                            // The name is a recursive CTE whose recursive member is still being analyzed in
+                            // an enclosing scope, yet this reference is resolved by a nested QueryAnalyzer
+                            // whose own recursiveCteStack does not contain it -- i.e. the reference sits
+                            // inside a scalar/IN/EXISTS subquery of the recursive member. A recursive
+                            // reference is only legal in the recursive member's FROM clause; inside a
+                            // subquery it previously slipped past the guard and expanded forever
+                            // (StackOverflowError / "Unknown error"). Reject it with the same message.
+                            throw new SemanticException("Doesn't support multi-level recursive CTE",
+                                    tableRelation.getPos());
                         }
                         return newCteRelation;
                     }
@@ -1255,7 +1304,7 @@ public class QueryAnalyzer {
 
                 // Validate ASOF JOIN conditions
                 if (join.getJoinOp().isAsofJoin()) {
-                    validateAsofJoinConditions(joinEqual);
+                    validateAsofJoinConditions(joinEqual, leftScope, rightScope);
                 }
 
                 // check the join on predicate, example:
@@ -1325,12 +1374,12 @@ public class QueryAnalyzer {
             return newFields;
         }
 
-        private void validateAsofJoinConditions(Expr joinPredicate) {
+        private void validateAsofJoinConditions(Expr joinPredicate, Scope leftScope, Scope rightScope) {
             if (joinPredicate == null) {
                 throw new SemanticException("ASOF JOIN requires ON clause with join conditions");
             }
 
-            AsofJoinConditionValidator validator = new AsofJoinConditionValidator();
+            AsofJoinConditionValidator validator = new AsofJoinConditionValidator(leftScope, rightScope);
             validator.validate(joinPredicate);
         }
 
@@ -2690,9 +2739,25 @@ public class QueryAnalyzer {
     }
 
     private static class AsofJoinConditionValidator {
+        // Which side of the join an operand of the temporal condition reads its columns from.
+        private enum OperandSide {
+            LEFT,
+            RIGHT,
+            BOTH,
+            // Reads neither child: a constant, or a column of an enclosing query.
+            NONE
+        }
+
+        private final Scope leftScope;
+        private final Scope rightScope;
         private int equalityPredicateCount = 0;
         private int inequalityPredicateCount = 0;
         private boolean containsOrOperator = false;
+
+        AsofJoinConditionValidator(Scope leftScope, Scope rightScope) {
+            this.leftScope = leftScope;
+            this.rightScope = rightScope;
+        }
 
         public void validate(Expr joinPredicate) {
             visit(joinPredicate);
@@ -2724,6 +2789,7 @@ public class QueryAnalyzer {
                 } else if (binary.getOp().isRange()) {
                     inequalityPredicateCount++;
                     validateTemporalConditionTypes(binary);
+                    validateTemporalConditionSides(binary);
                 } else {
                     throw new SemanticException("ASOF JOIN does not support '" + binary.getOp() + "' operator " +
                             "in join ON clause");
@@ -2749,6 +2815,61 @@ public class QueryAnalyzer {
 
         private boolean isTemporalOrderingType(Type type) {
             return type.isBigint() || type.isDate() || type.isDatetime();
+        }
+
+        // The temporal condition is what the ASOF match is computed on: the BE reads one operand from
+        // the probe chunk and the other from the build chunk. If both operands read the same side there
+        // is no temporal relation between the two tables at all, and the BE ends up asking the build
+        // chunk for a column that only the probe side carries.
+        private void validateTemporalConditionSides(BinaryPredicate predicate) {
+            OperandSide leftOperandSide = operandSide(predicate.getChild(0));
+            OperandSide rightOperandSide = operandSide(predicate.getChild(1));
+
+            // Exactly one operand per side, in either order. Anything else - both operands on one side, an
+            // operand mixing the two, or an operand that reads neither child (a constant, an outer
+            // reference) - leaves the join without a temporal column on one of its sides.
+            boolean relatesTheTwoSides =
+                    (leftOperandSide == OperandSide.LEFT && rightOperandSide == OperandSide.RIGHT) ||
+                            (leftOperandSide == OperandSide.RIGHT && rightOperandSide == OperandSide.LEFT);
+
+            if (!relatesTheTwoSides) {
+                throw new SemanticException(
+                        "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                                + "with a column from the right side, found: " + ExprToSql.toMySql(predicate),
+                        predicate.getPos());
+            }
+        }
+
+        private OperandSide operandSide(Expr operand) {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            operand.collect(SlotRef.class, slotRefs);
+
+            boolean readsLeft = false;
+            boolean readsRight = false;
+            for (SlotRef slotRef : slotRefs) {
+                if (readsScope(leftScope, slotRef)) {
+                    readsLeft = true;
+                } else if (readsScope(rightScope, slotRef)) {
+                    readsRight = true;
+                }
+            }
+
+            if (readsLeft && readsRight) {
+                return OperandSide.BOTH;
+            } else if (readsLeft) {
+                return OperandSide.LEFT;
+            } else if (readsRight) {
+                return OperandSide.RIGHT;
+            }
+            return OperandSide.NONE;
+        }
+
+        // Only this scope's own fields count. `Scope.tryResolveField` walks up to the parent scope, which
+        // resolves an outer query's column here: with a chained join whose left child is itself a join (that
+        // scope does have a parent), a right-side column that shares its name with an outer relation would be
+        // charged to the left side and a perfectly valid join rejected.
+        private boolean readsScope(Scope scope, SlotRef slotRef) {
+            return !scope.getRelationFields().resolveFields(slotRef).isEmpty();
         }
     }
 }

@@ -186,6 +186,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 如果要在当前会话中激活一个角色，可以使用 [SET ROLE](sql-statements/account-management/SET_ROLE.md)。
 
+### ai_topn_pushdown_max_global_limit
+
+* **描述**：在满足条件的 AI 投影下方使用全局候选 TopN 的最大 SQL `LIMIT` 值。超过阈值时，按每个 Fragment Instance 使用本地候选 TopN 裁剪。`0` 表示仅使用本地裁剪，不会禁用优化。
+* **默认值**：1000
+* **数据类型**：long
+* **取值范围**：[0, 9223372036854775807]
+* **作用域**：Session、Global
+
+支持通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置，无需重启。策略说明和示例参见 [减少 AI 输入行数](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows)。
+
 ### ann_params
 
 * **描述**：指定近似最近邻（ANN）向量索引检索的查询参数。取值是键和值均为字符串的 JSON 对象字符串。HNSW 支持 `efsearch`；IVFPQ 支持 `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht` 和 `range_search_confidence`。可以在会话或单条语句中设置，例如 `SET ann_params = '{"efsearch":"256"}'` 或 `SET_VAR (ann_params='{"efsearch":"256"}')`。
@@ -1247,6 +1257,14 @@ FROM test;
 * 默认值：33554432 (32 MB)
 * 单位：Byte
 * 类型：Int
+
+### max_array_length
+
+* **作用域**: Session
+* **描述**: 数组函数生成的数组中最大的元素数量。当某个函数生成的数组超过该限制时，查询会直接失败，而不会返回超大数组。设置为 `0` 或负数表示不限制。该限制适用于所有生成数组的函数，但目前仅 [array_agg](sql-functions/array-functions/array_agg.md) 会校验该限制。
+* **默认值**: 0
+* **数据类型**: Long
+* **引入版本**: v4.2
 
 ### max_pipeline_dop
 

@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <map>
+#include <optional>
 #include <random>
 #include <set>
 
@@ -292,8 +293,8 @@ public:
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
         ASSIGN_OR_ABORT(auto* entry, _update_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard));
         CHECK_EQ(2, entry->get_ref());
-        CHECK_OK(entry->value().sync_flush_persistent_index(10'000'000));
-        CHECK_OK(entry->value().commit(metadata, &builder));
+        CHECK_OK(entry->value().sync_flush_all_memtables(10'000'000));
+        CHECK_OK(entry->value().commit(&builder));
         write_guard.reset();
         _update_mgr->release_primary_index_cache(entry);
         _update_mgr->unlock_shard_pk_index_shard(metadata->id());
@@ -1492,16 +1493,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_indexes_only_the_rows_this_
         ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
     };
 
-    // The two publishes run the two sides of parallel_upsert, which select identically but reach the
-    // index by different overloads -- inline with the DeletesMap, or through a slot the context owns.
-    {
-        ConfigResetGuard<bool> serial(&config::enable_pk_index_parallel_execution, false);
-        cross_publish_all_keys(2);
-    }
-    {
-        ConfigResetGuard<bool> parallel(&config::enable_pk_index_parallel_execution, true);
-        cross_publish_all_keys(3);
-    }
+    // Both publishes run parallel_upsert; the second one's delete count reads out what the first
+    // actually indexed.
+    cross_publish_all_keys(2);
+    cross_publish_all_keys(3);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
     ASSERT_EQ(2, metadata->rowsets_size());
@@ -1572,9 +1567,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
     if (GetParam().enable_transparent_data_encryption) {
         return;
     }
-    // No token below pk_index_parallel_execution_min_rows, so the winners reach the index through the
-    // serial branch: index.upsert() over each winner range of the unfiltered chunk.
-    ConfigResetGuard<bool> serial(&config::enable_pk_index_parallel_execution, false);
+    // The chunk is far below pk_index_parallel_execution_min_rows, so the compare produces a single
+    // winner range per segment: index.upsert() over each winner range of the unfiltered chunk.
 
     const int n = kChunkSize;
     const int kOwnedLower = n / 4;
@@ -1699,7 +1693,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_delvecs_lo
     }
     // The token is created only once the rowset has at least pk_index_parallel_execution_min_rows
     // rows, so lower the bar to reach that path with a chunk this small.
-    ConfigResetGuard<bool> parallel(&config::enable_pk_index_parallel_execution, true);
     ConfigResetGuard<int64_t> min_rows(&config::pk_index_parallel_execution_min_rows, 1);
 
     const int n = kChunkSize;
@@ -3250,7 +3243,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
     ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
-    ConfigResetGuard guard2(&config::enable_pk_index_parallel_execution, false);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     {
@@ -3307,9 +3299,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    // Version 2 remains current in the cache despite having no persisted SST. The first low-threshold delete
-    // flushes that ordinary memtable together with the cached upsert, followed by 50 later ordinary SSTs.
-    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 51);
+    // 52 SSTs across 51 filesets: the version-2 upsert is sealed into its own SST rather than riding
+    // along with the first low-threshold delete, then 51 deletes each add one. This is the count the
+    // parallel PK index path produces, which is the only path there is (and, since
+    // enable_pk_index_parallel_execution defaulted to true, the only one production ever ran); the
+    // former 51 was reachable only by forcing the removed serial path. Fileset count, and therefore
+    // the compaction score below, are unchanged either way.
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 52);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst
     {
@@ -3331,7 +3327,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     size_t sst_cnt = new_tablet_metadata->sstable_meta().sstables_size();
-    EXPECT_EQ(sst_cnt, 51);
+    EXPECT_EQ(sst_cnt, 52);
     EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 76.5);
     // 4. compaction with sst
     {
@@ -3523,12 +3519,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) {
-    bool old_enable_pk_index_parallel_execution = config::enable_pk_index_parallel_execution;
     int64_t old_pk_index_parallel_execution_min_rows = config::pk_index_parallel_execution_min_rows;
     int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
     int64_t old_pk_index_memtable_max_count = config::pk_index_memtable_max_count;
     config::l0_max_mem_usage = 10;
-    config::enable_pk_index_parallel_execution = true;
     config::pk_index_parallel_execution_min_rows = 4096;
     config::pk_index_memtable_max_count = 3;
     const int64_t chunk_size = 3 * 4096;
@@ -3558,14 +3552,59 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     // update memory usage, should large than zero
     EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
-    if (config::enable_pk_index_parallel_execution) {
-        ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
-    }
+    ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
     // reset configs
-    config::enable_pk_index_parallel_execution = old_enable_pk_index_parallel_execution;
     config::pk_index_parallel_execution_min_rows = old_pk_index_parallel_execution_min_rows;
     config::l0_max_mem_usage = old_l0_max_mem_usage;
     config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
+}
+
+// parallel_upsert over a segment that splits into more than one chunk.
+//
+// Every other publish test writes kChunkSize (12) rows, which SegmentPKIterator emits as a single
+// chunk, so the loop body only ever runs once and nothing covers what happens to a chunk's scratch
+// once the next one starts. Each chunk owns a slot that is released as soon as its lookup completes;
+// if anything still referenced it the encoded-key Slices would dangle, which shows up here as a wrong
+// delete map (a row count other than kRows) or, under ASAN, as a use-after-free.
+//
+// The segment iterator reads DEFAULT_CHUNK_SIZE (4096) rows per get_next and breaks out of its
+// accumulate loop as soon as it has pk_index_parallel_execution_min_rows, so 4096 below makes each
+// chunk exactly 4096 rows and kRows makes three of them. Republishing the SAME keys three times means
+// every row of the previous version must be found and marked deleted.
+TEST_P(LakePrimaryKeyPublishTest, test_multi_chunk_upsert) {
+    ConfigResetGuard<int64_t> min_rows(&config::pk_index_parallel_execution_min_rows, 4096);
+    constexpr int64_t kRows = 3 * 4096;
+
+    auto tablet_id = _tablet_metadata->id();
+    auto [chunk0, indexes] = gen_data_and_index(kRows, 0, true, true);
+    int64_t version = 1;
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    EXPECT_EQ(kRows, read_rows(tablet_id, version));
+    // Each republish shadows the whole previous rowset, so every rowset but the last is fully deleted.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(3, metadata->rowsets_size());
+    EXPECT_EQ(kRows, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(kRows, metadata->rowsets(1).num_dels());
+    EXPECT_EQ(0, metadata->rowsets(2).num_dels());
 }
 
 // experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the
@@ -3871,13 +3910,19 @@ TEST_P(LakePrimaryKeyPublishTest, test_non_monotonic_partial_checkpoint_publish_
     const IndexValue expected_new_rss_rowid((uint64_t{kNewRssid} << 32) | kNewRowid);
 
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
-    ConfigResetGuard<int32_t> ratio_guard(&config::pk_index_parallel_rebuild_mem_ratio, 100);
-    ASSERT_FALSE(RuntimeEnv::GetInstance()->update_mem_tracker()->limit_exceeded_by_ratio(
-            config::pk_index_parallel_rebuild_mem_ratio));
-
     for (bool parallel : {false, true}) {
         SCOPED_TRACE(parallel ? "parallel" : "serial");
-        ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, parallel);
+        // The serial leg drives the cold rebuild onto its single-pass fallback; the parallel leg
+        // opens the memory gate so it cannot be taken by surprise.
+        std::optional<RebuildMemPressureGuard> serial_guard;
+        std::optional<ConfigResetGuard<int32_t>> ratio_guard;
+        if (parallel) {
+            ratio_guard.emplace(&config::pk_index_parallel_rebuild_mem_ratio, 100);
+            ASSERT_FALSE(RuntimeEnv::GetInstance()->update_mem_tracker()->limit_exceeded_by_ratio(
+                    config::pk_index_parallel_rebuild_mem_ratio));
+        } else {
+            serial_guard.emplace();
+        }
         auto metadata = build_non_monotonic_complete_checkpoint_history();
         const auto tablet_id = metadata->id();
         ASSERT_EQ(kBaseVersion, metadata->version());

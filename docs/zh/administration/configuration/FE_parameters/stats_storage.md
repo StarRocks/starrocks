@@ -116,6 +116,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在 `dict_thrash_guard_window_sec` 时间窗口内，触发全局字典抖动守卫禁止采集某列全局字典的失效次数阈值。设置为 `0` 可在保持守卫启用的同时禁用次数检查（不会自动禁用任何列）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
 - 引入版本: v4.2.0
 
+
+### `min_max_stats_collect_interval_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 同一列两次 min/max 统计采集之间的最小间隔。min/max 统计（用于将 `min()`/`max()` 折叠为常量、以及构建压缩 group-by key）通过读取每个 segment zone-map 元数据的 `[_META_]` MetaScan 按需采集；若不节流，频繁导入的列会在每次导入后重扫，和全局字典重采集一样争用 segment 元数据缓存。间隔窗口内跳过 min/max 优化而非重新采集——绝不返回陈旧值，因此只影响优化、不影响正确性。设置为 `0` 可禁用节流。
+- 引入版本: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true
@@ -144,6 +154,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.2.0
 
 ## 存储
+
+### `allow_implicit_key_column_in_agg_add_column`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在聚合表上执行 `ALTER TABLE ... ADD COLUMN` 时，如果新列既未指定聚合函数，也未指定 `KEY` 关键字，是否允许将该列创建为 Key 列。此类语句存在歧义，并且创建 Key 列会改变表的聚合键并重写已有数据。设置为 `false` 时，该语句会被拒绝，报错信息会同时说明两种写法。设置为 `true` 可恢复早期版本的行为，即将该列创建为 Key 列。该参数可动态修改，但除非使用 `WITH PERSISTENT` 设置，否则重启后不会保留。
+- 引入版本: v4.2.0
 
 ### `alter_table_timeout_second`
 
@@ -624,7 +643,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 执行 SPLIT 或 MERGE 操作后，Tablet 的目标大小。
+- 描述: 执行 SPLIT 或 MERGE 操作后 Tablet 的目标大小。设置为 `0` 时，将禁用基于大小的 Tablet 自动分裂和合并。存算分离集群在该值为 `0` 时执行在线 Range Rewrite，会以各个最新基表索引当前的 Tablet 数量作为请求数量，并在新的排序键空间中重新计算边界，而不会复用原有边界。如果采样无法生成足够多的不同边界，实际 Tablet 数量可能更少。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_max_split_count`

@@ -24,6 +24,8 @@
 #include <vector>
 
 #include "base/string/trim.h"
+#include "common/config_memory_allocator_fwd.h"
+#include "common/config_update_registry.h"
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "fmt/format.h"
@@ -117,12 +119,17 @@ Status apply_decay_ms(const std::string& option, bool dirty, ssize_t decay_ms) {
         return mallctl_failed(default_name, err);
     }
 
-    // `arenas.narenas` reports the arena count cached by the ctl layer, which is
-    // only refreshed when the epoch advances.
-    uint64_t epoch = 1;
-    size_t epoch_size = sizeof(epoch);
-    (void)je_mallctl("epoch", &epoch, &epoch_size, &epoch, epoch_size);
-
+    // Deliberately no "epoch" refresh first. Writing to `epoch` runs ctl_refresh(), which
+    // re-snapshots what the stats.* nodes report, and nothing here reads one.
+    //
+    // `arenas.narenas` in particular is not one of them. It does change over a process's life --
+    // ctl_init() sets it and ctl_arena_init() increments it when an arena is created -- but both
+    // write it directly, while ctl_refresh() only iterates the count it already holds. So a
+    // refresh cannot make this read see an arena it would otherwise miss.
+    //
+    // `opt.narenas` is fixed at startup, and `arena.<i>.dirty_decay_ms` resolves its arena
+    // through arena_get() -- which is also where its EFAULT for an arena that does not exist yet
+    // comes from. A refresh would only walk every arena merging statistics under ctl_mtx.
     unsigned narenas = 0;
     size_t narenas_size = sizeof(narenas);
     if (int err = je_mallctl("arenas.narenas", &narenas, &narenas_size, nullptr, 0); err != 0) {
@@ -234,6 +241,36 @@ std::string startup_jemalloc_conf(std::string_view config_value) {
     return std::string(config_value);
 }
 
+std::string serialize_jemalloc_conf(const JemallocOptions& options) {
+    std::vector<std::string> parts;
+    parts.reserve(options.size());
+    for (const auto& [name, value] : options) {
+        parts.emplace_back(fmt::format("{}:{}", name, value));
+    }
+    return JoinStrings(parts, ",");
+}
+
+StatusOr<std::string> jemalloc_conf_with_prof_active(std::string_view conf, bool active) {
+    ASSIGN_OR_RETURN(JemallocOptions options, parse_jemalloc_conf(conf));
+    // The option is inserted when `conf` does not carry it. That is not a claim about how the
+    // process started -- `prof_active` is one of the options jemalloc lets us change at runtime,
+    // and jemalloc defaults it to false, so its absence means profiling is armed but idle, which
+    // is exactly the state a caller wants to leave. --jemalloc_debug reaches it: it starts the BE
+    // with `junk:true,tcache:false,prof:true`, no `prof_active` in sight. Whether profiling is
+    // armed at all is apply_prof_active()'s call, which reads opt.prof instead of looking for a
+    // string in the config.
+    options[kProfActive] = active ? "true" : "false";
+    return serialize_jemalloc_conf(options);
+}
+
+Status set_prof_active_via_config(bool active) {
+    ASSIGN_OR_RETURN(std::string new_conf, jemalloc_conf_with_prof_active(config::jemalloc_conf.value(), active));
+    // Going through the registry rather than applying directly keeps one code path: the hook
+    // runs JemallocConfUpdater::update(), which is also what an operator editing
+    // information_schema.be_configs reaches, and it rolls the config value back on failure.
+    return ConfigUpdateRegistry::instance()->update_config(kJemallocConfName, new_conf);
+}
+
 void JemallocConfUpdater::init(std::string_view config_value) {
     std::lock_guard guard(_mutex);
 
@@ -268,31 +305,10 @@ JemallocOptions JemallocConfUpdater::applied_options() {
     return _applied;
 }
 
-void JemallocConfUpdater::refresh_prof_active(JemallocOptions* options) {
-#ifndef __APPLE__
-    auto it = options->find(kProfActive);
-    if (it == options->end()) {
-        return;
-    }
-    bool prof_enabled = false;
-    size_t size = sizeof(prof_enabled);
-    if (je_mallctl("opt.prof", &prof_enabled, &size, nullptr, 0) != 0 || !prof_enabled) {
-        return;
-    }
-    std::string live = HeapProf::getInstance().has_enable() ? "true" : "false";
-    if (it->second != live) {
-        LOG(INFO) << "jemalloc prof.active was changed outside of jemalloc_conf, move the baseline of 'prof_active' "
-                  << "from " << it->second << " to " << live;
-        it->second = std::move(live);
-    }
-#endif
-}
-
 Status JemallocConfUpdater::update(std::string_view new_conf) {
     ASSIGN_OR_RETURN(JemallocOptions new_options, parse_jemalloc_conf(new_conf));
 
     std::lock_guard guard(_mutex);
-    refresh_prof_active(&_applied);
 
     std::vector<std::string> rejected;
     JemallocOptions changed;

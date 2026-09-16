@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -131,7 +132,14 @@ public:
     // reconciled into schema.table_indices in an idempotent way (FE has
     // usually already published the new schema, so this is a belt-and-braces
     // step to cover edge cases like FE publish races).
-    void apply_add_index(const TxnLogPB_OpAddIndex& op);
+    //
+    // Fails when op.new_schema() would move the tablet schema BACKWARDS: the log
+    // carries a snapshot FE took at dispatch time, and installing it over content
+    // that has since advanced would drop the columns added in between. Errors
+    // here must propagate rather than be logged and ignored - see the schema
+    // installation comment in the implementation for why a wrong schema at this
+    // point is both silent and permanent.
+    Status apply_add_index(const TxnLogPB_OpAddIndex& op);
 
     // Apply an OpDropIndex (produced by the DROP INDEX fast path): merge
     // tombstones into the dropped_keys list of each matching IDG entry; any
@@ -234,23 +242,25 @@ private:
     PendingRowsetData _pending_rowset_data;
 };
 
-struct DelvecFileInfo {
+// One byte-range page from a plaintext delvec object.  The page declaration is
+// kept with its file declaration because a compacted MERGE output copies only
+// the live page ranges, rather than whole source objects.
+struct DelvecPageInfo {
     int64_t tablet_id;
     FileMetaPB delvec_file;
+    DelvecPagePB page;
 };
 
-Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
-                          int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
-                          std::vector<uint64_t>* offsets, const Slice& extra_data = {},
-                          uint64_t* extra_data_offset = nullptr);
+// A target page is either copied byte-for-byte from an existing plaintext
+// source page, or is the already serialized result of a delvec union.
+struct DelvecOutputPage {
+    std::optional<DelvecPageInfo> raw_page;
+    std::string serialized_page;
+};
 
-// Write a brand-new delvec file containing only |buffer|. Used by tablet merge
-// when final states have no single-source file to copy (synthesized gaps or
-// merged pages) — sidesteps merge_delvec_files's DCHECK on (empty old_files +
-// non-empty extra_data) and avoids generating an empty file by mistake. Buffer
-// is written at offset 0; the resulting FileMetaPB is shared=false.
-Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
-                                     const Slice& buffer, FileMetaPB* new_delvec_file);
+Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector<DelvecOutputPage>& pages,
+                                    int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
+                                    std::vector<uint64_t>* page_offsets);
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);

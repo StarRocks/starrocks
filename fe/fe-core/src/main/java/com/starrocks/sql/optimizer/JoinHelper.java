@@ -219,7 +219,8 @@ public class JoinHelper {
         }
 
         if (candidates.isEmpty()) {
-            throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition. found: 0");
+            throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition comparing "
+                    + "a column of the left side with a column of the right side. found: 0");
         }
         if (candidates.size() > 1) {
             throw new IllegalStateException(String.format(
@@ -245,9 +246,15 @@ public class JoinHelper {
         return candidates.get(0);
     }
 
-    private static boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
-                                                        ColumnRefSet leftColumns,
-                                                        ColumnRefSet rightColumns) {
+    /**
+     * A temporal predicate can drive the ASOF match only if it relates the two sides of the join: one operand must be
+     * computable from the left child alone and the other from the right child alone. An operand mixing both sides, or
+     * two operands reading the same side, leaves the join without a build-side temporal column -- the BE would then
+     * look up a slot the build chunk never contains.
+     */
+    public static boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
+                                                       ColumnRefSet leftColumns,
+                                                       ColumnRefSet rightColumns) {
         if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
             return false;
         }
@@ -257,6 +264,11 @@ public class JoinHelper {
 
         ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
         ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
+        // An operand with no column at all is contained by either child, which would let a constant stand in
+        // for a whole side of the match.
+        if (leftOperandColumns.isEmpty() || rightOperandColumns.isEmpty()) {
+            return false;
+        }
         if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
             return false;
         }
@@ -264,7 +276,8 @@ public class JoinHelper {
             return false;
         }
 
-        return true;
+        return (leftColumns.containsAll(leftOperandColumns) && rightColumns.containsAll(rightOperandColumns)) ||
+                (rightColumns.containsAll(leftOperandColumns) && leftColumns.containsAll(rightOperandColumns));
     }
 
     public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,

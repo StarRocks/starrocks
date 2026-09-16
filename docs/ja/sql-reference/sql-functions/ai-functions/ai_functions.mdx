@@ -1,0 +1,35 @@
+---
+displayed_sidebar: docs
+description: "SQL で AI 関数を使用し、TopN プッシュダウンで AI 入力行数を削減します。"
+sidebar_position: 10
+---
+
+# AI 関数
+
+AI 関数は、SQL から設定済みのモデルサービスを呼び出します。テキスト生成については [ai_complete](ai_complete.md) を参照してください。
+
+## AI 入力行数の削減 {/* #reducing-ai-input-rows */}
+
+`LIMIT` が正で `OFFSET` を含まない `ORDER BY ... LIMIT` クエリでは、ソート列が AI 投影とその間の通常の Project を変更されずに通過する場合、StarRocks は AI 投影の評価前に候補行を選択できます。
+
+[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) は SQL の `LIMIT N` に応じて戦略を選択します。
+
+- `N` がしきい値（デフォルト `1000`）以下の場合、グローバル候補 TopN により、書き換えられた AI 投影への入力を全体で最大 `N` 行に制限します。
+- `N` がしきい値を超える場合、ローカル候補 TopN により、その AI 投影への入力を fragment instance ごとに最大 `N` 行に制限します。BE ごとや pipeline driver ごとの上限ではありません。
+
+グローバル戦略では、全体の行数制限と引き換えにインスタンス間の AI 並列性が低下する場合があります。ローカル戦略は AI 実行前のグローバルな集約を追加しませんが、ローカルマージによってインスタンス内の並列性が低下する場合があります。どちらも AI 投影の上に元の TopN を保持し、出力順序と行数制限を維持します。`EXPLAIN` で実行計画を確認できます。
+
+この上限は書き換えられた AI 投影に適用され、クエリ全体の AI 処理を制限するものではありません。ネストした内側の AI 呼び出しは、より多くの行を処理する場合があります。また、HTTP リクエスト数やトークン数の上限ではありません。除外された行では AI 呼び出しは実行されません。
+
+この最適化は、ソートやフィルタリングに必要な AI 呼び出しの下に TopN を移動せず、既存の Limit や安全でない投影・述語の境界を越えません。パーティション化された TopN、`RANK`、`DENSE_RANK` にも適用されません。
+
+### 戦略の選択
+
+しきい値は、再起動なしで `SET`、以降のセッションに適用される `SET GLOBAL`、および文単位の `SET_VAR` ヒントで設定できます。AI 投影を含まないクエリには影響しません。`0` はローカルのみの削減を選択し、削減を無効にするものではありません。
+
+```sql
+-- LIMIT <= 1000 にはグローバル削減、それより大きい LIMIT にはローカル削減を使用します。
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- ローカル削減のみを使用します。
+SET ai_topn_pushdown_max_global_limit = 0;
+```

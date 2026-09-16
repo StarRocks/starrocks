@@ -151,9 +151,6 @@ CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
 // early sst compaction threshold for primary key index in shared-data mode.
 CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
 
-// Whether enable parallel get for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_execution, "true");
-
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 
@@ -252,8 +249,13 @@ CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 
-// When the ratio of cumulative level to base level is greater than this config, use base merge.
-CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
+// Verify sstable block checksums on cloud-native PK index reads (open, point lookup,
+// and compaction merge), so corrupted bytes (usually a bad local cache copy) fail
+// deterministically as Corruption — and get healed by the drop-corrupted-cache
+// fallback — instead of being misparsed or silently returning wrong index values.
+// Mutable so the verification can be switched off quickly if the crc32c overhead
+// ever becomes a concern on a hot read path.
+CONF_mBool(lake_pk_index_sst_verify_checksum, "true");
 
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 

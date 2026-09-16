@@ -189,6 +189,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### ai_topn_pushdown_max_global_limit
+
+* **説明**: 適用条件を満たす AI projection の下でグローバル候補 TopN を使用する SQL `LIMIT` の最大値です。しきい値を超える場合は、フラグメントインスタンスごとにローカル候補 TopN でプルーニングします。`0` はローカルのみのプルーニングを選択し、最適化自体は無効にしません。
+* **デフォルト**: 1000
+* **データ型**: long
+* **範囲**: [0, 9223372036854775807]
+* **スコープ**: Session、Global
+
+`SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定でき、再起動は不要です。戦略の説明と例については、[AI 入力行数の削減](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows) を参照してください。
+
 ### ann_params
 
 * **説明**: 近似最近傍（ANN）ベクターインデックス検索のクエリパラメータを指定します。値は、キーと値がともに文字列である JSON オブジェクト文字列です。HNSW は `efsearch`、IVFPQ は `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht`、`range_search_confidence` をサポートします。セッションまたは単一ステートメントに設定できます。例：`SET ann_params = '{"efsearch":"256"}'` または `SET_VAR (ann_params='{"efsearch":"256"}')`。
@@ -1210,6 +1220,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 33554432 (32 MB)。クライアントが "PacketTooBigException" を報告する場合、この値を増やすことができます。
 * **単位**: バイト
 * **データ型**: Int
+
+### max_array_length
+
+* **スコープ**: Session
+* **説明**: 配列関数が生成する配列に含まれる要素の最大数です。関数がこの上限を超える配列を生成した場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。この上限は配列を生成するすべての関数を対象としていますが、現時点では [array_agg](sql-functions/array-functions/array_agg.md) のみがチェックします。
+* **デフォルト**: 0
+* **タイプ**: Long
+* **導入バージョン**: v4.2
 
 ### max_pipeline_dop
 

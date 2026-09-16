@@ -583,4 +583,19 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select grouping(v1) from t0 group by all");
         analyzeSuccess("select *, sum(v1) from t0 group by all");
     }
+
+    @Test
+    public void testDistinctOverPercentile() {
+        // count(distinct <PERCENTILE>) has no meaning and no rewrite (unlike count(distinct bitmap)
+        // / count(distinct hll), which the optimizer rewrites to bitmap_union_count / hll
+        // cardinality), so it used to reach the BE as a raw distinct aggregate and crash when the
+        // PercentileColumn was down_cast to a BinaryColumn. It must be rejected up front.
+        analyzeFail("select count(distinct percentile_hash(cast(1 as double)))",
+                "DISTINCT aggregation is not supported for PERCENTILE type");
+        analyzeFail("select count(distinct p1) from test_object",
+                "DISTINCT aggregation is not supported for PERCENTILE type");
+        // count(distinct bitmap) / count(distinct hll) stay supported -- only PERCENTILE is rejected.
+        analyzeSuccess("select count(distinct b1) from test_object");
+        analyzeSuccess("select count(distinct h1) from test_object");
+    }
 }

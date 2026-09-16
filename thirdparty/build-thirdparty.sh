@@ -661,12 +661,18 @@ build_snappy() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
+    local snappy_cxx_flags="${CXXFLAGS}"
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        snappy_cxx_flags="${snappy_cxx_flags} -march=armv8-a+crc"
+    fi
     $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -G "${CMAKE_GENERATOR}" \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
-    -DSNAPPY_BUILD_TESTS=0 ../
+    -DCMAKE_CXX_FLAGS="${snappy_cxx_flags}" \
+    -DSNAPPY_BUILD_TESTS=OFF \
+    -DSNAPPY_BUILD_BENCHMARKS=OFF ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
@@ -1830,6 +1836,7 @@ build_paimon_cpp() {
     ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/paimon-cpp \
+        -DCMAKE_INSTALL_LIBDIR=lib \
         -DPAIMON_BUILD_STATIC=OFF \
         -DPAIMON_ENABLE_ORC=ON \
         -DPAIMON_ENABLE_AVRO=ON \
@@ -1844,6 +1851,11 @@ build_paimon_cpp() {
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+    # be/ resolves paimon strictly from <prefix>/lib (CMAKE_INSTALL_LIBDIR pinned above).
+    if [[ ! -f "${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so" ]]; then
+        echo "Error: ${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so not found after install; CMAKE_INSTALL_LIBDIR=lib was not honored" >&2
+        exit 1
+    fi
     restore_compile_flags
 }
 

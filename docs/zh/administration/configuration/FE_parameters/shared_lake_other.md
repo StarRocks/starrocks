@@ -642,6 +642,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
 - 引入版本: v4.1.5
 
+### `lake_online_rewrite_partition_retry_timeout_second`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 存算分离模式下 Range 分布表的在线数据重写在某个分区的重写 `INSERT` 失败后，持续重试该分区的时长上限，超过该时长才取消整个作业。在线数据重写（Range 排序键 Schema Change、Range Rollup、物化视图排序键重写）按 Alter 调度周期逐个分区重建数据，因此某个 Compute Node 在 `INSERT` 执行期间重启或崩溃时，只会导致该分区失败。在该时长内，作业只会在后续调度周期重跑失败的那个分区，并保留已经重写完成的所有分区；该时长耗尽后，作业被取消并报告最后一次重写错误。该时长只会被该分区自身失败的重试尝试消耗：每次失败按「该次尝试实际运行的时长 + 一个 `alter_scheduler_interval_millisecond`」计入，一旦某次尝试的计入使其达到该时长，作业立即取消。每个分区至少会获得一次重试，即使单次尝试的开销已超过整个时长——否则一个本就需要运行更久的重写会在首次瞬时故障时即被取消。分区因等待而非失败所消耗的时间——例如没有可用的 Compute Node 执行重写，或重写已 `COMMITTED` 但仍在等待 publish——不会消耗该时长，作业处理其他分区所花的时间同样不会；此类等待由 `alter_table_timeout_second` 限制。该值应大于 Compute Node 恢复可用所需的时间，同时应远小于 `alter_table_timeout_second`，因为在线数据重写运行期间该表的 Compaction 会被推迟。设置为 `0` 表示首次失败即取消作业。
+- 引入版本: v4.2.0
+
 ## 数据湖
 
 ### `files_enable_insert_push_down_column_type`

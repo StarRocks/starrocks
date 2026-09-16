@@ -31,6 +31,18 @@ void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta) {
     }
 }
 
+void SegmentFileInfo::sort_key_fields_to_proto(SegmentMetadataPB* segment_meta) const {
+    sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+    sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+    // Nothing writes the deprecated samples any more -- split points come from the segment's own
+    // short key index or its data pages (storage/sort_key_sampler.h). The clears stay, and matter
+    // more now than when they were added: a rewrite can be handed a SegmentMetadataPB that already
+    // carries samples from its source, and no code maintains them, so passing them through would
+    // publish values nothing keeps true.
+    segment_meta->clear_deprecated_sort_key_samples();
+    segment_meta->clear_deprecated_sort_key_sample_row_interval();
+}
+
 void SegmentFileInfo::to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const {
     // File attributes. An empty encryption_meta means "unencrypted", same as absent, so don't store it.
     segment_meta->set_filename(path);
@@ -44,14 +56,7 @@ void SegmentFileInfo::to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_
         segment_meta->set_bundle_file_offset(bundle_file_offset.value());
     }
     // Sort-key fields.
-    sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-    sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-    for (const auto& sample : sort_key_samples) {
-        sample.to_proto(segment_meta->add_deprecated_sort_key_samples());
-    }
-    if (!sort_key_samples.empty() && sort_key_sample_row_interval > 0) {
-        segment_meta->set_deprecated_sort_key_sample_row_interval(sort_key_sample_row_interval);
-    }
+    sort_key_fields_to_proto(segment_meta);
     // Other per-segment metadata.
     segment_meta->set_num_rows(num_rows);
     segment_meta->set_segment_idx(segment_idx);

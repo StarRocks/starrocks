@@ -491,6 +491,14 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - 两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
+:::note
+
+**排序键与主键不同**的范围分布主键表**不支持 MERGE**。这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。`ALTER TABLE ... MERGE TABLETS` 与基于大小的自动合并都会被拒绝，报错 `Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key`。
+
+SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。
+
+:::
+
 详细示例，参考[拆分或合并 Tablet](#拆分或合并-tablet)。
 
 ### 修改列（添加/删除列，改变列的顺序或注释）
@@ -510,7 +518,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意：
 
 1. 如果向聚合表中添加值列，需要指定agg_type。
-2. 如果向非聚合表（如明细表）中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表（如明细表）中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列存在歧义，会被拒绝，因为创建键列会改变表的聚合键并重写已有数据。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `true` 可恢复早期版本将该列作为键列创建的行为。
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以重新创建 Rollup。）
 4. 在存算分离集群的 Range 分布表上，明细表（Duplicate Key）、聚合表（Aggregate）和更新表（Unique Key）自 v4.2 起支持添加键列（该列将加入 Range 排序键）。该操作会触发在线重写，新增的键列必须指定常量 `DEFAULT` 值。不支持主键表（Primary Key），以及存在 Rollup 或同步物化视图的表。
 
@@ -542,7 +550,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 如果向聚合表中添加值列，需要指定`agg_type`。
 
-2. 如果向非聚合表中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列存在歧义，会被拒绝。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `true` 可恢复早期版本的行为。
 
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以创建另一个 Rollup。）
 
@@ -1097,7 +1105,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 
