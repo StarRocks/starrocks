@@ -46,6 +46,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>The probe samples {@link LockHoldDepth#isUnderLock()} on every connector entry point the method
  * reaches, OR-accumulated: each entry point is called once per base table, so a plain assignment would
  * let a later lock-free call overwrite an earlier violation and turn the test green for the wrong reason.
+ *
+ * <p>It samples only calls made on the thread that installed it. Creating an MV hands its definition to
+ * the {@code mv-plan-cache} executor, which analyzes it asynchronously and resolves the same hive table
+ * through the same mocked catalog; that call lands at an arbitrary moment, on a thread whose lock state
+ * has nothing to do with the statement under test. Counting it inflates the baseline and makes the
+ * call-count assertion below flap, and its lock state would be attributed to {@code inspect_mv_refresh_info}.
  */
 public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
 
@@ -59,11 +65,17 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
     }
 
     private static class LockProbeHiveMetadata extends MockedHiveMetadata {
+        /** The thread that installed the probe; see the class comment for why the others are ignored. */
+        private final Thread owner = Thread.currentThread();
         private final AtomicBoolean underLock = new AtomicBoolean(false);
         private final AtomicInteger calls = new AtomicInteger();
         private final AtomicInteger getTableCalls = new AtomicInteger();
         /** Runs on every getTable, so a test can interleave something at a point it controls. */
         private Runnable onGetTable;
+
+        private boolean isObserved() {
+            return Thread.currentThread() == owner;
+        }
 
         private void sample() {
             calls.incrementAndGet();
@@ -74,10 +86,12 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
 
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
-            sample();
-            getTableCalls.incrementAndGet();
-            if (onGetTable != null) {
-                onGetTable.run();
+            if (isObserved()) {
+                sample();
+                getTableCalls.incrementAndGet();
+                if (onGetTable != null) {
+                    onGetTable.run();
+                }
             }
             return super.getTable(context, dbName, tblName);
         }
@@ -85,13 +99,17 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
         @Override
         public List<String> listPartitionNames(String dbName, String tableName,
                                                ConnectorMetadataRequestContext requestContext) {
-            sample();
+            if (isObserved()) {
+                sample();
+            }
             return super.listPartitionNames(dbName, tableName, requestContext);
         }
 
         @Override
         public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-            sample();
+            if (isObserved()) {
+                sample();
+            }
             return super.getPartitions(table, partitionNames);
         }
     }
