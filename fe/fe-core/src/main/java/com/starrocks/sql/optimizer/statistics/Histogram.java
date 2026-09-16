@@ -46,7 +46,10 @@ public class Histogram {
                                           Map<String, Long> mcv) {
         long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
         long nonMcvRows = Math.max(0L, Math.round(nonNullRowCount) - mcvRows);
-        if (nonMcvRows == 0 || !Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
+        if (nonMcvRows == 0) {
+            return new Histogram(List.of(), mcv);
+        }
+        if (!Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
             return new Histogram(List.of(
                     new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, nonMcvRows, 0L)), mcv);
         }
