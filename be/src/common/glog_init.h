@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "common/status.h"
 #include "gutil/walltime.h"
 
 namespace starrocks {
@@ -31,7 +32,9 @@ void shutdown_logging();
 // Format a timestamp in the same format as used by GLog.
 std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch);
 
-void update_logging();
+// Applies the current sys_log_level to the running process. Returns an error if it names no known
+// severity, which config validation should already have ruled out.
+Status update_logging();
 
 // Reports every config value that had to be replaced by its default, on stderr as well as through
 // glog, and clears them so each is reported once. init_glog calls this as soon as logging is up;

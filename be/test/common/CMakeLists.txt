@@ -23,6 +23,7 @@ set(COMMON_TEST_FILES
     config_test.cpp
     cow_test.cpp
     crash_watchdog_test.cpp
+    glog_init_test.cpp
     greplog_test.cpp
     process_exit_test.cpp
     runtime_profile_test.cpp
