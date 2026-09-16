@@ -149,8 +149,6 @@ static bool apply_log_level(const std::string& loglevel) {
     return true;
 }
 
-static const char* const kDefaultRollMode = "SIZE-MB-1024";
-
 static bool apply_roll_mode(const std::string& rollmode) {
     const std::string sizeflag = "SIZE-MB-";
     if (rollmode.compare("TIME-DAY") == 0) {
@@ -235,10 +233,9 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     // than failing: unusable logging is a worse outcome than logging that rolls differently than
     // asked, and the fallback is reported once logging is up.
     if (!apply_roll_mode(config::sys_log_roll_mode)) {
-        std::string defval = config::default_value_of("sys_log_roll_mode").value_or(kDefaultRollMode);
-        config::record_config_fallback(
-                {"sys_log_roll_mode", config::sys_log_roll_mode, defval, "TIME-DAY,TIME-HOUR,SIZE-MB-nnn"});
-        if (!apply_roll_mode(defval)) {
+        std::string rejected = config::sys_log_roll_mode;
+        if (!config::fall_back_to_default("sys_log_roll_mode", rejected, "TIME-DAY,TIME-HOUR,SIZE-MB-nnn") ||
+            !apply_roll_mode(config::sys_log_roll_mode)) {
             std::cerr << "sys_log_roll_mode needs to be TIME-DAY, TIME-HOUR, SIZE-MB-nnn" << std::endl;
             return false;
         }

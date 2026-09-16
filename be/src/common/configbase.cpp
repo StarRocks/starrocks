@@ -309,12 +309,17 @@ void TEST_clear_configs() {
     (void)take_config_fallbacks();
 }
 
-std::optional<std::string> default_value_of(const std::string& field) {
+bool fall_back_to_default(const std::string& field, const std::string& rejected_value,
+                          const std::string& allowed_values) {
     auto it = Field::fields().find(field);
     if (it == Field::fields().end()) {
-        return std::nullopt;
+        return false;
     }
-    return std::string(it->second->defval());
+    if (!it->second->set_value(it->second->defval(), /*allow_fallback=*/false)) {
+        return false;
+    }
+    record_config_fallback({field, rejected_value, it->second->value(), allowed_values});
+    return true;
 }
 
 } // namespace starrocks::config

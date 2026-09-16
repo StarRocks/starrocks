@@ -21,7 +21,6 @@
 
 #include <cstdint>
 #include <iosfwd>
-#include <optional>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -157,8 +156,12 @@ void record_config_fallback(ConfigFallback fallback);
 // Returns the fallbacks recorded so far and clears them, so each is reported only once.
 std::vector<ConfigFallback> take_config_fallbacks();
 
-// Returns the value the config was declared with, or nullopt if no such config exists.
-std::optional<std::string> default_value_of(const std::string& field);
+// Replaces the value of a config that could not be applied with the value it was declared with, and
+// records the fallback. Returns false if there is no such config, or if its declared default cannot
+// be parsed either. Keeping the config variable in step matters because list_configs() publishes it
+// through information_schema.be_configs and /varz.
+bool fall_back_to_default(const std::string& field, const std::string& rejected_value,
+                          const std::string& allowed_values);
 
 } // namespace config
 } // namespace starrocks

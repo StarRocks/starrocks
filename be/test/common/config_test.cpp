@@ -373,6 +373,30 @@ TEST_F(ConfigTest, test_string_enum_or_default_duplicate_assignment) {
     }
 }
 
+TEST_F(ConfigTest, test_fall_back_to_default) {
+    CONF_String(cfg_roll_mode, "SIZE-MB-1024");
+
+    std::stringstream ss;
+    ss << R"DEL(
+       cfg_roll_mode = SIZE-MB-abc
+       )DEL";
+    // Nothing validates this config while it is parsed; whoever applies it decides it is unusable.
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ("SIZE-MB-abc", cfg_roll_mode);
+
+    ASSERT_TRUE(config::fall_back_to_default("cfg_roll_mode", cfg_roll_mode, "SIZE-MB-nnn"));
+    // The config variable now holds what is actually in use, because list_configs() publishes it.
+    EXPECT_EQ("SIZE-MB-1024", cfg_roll_mode);
+
+    std::vector<ConfigFallback> fallbacks = config::take_config_fallbacks();
+    ASSERT_EQ(1, fallbacks.size());
+    EXPECT_EQ("cfg_roll_mode", fallbacks[0].name);
+    EXPECT_EQ("SIZE-MB-abc", fallbacks[0].rejected_value);
+    EXPECT_EQ("SIZE-MB-1024", fallbacks[0].effective_value);
+
+    EXPECT_FALSE(config::fall_back_to_default("cfg_not_exist", "x", "y"));
+}
+
 TEST_F(ConfigTest, test_invalid_default_value) {
     CONF_Int32(cfg_int32, "false");
     ASSERT_FALSE(config::init(nullptr));
