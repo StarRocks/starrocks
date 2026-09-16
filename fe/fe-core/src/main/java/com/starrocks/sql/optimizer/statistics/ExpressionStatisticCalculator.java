@@ -1264,7 +1264,8 @@ public class ExpressionStatisticCalculator {
                     distinctValues = Math.min(dateStatistic.getDistinctValuesCount(), estimatedNdv.get());
                 }
 
-                transformedHistogram = transformHistogramForDateTrunc(fmtString, dateStatistic, callOperator.getType());
+                transformedHistogram = transformHistogramForDateTrunc(fmtString, dateStatistic, callOperator.getType(),
+                        minValue, maxValue);
             }
 
             return ColumnStatistic.buildFrom(dateStatistic) //
@@ -1276,7 +1277,7 @@ public class ExpressionStatisticCalculator {
         }
 
         private Histogram transformHistogramForDateTrunc(String fmtString, ColumnStatistic dateStatistic,
-                                                         Type resultType) {
+                                                         Type resultType, double minValue, double maxValue) {
             final var histogram = dateStatistic.getHistogram();
             if (histogram == null || histogram.getMCV().isEmpty()) {
                 return null;
@@ -1306,7 +1307,7 @@ public class ExpressionStatisticCalculator {
                 newMcv.merge(truncatedKeyString.get().getVarchar(), entry.getValue(), Long::sum);
             }
 
-            return new Histogram(Collections.emptyList(), newMcv);
+            return Histogram.ofSingleBucket(minValue, maxValue, histogram.getTotalRows(), newMcv);
         }
 
         private Optional<LocalDateTime> truncateDateValue(String fmt, LocalDateTime value, Type resultType) {
