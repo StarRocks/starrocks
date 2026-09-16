@@ -266,4 +266,3 @@ public class PulsarRoutineLoadJobTest {
         Assertions.assertEquals("pulsar://localhost:6650", convertedCustomProperties.get("pulsar.service.url"));
     }
 }
-
