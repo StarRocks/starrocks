@@ -22,6 +22,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <set>
 #include <string>
@@ -176,11 +177,43 @@ std::optional<Field*> Field::get(const std::string& name_or_alias) {
     return ret;
 }
 
+// Fallbacks are keyed by config name: a config file may assign the same config more than once, and
+// the last assignment is the one that takes effect, so only the last one may be reported.
+namespace {
+std::mutex g_fallback_mutex;
+std::map<std::string, ConfigFallback> g_fallbacks;
+
+void erase_config_fallback(const std::string& name) {
+    std::lock_guard guard(g_fallback_mutex);
+    g_fallbacks.erase(name);
+}
+} // namespace
+
+void record_config_fallback(ConfigFallback fallback) {
+    std::lock_guard guard(g_fallback_mutex);
+    std::string name = fallback.name;
+    g_fallbacks.insert_or_assign(std::move(name), std::move(fallback));
+}
+
+std::vector<ConfigFallback> take_config_fallbacks() {
+    std::lock_guard guard(g_fallback_mutex);
+    std::vector<ConfigFallback> taken;
+    taken.reserve(g_fallbacks.size());
+    for (auto& entry : g_fallbacks) {
+        taken.emplace_back(std::move(entry.second));
+    }
+    g_fallbacks.clear();
+    return taken;
+}
+
 bool Field::set_value(std::string value, bool allow_fallback) {
     if (auto st = replaceenv(value); !st.ok()) {
         return false;
     }
     StripWhiteSpace(&value);
+    // This assignment supersedes any earlier one for the same config, including a fallback that an
+    // earlier duplicate assignment recorded.
+    erase_config_fallback(_name);
     bool success = parse_value(value, allow_fallback);
     if (success) {
         _last_set_val.swap(_current_set_val);
@@ -276,22 +309,6 @@ void TEST_clear_configs() {
     (void)take_config_fallbacks();
 }
 
-namespace {
-std::mutex g_fallback_mutex;
-std::vector<ConfigFallback> g_fallbacks;
-} // namespace
-
-void record_config_fallback(ConfigFallback fallback) {
-    std::lock_guard guard(g_fallback_mutex);
-    g_fallbacks.emplace_back(std::move(fallback));
-}
-
-std::vector<ConfigFallback> take_config_fallbacks() {
-    std::lock_guard guard(g_fallback_mutex);
-    std::vector<ConfigFallback> taken;
-    taken.swap(g_fallbacks);
-    return taken;
-}
 
 std::optional<std::string> default_value_of(const std::string& field) {
     auto it = Field::fields().find(field);

@@ -341,6 +341,38 @@ TEST_F(ConfigTest, test_string_enum_or_default) {
     EXPECT_TRUE(config::take_config_fallbacks().empty());
 }
 
+TEST_F(ConfigTest, test_string_enum_or_default_duplicate_assignment) {
+    CONF_mString_enum_or_default(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    // Assigning a config twice is last-wins, so a later valid assignment leaves nothing to report:
+    // the fallback the first assignment took never reached the running config.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = WARN
+           cfg_level = FATAL
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("FATAL", cfg_level.value());
+        EXPECT_TRUE(config::take_config_fallbacks().empty());
+    }
+    // Two assignments that both fall back are reported once, naming the one that took effect.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = WARN
+           cfg_level = TRACE
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("INFO", cfg_level.value());
+
+        std::vector<ConfigFallback> fallbacks = config::take_config_fallbacks();
+        ASSERT_EQ(1, fallbacks.size());
+        EXPECT_EQ("TRACE", fallbacks[0].rejected_value);
+        EXPECT_EQ("INFO", fallbacks[0].effective_value);
+    }
+}
+
 TEST_F(ConfigTest, test_invalid_default_value) {
     CONF_Int32(cfg_int32, "false");
     ASSERT_FALSE(config::init(nullptr));
