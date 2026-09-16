@@ -16,18 +16,25 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_starlet_fwd.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/block.h"
 #include "storage/sstable/comparator.h"
+#include "storage/sstable/format.h"
+#include "storage/sstable/iterator.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
@@ -467,6 +474,82 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_overlapping_sstab
     ASSERT_EQ(output_sstables[0].range().start_key(), sst1.range().start_key());
     ASSERT_EQ(output_sstables[0].range().end_key(), sst2.range().end_key());
 }
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+// Overwrite the 1-byte compression-type trailer of the first data block with an
+// invalid value, reproducing the production "Corruption: bad block type" failure.
+// The block is located through the footer -> index block, so the injection is
+// deterministic no matter whether block checksum verification is enabled (with
+// checksums on, the same read fails as a checksum mismatch -- still Corruption).
+static void corrupt_first_data_block_type_byte(const std::string& path) {
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
+    ASSERT_GT(file_size, sstable::Footer::kEncodedLength);
+    std::string content(file_size, '\0');
+    ASSERT_OK(rf->read_at_fully(0, content.data(), file_size));
+
+    sstable::Footer footer;
+    Slice footer_input(content.data() + file_size - sstable::Footer::kEncodedLength, sstable::Footer::kEncodedLength);
+    ASSERT_OK(footer.DecodeFrom(&footer_input));
+    sstable::BlockContents index_contents;
+    index_contents.data = Slice(content.data() + footer.index_handle().offset(), footer.index_handle().size());
+    index_contents.cachable = false;
+    index_contents.heap_allocated = false;
+    sstable::Block index_block(index_contents);
+    std::unique_ptr<sstable::Iterator> iter(index_block.NewIterator(sstable::BytewiseComparator()));
+    iter->SeekToFirst();
+    ASSERT_TRUE(iter->Valid());
+    Slice handle_value = iter->value();
+    sstable::BlockHandle first_block;
+    ASSERT_OK(first_block.DecodeFrom(&handle_value));
+    // The compression-type byte sits right after the block payload.
+    size_t type_offset = first_block.offset() + first_block.size();
+    ASSERT_LT(type_offset, content.size());
+    content[type_offset] = 0x7f;
+
+    WritableFileOptions wf_opts;
+    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
+    ASSERT_OK(wf->append(Slice(content)));
+    ASSERT_OK(wf->close());
+}
+
+// A corrupted data block in one input sstable must fail the whole task as Corruption
+// and drop the local cache of every input sstable, so the next compaction round
+// re-reads from remote storage instead of hitting the same bad blocks again.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_drops_corrupted_cache) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    PersistentIndexSstablePB sst1, sst2;
+    ASSERT_OK(create_test_sstable("corrupted_cache_sst_1.sst", 0, 100, &sst1));
+    ASSERT_OK(create_test_sstable("corrupted_cache_sst_2.sst", 50, 100, &sst2));
+
+    // Corrupt the first data block of one input (the index block and footer near the
+    // file tail stay intact so opening still succeeds).
+    corrupt_first_data_block_type_byte(_tablet_mgr->sst_location(_tablet_metadata->id(), sst1.filename()));
+
+    bool old_cfg = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    std::atomic<int> drop_cnt{0}; // the task runs on the compaction thread pool
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    auto st = mgr->compact(candidates, _tablet_metadata, false, &output_sstables);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old_cfg;
+
+    ASSERT_TRUE(st.is_corruption()) << st;
+    // Both input sstables of the failed task must have their local cache dropped.
+    ASSERT_EQ(2, drop_cnt.load());
+}
+#endif // USE_STAROS && !BUILD_FORMAT_LIB
 
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_apply_rssid_offset) {
     auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());

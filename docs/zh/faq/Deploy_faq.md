@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks 部署常见问题及解决方案。"
 ---
@@ -29,7 +30,7 @@ description: "StarRocks 部署常见问题及解决方案。"
 
 ## StarRocks 是否支持动态修改 FE、BE 配置项？
 
-部分 FE 和 BE 节点的配置项支持动态修改。具体操作参考 [配置参数](../administration/management/FE_configuration.md)。
+部分 FE 和 BE 节点的配置项支持动态修改。具体操作参考 [配置参数](../administration/configuration/FE_parameters/FE_parameters.md)。
 
 * 动态修改 FE 节点配置项：
   * 使用 SQL 方式动态修改：

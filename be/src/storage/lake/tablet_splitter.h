@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -26,6 +28,8 @@ namespace starrocks {
 class TabletRange;
 class Segment;
 class Schema;
+class TabletSchema;
+using TabletSchemaCSPtr = std::shared_ptr<const TabletSchema>;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -39,10 +43,15 @@ struct SegmentSplitInfo {
     int64_t num_rows = 0;
     int64_t data_size = 0;
     uint32_t source_id = 0; // Optional: for per-source statistics tracking (e.g., rowset_id)
+    // Position of this segment in its rowset's segment_metas. Together with source_id it identifies
+    // the segment, which source_id alone cannot -- that names the ROWSET. Set by the split boundary
+    // planner so the per-child statistics projection can find the samples already computed for a
+    // segment instead of re-deriving them; -1 means "not from a per-segment metadata walk".
+    int32_t segment_meta_pos = -1;
 
     // Equal-row-interval samples of the sort key (NON-DECREASING) and the row
-    // interval used to produce them. Populated from SegmentMetadataPB when
-    // available. Empty sort_key_samples <=> sort_key_sample_row_interval == 0.
+    // interval used to produce them, as produced by load_samples() below.
+    // Empty sort_key_samples <=> sort_key_sample_row_interval == 0.
     // When non-empty, the producer guarantees
     //   sort_key_samples.size() * sort_key_sample_row_interval < num_rows.
     // Consumed by calculate_range_split_boundaries() to treat each segment as
@@ -51,36 +60,24 @@ struct SegmentSplitInfo {
     std::vector<VariantTuple> sort_key_samples;
     int64_t sort_key_sample_row_interval = 0;
 
-    // Load sort-key samples from a SegmentMetadataPB. Validates that
-    // sort_key_samples.size() * sort_key_sample_row_interval < num_rows
-    // (overflow-safe); on failure, leaves sort_key_samples and
-    // sort_key_sample_row_interval at their defaults (empty/zero).
-    // Requires num_rows to be set before calling.
-    Status load_sort_key_samples(const SegmentMetadataPB& segment_meta);
-
-    // Load sort-key samples directly from |segment|'s full sort key index page, for a
-    // segment that carries the full, untruncated all-column order-preserving index.
-    // Precondition (enforced by the caller's gate): segment.has_full_sort_key_index_page()
-    // is true AND segment.ensure_full_sort_key_index_usable() has returned true, so
-    // segment.full_sort_key_index_decoder() is a non-null validated decoder. min_key,
-    // max_key, and num_rows must also be set before calling.
+    // Populate sort_key_samples / sort_key_sample_row_interval for this segment.
     //
-    // Full-page entry 0 is row 0 (== min_key), not a sample; entries [1, num_items) are
-    // decoded via decode_full_sort_key into sort_key_samples, so sample[i] (0-indexed) is
-    // the key at row (i+1) * segment.num_rows_per_block() (block geometry is shared with the
-    // legacy page). sort_key_sample_row_interval is set to segment.num_rows_per_block() only
-    // when at least one sample was decoded (fewer than 2 blocks yields zero samples and leaves
-    // the interval at 0), preserving the sort_key_samples.empty() <=> interval == 0 invariant.
+    // Prefers the segment's short key index when it already encodes the whole sort key -- free, no
+    // data-page I/O. Otherwise reads |data_page_target| sort key values from the segment's data
+    // pages, which costs page reads and is therefore separately budgeted; pass 0 to decline it (the
+    // external-boundaries split path does, because samples cannot move its FE-supplied boundaries).
     //
-    // Runtime-validates the decoded samples (data-safe, not just DCHECK): each sample's arity
-    // must equal segment.num_sort_key_columns(); samples must be non-decreasing; and each must
-    // fall within [min_key, max_key]. Returns true iff index samples were loaded and passed
-    // validation; returns false (NOT an error) when the full decoder is unavailable or any
-    // decoded sample fails validation, leaving sort_key_samples empty so the caller can fall
-    // back to metadata samples or the coarse [min, max] range. A bad/corrupt full page never
-    // aborts the split.
-    StatusOr<bool> load_samples_from_short_key_index(const Segment& segment, const Schema& schema,
-                                                     const std::vector<uint32_t>& sort_key_idxes);
+    // |schema| and |sort_key_idxes| must both come from |segment_schema|, the schema this segment
+    // was written with. A |sort_key_idxes| sourced from anywhere else is REJECTED by the data-page
+    // sampler -- silently, with empty samples -- because a divergent argument would publish split
+    // boundaries in the wrong column order.
+    //
+    // Never fails: on any rejection or I/O failure the samples stay empty and the caller falls back
+    // to this segment's coarse [min_key, max_key] range. min_key, max_key and num_rows must be set
+    // before calling.
+    Status load_samples(Segment& segment, const Schema& schema, const TabletSchemaCSPtr& segment_schema,
+                        const std::vector<uint32_t>& sort_key_idxes, int64_t target, int64_t data_page_target,
+                        bool fill_data_cache);
 };
 
 // Per-range estimated statistics keyed by source_id.
@@ -116,6 +113,7 @@ struct RangeSplitResult {
 //
 // Returns RangeSplitResult with boundaries and per-range estimates, or empty boundaries if
 // splitting is not possible (e.g., not enough data or segments).
+// This generic calculator is unlimited. SPLIT operations use a separate bounded internal path.
 //
 // colocate_column_count > 0 enables colocate-aware boundary canonicalization: when the
 // selected boundary crosses a colocate-prefix transition between adjacent candidate ranges,
@@ -139,22 +137,26 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
 // own that check.
 //
 // When |tablet_manager| is non-null, opportunistically loads each rowset's segments
-// (via Rowset::load_segments, using that rowset's own historical schema) to read a
-// full-key segment's short key index directly (load_samples_from_short_key_index).
-// The loader is opened for a rowset only when it has a segment lacking metadata
-// samples AND its schema resolves to a valid registered id (both are cheap protobuf
-// reads checked before the Rowset is constructed, so a pure-legacy tablet does no
-// segment I/O and synthetic reshard metadata with an unset schema id never aborts).
-// A legacy segment falls back to load_sort_key_samples (deprecated_sort_key_samples),
-// and a segment whose LoadedSegment is null (skipped/ignored/lost) or whose files
-// fail to load falls back the same way without ever dereferencing the null segment.
-// When |tablet_manager| is null (synthetic metadata-only callers), the loader is
-// skipped entirely and every segment sources from deprecated_sort_key_samples or
-// coarse [min, max], matching pre-existing behavior.
+// (via Rowset::load_segments, using that rowset's own historical schema) and samples
+// each one's sort key through SegmentSplitInfo::load_samples. A rowset is opened only
+// when at least one of its segments has a nonzero sample budget AND its schema resolves
+// to a valid registered id (both are cheap protobuf reads checked before the Rowset is
+// constructed, so a tablet with sampling disabled does no segment I/O and synthetic
+// reshard metadata with an unset schema id never aborts). A segment whose LoadedSegment
+// is null (skipped/ignored/lost), whose files fail to load, or whose rowset schema does
+// not resolve degrades to that segment's coarse [min, max] range without ever
+// dereferencing the null segment. When |tablet_manager| is null (synthetic metadata-only
+// callers), sampling is skipped entirely and every segment is coarse.
+//
+// |split_width| is the caller's requested output width; it scales the per-segment sample
+// budget, so a 2-way split does not pay a 1024-way split's sampling cost.
+// |data_page_split_width| separately budgets the sampling path that costs page-read I/O;
+// pass 0 to decline it while keeping the free short-key-index path.
 //
 // Exposed for unit testing; production call sites are get_tablet_split_ranges_impl
 // and compute_split_ranges_from_external_boundaries_impl.
 Status build_segments_from_rowsets(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                                   int64_t split_width, int64_t data_page_split_width,
                                    std::vector<SegmentSplitInfo>* segments);
 
 // Per-rowset estimated stats; used by the external boundaries split path's per-range output.
@@ -176,21 +178,32 @@ struct TabletRangeInfo {
 // testing (parity comparison with the external-boundaries path); the production call site
 // is in split_tablet().
 //
-// `tablet_manager` is only dereferenced by build_rowset_anchor's primary-key
-// delvec fallback. For tests using DUP_KEYS metadata with num_dels populated
-// directly, `tablet_manager` may be nullptr.
+// Uses unique physical segments for boundaries, then projects each rowset's recorded
+// statistics onto eligible children. With a manager it may sample on-disk full sort-key
+// indexes under the SPLIT metadata-visit budget; null uses metadata only. Delvecs are not read.
 Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
                                int32_t colocate_column_count = 0);
+
+// PK-index-driven peer used when a PRIMARY KEY tablet's physical sort key differs from its PK.
+// |encoded_samples| are V2-encoded primary keys sampled from the tablet's cloud-native persistent-index
+// SSTs. The helper filters them to strict interior points of the current tablet range, chooses K-1
+// quantiles, decodes them back to full PK tuples, and emits K ranges. Exposed separately so the boundary
+// selection/decoding contract can be unit-tested without object-store I/O; the production split path
+// collects the samples from TabletMetadataPB::sstable_meta before calling it.
+Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manager,
+                                                     const TabletMetadataPtr& tablet_metadata, int32_t split_count,
+                                                     std::vector<std::string> encoded_samples,
+                                                     std::vector<TabletRangeInfo>* split_ranges,
+                                                     int32_t colocate_column_count = 0);
 
 // external-boundaries peer of get_tablet_split_ranges: produces a vector<TabletRangeInfo>
 // from FE-supplied boundaries instead of computing them from segment
 // distribution. Exposed for unit testing of the validation paths; the
 // production call site is in split_tablet().
 //
-// `tablet_manager` is only dereferenced when the old tablet has rowsets
-// (build_rowset_anchor at step 9). For empty-tablet validation tests
-// `tablet_manager` may be nullptr.
+// Skips boundary planning entirely. Projection uses metadata-only weights, or uniform
+// eligible-child weights for separate-sort PK and segmentless rowsets. The manager may be null.
 Status compute_split_ranges_from_external_boundaries(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
         const google::protobuf::RepeatedPtrField<TabletRangePB>& external_ranges,
@@ -213,10 +226,15 @@ struct RowsetOwnership {
 };
 
 // True iff a rowset's metadata shape permits per-segment ownership pruning:
-// (a) no partial-compaction cursor, (b) every segment has sort-key bounds. Each
-// SegmentMetadataPB is self-contained (filename/size/shared/bundle_file_offset travel
-// with it), so bundled rowsets prune uniformly with any other.
-bool can_prune_rowset_segments(const RowsetMetadataPB& rowset);
+// (a) no partial-compaction cursor, (b) every segment has sort-key bounds, (c) those bounds are at
+// |sort_key_arity|, the tablet's CURRENT sort-key arity, so they are comparable with the new
+// tablets' ranges. Each SegmentMetadataPB is self-contained
+// (filename/size/shared/bundle_file_offset travel with it), so bundled rowsets prune uniformly with
+// any other.
+//
+// |sort_key_arity| == 0 means "cannot tell" (a schema carrying no sort key at all, e.g. synthetic
+// metadata) and skips (c) rather than rejecting every rowset.
+bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_arity);
 
 // Computes per-segment ownership of a pruneable rowset against the new tablets'
 // ranges. Fail-closed: returns non-OK (caller degrades the whole rowset to

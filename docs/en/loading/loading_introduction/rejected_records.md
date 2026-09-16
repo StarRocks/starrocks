@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 sidebar_label: "Rejected records"
 keywords: ['rejected', 'records', 'max_filter_ratio', 'replay']

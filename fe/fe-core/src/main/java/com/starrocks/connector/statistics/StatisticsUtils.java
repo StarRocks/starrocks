@@ -43,12 +43,12 @@ public class StatisticsUtils {
         Preconditions.checkState(splits.length == 4);
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, splits[0], splits[1], splits[2]);
         if (table == null) {
-            throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
+            throw new SemanticException("Table [%s.%s.%s] does not exist", splits[0], splits[1], splits[2]);
         }
         if (table.getUUID().equals(tableUUID)) {
             return table;
         } else {
-            throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
+            throw new SemanticException("Table [%s.%s.%s] does not exist", splits[0], splits[1], splits[2]);
         }
     }
 
@@ -58,15 +58,15 @@ public class StatisticsUtils {
         Preconditions.checkState(splits.length == 4);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, splits[0], splits[1]);
         if (db == null) {
-            throw new SemanticException("Database [%s.%s] is not existed", splits[0], splits[1]);
+            throw new SemanticException("Database [%s.%s] does not exist", splits[0], splits[1]);
         }
 
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, splits[0], splits[1], splits[2]);
         if (table == null) {
-            throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
+            throw new SemanticException("Table [%s.%s.%s] does not exist", splits[0], splits[1], splits[2]);
         }
         if (!table.getUUID().equals(tableUUID)) {
-            throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
+            throw new SemanticException("Table [%s.%s.%s] does not exist", splits[0], splits[1], splits[2]);
         }
 
         return ImmutableTriple.of(splits[0], db, table);

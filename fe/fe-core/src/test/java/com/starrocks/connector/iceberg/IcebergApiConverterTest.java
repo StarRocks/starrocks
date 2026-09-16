@@ -631,13 +631,9 @@ public class IcebergApiConverterTest {
         Expr expr3 = ColumnIdExpr.fromSql("id").getExpr();
         orderByElements.add(new OrderByElement(expr3, true, true));
 
-        sortOrder = null;
-        try {
-            sortOrder = IcebergApiConverter.toIcebergSortOrder(schema, orderByElements);
-        } catch (DdlException e) {
-            assertTrue(true);
-        }
-        assertEquals(sortOrder, null);
+        DdlException e = assertThrows(DdlException.class,
+                () -> IcebergApiConverter.toIcebergSortOrder(schema, orderByElements));
+        assertTrue(e.getMessage().contains("Duplicate sort key column id is not allowed."), e.getMessage());
     }
 
     @Test

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "存算分离集群中 Compaction 的管理和监控方法。"
 ---

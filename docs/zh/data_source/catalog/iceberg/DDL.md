@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks Iceberg catalog 支持 DDL 操作，包括创建和管理数据库、表及视图。"
 toc_max_heading_level: 5

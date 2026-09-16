@@ -210,6 +210,91 @@ class TestReflectionMaterializedViewsIntegration:
             finally:
                 connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
 
+    def test_reflect_mv_with_colocate_with(self, sr_root_engine: Engine):
+        """Reflection must report colocate_with for a colocated materialized view.
+
+        Regression test: information_schema.tables_config does not report colocate_with for
+        MVs (it does for tables), so reflecting properties from tables_config alone left the
+        property invisible. Autogenerate then saw it as missing on every run and emitted an
+        ALTER that StarRocks rejects ("colocate_with is not supported for materialized view
+        in shared-nothing cluster"). It is now read from the CREATE MATERIALIZED VIEW ddl.
+        """
+        sr_engine = sr_root_engine
+        if sr_engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
+            pytest.skip("MV colocation behaviour on shared-data clusters is not verified")
+
+        mv_name = "test_reflect_mv_colocate"
+        base_table = "colocate_base"
+        group_name = "test_reflect_mv_colocate_group"
+
+        with sr_engine.connect() as connection:
+            connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            connection.execute(text(f"DROP TABLE IF EXISTS {base_table}"))
+            # The base table defines the colocation group; the MV must match its bucket count,
+            # replication count and distribution column type to join it.
+            connection.execute(text(f"""
+                CREATE TABLE {base_table} (id INT, val INT)
+                DISTRIBUTED BY HASH(id) BUCKETS 3
+                PROPERTIES ("replication_num" = "1", "colocate_with" = "{group_name}")
+            """))
+            connection.execute(text(f"""
+                CREATE MATERIALIZED VIEW {mv_name}
+                DISTRIBUTED BY HASH(id) BUCKETS 3
+                REFRESH ASYNC
+                PROPERTIES ("replication_num" = "1", "colocate_with" = "{group_name}")
+                AS SELECT id, sum(val) AS total FROM {base_table} GROUP BY id
+            """))
+
+            try:
+                inspector = inspect(connection)
+                _wait_for_mv_creation(inspector, mv_name)
+                inspector.clear_cache()
+
+                mv_state: ReflectedMVState = inspector.get_materialized_view(mv_name, schema=sr_engine.url.database)
+                assert mv_state is not None
+                properties: dict = mv_state.properties
+                logger.debug(f"properties: {properties}")
+
+                assert properties.get("colocate_with") == group_name
+                # Properties that tables_config does report must still come through.
+                assert properties.get("replication_num") == "1"
+                # Only allowlisted properties are taken from the ddl. SHOW CREATE also prints
+                # replicated_storage, which tables_config omits on purpose; picking it up would
+                # make autogenerate warn about an unmanaged database value on every run.
+                assert "replicated_storage" not in properties
+            finally:
+                connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+                connection.execute(text(f"DROP TABLE IF EXISTS {base_table}"))
+
+    def test_reflect_mv_without_colocate_with(self, sr_root_engine: Engine):
+        """An MV with no colocation must not gain a colocate_with property from reflection."""
+        sr_engine = sr_root_engine
+        mv_name = "test_reflect_mv_no_colocate"
+
+        with sr_engine.connect() as connection:
+            connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            connection.execute(text(f"""
+                CREATE MATERIALIZED VIEW {mv_name}
+                REFRESH ASYNC
+                PROPERTIES ("replication_num" = "1")
+                AS SELECT id, name FROM users
+            """))
+
+            try:
+                inspector = inspect(connection)
+                _wait_for_mv_creation(inspector, mv_name)
+                inspector.clear_cache()
+
+                mv_state: ReflectedMVState = inspector.get_materialized_view(mv_name, schema=sr_engine.url.database)
+                assert mv_state is not None
+                properties: dict = mv_state.properties
+                logger.debug(f"properties: {properties}")
+
+                assert "colocate_with" not in properties
+                assert "replicated_storage" not in properties
+            finally:
+                connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+
     def test_reflect_mv_with_comment(self, sr_root_engine: Engine):
         """Test reflection of a materialized view with comment."""
         mv_name = "test_reflect_mv_with_comment"

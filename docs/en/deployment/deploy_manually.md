@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "How to manually deploy a shared-nothing StarRocks cluster where BE nodes handle both storage and computing."
 ---
@@ -9,9 +10,9 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 <ManualPrep />
 
-This topic describes how to manually deploy a shared-nothing StarRocks cluster (in which BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
+This topic describes how to manually deploy a shared-nothing StarRocks cluster (in which BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](./deployment.md).
 
-To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy Shared-data StarRocks Manually](../deployment/deploy_shared_data_manually.md).
+To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy Shared-data StarRocks Manually](./deploy_shared_data_manually.md).
 
 ## Step 1: Start the Leader FE node
 
@@ -24,7 +25,7 @@ The following procedures are performed on an FE instance.
    mkdir -p <meta_dir>
    ```
 
-2. Navigate to the directory that stores the [StarRocks FE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the FE configuration file **fe/conf/fe.conf**.
+2. Navigate to the directory that stores the [StarRocks FE deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the FE configuration file **fe/conf/fe.conf**.
 
    a. Specify the metadata directory in the configuration item `meta_dir`.
 
@@ -33,7 +34,7 @@ The following procedures are performed on an FE instance.
       meta_dir = <meta_dir>
       ```
 
-   b. If any of the FE ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md#fe-ports) are occupied, you must assign valid alternatives in the FE configuration file.
+   b. If any of the FE ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md#fe-ports) are occupied, you must assign valid alternatives in the FE configuration file.
 
       ```YAML
       http_port = aaaa        # Default: 8030
@@ -64,7 +65,7 @@ The following procedures are performed on an FE instance.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/management/FE_configuration.md).
+   For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/configuration/FE_parameters/FE_parameters.md).
 
 3. Start the FE node.
 
@@ -84,7 +85,7 @@ The following procedures are performed on an FE instance.
 
      > **CAUTION**
      >
-     > Before starting the FE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
+     > Before starting the FE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](./preparation/environment_configurations.md#hostnames) for more information.
 
 4. Check the FE logs to verify if the FE node is started successfully.
 
@@ -111,7 +112,7 @@ The following procedures are performed on the BE instances.
    mkdir -p <storage_root_path>
    ```
 
-2. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the BE configuration file **be/conf/be.conf**.
+2. Navigate to the directory that stores the [StarRocks BE deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the BE configuration file **be/conf/be.conf**.
 
    a. Specify the data directory in the configuration item `storage_root_path`. Multiple volumes are separated by semicolon (;). Example: `/data1;/data2`.
 
@@ -120,7 +121,7 @@ The following procedures are performed on the BE instances.
       storage_root_path = <storage_root_path>
       ```
 
-   b. If any of the BE ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md#be-ports) are occupied, you must assign valid alternatives in the BE configuration file.
+   b. If any of the BE ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md#be-ports) are occupied, you must assign valid alternatives in the BE configuration file.
 
       ```YAML
       be_port = vvvv                   # Default: 9060
@@ -148,7 +149,7 @@ The following procedures are performed on the BE instances.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/BE_configuration.md).
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/configuration/BE_parameters/BE_parameters.md).
 
 3. Start the BE node.
 
@@ -158,7 +159,7 @@ The following procedures are performed on the BE instances.
 
       > **CAUTION**
       >
-      > - Before starting the BE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
+      > - Before starting the BE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](./preparation/environment_configurations.md#hostnames) for more information.
       > - You do not need to specify the parameter `--host_type` when you start BE nodes.
 
 4. Check the BE logs to verify if the BE node is started successfully.
@@ -454,4 +455,4 @@ Try the following steps to identify the errors that occur when you start the FE 
 
 ## What to do next
 
-Having deployed your StarRocks cluster, you can move on to [Post-deployment Setup](../deployment/post_deployment_setup.md) for instructions on initial management measures.
+Having deployed your StarRocks cluster, you can move on to [Post-deployment Setup](./manage_deployment/post_deployment_setup.md) for instructions on initial management measures.

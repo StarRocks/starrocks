@@ -611,6 +611,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TListMaterializedViewStatusResult listMaterializedViewStatus(TGetTablesParams params) throws TException {
         LOG.debug("get list table request: {}", params);
         ConnectContext context = new ConnectContext();
+        // When this is served for a BE schema scan (the non-FE-evaluated information_schema.materialized_views
+        // path, e.g. a LIKE predicate), the BE forwards the outer query's query_timeout. Install the context
+        // as thread-local and stamp its start time so SimpleExecutor.outerRemainingQueryTimeoutS() bounds the
+        // internal task_run_history read by query_timeout instead of statistic_collect_query_timeout.
+        if (params.isSetQuery_timeout() && params.getQuery_timeout() > 0) {
+            context.getSessionVariable().setQueryTimeoutS((int) params.getQuery_timeout());
+            context.setStartTime();
+            context.setThreadLocalInfo();
+            try {
+                return MaterializedViewsSystemTable.query(params, context);
+            } finally {
+                ConnectContext.remove();
+            }
+        }
         return MaterializedViewsSystemTable.query(params, context);
     }
 
@@ -3836,7 +3850,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TUpdateFailPointResponse updateFailPointStatus(TUpdateFailPointRequest request) {
         TStatus status = new TStatus();
         if (FailPoint.isEnabled()) {
-            if (request.isIs_enable()) {
+            // Not `request.isIs_enable()`: a pause request deliberately carries is_enable = false so
+            // that an FE predating the pause field removes the policy instead of arming an ENABLE it
+            // cannot honour. isArming() is what keeps a pause from being read as a removal here.
+            if (TriggerPolicy.isArming(request)) {
                 FailPoint.setTriggerPolicy(request.getName(), TriggerPolicy.fromThrift(request));
             } else {
                 FailPoint.removeTriggerPolicy(request.getName());

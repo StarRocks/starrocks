@@ -1,4 +1,5 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 description: "How to use dbt-starrocks to transform data in StarRocks using dbt modeling patterns and best practices."
 ---

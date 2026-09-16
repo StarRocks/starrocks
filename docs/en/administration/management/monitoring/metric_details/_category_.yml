@@ -3,5 +3,5 @@ label: 'General metrics'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
-  title: 'Metric details'
+  type: doc
+  id: metric_details

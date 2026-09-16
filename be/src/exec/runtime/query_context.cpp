@@ -292,6 +292,8 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
     query_statistic->add_cpu_costs(_query_runtime_state.consume_delta_cpu_cost());
     query_statistic->add_mem_costs(mem_cost_bytes());
     query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
+    query_statistic->add_read_stats(_query_runtime_state.consume_delta_read_local_cnt(),
+                                    _query_runtime_state.consume_delta_read_remote_cnt());
     _query_runtime_state.consume_delta_scan_stats(query_statistic.get());
     for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         query_statistic->add_exec_stats_item(

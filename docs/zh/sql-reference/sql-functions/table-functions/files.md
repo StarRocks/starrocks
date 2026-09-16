@@ -389,7 +389,7 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 | `aws.s3.access_key`           | 否       | 您的 IAM 用户的访问密钥。如果您选择 IAM 用户作为访问 AWS S3 的凭证方法，您必须指定此参数。 |
 | `aws.s3.secret_key`           | 否       | 您的 IAM 用户的密钥。如果您选择 IAM 用户作为访问 AWS S3 的凭证方法，您必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ###### AWS STS 区域终端节点
 

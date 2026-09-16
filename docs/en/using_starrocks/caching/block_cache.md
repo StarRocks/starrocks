@@ -28,11 +28,11 @@ You can configure Data Cache using the following CN(BE) configuration items:
 
 ### Cache directory
 
-- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
+- [storage_root_path](../../administration/configuration/BE_parameters/BE_parameters.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
 
 ### Cache disk size
 
-- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
+- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
 
 ## View Data Cache status
 

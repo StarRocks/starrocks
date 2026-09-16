@@ -24,6 +24,18 @@ Map the BE development surface for execution, storage, runtime, services, and th
 - Reviewed legacy debt in `build-support/be_module_boundary_baseline.json` is shrink-only.
 - BE config or metric changes must update matching public docs.
 
+## Observability Touchpoints
+
+Apply the [Observability Awareness policy](../policies/observability-awareness.md) with these existing BE mechanisms in mind whenever the affected path uses or should use them:
+
+- **Query Profile**: Follow profile creation, counter or timer updates, reporting, and aggregation when changing query execution. A new operator, strategy, fast path, or fallback must not bypass the applicable profile updates.
+- **Load Profile**: Follow the load profile from BE counter or timer updates through reporting and FE-side aggregation and exposure. Check new load modes, sink paths, optimizations, and failure paths against that entire flow.
+- **Primary Key publish trace logs**: Follow the existing trace and its parent/child context around tablet publish work. Keep new phases, retries, waits, I/O, fallbacks, and errors connected to that trace path.
+- **Metrics**: Inspect the owning module's existing registration, update, and cleanup patterns. Keep affected metrics accurate and extend the nearby metric set when a new operationally relevant state or outcome would otherwise be missing.
+- **Errors and logs**: Preserve the original `Status` cause and the identifiers already used for correlation; keep logging at the established ownership boundary.
+
+When one of these mechanisms needs to be extended, follow its existing naming, hierarchy, lifetime, batching or sampling, and tests rather than introducing a parallel convention.
+
 ## Metrics Ownership
 
 - `be/src/base/metrics.h` owns only low-level metric primitives such as `Metric`, `MetricRegistry`, labels, visitors, and hooks.

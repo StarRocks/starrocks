@@ -291,6 +291,26 @@ OpFactories maybe_interpolate_local_shuffle_exchange(PipelineBuilderContext* con
             self_keys_match_buckets ? bucket_properties : std::vector<TBucketProperty>{});
 }
 
+OpFactories interpolate_local_forced_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
+                                                      int32_t plan_node_id, OpFactories& pred_operators,
+                                                      const std::vector<ExprContext*>& partition_expr_ctxs,
+                                                      TPartitionType::type part_type,
+                                                      const std::vector<TBucketProperty>& bucket_properties) {
+    // ShufflePartitioner indexes bucket_properties by partition-column position, so a scheme settled
+    // on one child is only usable on another when the two line up 1:1; otherwise fall back to the
+    // plain hash of this child's own keys, which every child can produce. (maybe_interpolate_local_
+    // shuffle_exchange makes the same size check for its self-keys branch.)
+    if (!bucket_properties.empty() && bucket_properties.size() != partition_expr_ctxs.size()) {
+        return do_maybe_interpolate_local_shuffle_exchange(context, state, plan_node_id, pred_operators,
+                                                           partition_expr_ctxs, TPartitionType::HASH_PARTITIONED, {});
+    }
+    // No could_local_shuffle() early-out and no reading of THIS source's partition type or bucket
+    // properties on purpose -- see the header; the caller passes the first child's scheme for all of
+    // them. do_maybe_... still skips at DOP 1, which is safe because every child runs at the same DOP.
+    return do_maybe_interpolate_local_shuffle_exchange(context, state, plan_node_id, pred_operators,
+                                                       partition_expr_ctxs, part_type, bucket_properties);
+}
+
 OpFactories maybe_interpolate_local_bucket_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
                                                             int32_t plan_node_id, OpFactories& pred_operators,
                                                             const std::vector<ExprContext*>& partition_expr_ctxs) {
@@ -488,6 +508,9 @@ OpFactories maybe_interpolate_collect_stats(PipelineBuilderContext* context, Run
     for (const auto& pipeline : context->dependent_pipelines()) {
         downstream_source_op->add_group_dependent_pipeline(pipeline);
     }
+    // A node that builds a subtree outside its own push_dependent_pipeline() scope binds itself to
+    // these afterwards -- see PipelineBuilderContext::bind_dependent_pipeline_between().
+    context->record_group_dependent_source(downstream_source_op.get());
 
     return {std::move(downstream_source_op)};
 }

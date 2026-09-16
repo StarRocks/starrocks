@@ -27,6 +27,7 @@ set(COLUMN_TEST_FILES
     global_dict_core_test.cpp
     german_string_test.cpp
     json_column_test.cpp
+    json_merger_test.cpp
     map_column_test.cpp
     mysql_row_buffer_test.cpp
     object_column_core_test.cpp
@@ -65,7 +66,9 @@ set(COLUMN_TEST_FILES
     variant_merger_test.cpp
     variant_builder_test.cpp
     variant_encoder_test.cpp
+    variant_subvalue_test.cpp
     buffer_test.cpp
+    geo_column_test.cpp
 )
 
 if (USE_AVX2)

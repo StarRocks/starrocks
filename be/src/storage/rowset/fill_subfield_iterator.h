@@ -42,6 +42,8 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override;
+
     Status seek_to_first() override;
 
     Status seek_to_ordinal(ordinal_t ord) override;

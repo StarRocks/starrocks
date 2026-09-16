@@ -292,6 +292,17 @@ public class FragmentNormalizer {
         return new Pair<>(remapSlotIds(slotIds), exprs);
     }
 
+    // Serialize a thrift struct into the digest the same way expressions are handled, so a
+    // sub-structure that has no expression form can still take part in the cache key.
+    public ByteBuffer normalizeThrift(org.apache.thrift.TBase<?, ?> value) {
+        try {
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
+            return ByteBuffer.wrap(ser.serialize(value));
+        } catch (Exception e) {
+            throw new RuntimeException("Fatal error happens when normalize thrift struct", e);
+        }
+    }
+
     public List<ByteBuffer> normalizeExprs(List<Expr> exprList) {
         if (exprList == null || exprList.isEmpty()) {
             return Collections.emptyList();
@@ -756,6 +767,10 @@ public class FragmentNormalizer {
 
     public boolean normalize() {
         PlanNode root = fragment.getPlanRoot();
+        if (fragment.collectNodes().stream().anyMatch(AIProjectNode.class::isInstance)) {
+            setUncacheable(true);
+            return false;
+        }
 
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();

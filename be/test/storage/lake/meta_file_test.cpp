@@ -17,24 +17,33 @@
 #include <gtest/gtest.h>
 
 #include <ctime>
+#include <functional>
+#include <limits>
 #include <set>
+#include <unordered_map>
 
+#include "base/debug/trace.h"
+#include "base/hash/crc32c.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_metrics.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 
@@ -70,20 +79,170 @@ public:
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
-    void ensure_kek_in_key_cache() {
-        if (KeyCache::instance().get_key("0000000000000000") != nullptr) {
-            return;
+    void write_file(const std::string& path, const std::string& content) {
+        WritableFileOptions options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto writer, fs::new_writable_file(options, path));
+        ASSERT_OK(writer->append(Slice(content)));
+        ASSERT_OK(writer->close());
+    }
+
+    DelvecPageInfo add_test_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
+                                   const std::string& filename, const std::string& content) {
+        FileMetaPB file_meta;
+        file_meta.set_name(filename);
+        file_meta.set_size(content.size());
+        (*metadata->mutable_delvec_meta()->mutable_version_to_file())[version] = file_meta;
+
+        DelvecPagePB page;
+        page.set_version(version);
+        page.set_offset(0);
+        page.set_size(content.size());
+        (*metadata->mutable_delvec_meta()->mutable_delvecs())[segment_id] = page;
+        write_file(_tablet_manager->delvec_location(tablet_id, filename), content);
+        return DelvecPageInfo{tablet_id, std::move(file_meta), std::move(page)};
+    }
+
+    DelvecOutputPage raw_output_page(int64_t tablet_id, std::string filename, uint64_t offset, uint64_t size,
+                                     std::optional<int64_t> declared_size = std::nullopt) {
+        DelvecPageInfo raw;
+        raw.tablet_id = tablet_id;
+        raw.delvec_file.set_name(std::move(filename));
+        if (declared_size.has_value()) {
+            raw.delvec_file.set_size(*declared_size);
         }
-        EncryptionKeyPB pb;
-        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
-        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
-        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
-        pb.set_plain_key("0000000000000000");
-        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
-        auto kek = root_encryption_key->generate_key().value();
-        kek->set_id(2);
-        KeyCache::instance().add_key(root_encryption_key);
-        KeyCache::instance().add_key(kek);
+        raw.page.set_version(1);
+        raw.page.set_offset(offset);
+        raw.page.set_size(size);
+        return DelvecOutputPage{.raw_page = std::move(raw)};
+    }
+
+    enum class RejectionStatus { kInvalidArgument, kNotSupported, kCorruption };
+
+    void expect_compacted_delvec_rejected(const std::vector<DelvecOutputPage>& pages, RejectionStatus expected_status,
+                                          std::string_view expected_message, int expected_preflight_opens = 0,
+                                          int expected_source_sizes = 0,
+                                          const std::function<void(SyncPoint*)>& configure = {}) {
+        SCOPED_TRACE(expected_message);
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        output.set_size(123);
+        output.set_shared(true);
+        output.set_encryption_meta("unchanged-encryption");
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string before_file = output.SerializeAsString();
+        const std::vector<uint64_t> before_offsets = offsets;
+
+        int preflight_opens = 0;
+        int source_sizes = 0;
+        int get_del_vec_calls = 0;
+        int range_reads = 0;
+        int writer_opens = 0;
+        int append_chunks = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack("write_compacted_delvec_pages:preflight_source_open", [&](void*) { ++preflight_opens; });
+        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_sizes; });
+        sync->SetCallBack("merge_delvecs:before_get_del_vec", [&](void*) { ++get_del_vec_calls; });
+        sync->SetCallBack("write_compacted_delvec_pages:read_chunk_size", [&](void*) { ++range_reads; });
+        sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
+        sync->SetCallBack("append_delvec_bytes_bounded:chunk_size", [&](void*) { ++append_chunks; });
+        if (configure) configure(sync);
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), pages, next_id(), next_id(), &output, &offsets);
+        switch (expected_status) {
+        case RejectionStatus::kInvalidArgument:
+            EXPECT_TRUE(status.is_invalid_argument()) << status;
+            break;
+        case RejectionStatus::kNotSupported:
+            EXPECT_TRUE(status.is_not_supported()) << status;
+            break;
+        case RejectionStatus::kCorruption:
+            EXPECT_TRUE(status.is_corruption()) << status;
+            break;
+        }
+        EXPECT_EQ(expected_message, status.message()) << status;
+        EXPECT_EQ(before_file, output.SerializeAsString());
+        EXPECT_EQ(before_offsets, offsets);
+        EXPECT_EQ(expected_preflight_opens, preflight_opens);
+        EXPECT_EQ(expected_source_sizes, source_sizes);
+        EXPECT_EQ(0, get_del_vec_calls);
+        EXPECT_EQ(0, range_reads);
+        EXPECT_EQ(0, writer_opens);
+        EXPECT_EQ(0, append_chunks);
+    }
+
+    std::shared_ptr<TabletMetadataPB> make_shared_delvec_source(int64_t tablet_id, int segment_count) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(segment_count + 1);
+        metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+        metadata->mutable_schema()->set_id(1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10 * segment_count);
+        rowset->set_data_size(100 * segment_count);
+        rowset->mutable_uid()->set_hi(0x1234);
+        rowset->mutable_uid()->set_lo(0x5678);
+        for (int i = 0; i < segment_count; ++i) {
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(fmt::format("atomic_shared_{}.dat", i));
+            segment->set_size(100);
+            segment->set_num_rows(10);
+            segment->set_segment_idx(i);
+            segment->set_shared(true);
+        }
+        return metadata;
+    }
+
+    Status publish_delvec_merge(const std::vector<std::shared_ptr<TabletMetadataPB>>& sources, int64_t merged_tablet,
+                                int64_t txn_id, std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
+        CHECK_EQ(2, sources.size());
+        auto* split_key = sources[0]->mutable_range()->mutable_upper_bound()->add_values();
+        split_key->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+        split_key->set_value("0");
+        split_key->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        sources[0]->mutable_range()->set_upper_bound_included(false);
+        sources[1]->mutable_range()->mutable_lower_bound()->CopyFrom(sources[0]->range().upper_bound());
+        sources[1]->mutable_range()->set_lower_bound_included(true);
+        for (const auto& source : sources) {
+            RETURN_IF_ERROR(_tablet_manager->put_tablet_metadata(source));
+        }
+        ReshardingTabletInfoPB resharding;
+        auto& merging = *resharding.mutable_merging_tablet_info();
+        for (const auto& source : sources) {
+            merging.add_old_tablet_ids(source->id());
+        }
+        merging.set_new_tablet_id(merged_tablet);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding, /*base_version=*/1,
+                                               /*new_version=*/2, txn_info, false, *published_metadatas, tablet_ranges);
+    }
+
+    StatusOr<std::set<std::string>> delvec_inventory() {
+        std::set<std::string> files;
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(
+                _location_provider->segment_root_location(1), [&](std::string_view filename) {
+                    constexpr std::string_view kSuffix = ".delvec";
+                    if (filename.size() >= kSuffix.size() &&
+                        filename.substr(filename.size() - kSuffix.size()) == kSuffix) {
+                        files.emplace(filename);
+                    }
+                    return true;
+                }));
+        return files;
     }
 
     constexpr static const char* const kTestDir = "./lake_meta_test";
@@ -161,51 +320,666 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
     EXPECT_TRUE(rs.overlapped());           // composite spanning >1 op_write
 }
 
-TEST_F(MetaFileTest, test_merge_delvec_files_empty) {
-    std::vector<DelvecFileInfo> old_delvec_files;
-    FileMetaPB new_delvec_file;
-    std::vector<uint64_t> offsets;
-
-    EXPECT_OK(merge_delvec_files(_tablet_manager.get(), old_delvec_files, 1, 1, &new_delvec_file, &offsets));
-    EXPECT_TRUE(offsets.empty());
+TEST_F(MetaFileTest, test_compacted_delvec_empty_plan_rejected) {
+    expect_compacted_delvec_rejected({}, RejectionStatus::kInvalidArgument, "compacted delvec page plan is empty");
 }
 
-TEST_F(MetaFileTest, test_merge_delvec_files_encrypted) {
-    ensure_kek_in_key_cache();
+TEST_F(MetaFileTest, test_compacted_delvec_plan_shapes_and_filename) {
+    expect_compacted_delvec_rejected({}, RejectionStatus::kInvalidArgument, "compacted delvec page plan is empty");
+    expect_compacted_delvec_rejected({DelvecOutputPage{}}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output page must contain exactly one payload");
+    auto both = raw_output_page(next_id(), "both.delvec", 0, 1, 1);
+    both.serialized_page = "x";
+    expect_compacted_delvec_rejected({both}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output page must contain exactly one payload");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "", 0, 1, 1)}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec raw page filename is empty");
+}
 
-    const int64_t tablet_id = 2001;
-    const int64_t new_tablet_id = 2002;
-    const int64_t txn_id = 5;
+TEST_F(MetaFileTest, test_compacted_delvec_signed_and_file_domains) {
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "zero.delvec", 0, 0, 0)},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec raw page size must be positive");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "negative.delvec", 0, 1, -1)},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec declared source size is negative");
+    expect_compacted_delvec_rejected(
+            {raw_output_page(next_id(), "offset.delvec", uint64_t{std::numeric_limits<int64_t>::max()} + 1, 1,
+                             std::numeric_limits<int64_t>::max())},
+            RejectionStatus::kInvalidArgument, "compacted delvec raw page offset is outside signed int64 domain");
+    expect_compacted_delvec_rejected(
+            {raw_output_page(next_id(), "size.delvec", 0, uint64_t{std::numeric_limits<int64_t>::max()} + 1,
+                             std::numeric_limits<int64_t>::max())},
+            RejectionStatus::kInvalidArgument, "compacted delvec raw page size is outside signed int64 domain");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "end.delvec", std::numeric_limits<int64_t>::max(), 1,
+                                                      std::numeric_limits<int64_t>::max())},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec raw page end is outside signed int64 domain");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "undersize.delvec", 2, 3, 4)},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec declared source size does not contain page");
 
-    ASSIGN_OR_ABORT(auto pair, KeyCache::instance().create_plain_random_encryption_meta_pair());
-    const std::string content = "encrypted-delvec";
-    const std::string file_name = "delvec-encrypted";
+    // The first entry ends exactly at INT64_MAX and is valid. The following malformed entry
+    // supplies a zero-I/O stopping point, proving the near-limit declaration passed preflight.
+    expect_compacted_delvec_rejected(
+            {raw_output_page(next_id(), "near-limit.delvec", std::numeric_limits<int64_t>::max() - 7, 7,
+                             std::numeric_limits<int64_t>::max()),
+             DelvecOutputPage{}},
+            RejectionStatus::kInvalidArgument, "compacted delvec output page must contain exactly one payload");
+}
 
-    const std::string file_path = _tablet_manager->delvec_location(tablet_id, file_name);
-    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    wopts.encryption_info = pair.info;
-    ASSIGN_OR_ABORT(auto writer, fs::new_writable_file(wopts, file_path));
-    ASSERT_OK(writer->append(Slice(content)));
-    ASSERT_OK(writer->close());
+TEST_F(MetaFileTest, test_compacted_delvec_output_overflow) {
+    auto configure_overflow = [](uint64_t initial, bool skip_int64) {
+        return [=](SyncPoint* sync) {
+            sync->SetCallBack("write_compacted_delvec_pages:initial_output_offset",
+                              [=](void* arg) { *static_cast<uint64_t*>(arg) = initial; });
+            sync->SetCallBack("write_compacted_delvec_pages:test_skip_int64_output_limit",
+                              [=](void* arg) { *static_cast<bool*>(arg) = skip_int64; });
+        };
+    };
+    expect_compacted_delvec_rejected({DelvecOutputPage{.serialized_page = "xx"}}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output size is outside signed int64 domain", 0, 0,
+                                     configure_overflow(std::numeric_limits<int64_t>::max(), false));
+    expect_compacted_delvec_rejected({DelvecOutputPage{.serialized_page = "xx"}}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output size overflows uint64", 0, 0,
+                                     configure_overflow(std::numeric_limits<uint64_t>::max() - 1, true));
+}
 
-    DelvecFileInfo file_info;
-    file_info.tablet_id = tablet_id;
-    file_info.delvec_file.set_name(file_name);
-    file_info.delvec_file.set_size(content.size());
-    file_info.delvec_file.set_encryption_meta(pair.encryption_meta);
+TEST_F(MetaFileTest, test_compacted_delvec_duplicate_declarations) {
+    const int64_t source_tablet = next_id();
+    const int64_t target_tablet = next_id();
+    const std::string filename = "duplicate-page.delvec";
+    write_file(_tablet_manager->delvec_location(source_tablet, filename), "abcd");
 
-    std::vector<DelvecFileInfo> old_delvec_files{file_info};
-    FileMetaPB new_delvec_file;
+    auto raw = raw_output_page(source_tablet, filename, 0, 4, 4);
+    FileMetaPB output;
     std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {raw, raw}, target_tablet, next_id(), &output,
+                                           &offsets));
+    EXPECT_EQ(std::vector<uint64_t>({0, 4}), offsets);
+    ASSIGN_OR_ABORT(auto reader,
+                    fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+    ASSIGN_OR_ABORT(auto copied, reader->read_all());
+    EXPECT_EQ("abcdabcd", copied);
 
-    EXPECT_OK(merge_delvec_files(_tablet_manager.get(), old_delvec_files, new_tablet_id, txn_id, &new_delvec_file,
-                                 &offsets));
-    ASSERT_EQ(1, offsets.size());
-    EXPECT_EQ(0, offsets[0]);
-    EXPECT_FALSE(new_delvec_file.name().empty());
-    EXPECT_EQ(static_cast<int64_t>(content.size()), new_delvec_file.size());
-    EXPECT_FALSE(new_delvec_file.encryption_meta().empty());
-    EXPECT_FALSE(new_delvec_file.shared());
+    auto conflicting = raw_output_page(source_tablet, filename, 0, 3, 4);
+    expect_compacted_delvec_rejected({raw, conflicting}, RejectionStatus::kCorruption,
+                                     "compacted delvec duplicate page declarations disagree on size");
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_plaintext_guard_raw_and_mixed) {
+    auto encrypted = raw_output_page(next_id(), "encrypted.delvec", 0, 1, 1);
+    encrypted.raw_page->delvec_file.set_encryption_meta("stale");
+    for (const auto& pages : std::vector<std::vector<DelvecOutputPage>>{
+                 {encrypted}, {encrypted, DelvecOutputPage{.serialized_page = "x"}}}) {
+        expect_compacted_delvec_rejected(
+                pages, RejectionStatus::kNotSupported,
+                "encrypted delvec input is unsupported; delvec must be plaintext: encrypted.delvec");
+    }
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycle) {
+    const int64_t source_a = next_id();
+    const int64_t source_b = next_id();
+    const int64_t source_same_name_other_tablet = next_id();
+    write_file(_tablet_manager->delvec_location(source_a, "a.delvec"), "a");
+    write_file(_tablet_manager->delvec_location(source_b, "b.delvec"), "b");
+    write_file(_tablet_manager->delvec_location(source_same_name_other_tablet, "a.delvec"), "a");
+    const auto a = raw_output_page(source_a, "a.delvec", 0, 1);
+    const auto b = raw_output_page(source_b, "b.delvec", 0, 1);
+    const auto same_name_other_tablet = raw_output_page(source_same_name_other_tablet, "a.delvec", 0, 1);
+    {
+        int active_readers = 0;
+        int peak_readers = 0;
+        int copy_opens = 0;
+        int source_size_lookups = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+            active_readers += *static_cast<int*>(arg);
+            peak_readers = std::max(peak_readers, active_readers);
+            if (*static_cast<int*>(arg) == 1) ++copy_opens;
+        });
+        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_size_lookups; });
+        sync->SetCallBack("write_compacted_delvec_pages:source_options", [&](void* arg) {
+            EXPECT_TRUE(static_cast<RandomAccessFileOptions*>(arg)->skip_fill_local_cache);
+        });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {a, a, b, a}, next_id(), next_id(), &output,
+                                               &offsets));
+        EXPECT_EQ(2, source_size_lookups);
+        EXPECT_EQ(3, copy_opens);
+        EXPECT_EQ(1, peak_readers);
+        EXPECT_EQ(0, active_readers);
+
+        source_size_lookups = 0;
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {a, same_name_other_tablet}, next_id(), next_id(),
+                                               &output, &offsets));
+        EXPECT_EQ(2, source_size_lookups);
+    }
+
+    auto configure_resolved_size = [](int64_t resolved_size) {
+        return [=](SyncPoint* sync) {
+            sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [resolved_size](void* arg) {
+                *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = resolved_size;
+            });
+        };
+    };
+    expect_compacted_delvec_rejected({a}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec resolved source size is negative", 1, 1,
+                                     configure_resolved_size(-1));
+    expect_compacted_delvec_rejected({a}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec resolved source size does not contain page", 1, 1,
+                                     configure_resolved_size(0));
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_absent_size_preflight_is_traced) {
+    const int64_t source_tablet = next_id();
+    const std::string source_name = "absent-size-traced.delvec";
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), "a");
+    const auto raw = raw_output_page(source_tablet, source_name, 0, 1);
+
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [](void* arg) {
+        *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = Status::InternalError("injected size failure");
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    scoped_refptr<Trace> trace(new Trace);
+    Status status;
+    {
+        ADOPT_TRACE(trace.get());
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        status = write_compacted_delvec_pages(_tablet_manager.get(), {raw}, next_id(), next_id(), &output, &offsets);
+    }
+    EXPECT_EQ("injected size failure", status.message()) << status;
+    EXPECT_NE(std::string::npos, trace->MetricsAsJSON().find("delvec_file_read_latency_us"));
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_reader_lifecycle_resets_across_serialized_page) {
+    const int64_t source_tablet = next_id();
+    const int64_t target_tablet = next_id();
+    constexpr std::string_view source_name = "reader-lifecycle-source.delvec";
+
+    DelVector raw_delvec;
+    const uint32_t raw_deleted[] = {2, 7};
+    raw_delvec.init(/*version=*/3, raw_deleted, std::size(raw_deleted));
+    const std::string raw_bytes = raw_delvec.save();
+    write_file(_tablet_manager->delvec_location(source_tablet, std::string(source_name)), raw_bytes);
+
+    DelVector serialized_delvec;
+    const uint32_t serialized_deleted[] = {1, 9, 14};
+    serialized_delvec.init(/*version=*/4, serialized_deleted, std::size(serialized_deleted));
+    const std::string serialized_bytes = serialized_delvec.save();
+    const auto raw = raw_output_page(source_tablet, std::string(source_name), 0, raw_bytes.size());
+
+    int active_readers = 0;
+    int peak_readers = 0;
+    int copy_opens = 0;
+    int source_size_lookups = 0;
+    int source_option_uses = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+        const int delta = *static_cast<int*>(arg);
+        active_readers += delta;
+        peak_readers = std::max(peak_readers, active_readers);
+        if (delta == 1) ++copy_opens;
+    });
+    sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_size_lookups; });
+    sync->SetCallBack("write_compacted_delvec_pages:source_options", [&](void* arg) {
+        ++source_option_uses;
+        EXPECT_TRUE(static_cast<RandomAccessFileOptions*>(arg)->skip_fill_local_cache);
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(),
+                                           {raw, DelvecOutputPage{.serialized_page = serialized_bytes}, raw},
+                                           target_tablet, next_id(), &output, &offsets));
+    EXPECT_EQ(std::vector<uint64_t>({0, raw_bytes.size(), raw_bytes.size() + serialized_bytes.size()}), offsets);
+    ASSIGN_OR_ABORT(auto reader,
+                    fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+    ASSIGN_OR_ABORT(auto actual, reader->read_all());
+    EXPECT_EQ(raw_bytes + serialized_bytes + raw_bytes, actual);
+    EXPECT_EQ(static_cast<int64_t>(actual.size()), output.size());
+    EXPECT_EQ(1, source_size_lookups);
+    EXPECT_EQ(3, source_option_uses);
+    EXPECT_EQ(2, copy_opens);
+    EXPECT_EQ(1, peak_readers);
+    EXPECT_EQ(0, active_readers);
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_serialized_output_uses_bounded_appends) {
+    const std::string expected(3 * (1UL << 20) + 17, 's');
+    const int64_t target_tablet = next_id();
+    std::vector<size_t> append_sizes;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("append_delvec_bytes_bounded:chunk_size",
+                      [&](void* arg) { append_sizes.push_back(*static_cast<size_t*>(arg)); });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {DelvecOutputPage{.serialized_page = expected}},
+                                           target_tablet, next_id(), &output, &offsets));
+    ASSERT_GT(append_sizes.size(), 1);
+    for (size_t size : append_sizes) EXPECT_LE(size, 1UL << 20);
+    ASSIGN_OR_ABORT(auto input,
+                    fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+    ASSIGN_OR_ABORT(auto actual, input->read_all());
+    EXPECT_EQ(expected, actual);
+}
+
+TEST_F(MetaFileTest, test_finalize_delvec_uses_bounded_appends) {
+    const int64_t tablet_id = next_id();
+    const int64_t version = 2;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(1);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector seed;
+    const uint32_t deleted = 7;
+    std::shared_ptr<DelVector> expected;
+    seed.add_dels_as_new_version({deleted}, version, &expected);
+    const std::string prefix = expected->save();
+    const std::string padding(3 * (1UL << 20) + 17, 'p');
+    const std::string expected_physical_bytes = prefix + padding;
+    builder.append_delvec(expected, /*segment_id=*/1);
+
+    std::vector<size_t> append_sizes;
+    int64_t logical_size = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("MetaFileBuilder::_finalize_delvec", [&](void* arg) {
+        auto* buffer = static_cast<Buffer<uint8_t>*>(arg);
+        const size_t original_size = buffer->size();
+        EXPECT_EQ(prefix.size(), original_size);
+        buffer->resize(original_size + padding.size());
+        std::fill(buffer->begin() + original_size, buffer->end(), static_cast<uint8_t>('p'));
+    });
+    sync->SetCallBack("MetaFileBuilder::_finalize_delvec:logical_append_size",
+                      [&](void* arg) { logical_size = *static_cast<int64_t*>(arg); });
+    sync->SetCallBack("append_delvec_bytes_bounded:chunk_size",
+                      [&](void* arg) { append_sizes.push_back(*static_cast<size_t*>(arg)); });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    ASSERT_OK(builder.finalize(next_id()));
+    ASSERT_GT(logical_size, 3 * (1UL << 20));
+    ASSERT_GT(append_sizes.size(), 1);
+    for (size_t size : append_sizes) EXPECT_LE(size, 1UL << 20);
+    const auto& file = metadata->delvec_meta().version_to_file().at(version);
+    EXPECT_EQ(logical_size, file.size());
+    EXPECT_EQ(static_cast<int64_t>(expected_physical_bytes.size()), file.size());
+    EXPECT_TRUE(file.encryption_meta().empty());
+    ASSIGN_OR_ABORT(auto reader, fs::new_random_access_file(_tablet_manager->delvec_location(tablet_id, file.name())));
+    ASSIGN_OR_ABORT(auto physical_size, reader->get_size());
+    EXPECT_EQ(expected_physical_bytes.size(), physical_size);
+    ASSIGN_OR_ABORT(auto physical_bytes, reader->read_all());
+    EXPECT_EQ(expected_physical_bytes, physical_bytes);
+    ASSERT_GE(physical_bytes.size(), prefix.size());
+    EXPECT_EQ(prefix, physical_bytes.substr(0, prefix.size()));
+    EXPECT_EQ(padding, physical_bytes.substr(prefix.size()));
+    DelVector loaded;
+    LakeIOOptions io_options;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *metadata, /*segment_id=*/1, false, io_options, &loaded));
+    EXPECT_EQ(prefix, loaded.save());
+}
+
+TEST_F(MetaFileTest, test_get_delvec_ignores_encryption_metadata) {
+    const int64_t tablet_id = next_id();
+    const int64_t version = 11;
+    const uint32_t segment_id = 7;
+    const std::string file_name = "plain-delvec-with-stale-encryption-meta.delvec";
+
+    DelVector expected;
+    const uint32_t deleted_rowids[] = {3, 9};
+    expected.init(version, deleted_rowids, std::size(deleted_rowids));
+    const std::string content = expected.save();
+    write_file(_tablet_manager->delvec_location(tablet_id, file_name), content);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(version);
+    auto& file = (*metadata.mutable_delvec_meta()->mutable_version_to_file())[version];
+    file.set_name(file_name);
+    file.set_size(content.size());
+    file.set_encryption_meta(std::string(1, static_cast<char>(0xff)));
+    auto& page = (*metadata.mutable_delvec_meta()->mutable_delvecs())[segment_id];
+    page.set_version(version);
+    page.set_offset(0);
+    page.set_size(content.size());
+
+    DelVector actual;
+    LakeIOOptions io_options;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), metadata, segment_id, false, io_options, &actual));
+    EXPECT_EQ(expected.save(), actual.save());
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_raw_page_writes_plaintext) {
+    const int64_t source_tablet_id = next_id();
+    const int64_t target_tablet_id = next_id();
+    const int64_t txn_id = next_id();
+    const int64_t version = 11;
+    const uint32_t segment_id = 7;
+    const std::string file_name = "plain-merge-source.delvec";
+
+    DelVector expected;
+    const uint32_t deleted_rowids[] = {2, 8};
+    expected.init(version, deleted_rowids, std::size(deleted_rowids));
+    const std::string content = expected.save();
+    write_file(_tablet_manager->delvec_location(source_tablet_id, file_name), content);
+
+    DelvecPageInfo source;
+    source.tablet_id = source_tablet_id;
+    source.delvec_file.set_name(file_name);
+    source.delvec_file.set_size(content.size());
+    source.page.set_version(version);
+    source.page.set_offset(0);
+    source.page.set_size(content.size());
+
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {DelvecOutputPage{.raw_page = source}},
+                                           target_tablet_id, txn_id, &output, &offsets));
+    ASSERT_EQ(std::vector<uint64_t>({0}), offsets);
+    EXPECT_TRUE(output.encryption_meta().empty());
+
+    TabletMetadataPB metadata;
+    metadata.set_id(target_tablet_id);
+    metadata.set_version(version);
+    (*metadata.mutable_delvec_meta()->mutable_version_to_file())[version] = output;
+    auto& page = (*metadata.mutable_delvec_meta()->mutable_delvecs())[segment_id];
+    page.set_version(version);
+    page.set_offset(0);
+    page.set_size(content.size());
+    DelVector actual;
+    LakeIOOptions io_options;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), metadata, segment_id, false, io_options, &actual));
+    EXPECT_EQ(expected.save(), actual.save());
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_serialized_page_writes_plaintext) {
+    const int64_t tablet_id = next_id();
+    const int64_t txn_id = next_id();
+    DelVector expected;
+    const uint32_t deleted = 1;
+    expected.init(/*version=*/2, &deleted, 1);
+
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(),
+                                           {DelvecOutputPage{.serialized_page = expected.save()}}, tablet_id, txn_id,
+                                           &output, &offsets));
+    EXPECT_TRUE(output.encryption_meta().empty());
+    EXPECT_EQ(std::vector<uint64_t>({0}), offsets);
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
+    constexpr std::string_view kPrefix = "injected compacted delvec ";
+    const int64_t source_tablet = next_id();
+    const int64_t target_tablet = next_id();
+    const std::string source_name = "failure-atomic-source.delvec";
+    const std::string source_bytes((1UL << 20) + 17, 'r');
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), source_bytes);
+    auto raw = raw_output_page(source_tablet, source_name, 0, source_bytes.size(), source_bytes.size());
+    const std::vector<DelvecOutputPage> pages = {raw, DelvecOutputPage{.serialized_page = "serialized"}};
+
+    auto expect_source_unchanged = [&] {
+        ASSIGN_OR_ABORT(auto reader,
+                        fs::new_random_access_file(_tablet_manager->delvec_location(source_tablet, source_name)));
+        ASSIGN_OR_ABORT(auto actual, reader->read_all());
+        EXPECT_EQ(source_bytes, actual);
+    };
+    auto run_phase = [&](std::string_view seam, int fail_on_call, int expected_calls) {
+        SCOPED_TRACE(seam);
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        output.set_size(123);
+        output.set_shared(true);
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string output_before = output.SerializeAsString();
+        const auto offsets_before = offsets;
+        const std::string message = std::string(kPrefix) + std::string(seam);
+        int calls = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack(std::string(seam), [&](void* arg) {
+            if (++calls == fail_on_call) *static_cast<Status*>(arg) = Status::InternalError(message);
+        });
+        sync->EnableProcessing();
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), pages, target_tablet, next_id(), &output, &offsets);
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        EXPECT_EQ(message, status.message()) << status;
+        EXPECT_EQ(expected_calls, calls);
+        EXPECT_EQ(output_before, output.SerializeAsString());
+        EXPECT_EQ(offsets_before, offsets);
+        expect_source_unchanged();
+
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), pages, target_tablet, next_id(), &output,
+                                               &offsets));
+        EXPECT_EQ(std::vector<uint64_t>({0, source_bytes.size()}), offsets);
+        ASSIGN_OR_ABORT(auto reader,
+                        fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+        ASSIGN_OR_ABORT(auto actual, reader->read_all());
+        EXPECT_EQ(source_bytes + "serialized", actual);
+    };
+
+    // The actual-size seam is a preflight failure: no destination writer may have been created.
+    {
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string output_before = output.SerializeAsString();
+        const auto offsets_before = offsets;
+        int calls = 0;
+        auto absent_size_raw = raw;
+        absent_size_raw.raw_page->delvec_file.clear_size();
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [&](void* arg) {
+            ++calls;
+            *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = Status::InternalError("injected actual-size");
+        });
+        sync->EnableProcessing();
+        const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {absent_size_raw}, target_tablet,
+                                                           next_id(), &output, &offsets);
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        EXPECT_EQ("injected actual-size", status.message()) << status;
+        EXPECT_EQ(1, calls);
+        EXPECT_EQ(output_before, output.SerializeAsString());
+        EXPECT_EQ(offsets_before, offsets);
+        expect_source_unchanged();
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {absent_size_raw}, target_tablet, next_id(),
+                                               &output, &offsets));
+    }
+
+    run_phase("write_compacted_delvec_pages:before_writer_open", 1, 1);
+    run_phase("write_compacted_delvec_pages:before_read_chunk", 1, 1);
+    run_phase("write_compacted_delvec_pages:before_read_chunk", 2, 2);
+    run_phase("append_delvec_bytes_bounded:before_chunk", 1, 1);
+    run_phase("append_delvec_bytes_bounded:before_chunk", 2, 2);
+    run_phase("write_compacted_delvec_pages:before_close", 1, 1);
+    run_phase("write_compacted_delvec_pages:before_apply_offsets", 1, 1);
+
+    // This source does not exist at INT64_MAX; the injected actual size and writer failure prove
+    // that the valid near-limit declaration is preflighted without allocating or reading its range.
+    {
+        auto near_limit = raw_output_page(source_tablet, source_name, std::numeric_limits<int64_t>::max() - 7, 7);
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string output_before = output.SerializeAsString();
+        const auto offsets_before = offsets;
+        int override_calls = 0;
+        int writer_calls = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [&](void* arg) {
+            ++override_calls;
+            *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = std::numeric_limits<int64_t>::max();
+        });
+        sync->SetCallBack("write_compacted_delvec_pages:before_writer_open", [&](void* arg) {
+            ++writer_calls;
+            *static_cast<Status*>(arg) = Status::InternalError("injected near-limit writer");
+        });
+        sync->EnableProcessing();
+        const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {near_limit}, target_tablet,
+                                                           next_id(), &output, &offsets);
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        EXPECT_EQ("injected near-limit writer", status.message()) << status;
+        EXPECT_EQ(1, override_calls);
+        EXPECT_EQ(1, writer_calls);
+        EXPECT_EQ(output_before, output.SerializeAsString());
+        EXPECT_EQ(offsets_before, offsets);
+        expect_source_unchanged();
+    }
+}
+
+TEST_F(MetaFileTest, test_delvec_output_append_failure_is_atomic) {
+    constexpr std::string_view kInjectedError = "injected delvec append failure";
+    int injection_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("append_delvec_bytes_bounded:before_chunk", [&](void* arg) {
+        ++injection_count;
+        *static_cast<Status*>(arg) = Status::InternalError(kInjectedError);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DelVector direct_delvec;
+    const uint32_t direct_deleted = 2;
+    direct_delvec.init(/*version=*/2, &direct_deleted, 1);
+    FileMetaPB direct_output;
+    const std::string direct_output_before = direct_output.SerializeAsString();
+    std::vector<uint64_t> direct_offsets;
+    auto direct_status = write_compacted_delvec_pages(_tablet_manager.get(),
+                                                      {DelvecOutputPage{.serialized_page = direct_delvec.save()}},
+                                                      next_id(), next_id(), &direct_output, &direct_offsets);
+    EXPECT_FALSE(direct_status.ok());
+    EXPECT_TRUE(direct_status.message().contains(kInjectedError)) << direct_status;
+    EXPECT_EQ(direct_output_before, direct_output.SerializeAsString());
+
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    auto meta_a = make_shared_delvec_source(child_a, /*segment_count=*/1);
+    auto meta_b = make_shared_delvec_source(child_b, /*segment_count=*/1);
+    DelVector delvec_a;
+    const uint32_t deleted_a = 4;
+    delvec_a.init(/*version=*/10, &deleted_a, 1);
+    add_test_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "append_atomic_a.delvec", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_b = 7;
+    delvec_b.init(/*version=*/11, &deleted_b, 1);
+    add_test_delvec(meta_b.get(), child_b, /*version=*/11, /*segment_id=*/1, "append_atomic_b.delvec", delvec_b.save());
+
+    std::unordered_map<int64_t, TabletMetadataPtr> published_metadatas;
+    auto publish_status = publish_delvec_merge({meta_a, meta_b}, merged_tablet, next_id(), &published_metadatas);
+    EXPECT_FALSE(publish_status.ok());
+    EXPECT_TRUE(publish_status.message().contains(kInjectedError)) << publish_status;
+    EXPECT_FALSE(published_metadatas.contains(merged_tablet));
+    EXPECT_TRUE(_tablet_manager->get_tablet_metadata(merged_tablet, /*version=*/2).status().is_not_found());
+    EXPECT_EQ(2, injection_count);
+}
+
+TEST_F(MetaFileTest, test_delvec_output_close_failure_is_atomic) {
+    constexpr std::string_view kInjectedError = "injected delvec close failure";
+    int injection_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("write_compacted_delvec_pages:before_close", [&](void* arg) {
+        ++injection_count;
+        *static_cast<Status*>(arg) = Status::InternalError(kInjectedError);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DelVector direct_raw_delvec;
+    const uint32_t direct_raw_deleted = 1;
+    direct_raw_delvec.init(/*version=*/10, &direct_raw_deleted, 1);
+    auto direct_metadata = make_shared_delvec_source(next_id(), /*segment_count=*/1);
+    auto direct_source = add_test_delvec(direct_metadata.get(), direct_metadata->id(), /*version=*/10,
+                                         /*segment_id=*/1, "close_atomic_direct.delvec", direct_raw_delvec.save());
+    DelVector direct_union_delvec;
+    const uint32_t direct_union_deleted = 3;
+    direct_union_delvec.init(/*version=*/2, &direct_union_deleted, 1);
+    const std::string direct_union_content = direct_union_delvec.save();
+    FileMetaPB direct_output;
+    const std::string direct_output_before = direct_output.SerializeAsString();
+    std::vector<uint64_t> direct_offsets;
+    auto direct_status = write_compacted_delvec_pages(
+            _tablet_manager.get(),
+            {DelvecOutputPage{.raw_page = direct_source}, DelvecOutputPage{.serialized_page = direct_union_content}},
+            next_id(), next_id(), &direct_output, &direct_offsets);
+    EXPECT_FALSE(direct_status.ok());
+    EXPECT_TRUE(direct_status.message().contains(kInjectedError)) << direct_status;
+    EXPECT_EQ(direct_output_before, direct_output.SerializeAsString());
+
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    auto meta_a = make_shared_delvec_source(child_a, /*segment_count=*/2);
+    auto meta_b = make_shared_delvec_source(child_b, /*segment_count=*/2);
+    DelVector plain_single;
+    const uint32_t plain_deleted = 2;
+    plain_single.init(/*version=*/10, &plain_deleted, 1);
+    add_test_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "close_atomic_plain.delvec",
+                    plain_single.save());
+    DelVector merged_a;
+    const uint32_t merged_deleted_a = 5;
+    merged_a.init(/*version=*/11, &merged_deleted_a, 1);
+    add_test_delvec(meta_a.get(), child_a, /*version=*/11, /*segment_id=*/2, "close_atomic_merged_a.delvec",
+                    merged_a.save());
+    DelVector merged_b;
+    const uint32_t merged_deleted_b = 8;
+    merged_b.init(/*version=*/12, &merged_deleted_b, 1);
+    add_test_delvec(meta_b.get(), child_b, /*version=*/12, /*segment_id=*/2, "close_atomic_merged_b.delvec",
+                    merged_b.save());
+
+    std::unordered_map<int64_t, TabletMetadataPtr> published_metadatas;
+    auto publish_status = publish_delvec_merge({meta_a, meta_b}, merged_tablet, next_id(), &published_metadatas);
+    EXPECT_FALSE(publish_status.ok());
+    EXPECT_TRUE(publish_status.message().contains(kInjectedError)) << publish_status;
+    EXPECT_FALSE(published_metadatas.contains(merged_tablet));
+    EXPECT_TRUE(_tablet_manager->get_tablet_metadata(merged_tablet, /*version=*/2).status().is_not_found());
+    EXPECT_EQ(2, injection_count);
 }
 
 TEST_F(MetaFileTest, test_delvec_rw) {
@@ -306,6 +1080,97 @@ TEST_F(MetaFileTest, test_delvec_rw) {
 
     iter2 = version_to_file_map.find(new_version);
     EXPECT_TRUE(iter2 != version_to_file_map.end());
+}
+
+// A delvec page whose bytes fail the recorded crc32c is most plausibly a corrupted
+// block in the local data cache, so get_del_vec drops that cache and reads once
+// more. Simulate exactly that: corrupt the delvec file, then have the cache-drop
+// hook restore the original bytes -- standing in for the retry reading through to
+// an intact remote object -- and the read must then succeed. Without the hook the
+// drop reports NotSupported on this build, the retry is skipped, and the original
+// Corruption surfaces.
+TEST_F(MetaFileTest, test_get_del_vec_crc32c_retries_after_dropping_cache) {
+    const int64_t tablet_id = 10012;
+    const uint32_t segment_id = 5678;
+    const int64_t version = 11;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {1, 3, 5, 7, 90000};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    const std::string expected_delvec = ndv->save();
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_OK(builder.finalize(next_id()));
+
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    auto page_iter = metadata2->delvec_meta().delvecs().find(segment_id);
+    ASSERT_TRUE(page_iter != metadata2->delvec_meta().delvecs().end());
+    const auto& delvec_page = page_iter->second;
+    ASSERT_TRUE(delvec_page.has_crc32c());
+    auto file_iter = metadata2->delvec_meta().version_to_file().find(delvec_page.version());
+    ASSERT_TRUE(file_iter != metadata2->delvec_meta().version_to_file().end());
+    const std::string delvec_path = _tablet_manager->delvec_location(tablet_id, file_iter->second.name());
+
+    // Keep the good bytes, then corrupt one byte inside the page (length-preserving).
+    std::string good_bytes;
+    {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(delvec_path));
+        ASSIGN_OR_ABORT(good_bytes, rf->read_all());
+        ASSERT_GT(good_bytes.size(), delvec_page.offset());
+        auto corrupted = good_bytes;
+        corrupted[delvec_page.offset()] = static_cast<char>(corrupted[delvec_page.offset()] ^ 0xff);
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, delvec_path));
+        ASSERT_OK(wf->append(Slice(corrupted)));
+        ASSERT_OK(wf->close());
+    }
+    // Make sure the reads below hit the file, not a delvec primed into the metacache.
+    _tablet_manager->metacache()->prune();
+
+    bool old_strict = config::enable_strict_delvec_crc_check;
+    config::enable_strict_delvec_crc_check = true;
+    LakeIOOptions lake_io_opts;
+
+    // Without the hook: the drop is NotSupported here, so the original Corruption
+    // must surface.
+    {
+        DelVector read_delvec;
+        auto st = get_del_vec(_tablet_manager.get(), *metadata2, delvec_page, false, lake_io_opts, &read_delvec);
+        ASSERT_TRUE(st.is_corruption()) << st;
+    }
+
+    // With the hook: force the drop to report success and restore the file at the
+    // same moment -- that is what dropping a corrupt cached block achieves in
+    // production -- and the retry must succeed.
+    int drop_calls = 0;
+    const std::string sync_point = "lake::drop_corrupted_delvec_file_cache";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        ++drop_calls;
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, delvec_path));
+        CHECK_OK(wf->append(Slice(good_bytes)));
+        CHECK_OK(wf->close());
+        *(Status*)arg = Status::OK();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    {
+        DelVector read_delvec;
+        auto st = get_del_vec(_tablet_manager.get(), *metadata2, delvec_page, false, lake_io_opts, &read_delvec);
+        ASSERT_OK(st);
+        EXPECT_EQ(expected_delvec, read_delvec.save());
+    }
+    EXPECT_EQ(1, drop_calls);
+    SyncPoint::GetInstance()->ClearCallBack(sync_point);
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::enable_strict_delvec_crc_check = old_strict;
 }
 
 TEST_F(MetaFileTest, test_delvec_read_loop) {
@@ -659,6 +1524,56 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
+    // Regression for the metadata-reclaim change: when compaction archives its input
+    // rowsets into compaction_inputs, the (potentially large) delete_predicate must be
+    // dropped from the archived copy. compaction_inputs is consumed only by vacuum/file
+    // cleanup, never by readers, so the predicate is pure metadata bloat once moved.
+    const int64_t tablet_id = 10007;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(112);
+
+    // Two live rowsets, each carrying a delete_predicate.
+    auto* r0 = metadata->add_rowsets();
+    r0->set_id(110);
+    r0->set_overlapped(false);
+    r0->set_num_rows(10);
+    r0->set_data_size(100);
+    r0->add_segment_metas()->set_filename("aaa.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = metadata->add_rowsets();
+    r1->set_id(111);
+    r1->set_overlapped(false);
+    r1->set_num_rows(20);
+    r1->set_data_size(200);
+    r1->add_segment_metas()->set_filename("bbb.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+
+    // Pre-condition: both live rowsets currently carry the predicate.
+    ASSERT_TRUE(metadata->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(metadata->rowsets(1).has_delete_predicate());
+
+    // Compact 110 + 111 -> archived into compaction_inputs.
+    metadata->set_version(11);
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(110);
+    op_compaction.add_input_rowsets(111);
+    RowsetMetadataPB output_rowset;
+    output_rowset.add_segment_metas()->set_filename("ccc.dat");
+    op_compaction.mutable_output_rowset()->CopyFrom(output_rowset);
+    op_compaction.set_compact_version(11);
+    builder.apply_opcompaction(op_compaction, 111, 0);
+
+    // The archived compaction_inputs must NOT retain the delete_predicate.
+    ASSERT_EQ(2, metadata->compaction_inputs_size());
+    EXPECT_FALSE(metadata->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(metadata->compaction_inputs(1).has_delete_predicate());
+}
+
 TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
     const int64_t tablet_id = 32001;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
@@ -900,6 +1815,67 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_num_rows) {
     EXPECT_EQ(100, total); // 40 + 60 + 0
     EXPECT_TRUE(rowset.del_files(0).has_num_rows());
     EXPECT_FALSE(rowset.del_files(2).has_num_rows());
+}
+
+// The del file checksum rules: absent means "not recorded" and is always accepted (a del file
+// written before the field existed, or by the replication path), a recorded checksum is enforced,
+// and the config turns verification off entirely.
+TEST_F(MetaFileTest, test_verify_del_file_crc32c) {
+    const std::string content = "0123456789abcdef";
+    const std::string corrupted = "0123456789abcdeF";
+    const uint32_t good = crc32c::Mask(crc32c::Value(content.data(), content.size()));
+
+    FileMetaPB file_meta;
+    file_meta.set_name("0000000000000001_d.del");
+    EXPECT_FALSE(file_meta.has_crc32c());
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, content));
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, corrupted));
+
+    file_meta.set_crc32c(good);
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, content));
+    EXPECT_TRUE(verify_del_file_crc32c(file_meta, 42, corrupted).is_corruption());
+
+    // Same rules on the persisted metadata type.
+    DelfileWithRowsetId del_meta;
+    del_meta.set_name(file_meta.name());
+    EXPECT_OK(verify_del_file_crc32c(del_meta, 42, corrupted));
+    del_meta.set_crc32c(good);
+    EXPECT_OK(verify_del_file_crc32c(del_meta, 42, content));
+    EXPECT_TRUE(verify_del_file_crc32c(del_meta, 42, corrupted).is_corruption());
+
+    const bool old_check = config::lake_enable_del_file_crc_check;
+    config::lake_enable_del_file_crc_check = false;
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, corrupted));
+    EXPECT_OK(verify_del_file_crc32c(del_meta, 42, corrupted));
+    config::lake_enable_del_file_crc_check = old_check;
+}
+
+// apply must carry dels_meta.crc32c into the persisted del file metadata, and leave it absent when
+// the writer recorded none (older writer / replication).
+TEST_F(MetaFileTest, test_apply_opwrite_del_crc32c) {
+    const int64_t tablet_id = 31012;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    auto* d1 = op_write.add_dels_meta();
+    d1->set_name("d1.del");
+    d1->set_crc32c(0x12345678);
+    op_write.add_dels_meta()->set_name("d2.del"); // no checksum recorded
+
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.del_files_size());
+    ASSERT_TRUE(rowset.del_files(0).has_crc32c());
+    EXPECT_EQ(0x12345678u, rowset.del_files(0).crc32c());
+    EXPECT_FALSE(rowset.del_files(1).has_crc32c());
 }
 
 // batch path: op_write.del_num_rows is carried through batch_apply_opwrite/set_final_rowset.
@@ -1200,11 +2176,20 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     EXPECT_EQ(9, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(14, final_rowset.segment_metas(2).segment_idx());
     ASSERT_EQ(3, final_rowset.del_files_size());
+    // A del's op_offset names the last segment of the op_write that PRODUCED it, in the merged
+    // rowset's segment-id space -- not the merged rowset's last segment. batch 1's segments land at
+    // 3 and 9, so its two dels resolve to 9; batch 2's single segment lands at 14, so its del
+    // resolves to 14. Recording all three at 14 (what an unresolved -1 used to produce in
+    // set_final_rowset) would sort batch 1's deletes after batch 2's segment, which is not where
+    // apply put them.
     std::set<std::string> del_names;
+    std::map<std::string, uint32_t> expected_op_offset{{"d1.del", 9}, {"d2.del", 9}, {"d3.del", 14}};
     for (int i = 0; i < final_rowset.del_files_size(); ++i) {
-        del_names.insert(final_rowset.del_files(i).name());
+        const auto& name = final_rowset.del_files(i).name();
+        del_names.insert(name);
         EXPECT_EQ(final_rowset.id(), final_rowset.del_files(i).origin_rowset_id());
-        EXPECT_EQ(14, final_rowset.del_files(i).op_offset());
+        ASSERT_TRUE(expected_op_offset.count(name) > 0) << name;
+        EXPECT_EQ(expected_op_offset[name], final_rowset.del_files(i).op_offset()) << name;
     }
     EXPECT_TRUE(del_names.count("d1.del") > 0);
     EXPECT_TRUE(del_names.count("d2.del") > 0);
@@ -1253,7 +2238,10 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(1, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(2, final_rowset.segment_metas(2).segment_idx());
     ASSERT_EQ(2, final_rowset.del_files_size());
-    EXPECT_EQ(2, final_rowset.del_files(0).op_offset());
+    // Same contract as test_batch_apply_opwrite_merge_dels: each del follows its own op_write's last
+    // segment. batch 1's segments are positional 0 and 1, so d1 resolves to 1; batch 2's single
+    // segment is remapped to 2, so d2 resolves to 2.
+    EXPECT_EQ(1, final_rowset.del_files(0).op_offset());
     EXPECT_EQ(2, final_rowset.del_files(1).op_offset());
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
@@ -1422,7 +2410,8 @@ TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst) {
     EXPECT_TRUE(orphan_names.count("reused.sst") == 0);
 }
 
-// Test that remove_compacted_sst also handles output_sstable (singular, from major_compact)
+// Test that remove_compacted_sst also handles output_sstable (singular), which only appears in
+// txn logs written before index compaction moved to the plural output_sstables field.
 TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst_singular_output) {
     const int64_t tablet_id = 10011;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
@@ -2100,7 +3089,7 @@ TEST_F(MetaFileTest, test_apply_add_index_happy_path) {
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(100);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     ASSERT_TRUE(metadata->has_idg_meta());
     const auto& idgs = metadata->idg_meta().idgs();
@@ -2126,7 +3115,7 @@ TEST_F(MetaFileTest, test_apply_add_index_missing_segment_id_skipped) {
     // well-formed — should land
     push_segment_entry(&op, /*seg_id=*/3, /*version=*/1, "good.idx", 1, BITMAP);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     const auto& idgs = metadata->idg_meta().idgs();
     ASSERT_EQ(1u, idgs.size());
@@ -2145,11 +3134,11 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first) {
 
     TxnLogPB_OpAddIndex op1;
     push_segment_entry(&op1, 5, /*version=*/10, "old.idx", 1, BITMAP);
-    builder.apply_add_index(op1);
+    ASSERT_OK(builder.apply_add_index(op1));
 
     TxnLogPB_OpAddIndex op2;
     push_segment_entry(&op2, 5, /*version=*/11, "new.idx", 1, BITMAP);
-    builder.apply_add_index(op2);
+    ASSERT_OK(builder.apply_add_index(op2));
 
     const auto& v = metadata->idg_meta().idgs().at(5);
     ASSERT_EQ(2, v.entries_size());
@@ -2169,19 +3158,19 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first_multi) {
 
     TxnLogPB_OpAddIndex op1;
     push_segment_entry(&op1, /*seg_id=*/7, /*version=*/10, "v1.idx", /*index_id=*/100, BITMAP);
-    builder.apply_add_index(op1);
+    ASSERT_OK(builder.apply_add_index(op1));
 
     TxnLogPB_OpAddIndex op2;
     push_segment_entry(&op2, /*seg_id=*/7, /*version=*/11, "v2.idx", /*index_id=*/101, BITMAP);
-    builder.apply_add_index(op2);
+    ASSERT_OK(builder.apply_add_index(op2));
 
     TxnLogPB_OpAddIndex op3;
     push_segment_entry(&op3, /*seg_id=*/7, /*version=*/12, "v3.idx", /*index_id=*/102, BITMAP);
-    builder.apply_add_index(op3);
+    ASSERT_OK(builder.apply_add_index(op3));
 
     TxnLogPB_OpAddIndex op4;
     push_segment_entry(&op4, /*seg_id=*/7, /*version=*/13, "v4.idx", /*index_id=*/103, BITMAP);
-    builder.apply_add_index(op4);
+    ASSERT_OK(builder.apply_add_index(op4));
 
     const auto& v = metadata->idg_meta().idgs().at(7);
     ASSERT_EQ(4, v.entries_size());
@@ -2213,7 +3202,7 @@ TEST_F(MetaFileTest, test_apply_add_index_empty_op_is_pure_noop) {
 
     TxnLogPB_OpAddIndex op;
     op.set_alter_version(7);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(metadata->has_idg_meta());
     EXPECT_EQ(300, metadata->schema().id());
@@ -2245,7 +3234,7 @@ TEST_F(MetaFileTest, test_apply_add_index_stamps_new_schema_id) {
     op.set_new_schema_id(200);
     op.set_new_schema_version(6);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(200, metadata->schema().id());
     EXPECT_EQ(6, metadata->schema().schema_version());
@@ -2286,7 +3275,7 @@ TEST_F(MetaFileTest, test_apply_add_index_evolved_table_archives_and_repoints) {
     op.set_new_schema_id(200);
     op.set_new_schema_version(6);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(200, metadata->schema().id());
     // Indexed schema archived under the new id (pins to it must resolve).
@@ -2300,7 +3289,7 @@ TEST_F(MetaFileTest, test_apply_add_index_evolved_table_archives_and_repoints) {
 
     // Idempotent replay: re-applying the same op is a no-op (guarded on
     // historical_schemas already containing the new id).
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
     EXPECT_EQ(200, metadata->schema().id());
     EXPECT_EQ(200, metadata->rowset_to_schema().at(1));
     EXPECT_EQ(50, metadata->rowset_to_schema().at(3));
@@ -2414,7 +3403,7 @@ TEST_F(MetaFileTest, test_apply_add_index_flips_has_bitmap_index_flag) {
     new_ix->set_index_id(7777);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(42);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     ASSERT_EQ(1, schema->table_indices_size());
     EXPECT_TRUE(schema->column(0).has_bitmap_index());
@@ -2434,7 +3423,7 @@ TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_ngrambf) {
     new_ix->set_index_id(8888);
     new_ix->set_index_type(NGRAMBF);
     new_ix->add_col_unique_id(55);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(schema->column(0).has_bitmap_index());
     EXPECT_TRUE(schema->column(0).is_bf_column());
@@ -2454,9 +3443,586 @@ TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_bloom_filter) {
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(77);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_TRUE(schema->column(0).is_bf_column());
+}
+
+// ---------------------------------------------------------------------------
+// Installing the authoritative schema content (StarRocksTest#12090).
+//
+// Under fast schema evolution v2 a metadata-only ADD COLUMN updates only the FE
+// catalog; tablet metadata catches up on the next write naming a newer schema.
+// A fast-path ADD INDEX dispatched inside that window carries the full column
+// definitions so publish does not bind FE's new schema id to content that is
+// still missing the added column.
+// ---------------------------------------------------------------------------
+
+TEST_F(MetaFileTest, test_apply_add_index_installs_new_schema_content_with_new_id) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20110);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20110);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    // The schema this alter publishes: c1 plus the ALTER-added c5, carrying the
+    // FE-allocated target id/version inside it (the writer emits no standalone
+    // new_schema_id, so a pre-new_schema worker finds nothing to stamp).
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // Content: the added column is present...
+    ASSERT_EQ(2, schema->column_size());
+    EXPECT_EQ(105, schema->column(1).unique_id());
+    // ...and the per-column index flag actually landed on it. Without installing
+    // the content first, bump_flag() would have had no column 105 to find, and
+    // compaction output would carry no bloom filter for c5.
+    EXPECT_TRUE(schema->column(1).is_bf_column());
+    ASSERT_EQ(1, schema->table_indices_size());
+    // Id/version: this alter's, not FE's catalog id.
+    EXPECT_EQ(777, schema->id());
+    EXPECT_EQ(4, schema->schema_version());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_rejects_schema_version_regression) {
+    // op.new_schema() is the snapshot FE took at dispatch; publish happens later.
+    // If tablet metadata advanced in between, installing the snapshot would DROP
+    // the columns that arrived meanwhile, so the apply must fail instead.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20111);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20111);
+    metadata->set_version(9);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(10);
+    push_column(schema, /*col_uid=*/42, "c1");
+    push_column(schema, /*col_uid=*/43, "c2_added_later");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4); // older than the metadata's 10
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(42);
+
+    EXPECT_FALSE(builder.apply_add_index(op).ok());
+    // The later column survived and the id was not stamped.
+    EXPECT_EQ(2, schema->column_size());
+    EXPECT_EQ(500, schema->id());
+    EXPECT_EQ(10, schema->schema_version());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_new_schema_replay_is_idempotent) {
+    // Publish can replay (retry, or metadata replay after a restart). By then the
+    // metadata already carries the TARGET schema version, which is newer than the
+    // FE catalog snapshot in the log -- so the no-regression check must be made
+    // against the target version, not the snapshot's, or every replay would fail.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20113);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20113);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4); // catalog snapshot; target below is 4
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.apply_add_index(op));
+    }
+    ASSERT_EQ(777, schema->id());
+    ASSERT_EQ(4, schema->schema_version());
+
+    // Replay the very same op against the already-applied metadata.
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.apply_add_index(op));
+    }
+    // Same end state: no duplicated column, no duplicated index, id intact.
+    EXPECT_EQ(2, schema->column_size());
+    EXPECT_TRUE(schema->column(1).is_bf_column());
+    EXPECT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ(777, schema->id());
+    EXPECT_EQ(4, schema->schema_version());
+}
+
+// Installing the authoritative schema must not clobber the BE-only parts of the
+// tablet schema that FE's converted schema cannot express.
+//
+// The dangerous one is dropped_table_indices: a metadata-only DROP INDEX records
+// a tombstone there so readers do not reinterpret the footer payload the drop
+// left behind. convert_t_schema_to_pb_schema() never emits that field, so copying
+// FE's schema wholesale erased it -- and then
+// ColumnReader::has_original_bloom_filter_index() would accept a footer holding an
+// NGRAM bloom as if it were a plain one, pruning away matching rows. A later
+// ADD INDEX on an unrelated column was enough to trigger it.
+TEST_F(MetaFileTest, test_apply_add_index_preserves_be_only_schema_fields) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20116);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20116);
+    metadata->set_version(6);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(600);
+    schema->set_schema_version(4);
+    // BE-only bookkeeping FE's converted schema does not reproduce faithfully.
+    schema->set_next_column_unique_id(9000);
+    schema->set_num_rows_per_row_block(1234);
+    schema->set_bf_fpp(0.02);
+    // A stale sort key, matching the metadata's own (pre-ADD-COLUMN) column order.
+    schema->add_sort_key_idxes(0);
+    schema->set_num_short_key_columns(2);
+    push_column(schema, /*col_uid=*/42, "c1");
+    auto* prev = push_column(schema, /*col_uid=*/105, "v2");
+    // A flag bumped by an earlier fast-path ADD INDEX whose FE catalog mutation
+    // has not landed yet, so FE's schema below does NOT carry it.
+    prev->set_is_bf_column(true);
+    // Tombstone from a metadata-only DROP INDEX of an NGRAMBF on v2.
+    auto* tomb = schema->add_dropped_table_indices();
+    tomb->set_index_id(-1);
+    tomb->set_index_name("ngram_v2");
+    tomb->set_index_type(NGRAMBF);
+    tomb->add_col_unique_id(105);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(888);
+    fe_schema->set_schema_version(5);
+    // FE recomputes these from what it knows, and cannot express the tombstone.
+    fe_schema->set_next_column_unique_id(107);
+    fe_schema->set_num_rows_per_row_block(65535);
+    // FE's sort key reflects the post-ADD-COLUMN column order and must win.
+    fe_schema->add_sort_key_idxes(2);
+    fe_schema->set_num_short_key_columns(1);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    push_column(fe_schema, /*col_uid=*/105, "v2");
+    auto* fe_new = push_column(fe_schema, /*col_uid=*/106, "bfc");
+    fe_new->set_is_nullable(true);
+    fe_new->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("bf_bfc");
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(106);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // The tombstone survived -- otherwise v2's stale footer bloom becomes live again.
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ("ngram_v2", schema->dropped_table_indices(0).index_name());
+    EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+
+    // Other BE-only bookkeeping kept its value instead of FE's recomputation.
+    // next_column_unique_id is a monotonic mark, so it takes the max: FE recomputed
+    // a LOWER 107 from its current columns, which must not move the mark backwards.
+    EXPECT_EQ(9000, schema->next_column_unique_id());
+    EXPECT_EQ(1234, schema->num_rows_per_row_block());
+    EXPECT_DOUBLE_EQ(0.02, schema->bf_fpp());
+
+    // The columns came from FE (the added one is present)...
+    ASSERT_EQ(3, schema->column_size());
+    EXPECT_EQ(106, schema->column(2).unique_id());
+    EXPECT_TRUE(schema->column(2).is_bf_column());
+    // ...while a flag FE did not know about was merged, not cleared. Losing it
+    // would make later writes stop building that column's index.
+    EXPECT_EQ(105, schema->column(1).unique_id());
+    EXPECT_TRUE(schema->column(1).is_bf_column()) << "pre-existing index flag was dropped";
+    EXPECT_EQ(888, schema->id());
+
+    // Fields that index INTO the column list must move together with it. FE's
+    // schema declared a different sort key than the metadata's, and since ADD
+    // COLUMN does not always append (... AFTER c / FIRST, or a new KEY column),
+    // keeping the old ordinals alongside new columns would misalign the sort key.
+    ASSERT_EQ(1, schema->sort_key_idxes_size());
+    EXPECT_EQ(2, schema->sort_key_idxes(0));
+    EXPECT_EQ(1, schema->num_short_key_columns());
+}
+
+// The other direction of the monotonic mark: right after an ADD COLUMN, FE has
+// just allocated the new column's unique id, so ITS next_column_unique_id is the
+// higher one and must win. Restoring the metadata value outright would hand the
+// same id out twice on a later add.
+TEST_F(MetaFileTest, test_apply_add_index_next_unique_id_takes_the_higher_mark) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20117);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20117);
+    metadata->set_version(3);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(700);
+    schema->set_schema_version(2);
+    schema->set_next_column_unique_id(43);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(701);
+    fe_schema->set_schema_version(3);
+    fe_schema->set_next_column_unique_id(44); // FE just allocated uid 43
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* added = push_column(fe_schema, /*col_uid=*/43, "bfc");
+    added->set_is_nullable(true);
+    added->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(43);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    EXPECT_EQ(44, schema->next_column_unique_id()) << "allocation mark must not lag FE";
+    ASSERT_EQ(2, schema->column_size());
+    EXPECT_TRUE(schema->column(1).is_bf_column());
+}
+
+// The id may arrive either inside new_schema (what this version writes) or in the
+// standalone new_schema_id field (logs written before new_schema existed). Both
+// must reach the same end state for the id, and the legacy encoding must keep
+// working -- an upgraded BE still has to apply logs an older one left behind.
+// Installing the column set means replacing it, so an empty one would wipe the
+// tablet's column definitions and leave it unreadable. FE always sends the full
+// set, so an empty one means the log cannot be trusted -- reject it instead of
+// applying it, and leave the existing schema untouched.
+TEST_F(MetaFileTest, test_apply_add_index_rejects_schema_with_no_columns) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20119);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20119);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+    push_column(schema, /*col_uid=*/43, "c2");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
+    // Deliberately no columns.
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(42);
+
+    EXPECT_FALSE(builder.apply_add_index(op).ok());
+    // The tablet keeps its columns and its id.
+    EXPECT_EQ(2, schema->column_size());
+    EXPECT_EQ(500, schema->id());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_accepts_legacy_standalone_schema_id) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20118);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20118);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Legacy shape: no new_schema at all, id/version in the standalone fields.
+    TxnLogPB_OpAddIndex op;
+    op.set_new_schema_id(777);
+    op.set_new_schema_version(4);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(42);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // Old behaviour preserved: id/version stamped, index appended, flag bumped,
+    // and the column set untouched (no content to install).
+    EXPECT_EQ(777, schema->id());
+    EXPECT_EQ(4, schema->schema_version());
+    ASSERT_EQ(1, schema->table_indices_size());
+    ASSERT_EQ(1, schema->column_size());
+    EXPECT_TRUE(schema->column(0).has_bitmap_index());
+}
+
+// Guard: apply_add_index() replaces only the column-layout fields of
+// TabletSchemaPB (columns plus what indexes into them by ordinal) and preserves
+// everything else. A newly added field is therefore preserved by default, which is
+// the safe direction -- but if the new field belongs to the column-layout set it
+// must be added to the replace list, or it will drift out of sync with the columns
+// exactly the way sort_key_idxes would. If this trips, classify the new field,
+// update the install block in apply_add_index if needed, then bump the count.
+TEST_F(MetaFileTest, test_tablet_schema_pb_field_count_guard) {
+    EXPECT_EQ(17, TabletSchemaPB::descriptor()->field_count())
+            << "TabletSchemaPB gained or lost a field. Decide whether apply_add_index must preserve it "
+               "from tablet metadata (BE-only bookkeeping) or take it from FE's schema (logical schema), "
+               "then update the expected count.";
+}
+
+// A second fast-path ADD INDEX must not drop the first one's table_indices entry.
+//
+// A plain bloom filter is not an Index object in the FE catalog -- it lives in the
+// table-level bloom_filter_columns property -- so the schema FE attaches to the
+// request carries NO table_indices entry for it, and op.new_indexes() names only
+// the columns THIS alter adds. An earlier version of this fix CopyFrom'd FE's
+// whole schema, which left previously-indexed columns without their entry;
+// installing only the columns leaves table_indices intact.
+//
+// Metadata fidelity rather than a read-path bug: the plain-BF read path keys off
+// the per-column is_bf_column flag and `!has_index(uid, NGRAMBF)`, and has_index()
+// is never queried for BLOOM_FILTER. Pinned anyway so the accumulated index set
+// stays truthful for DROP INDEX, tooling, and any future consumer.
+TEST_F(MetaFileTest, test_apply_add_index_keeps_earlier_bloom_filter_entry) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20115);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20115);
+    metadata->set_version(6);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(600);
+    schema->set_schema_version(4);
+    push_column(schema, /*col_uid=*/42, "c1");
+    auto* prev_bf_col = push_column(schema, /*col_uid=*/105, "bfc");
+    prev_bf_col->set_is_nullable(true);
+    prev_bf_col->set_is_bf_column(true);
+    auto* dropped_col = push_column(schema, /*col_uid=*/106, "gone");
+    dropped_col->set_is_bf_column(true);
+    // What a previous fast-path ADD INDEX left behind: one entry for a column that
+    // still exists, one for a column the target schema no longer has.
+    auto* prev_ix = schema->add_table_indices();
+    prev_ix->set_index_id(-1);
+    prev_ix->set_index_name("bf_bfc");
+    prev_ix->set_index_type(BLOOM_FILTER);
+    prev_ix->add_col_unique_id(105);
+    auto* dead_ix = schema->add_table_indices();
+    dead_ix->set_index_id(-1);
+    dead_ix->set_index_name("bf_gone");
+    dead_ix->set_index_type(BLOOM_FILTER);
+    dead_ix->add_col_unique_id(106);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // FE's schema: c1 + bfc + the newly added bfc2. Column 106 was dropped, and
+    // no table_indices entry for any bloom filter (FE cannot express them).
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(888);
+    fe_schema->set_schema_version(5);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* fe_bfc = push_column(fe_schema, /*col_uid=*/105, "bfc");
+    fe_bfc->set_is_nullable(true);
+    auto* fe_bfc2 = push_column(fe_schema, /*col_uid=*/107, "bfc2");
+    fe_bfc2->set_is_nullable(true);
+    fe_bfc2->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("bf_bfc2");
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(107);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // Both the earlier BF column and the new one are represented...
+    std::set<std::string> names;
+    for (const auto& ix : schema->table_indices()) {
+        names.insert(ix.index_name());
+    }
+    EXPECT_EQ(1u, names.count("bf_bfc")) << "earlier bloom filter entry was dropped";
+    EXPECT_EQ(1u, names.count("bf_bfc2"));
+    // The entry left behind by a DROP COLUMN stays too. Pruning dead index entries
+    // is the DROP COLUMN path's job, not this alter's -- installing the schema
+    // leaves table_indices alone, so it neither loses live entries nor takes on
+    // cleanup it has no business doing.
+    EXPECT_EQ(1u, names.count("bf_gone"));
+    EXPECT_EQ(3, schema->table_indices_size());
+
+    // Per-column flags: both indexed columns carry it, and neither is lost by the
+    // install (FE's schema arrives with the flags unset for the new column).
+    for (const auto& col : schema->column()) {
+        if (col.unique_id() == 105 || col.unique_id() == 107) {
+            EXPECT_TRUE(col.is_bf_column()) << "column " << col.unique_id();
+        }
+    }
+    EXPECT_EQ(888, schema->id());
+}
+
+// Pins the LIMIT of coverage convergence, so no comment or doc can claim more
+// than this.
+//
+// On a table that has already fast-evolved, a metadata-only ADD COLUMN makes the
+// next write archive the current schema and pin every existing rowset to it
+// (archive_current_schema_into_history in txn_log_applier.cpp). Those pins point
+// at a schema that predates the added column. apply_add_index repoints only the
+// pins that referenced the PRE-APPLY schema, by design -- rowsets pinned to older,
+// fewer-column schemas keep their pin.
+//
+// Compacting such a rowset ALONE resolves the OLD schema, which has neither the
+// added column nor its index flag. The output rowset is then pinned to that same
+// resolved schema (txn_log_applier.cpp passes it as output_rowset_schema_id and
+// meta_file.cpp records it), so compacting again resolves the same thing: a fixed
+// point that does not advance on its own.
+//
+// It is NOT permanent, though. get_output_rowset_schema takes the highest
+// schema_version among its inputs, so as soon as such a rowset is compacted
+// TOGETHER with one pinned to the indexed schema -- which any write after this
+// alter produces -- the output picks up the index. Block 3 asserts that recovery.
+// What is unbounded is the timing: size-tiered compaction picks rowsets by level,
+// so a partition that stops receiving writes can sit at the fixed point
+// indefinitely. Queries stay correct throughout (the column reads as its default);
+// only pruning is missing.
+TEST_F(MetaFileTest, test_apply_add_index_old_pin_is_a_compaction_fixed_point) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20114);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20114);
+    metadata->set_version(7);
+
+    // The schema in effect before the ADD COLUMN: no c5. Archived, with rowset 1
+    // pinned to it -- exactly what the next write after ADD COLUMN produces.
+    const int64_t kPreAddColumnSchemaId = 400;
+    auto& archived = (*metadata->mutable_historical_schemas())[kPreAddColumnSchemaId];
+    archived.set_id(kPreAddColumnSchemaId);
+    archived.set_schema_version(2);
+    archived.set_keys_type(DUP_KEYS);
+    push_column(&archived, /*col_uid=*/42, "c1");
+    (*metadata->mutable_rowset_to_schema())[1] = kPreAddColumnSchemaId;
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+
+    // Current schema, post-ADD-COLUMN: carries c5, still no index.
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    schema->set_keys_type(DUP_KEYS);
+    push_column(schema, /*col_uid=*/42, "c1");
+    auto* cur_c5 = push_column(schema, /*col_uid=*/105, "c5");
+    cur_c5->set_is_nullable(true);
+    cur_c5->set_default_value("0");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
+    fe_schema->set_keys_type(DUP_KEYS);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // The pin to the pre-ADD-COLUMN schema is deliberately left alone.
+    EXPECT_EQ(kPreAddColumnSchemaId, metadata->rowset_to_schema().at(1));
+    // And that archived schema still has neither the column nor the index flag.
+    const auto& still_archived = metadata->historical_schemas().at(kPreAddColumnSchemaId);
+    EXPECT_EQ(1, still_archived.column_size());
+    EXPECT_FALSE(still_archived.column(0).is_bf_column());
+
+    // 1. Compacting rowset 1 alone resolves the old schema, so its output segment
+    //    is written without the index -- and the output rowset would be pinned to
+    //    this same schema, which is what makes it a fixed point.
+    std::vector<uint32_t> input_rowsets{1};
+    ASSIGN_OR_ABORT(auto compaction_schema, _tablet_manager->get_output_rowset_schema(input_rowsets, metadata.get()));
+    EXPECT_EQ(kPreAddColumnSchemaId, compaction_schema->id());
+    EXPECT_EQ(1u, compaction_schema->num_columns());
+
+    // 2. Contrast: with no pins at all (a table that never fast-evolved, or one
+    //    where no write followed the ADD COLUMN), compaction resolves the CURRENT
+    //    schema and the index flag reaches the output segment.
+    auto fresh = std::make_shared<TabletMetadata>(*metadata);
+    fresh->mutable_rowset_to_schema()->clear();
+    ASSIGN_OR_ABORT(auto fresh_schema, _tablet_manager->get_output_rowset_schema(input_rowsets, fresh.get()));
+    EXPECT_EQ(777, fresh_schema->id());
+    ASSERT_EQ(2u, fresh_schema->num_columns());
+    EXPECT_TRUE(fresh_schema->column(1).is_bf_column());
+
+    // 3. Recovery: add a rowset pinned to the indexed schema -- what any write
+    //    after this alter produces -- and compact the two together. The highest
+    //    input schema_version wins, so the output picks up the indexed schema and
+    //    the old rowset's data gets rewritten with the index. The gap is bounded by
+    //    when compaction happens to batch them, not permanent.
+    auto mixed = std::make_shared<TabletMetadata>(*metadata);
+    (*mixed->mutable_historical_schemas())[777].CopyFrom(mixed->schema());
+    (*mixed->mutable_rowset_to_schema())[2] = 777;
+    auto* new_rowset = mixed->add_rowsets();
+    new_rowset->set_id(2);
+    std::vector<uint32_t> mixed_inputs{1, 2};
+    ASSIGN_OR_ABORT(auto mixed_schema, _tablet_manager->get_output_rowset_schema(mixed_inputs, mixed.get()));
+    EXPECT_EQ(777, mixed_schema->id()) << "a co-compacted indexed rowset must pull the old one up";
+    ASSERT_EQ(2u, mixed_schema->num_columns());
+    EXPECT_TRUE(mixed_schema->column(1).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_repoints_rowset_pins_from_pre_apply_id) {
+    // On a table that already fast-evolved, rowsets are PINNED to a schema id and
+    // both the read path and compaction resolve through historical_schemas. The
+    // pins that referenced the schema this apply replaces must move to the new
+    // id -- matched against the PRE-APPLY id, not schema->id(), which installing
+    // op.new_schema() overwrites with FE's catalog id.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20112);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20112);
+    metadata->set_version(7);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+    (*metadata->mutable_rowset_to_schema())[1] = 500;
+    (*metadata->mutable_historical_schemas())[500].CopyFrom(*schema);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777); // FE catalog id, deliberately != 500
+    fe_schema->set_schema_version(4);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    ASSERT_EQ(1u, metadata->rowset_to_schema().count(1));
+    EXPECT_EQ(777, metadata->rowset_to_schema().at(1));
+    ASSERT_EQ(1u, metadata->historical_schemas().count(777));
+    EXPECT_EQ(2, metadata->historical_schemas().at(777).column_size());
 }
 
 TEST_F(MetaFileTest, test_apply_add_index_unknown_col_unique_id_is_noop_on_columns) {
@@ -2475,7 +4041,7 @@ TEST_F(MetaFileTest, test_apply_add_index_unknown_col_unique_id_is_noop_on_colum
     new_ix->set_index_id(9001);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(/*ghost=*/999);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(schema->column(0).has_bitmap_index());
     EXPECT_FALSE(schema->column(0).is_bf_column());
@@ -2506,7 +4072,7 @@ TEST_F(MetaFileTest, test_apply_add_index_self_heals_existing_index_id) {
     new_ix->set_index_id(123);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(12);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(1, schema->table_indices_size());        // not duplicated
     EXPECT_TRUE(schema->column(0).has_bitmap_index()); // self-healed
@@ -2527,7 +4093,7 @@ TEST_F(MetaFileTest, test_apply_add_index_no_segment_entries_only_index_pb) {
     new_ix->set_index_id(42);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(1);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     // mutable_idg_meta() lazy-allocates so has_idg_meta() is true; the
     // contract-relevant check is that the idgs map stayed empty.
@@ -2550,7 +4116,7 @@ TEST_F(MetaFileTest, test_apply_add_index_index_without_type_skips_flag_bump) {
     new_ix->set_index_id(99);
     // intentionally omit set_index_type
     new_ix->add_col_unique_id(3);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(schema->column(0).has_bitmap_index());
     EXPECT_FALSE(schema->column(0).is_bf_column());
@@ -2633,7 +4199,7 @@ TEST_F(MetaFileTest, test_apply_add_index_second_bitmap_with_sentinel_id_lands) 
     new_ix->set_index_name("idx_b");
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(102);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     ASSERT_EQ(2, schema->table_indices_size());
     EXPECT_EQ("idx_a", schema->table_indices(0).index_name());
@@ -2661,7 +4227,7 @@ TEST_F(MetaFileTest, test_apply_add_index_same_name_with_sentinel_id_dedups) {
     new_ix->set_index_name("idx_a"); // same name
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(101);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(1, schema->table_indices_size());
 }

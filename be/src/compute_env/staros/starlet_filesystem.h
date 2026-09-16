@@ -67,6 +67,20 @@ FileSystemProvider new_starlet_file_system_provider(int priority = 30);
 //   - This is used for non-S3 storage types (OSS/Azure/HDFS/GFS)
 std::shared_ptr<FileSystem> new_fs_starlet(int64_t virtual_shard_id, bool use_raw_path);
 
+#ifdef BE_TEST
+// Drop every entry from the process-wide shard filesystem cache that new_fs_starlet(shard_id, ...)
+// consults before it creates anything.
+//
+// That cache is keyed by shard id only and lives for the life of the process, so a filesystem a test
+// injected through the "new_fs_starlet::get_shard_filesystem" sync point stays reachable by every
+// later test using the same shard id -- and because a cache HIT returns early, the later test's own
+// sync-point callback is never invoked. The next test then silently runs against its predecessor's
+// mock: one expecting filesystem creation to fail instead gets a working mock, and one reading file
+// content gets the previous test's bytes. Fixtures that inject a filesystem must clear the cache so
+// they neither inherit nor leak one.
+void TEST_clear_shard_fs_cache();
+#endif
+
 } // namespace starrocks
 
 #endif // USE_STAROS
