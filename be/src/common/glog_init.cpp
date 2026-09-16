@@ -33,6 +33,7 @@
 #include "common/config_diagnostic_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/configbase.h"
+#include "fmt/format.h"
 #include "gutil/stringprintf.h"
 
 namespace starrocks {
@@ -262,10 +263,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     // Config parsing runs before logging exists, so values it had to reject are reported here, where
     // every caller of init_glog gets it rather than only the ones that remember to ask.
-    for (const auto& fallback : config::take_config_fallbacks()) {
-        LOG(ERROR) << "invalid config '" << fallback.name << "'='" << fallback.rejected_value << "', using '"
-                   << fallback.effective_value << "' instead; valid values: " << fallback.allowed_values;
-    }
+    report_config_fallbacks();
 
     return true;
 }
@@ -283,6 +281,19 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
 
     return StringPrintf("%02d%02d %02d:%02d:%02d.%06" PRId64, 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
                         tm_time.tm_min, tm_time.tm_sec, usecs);
+}
+
+void report_config_fallbacks() {
+    for (const auto& fallback : config::take_config_fallbacks()) {
+        std::string message =
+                fmt::format("invalid config '{}'='{}', using '{}' instead; valid values: {}", fallback.name,
+                            fallback.rejected_value, fallback.effective_value, fallback.allowed_values);
+        // On stderr as well as through glog: the log below is subject to FLAGS_minloglevel, which a
+        // sys_log_level of FATAL sets high enough to drop it, and stderr is where the message used
+        // to appear before these values were given a fallback.
+        std::cerr << message << std::endl;
+        LOG(ERROR) << message;
+    }
 }
 
 void update_logging() {

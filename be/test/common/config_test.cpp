@@ -28,6 +28,7 @@
 #include <thread>
 
 #include "common/config_update_registry.h"
+#include "common/glog_init.h"
 #include "common/status.h"
 #include "gutil/strings/join.h"
 
@@ -395,6 +396,37 @@ TEST_F(ConfigTest, test_fall_back_to_default) {
     EXPECT_EQ("SIZE-MB-1024", fallbacks[0].effective_value);
 
     EXPECT_FALSE(config::fall_back_to_default("cfg_not_exist", "x", "y"));
+}
+
+TEST_F(ConfigTest, test_fallback_is_reported_on_stderr) {
+    CONF_mString_enum_or_default(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    std::stringstream ss;
+    ss << R"DEL(
+       cfg_level = WARN
+       )DEL";
+    ASSERT_TRUE(config::init(ss));
+
+    // Reported on stderr as well as through glog, because the glog message is dropped when
+    // sys_log_level itself is FATAL.
+    std::stringstream stringbuf;
+    {
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        report_config_fallbacks();
+    }
+    std::string reported = stringbuf.str();
+    EXPECT_THAT(reported, HasSubstr("cfg_level"));
+    EXPECT_THAT(reported, HasSubstr("WARN"));
+    EXPECT_THAT(reported, HasSubstr("INFO"));
+
+    // Reporting consumes the records, so nothing is reported twice.
+    EXPECT_TRUE(config::take_config_fallbacks().empty());
+    stringbuf.str("");
+    {
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        report_config_fallbacks();
+    }
+    EXPECT_TRUE(stringbuf.str().empty()) << stringbuf.str();
 }
 
 TEST_F(ConfigTest, test_invalid_default_value) {
