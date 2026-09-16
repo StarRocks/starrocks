@@ -30,7 +30,7 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
     auto* query_execution_services = state->query_execution_services();
     _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
-            state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
+            state, _record_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, 1, true);
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _stream_recvr->attach_observer(state, this->observer());
@@ -147,7 +147,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
 
 Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc));
+    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs->open(state));
     return Status::OK();
 }

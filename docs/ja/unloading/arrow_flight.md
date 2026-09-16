@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "StarRocks は v3.5.1 以降 Apache Arrow Flight SQL プロトコルでの接続をサポートしています。"
 ---

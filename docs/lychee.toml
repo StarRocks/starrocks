@@ -79,6 +79,7 @@ method = "get"
      "https://github.com/*",
      "https://www.bilibili.com/*",
      "https://www.linkedin.com/*",
+     "https://issues.apache.org/*",
    ]
 
 # Exclude these filesystem paths from getting checked.

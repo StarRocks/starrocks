@@ -37,7 +37,7 @@
 
 namespace starrocks {
 
-SchemaTableSink::SchemaTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
+SchemaTableSink::SchemaTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _t_output_expr(t_exprs) {}
 
 SchemaTableSink::~SchemaTableSink() = default;

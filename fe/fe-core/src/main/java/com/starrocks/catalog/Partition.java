@@ -197,6 +197,15 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         return idToSubPartition.get(id);
     }
 
+    // Most recent user-write time (ms epoch) across sub-partitions.
+    public long getLastUpdateTime() {
+        long maxTime = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            maxTime = Math.max(maxTime, subPartition.getLastUpdateTime());
+        }
+        return maxTime;
+    }
+
     public PhysicalPartition getLatestPhysicalPartition() {
         return getSubPartitions()
                 .stream()

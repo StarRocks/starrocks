@@ -84,7 +84,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
-import com.starrocks.proto.TabletStatPB;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -151,7 +150,6 @@ import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -181,12 +179,23 @@ public class LeaderImpl {
     public TMasterResult finishTask(TFinishTaskRequest request) {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TTaskType taskType = request.getTask_type();
+        long signature = request.getSignature();
+        boolean isLeader = globalStateMgr.isLeader();
+        boolean isLeaderDemoting = isLeader && globalStateMgr.isLeaderDemoting();
+        boolean leaderWorkAdmissionOpen = isLeader && globalStateMgr.isLeaderWorkAdmissionOpen();
+        if (!isLeader || isLeaderDemoting || !leaderWorkAdmissionOpen) {
+            TStatusCode statusCode = taskType == TTaskType.CREATE
+                    ? TStatusCode.LEADER_TRANSFERRED : TStatusCode.INTERNAL_ERROR;
+            String errMsg = isLeader ? "leader is transferring, finish task should retry on new leader"
+                    : "current fe is not master";
+            TStatus status = new TStatus(statusCode);
+            status.setError_msgs(Lists.newArrayList(errMsg));
             result.setStatus(status);
-            LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
-                    request.getTask_type(), request.getSignature());
+            LOG.warn("current node is not active leader, finish task failed, task type: {}. task signature: {}, " +
+                            "isLeader: {}, isLeaderDemoting: {}, leaderWorkAdmissionOpen: {}",
+                    taskType, signature, isLeader, isLeaderDemoting, leaderWorkAdmissionOpen);
             return result;
         }
         TStatus tStatus = new TStatus(TStatusCode.OK);
@@ -224,8 +233,6 @@ public class LeaderImpl {
         }
         backendId = cn.getId();
 
-        TTaskType taskType = request.getTask_type();
-        long signature = request.getSignature();
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
         if (task == null) {
             if (taskType != TTaskType.DROP && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
@@ -700,33 +707,19 @@ public class LeaderImpl {
                         publishVersionTask.getDbId(), publishVersionTask.getTransactionId(), publishVersionTask.getBackendId());
             }
         }
-        publishVersionTask.setIsFinished(true);
+        // Park the reported stats on the task rather than writing them into the transaction's
+        // PartitionCommitInfos: this runs on a thrift handler thread holding no transaction lock,
+        // while the publish daemon may be snapshotting that very state. The daemon merges them in
+        // when it finishes the transaction. Record them before marking the task finished, since
+        // "all publish tasks finished" is the daemon's signal to finish the transaction.
+        if (request.isSetFinish_tablet_infos()) {
+            publishVersionTask.collectFirstLoadTabletStats(request.getFinish_tablet_infos());
+        }
         TransactionState txnState = publishVersionTask.getTxnState();
         if (txnState != null) {
             txnState.updatePublishTaskFinishTime();
-
-            // Used to collect statistics when the partition is first imported
-            // TODO(stephen): support insert into multiple tables in a transaction
-            if (txnState.getSourceType() == LoadJobSourceType.INSERT_STREAMING &&
-                    txnState.getIdToTableCommitInfos().size() == 1 &&
-                    request.isSetFinish_tablet_infos() &&
-                    !request.getFinish_tablet_infos().isEmpty()) {
-                Map<Long, PartitionCommitInfo> idToPartitionCommitInfo = txnState.getIdToTableCommitInfos().values()
-                        .iterator().next().getIdToPartitionCommitInfo();
-                List<TTabletInfo> tabletInfos = request.getFinish_tablet_infos();
-                for (TTabletInfo tabletInfo : tabletInfos) {
-                    long partitionId = tabletInfo.getPartition_id();
-                    PartitionCommitInfo commitInfo = idToPartitionCommitInfo.get(partitionId);
-                    if (commitInfo != null && commitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
-                        long tabletId = tabletInfo.getTablet_id();
-                        TabletStatPB stat = new TabletStatPB();
-                        stat.numRows = tabletInfo.getRow_count();
-                        stat.dataSize = tabletInfo.getData_size();
-                        commitInfo.getTabletStats().put(tabletId, stat);
-                    }
-                }
-            }
         }
+        publishVersionTask.setIsFinished(true);
 
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
             // not remove the task from queue and be will retry

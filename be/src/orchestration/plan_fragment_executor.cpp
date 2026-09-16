@@ -170,8 +170,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {
         RETURN_IF_ERROR(DataSink::create_data_sink(_runtime_state, request.fragment.output_sink,
-                                                   request.fragment.output_exprs, params, params.sender_id, row_desc(),
-                                                   &_sink));
+                                                   request.fragment.output_exprs, params, params.sender_id,
+                                                   record_desc(), &_sink));
         DCHECK(_sink != nullptr);
         RETURN_IF_ERROR(_sink->prepare(runtime_state()));
         _sink->set_query_statistics(_query_statistics);
@@ -251,7 +251,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
         if (VLOG_ROW_IS_ON) {
             VLOG_ROW << "_open_internal_vectorized: #rows=" << chunk->num_rows()
-                     << " desc=" << row_desc().debug_string() << " columns=" << chunk->debug_columns();
+                     << " desc=" << record_desc().debug_string() << " columns=" << chunk->debug_columns();
             // TODO(kks): support chunk debug log
         }
 
@@ -422,8 +422,8 @@ void PlanFragmentExecutor::cancel() {
     }
 }
 
-const RowDescriptor& PlanFragmentExecutor::row_desc() {
-    return _plan->row_desc();
+const RecordDescriptor& PlanFragmentExecutor::record_desc() {
+    return _plan->record_desc();
 }
 
 RuntimeProfile* PlanFragmentExecutor::profile() {

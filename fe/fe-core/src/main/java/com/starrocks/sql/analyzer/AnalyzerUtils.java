@@ -54,6 +54,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -115,6 +116,7 @@ import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -167,19 +169,37 @@ public class AnalyzerUtils {
     private static final Logger LOG = LogManager.getLogger(AnalyzerUtils.class);
 
     /**
-     * Whether a table/materialized view created without an explicit {@code DISTRIBUTED BY} clause
-     * should default to range distribution.
-     * <p>
-     * Range distribution (with dynamic tablet split/merge) is only functional in shared-data mode,
-     * so the {@code enable_range_distribution} config default only takes effect there; it has no
-     * effect in shared-nothing mode. The INVISIBLE session variable is an explicit per-session
-     * opt-in that can still enable range distribution in any run mode (and even when the config is
-     * turned off).
+     * Whether a table created without an explicit {@code DISTRIBUTED BY} clause should default to
+     * range distribution. A materialized view asks
+     * {@link #isEnableMvRangeDistribution(ConnectContext)} instead, which answers under a stricter
+     * rule.
      */
     public static boolean isEnableRangeDistribution(ConnectContext connectContext) {
-        if (Config.enable_range_distribution && RunMode.isSharedDataMode()) {
-            return true;
-        }
+        return isRangeDistributionEnabledByClusterDefault() || isRangeDistributionEnabledBySession(connectContext);
+    }
+
+    /**
+     * The same question for an asynchronous materialized view, whose cluster default additionally
+     * requires {@code enable_mv_range_distribution} -- a cluster can therefore adopt
+     * range-distributed tables while its materialized views stay on the previous default
+     * distribution. Range distribution has no {@code DISTRIBUTED BY} syntax, so with that
+     * config off the per-session opt-in below is the only remaining way to ask for it.
+     */
+    public static boolean isEnableMvRangeDistribution(ConnectContext connectContext) {
+        return (Config.enable_mv_range_distribution && isRangeDistributionEnabledByClusterDefault())
+                || isRangeDistributionEnabledBySession(connectContext);
+    }
+
+    // Range distribution comes with dynamic tablet split/merge, which is only functional in
+    // shared-data mode, so the cluster default is scoped to that run mode as well as to the config.
+    private static boolean isRangeDistributionEnabledByClusterDefault() {
+        return Config.enable_range_distribution && RunMode.isSharedDataMode();
+    }
+
+    // An explicit per-session opt-in, so unlike the cluster default it applies in any run mode, and
+    // a null context (no session to read, e.g. a replayed or internally issued statement) means no
+    // opt-in.
+    private static boolean isRangeDistributionEnabledBySession(ConnectContext connectContext) {
         return connectContext != null && connectContext.getSessionVariable().isEnableRangeDistribution();
     }
 
@@ -1156,7 +1176,7 @@ public class AnalyzerUtils {
     private static class CopyUnsafeTablesCollector extends TableCollector {
 
         private static final ImmutableSet<Table.TableType> IMMUTABLE_EXTERNAL_TABLES =
-                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG);
+                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG, Table.TableType.FLUSS);
 
         public CopyUnsafeTablesCollector(Map<TableName, Table> tables) {
             super(tables);
@@ -1614,36 +1634,28 @@ public class AnalyzerUtils {
      * used by both partition clause creation and dedup key generation.
      */
     public static String truncateToPartitionBoundary(String dateValue, String granularity) throws AnalysisException {
+        TimeUnit timeUnit = toAutoPartitionTimeUnit(granularity,
+                "unsupported automatic partition granularity: " + granularity);
         try {
             if ("NULL".equalsIgnoreCase(dateValue)) {
                 dateValue = "0000-01-01";
             }
             DateTimeFormatter fmt = DateUtils.probeFormat(dateValue);
             LocalDateTime dt = DateUtils.parseStringWithDefaultHSM(dateValue, fmt);
-            switch (granularity.toLowerCase()) {
-                case "minute":
-                    dt = dt.withSecond(0).withNano(0);
-                    return dt.format(DateUtils.MINUTE_FORMATTER_UNIX);
-                case "hour":
-                    dt = dt.withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.HOUR_FORMATTER_UNIX);
-                case "day":
-                    dt = dt.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.DATEKEY_FORMATTER_UNIX);
-                case "month":
-                    dt = dt.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.MONTH_FORMATTER_UNIX);
-                case "year":
-                    dt = dt.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    return dt.format(DateUtils.YEAR_FORMATTER_UNIX);
-                default:
-                    throw new AnalysisException("unsupported automatic partition granularity: " + granularity);
-            }
-        } catch (AnalysisException e) {
-            throw e;
+            dt = PartitionTimeUtils.truncateToUnitStart(dt, timeUnit);
+            return dt.format(PartitionTimeUtils.getPartitionNameFormatter(timeUnit));
         } catch (Exception e) {
             throw new AnalysisException("failed to parse partition value: " + dateValue);
         }
+    }
+
+    /** Resolves an automatic partition granularity into its time unit. */
+    private static TimeUnit toAutoPartitionTimeUnit(String granularity, String errorMessage) throws AnalysisException {
+        TimeUnit timeUnit = TimeUnit.fromName(granularity);
+        if (timeUnit == null || !PartitionTimeUtils.AUTO_PARTITION_TIME_UNITS.contains(timeUnit)) {
+            throw new AnalysisException(errorMessage);
+        }
+        return timeUnit;
     }
 
     public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
@@ -1866,30 +1878,10 @@ public class AnalyzerUtils {
 
                 beginDateTimeFormat = DateUtils.probeFormat(partitionItem);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
-                switch (granularity.toLowerCase()) {
-                    case "minute":
-                        beginTime = beginTime.withSecond(0).withNano(0);
-                        endTime = beginTime.plusMinutes(interval);
-                        break;
-                    case "hour":
-                        beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusHours(interval);
-                        break;
-                    case "day":
-                        beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusDays(interval);
-                        break;
-                    case "month":
-                        beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusMonths(interval);
-                        break;
-                    case "year":
-                        beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        endTime = beginTime.plusYears(interval);
-                        break;
-                    default:
-                        throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
-                }
+                TimeUnit timeUnit = toAutoPartitionTimeUnit(granularity,
+                        "unsupported automatic partition granularity:" + granularity);
+                beginTime = PartitionTimeUtils.truncateToUnitStart(beginTime, timeUnit);
+                endTime = PartitionTimeUtils.plus(beginTime, timeUnit, interval);
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
@@ -1921,18 +1913,16 @@ public class AnalyzerUtils {
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
                                                            LocalDateTime endTime) throws AnalysisException {
         boolean isMaxValue;
-        DateTimeFormatter outputDateFormat;
         if (partitionType.isDate()) {
-            outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
             isMaxValue =
                     endTime.isAfter(TimeUtils.MAX_DATE.atTime(0, 0, 0));
         } else if (partitionType.isDatetime()) {
-            outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
             isMaxValue = endTime.isAfter(
                     TimeUtils.MAX_DATETIME);
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }
+        DateTimeFormatter outputDateFormat = PartitionTimeUtils.getPartitionBoundFormatter(partitionType);
         String lowerBound = beginTime.format(outputDateFormat);
 
         PartitionValue upperPartitionValue;
@@ -2035,6 +2025,27 @@ public class AnalyzerUtils {
                     throw new SemanticException("Materialized view query statement select item " +
                             ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
                 }
+                return super.visitFunctionCall(expr, context);
+            }
+
+            @Override
+            public Void visitSetOp(SetOperationRelation node, Void context) {
+                super.visitSetOp(node, context);
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitValues(ValuesRelation node, Void context) {
+                if (node.hasWithClause()) {
+                    node.getCteRelations().forEach(cte -> visit(cte, context));
+                }
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                node.getRows().forEach(row -> row.forEach(expr -> visit(expr, context)));
                 return null;
             }
         }.visit(node);

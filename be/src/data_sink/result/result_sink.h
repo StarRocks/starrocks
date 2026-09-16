@@ -54,10 +54,8 @@ class MemTracker;
 class ResultSink final : public DataSink {
 public:
     // construct a buffer for the result need send to coordinator.
-    // row_desc used for convert RowBatch to TRowBatch
     // buffer_size is the buffer size allocated to each query
-    ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& select_exprs, const TResultSink& sink,
-               int buffer_size);
+    ResultSink(const std::vector<TExpr>& select_exprs, const TResultSink& sink, int buffer_size);
     ~ResultSink() override = default;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
@@ -81,13 +79,10 @@ public:
 
     bool isBinaryFormat() const { return _is_binary_format; }
 
-    const RowDescriptor& get_row_desc() const { return _row_desc; }
-
     const std::vector<std::string>& get_output_column_names() const { return _output_column_names; }
 
 private:
     Status prepare_exprs(RuntimeState* state);
-    const RowDescriptor& _row_desc;
     TResultSinkType::type _sink_type;
     bool _is_binary_format;
     // It is non-empty only for ARROW_FLIGHT_PROTOCAL.

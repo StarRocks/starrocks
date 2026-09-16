@@ -24,8 +24,10 @@
 #include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/tracer.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "exec/exec_env.h"
@@ -284,6 +286,31 @@ TEST_F(OlapTableSinkTest, test_decimal_error_log) {
                 col->append_datum(Datum(DecimalV2Value(100000000, 0)));
             },
             "Decimal", "out of range");
+}
+
+TEST_F(OlapTableSinkTest, test_close_wait_twice_after_cancel) {
+#ifdef __APPLE__
+    GTEST_SKIP() << "OpenTelemetry tracing is disabled on macOS";
+#else
+    std::string old_jaeger_endpoint = config::jaeger_endpoint;
+    config::jaeger_endpoint = "127.0.0.1:16831";
+    Tracer::reinitialize_for_test();
+    DeferOp defer([&]() {
+        config::jaeger_endpoint = old_jaeger_endpoint;
+        Tracer::reinitialize_for_test();
+    });
+
+    std::unique_ptr<RuntimeState> runtime_state;
+    DescriptorTbl* desc_tbl = nullptr;
+    auto sink = _setup_sink(runtime_state, desc_tbl);
+    ASSERT_TRUE(sink->_span->IsRecording());
+
+    // set_cancelled() then pending_finish() both close the sink when a load is cancelled
+    Status first = sink->close_wait(runtime_state.get(), Status::Cancelled("Cancelled by pipeline engine"));
+    ASSERT_TRUE(first.is_cancelled());
+    Status second = sink->close_wait(runtime_state.get(), Status::OK());
+    ASSERT_TRUE(second.is_cancelled());
+#endif
 }
 
 TEST_F(OlapTableSinkTest, test_decimalv3_error_log) {

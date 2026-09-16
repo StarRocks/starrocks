@@ -199,6 +199,30 @@ public class ReplicationMgrTest {
     }
 
     @Test
+    public void testDemotionResetsTaskBookkeepingForCrashRecovery() {
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+
+        replicationMgr.runAfterLeaseValid();
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertFalse(job.isCrashRecovery());
+
+        // Leader demotion abandons the queued agent tasks and their BE finish reports get dropped,
+        // so onStopped must reset the leader-session bookkeeping to its deserialized-equivalent
+        // shape - otherwise a re-elected leader in this same process would judge the job as still
+        // running (isCrashRecovery() == false) and never re-send the tasks.
+        replicationMgr.onStopped();
+        Assertions.assertTrue(job.isCrashRecovery(),
+                "after the demotion reset a re-elected leader must re-drive the current state");
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState(),
+                "the journal-visible job state must be untouched");
+
+        // The re-elected leader's next cycle re-sends the snapshot tasks like a crash recovery.
+        replicationMgr.runAfterLeaseValid();
+        Assertions.assertFalse(job.isCrashRecovery());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+    }
+
+    @Test
     public void testSnapshotingCancel() {
         Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 

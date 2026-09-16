@@ -363,8 +363,7 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     _chunk.reset();
 }
 
-DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc,
-                                   const TDataStreamSink& sink,
+DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
                                    bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
                                    bool enable_exchange_perf)

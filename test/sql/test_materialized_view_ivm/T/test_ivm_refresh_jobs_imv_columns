@@ -57,10 +57,11 @@ function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.
 -- The baseline (PCT) job records no source range: at least one job has both range columns NULL.
 function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_VERSION_RANGE IS NULL AND IMV_SOURCE_TIMESTAMP_RANGE IS NULL", "1")
 
--- A pinning job records IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP, keyed by the iceberg table identifier
--- (t1:<uuid>) -- a different key scheme from the range columns. Assert on at least one job and
--- match the table name only, not the uuid/snapshot value.
+-- A pinning job records IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP. It keys on the base table the same way
+-- the range columns do, which is what lets the three be joined; the two live on different jobs, so
+-- the keys are extracted and compared rather than read off one row.
 function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP IS NOT NULL AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP LIKE '%t1%'", "1")
+function: assert_query_contains("SELECT (SELECT regexp_extract(IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP, '\"([^\"]+)\":', 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP IS NOT NULL LIMIT 1) = (SELECT regexp_extract(IMV_SOURCE_VERSION_RANGE, '\"([^\"]+)\":', 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='db_${uuid0}' AND TABLE_NAME='test_mv1' AND IMV_SOURCE_VERSION_RANGE IS NOT NULL LIMIT 1)", "1")
 
 drop materialized view test_mv1;
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;

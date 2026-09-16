@@ -303,7 +303,7 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                            std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
-                           std::shared_ptr<const TabletSchema> tablet_schema)
+                           std::shared_ptr<const TabletSchema> tablet_schema, RowSourceMaskBuffer* selection_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
@@ -312,7 +312,8 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
           _is_key(is_key),
-          _mask_buffer(mask_buffer) {
+          _mask_buffer(mask_buffer),
+          _selection_buffer(selection_buffer) {
     DCHECK(_mask_buffer);
 }
 
@@ -465,6 +466,24 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
 
     DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
            read_params.column_access_paths->empty());
+    // Bail out before touching any segment when this read has no JSON column: get_segments() below
+    // loads every input segment, so on JSON-free tables this path would fully load the whole input
+    // set for nothing (500 wide segments ≈ 350MB). Without a held set it also loads them with
+    // fill_metadata_cache=true, pushing that whole set into the shared metacache and evicting
+    // neighbors' entries; a compaction task that holds its inputs reuses them here instead
+    // (Rowset::get_segments_checked).
+    bool has_json_column = false;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        if (col.type() == LogicalType::TYPE_JSON && _schema.get_field_by_name(std::string(col.name())) != nullptr) {
+            has_json_column = true;
+            break;
+        }
+    }
+    if (!has_json_column) {
+        return Status::OK();
+    }
+
     // get_non_null_segments() drops lost-segment placeholders (experimental_lake_ignore_lost_segment).
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
@@ -559,6 +578,12 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
         return Status::EndOfFile("split morsel");
     }
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
+    if (_is_key && _selection_buffer != nullptr && source_masks->empty() && chunk->num_rows() > 0) {
+        // A one-child heap merge returns the child iterator directly, which does not
+        // produce source masks. UNSHARE still needs one mask per physical row so value
+        // groups can replay the selection stream.
+        source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{0, false});
+    }
     return Status::OK();
 }
 
@@ -566,6 +591,9 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
                                  std::vector<uint64_t>* rssid_rowids) {
     DCHECK(_is_vertical_merge);
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
+    if (_is_key && _selection_buffer != nullptr && source_masks->empty() && chunk->num_rows() > 0) {
+        source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{0, false});
+    }
     return Status::OK();
 }
 
@@ -825,6 +853,18 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
     _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
     _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
+    _stats.lake_prepared_seed_vector_index_load_ns += prepare_stats.vector_index_load_ns;
+    _stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns += prepare_stats.get_row_ranges_by_vector_index_timer;
+    _stats.lake_prepared_seed_vector_index_cache_lookup_ns += prepare_stats.vector_index_cache_lookup_ns;
+    _stats.lake_prepared_seed_vector_index_file_open_ns += prepare_stats.vector_index_file_open_ns;
+    _stats.lake_prepared_seed_vector_index_read_file_ns += prepare_stats.vector_index_read_file_ns;
+    _stats.lake_prepared_seed_vector_index_init_index_ns += prepare_stats.vector_index_init_index_ns;
+    _stats.lake_prepared_seed_vector_index_searcher_init_ns += prepare_stats.vector_index_searcher_init_ns;
+    _stats.lake_prepared_seed_vector_index_cache_hit_count += prepare_stats.vector_index_cache_hit_count;
+    _stats.lake_prepared_seed_vector_index_cache_miss_count += prepare_stats.vector_index_cache_miss_count;
+    _stats.lake_prepared_seed_vector_search_ns += prepare_stats.vector_search_timer;
+    _stats.lake_prepared_seed_process_vector_distance_and_id_ns += prepare_stats.process_vector_distance_and_id_timer;
+    _stats.lake_prepared_seed_rows_vector_index_filtered += prepare_stats.rows_vector_index_filtered;
     _stats.lake_prepared_seed_zonemap_ns += prepare_stats.zone_map_filter_ns;
     _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
     _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
@@ -947,17 +987,16 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset_idx, rowset]() {
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
 #ifdef BE_TEST
-                        Status injected_st;
-                        TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
-                        if (!injected_st.ok()) {
-                            return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
-                        }
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                if (!injected_st.ok()) {
+                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                }
 #endif
-                        return enhance_error_prompt(rowset->read(schema(), rs_opts));
-                    });
+                return enhance_error_prompt(rowset->read(schema(), rs_opts));
+            });
 
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
@@ -987,6 +1026,33 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 }
 
 Status TabletReader::init_predicates(const TabletReaderParams& params) {
+    return Status::OK();
+}
+
+Status delete_predicate_column_ids(const TabletMetadataPB& metadata, const TabletSchema& schema,
+                                   std::set<ColumnId>* column_ids) {
+    auto keep = [&](const std::string& column_name) {
+        const size_t index = schema.field_index(column_name);
+        if (index < schema.num_columns()) {
+            column_ids->insert(index);
+        }
+    };
+    for (int index = 0, size = metadata.rowsets_size(); index < size; ++index) {
+        const auto& rowset_metadata = metadata.rowsets(index);
+        if (!rowset_metadata.has_delete_predicate()) {
+            continue;
+        }
+        const auto& pred_pb = rowset_metadata.delete_predicate();
+        for (int i = 0; i < pred_pb.binary_predicates_size(); ++i) {
+            keep(pred_pb.binary_predicates(i).column_name());
+        }
+        for (int i = 0; i < pred_pb.is_null_predicates_size(); ++i) {
+            keep(pred_pb.is_null_predicates(i).column_name());
+        }
+        for (int i = 0; i < pred_pb.in_predicates_size(); ++i) {
+            keep(pred_pb.in_predicates(i).column_name());
+        }
+    }
     return Status::OK();
 }
 
@@ -1106,7 +1172,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         // SegmentIterator  ...    SegmentIterator
         //
         if (_is_vertical_merge && !_is_key) {
-            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
         } else {
             _collect_iter = new_heap_merge_iterator(
                     seg_iters,
@@ -1167,7 +1233,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "Aggr");
 
             if (_is_vertical_merge && !_is_key) {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
             } else {
                 _collect_iter = new_heap_merge_iterator(seg_iters);
             }
@@ -1180,7 +1246,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
             if (_is_vertical_merge && !_is_key) {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
             } else {
                 _collect_iter = new_heap_merge_iterator(seg_iters);
             }

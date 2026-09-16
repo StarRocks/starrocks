@@ -282,7 +282,8 @@ protected:
     };
 
     // Write one JSON segment from `jsons`; segment nullability follows jsons[0]->is_nullable().
-    SegmentHandle write_segment(MutableColumns& jsons, bool need_flat, const std::string& fname) {
+    SegmentHandle write_segment(MutableColumns& jsons, bool need_flat, const std::string& fname,
+                                bool is_compaction = true, bool simulate_legacy_root_footprint = false) {
         SegmentHandle handle;
         handle.fs = std::make_shared<MemoryFileSystem>();
         EXPECT_TRUE(handle.fs->create_dir(TEST_DIR).ok());
@@ -304,7 +305,7 @@ protected:
         writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
         writer_opts.meta->set_is_nullable(jsons[0]->is_nullable());
         writer_opts.need_zone_map = false;
-        writer_opts.is_compaction = true;
+        writer_opts.is_compaction = is_compaction;
 
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
         EXPECT_OK(writer->init());
@@ -317,6 +318,9 @@ protected:
         EXPECT_TRUE(writer->write_ordinal_index().ok());
         EXPECT_TRUE(wfile->close().ok());
 
+        if (simulate_legacy_root_footprint) {
+            handle.meta->set_total_mem_footprint(0);
+        }
         handle.segment->set_num_rows(handle.num_rows);
         auto res = ColumnReader::create(handle.meta.get(), handle.segment.get(), nullptr);
         EXPECT_TRUE(res.ok());
@@ -363,6 +367,51 @@ private:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
 };
+
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonRootTotalMemFootprint) {
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"session_id": "session-1", "messages": [{"content": "first message"}]})", false),
+            normal_json(R"({"session_id": "session-2", "messages": [{"content": "second message"}]})", false),
+    });
+
+    for (bool is_compaction : {false, true}) {
+        auto handle = write_segment(jsons, /*need_flat=*/true,
+                                    is_compaction ? "/compaction_flat_json_total_mem_footprint.data"
+                                                  : "/load_flat_json_total_mem_footprint.data",
+                                    is_compaction);
+        ASSERT_TRUE(handle.meta->json_meta().is_flat());
+        ASSERT_GT(handle.meta->children_columns_size(), 0);
+
+        uint64_t child_mem_footprint = 0;
+        for (const auto& child : handle.meta->children_columns()) {
+            child_mem_footprint += child.total_mem_footprint();
+        }
+        ASSERT_GT(child_mem_footprint, 0);
+        EXPECT_EQ(child_mem_footprint, handle.meta->total_mem_footprint());
+        EXPECT_EQ(handle.meta->total_mem_footprint(), handle.reader->total_mem_footprint());
+    }
+}
+
+TEST_F(FlatJsonColumnCompactTest, testLegacyFlatJsonRootTotalMemFootprintFallback) {
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"session_id": "session-1", "messages": [{"content": "first message"}]})", false),
+            normal_json(R"({"session_id": "session-2", "messages": [{"content": "second message"}]})", false),
+    });
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/legacy_flat_json_total_mem_footprint.data",
+                                /*is_compaction=*/true, /*simulate_legacy_root_footprint=*/true);
+    ASSERT_TRUE(handle.meta->json_meta().is_flat());
+    ASSERT_EQ(0, handle.meta->total_mem_footprint());
+    ASSERT_TRUE(handle.reader->is_flat_json());
+    ASSERT_NE(nullptr, handle.reader->sub_readers());
+
+    uint64_t child_mem_footprint = 0;
+    for (const auto& child : *handle.reader->sub_readers()) {
+        child_mem_footprint += child->total_mem_footprint();
+    }
+    ASSERT_GT(child_mem_footprint, 0);
+    EXPECT_EQ(child_mem_footprint, handle.reader->total_mem_footprint());
+}
 
 TEST_F(FlatJsonColumnCompactTest, testJsonCompactToJson) {
     // clang-format off

@@ -31,6 +31,13 @@ jobs:
           echo $workdir
           sed -i "s|\/root\/starrocks|$workdir|g" be/build-wrapper/build-wrapper-dump.json
 
+      - name: Set up JDK 21
+        if: steps.changes.outputs.be == 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
       - name: Run sonar-scanner
         if: steps.changes.outputs.be == 'true'
         env:

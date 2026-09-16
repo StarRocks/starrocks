@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -53,6 +52,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.APPROX_COSINE_SIMILARITY;
+import static com.starrocks.catalog.FunctionSet.APPROX_INNER_PRODUCT;
 import static com.starrocks.catalog.FunctionSet.APPROX_L2_DISTANCE;
 import static com.starrocks.sql.ast.expression.BinaryType.GE;
 import static com.starrocks.sql.ast.expression.BinaryType.LE;
@@ -67,10 +67,6 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!Config.enable_experimental_vector) {
-            return false;
-        }
-
         LogicalTopNOperator topNOp = (LogicalTopNOperator) input.getOp();
         LogicalOlapScanOperator scanOp = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
 
@@ -133,8 +129,8 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
         // Note: a residual that the optimizer cannot push into the scan (e.g. cat + tag > 50) ends up
         // as a SELECT above the ANN scan. The BE detects that from the execution tree (FragmentExecutor
-        // walk -> ScanNode::is_filtered_above_iterator) and routes to exact brute-force, so the rewrite
-        // does not need to predict it here.
+        // walk -> ScanNode::is_filtered_above_iterator) and applies the configured underfill fallback
+        // policy, so the rewrite does not need to predict it here.
 
         opts.setEnableUseANN(true);
         opts.setRefineDistance(doRefine);
@@ -288,12 +284,13 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         return new PredicateSplit(range, residuals.isEmpty() ? null : Utils.compoundAnd(residuals));
     }
 
-    // Whether the operator tree references a vector distance function (approx_l2_distance /
-    // approx_cosine_similarity) in any position.
+    // Whether the operator tree references a vector distance function in any position.
     private boolean referencesVectorDistanceFunc(ScalarOperator op) {
         if (op instanceof CallOperator) {
             String fnName = ((CallOperator) op).getFnName();
-            if (fnName.equalsIgnoreCase(APPROX_L2_DISTANCE) || fnName.equalsIgnoreCase(APPROX_COSINE_SIMILARITY)) {
+            if (fnName.equalsIgnoreCase(APPROX_L2_DISTANCE) ||
+                    fnName.equalsIgnoreCase(APPROX_COSINE_SIMILARITY) ||
+                    fnName.equalsIgnoreCase(APPROX_INNER_PRODUCT)) {
                 return true;
             }
         }
@@ -339,6 +336,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
      * 2. The <approx_distance> function needs to match the metric_type and isAscending of the vector index.
      * - If the metric_type is L2_DISTANCE, then the <approx_distance> function is approx_l2_distance, and the order is ASC.
      * - If the metric_type is COSINE_SIMILARITY, then the <approx_distance> function is cosine_similarity, and the order is DESC.
+     * - If the metric_type is INNER_PRODUCT, then the <approx_distance> function is approx_inner_product, and the order is DESC.
      * 3. The arguments of the <approx_distance> function are the vector index column and a constant array.
      *
      * @return the vector function information if the ordering column is matched, otherwise empty.
@@ -375,6 +373,9 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                 break;
             case COSINE_SIMILARITY:
                 matchedFunc = inCallOperator.getFnName().equalsIgnoreCase(APPROX_COSINE_SIMILARITY) && !isAscending;
+                break;
+            case INNER_PRODUCT:
+                matchedFunc = inCallOperator.getFnName().equalsIgnoreCase(APPROX_INNER_PRODUCT) && !isAscending;
                 break;
             default:
                 matchedFunc = false;
@@ -555,7 +556,8 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         private final ColumnRefOperator inColumnRef;
         // The column ref of the first ordering column, which is obtained by vectorFuncCallOperator `<approx_distance>(inColumnRef, vectorQuery)`.
         // - If metricType is L2_DISTANCE, then <approx_distance> function is `approx_l2_distance`, and the order is ASC.
-        // - If metricType is COSINE_SIMILARITY, then <approx_distance> function `is cosine_similarity`, and the order is DESC.
+        // - If metricType is COSINE_SIMILARITY, the function is `approx_cosine_similarity`, and the order is DESC.
+        // - If metricType is INNER_PRODUCT, the function is `approx_inner_product`, and the order is DESC.
         private final ColumnRefOperator outColumnRef;
         private final CallOperator vectorFuncCallOperator;
         private final VectorIndexParams.MetricsType metricType;

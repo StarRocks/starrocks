@@ -9,7 +9,6 @@
 -- These paths are end-to-end-only; unit tests can drive isolated pieces but
 -- can't reach init_searcher's happy path without spinning up the BE.
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 -- ---- vector_query_cache_capacity runtime config (config_update_hooks callback) ----
 
@@ -94,4 +93,3 @@ select count(*) from (
 update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
 DROP TABLE t_vi_cache;
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

@@ -41,6 +41,7 @@
 #include "exec_primitive/data_sink.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
+#include "runtime/descriptors.h"
 
 namespace arrow {
 
@@ -65,9 +66,8 @@ class MemTracker;
 class MemoryScratchSink : public DataSink {
 public:
     // construct a buffer for the result need send to blocking queue.
-    // row_desc used for convert RowBatch to TRowBatch
     // buffer_size is the buffer size allocated to each scan
-    MemoryScratchSink(const RowDescriptor& row_desc, const std::vector<TExpr>& select_exprs,
+    MemoryScratchSink(RecordDescriptor record_desc, const std::vector<TExpr>& select_exprs,
                       const TMemoryScratchSink& sink);
 
     ~MemoryScratchSink() override;
@@ -87,15 +87,14 @@ public:
 
     std::vector<TExpr> get_output_expr() { return _t_output_expr; }
 
-    const RowDescriptor get_row_desc();
+    const RecordDescriptor& get_record_desc() const { return _record_desc; }
 
 private:
     Status prepare_exprs(RuntimeState* state);
 
     void _prepare_id_to_col_name_map();
 
-    // Owned by the RuntimeState.
-    const RowDescriptor& _row_desc;
+    const RecordDescriptor _record_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
     std::unordered_map<int64_t, std::string> _id_to_col_name;
 

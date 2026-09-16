@@ -37,11 +37,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.Histogram;
-import com.starrocks.sql.optimizer.statistics.HistogramUtils;
+import com.starrocks.sql.optimizer.statistics.ColumnStatisticDump;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -92,9 +94,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         return dumpJson;
     }
 
+    private boolean shouldDesensitizeDump(QueryDumpInfo dumpInfo) {
+        return Config.enable_desensitize_query_dump || dumpInfo.isDesensitizedInfo();
+    }
+
     private JsonObject serializeSensitiveContent(QueryDumpInfo dumpInfo) {
         JsonObject dumpJson = new JsonObject();
-        if (Config.enable_desensitize_query_dump || dumpInfo.isDesensitizedInfo()) {
+        if (shouldDesensitizeDump(dumpInfo)) {
             try {
                 desensitizeContent(dumpInfo, dumpJson);
                 return dumpJson;
@@ -124,6 +130,47 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
+        // External-catalog (iceberg/hive/...) tables: record each table's real catalog explicitly, keyed like
+        // table_meta (db.table). This lets replay recreate the external catalog directly by name, independent
+        // of the legacy "resource" concept. Older dumps omit this section; replay then infers the catalog from
+        // the SQL, so this stays backward compatible.
+        JsonObject externalCatalogData = new JsonObject();
+        for (Pair<String, Table> entry : tableMetaPairs) {
+            String catalogName = entry.second.getCatalogName();
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                externalCatalogData.addProperty(entry.first + "." + entry.second.getName(), catalogName);
+            }
+        }
+        if (externalCatalogData.size() > 0) {
+            dumpJson.add("external_table_catalog", externalCatalogData);
+        }
+        // External-catalog table total row counts (keyed db.table). Iceberg has no hms scanRowCount to carry
+        // it, and without it replay would fall back to a tiny default that clamps NDV/cardinality.
+        if (!dumpInfo.getExternalTableRowCountMap().isEmpty()) {
+            JsonObject externalRowCountData = new JsonObject();
+            for (Map.Entry<String, Long> entry : dumpInfo.getExternalTableRowCountMap().entrySet()) {
+                externalRowCountData.addProperty(entry.getKey(), entry.getValue());
+            }
+            dumpJson.add("external_table_row_count", externalRowCountData);
+        }
+        // Iceberg partition spec (transforms) + partition names, so replay can rebuild a real PartitionSpec
+        // and reproduce partition pruning. Keyed db.table. Only present for partitioned iceberg tables.
+        if (!dumpInfo.getExternalTablePartitionNameMap().isEmpty()) {
+            JsonObject specData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionSpecMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                specData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_spec", specData);
+            JsonObject namesData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionNameMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                namesData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_names", namesData);
+        }
         // hive meta store table info
         if (!dumpInfo.getHmsTableMap().isEmpty()) {
             JsonObject externalTableInfoData = new JsonObject();
@@ -177,30 +224,50 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
-                columnStatistics.addProperty(columnEntry.getKey(), columnEntry.getValue().toString());
+                columnStatistics.add(columnEntry.getKey(),
+                        GsonUtils.GSON.toJsonTree(ColumnStatisticDump.from(columnEntry.getValue())));
             }
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
-        // column histogram: the full histogram (buckets + mcv) round-trips here, keyed the same way as
-        // column_statistics, because column_statistics only keeps the truncated MCV preview from toString().
-        // Only emitted when a column actually carries a histogram, so older/histogram-free dumps are unaffected.
-        // Intentionally not emitted on the desensitized path: raw bucket bounds and MCV values would leak data.
-        JsonObject tableColumnHistogram = new JsonObject();
-        for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
-            JsonObject columnHistograms = new JsonObject();
-            for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
-                Histogram histogram = columnEntry.getValue().getHistogram();
-                if (histogram != null) {
-                    columnHistograms.addProperty(columnEntry.getKey(), HistogramUtils.serializeHistogram(histogram));
-                }
+        // low-cardinality global dictionary: captured so replay reproduces the dict-encoding (Decode-node)
+        // optimization, which is otherwise lost offline (production CacheDictManager has no BE -> no dict).
+        // Keyed like column_statistics (db.table -> column). Value is ColumnDict.toJson(). Only emitted when a
+        // column actually has a captured dict, and intentionally not on the desensitized path -- dictionary
+        // strings are raw column data, just like the embedded histogram values.
+        JsonObject tableGlobalDict = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : dumpInfo.getTableGlobalDictMap().entrySet()) {
+            JsonObject columnDicts = new JsonObject();
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                columnDicts.addProperty(columnEntry.getKey(), columnEntry.getValue().toJson());
             }
-            if (columnHistograms.size() > 0) {
-                tableColumnHistogram.add(entry.getKey(), columnHistograms);
+            if (columnDicts.size() > 0) {
+                tableGlobalDict.add(entry.getKey(), columnDicts);
             }
         }
-        if (tableColumnHistogram.size() > 0) {
-            dumpJson.add("column_histogram", tableColumnHistogram);
+        if (tableGlobalDict.size() > 0) {
+            dumpJson.add("global_dict", tableGlobalDict);
+        }
+        // column min/max: captured so replay reproduces the meta-scan / group-by-compressed-key rewrites, which
+        // are otherwise lost offline (production ColumnMinMaxMgr has no BE -> no min/max). Keyed like
+        // column_statistics (db.table -> column). Not emitted on the desensitized path -- min/max are raw
+        // column data, like global dictionaries and embedded histograms.
+        JsonObject tableColumnMinMax = new JsonObject();
+        for (Map.Entry<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> entry :
+                dumpInfo.getTableColumnMinMaxMap().entrySet()) {
+            JsonObject columnMinMaxes = new JsonObject();
+            for (Map.Entry<String, IMinMaxStatsMgr.ColumnMinMax> columnEntry : entry.getValue().entrySet()) {
+                JsonObject minMax = new JsonObject();
+                minMax.addProperty("min", columnEntry.getValue().minValue());
+                minMax.addProperty("max", columnEntry.getValue().maxValue());
+                columnMinMaxes.add(columnEntry.getKey(), minMax);
+            }
+            if (columnMinMaxes.size() > 0) {
+                tableColumnMinMax.add(entry.getKey(), columnMinMaxes);
+            }
+        }
+        if (tableColumnMinMax.size() > 0) {
+            dumpJson.add("column_min_max", tableColumnMinMax);
         }
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
@@ -385,12 +452,10 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
-                // Strip the histogram before rendering: ColumnStatistic.toString() would otherwise emit
-                // histogram.getMcvString(), leaking the raw top-MCV column values into the desensitized dump.
-                // The histogram is intentionally not serialized at all on the desensitized path.
-                columnStatistics.addProperty(
+                columnStatistics.add(
                         DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
-                        stripHistogram(columnEntry.getValue()).toString()
+                        GsonUtils.GSON.toJsonTree(ColumnStatisticDump.from(
+                                stripSensitiveStatisticValues(columnEntry.getValue())))
                 );
             }
             String[] splits = entry.getKey().split("\\.");
@@ -406,13 +471,12 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
 
     }
 
-    // Returns the statistic without its histogram, so ColumnStatistic.toString() renders the base stat only.
-    // Used on the desensitized path so histogram MCV values (raw column data) never reach the dump.
-    private static ColumnStatistic stripHistogram(ColumnStatistic columnStatistic) {
-        if (columnStatistic.getHistogram() == null) {
-            return columnStatistic;
-        }
-        return ColumnStatistic.buildFrom(columnStatistic).setHistogram(null).build();
+    private static ColumnStatistic stripSensitiveStatisticValues(ColumnStatistic columnStatistic) {
+        return ColumnStatistic.buildFrom(columnStatistic)
+                .setHistogram(null)
+                .setMinString(null)
+                .setMaxString(null)
+                .build();
     }
 
     private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {

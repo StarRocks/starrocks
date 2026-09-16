@@ -69,7 +69,7 @@ StatusOr<ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
+    auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_record_desc,
                                                                          _sort_exec_exprs, _order_by_types);
     RETURN_IF_ERROR(materialize_chunk);
     TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
@@ -118,7 +118,7 @@ Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
 
 Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc));
+    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs.open(state));
     RETURN_IF_ERROR(ExprExecutor::prepare(_analytic_partition_exprs, state));
     RETURN_IF_ERROR(ExprExecutor::open(_analytic_partition_exprs, state));
@@ -148,7 +148,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
     auto sort_context = _sort_context_factory->create(driver_sequence);
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<PartitionSortSinkOperator>(this, _id, _plan_node_id, driver_sequence, chunks_sorter,
-                                                           _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
+                                                           _sort_exec_exprs, _order_by_types, _materialized_record_desc,
                                                            sort_context.get(), _runtime_filter_hub);
     return ope;
 }

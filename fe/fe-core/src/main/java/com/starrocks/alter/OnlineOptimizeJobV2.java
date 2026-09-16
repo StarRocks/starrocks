@@ -86,7 +86,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
 
-    private Future<Constants.TaskRunState> future = null;
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    Future<Constants.TaskRunState> future = null;
 
     @SerializedName(value = "tmpPartitionIds")
     private List<Long> tmpPartitionIds = Lists.newArrayList();
@@ -97,7 +98,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     private Map<String, String> properties = Maps.newHashMap();
 
     @SerializedName(value = "rewriteTasks")
-    private List<OptimizeTask> rewriteTasks = Lists.newArrayList();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    List<OptimizeTask> rewriteTasks = Lists.newArrayList();
     private int progress = 0;
 
     @SerializedName(value = "sourcePartitionNames")
@@ -143,6 +145,52 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         this.allPartitionOptimized = job.allPartitionOptimized;
         this.distributionInfo = job.distributionInfo;
         this.optimizeOperation = job.optimizeOperation;
+    }
+
+    @Override
+    protected void resetTransientState() {
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // The single in-flight INSERT future is attributed to "the task currently being
+        // processed" by position, not identity: a stale result from the previous leader
+        // session would be consumed by a NEW task whose INSERT never ran, and its EMPTY temp
+        // partition would be durably swapped in. Cancel hard and drop it.
+        if (future != null) {
+            future.cancel(true);
+            future = null;
+        }
+        // runWaitingTxnJob APPENDS to rewriteTasks; watershedTxnId is reallocated per task
+        // during RUNNING and its durable WAITING_TXN value is -1.
+        rewriteTasks.clear();
+        watershedTxnId = -1;
+        progress = 0;
+        if (jobState == JobState.PENDING) {
+            tmpPartitionIds.clear();
+            allPartitionOptimized = false;
+        }
+        // Drop the never-journaled double-write routing so the demoted node behaves like a
+        // freshly loaded FE (best-effort: db/table may already be gone).
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null) {
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState()
+                        .getLocalMetastore().getTable(db.getId(), tableId);
+                if (tbl != null) {
+                    disableDoubleWritePartition(db, tbl);
+                }
+            }
+        } catch (Throwable t) {
+            LOG.warn("clear double-write partitions failed on leader handoff, job: {}", jobId, t);
+        }
+        // optimizeClause must be DROPPED, unlike OptimizeJobV2: that class may keep it because a re-run
+        // self-cancels on the TaskManager task-name collision, but OnlineOptimizeJobV2 never registers
+        // TaskManager tasks (it executeSql()s the rewrite INSERT directly), so a kept clause would re-run
+        // the same INSERT into a temp partition that already holds the previous run's committed rows and
+        // then swap DOUBLED data into the user partition. Nulling it makes the re-elected leader behave
+        // exactly like a restarted FE (the field is not @SerializedName): runWaitingTxnJob sees the null
+        // clause and self-cancels, cleaning up the temp partitions.
+        optimizeClause = null;
     }
 
     public List<Long> getTmpPartitionIds() {
@@ -285,7 +333,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + ParseUtil.backquote(dbName) + "."
                         + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
-                        + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
+                        + ParseUtil.backquote(tmpPartitionName) + ") (" + Joiner.on(", ").join(tableColumnNames)
+                        + ") select " + Joiner.on(", ").join(tableColumnNames)
                         + " from " + ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(tableName)
                         + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
@@ -302,11 +351,20 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.info("transfer optimize job {} state to {}", jobId, this.jobState);
     }
 
-    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tempPartitionName) {
+    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tempPartitionName)
+            throws AlterCancelException {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            Preconditions.checkState(tbl.getState() == OlapTableState.OPTIMIZE);
+            if (tbl.getState() != OlapTableState.OPTIMIZE) {
+                // Reachable after an in-place leader handoff: onFinished() flips the table to NORMAL in
+                // memory BEFORE journaling the finish, so a demotion in that window leaves a re-elected
+                // leader with a WAITING_TXN/RUNNING job against a NORMAL table. Cancel the job cleanly
+                // (run() only catches AlterCancelException) instead of throwing IllegalStateException,
+                // which would leave it stuck until the global timeout.
+                throw new AlterCancelException("table " + tbl.getName() + " state is " + tbl.getState()
+                        + " (expected OPTIMIZE), the optimize job cannot resume after leader handoff");
+            }
             Partition temp = tbl.getPartition(tempPartitionName, true);
             if (temp != null) {
                 Preconditions.checkState(temp.getSubPartitions().size() == 1);
@@ -884,10 +942,13 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (context == null) {
             context = buildConnectContext();
         }
+        boolean originalOptimizeRewrite = context.isOptimizeRewrite();
+        context.setOptimizeRewrite(true);
         try (var scope = context.bindScope()) {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             if (parsedStmt instanceof InsertStmt) {
-                ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
+                InsertStmt insertStmt = (InsertStmt) parsedStmt;
+                insertStmt.setIsVersionOverwrite(true);
             }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
@@ -907,6 +968,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
                 throw new AlterCancelException(context.getState().getErrorMessage());
             }
+        } finally {
+            context.setOptimizeRewrite(originalOptimizeRewrite);
         }
     }
 

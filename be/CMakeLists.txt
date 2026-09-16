@@ -192,6 +192,7 @@ option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEF
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_GLIBC_COMPAT "Build starrocks_be with the glibc compatibility shim, so it runs on hosts with an older glibc than the build image's" OFF)
 option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
 option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
@@ -209,6 +210,8 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 option(WITH_TENANN "Build with TENANN" OFF)
 
+option(WITH_PAIMON_CPP "Build with paimon-cpp" ON)
+
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 if (${WITH_TENANN} STREQUAL "ON")
@@ -224,6 +227,12 @@ message(STATUS "WITH TENANN is: ${WITH_TENANN}")
 if (APPLE AND WITH_STARCACHE)
     message(STATUS "Disable starcache on macOS")
     set(WITH_STARCACHE OFF CACHE BOOL "Build binary with starcache library" FORCE)
+endif()
+
+# thirdparty does not build paimon-cpp on macOS.
+if (APPLE AND WITH_PAIMON_CPP)
+    message(STATUS "Disable paimon-cpp on macOS")
+    set(WITH_PAIMON_CPP OFF CACHE BOOL "Build with paimon-cpp" FORCE)
 endif()
 
 # Check gcc
@@ -760,9 +769,13 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         breakpad
-        libdeflate
     )
 endif()
+
+set(STARROCKS_DEPENDENCIES
+    ${STARROCKS_DEPENDENCIES}
+    libdeflate
+)
 
 if (${WITH_TENANN} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
@@ -930,10 +943,12 @@ set (TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+# Several benches assert with gtest macros, so benchmarks need gtest just like tests do.
 set (BENCH_LINK_LIBS
     ${STARROCKS_LINK_LIBS}
     ${WL_START_GROUP}
     ${DIRECT_CONNECTOR_LINK_LIBS}
+    gtest
     ${WL_END_GROUP}
 )
 

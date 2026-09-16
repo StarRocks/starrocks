@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -57,13 +58,41 @@ import java.util.List;
 public class IvmOpUtils {
     public static final String COLUMN_ROW_ID = "__ROW_ID__";
     public static final String COLUMN_AGG_STATE_PREFIX = "__AGG_STATE";
+    public static final int ENCODE_ROW_ID_VERSION_SORT_KEY = 0;
+    public static final int ENCODE_ROW_ID_VERSION_FINGERPRINT = 1;
     public static final ImmutableMap<Integer, String> ENCODE_ROW_ID_FUNCTION_MAP =
             new ImmutableMap.Builder<Integer, String>()
-                    .put(0, FunctionSet.ENCODE_SORT_KEY)
-                    .put(1, FunctionSet.ENCODE_FINGERPRINT_SHA256)
+                    .put(ENCODE_ROW_ID_VERSION_SORT_KEY, FunctionSet.ENCODE_SORT_KEY)
+                    .put(ENCODE_ROW_ID_VERSION_FINGERPRINT, FunctionSet.ENCODE_FINGERPRINT_SHA256)
+                    .build();
+
+    // The fingerprint's own width. Past it a sort key buys locality at the cost of a wider primary key,
+    // so the comparison has to be against the sort key's *stored* width -- see encodedWidth.
+    private static final int MAX_SORT_KEY_BYTES = 32;
+
+    // What UtilityFunctions::encode_sort_key emits per key, which is not the type's slot size: a FLOAT
+    // goes through encode_float32 as 4 bytes where getTypeSize() reports 8. A type absent here is one the
+    // encoder rejects outright -- LARGEINT and every DECIMAL width among them.
+    private static final ImmutableMap<PrimitiveType, Integer> SORT_KEY_ENCODED_BYTES =
+            new ImmutableMap.Builder<PrimitiveType, Integer>()
+                    .put(PrimitiveType.BOOLEAN, 1)
+                    .put(PrimitiveType.TINYINT, 1)
+                    .put(PrimitiveType.SMALLINT, 2)
+                    .put(PrimitiveType.INT, 4)
+                    .put(PrimitiveType.BIGINT, 8)
+                    .put(PrimitiveType.FLOAT, 4)
+                    .put(PrimitiveType.DOUBLE, 8)
+                    .put(PrimitiveType.DATE, 4)
+                    .put(PrimitiveType.DATETIME, 8)
+                    .put(PrimitiveType.TIME, 8)
                     .build();
 
     private IvmOpUtils() {
+    }
+
+    /** Columns IVM derives for itself, as opposed to the ones the user's projection asks for. */
+    public static boolean isIvmInternalColumn(String columnName) {
+        return COLUMN_ROW_ID.equalsIgnoreCase(columnName) || columnName.startsWith(COLUMN_AGG_STATE_PREFIX);
     }
 
     public static String getIvmAggStateColumnName(FunctionCallExpr functionCallExpr) {
@@ -73,41 +102,44 @@ public class IvmOpUtils {
     }
 
     /**
-     * encode_row_id(...) -> encode_sort_key(...) if all args are fixed-length and total size <= 32 bytes
+     * The row-id encoding for a set of keys: encode_sort_key(...) if every key is a type the backend can
+     *                       order-encode and they total at most 32 bytes
      *                    -> encode_fingerprint_sha256(...) otherwise
+     *
+     * <p>The chosen version is stored on the mv ({@code MaterializedView.encodeRowIdVersion}) and reused for
+     * every later refresh, so this only ever runs when an mv is created.
      */
     public static int deduceEncodeRowIdVersion(List<Expr> children) {
-        boolean allTypesAvailable = true;
         int totalSize = 0;
-
         for (Expr child : children) {
-            if (!child.isAnalyzed() || child.getType() == null || !child.getType().isValid()) {
-                allTypesAvailable = false;
-                break;
+            // encode_sort_key mis-encodes a ConstColumn: the constant lands in the first row's buffer once
+            // per row in the chunk and never in the others, so that key overflows primary_key_limit_size and
+            // every other row silently loses it.
+            if (child.isConstant()) {
+                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
             }
-
-            if (child.getType().isScalarType()) {
-                ScalarType scalarType = (ScalarType) child.getType();
-                if (scalarType.getPrimitiveType().isVariableLengthType()) {
-                    allTypesAvailable = false;
-                    break;
-                }
-                totalSize += scalarType.getPrimitiveType().getTypeSize();
-            } else if (child.getType().isComplexType()) {
-                allTypesAvailable = false;
-                break;
+            Type type = child.getType();
+            if (type == null || !type.isValid() || !type.isScalarType()) {
+                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
             }
+            Integer encodedBytes = SORT_KEY_ENCODED_BYTES.get(((ScalarType) type).getPrimitiveType());
+            if (encodedBytes == null) {
+                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
+            }
+            totalSize += encodedBytes;
         }
-
-        if (allTypesAvailable && totalSize > 0 && totalSize <= 32) {
-            return 0;
-        }
-        return 1;
+        return totalSize > 0 && encodedWidth(totalSize, children.size()) <= MAX_SORT_KEY_BYTES
+                ? ENCODE_ROW_ID_VERSION_SORT_KEY
+                : ENCODE_ROW_ID_VERSION_FINGERPRINT;
     }
 
-    public static String getEncodeRowIdFunctionNameChecked(List<Expr> children) {
-        int encodeRowIdVersion = deduceEncodeRowIdVersion(children);
-        return getEncodeRowIdFunctionNameChecked(encodeRowIdVersion);
+    /**
+     * What the keys occupy once encoded: encode_sort_key frames every key with a null marker and puts a
+     * separator between keys, so eight 4-byte FLOATs are 47 bytes rather than 32 -- wider than the
+     * fingerprint they would replace. Matches the encoder: one BIGINT is 9 bytes, two are 19.
+     */
+    private static int encodedWidth(int payloadBytes, int keyCount) {
+        return payloadBytes + 2 * keyCount - 1;
     }
 
     public static String getEncodeRowIdFunctionNameChecked(int encodeRowIdVersion) {
@@ -125,8 +157,8 @@ public class IvmOpUtils {
 
     /**
      * Build the row id function expression for IVM.
-     * For multi unique keys, use ENCODE_ROW_ID to encode them to a varbinary and use FROM_BINARY to convert it into
-     * varchar: {@code FROM_BINARY(ENCODE_ROW_ID(k1, k2, ..., kn), 'encode64')}
+     * For multi unique keys, encode them to a varbinary and use FROM_BINARY to convert it into
+     * varchar: {@code FROM_BINARY(<encode>(k1, k2, ..., kn), 'encode64')}
      */
     public static FunctionCallExpr buildRowIdFuncExpr(int encodeRowIdVersion, List<Expr> uniqueKeys) {
         final String encodeRowIdFuncName = getEncodeRowIdFunctionNameChecked(encodeRowIdVersion);

@@ -103,6 +103,9 @@ public:
 
     StatusOr<FileEncryptionInfo> unwrap_encryption_meta(const std::string& encryption_meta);
 
+    // Resolves a complete foreign key hierarchy without reading or mutating this cache.
+    StatusOr<FileEncryptionInfo> unwrap_encryption_meta_without_cache(const std::string& encryption_meta);
+
     Status refresh_keys_from_fe();
 
     Status refresh_keys(const std::vector<std::string>& key_metas);
@@ -119,7 +122,11 @@ public:
 
 private:
     Status _resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::vector<const EncryptionKey*>& keys,
-                                    std::vector<std::unique_ptr<EncryptionKey>>& owned_keys, bool cache_last_key);
+                                    std::vector<std::unique_ptr<EncryptionKey>>& owned_keys, bool cache_last_key,
+                                    bool cache_intermediate_keys);
+
+    StatusOr<FileEncryptionInfo> _unwrap_encryption_meta(const std::string& encryption_meta,
+                                                         bool cache_intermediate_keys);
 
     mutable std::mutex _lock;
     MetricRegistry* _metrics_registry = nullptr;

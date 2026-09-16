@@ -190,6 +190,16 @@ public:
     // this information should be updated as well.
     virtual void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const {}
 
+    // For window functions evaluated in streaming mode whose look-back is bounded but data-dependent.
+    // Returns the earliest input row position, in the analytor's local column coordinates, that this function may still
+    // read for subsequent rows. The analytor may evict any buffered row strictly before the minimum such position across
+    // all its functions.
+    // Returns std::nullopt when the function imposes no retention requirement beyond the operator's frame-based bound.
+    virtual std::optional<int64_t> get_min_retained_position(FunctionContext* ctx,
+                                                             ConstAggDataPtr __restrict state) const {
+        return std::nullopt;
+    }
+
     virtual std::string get_name() const = 0;
 
     // State management methods:
@@ -302,6 +312,12 @@ public:
     // There may be other operators which may change immediate state's nullable between multi stage aggregate,
     // so even for non-nullable aggregate function, we still need to support nullable immediate input.
     virtual bool support_nullable_immediate_input() const { return false; }
+
+    // Whether this aggregate never emits a NULL result, even over a nullable input or an empty window frame
+    // (e.g. count, bitmap_union_count). Declared per-function; the analytic executor uses it to materialize a
+    // non-nullable result column. NOTE: this is NOT the same as the AggNonNullPred wrapper -- sum/avg/max/min
+    // use that wrapper too yet still return NULL over an empty frame -- so each such function opts in itself.
+    virtual bool is_result_non_nullable() const { return false; }
 
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"

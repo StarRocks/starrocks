@@ -72,6 +72,15 @@ public class PartitionColumnFilter {
      */
     private boolean fromFunctionCall = false;
 
+    /**
+     * Set when the bounds came from a partition expression that plateaus at this constant -- some
+     * neighbouring source value maps to the same partition value. The mapping is then
+     * one-directional: every row matching the predicate falls inside the bounds, which is all
+     * partition pruning needs, but a partition the bounds keep also holds rows the predicate rejects.
+     * Anything asking "do these partitions imply the predicate" must not use such a filter.
+     */
+    private boolean mappedThroughPartitionExpr = false;
+
     public InPredicate getInPredicate() {
         return inPredicate;
     }
@@ -82,6 +91,14 @@ public class PartitionColumnFilter {
         for (int i = 1; i < inPredicate.getChildren().size(); i++) {
             inPredicateLiterals.add((LiteralExpr) inPredicate.getChild(i));
         }
+    }
+
+    public boolean isMappedThroughPartitionExpr() {
+        return mappedThroughPartitionExpr;
+    }
+
+    public void setMappedThroughPartitionExpr() {
+        this.mappedThroughPartitionExpr = true;
     }
 
     public boolean isFromFunctionCall() {

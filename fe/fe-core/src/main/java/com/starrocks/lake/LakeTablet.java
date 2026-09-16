@@ -57,9 +57,28 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    // Which tablet version rowCount was computed from; 0 = unknown. Not persisted and not
+    // journal-replicated: it describes what THIS FE managed to collect. Only ever written together
+    // with the count it describes and read back the same way, see getRowCountAtVersion.
+    private volatile long rowCountVersion = 0L;
+
     @SerializedName(value = "vibv")
     private volatile long vectorIndexBuiltVersion = 0L;
 
+    // The vacuum metadata floor the BE last proved for this tablet: no tablet metadata exists at or
+    // below this version, so the next vacuum round starts its prev_garbage_version walk here instead
+    // of descending into versions an earlier round already deleted. Sent to the BE as
+    // TabletInfoPB.min_version and adopted back from the vacuum response (AutovacuumDaemon); also the
+    // lower bound of a repair metadata scan (TabletRepairHelper).
+    //
+    // Known issue, working as designed for now: no @SerializedName, so it is neither persisted in the
+    // image nor journal-replicated, and every FE restart or leader failover resets it to 0 for every
+    // tablet. Acceptable because it is a hint, never a correctness input -- the BE clamps it with
+    // max(1, min_version), treats a NotFound during the walk as the chain bottom rather than an error,
+    // and re-reports a fresh floor on every round that proves one, so a stale-low value costs only
+    // extra metadata reads (one NotFound per tablet per round) until a later round restores it.
+    // Persisting it would be an image/journal format change. Do not start relying on this value for
+    // anything that must survive a restart.
     private volatile long minVersion = 0L;
 
     // Written by the ALTER ... DROP PERSISTENT INDEX path and read lock-free by the lake publish
@@ -100,6 +119,17 @@ public class LakeTablet extends Tablet {
         return dataSizeUpdateTime;
     }
 
+    /**
+     * The CN computes get_tablet_stats strictly from the version the FE asked for
+     * (LakeServiceImpl::get_tablet_stats -> get_tablet_metadata(tablet_id, version)), so the
+     * version we requested is exactly the version the returned rowCount describes. The publish-time
+     * shortcut in LakeTableTxnLogApplier likewise knows the version it is applying.
+     */
+    @Override
+    public synchronized long getRowCountAtVersion(long version) {
+        return rowCountVersion > 0 && rowCountVersion == version ? rowCount : -1L;
+    }
+
     public long getMinVersion() {
         return minVersion;
     }
@@ -119,8 +149,23 @@ public class LakeTablet extends Tablet {
         return rowCount;
     }
 
-    public void setRowCount(long rowCount) {
+    /**
+     * For a caller that knows which version the count was computed from. Written as one pair with
+     * the version, so a reader can never pick up a count next to a version that does not describe
+     * it; see getRowCountAtVersion.
+     */
+    public synchronized void setRowCount(long rowCount, long version) {
         this.rowCount = rowCount;
+        this.rowCountVersion = version;
+    }
+
+    /**
+     * For a caller that cannot say which version the count covers. It drops any previous proof
+     * rather than leaving it to vouch for a number it never saw.
+     */
+    public synchronized void setRowCount(long rowCount) {
+        this.rowCount = rowCount;
+        this.rowCountVersion = 0L;
     }
 
     @Override

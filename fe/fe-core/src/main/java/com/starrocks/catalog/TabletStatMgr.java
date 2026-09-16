@@ -93,15 +93,14 @@ public class TabletStatMgr extends FrontendDaemon {
         super("tablet-stat-mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
+    // Note this stamp says only that a cycle ENDED, not that it collected anything: it is advanced
+    // unconditionally below, including for a cycle whose stat RPCs all failed. Its one remaining
+    // consumer, StatisticsCalcUtils, uses it for a cardinality estimate, where being wrong costs a
+    // worse plan. The exact-COUNT(*) fold used to consult it too, through workTimeIsMustAfter(), and
+    // served stale rows as an exact answer; it now asks the tablets to prove which version their
+    // counts cover (see Tablet#getRowCountAtVersion), and that method is gone with its last caller.
     public LocalDateTime getLastWorkTimestamp() {
         return lastWorkTimestamp;
-    }
-
-    public boolean workTimeIsMustAfter(LocalDateTime time) {
-        if (lastWorkTimestamp.isEqual(LocalDateTime.MIN)) {
-            return false;
-        }
-        return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
     }
 
     @Override
@@ -136,6 +135,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 long totalRowCount = 0L;
                 long maxTabletSize = 0L;
                 long minAdjacentTabletPairSize = Long.MAX_VALUE;
+                long maxAdaptiveSplitTabletSize = 0L;
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
@@ -145,8 +145,17 @@ public class TabletStatMgr extends FrontendDaemon {
                 boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
                         && olapTable.isCloudNativeTableOrMaterializedView()
                         && olapTable.isRangeDistribution();
-                int parallelismFloor = reshardEligible
-                        ? TabletReshardUtils.safeComputeParallelismFloor(table.getId()) : 0;
+                // One resolution per eligible table, feeding both the merge floor and the early bound.
+                int computeNodeCount = reshardEligible
+                        ? TabletReshardUtils.safeComputeNodeCountForTable(table.getId()) : 0;
+                // One sample of the split cap as well as of the node count: both the merge floor and
+                // the adaptive bound derive from it, and a change landing between two reads would put
+                // the floor above the bound -- the overlap that lets this scan emit a merge signal and
+                // an adaptive-split signal for the same index.
+                int maxSplitCount = Config.tablet_reshard_max_split_count;
+                int parallelismFloor = computeNodeCount == 0 ? 0
+                        : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
+                int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount, maxSplitCount);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -164,12 +173,33 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
                                 // inside an admitted job, so the floor holds even for manual size-based merges.
                                 boolean eligibleForMerge = tablets.size() > parallelismFloor;
+                                // Under-provisioned means what the planner means by it: fewer tablets than
+                                // the bound, which is also the headroom the planner spends. Testing it here
+                                // is what keeps the adaptive rule and auto-merge disjoint -- the bound sits
+                                // at or below the merge floor, so an index is one rule's business or the
+                                // other's, never both -- and it is what stops an index parked at its bound
+                                // from signalling on every scan for a plan that can only come out empty.
+                                // It also keeps the index walk below off every table that cannot reshard at
+                                // all: a follower FE, or a shared-nothing table whose tablets take a lock
+                                // per size read.
+                                boolean underProvisioned = adaptiveBound > 0 && tablets.size() < adaptiveBound;
+                                // The index's own target: narrowed while it has less parallelism
+                                // than the warehouse can drive, the steady-state target once it does.
+                                long indexTarget = underProvisioned
+                                        ? TabletReshardUtils.adaptiveTargetSize(index.getDataSize(true),
+                                                Config.tablet_reshard_target_size, adaptiveBound)
+                                        : 0;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
+                                    if (underProvisioned
+                                            && TabletReshardUtils.adaptiveSplitCount(dataSize, indexTarget) > 1) {
+                                        maxAdaptiveSplitTabletSize =
+                                                Math.max(maxAdaptiveSplitTabletSize, dataSize);
+                                    }
                                     if (!(tablet instanceof LakeTablet)
                                             || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
                                         prevFreshTabletSize = -1L;
@@ -221,7 +251,8 @@ public class TabletStatMgr extends FrontendDaemon {
                 // carries the merge signal too.
                 if (reshardEligible) {
                     GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
-                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize);
+                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize,
+                            maxAdaptiveSplitTabletSize, adaptiveBound);
                 }
             }
         }
@@ -270,10 +301,16 @@ public class TabletStatMgr extends FrontendDaemon {
                 continue;
             }
             // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
+            // The BE serves get_tablet_stat from a snapshot it rebuilds only every
+            // tablet_stat_cache_update_interval_second (300s by default), so a successful RPC does
+            // NOT mean the numbers are current. The reported version says which tablet version they
+            // describe; a BE too old to report it leaves 0, which keeps exact-count callers on the
+            // safe (meta scan) path.
             replica.updateStat(
                     entry.getValue().getData_size(),
                     entry.getValue().getRow_num(),
-                    entry.getValue().getVersion_count()
+                    entry.getValue().getVersion_count(),
+                    entry.getValue().isSetVersion() ? entry.getValue().getVersion() : 0L
             );
         }
     }
@@ -473,7 +510,10 @@ public class TabletStatMgr extends FrontendDaemon {
                         for (TabletStat stat : response.tabletStats) {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
-                            tablet.setRowCount(stat.numRows);
+                            // The CN computes these strictly from the version we asked for
+                            // (LakeServiceImpl::get_tablet_stats -> get_tablet_metadata(id, version)),
+                            // so the requested version is exactly what the numbers describe.
+                            tablet.setRowCount(stat.numRows, version);
                             tablet.setDataSizeUpdateTime(collectStatTime);
                         }
                     }

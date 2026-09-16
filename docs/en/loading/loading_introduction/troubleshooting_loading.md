@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 sidebar_label: "Troubleshooting"
 description: "How to monitor data load job status via SQL interfaces, identify performance bottlenecks, and troubleshoot anomalies in StarRocks data loading operations."
@@ -198,6 +199,41 @@ The structure of Load Profiles is identical to that of Query Profiles. For detai
 You can analyze Load Profiles by executing [ANALYZE PROFILE](../../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md). For detailed instructions, see [Analyze text-based Profiles](../../best_practices/query_tuning/query_profile_text_based_analysis.md).
 
 Profiles provide detailed operator metrics. Key components include the `OlapTableSink` operator and the `LoadChannel` operator.
+
+#### PreSplit node
+
+When StarRocks attempts to pre-split a range-distributed target for INSERT, Broker Load, or an incremental materialized view refresh, the top-level Load Profile contains a `PreSplit` node. The node is omitted when the load does not attempt pre-splitting.
+
+The node contains the following time metrics:
+
+| Metric | Description |
+| ------ | ----------- |
+| TotalTime | Total wall-clock time spent by all pre-split attempts in the load. |
+| SourceSamplingTime | Time spent reading source samples or file metadata. This value is `0` for the `derived_tier`. |
+| PartitionAndBoundaryPlanningTime | Time spent grouping sampled rows by target partition and planning split boundaries. |
+| JobSubmissionTime | Time spent admitting the planned tablet reshard job. |
+| ReshardWaitTime | Time spent waiting for the submitted reshard job to reach a terminal state before the load continues. |
+
+The node also contains the following counters:
+
+| Counter | Description |
+| ------- | ----------- |
+| Attempts | Number of target-table pre-split attempts. |
+| SampleRows | Number of rows retained by data-tier sampling. Metadata- and derived-tier attempts do not add sampled rows. |
+| EstimatedInputBytes | Estimated source bytes across attempts. Repeated per-index estimates within one target-table attempt are counted once. |
+| TargetPartitions | Number of target partitions selected for pre-splitting. |
+| BoundariesPlanned | Number of split boundaries planned across target partitions and indexes. |
+
+The information strings identify the execution path:
+
+| Field | Description |
+| ----- | ----------- |
+| LoadKinds | Load paths that attempted pre-splitting, such as `INSERT-from-FILES`, `INSERT-from-table`, `Broker Load`, or `incremental MV refresh`. |
+| Tables | Target tables for which pre-splitting was attempted. |
+| SourceTiers | Boundary-source tiers attempted: `meta_tier`, `data_tier`, or `derived_tier`. Multiple values indicate fallback or multiple table attempts. |
+| Outcomes | Submission, completion, fallback, or skip outcomes observed during pre-splitting. |
+| SampleQueryIds | Query IDs of internal data-tier sample queries. |
+| ReshardJobIds | IDs of submitted tablet reshard jobs. |
 
 #### OlapTableSink operator
 
@@ -496,7 +532,7 @@ select tablet_id,t.data_size,num_row,visible_version,num_version,num_rowset,num_
 
 #### BE Load
 
-These metrics are available under the **BE Load** category in Grafana. If you cannot find this category, verify that you are using the [latest Grafana dashboard template](../../administration/management/monitoring/Monitor_and_Alert.md#125-configure-dashboard).
+These metrics are available under the **BE Load** category in Grafana. If you cannot find this category, verify that you are using the [latest Grafana dashboard template](../../administration/management/monitoring/monitoring.md#125-configure-dashboard).
 
 ##### ThreadPool
 

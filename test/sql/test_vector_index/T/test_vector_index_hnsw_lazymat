@@ -3,7 +3,6 @@
 -- HNSW vector queries under global lazy-materialization: SELECT id only (prune),
 -- SELECT with v (defer + fetch K survivors), predicate + ANN (eager), IVFPQ (eager).
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 -- IVFPQ is quantized; refine so its embedding stays eager and distances are exact (the eager check below).
 SET enable_vector_index_refine = true;
@@ -82,4 +81,3 @@ order by d, id limit 2;
 
 drop table lm_ivfpq;
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

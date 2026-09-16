@@ -18,10 +18,13 @@
 #include <string_view>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
@@ -137,6 +140,42 @@ TEST_F(ChunkHelperTest, PaddingNullableCharColumnCopiesAllRowsWhenNullsAreSparse
     expect_padded_char_column(
             *data_column, {padded_char("a", 4), padded_char("bc", 4), padded_char("def", 4), padded_char("nullv", 4),
                            padded_char("wxyzq", 4), padded_char("m", 4), padded_char("no", 4), padded_char("pqrs", 4)});
+}
+
+static ChunkPtr make_string_chunk(const std::vector<std::string>& values) {
+    // One row per value, and one array element per row, so that every invariant Chunk and its
+    // columns assert on lines up: each column's size equals the chunk's row count, the array's last
+    // offset equals its element count, and each null column matches the column it annotates.
+    const size_t rows = values.size();
+    auto binary = BinaryColumn::create();
+    auto elements = BinaryColumn::create();
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    for (size_t i = 0; i < rows; i++) {
+        binary->append(Slice(values[i]));
+        elements->append(Slice(values[i]));
+        offsets->append(static_cast<uint32_t>(i + 1));
+    }
+    // ArrayColumn requires its elements to be nullable.
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(elements), NullColumn::create(rows, 0)),
+                                     std::move(offsets));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(std::move(binary), 0);
+    chunk->append_column(NullableColumn::create(std::move(array), NullColumn::create(rows, 0)), 1);
+    return chunk;
+}
+
+TEST_F(ChunkHelperTest, reject_if_over_capacity_accepts_an_ordinary_chunk) {
+    auto chunk = make_string_chunk({"alpha", "beta", "gamma"});
+    // Covers the nested case too: the array column has to be walked down to the binary column
+    // holding its elements. On this branch those offsets are AdaptiveOffsets and the byte limb
+    // is MAX_LARGE_CAPACITY_LIMIT, so this check only fires on a genuinely unaddressable chunk;
+    // it is here to keep the path in step with branch-3.5-cc, where the same offsets are uint32.
+    ASSERT_OK(ChunkHelper::reject_if_over_capacity(*chunk, "source chunk", 10001, 4242));
+
+    Chunk empty;
+    ASSERT_OK(ChunkHelper::reject_if_over_capacity(empty, "source chunk", 10001, 4242));
 }
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {

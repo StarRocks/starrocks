@@ -100,6 +100,9 @@ public:
     // logically follows), or kUnknownDelOpOffset when the writer cannot determine the order.
     const std::vector<uint32_t>& del_op_offsets() const { return _del_op_offsets; }
 
+    // Parallel to dels(): the tombstone (delete row) count of each del file, recorded at write time.
+    const std::vector<int64_t>& del_num_rows() const { return _del_num_rows; }
+
     const std::vector<FileInfo>& ssts() const { return _ssts; }
 
     const std::vector<PersistentIndexSstableRangePB>& sst_ranges() const { return _sst_ranges; }
@@ -108,6 +111,13 @@ public:
     // writer and must be masked by a delete vector at publish. Empty vectors for segments/paths
     // that produced no such losers (e.g. the sort-key==PK eager path). PK table only.
     const std::vector<std::vector<uint32_t>>& seg_delvecs() const { return _seg_delvecs; }
+
+    // Parallel to dels(): the pre-built tombstone sstable for each del file, built at write time when
+    // its serialized size reaches pk_index_eager_build_threshold_bytes. An empty entry means publish
+    // applies that delete via the memtable erase path. del_sst_ranges() carries each sstable's key range.
+    const std::vector<FileInfo>& del_ssts() const { return _del_ssts; }
+
+    const std::vector<PersistentIndexSstableRangePB>& del_sst_ranges() const { return _del_sst_ranges; }
 
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
@@ -236,6 +246,12 @@ public:
     // (for example, during large imports or major compaction tasks), it will invoke this function.
     // However, whether eager PK index build is actually enabled still depends on the schema.
     void try_enable_pk_index_eager_build();
+    // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (an empty FileInfo
+    // when this del file has no sstable). Built when the serialized del-file size reaches
+    // pk_index_eager_build_threshold_bytes; shared-data primary-key tablets always use the cloud-native
+    // persistent index, so publish can ingest it directly.
+    std::vector<FileInfo> _del_ssts;
+    std::vector<PersistentIndexSstableRangePB> _del_sst_ranges;
 
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
@@ -244,6 +260,14 @@ public:
     // async-mode ADD still builds existing data's .vi during the rewrite. Other writers: false.
     bool force_build_vector_index_inline() const { return _force_build_vector_index_inline; }
     void force_set_build_vector_index_inline() { _force_build_vector_index_inline = true; }
+
+    // Set by DeltaWriter for the column partial-update modes, whose publish path
+    // (UpdateManager::_handle_delete_files) applies every del file with index.erase and never consults
+    // op_write.del_ssts(). A tombstone sstable built for such a load is therefore never ingested, so it
+    // never enters sstable_meta() and only a full vacuum's orphan scan reclaims it -- pure waste on both
+    // the write and the storage side. Skip the build instead of emitting a file nobody consumes.
+    bool skip_del_tombstone_sstable() const { return _skip_del_tombstone_sstable; }
+    void set_skip_del_tombstone_sstable() { _skip_del_tombstone_sstable = true; }
 
     void check_global_dict(SegmentWriter* segment_writer);
 
@@ -259,6 +283,11 @@ protected:
     std::vector<FileInfo> _dels;
     // Parallel to _dels: op_offset (segment index the delete follows) for each del file.
     std::vector<uint32_t> _del_op_offsets;
+    // Parallel to _dels: tombstone (delete row) count for each del file. Populated for EVERY del at
+    // flush_del_file() time (deletes.size()), so it is always 1:1 with _dels. Downstream fallbacks
+    // that pad a missing entry with 0 are therefore unreachable defensive code on the normal write
+    // path; the absent case only matters when reading cross-version metadata (proto field absent).
+    std::vector<int64_t> _del_num_rows;
     std::mutex _dels_mutex;
     std::vector<FileInfo> _ssts;
     std::vector<PersistentIndexSstableRangePB> _sst_ranges;
@@ -279,6 +308,7 @@ protected:
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_index_eager_build = false;
     bool _force_build_vector_index_inline = false;
+    bool _skip_del_tombstone_sstable = false;
 };
 
 } // namespace lake

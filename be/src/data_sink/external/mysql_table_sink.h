@@ -43,7 +43,6 @@
 
 namespace starrocks {
 
-class RowDescriptor;
 class TExpr;
 class TMysqlTableSink;
 class RuntimeState;
@@ -53,7 +52,7 @@ class ExprContext;
 // This class is a sinker, which put input data to mysql table
 class MysqlTableSink : public DataSink {
 public:
-    MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs);
+    MysqlTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs);
 
     ~MysqlTableSink() override;
 

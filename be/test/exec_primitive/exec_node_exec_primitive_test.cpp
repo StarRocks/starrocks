@@ -27,17 +27,6 @@
 namespace starrocks {
 namespace {
 
-ChunkPtr make_int_chunk(int32_t first, int num_rows) {
-    auto column = Int32Column::create();
-    for (int i = 0; i < num_rows; ++i) {
-        column->append(first + i);
-    }
-
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(std::move(column), 0);
-    return chunk;
-}
-
 class ExecNodeExecPrimitiveTest : public ::testing::Test {
 public:
     ExecNodeExecPrimitiveTest() : _runtime_state(TQueryGlobals()) {}

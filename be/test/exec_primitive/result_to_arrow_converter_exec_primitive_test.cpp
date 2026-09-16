@@ -41,11 +41,9 @@ TEST(ResultToArrowConverterExecPrimitiveTest, BuildsSchemaAndConvertsChunkThroug
     ASSERT_OK(expr_context.prepare(&runtime_state));
     ASSERT_OK(expr_context.open(&runtime_state));
     std::vector<ExprContext*> output_expr_ctxs{&expr_context};
-
-    RowDescriptor row_desc;
     std::unordered_map<int64_t, std::string> id_to_col_name{{(int64_t{kTupleId} << 32) | kSlotId, "answer"}};
     std::shared_ptr<arrow::Schema> schema;
-    ASSERT_OK(convert_to_arrow_schema(row_desc, id_to_col_name, &schema, output_expr_ctxs));
+    ASSERT_OK(convert_to_arrow_schema(id_to_col_name, &schema, output_expr_ctxs));
     ASSERT_NE(nullptr, schema);
     ASSERT_EQ(1, schema->num_fields());
     EXPECT_EQ("answer", schema->field(0)->name());

@@ -20,7 +20,6 @@
 
 namespace starrocks {
 class DataStreamRecvr;
-class RowDescriptor;
 namespace pipeline {
 class ExchangeSourceOperator : public SourceOperator {
 public:
@@ -51,11 +50,11 @@ private:
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, const TExchangeNode& texchange_node,
-                                  int32_t num_sender, const RowDescriptor& row_desc, bool enable_pipeline_level_shuffle)
+                                  int32_t num_sender, RecordDescriptor record_desc, bool enable_pipeline_level_shuffle)
             : SourceOperatorFactory(id, "exchange_source", plan_node_id),
               _texchange_node(texchange_node),
               _num_sender(num_sender),
-              _row_desc(row_desc),
+              _record_desc(std::move(record_desc)),
               _enable_pipeline_level_shuffle(enable_pipeline_level_shuffle) {}
 
     ~ExchangeSourceOperatorFactory() override;
@@ -82,7 +81,7 @@ public:
 private:
     const TExchangeNode& _texchange_node;
     const int32_t _num_sender;
-    const RowDescriptor& _row_desc;
+    const RecordDescriptor _record_desc;
     const bool _enable_pipeline_level_shuffle;
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
     std::atomic<int64_t> _stream_recvr_cnt = 0;

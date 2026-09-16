@@ -29,6 +29,7 @@
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "gutil/strings/numbers.h"
 
 namespace starrocks {
 
@@ -43,26 +44,22 @@ StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
 
 StarOSWorker::~StarOSWorker() = default;
 
-static const uint64_t kUnknownTableId = UINT64_MAX;
-
 void StarOSWorker::set_fs_cache_capacity(int32_t capacity) {
     _fs_cache->set_capacity(capacity);
 }
 
-uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
-    const auto& properties = shard.properties;
-    auto iter = properties.find("tableId");
-    if (iter == properties.end()) {
-        DCHECK(false) << "tableId doesn't exist in shard properties";
-        return kUnknownTableId;
+std::optional<uint64_t> StarOSWorker::get_table_id(const ShardInfo& shard) {
+    const auto iter = shard.properties.find("tableId");
+    if (iter == shard.properties.end()) {
+        return std::nullopt;
     }
-    const auto& tableId = properties.at("tableId");
-    try {
-        return std::stoull(tableId);
-    } catch (const std::exception& e) {
-        DCHECK(false) << "failed to parse tableId: " << tableId << ", " << e.what();
-        return kUnknownTableId;
+
+    uint64_t table_id = 0;
+    if (iter->second.find('\0') != std::string::npos || !safe_strtou64(iter->second, &table_id)) {
+        LOG(WARNING) << "failed to parse tableId: " << iter->second;
+        return std::nullopt;
     }
+    return table_id;
 }
 
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
@@ -80,7 +77,9 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     l.unlock();
     if (ret.second) {
         if (_table_metrics_mgr != nullptr) {
-            _table_metrics_mgr->register_table(get_table_id(shard));
+            if (auto table_id = get_table_id(shard); table_id.has_value()) {
+                _table_metrics_mgr->register_table(*table_id);
+            }
         }
         // it is an insert op to the map
         // NOTE:
@@ -111,9 +110,10 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     std::unique_lock l(_mtx);
     auto iter = _shards.find(id);
     if (iter != _shards.end()) {
-        uint64_t table_id = get_table_id(iter->second.shard_info);
         if (_table_metrics_mgr != nullptr) {
-            _table_metrics_mgr->unregister_table(table_id);
+            if (auto table_id = get_table_id(iter->second.shard_info); table_id.has_value()) {
+                _table_metrics_mgr->unregister_table(*table_id);
+            }
         }
         _shards.erase(iter);
         StarOSWorkerMetrics::instance()->staros_shard_count.set_value(_shards.size());
@@ -235,10 +235,21 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
-    auto cond = []() { return get_starlet()->is_ready(); };
+    // A null starlet means the runtime was already released by `shutdown_staros_worker()`. Treat
+    // that as "stop waiting" so a late call fails immediately instead of burning the full timeout.
+    auto cond = []() {
+        auto starlet = get_starlet();
+        return starlet == nullptr || starlet->is_ready();
+    };
     auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
     if (!ret) {
         return absl::UnavailableError("starlet is still not ready!");
+    }
+    // Hold the runtime for the rest of the call: shutdown can release the global at any point, and
+    // `get_shard_info()` below blocks on a starmgr RPC that outlives any point-in-time check.
+    auto starlet = get_starlet();
+    if (starlet == nullptr) {
+        return absl::UnavailableError("starlet is not available");
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
@@ -246,7 +257,7 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     // FE-side task/node selection is scheduling work on a BE whose local cache does not have
     // the shard (the FE did not push it in time, or the placement was wrong).
     StarOSWorkerMetrics::instance()->staros_shard_info_fallback_total.increment(1);
-    auto info_or = get_starlet()->get_shard_info(id);
+    auto info_or = starlet->get_shard_info(id);
     if (!info_or.ok()) {
         StarOSWorkerMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
     }

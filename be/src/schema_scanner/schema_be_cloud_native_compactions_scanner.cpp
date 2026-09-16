@@ -38,7 +38,8 @@ SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = 
         {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"PROGRESS", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
         {"STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"PROFILE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false}};
+        {"PROFILE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"SUBTASK_ID", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), true}};
 
 SchemaBeCloudNativeCompactionsScanner::SchemaBeCloudNativeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -68,7 +69,7 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 11) {
+            if (slot_id < 1 || slot_id > 12) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
@@ -141,6 +142,15 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 // PROFILE
                 Slice v(info.profile.data(), info.profile.size());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
+                break;
+            }
+            case 12: {
+                // SUBTASK_ID
+                if (info.subtask_id >= 0) {
+                    fill_column_with_slot<TYPE_INT>(column, (void*)&info.subtask_id);
+                } else {
+                    fill_data_column_with_null(column);
+                }
                 break;
             }
             default:

@@ -95,8 +95,6 @@ protected:
     const TBrokerScanRangeParams& _params;
     ScannerCounter* _counter;
 
-    std::unique_ptr<RowDescriptor> _row_desc;
-
     bool _strict_mode{false};
     int64_t _error_counter{0};
     // When column mismatch, files query/load and other type load have different behaviors.

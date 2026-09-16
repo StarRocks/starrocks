@@ -332,11 +332,9 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
 // 3. Verify final state matches expected merge results based on max(c1) logic
 TEST_P(ConditionUpdateTest, test_condition_update_parallel) {
     // Configure test environment for parallel execution
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_parallel_compaction, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_index_parallel_execution_min_rows, 4096);
-    ConfigResetGuard<int64_t> guard4(&config::pk_index_eager_build_threshold_bytes, 1);
-    ConfigResetGuard<bool> guard5(&config::ignore_merge_condition_inside_same_transaction, true);
+    ConfigResetGuard<int64_t> guard(&config::pk_index_parallel_execution_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard3(&config::ignore_merge_condition_inside_same_transaction, true);
     ConfigResetGuard<int64_t> guard6(&config::lake_publish_version_slow_log_ms, 0);
     // Force small write buffer to ensure SST files are generated (required for parallel path)
     ConfigResetGuard<int64_t> guard7(&config::write_buffer_size, 1);
@@ -432,8 +430,6 @@ TEST_P(ConditionUpdateTest, test_condition_update_parallel) {
 // Scenario mirrors test_condition_update but the compare phase runs on the
 // pk_index_execution_thread_pool; results must be identical to the serial path.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -501,8 +497,6 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel) {
 // compare task to the shared pool, and the final index.upsert is applied per segment
 // after the barrier.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_multi_segment) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -560,8 +554,6 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_multi_segment)
 // so index.get() returns -1 for every row and the per-chunk task skips the condition-column
 // reads. Serial merge then upserts the whole chunk as a single winner range.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_all_new_keys) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
         indexes[i] = i;
@@ -627,10 +619,8 @@ TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_all_new_keys) 
 // the PR replaced. The expected merged state mixes baseline rows and update rows
 // row-by-row.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_parallel_fragmented_winners) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
-
     const int64_t chunk_size = 5 * 4096; // 20K rows, multiple per-segment chunks
-    ConfigResetGuard<int64_t> guard2(&config::pk_index_parallel_execution_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard(&config::pk_index_parallel_execution_min_rows, 4096);
 
     auto baseline = generate_data(chunk_size, 0, 3, 4); // baseline c1=k*3, c2=k*4
     auto indexes = std::vector<uint32_t>(chunk_size);
@@ -737,9 +727,8 @@ static int64_t find_trace_metric(const std::map<const char*, int64_t>& metrics, 
 // worker's (absent) trace and be lost; asserting it is visible in the adopted trace proves
 // the counters are propagated back.
 TEST_P(ConditionUpdateTest, test_condition_update_no_sst_trace_propagation) {
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
     const int64_t chunk_size = 2 * 4096; // >1 per-segment chunk so the compare runs on the pool
-    ConfigResetGuard<int64_t> guard2(&config::pk_index_parallel_execution_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard(&config::pk_index_parallel_execution_min_rows, 4096);
 
     auto baseline = generate_data(chunk_size, 0, 3, 4); // baseline c1=k*3, c2=k*4
     auto indexes = std::vector<uint32_t>(chunk_size);

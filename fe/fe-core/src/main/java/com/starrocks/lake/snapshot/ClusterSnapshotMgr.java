@@ -526,6 +526,20 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    /**
+     * Fire-and-forget stop for leader demotion: request stop on the inner scheduler without joining,
+     * so the single state-change thread is not blocked. The scheduler's worker self-cleans in
+     * onStopped() and deregisters on exit; the re-activation cleanliness gate verifies quiescence. The
+     * scheduler reference is nulled so the next {@link #start()} rebuilds it on re-election.
+     */
+    public void stopBestEffort() {
+        ClusterSnapshotJobScheduler scheduler = clusterSnapshotJobScheduler;
+        if (scheduler != null) {
+            scheduler.stopBestEffort();
+            clusterSnapshotJobScheduler = null;
+        }
+    }
+
     public TClusterSnapshotJobsResponse getAllSnapshotJobsInfo() {
         TClusterSnapshotJobsResponse response = new TClusterSnapshotJobsResponse();
         for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {

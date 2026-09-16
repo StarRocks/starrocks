@@ -151,9 +151,9 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
     return std::move(chunk_pb);
 }
 
-StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
+StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RecordDescriptor& record_desc, const ChunkPB& chunk_pb,
                                                 const int encode_level) {
-    auto res = build_protobuf_chunk_meta(row_desc, chunk_pb);
+    auto res = build_protobuf_chunk_meta(record_desc, chunk_pb);
     if (!res.ok()) {
         return res.status();
     }
@@ -287,10 +287,15 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
     }
 
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());
-    return Chunk(std::move(columns), _meta.slot_id_to_index, std::move(chunk_extra_data));
+    Chunk chunk(std::move(columns), _meta.slot_id_to_index, std::move(chunk_extra_data));
+    // The row-count loop above only sees Column::size(), which for a complex column is derived from its
+    // offsets or its first field, so a nested child the sender never materialized slips through it. This
+    // is the constructor that skips the check the other Chunk constructors run; do it here instead.
+    DCHECK_CHUNK(&chunk);
+    return chunk;
 }
 
-StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb) {
+StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RecordDescriptor& record_desc, const ChunkPB& chunk_pb) {
     ProtobufChunkMeta chunk_meta;
     if (UNLIKELY(chunk_pb.is_nulls().empty() || chunk_pb.slot_id_map().empty())) {
         return Status::InternalError("chunk_pb _meta could not be empty");
@@ -308,15 +313,12 @@ StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_d
 
     size_t column_index = 0;
     chunk_meta.types.resize(chunk_pb.is_nulls().size());
-    for (auto* tuple_desc : row_desc.tuple_descriptors()) {
-        const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
-        for (const auto& kv : chunk_meta.slot_id_to_index) {
-            for (auto slot : slots) {
-                if (kv.first == slot->id()) {
-                    chunk_meta.types[kv.second] = slot->type();
-                    ++column_index;
-                    break;
-                }
+    for (const auto& kv : chunk_meta.slot_id_to_index) {
+        for (const auto* slot : record_desc.slots()) {
+            if (kv.first == slot->id()) {
+                chunk_meta.types[kv.second] = slot->type();
+                ++column_index;
+                break;
             }
         }
     }

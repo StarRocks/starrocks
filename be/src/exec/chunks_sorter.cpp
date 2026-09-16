@@ -58,19 +58,39 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
     profile->add_info_string("UseGermanString", is_use_german_string() ? "True" : "False");
 }
 
-StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
+// TODO: take the materialized slot ids directly instead of a RecordDescriptor.
+//
+// The only thing read out of `materialized_record_desc` below is `slot->id()` -- the slot types and
+// nullability come from `order_by_types`. Passing a whole descriptor is therefore over-general, and
+// it is what let a caller hand over a record that was not the sort tuple (the window pre-agg plan
+// gives the sort node a second tuple), which this function cannot detect beyond a DCHECK.
+//
+// The pre-aggregation half of the same node already does it the narrow way: it gets its output slot
+// ids straight off the thrift plan as `TSortNode.pre_agg_output_slot_id` and never consults a tuple
+// descriptor. Sending the sort tuple's materialized slot ids the same way would make the two halves
+// symmetric and let TopNNode::_materialized_record_descriptor, this parameter and the DCHECK below
+// all disappear. It needs a thrift field plus FE changes, so it is deliberately not part of the fix
+// for the crash.
+StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk,
+                                                               const RecordDescriptor& materialized_record_desc,
                                                                const SortExecExprs& sort_exec_exprs,
                                                                const std::vector<OrderByType>& order_by_types) {
     ChunkPtr materialize_chunk = std::make_shared<Chunk>();
 
     // materialize all sorting columns: replace old columns with evaluated columns
     const size_t row_num = chunk->num_rows();
-    const auto& slots_in_row_descriptor = materialized_tuple_desc->slots();
+    auto slots_in_record_descriptor = materialized_record_desc.slots();
     const auto& slots_in_sort_exprs = sort_exec_exprs.sort_tuple_slot_expr_ctxs();
 
-    DCHECK_EQ(slots_in_row_descriptor.size(), slots_in_sort_exprs.size());
+    // One slot per sort-tuple expression: the expressions supply the values, the descriptor supplies
+    // the slot ids they are keyed by, and the two are paired POSITIONALLY below. This holds only if
+    // the caller passes the sort tuple ALONE -- passing a sort node's whole record, which may also
+    // carry the window pre-agg tuple, breaks it. See TopNNode::_materialized_record_descriptor.
+    DCHECK_EQ(materialized_record_desc.num_slots(), slots_in_sort_exprs.size());
 
-    for (size_t i = 0; i < slots_in_sort_exprs.size(); ++i) {
+    auto slot_iter = slots_in_record_descriptor.begin();
+    for (size_t i = 0; i < slots_in_sort_exprs.size(); ++i, ++slot_iter) {
+        const SlotDescriptor* slot = *slot_iter;
         ExprContext* expr_ctx = slots_in_sort_exprs[i];
         ColumnPtr col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk);
         if (col->is_constant()) {
@@ -79,7 +99,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 // so replace it by a nullable column of original data type filled with all NULLs.
                 MutableColumnPtr new_col = ColumnHelper::create_column(order_by_types[i].type_desc, true);
                 new_col->append_nulls(row_num);
-                materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
+                materialize_chunk->append_column(std::move(new_col), slot->id());
             } else {
                 // Case 1: an expression may generate a constant column which will be reused by
                 // another call of evaluate(). We clone its data column to resize it as same as
@@ -95,9 +115,9 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 if (order_by_types[i].is_nullable) {
                     ColumnPtr nullable_column =
                             NullableColumn::create(std::move(new_col), NullColumn::create(row_num, 0));
-                    materialize_chunk->append_column(std::move(nullable_column), slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(std::move(nullable_column), slot->id());
                 } else {
-                    materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(std::move(new_col), slot->id());
                 }
             }
         } else {
@@ -105,7 +125,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
             if (!col->is_nullable() && order_by_types[i].is_nullable) {
                 col = NullableColumn::create(col, NullColumn::create(col->size(), 0));
             }
-            materialize_chunk->append_column(std::move(col), slots_in_row_descriptor[i]->id());
+            materialize_chunk->append_column(std::move(col), slot->id());
         }
     }
 

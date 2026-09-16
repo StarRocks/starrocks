@@ -84,7 +84,9 @@ private:
 };
 
 struct SerdeContext {
-    raw::RawString serialize_buffer;
+    // Page-aligned backing store: base address must be 4096-aligned so O_DIRECT spill writes
+    // (spill_enable_direct_io) satisfy pwritev's iov_base alignment requirement.
+    raw::RawStringPage serialize_buffer;
 };
 // Serde is used to serialize and deserialize spilled data.
 class Serde;

@@ -22,6 +22,7 @@ set(COMMON_TEST_FILES
     brpc/internal_service_recoverable_stub_test.cpp
     config_test.cpp
     cow_test.cpp
+    crash_watchdog_test.cpp
     greplog_test.cpp
     process_exit_test.cpp
     runtime_profile_test.cpp
@@ -30,6 +31,7 @@ set(COMMON_TEST_FILES
     stack_trace_mutex_test.cpp
     system/cpu_info_test.cpp
     system/master_info_test.cpp
+    system/mem_info_test.cpp
     table_metrics_mgr_test.cpp
     thrift_client_test.cpp
     thread/cpu_usage_info_test.cpp

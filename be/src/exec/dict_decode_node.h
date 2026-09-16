@@ -53,7 +53,7 @@ private:
     ChunkPtr _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<TypeDescriptor*> _decode_column_types;
+    std::vector<const TypeDescriptor*> _decode_column_types;
     std::vector<GlobalDictDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;

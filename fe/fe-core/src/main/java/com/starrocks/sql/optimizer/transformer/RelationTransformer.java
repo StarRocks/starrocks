@@ -113,6 +113,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
@@ -246,7 +247,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             boolean shouldInline = switch (cteRelation.getMaterializationHint()) {
                 case NOT_MATERIALIZED -> true;
                 case MATERIALIZED -> false;
-                case NONE -> cteRelation.getRefs() <= 1 || cteContext.isForceInline();
+                // isForceInline() flips once the number of distinct reused CTE moulds exceeds the
+                // limit, and it stays true because the mould map only grows. A CTE that was already
+                // registered (decided to be reused) must keep being re-anchored in every duplicated
+                // copy of an enclosing CTE's definition; otherwise later copies would emit consumes
+                // referencing its id with no matching anchor in that copy (orphan consume ->
+                // "no executable plan"). Only brand-new moulds encountered past the limit are inlined.
+                case NONE -> cteRelation.getRefs() <= 1
+                        || (cteContext.isForceInline() && !cteContext.hasRegisteredCte(cteRelation.getCteMouldId()));
             };
             if (shouldInline) {
                 continue;
@@ -732,6 +740,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else if (Table.TableType.KUDU.equals(node.getTable().getType())) {
             scanOperator = new LogicalKuduScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                 columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.FLUSS.equals(node.getTable().getType())) {
+            scanOperator = new LogicalFlussScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalSchemaScanOperator(node.getTable(),

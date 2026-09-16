@@ -27,7 +27,6 @@ namespace starrocks {
 class ExprContext;
 class BufferControlBlock;
 class RuntimeProfile;
-class RowDescriptor;
 using TFetchDataResultPtr = std::unique_ptr<TFetchDataResult>;
 using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 
@@ -35,8 +34,7 @@ using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 class ArrowResultWriter final : public BufferControlResultWriter {
 public:
     ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
-                      const std::vector<std::string>& output_column_names, RuntimeProfile* parent_profile,
-                      const RowDescriptor& row_desc);
+                      const std::vector<std::string>& output_column_names, RuntimeProfile* parent_profile);
 
     Status init(RuntimeState* state) override;
 
@@ -51,8 +49,6 @@ private:
 
     std::vector<ExprContext*>& _output_expr_ctxs;
     const std::vector<std::string>& _output_column_names;
-
-    const RowDescriptor& _row_desc;
 
     std::shared_ptr<arrow::Schema> _arrow_schema;
 };

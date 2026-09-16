@@ -22,6 +22,7 @@
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/array_size_limit.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/mem_pool.h"
@@ -29,6 +30,7 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
+
 // Primary template: non-string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>, typename = guard::Guard>
 struct ArrayAggAggregateState {
@@ -77,6 +79,15 @@ struct ArrayAggAggregateState {
             }
         }
         return &data_column;
+    }
+
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
     }
 
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
@@ -163,6 +174,15 @@ struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT
         return &data_column;
     }
 
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
+    }
+
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
 
     static bool check_overflow(const Column& col, FunctionContext* ctx) {
@@ -238,13 +258,41 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        // Array element is nullable, so we need to extract the data from nullable column first
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto offset_size = input_column->get_element_offset_size(row_num);
-        auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
-
+        const auto& array_element = input_column->elements();
         const auto* element_data_column = ColumnHelper::get_data_column(&array_element);
-        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+
+        // The offsets and the element column must agree on how many elements the array has.
+        // If they don't, the update() below indexes past the element column and hands the state
+        // a wild Slice.
+        if (UNLIKELY(offset_size.first + offset_size.second > element_data_column->size())) {
+            LOG_FIRST_N(ERROR, 20) << "array_agg merge: inconsistent array column"
+                                   << " row=" << row_num << " offset=" << offset_size.first
+                                   << " size=" << offset_size.second << " elements=" << element_data_column->size()
+                                   << " array_rows=" << input_column->size()
+                                   << " elem_nullable=" << array_element.is_nullable();
+            ctx->set_error("array_agg: corrupted array column (offsets exceed element column)");
+            return;
+        }
+
+        // update() reinterprets the element column as the column for LT. Nothing in the type
+        // system ties the two together -- a dictionary-encoded stand-in for a string column is
+        // an INT column -- so check rather than reinterpret.
+        if constexpr (lt_is_string_or_binary<LT>) {
+            if (UNLIKELY(!element_data_column->is_binary() && !element_data_column->is_large_binary())) {
+                LOG_FIRST_N(ERROR, 20) << "array_agg merge: array element column is " << element_data_column->get_name()
+                                       << ", expected a binary column for logical type " << static_cast<int>(LT);
+                ctx->set_error("array_agg: unexpected array element column type");
+                return;
+            }
+        }
+
+        // Array elements are normally nullable, but nothing in the type system guarantees it.
+        size_t element_null_count = array_element.is_nullable()
+                                            ? down_cast<const NullableColumn&>(array_element)
+                                                      .null_count(offset_size.first, offset_size.second)
+                                            : 0;
         DCHECK_LE(element_null_count, offset_size.second);
 
         this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
@@ -254,8 +302,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        // should check overflow before append, otherwise will generate invalid result.
-        if (UNLIKELY(state_impl.check_overflow(ctx))) {
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()) ||
+                     state_impl.check_overflow(ctx))) {
             return;
         }
 
@@ -290,7 +338,21 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
+        // get_values must always grow dst by exactly end - start rows, even when it fails. Two callers depend
+        // on that and neither can observe an error: the Analytor appends dst to an input chunk whose row count
+        // is already fixed, and the nullable wrapper appends end - start null flags alongside this call no
+        // matter what happens here. So pad dst back up on every exit path. The padding is never read: whoever
+        // set the error fails the query.
+        const size_t expected_size = dst->size() + (end - start);
+        auto defer = DeferOp([&]() {
+            if (dst->size() < expected_size) {
+                dst->append_default(expected_size - dst->size());
+            }
+        });
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()))) {
+            return;
+        }
         const auto& data_column = state_impl.get_data_column();
         auto* array_column = down_cast<ArrayColumn*>(dst);
         for (auto i = start; i < end; i++) {
@@ -487,8 +549,14 @@ public:
 
     // finalize each state->column to a [nullable] array
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        // The null flag of the current row is appended before the array row itself is built, so an
+        // error path may return with `to` half-written: its null column holds one more entry than
+        // its data column. Roll back to the row count observed on entry before appending the
+        // placeholder row, otherwise append_default() would widen the gap instead of closing it.
+        const size_t orig_num_rows = to != nullptr ? to->size() : 0;
         auto defer = DeferOp([&]() {
             if (ctx->has_error() && to != nullptr) {
+                to->resize(orig_num_rows);
                 to->append_default();
             }
         });
@@ -578,6 +646,9 @@ public:
             }
             index.resize(res_num);
             elem_size = res_num;
+        }
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", elem_size))) {
+            return;
         }
         auto* elements_col = array_col->elements_column_raw_ptr();
         if (index.empty()) {

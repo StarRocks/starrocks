@@ -37,6 +37,7 @@
 #include <memory>
 #include <set>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
@@ -53,6 +54,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -249,6 +251,20 @@ void Rowset::warmup_lrucache() {
 #endif
 }
 
+void Rowset::_update_metadata_cache_charge(size_t charge) {
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+#ifdef BE_TEST
+        TEST_SYNC_POINT_CALLBACK("Rowset::_update_metadata_cache_charge", &charge);
+        // Most unit tests do not create the global metadata cache. Tests that
+        // install one exercise the same charge update as production.
+        if (MetadataCache::instance() == nullptr) {
+            return;
+        }
+#endif
+        MetadataCache::instance()->update_rowset_charge(this, charge);
+    }
+}
+
 // this function is only used for partial update so far
 // make sure segment_footer is in the end of segment_file before call this function
 Status Rowset::reload() {
@@ -367,10 +383,14 @@ Status Rowset::remove() {
         // delete index
         for (const auto& index : *(_schema->indexes())) {
             if (index.index_type() == IndexType::GIN) {
+                if (is_builtin_inverted_index(index)) {
+                    continue;
+                }
                 std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
                         _rowset_path, rowset_id().to_string(), i, index.index_id());
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
-                LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
+                LOG_IF(WARNING, !ist.ok())
+                        << "Fail to delete inverted_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
             } else if (index.index_type() == IndexType::VECTOR) {
                 std::string vector_index_path = IndexDescriptor::vector_index_file_path(
@@ -462,6 +482,9 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int
             const auto& indexes = *_schema->indexes();
             for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
@@ -591,11 +614,14 @@ StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
         if (!indexes.empty()) {
             for (const auto& index : indexes) {
                 if (index.index_type() == IndexType::GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dir, rowset_id().to_string(),
                                                                                            i, index.index_id());
                     if (fs::path_exist(dst_index_path)) {
-                        LOG(WARNING) << "Index path already exist: " << dst_path;
-                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_path));
+                        LOG(WARNING) << "Index path already exist: " << dst_index_path;
+                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_index_path));
                     }
 
                     std::string src_index_path = IndexDescriptor::inverted_index_file_path(
@@ -720,6 +746,7 @@ void Rowset::do_close() {
 }
 
 size_t Rowset::segment_memory_usage() {
+    TEST_SYNC_POINT("Rowset::segment_memory_usage");
     size_t total = 0;
     for (const auto& segment : _segments) {
         total += segment->mem_usage();

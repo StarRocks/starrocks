@@ -179,7 +179,8 @@ public:
             return Status::InvalidArgument(
                     Substitute("Key too short, need=$0 vs real=$1", sizeof(bool), encoded_key->size));
         }
-        bool v = reinterpret_cast<const bool*>(encoded_key->data);
+        bool v;
+        memcpy(&v, encoded_key->data, sizeof(v));
         memcpy(cell_ptr, &v, sizeof(v));
         encoded_key->remove_prefix(sizeof(v));
         return Status::OK();
@@ -293,21 +294,46 @@ public:
     }
 };
 
-// TODO (stephen): implement this trait later. because we can't test it in the current patch.
 template <>
 class KeyCoderTraits<TYPE_INT256> {
 public:
     using CppType = int256_t;
 
-    static void full_encode_ascending(const void* value, std::string* buf) {}
+    static void full_encode_ascending(const void* value, std::string* buf) {
+        int256_t v;
+        memcpy(&v, value, sizeof(v));
+        uint128_t hi = static_cast<uint128_t>(v.high) ^ (static_cast<uint128_t>(1) << 127);
+        uint128_t lo = v.low;
+        char tmp[32];
+        for (int i = 0; i < 16; i++) tmp[i] = static_cast<char>(hi >> (8 * (15 - i)));
+        for (int i = 0; i < 16; i++) tmp[16 + i] = static_cast<char>(lo >> (8 * (15 - i)));
+        buf->append(tmp, 32);
+    }
 
-    static void full_encode_ascending_datum(const Datum& value, std::string* buf) {}
+    static void full_encode_ascending_datum(const Datum& value, std::string* buf) {
+        int256_t raw = value.get_int256();
+        full_encode_ascending(&raw, buf);
+    }
 
+    // legacy short-key path: unchanged (empty) to preserve the on-disk encoding of
+    // existing version-0 segments with a decimal256 short-key column.
     static void encode_ascending(const void* value, size_t index_size, std::string* buf) {}
 
     static void encode_ascending_datum(const Datum& value, size_t index_size, std::string* buf) {}
 
-    static Status decode_ascending(Slice* encoded_key, size_t index_size, uint8_t* cell_ptr, MemPool* pool) {
+    static Status decode_ascending(Slice* encoded_key, size_t index_size __attribute__((unused)), uint8_t* cell_ptr,
+                                   MemPool* pool __attribute__((unused))) {
+        if (encoded_key->size < 32) {
+            return Status::InvalidArgument(Substitute("Key too short, need=$0 vs real=$1", 32, encoded_key->size));
+        }
+        const auto* p = reinterpret_cast<const uint8_t*>(encoded_key->data);
+        uint128_t hi = 0, lo = 0;
+        for (int i = 0; i < 16; i++) hi = (hi << 8) | p[i];
+        for (int i = 0; i < 16; i++) lo = (lo << 8) | p[16 + i];
+        hi ^= (static_cast<uint128_t>(1) << 127);
+        int256_t out(static_cast<int128_t>(hi), lo);
+        memcpy(cell_ptr, &out, sizeof(out));
+        encoded_key->remove_prefix(32);
         return Status::OK();
     }
 };

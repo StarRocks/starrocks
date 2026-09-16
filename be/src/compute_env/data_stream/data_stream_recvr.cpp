@@ -149,9 +149,9 @@ std::vector<merge_path::MergePathChunkProvider> DataStreamRecvr::create_merge_pa
     return chunk_providers;
 }
 
-DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
-                                 const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
-                                 bool is_merging, int total_buffer_limit,
+DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state,
+                                 const RecordDescriptor& record_desc, const TUniqueId& fragment_instance_id,
+                                 PlanNodeId dest_node_id, int num_senders, bool is_merging, int total_buffer_limit,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
                                  bool is_pipeline, int32_t degree_of_parallelism, bool keep_order,
                                  PassThroughChunkBuffer* pass_through_chunk_buffer)
@@ -159,7 +159,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
           _total_buffer_limit(total_buffer_limit),
-          _row_desc(row_desc),
+          _record_desc(record_desc),
           _is_merging(is_merging),
           _num_buffered_bytes(0),
           _instance_profile(runtime_state->runtime_profile_ptr()),

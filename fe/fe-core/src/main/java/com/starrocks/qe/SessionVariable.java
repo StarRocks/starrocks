@@ -96,6 +96,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -125,6 +126,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
         }
         SETTER_MAP = builder.build();
+    }
+
+    public enum PaimonReaderMode {
+        AUTO,
+        JNI,
+        NATIVE
     }
 
     public enum BinaryEncodingFormat {
@@ -528,6 +535,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+    public static final String CBO_PUSH_DOWN_COUNT_AGGREGATE = "cbo_push_down_count_aggregate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
@@ -764,6 +772,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String PAIMON_READER_MODE = "paimon_reader_mode";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -957,6 +966,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
+    public static final String MAX_ARRAY_LENGTH = "max_array_length";
+
     // These parameters are experimental. They may be removed in the future
     public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
     public static final String SPILL_MEM_TABLE_NUM = "spill_mem_table_num";
@@ -996,6 +1007,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED =
             "enable_force_group_by_skew_eliminate_when_skewed";
     public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
+    public static final String ENABLE_WINDOW_SKEW_MERGE_SORT = "enable_window_skew_merge_sort";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
@@ -1057,6 +1069,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String INTERLEAVING_GROUP_SIZE = "interleaving_group_size";
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+
+    public static final String ENABLE_AI_TOPN_PUSHDOWN = "enable_ai_topn_pushdown";
+    public static final String AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT = "ai_topn_pushdown_max_global_limit";
 
     public static final String CBO_PUSHDOWN_DISTINCT_LIMIT = "cbo_push_down_distinct_limit";
 
@@ -2174,6 +2189,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT, flag = VariableMgr.INVISIBLE)
     private long cboPushDownAggregateOnBroadcastJoinRowCountLimit = 250000;
 
+    @VarAttr(name = CBO_PUSH_DOWN_COUNT_AGGREGATE, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownCountAggregate = true;
+
     @VarAttr(name = CBO_ENABLE_INTERSECT_ADD_DISTINCT)
     private boolean cboEnableIntersectAddDistinct = true;
 
@@ -2287,6 +2305,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
+
+    @VarAttr(name = ENABLE_AI_TOPN_PUSHDOWN, flag = VariableMgr.INVISIBLE)
+    private boolean enableAiTopnPushdown = true;
+
+    // Larger limits use per-instance candidates; zero selects the local path for all eligible limits.
+    @VarAttr(name = AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)
+    private long aiTopnPushdownMaxGlobalLimit = 1000;
 
     @VarAttr(name = CBO_PUSHDOWN_DISTINCT_LIMIT)
     private long cboPushDownDistinctLimit = 4096;
@@ -2618,6 +2643,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownTopNLimit;
     }
 
+    public boolean isEnableAiTopnPushdown() {
+        return enableAiTopnPushdown;
+    }
+
+    public void setEnableAiTopnPushdown(boolean enableAiTopnPushdown) {
+        this.enableAiTopnPushdown = enableAiTopnPushdown;
+    }
+
+    public long getAiTopnPushdownMaxGlobalLimit() {
+        return aiTopnPushdownMaxGlobalLimit;
+    }
+
+    public void setAiTopnPushdownMaxGlobalLimit(long aiTopnPushdownMaxGlobalLimit) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        if (aiTopnPushdownMaxGlobalLimit < 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT, aiTopnPushdownMaxGlobalLimit, "a non-negative integer");
+        }
+        this.aiTopnPushdownMaxGlobalLimit = aiTopnPushdownMaxGlobalLimit;
+    }
+
     public long cboPushDownDistinctLimit() {
         return cboPushDownDistinctLimit;
     }
@@ -2899,6 +2945,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
+    private String paimonReaderMode = PaimonReaderMode.AUTO.name();
+
     @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
     private boolean avroUseJNIReader = false;
 
@@ -3115,6 +3164,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 1024;
 
+    // Maximum number of elements in an array produced by an array function. A query that exceeds it
+    // fails instead of returning an oversized array. 0 or negative means unlimited. This is meant to
+    // cover every array-producing function, but only array_agg enforces it so far.
+    @VariableMgr.VarAttr(name = MAX_ARRAY_LENGTH)
+    private long maxArrayLength = 0;
+
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedRows = 1 * 1024 * 1024 * 1024;
 
@@ -3139,6 +3194,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
     private boolean enableSplitWindowSkewToUnion = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_WINDOW_SKEW_MERGE_SORT, flag = VariableMgr.INVISIBLE)
+    private boolean enableWindowSkewMergeSort = false;
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
@@ -3311,6 +3369,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setAnnParams(String annParams) {
         this.annParams = annParams;
+    }
+
+    public double getKFactor() {
+        return kFactor;
+    }
+
+    public void setKFactor(double kFactor) {
+        this.kFactor = kFactor;
+    }
+
+    public double getPqRefineFactor() {
+        return pqRefineFactor;
     }
 
     public Map<String, String> getAnnParams() {
@@ -3681,6 +3751,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.exprChildrenLimit = exprChildrenLimit;
     }
 
+    public long getMaxArrayLength() {
+        return maxArrayLength;
+    }
+
+    public void setMaxArrayLength(long maxArrayLength) {
+        this.maxArrayLength = maxArrayLength;
+    }
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
@@ -3761,12 +3839,35 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSplitWindowSkewToUnion = enableSplitWindowSkewToUnion;
     }
 
+    public boolean isEnableWindowSkewMergeSort() {
+        return enableWindowSkewMergeSort;
+    }
+
+    public void setEnableWindowSkewMergeSort(boolean enableWindowSkewMergeSort) {
+        this.enableWindowSkewMergeSort = enableWindowSkewMergeSort;
+    }
+
     public boolean getHudiMORForceJNIReader() {
         return hudiMORForceJNIReader;
     }
 
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
+    }
+
+    public PaimonReaderMode getPaimonReaderMode() {
+        // The SET path is validated by PaimonReaderModeConverter, but the raw string can also be
+        // written through non-validated paths (e.g. the reflective setter), so parse defensively
+        // instead of throwing IllegalArgumentException at plan time.
+        try {
+            return PaimonReaderMode.valueOf(paimonReaderMode.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return PaimonReaderMode.AUTO;
+        }
+    }
+
+    public void setPaimonReaderMode(String paimonReaderMode) {
+        this.paimonReaderMode = paimonReaderMode.toUpperCase(Locale.ROOT);
     }
 
     public boolean getAvroUseJNIReader() {
@@ -5240,6 +5341,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPushDownAggregateOnBroadcastJoinRowCountLimit = cboPushDownAggregateOnBroadcastJoinRowCountLimit;
     }
 
+    public boolean isCboPushDownCountAggregate() {
+        return cboPushDownCountAggregate;
+    }
+
+    public void setCboPushDownCountAggregate(boolean cboPushDownCountAggregate) {
+        this.cboPushDownCountAggregate = cboPushDownCountAggregate;
+    }
+
     public String getCboPushDownAggregate() {
         return cboPushDownAggregate;
     }
@@ -6667,6 +6776,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
+        tResult.setMax_array_length(maxArrayLength);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
         tResult.setEnable_predicate_col_late_materialize(enablePredicateColLateMaterialize);

@@ -87,7 +87,7 @@ public class StatisticsMetaMgrTest extends PlanTestBase  {
 
         Deencapsulation.invoke(m, "refreshStatisticsTable", FULL_STATISTICS_TABLE_NAME);
 
-        Assertions.assertTrue(m.isStopped());
+        Assertions.assertTrue(m.isStopRequested());
     }
 
     private TableRef createTableRef(TableName tableName) {

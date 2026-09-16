@@ -20,18 +20,17 @@
 
 namespace starrocks {
 class DataStreamRecvr;
-class RowDescriptor;
 class SortExecExprs;
 namespace pipeline {
 class ExchangeMergeSortSourceOperator : public SourceOperator {
 public:
     ExchangeMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                    int32_t num_sender, const RowDescriptor& row_desc, SortExecExprs* sort_exec_exprs,
-                                    const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first,
-                                    int64_t offset, int64_t limit)
+                                    int32_t num_sender, const RecordDescriptor& record_desc,
+                                    SortExecExprs* sort_exec_exprs, const std::vector<bool>& is_asc_order,
+                                    const std::vector<bool>& nulls_first, int64_t offset, int64_t limit)
             : SourceOperator(factory, id, "global_merge_source", plan_node_id, false, driver_sequence),
               _num_sender(num_sender),
-              _row_desc(row_desc),
+              _record_desc(record_desc),
               _sort_exec_exprs(sort_exec_exprs),
               _is_asc_order(is_asc_order),
               _nulls_first(nulls_first),
@@ -56,7 +55,7 @@ private:
     Status get_next_merging(RuntimeState* state, ChunkPtr* chunk);
 
     int32_t _num_sender;
-    const RowDescriptor& _row_desc;
+    const RecordDescriptor& _record_desc;
 
     SortExecExprs* _sort_exec_exprs;
     const std::vector<bool>& _is_asc_order;
@@ -74,12 +73,12 @@ private:
 class ExchangeMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExchangeMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t num_sender,
-                                           const RowDescriptor& row_desc, SortExecExprs* sort_exec_exprs,
+                                           RecordDescriptor record_desc, SortExecExprs* sort_exec_exprs,
                                            const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first,
                                            int64_t offset, int64_t limit)
             : SourceOperatorFactory(id, "global_merge_source", plan_node_id),
               _num_sender(num_sender),
-              _row_desc(row_desc),
+              _record_desc(std::move(record_desc)),
               _sort_exec_exprs(sort_exec_exprs),
               _is_asc_order(is_asc_order),
               _nulls_first(nulls_first),
@@ -91,7 +90,7 @@ public:
 
     OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
         return std::make_shared<ExchangeMergeSortSourceOperator>(this, _id, _plan_node_id, driver_sequence, _num_sender,
-                                                                 _row_desc, _sort_exec_exprs, _is_asc_order,
+                                                                 _record_desc, _sort_exec_exprs, _is_asc_order,
                                                                  _nulls_first, _offset, _limit);
     }
 
@@ -102,7 +101,7 @@ public:
 
 private:
     int32_t _num_sender;
-    const RowDescriptor& _row_desc;
+    const RecordDescriptor _record_desc;
     SortExecExprs* _sort_exec_exprs;
     const std::vector<bool>& _is_asc_order;
     const std::vector<bool>& _nulls_first;

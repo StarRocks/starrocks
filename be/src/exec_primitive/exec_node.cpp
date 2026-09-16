@@ -68,7 +68,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _type(tnode.node_type),
           _pool(pool),
           _tuple_ids(tnode.row_tuples),
-          _row_descriptor(descs, tnode.row_tuples),
+          _record_descriptor(descs, tnode.row_tuples),
           _limit(tnode.limit) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
@@ -84,23 +84,6 @@ void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
     _tuple_slot_mappings = parent_mappings;
     for (auto& child : _children) {
         child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
-    }
-}
-
-void ExecNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
-    if (collector->empty()) return;
-    if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
-        push_down_join_runtime_filter_to_children(state, collector);
-    }
-    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
-}
-
-void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
-    for (auto& i : _children) {
-        i->push_down_join_runtime_filter(state, collector);
-        if (collector->size() == 0) {
-            return;
-        }
     }
 }
 
@@ -180,7 +163,6 @@ Status ExecNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.open(state));
-    push_down_join_runtime_filter(state, &_runtime_filter_collector);
     _runtime_filter_collector.wait(is_scan_node());
     return Status::OK();
 }

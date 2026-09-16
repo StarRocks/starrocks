@@ -52,7 +52,6 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _profile(profile),
           _params(params),
           _counter(counter),
-          _row_desc(nullptr),
 
           _file_format_str("UNKNOWN"),
           _schema_only(schema_only) {
@@ -92,8 +91,6 @@ Status FileScanner::init_expr_ctx() {
 
         _src_slot_descriptors.emplace_back(it->second);
     }
-
-    _row_desc = std::make_unique<RowDescriptor>(_state->desc_tbl(), std::vector<TupleId>{_params.src_tuple_id});
 
     // destination
     _dest_tuple_desc = _state->desc_tbl().get_tuple_descriptor(_params.dest_tuple_id);

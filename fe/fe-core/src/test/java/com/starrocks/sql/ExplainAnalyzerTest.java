@@ -135,6 +135,30 @@ public class ExplainAnalyzerTest {
                 new Counter(TUnit.TIME_NS, null, 11372000));
         uniqueMetrics.addCounter("PeakChunkBufferMemoryUsage", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.BYTES, null, 12 * 1024 * 1024));
+        uniqueMetrics.addCounter("VectorIndex", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 19000000));
+        uniqueMetrics.addCounter("VectorIndexLoad", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 7000000));
+        uniqueMetrics.addCounter("VectorIndexCacheLookup", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1000000));
+        uniqueMetrics.addCounter("VectorIndexCacheHit", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 2));
+        uniqueMetrics.addCounter("VectorIndexCacheMiss", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 1));
+        uniqueMetrics.addCounter("VectorIndexFileOpenAndGetSize", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 2000000));
+        uniqueMetrics.addCounter("VectorIndexFileRead", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 3000000));
+        uniqueMetrics.addCounter("VectorIndexDeserialize", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 750000));
+        uniqueMetrics.addCounter("VectorIndexSearcherCreate", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 250000));
+        uniqueMetrics.addCounter("VectorIndexSearch", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 12000000));
+        uniqueMetrics.addCounter("VectorANNSearch", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 9000000));
+        uniqueMetrics.addCounter("VectorResultProcess", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 3000000));
         uniqueMetrics.addCounter("Unknown", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.BYTES, null, 12 * 1024 * 1024));
         olapScanProfile.addChild(uniqueMetrics);
@@ -169,6 +193,18 @@ public class ExplainAnalyzerTest {
         assertTrue(result.contains("SegmentProcessing"), result);
         assertTrue(result.contains("IOTask"), result);
         assertTrue(result.contains("IOBuffer"), result);
+        assertTrue(result.contains("VectorIndex:"), result);
+        assertTrue(result.contains("VectorIndexLoad: "), result);
+        assertTrue(result.contains("VectorIndexCacheLookup: "), result);
+        assertTrue(result.contains("VectorIndexCacheHit: "), result);
+        assertTrue(result.contains("VectorIndexCacheMiss: "), result);
+        assertTrue(result.contains("VectorIndexFileOpenAndGetSize: "), result);
+        assertTrue(result.contains("VectorIndexFileRead: "), result);
+        assertTrue(result.contains("VectorIndexDeserialize: "), result);
+        assertTrue(result.contains("VectorIndexSearcherCreate: "), result);
+        assertTrue(result.contains("VectorIndexSearch: "), result);
+        assertTrue(result.contains("VectorANNSearch: "), result);
+        assertTrue(result.contains("VectorResultProcess: "), result);
         assertTrue(result.contains("ZoneMapIndexFilter: "), result);
         assertTrue(result.contains("PredFilter: "), result);
         assertTrue(result.contains("ShortKeyFilter:"), result);

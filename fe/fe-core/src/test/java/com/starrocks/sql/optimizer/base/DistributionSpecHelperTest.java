@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for {@link DistributionSpecHelper#buildRangeDistributionSpecSkeleton}.
- * Covers the null-fallback paths (unknown group, non-range group, missing
+ * Covers the null-fallback paths (unknown group, non-range group, unstable group, missing
  * groupSchema, catalog-schema-too-short, column not in map) plus the happy path.
  */
 class DistributionSpecHelperTest {
@@ -119,6 +119,40 @@ class DistributionSpecHelperTest {
                 result = groupId;
                 colocateTableIndex.isRangeColocateGroup(groupId);
                 result = false;
+            }
+        };
+        assertNull(DistributionSpecHelper.buildRangeDistributionSpecSkeleton(
+                olapTable, mapping(col("a"))));
+    }
+
+    /**
+     * Regression: an unstable group is mid-alignment, so a scan of it must fall back to ANY
+     * rather than advertise a colocate distribution. Advertising it made ExecutionFragment
+     * build a colocated assignment, which {@code RangeColocateScanDispatch#requireAligned}
+     * then rejected — a plain single-table scan failed with "range colocate group N is in an
+     * unaligned state" for as long as the group stayed unstable.
+     */
+    @Test
+    void nullWhenGroupUnstable(@Mocked OlapTable olapTable,
+                               @Mocked GlobalStateMgr globalStateMgr,
+                               @Mocked ColocateTableIndex colocateTableIndex) {
+        ColocateTableIndex.GroupId groupId = new ColocateTableIndex.GroupId(1L, 2L);
+        new Expectations() {
+            {
+                olapTable.getId();
+                result = TABLE_ID;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getColocateTableIndex();
+                result = colocateTableIndex;
+                colocateTableIndex.isColocateTable(TABLE_ID);
+                result = true;
+                colocateTableIndex.getGroup(TABLE_ID);
+                result = groupId;
+                colocateTableIndex.isRangeColocateGroup(groupId);
+                result = true;
+                colocateTableIndex.isGroupUnstable(groupId);
+                result = true;
             }
         };
         assertNull(DistributionSpecHelper.buildRangeDistributionSpecSkeleton(

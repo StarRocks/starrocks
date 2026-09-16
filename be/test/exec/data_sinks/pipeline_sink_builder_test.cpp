@@ -61,10 +61,8 @@ protected:
         PipelineSinkTestRequest request(sink);
         pipeline::UnifiedExecPlanFragmentParams unified(request.common, request.unique);
         pipeline::OpFactories upstream{std::make_shared<pipeline::EmptySetOperatorFactory>(0, 0)};
-        return PipelineSinkBuilder::build(_context.get(), std::move(upstream), unified, _row_desc);
+        return PipelineSinkBuilder::build(_context.get(), std::move(upstream), unified);
     }
-
-    RowDescriptor _row_desc;
     std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     std::unique_ptr<pipeline::PipelineBuilderContext> _context;
 };

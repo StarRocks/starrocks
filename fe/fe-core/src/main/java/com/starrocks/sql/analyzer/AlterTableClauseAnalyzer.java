@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -67,6 +68,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -588,6 +590,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 if (idx == -1) {
                     throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
+                // Sort key columns are encoded on the BE via an order-preserving KeyCoder; reject
+                // types without one (JSON/complex/floating-point/metric/variant/TIME) so ALTER ...
+                // ORDER BY fails cleanly instead of crashing the BE short-key encoder on rewrite.
+                if (!columnDefs.get(idx).getType().canDistributedBy()) {
+                    throw new SemanticException("Sort key column[" + column + "] type not supported: "
+                            + columnDefs.get(idx).getType().toSql());
+                }
                 sortKeyIdxes.add(idx);
             }
         }
@@ -778,6 +787,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -878,6 +889,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                         tableName, null))
                                 .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -942,6 +955,27 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                             columnDef.getPos());
                 }
             });
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, ConnectContext context) {
+        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
+            throw new SemanticException("DISABLE/ENABLE DICTIONARY only supports OLAP tables");
+        }
+        if (clause.getColumns() == null || clause.getColumns().isEmpty()) {
+            throw new SemanticException("DISABLE/ENABLE DICTIONARY requires at least one column");
+        }
+        for (String colName : clause.getColumns()) {
+            Column column = table.getColumn(colName);
+            if (column == null) {
+                throw new SemanticException("Column: " + colName + " does not exist in table " + table.getName());
+            }
+            if (!column.getType().isStringType()) {
+                throw new SemanticException("Column: " + colName + " is not a string column; low-cardinality " +
+                        "dictionary only applies to string columns");
+            }
         }
         return null;
     }
@@ -1049,6 +1083,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -1123,6 +1159,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         FeNameFormat.checkColumnName(clause.getNewColName());
+        if (table != null && table.isNativeTableOrMaterializedView()) {
+            FeNameFormat.checkVirtualColumnNameNotUsed(clause.getNewColName());
+        }
         return null;
     }
 
@@ -1270,8 +1309,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     throw new SemanticException("Duplicate ORDER BY column '" + sk + "'");
                 }
                 // A range rollup's ORDER BY columns become its range sort-key (tablet-boundary) columns, so
-                // they must be sortable -- reject JSON and other non-distributable types, mirroring base-table
-                // and rollup key validation (createRangeRollupJob re-derives key flags from these columns).
+                // they must be encodable as a key on the BE -- reject JSON/complex/floating-point/metric/
+                // variant and TIME (all excluded by canDistributedBy()), mirroring base-table and rollup
+                // key validation (createRangeRollupJob re-derives key flags from these columns).
                 Column sortKeyColumn = table.getColumn(sk);
                 if (sortKeyColumn != null && !sortKeyColumn.getType().canDistributedBy()) {
                     throw new SemanticException("ORDER BY column '" + sk + "' has non-sortable type '"
@@ -1435,6 +1475,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new SemanticException("Merge tablet only support cloud native tables");
+        }
+
+        // A merge of this shape cannot attribute the rows of a segment its sources share, and fails at
+        // publish for good rather than at submission. Say so here, where the user is looking.
+        if (TabletReshardUtils.tabletMergeUnsupported((OlapTable) table)) {
+            throw new SemanticException("Merge tablet is not supported on a range-distributed primary key table "
+                    + "whose ORDER BY differs from the primary key");
         }
 
         if (clause.getPartitionNames() != null && clause.getTabletGroupList() != null) {

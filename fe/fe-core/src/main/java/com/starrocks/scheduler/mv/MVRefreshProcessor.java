@@ -80,7 +80,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -136,10 +135,32 @@ public abstract class MVRefreshProcessor {
      * @param state      the state of the task run
      * @param execPlan   the execution plan for the task run
      * @param insertStmt the insert statement for the task run
+     * @param skipReason why no plan was produced; {@code null} unless the state is SKIPPED
      */
     public record ProcessExecPlan(Constants.TaskRunState state,
                                   ExecPlan execPlan,
-                                  InsertStmt insertStmt) {
+                                  InsertStmt insertStmt,
+                                  SkipReason skipReason) {
+
+        /**
+         * Why a task run produced no exec plan. SKIPPED alone cannot be reported as "up to date": only
+         * MV_UP_TO_DATE and SCOPE_UP_TO_DATE mean the data was checked and found fresh.
+         */
+        public enum SkipReason {
+            MV_UP_TO_DATE,
+            // The partitions the user asked for are fresh; others may still be stale.
+            SCOPE_UP_TO_DATE,
+            // Another refresh job owns the pinning, so this batch's partitions are left unrefreshed.
+            STALE_PINNED_BATCH
+        }
+
+        public static ProcessExecPlan success(ExecPlan execPlan, InsertStmt insertStmt) {
+            return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, execPlan, insertStmt, null);
+        }
+
+        public static ProcessExecPlan skipped(SkipReason skipReason) {
+            return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null, skipReason);
+        }
     }
 
     public MVRefreshProcessor(Database db, MaterializedView mv,
@@ -331,6 +352,9 @@ public abstract class MVRefreshProcessor {
                 mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
         final Map<String, TvrVersionRange> pinnedMap = refreshRuntimeState.getPinnedTvrMap();
         pinnedMap.clear();
+        // Reported on the task run's extra message, and from there in the IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP
+        // column. Keyed like the other two IMV_SOURCE_* columns -- see below -- not like pinnedMap.
+        final Map<String, Long> snapshotIds = Maps.newHashMap();
 
         for (BaseTableSnapshotInfo info : snapshotBaseTables.values()) {
             final BaseTableInfo bti = info.getBaseTableInfo();
@@ -344,6 +368,11 @@ public abstract class MVRefreshProcessor {
             // (MVPCTRefreshPlanBuilder, PartitionDiffer#pinnedRangeFor). A bare table
             // name would collide across databases.
             pinnedMap.put(info.getBaseTable().getUUID(), pinned);
+            // The reported map keys on getReadableString() instead: the same call
+            // MVIVMRefreshProcessor uses for imvSourceVersionRange, so the three columns can be
+            // joined on the base table. getUUID() would not do -- it appends the iceberg table uuid,
+            // and degrades to a bare table id for an internal table.
+            snapshotIds.put(bti.getReadableString(), pinned.end().orElse(-1L));
 
             if (info instanceof PCTTableSnapshotInfo) {
                 ((PCTTableSnapshotInfo) info).setPinnedRange(pinned);
@@ -352,13 +381,7 @@ public abstract class MVRefreshProcessor {
         logger.info("setup pinned context for {} base tables, owner={}",
                 pinnedMap.size(), mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId());
 
-        // Expose snapshot ids on task run extra message for post-mortem debugging via
-        // information_schema.task_runs.EXTRA_MESSAGE.
-        if (!pinnedMap.isEmpty()) {
-            Map<String, Long> snapshotIds = new HashMap<>(pinnedMap.size());
-            for (Map.Entry<String, TvrVersionRange> e : pinnedMap.entrySet()) {
-                snapshotIds.put(e.getKey(), e.getValue().end().orElse(-1L));
-            }
+        if (!snapshotIds.isEmpty()) {
             updateTaskRunStatus(status ->
                     status.getMvTaskRunExtraMessage().setPinnedSnapshotIdMap(snapshotIds));
         }

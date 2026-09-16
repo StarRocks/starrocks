@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 5
+sidebar_position: 10
 description: "在共享数据集群上使用 Claude 和 StarRocks MCP 服务器分析复杂数据。"
 ---
 

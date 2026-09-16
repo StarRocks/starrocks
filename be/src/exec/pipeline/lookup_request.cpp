@@ -747,7 +747,7 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
     std::vector<RowLocatorTuple> locators;
 
     if (num_rows == 0) {
-        return Status::OK();
+        return locators;
     }
 
     int64_t cur_tablet = tablet_ids[0];

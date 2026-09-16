@@ -50,7 +50,7 @@ class Chunk;
 class DataStreamSender;
 class ObjectPool;
 class QueryStatistics;
-class RowDescriptor;
+class RecordDescriptor;
 class RuntimeProfile;
 class RuntimeState;
 class TPlanFragmentExecParams;
@@ -89,7 +89,8 @@ public:
     // new sink is written to *sink, and is owned by the caller.
     static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
                                    const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
-                                   int32_t sender_id, const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
+                                   int32_t sender_id, const RecordDescriptor& record_desc,
+                                   std::unique_ptr<DataSink>* sink);
 
     // Returns the runtime profile for the sink.
     virtual RuntimeProfile* profile() = 0;

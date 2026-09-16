@@ -82,6 +82,10 @@ private:
             col.set_type("INT");
             col.set_length(4);
             col.set_index_length(4);
+        } else if (type == TYPE_BIGINT) {
+            col.set_type("BIGINT");
+            col.set_length(8);
+            col.set_index_length(8);
         } else if (type == TYPE_VARCHAR) {
             col.set_type("VARCHAR");
             col.set_length(128);
@@ -102,6 +106,8 @@ private:
 public:
     TabletSchemaBuilder& create(int32_t id, bool nullable, LogicalType type, bool key = false) {
         if (type == TYPE_INT) {
+            _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
+        } else if (type == TYPE_BIGINT) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
         } else if (type == TYPE_VARCHAR) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
@@ -170,6 +176,106 @@ struct VecSchemaBuilder {
 private:
     Schema vec_schema;
 };
+
+// Writes |chunk| (already populated with all of |tablet_schema|'s columns, in order)
+// as a single-shot segment (has_key=true) under |path| on |fs|, then opens and returns
+// the resulting Segment.
+inline std::shared_ptr<Segment> write_and_open_segment(const std::shared_ptr<FileSystem>& fs, const std::string& path,
+                                                       const std::shared_ptr<TabletSchema>& tablet_schema,
+                                                       const Chunk& chunk, size_t num_rows_per_block) {
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(path));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = num_rows_per_block;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+    CHECK_OK(writer.init(true));
+    CHECK_OK(writer.append_chunk(chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{path}, 0, tablet_schema));
+    return segment;
+}
+
+// DUP table whose ORDER BY leads with a VARCHAR column while the only key column is INT. A split
+// hands the segment iterator a tablet range in key-column (INT) space, but the segment's rows are
+// ordered by the sort key, so the two are not comparable.
+inline std::shared_ptr<TabletSchema> make_varchar_leading_sortkey_schema() {
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_num_short_key_columns(1);
+    pb.set_next_column_unique_id(4);
+    auto* k1 = pb.add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("INT");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    k1->set_length(4);
+    k1->set_index_length(4);
+    k1->set_aggregation("NONE");
+    auto* s2 = pb.add_column();
+    s2->set_unique_id(2);
+    s2->set_name("s2");
+    s2->set_type("VARCHAR");
+    s2->set_is_key(false);
+    s2->set_is_nullable(false);
+    s2->set_length(16);
+    s2->set_index_length(16);
+    s2->set_aggregation("NONE");
+    auto* v3 = pb.add_column();
+    v3->set_unique_id(3);
+    v3->set_name("v3");
+    v3->set_type("INT");
+    v3->set_is_key(false);
+    v3->set_is_nullable(false);
+    v3->set_length(4);
+    v3->set_index_length(4);
+    v3->set_aggregation("NONE");
+    // ORDER BY (s2, k1): leading sort column is the VARCHAR, not the INT key column.
+    pb.add_sort_key_idxes(1);
+    pb.add_sort_key_idxes(0);
+    return std::make_shared<TabletSchema>(pb);
+}
+
+// Same shape, but a primary-key table: PRIMARY KEY(k1) ORDER BY(s2, k1). This is the combination
+// whose tablet range lives in a different space than the segment's row order.
+inline std::shared_ptr<TabletSchema> make_pk_varchar_sortkey_schema() {
+    TabletSchemaPB pb;
+    pb.set_keys_type(PRIMARY_KEYS);
+    pb.set_num_short_key_columns(1);
+    pb.set_next_column_unique_id(4);
+    auto* k1 = pb.add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("INT");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    k1->set_length(4);
+    k1->set_index_length(4);
+    k1->set_aggregation("NONE");
+    auto* s2 = pb.add_column();
+    s2->set_unique_id(2);
+    s2->set_name("s2");
+    s2->set_type("VARCHAR");
+    s2->set_is_key(false);
+    s2->set_is_nullable(false);
+    s2->set_length(16);
+    s2->set_index_length(16);
+    s2->set_aggregation("REPLACE");
+    auto* v3 = pb.add_column();
+    v3->set_unique_id(3);
+    v3->set_name("v3");
+    v3->set_type("INT");
+    v3->set_is_key(false);
+    v3->set_is_nullable(false);
+    v3->set_length(4);
+    v3->set_index_length(4);
+    v3->set_aggregation("REPLACE");
+    pb.add_sort_key_idxes(1);
+    pb.add_sort_key_idxes(0);
+    return std::make_shared<TabletSchema>(pb);
+}
 } // namespace test
 
 // This case is only triggered by dictionary inconsistencies.
@@ -369,6 +475,220 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();
+}
+
+// Regression test for an out-of-bounds read in `SegmentIterator::_switch_context`.
+//
+// Shape of the crash seen in production (4.0.12, SIGSEGV @0x0 with the PC in
+// `_switch_context`): a string column carries a global dictionary that cannot be
+// mapped onto the segment's local dictionary (the pages are not all dict-encoded),
+// so `_has_force_dict_encode` is set and the final-chunk schema is rebuilt from
+// `_encoded_schema`. That rebuild walks every field of `_encoded_schema` while
+// indexing `output_schema()` with a cursor that is never bounds-checked. As soon as
+// the LAST output field has been matched, every remaining encoded field reads
+// `output_schema().field(num_output_fields)` -- one past the end of the output
+// schema's field vector. `Schema::field()` only DCHECKs the index, so a RELEASE
+// binary dereferences whatever the read returns; a zeroed slot yields a null
+// FieldPtr and `->id()` faults at address 0.
+//
+// The trailing column here (`c2`) is predicate-only, i.e. exactly what
+// filter_unused_columns prunes from the output on a query like
+// `SELECT c0, c1 FROM t WHERE c2 >= '...'`.
+TEST_F(SegmentIteratorTest, TestForceGlobalDictEncodeWithTrailingUnusedColumn) {
+    // Two values big enough to overflow the dict page builder, so the column ends up
+    // with no usable local dictionary while a global dictionary still exists for it.
+    const int slice_num = 2;
+    const int overflow_sz = 1024 * 1024 + 10; // 1M
+    std::vector<std::string> values;
+    for (int i = 0; i < slice_num; ++i) {
+        std::string bigstr;
+        bigstr.reserve(overflow_sz);
+        for (int j = 0; j < overflow_sz; ++j) {
+            bigstr.push_back(j);
+        }
+        bigstr.push_back(i);
+        values.emplace_back(std::move(bigstr));
+    }
+    std::sort(values.begin(), values.end());
+
+    std::vector<Slice> data_strs;
+    for (const auto& data : values) {
+        data_strs.emplace_back(data);
+    }
+
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/force_encode_trailing_unused_column";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_INT, true)
+                                                          .create(2, false, TYPE_VARCHAR)
+                                                          .create(3, false, TYPE_VARCHAR)
+                                                          .set_length(overflow_sz + 10)
+                                                          .build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 1024;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = slice_num;
+
+    std::vector<std::string> small_values{"aaa", "bbb"};
+    auto i32_provider = [](int32_t i) { return i; };
+    auto small_slice_provider = [&small_values](int32_t i) { return Slice(small_values[i % small_values.size()]); };
+    auto big_slice_provider = [&data_strs](int32_t i) { return data_strs[i % data_strs.size()]; };
+
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, i32_provider));
+    ASSERT_OK(segment_data_builder.append(1, small_slice_provider));
+    ASSERT_OK(segment_data_builder.append(2, big_slice_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+
+    // The trailing column must have no local dictionary, otherwise the global dict is
+    // applied directly and `_has_force_dict_encode` stays false.
+    ColumnIteratorOptions iter_opts;
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
+    iter_opts.stats = &stats;
+    iter_opts.use_page_cache = false;
+    iter_opts.read_file = read_file.get();
+    iter_opts.check_dict_encoding = true;
+    iter_opts.reader_type = READER_QUERY;
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(tablet_schema->column(2), nullptr));
+    ASSERT_OK(scalar_iter->init(iter_opts));
+    ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_VARCHAR).add(2, "c2", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < slice_num; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[2] = &g_dict;
+    seg_opts.global_dictmaps = &dict_map;
+
+    // Every scanned column carries a pushed-down predicate. That keeps `new_segment_iterator()` on
+    // the branch that hands the schema to the iterator AS IS -- with fewer predicate columns than
+    // fields it would instead `reorder_schema()` the predicate columns to the front and wrap the
+    // iterator in a projection, which moves the unused column away from the tail and hides the bug.
+    std::unique_ptr<ColumnPredicate> pred_c0(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "0"));
+    std::unique_ptr<ColumnPredicate> pred_c1(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, "a"));
+    std::unique_ptr<ColumnPredicate> pred_c2(
+            new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 2, values[0].c_str()));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{pred_c0.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c1.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c2.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
+    // c2 is used by the pushed-down predicate only -- pruned from the output, and it is
+    // the last field of the schema.
+    std::unordered_set<uint32_t> unused_output_column_ids{2};
+    ASSERT_OK(chunk_iter->init_output_schema(unused_output_column_ids));
+    ASSERT_EQ(2, chunk_iter->output_schema().num_fields());
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+
+    ASSERT_EQ(2, res_chunk->num_columns());
+    ASSERT_EQ(num_rows, res_chunk->num_rows());
+    const auto& c0 = res_chunk->get_column_by_index(0);
+    const auto& c1 = res_chunk->get_column_by_index(1);
+    for (size_t i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(static_cast<int32_t>(i), c0->get(i).get_int32());
+        EXPECT_EQ(small_values[i % small_values.size()], c1->get(i).get_slice().to_string());
+    }
+    res_chunk->reset();
+}
+
+// The chunk source keeps delete-predicate columns out of the unused set; bypassing it must fail the scan
+// loudly rather than evaluate the delete filter against a column that is not in the outgoing chunk.
+TEST_F(SegmentIteratorTest, TestDeletePredicateColumnPrunedFromOutputFails) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/delete_predicate_on_pruned_output_column";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).create(3, false, TYPE_VARCHAR).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 32;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = 64;
+    const size_t num_rows = 40;
+    const std::string kKeep = "keep";
+    const std::string kDeleted = "zdel";
+
+    auto c0_provider = [](int32_t i) { return i; };
+    auto c1_provider = [](int32_t i) { return i * 10; };
+    // Odd rows carry the value the delete predicate matches, so exactly half the rows must disappear.
+    auto c2_provider = [&](int32_t i) { return Slice(i % 2 == 0 ? kKeep : kDeleted); };
+
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, c0_provider));
+    ASSERT_OK(data_builder.append(1, c1_provider));
+    ASSERT_OK(data_builder.append(2, c2_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+
+    // Every scanned column carries a predicate, so the schema reaches the iterator as is: with fewer
+    // predicate columns `new_segment_iterator()` reorders it and wraps a projection that hides the pruning.
+    std::unique_ptr<ColumnPredicate> pred_c0(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "0"));
+    std::unique_ptr<ColumnPredicate> pred_c1(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+    std::unique_ptr<ColumnPredicate> pred_c2(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 2, kKeep.c_str()));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{pred_c0.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c1.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c2.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    // DELETE FROM t WHERE c2 = 'zdel'
+    auto* del_pred = pool.add(new ConjunctivePredicates());
+    del_pred->add(pool.add(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 2, kDeleted.c_str())));
+    seg_opts.delete_predicates.add(*del_pred);
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    // c2 is a predicate-only column, so filter_unused_columns would prune it from the output on its own.
+    std::unordered_set<uint32_t> unused_output_column_ids{2};
+    ASSERT_OK(chunk_iter->init_output_schema(unused_output_column_ids));
+    ASSERT_EQ(2, chunk_iter->output_schema().num_fields());
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto st = chunk_iter->get_next(res_chunk.get());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error()) << st.to_string();
+    ASSERT_NE(std::string::npos, st.to_string().find("missing from the output schema")) << st.to_string();
 }
 
 // Verify predicate late materialization keeps non-predicate columns correct.
@@ -1678,6 +1998,112 @@ TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
     // One resolved rowid range per input SeekRange.
     ASSIGN_OR_ABORT(auto rowid_ranges, segment_seek_ranges_to_rowid_ranges(segment, seek_ranges, io_opts));
     ASSERT_EQ(1u, rowid_ranges.size());
+}
+
+// A primary-key tablet's range is expressed over its key columns. When the sort key is separate,
+// the segment is not ordered that way, so the range cannot be turned into a rowid interval --
+// feeding it to the short-key binary search compares an INT datum against a VARCHAR sort column and
+// throws bad_variant_access out of the scan, which on the publish path aborts the BE. The iterator
+// must skip the narrowing and return every row instead.
+TEST_F(SegmentIteratorTest, tablet_range_skipped_when_pk_sort_key_is_separate) {
+    using namespace starrocks::test;
+    constexpr int64_t kNumRows = 100;
+    constexpr uint32_t kRowsPerBlock = 10;
+
+    auto schema = make_pk_varchar_sortkey_schema();
+    ASSERT_TRUE(schema->has_separate_sort_key());
+
+    auto write_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, kNumRows);
+    auto cols = chunk->columns();
+    for (int64_t i = 0; i < kNumRows; ++i) {
+        // Rows are appended in sort-key order (s2 ascending); k1 runs the other way, so no rowid
+        // interval matches a k1 range.
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(kNumRows - i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(fmt::format("s{}", 1000000 + i))));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+    }
+    auto segment =
+            write_and_open_segment(_fs, kSegmentDir + "/separate_sortkey_range.dat", schema, *chunk, kRowsPerBlock);
+
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    Schema key_schema(std::vector<FieldPtr>{read_schema.field(0)});
+
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    OlapReaderStatistics stats;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    // The range is over k1, the key column -- the space a split's tablet range lives in.
+    seg_opts.tablet_range = SeekRange(SeekTuple(key_schema, {Datum(1)}), SeekTuple(key_schema, {Datum(5)}));
+    seg_opts.tablet_range->set_inclusive_lower(true);
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, seg_opts));
+    ASSERT_OK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+
+    int64_t total = 0;
+    while (true) {
+        auto out = ChunkFactory::new_chunk(iter->schema(), kRowsPerBlock);
+        auto st = iter->get_next(out.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        total += out->num_rows();
+    }
+    // Not narrowed: the whole segment is scanned, and nothing threw.
+    ASSERT_EQ(kNumRows, total);
+}
+
+// The counterpart: a duplicate-key tablet encodes its range over the sort key itself, so the
+// narrowing stays well-defined there and must keep happening. Range distribution allows a DUP table
+// any ORDER BY, so this shape is not hypothetical.
+TEST_F(SegmentIteratorTest, tablet_range_still_narrows_without_primary_key) {
+    using namespace starrocks::test;
+    constexpr int64_t kNumRows = 100;
+    constexpr uint32_t kRowsPerBlock = 10;
+
+    auto schema = make_varchar_leading_sortkey_schema();
+    ASSERT_TRUE(schema->has_separate_sort_key());
+    ASSERT_NE(KeysType::PRIMARY_KEYS, schema->keys_type());
+
+    auto write_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, kNumRows);
+    auto cols = chunk->columns();
+    for (int64_t i = 0; i < kNumRows; ++i) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(kNumRows - i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(fmt::format("s{}", 1000000 + i))));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+    }
+    auto segment = write_and_open_segment(_fs, kSegmentDir + "/dup_sortkey_range.dat", schema, *chunk, kRowsPerBlock);
+
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    // The range is over s2, the leading sort column -- the space a non-PK tablet range lives in.
+    Schema sort_key_schema;
+    sort_key_schema.append_sort_key_idx(1);
+    sort_key_schema.append(read_schema.field(1));
+
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    OlapReaderStatistics stats;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    const std::string lower = "s1000000";
+    const std::string upper = fmt::format("s{}", 1000000 + kNumRows / 2);
+    seg_opts.tablet_range = SeekRange(SeekTuple(sort_key_schema, {Datum(Slice(lower))}),
+                                      SeekTuple(sort_key_schema, {Datum(Slice(upper))}));
+    seg_opts.tablet_range->set_inclusive_lower(true);
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, seg_opts));
+    ASSERT_OK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+
+    int64_t total = 0;
+    while (true) {
+        auto out = ChunkFactory::new_chunk(iter->schema(), kRowsPerBlock);
+        auto st = iter->get_next(out.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        total += out->num_rows();
+    }
+    ASSERT_LT(total, kNumRows);
 }
 
 } // namespace starrocks

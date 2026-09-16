@@ -52,21 +52,16 @@
 
 namespace starrocks {
 
-MemoryScratchSink::MemoryScratchSink(const RowDescriptor& row_desc, const std::vector<TExpr>& t_output_expr,
+MemoryScratchSink::MemoryScratchSink(RecordDescriptor record_desc, const std::vector<TExpr>& t_output_expr,
                                      const TMemoryScratchSink& sink)
-        : _row_desc(row_desc), _t_output_expr(t_output_expr) {}
+        : _record_desc(std::move(record_desc)), _t_output_expr(t_output_expr) {}
 
 MemoryScratchSink::~MemoryScratchSink() = default;
 
 void MemoryScratchSink::_prepare_id_to_col_name_map() {
-    for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
-        auto& slots = tuple_desc->slots();
-        int64_t tuple_id = tuple_desc->id();
-        for (auto slot : slots) {
-            int64_t slot_id = slot->id();
-            int64_t id = tuple_id << 32 | slot_id;
-            _id_to_col_name.emplace(id, slot->col_name());
-        }
+    for (const auto* slot : _record_desc.slots()) {
+        int64_t id = static_cast<int64_t>(slot->parent()) << 32 | slot->id();
+        _id_to_col_name.emplace(id, slot->col_name());
     }
 }
 
@@ -80,7 +75,7 @@ Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     // Prepare id_to_col_name map
     _prepare_id_to_col_name_map();
     // generate the arrow schema
-    RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
+    RETURN_IF_ERROR(convert_to_arrow_schema(_id_to_col_name, &_arrow_schema, _output_expr_ctxs));
     return Status::OK();
 }
 
@@ -129,10 +124,6 @@ Status MemoryScratchSink::close(RuntimeState* state, const Status& exec_status) 
     ExprExecutor::close(_output_expr_ctxs, state);
     _closed = true;
     return Status::OK();
-}
-
-const RowDescriptor MemoryScratchSink::get_row_desc() {
-    return _row_desc;
 }
 
 } // namespace starrocks

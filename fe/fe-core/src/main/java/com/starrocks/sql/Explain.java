@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.cost.feature.FeatureExtractor;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -44,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
@@ -191,6 +193,18 @@ public class Explain {
         }
 
         @Override
+        public OperatorStr visitPhysicalAIProject(OptExpression optExpression,
+                                                  OperatorPrinter.ExplainContext context) {
+            PhysicalAIProjectOperator aiProject = optExpression.getOp().cast();
+            String expressions = aiProject.getColumnRefMap().entrySet().stream()
+                    .map(entry -> EXPR_PRINTER.print(entry.getKey()) + " := " + EXPR_PRINTER.print(entry.getValue()))
+                    .collect(Collectors.joining(", "));
+            StringBuilder sb = new StringBuilder("- AI PROJECT [").append(expressions).append("]\n");
+            buildCommonProperty(sb, aiProject, context.step);
+            return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
@@ -261,6 +275,22 @@ public class Explain {
             PhysicalHudiScanOperator scan = (PhysicalHudiScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- Hudi-SCAN [")
+                    .append(scan.getTable().getCatalogTableName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalFlussScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            PhysicalFlussScanOperator scan = (PhysicalFlussScanOperator) optExpression.getOp();
+
+            StringBuilder sb = new StringBuilder("- Fluss-SCAN [")
                     .append(scan.getTable().getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,

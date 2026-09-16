@@ -1,4 +1,5 @@
 ---
+sidebar_position: 90
 displayed_sidebar: docs
 description: "StarRocks は JDBC 互換のクライアント・IDE・アプリケーションから直接接続可能なネイティブ JDBC ドライバーを提供します。"
 ---

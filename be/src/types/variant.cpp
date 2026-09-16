@@ -268,7 +268,7 @@ StatusOr<VariantObjectInfo> VariantValue::get_object_info() const {
     }
 
     // Check for overflow in data offset calculation
-    uint64_t offset_list_size = static_cast<uint64_t>(num_elements + 1) * static_cast<uint64_t>(field_offset_size);
+    uint64_t offset_list_size = (static_cast<uint64_t>(num_elements) + 1) * field_offset_size;
     if (UNLIKELY(offset_list_size > UINT32_MAX || object_info.offset_start_offset > UINT32_MAX - offset_list_size)) {
         return Status::VariantError("Object offset list overflow: num_elements=" + std::to_string(num_elements) +
                                     ", field_offset_size=" + std::to_string(field_offset_size));
@@ -325,7 +325,7 @@ StatusOr<VariantArrayInfo> VariantValue::get_array_info() const {
     array_info.offset_start_offset = VariantValue::kHeaderSizeBytes + num_elements_size;
 
     // Check for potential overflow in offset calculation
-    uint64_t offset_list_size = static_cast<uint64_t>(num_elements + 1) * static_cast<uint64_t>(field_offset_size);
+    uint64_t offset_list_size = (static_cast<uint64_t>(num_elements) + 1) * field_offset_size;
     if (UNLIKELY(offset_list_size > UINT32_MAX || array_info.offset_start_offset > UINT32_MAX - offset_list_size)) {
         return Status::VariantError("Array offset list overflow: num_elements=" + std::to_string(num_elements) +
                                     ", field_offset_size=" + std::to_string(field_offset_size));
@@ -549,6 +549,83 @@ StatusOr<uint32_t> VariantValue::num_elements() const {
     }
 }
 
+StatusOr<size_t> VariantValue::_encoded_size() const {
+    size_t size = kHeaderSizeBytes;
+    switch (basic_type()) {
+    case BasicType::SHORT_STRING:
+        size += value_header();
+        break;
+    case BasicType::OBJECT: {
+        ASSIGN_OR_RETURN(const auto info, get_object_info());
+        size = static_cast<size_t>(info.data_start_offset) +
+               inline_read_little_endian_unsigned32(
+                       _value.data() + info.offset_start_offset + info.num_elements * info.offset_size,
+                       info.offset_size);
+        break;
+    }
+    case BasicType::ARRAY: {
+        ASSIGN_OR_RETURN(const auto info, get_array_info());
+        size = static_cast<size_t>(info.data_start_offset) +
+               inline_read_little_endian_unsigned32(
+                       _value.data() + info.offset_start_offset + info.num_elements * info.offset_size,
+                       info.offset_size);
+        break;
+    }
+    case BasicType::PRIMITIVE:
+        switch (type()) {
+        case VariantType::NULL_TYPE:
+        case VariantType::BOOLEAN_TRUE:
+        case VariantType::BOOLEAN_FALSE:
+            break;
+        case VariantType::INT8:
+            size += sizeof(int8_t);
+            break;
+        case VariantType::INT16:
+            size += sizeof(int16_t);
+            break;
+        case VariantType::INT32:
+        case VariantType::DATE:
+        case VariantType::FLOAT:
+            size += sizeof(int32_t);
+            break;
+        case VariantType::INT64:
+        case VariantType::DOUBLE:
+        case VariantType::TIMESTAMP_TZ:
+        case VariantType::TIMESTAMP_NTZ:
+        case VariantType::TIME_NTZ:
+        case VariantType::TIMESTAMP_TZ_NANOS:
+        case VariantType::TIMESTAMP_NTZ_NANOS:
+            size += sizeof(int64_t);
+            break;
+        case VariantType::DECIMAL4:
+            size += kDecimalScaleSizeBytes + sizeof(int32_t);
+            break;
+        case VariantType::DECIMAL8:
+            size += kDecimalScaleSizeBytes + sizeof(int64_t);
+            break;
+        case VariantType::DECIMAL16:
+            size += kDecimalScaleSizeBytes + sizeof(int128_t);
+            break;
+        case VariantType::UUID:
+            size += 16;
+            break;
+        case VariantType::BINARY:
+        case VariantType::STRING: {
+            ASSIGN_OR_RETURN(auto payload, get_primitive_string_or_binary(type()));
+            size += sizeof(uint32_t) + payload.size();
+            break;
+        }
+        default:
+            return Status::VariantError("Unknown variant primitive type");
+        }
+        break;
+    }
+    if (UNLIKELY(size > _value.size())) {
+        return Status::VariantError("Truncated variant value");
+    }
+    return size;
+}
+
 StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& metadata, std::string_view key) const {
     ASSIGN_OR_RETURN(const VariantObjectInfo& info, get_object_info());
     // hint: used to speed up the lookup for non-unique dictionary
@@ -612,13 +689,19 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
 
     const uint32_t offset = inline_read_little_endian_unsigned32(
             _value.data() + info.offset_start_offset + field_index * info.offset_size, info.offset_size);
-    if (info.data_start_offset + offset >= _value.size()) {
+    const uint32_t final_offset = inline_read_little_endian_unsigned32(
+            _value.data() + info.offset_start_offset + info.num_elements * info.offset_size, info.offset_size);
+    if (offset >= final_offset) {
         return Status::VariantError("Offset is out of bounds: " + std::to_string(offset) +
                                     ", data_start_offset: " + std::to_string(info.data_start_offset) +
                                     ", value_size: " + std::to_string(_value.size()));
     }
 
-    return VariantValue(_value.substr(info.data_start_offset + offset));
+    // Object offsets follow field-name order, not necessarily physical value order.
+    // Read the value's own encoded size instead of subtracting the next field's offset.
+    VariantValue field(_value.substr(info.data_start_offset + offset, final_offset - offset));
+    ASSIGN_OR_RETURN(size_t size, field._encoded_size());
+    return VariantValue(field.raw().substr(0, size));
 }
 
 StatusOr<VariantValue> VariantValue::get_element_at_index(const VariantMetadata& metadata, uint32_t index) const {
@@ -636,13 +719,15 @@ StatusOr<VariantValue> VariantValue::get_element_at_index(const VariantMetadata&
 
     uint32_t offset = inline_read_little_endian_unsigned32(
             _value.data() + info.offset_start_offset + index * info.offset_size, info.offset_size);
-    if (info.data_start_offset + offset >= _value.size()) {
+    const uint32_t end_offset = inline_read_little_endian_unsigned32(
+            _value.data() + info.offset_start_offset + (index + 1) * info.offset_size, info.offset_size);
+    if (offset >= end_offset || end_offset > _value.size() - info.data_start_offset) {
         return Status::VariantError("Offset is out of bounds: " + std::to_string(offset) +
                                     ", data_start_offset: " + std::to_string(info.data_start_offset) +
                                     ", value_size: " + std::to_string(_value.size()));
     }
 
-    const std::string_view element_value = _value.substr(info.data_start_offset + offset);
+    const std::string_view element_value = _value.substr(info.data_start_offset + offset, end_offset - offset);
     return VariantValue{element_value};
 }
 

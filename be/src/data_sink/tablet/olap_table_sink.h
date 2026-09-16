@@ -170,6 +170,8 @@ private:
     int64_t _sink_id = 0;
     std::string _txn_trace_parent;
     Span _span;
+    bool _close_wait_done = false;
+    Status _close_wait_status;
     int _num_repicas = -1;
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;

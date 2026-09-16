@@ -55,7 +55,12 @@ public:
                                     const std::shared_ptr<FileSystem>& fs) {
         return Status::OK();
     }
-    virtual StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() { return Status::OK(); }
+    // Only meaningful for writers that actually produce an SST; callers must gate the call on
+    // has_file_info(), which is false here, so the default is unreachable. Never return Status::OK()
+    // from a StatusOr: it is rewritten into an opaque InternalError instead of carrying a value.
+    virtual StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() {
+        return Status::NotSupported("flush_sst_writer() called on a writer that produces no SST file");
+    }
     virtual bool has_file_info() const { return false; }
     // Rowids (within the just-flushed segment) that lost primary-key dedup and must be masked by a
     // delete vector at publish. Non-empty only for the unsort writer; the caller moves them out once

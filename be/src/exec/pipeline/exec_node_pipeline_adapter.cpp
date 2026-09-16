@@ -26,7 +26,7 @@ void init_runtime_filter_for_operator(
         const ExecNode& exec_node, OperatorFactory* op, PipelineBuilderContext* context,
         const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& rc_rf_probe_collector) {
     op->init_runtime_filter(context->fragment_context()->runtime_filter_hub(), exec_node.get_tuple_ids(),
-                            exec_node.local_rf_waiting_set(), exec_node.row_desc(), rc_rf_probe_collector,
+                            exec_node.local_rf_waiting_set(), exec_node.record_desc(), rc_rf_probe_collector,
                             exec_node.filter_null_value_columns(), exec_node.tuple_slot_mappings());
 }
 

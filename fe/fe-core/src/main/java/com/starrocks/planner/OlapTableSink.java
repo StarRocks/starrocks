@@ -118,7 +118,6 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -215,34 +214,24 @@ public class OlapTableSink extends DataSink {
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState explicitTxnState = globalTransactionMgr.reserveExplicitTransactionLayout(
+                txnId, dbId, dstTable.getId());
         TransactionState txnState = globalTransactionMgr.getTransactionState(dbId, txnId);
-        if (txnState == null) {
-            // Multi-statement stream load plans its sub-task sinks during the load, before the
-            // explicit transaction is upserted into the DatabaseTransactionMgr at commit time, so
-            // getTransactionState misses. Fall back to the explicit transaction registry so the sink
-            // observes the transaction's combined-txn-log decision; otherwise write_txn_log stays at
-            // the per-tablet default while publish expects combined logs, wedging publish.
-            //
-            // Restricted to MULTI_STATEMENT_STREAMING on purpose: INSERT_STREAMING (BEGIN ... COMMIT)
-            // emits per-load-id txn logs that publish reads via the load_ids branch (which takes
-            // precedence over combined_txn_log), so its sink must keep the default per-load-id mode.
-            // Honoring the combined flag here would make BE skip those per-load-id logs and lose data.
-            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
-            if (explicitTxnState != null && explicitTxnState.getTransactionState() != null
-                    && explicitTxnState.getTransactionState().getSourceType()
-                            == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
-                txnState = explicitTxnState.getTransactionState();
-            }
+        if (txnState == null && explicitTxnState != null
+                && explicitTxnState.getSourceType() == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
+            txnState = explicitTxnState;
         }
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
-            tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+            if (explicitTxnState == null
+                    || explicitTxnState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+                tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+            }
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
-        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView() ||
-                dstTable.isOlapExternalTable() && ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
+        tSink.setIs_lake_table(writesToCloudNativeTable());
         tSink.setKeys_type(ExprToThrift.keysTypeToThrift(dstTable.getKeysType()));
         tSink.setWrite_quorum_type(writeQuorum);
         // If table has Gin index, do not allow replicated storage
@@ -387,23 +376,27 @@ public class OlapTableSink extends DataSink {
             return null;
         }
 
-        // normal transaction state
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        TransactionState txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
-
+        TransactionState txnState = globalTransactionMgr.reserveExplicitTransactionLayout(
+                txnId, tSink.getDb_id(), tSink.getTable_id());
         if (txnState == null) {
-            // explicit transaction state
-            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
-            if (explicitTxnState != null) {
-                txnState = explicitTxnState.getTransactionState();
-            }
-
-            if (txnState == null) {
-                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
-            }
+            txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
+        }
+        if (txnState == null) {
+            throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
         }
 
         return txnState;
+    }
+
+    // True when the load lands in object storage -- either the destination is itself a
+    // cloud-native table, or it is an ExternalOlapTable whose source table is one. This is the
+    // condition `is_lake_table` is derived from; anything that depends on "the BE will treat this
+    // as a lake write" must use the same predicate, or the two views drift apart.
+    private boolean writesToCloudNativeTable() {
+        return dstTable.isCloudNativeTableOrMaterializedView() ||
+                (dstTable.isOlapExternalTable() &&
+                        ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
     }
 
     // must called after tupleDescriptor is computed
@@ -424,11 +417,20 @@ public class OlapTableSink extends DataSink {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
         try {
+            // In shared-data mode a tablet has exactly one writer and exactly one copy in object
+            // storage, so `replication_num` carries no write redundancy there -- RunMode.SharedData
+            // already defaults it to 1. A cloud-native table created with an explicit
+            // replication_num > 1 (typically carried over from a shared-nothing DDL) would
+            // otherwise raise the sink's write-quorum threshold, letting a failed node channel be
+            // tolerated even though the tablets it owned have no data anywhere. Report a single
+            // replica for cloud-native tables so any node channel failure aborts the load.
             int numReplicas = 1;
-            Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
-            if (optionalPartition.isPresent()) {
-                long partitionId = optionalPartition.get().getId();
-                numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+            if (!writesToCloudNativeTable()) {
+                Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
+                if (optionalPartition.isPresent()) {
+                    long partitionId = optionalPartition.get().getId();
+                    numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+                }
             }
             if (enableAutomaticPartition && enableDynamicOverwrite) {
                 tSink.setDynamic_overwrite(true);
@@ -444,6 +446,18 @@ public class OlapTableSink extends DataSink {
             tSink.setPartition(partitionParam);
             tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
+            // A column-mode partial update writes the new values into a DCG beside the segment it
+            // patches. A split's UNSHARE compaction rewrites every segment wholesale and does not carry
+            // those across, so the update would be silently lost the first time such a table is split.
+            // Row mode rewrites whole rows and is unaffected. hasSeparateSortKey carries the range and
+            // primary-key tests itself, so a HASH-distributed primary-key table with a separate ORDER BY
+            // -- long supported -- stays out of this.
+            if ((this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPDATE_MODE
+                    || this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPSERT_MODE)
+                    && MetaUtils.hasSeparateSortKey(dstTable, dstTable.getBaseIndexMetaId())) {
+                throw new StarRocksException("Column-mode partial update is not supported on a range-distributed "
+                        + "primary key table whose ORDER BY key differs from the primary key");
+            }
             tSink.setPartial_update_mode(this.partialUpdateMode);
             tSink.setAutomatic_bucket_size(automaticBucketSize);
             if (canUseColocateMVIndex(dstTable)) {
@@ -733,6 +747,16 @@ public class OlapTableSink extends DataSink {
         return filtered;
     }
 
+    private static List<MaterializedIndex> selectWriteIndexes(
+            OlapTable table, PhysicalPartition physicalPartition,
+            @Nullable TransactionState txnState, @Nullable Long targetWriteIndexId)
+            throws StarRocksException {
+        List<MaterializedIndex> candidates = txnState == null
+                ? physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)
+                : txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition);
+        return filterTargetWriteIndexes(candidates, physicalPartition, targetWriteIndexId);
+    }
+
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
@@ -779,9 +803,8 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                                physicalPartition, targetWriteIndexId);
+                        List<MaterializedIndex> indexes = selectWriteIndexes(
+                                table, physicalPartition, txnState, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -862,9 +885,8 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                                physicalPartition, targetWriteIndexId);
+                        List<MaterializedIndex> indexes = selectWriteIndexes(
+                                table, physicalPartition, txnState, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -907,9 +929,8 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
-                    List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                            physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                            physicalPartition, targetWriteIndexId);
+                    List<MaterializedIndex> indexes = selectWriteIndexes(
+                            table, physicalPartition, txnState, targetWriteIndexId);
                     setMaterializedIndexes(tPartition, indexes);
                     partitionParam.addToPartitions(tPartition);
                     if (txnState != null) {
@@ -1078,9 +1099,8 @@ public class OlapTableSink extends DataSink {
             List<Long> allTabletIds = new ArrayList<>();
             for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
-                List<MaterializedIndex> indexes = (txnState != null)
-                        ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                        : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                List<MaterializedIndex> indexes = selectWriteIndexes(
+                        table, physicalPartition, txnState, null);
                 for (MaterializedIndex index : indexes) {
                     for (Tablet tablet : index.getTablets()) {
                         allTabletIds.add(tablet.getId());
@@ -1103,9 +1123,8 @@ public class OlapTableSink extends DataSink {
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
             LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
-            List<MaterializedIndex> indexes = (txnState != null)
-                    ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                    : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+            List<MaterializedIndex> indexes = selectWriteIndexes(
+                    table, physicalPartition, txnState, null);
             for (MaterializedIndex index : indexes) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
@@ -1229,18 +1248,34 @@ public class OlapTableSink extends DataSink {
         }
 
         int lowUsageIndex = -1;
+        // Only used when every healthy candidate is in DECOMMISSION state.
+        int decommissionIndex = -1;
         for (int i = 0; i < replicas.size(); i++) {
             Replica replica = replicas.get(i);
             boolean isHealthy = !replica.getLastWriteFail()
                     && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
-            
+
             // The isAlive() flag indicates node availability during shutdown sequences.
             // For single-replica configurations, we bypass node status checks to maintain
             // loading operation continuity despite shutdown transitions.
             if (replicas.size() > 1) {
                 isHealthy = isHealthy && infoService.getBackend(replica.getBackendId()).isAlive();
             }
-            
+
+            // A replica in DECOMMISSION state is scheduled for deletion, so it is the one most
+            // likely to disappear while the load is still running. It has to stay a write target
+            // to make up the write quorum, but it should not become the primary: when its tablet
+            // is dropped mid-load, LocalTabletsChannel tolerates the resulting "Fail to get
+            // tablet" error only for a Secondary replica, while for a Primary one it aborts the
+            // whole tablet_writer_open and fails the entire load. Keeping it as the last resort
+            // degrades a mid-load deletion to a per-replica failure that the write quorum absorbs.
+            if (replica.getState() == Replica.ReplicaState.DECOMMISSION) {
+                if (decommissionIndex == -1 && isHealthy) {
+                    decommissionIndex = i;
+                }
+                continue;
+            }
+
             if (lowUsageIndex == -1 && isHealthy) {
                 lowUsageIndex = i;
             }
@@ -1251,7 +1286,7 @@ public class OlapTableSink extends DataSink {
                 lowUsageIndex = i;
             }
         }
-        return lowUsageIndex;
+        return lowUsageIndex != -1 ? lowUsageIndex : decommissionIndex;
     }
 
     private static boolean canUseColocateMVIndex(OlapTable table) {

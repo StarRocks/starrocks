@@ -130,8 +130,8 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
             /*output_columns*/ std::vector<int32_t>(), bucket_properies);
     _exchange_sink_factory->set_runtime_state(_runtime_state.get());
 
-    RowDescriptor input_row_desc;
-    _recvr = _exec_env->stream_mgr()->create_recvr(_runtime_state.get(), input_row_desc, _fragment_id, 0, 3,
+    RecordDescriptor input_record_desc;
+    _recvr = _exec_env->stream_mgr()->create_recvr(_runtime_state.get(), input_record_desc, _fragment_id, 0, 3,
                                                    config::exchg_node_buffer_size_bytes, _dest_node_id,
                                                    std::make_shared<QueryStatisticsRecvr>(),
                                                    /*is_pipeline*/ true, 2, /*keep_order*/ false);

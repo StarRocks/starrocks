@@ -295,7 +295,7 @@ StatusOr<SpillTestContext*> no_partition_context(ObjectPool* pool, RuntimeState*
     //
     if (!order_bys.empty()) {
         RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
-        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
+        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state));
         RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
     }
 
@@ -1152,6 +1152,219 @@ TEST_F(SpillTest, aligned_buffer) {
     ASSERT_TRUE(is_aligned(buffer.data(), 4096));
 }
 
+// Rejects exactly the O_DIRECT opens and forwards everything else, so the container's
+// direct-IO-unsupported fallback can be driven on any platform. tmpfs used to serve this purpose
+// (it had no direct_IO), but modern kernels accept O_DIRECT on it, so the refusal has to be
+// injected rather than found.
+class RefuseDirectWriteFileSystem : public FileSystem {
+public:
+    explicit RefuseDirectWriteFileSystem(std::shared_ptr<FileSystem> delegate) : _fs(std::move(delegate)) {}
+
+    size_t direct_open_attempts() const { return _direct_open_attempts; }
+
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const std::string& fname) override {
+        if (opts.direct_write) {
+            ++_direct_open_attempts;
+            return Status::InvalidArgument("injected: filesystem does not support direct IO");
+        }
+        return _fs->new_writable_file(opts, fname);
+    }
+
+    Type type() const override { return _fs->type(); }
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& fname) override {
+        return _fs->new_sequential_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& fname) override {
+        return _fs->new_random_access_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& fname) override {
+        return _fs->new_writable_file(fname);
+    }
+    Status path_exists(const std::string& fname) override { return _fs->path_exists(fname); }
+    Status get_children(const std::string& dir, std::vector<std::string>* result) override {
+        return _fs->get_children(dir, result);
+    }
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
+        return _fs->iterate_dir(dir, cb);
+    }
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        return _fs->iterate_dir2(dir, cb);
+    }
+    Status delete_file(const std::string& fname) override { return _fs->delete_file(fname); }
+    Status create_dir(const std::string& dirname) override { return _fs->create_dir(dirname); }
+    Status create_dir_if_missing(const std::string& dirname, bool* created) override {
+        return _fs->create_dir_if_missing(dirname, created);
+    }
+    Status create_dir_recursive(const std::string& dirname) override { return _fs->create_dir_recursive(dirname); }
+    Status delete_dir(const std::string& dirname) override { return _fs->delete_dir(dirname); }
+    Status delete_dir_recursive(const std::string& dirname) override { return _fs->delete_dir_recursive(dirname); }
+    Status sync_dir(const std::string& dirname) override { return _fs->sync_dir(dirname); }
+    StatusOr<bool> is_directory(const std::string& path) override { return _fs->is_directory(path); }
+    Status canonicalize(const std::string& path, std::string* result) override {
+        return _fs->canonicalize(path, result);
+    }
+    StatusOr<uint64_t> get_file_size(const std::string& fname) override { return _fs->get_file_size(fname); }
+    StatusOr<uint64_t> get_file_modified_time(const std::string& fname) override {
+        return _fs->get_file_modified_time(fname);
+    }
+    Status rename_file(const std::string& src, const std::string& target) override {
+        return _fs->rename_file(src, target);
+    }
+    Status link_file(const std::string& old_path, const std::string& new_path) override {
+        return _fs->link_file(old_path, new_path);
+    }
+
+private:
+    std::shared_ptr<FileSystem> _fs;
+    size_t _direct_open_attempts = 0;
+};
+
+// Records every AcquireBlockOptions the spill path asks for, then delegates so the write still
+// happens end to end (including the container's real open, so an O_DIRECT-hostile filesystem
+// exercises the buffered fallback rather than failing the test).
+class OptionsRecordingBlockManager : public spill::BlockManager {
+public:
+    explicit OptionsRecordingBlockManager(spill::BlockManager* delegate) : _delegate(delegate) {}
+    Status open() override { return _delegate->open(); }
+    void close() override { _delegate->close(); }
+    StatusOr<spill::BlockPtr> acquire_block(const spill::AcquireBlockOptions& opts) override {
+        _seen.push_back(opts);
+        return _delegate->acquire_block(opts);
+    }
+    Status release_block(spill::BlockPtr block) override { return _delegate->release_block(std::move(block)); }
+
+    const std::vector<spill::AcquireBlockOptions>& seen() const { return _seen; }
+
+private:
+    spill::BlockManager* _delegate;
+    std::vector<spill::AcquireBlockOptions> _seen;
+};
+
+// spill_enable_direct_io used to stop at the output stream: AcquireBlockOptions.direct_io was
+// never assigned, so the container opened the file buffered no matter what the session asked
+// for. Assert the session value actually reaches the block manager, for both settings, with a
+// full spill behind each so the container's open and write paths run for real.
+TEST_F(SpillTest, direct_io_option_reaches_block_manager) {
+    for (bool direct_io : {false, true}) {
+        ObjectPool pool;
+        TExprBuilder order_by_slots_builder;
+        order_by_slots_builder << TYPE_INT;
+        auto order_by_slots = order_by_slots_builder.get_res();
+        std::vector<bool> nullables = {false, false};
+        TExprBuilder tuple_slots_builder;
+        tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+        auto tuple_slots = tuple_slots_builder.get_res();
+
+        dummy_rt_st._query_options.spill_enable_direct_io = direct_io;
+
+        auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+        ASSERT_OK(ctx_st.status());
+        auto ctx = ctx_st.value();
+        auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+        // A private block manager per iteration, NOT the fixture's. LogBlockManager caches
+        // containers keyed by (affinity group, dir, plan node id) and direct_io is not part of
+        // that key, so a shared manager would hand the second iteration the first one's already
+        // open buffered container and never take the O_DIRECT open path at all.
+        TUniqueId query_id = generate_uuid();
+        std::string dir_path = config::storage_root_path + "/spill_test_data/" + print_id(query_id);
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
+        spill::DirManager dir_mgr;
+        ASSERT_OK(dir_mgr.init(dir_path, {config::storage_root_path}));
+        spill::LogBlockManager block_mgr(query_id, &dir_mgr);
+
+        OptionsRecordingBlockManager recorder(&block_mgr);
+        SpilledOptions spill_options;
+        spill_options.mem_table_pool_size = 4;
+        spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+        spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+        spill_options.block_manager = &recorder;
+
+        RandomChunkBuilder chunk_builder;
+        auto factory = spill::make_spilled_factory();
+        auto spiller = factory->create(spill_options);
+        spiller->set_metrics(metrics);
+        SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+        ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+        for (size_t i = 0; i < 128; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+        }
+        ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+        ASSERT_FALSE(recorder.seen().empty()) << "no block acquired, direct_io=" << direct_io;
+        for (const auto& opts : recorder.seen()) {
+            EXPECT_EQ(direct_io, opts.direct_io) << "direct_io not propagated, expected " << direct_io;
+        }
+    }
+    dummy_rt_st._query_options.spill_enable_direct_io = false;
+}
+
+// Not every filesystem implements direct IO, and because spill_enable_direct_io was a silent no-op
+// until now, a deployment may already run with it on such a filesystem and depend on spilling
+// working. So a failing O_DIRECT open must degrade to a buffered one rather than fail the query.
+TEST_F(SpillTest, direct_io_open_failure_falls_back_to_buffered) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    dummy_rt_st._query_options.spill_enable_direct_io = true;
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    TUniqueId query_id = generate_uuid();
+    std::string dir_path = config::storage_root_path + "/spill_test_data/" + print_id(query_id);
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
+    std::shared_ptr<FileSystem> posix(FileSystem::Default(), [](FileSystem*) {});
+    auto refusing_fs = std::make_shared<RefuseDirectWriteFileSystem>(std::move(posix));
+    auto dir = std::make_shared<spill::Dir>(dir_path, refusing_fs, std::numeric_limits<int64_t>::max());
+    spill::DirManager dir_mgr(std::vector<spill::DirPtr>{dir});
+    spill::LogBlockManager block_mgr(query_id, &dir_mgr);
+
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 4;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = &block_mgr;
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t input_rows = 0;
+    for (size_t i = 0; i < 128; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        input_rows += chunk->num_rows();
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // The point of the test: the O_DIRECT open was attempted and refused, and every spill above
+    // still succeeded on the buffered retry. Without the fallback the first open failure
+    // propagates out of LogBlockContainer::open() and each of those ASSERT_OKs fails instead.
+    EXPECT_GT(refusing_fs->direct_open_attempts(), 0u) << "no O_DIRECT open was attempted";
+    EXPECT_GT(input_rows, 0u);
+
+    dummy_rt_st._query_options.spill_enable_direct_io = false;
+}
+
 /*
 TEST_F(SpillTest, file_group_test) {
     auto chunk = std::make_unique<Chunk>();
@@ -1181,7 +1394,7 @@ TEST_F(SpillTest, file_group_test) {
     auto order_bys = order_by_slots_builder.get_res();
 
     ASSERT_OK(sort_exprs.init(order_bys, nullptr, &pool, &dummy_rt_st));
-    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st, {}, {}));
+    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st));
     ASSERT_OK(sort_exprs.open(&dummy_rt_st));
 
     SortDescs descs = SortDescs::asc_null_first(1);

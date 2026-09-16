@@ -1,7 +1,4 @@
 -- name: test_vector_index_refine @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
--- result:
--- !result
 CREATE TABLE __refine_rows (
   k1 bigint NULL
 ) ENGINE=OLAP
@@ -197,8 +194,5 @@ DROP TABLE IF EXISTS t_novi;
 -- result:
 -- !result
 DROP TABLE IF EXISTS __refine_rows;
--- result:
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
 -- result:
 -- !result

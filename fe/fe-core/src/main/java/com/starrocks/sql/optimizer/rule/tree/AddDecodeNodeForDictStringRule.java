@@ -29,6 +29,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -971,6 +972,16 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 // Condition 1:
                 if (!column.getType().isVarchar()) {
+                    continue;
+                }
+
+                // Condition 1.1: an aggregate-state column stores a serialized aggregate state, not
+                // the values its type describes. The BE reads it with an aggregate function built
+                // from the agg state descriptor and never looks at the column type, so it would
+                // decode the dictionary codes as if they were still the original values.
+                Column aggStateCheck = scanOperator.getColRefToColumnMetaMap().get(column);
+                if (aggStateCheck != null
+                        && aggStateCheck.getAggregationType() == AggregateType.AGG_STATE_UNION) {
                     continue;
                 }
 

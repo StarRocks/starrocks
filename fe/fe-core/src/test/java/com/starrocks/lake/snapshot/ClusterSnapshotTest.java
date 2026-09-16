@@ -778,8 +778,8 @@ public class ClusterSnapshotTest {
         long beginTime = scheduler.lastAutomatedJobStartTimeMs;
 
         setAutomatedSnapshotOn(false);
-        scheduler.runAfterCatalogReady();
-        scheduler.runAfterCatalogReady();
+        scheduler.runAfterLeaseValid();
+        scheduler.runAfterLeaseValid();
 
         new MockUp<ClusterSnapshotJobScheduler>() {
             @Mock
@@ -790,7 +790,7 @@ public class ClusterSnapshotTest {
 
         long oldValue = Config.automated_cluster_snapshot_interval_seconds;
         Config.automated_cluster_snapshot_interval_seconds = 0L;
-        scheduler.runAfterCatalogReady();
+        scheduler.runAfterLeaseValid();
         long endTime = scheduler.lastAutomatedJobStartTimeMs;
         Config.automated_cluster_snapshot_interval_seconds = oldValue;
 
@@ -1191,6 +1191,40 @@ public class ClusterSnapshotTest {
         Assertions.assertTrue(failingJob.isError());
         String err = Deencapsulation.getField(failingJob, "errMsg");
         Assertions.assertEquals("boom", err);
+    }
+
+    @Test
+    public void testStopBestEffortNullsOutSchedulerSoStartRebuilds() {
+        // After demotion the inner ClusterSnapshotJobScheduler must be nulled out so that the
+        // next start() rebuilds it with fresh CheckpointController references; otherwise the
+        // re-elected leader silently never restarts snapshot scheduling.
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        ClusterSnapshotJobScheduler injected = new ClusterSnapshotJobScheduler(null, null);
+        Deencapsulation.setField(mgr, "clusterSnapshotJobScheduler", injected);
+        Assertions.assertNotNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"));
+
+        mgr.stopBestEffort();
+
+        Assertions.assertNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"),
+                "scheduler reference must be cleared so start() rebuilds it on re-election");
+    }
+
+    @Test
+    public void testStopBestEffortIsNoOpWhenSchedulerNeverStarted() {
+        // Followers / non-shared-data clusters never instantiate the scheduler. stopBestEffort
+        // must tolerate that and not throw.
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        Assertions.assertDoesNotThrow(() -> mgr.stopBestEffort());
+    }
+
+    @Test
+    public void testSchedulerInterruptOnStopOptedOut() {
+        // The scheduler's worker drives checkpoints inline (BDBJE getMaxJournalId /
+        // deleteJournals + image I/O), where an interrupt can invalidate the environment -
+        // it must opt out of the default interrupt-based stop and rely on cooperative
+        // isStopRequested() polling.
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(null, null);
+        Assertions.assertFalse(scheduler.interruptOnStop());
     }
 
 }

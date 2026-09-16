@@ -229,8 +229,7 @@ private:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
-        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
-        return row_desc->tuple_descriptors()[0];
+        return tbl->get_tuple_descriptor(row_tuples[0]);
     }
 
     static void _make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<FormatColumnInfo>* columns) {

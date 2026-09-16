@@ -462,7 +462,7 @@ TEST_F(AgentTaskTest, drop_tablet_proceeds_when_no_clone_task) {
 
     // Set up sync point to verify DROP task succeeds
     bool drop_succeeded = false;
-    DeferOp defer([&drop_succeeded]() {
+    DeferOp defer([]() {
         SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
         SyncPoint::GetInstance()->DisableProcessing();
     });

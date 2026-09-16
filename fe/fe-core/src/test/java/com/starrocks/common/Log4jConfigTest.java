@@ -153,6 +153,44 @@ public class Log4jConfigTest {
     }
 
     @Test
+    public void testRolloverFileIndexAndDeleteCount() throws IOException {
+        Config.sys_log_format = "plaintext";
+        String oldFileIndex = Config.profile_log_roll_file_index;
+        int oldDeleteCount = Config.profile_log_delete_count;
+        try {
+            // default: preserve historical behavior (min file index, no accumulated-count cap)
+            Config.profile_log_roll_file_index = "min";
+            Config.profile_log_delete_count = -1;
+            String xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
+            Assertions.assertTrue(xmlConfig.contains("<DefaultRolloverStrategy max=\"5\" fileIndex=\"min\">"));
+            Assertions.assertTrue(xmlConfig.contains("<IfFileName glob=\"fe.profile.log.*\" />"));
+            Assertions.assertFalse(xmlConfig.contains("<IfAccumulatedFileCount"),
+                    "no accumulated-count cap should be emitted when delete_count <= 0");
+
+            // opt-in: nomax file index with a hard retention cap
+            Config.profile_log_roll_file_index = "nomax";
+            Config.profile_log_delete_count = 3;
+            xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
+            Assertions.assertTrue(xmlConfig.contains("fileIndex=\"nomax\""));
+            Assertions.assertTrue(xmlConfig.contains("<IfAccumulatedFileCount exceeds=\"3\" />"));
+            Assertions.assertTrue(xmlConfig.contains("<IfAny>"));
+
+            // invalid file index is rejected
+            Config.profile_log_roll_file_index = "bogus";
+            Config.profile_log_delete_count = -1;
+            try {
+                Log4jConfig.generateActiveLog4jXmlConfig();
+                Assertions.fail("Expected IOException for invalid fileIndex");
+            } catch (IOException e) {
+                Assertions.assertTrue(e.getMessage().contains("profile_log_roll_file_index config error"));
+            }
+        } finally {
+            Config.profile_log_roll_file_index = oldFileIndex;
+            Config.profile_log_delete_count = oldDeleteCount;
+        }
+    }
+
+    @Test
     public void testJulLevelMapping() throws IOException {
 
         java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");

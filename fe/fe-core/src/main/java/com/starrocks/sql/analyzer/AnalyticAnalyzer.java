@@ -147,7 +147,6 @@ public class AnalyticAnalyzer {
             }
         }
 
-
         if (HintNode.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
             if (analyticExpr.getSkewColumn() == null) {
                 throw new SemanticException("Window skew column must be specified when using explicit skew hint");
@@ -162,6 +161,23 @@ public class AnalyticAnalyzer {
             }
             if (analyticExpr.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
                 throw new SemanticException("Window skew values must be constant");
+            }
+        }
+
+        if (analyticExpr.isForceMergeSort()) {
+            if (!HintNode.HINT_ANALYTIC_MERGE_SORT.equalsIgnoreCase(analyticExpr.getSkewHint()) || analyticExpr.isSkewed() ||
+                    analyticExpr.getPartitionHint() != null) {
+                throw new SemanticException("The merge_sort hint cannot be combined with any other hint",
+                        analyticExpr.getPos());
+            }
+            if (analyticExpr.getPartitionExprs().isEmpty()) {
+                throw new SemanticException("The merge_sort hint requires a PARTITION BY clause",
+                        analyticExpr.getPos());
+            }
+            if (analyticExpr.getOrderByElements().isEmpty()) {
+                throw new SemanticException(
+                        "The merge_sort hint requires an ORDER BY clause in the window specification",
+                        analyticExpr.getPos());
             }
         }
 

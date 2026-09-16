@@ -35,8 +35,10 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
     private static final Logger LOG = LogManager.getLogger(LakeTableTxnLogApplier.class);
@@ -76,6 +78,17 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+        applyVisibleLog(txnState, commitInfo, db, null);
+    }
+
+    /**
+     * @param deferredPublishes when non-null, the mutations a reader could pair inconsistently - the visible
+     *                          version and the UNSHARE query-layout cutover - are not applied here but recorded
+     *                          per physical partition id, for {@link #applyVisibleLogBatch} to apply, in that
+     *                          order, once the whole batch has been applied.
+     */
+    private void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db,
+                                 @Nullable Map<Long, DeferredPublish> deferredPublishes) {
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
@@ -98,13 +111,28 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
 
+            DeferredPublish pending = deferredPublishes == null ? null
+                    : deferredPublishes.computeIfAbsent(partitionId, k -> new DeferredPublish());
+
+            // Within a batch the earlier transactions have not published their version yet, so the
+            // continuity check must compare against the version this partition is going to end up on.
+            long currentVisibleVersion = pending != null && pending.finalCommitInfo != null
+                    ? pending.finalCommitInfo.getVersion() : partition.getVisibleVersion();
+
             // The version of a replication transaction may not continuously
             Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
                     || txnState.isVersionOverwrite()
                     || partitionCommitInfo.isDoubleWrite()
-                    || version == partition.getVisibleVersion() + 1);
+                    || version == currentVisibleVersion + 1);
 
-            partition.updateVisibleVersion(version, versionTime);
+            if (pending != null) {
+                pending.finalCommitInfo = partitionCommitInfo;
+            } else {
+                partition.updateVisibleVersion(version, versionTime);
+            }
+            if (txnState.isUserWriteSource()) {
+                partition.updateLastUpdateTime(versionTime);
+            }
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 partition.setDataVersion(partitionCommitInfo.getDataVersion());
                 if (partitionCommitInfo.getVersionEpoch() > 0) {
@@ -117,11 +145,27 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 boolean isPartialSuccess = false;
-                if (txnState.getTxnCommitAttachment() != null) {
-                    isPartialSuccess = ((CompactionTxnCommitAttachment) txnState.getTxnCommitAttachment()).getForceCommit();
+                boolean isUnshare = false;
+                if (txnState.getTxnCommitAttachment() instanceof CompactionTxnCommitAttachment attachment) {
+                    isPartialSuccess = attachment.getForceCommit();
+                    isUnshare = attachment.isUnshare();
                 }
                 compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
                         txnState.getTransactionId(), isPartialSuccess);
+                if (isUnshare) {
+                    if (pending != null) {
+                        // In a batch the version this cutover belongs to is not published yet; cutting the
+                        // layout over now would let a lock-free planner pair the child layout with a version
+                        // older than the UNSHARE. Hand it to applyVisibleLogBatch, which runs it after the
+                        // version publication, preserving the single-transaction order below.
+                        pending.unshareCutoverPending = true;
+                    } else if (partition.finishUnshare()) {
+                        // This method runs under the transaction-visible table write lock. Make the query-layout
+                        // cutover part of the same catalog mutation as the UNSHARE version, then invalidate any
+                        // optimistic plan that captured the parent layout before this point.
+                        table.lastSchemaUpdateTime.set(System.nanoTime());
+                    }
+                }
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
@@ -141,7 +185,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             if (GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.isCheckpointThread()) {
                 Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
                 if (tabletStats != null && !tabletStats.isEmpty()) {
-                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, versionTime);
+                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, version, versionTime);
                 }
             }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
@@ -181,7 +225,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
      * statistics collector samples from LakeTablet.getFuzzyRowCount(), not from this map.
      */
     private void refreshTabletStatsAndMarkReshardCandidate(PhysicalPartition partition,
-            Map<Long, TabletStatPB> tabletStats, Database db, long versionTime) {
+            Map<Long, TabletStatPB> tabletStats, Database db, long version, long versionTime) {
         List<MaterializedIndex> indexes = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
         long maxTabletSize = 0L;
         // Walk only the tablets this publish actually reported, not every tablet in the partition: this
@@ -201,7 +245,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             TabletStatPB tabletStat = entry.getValue();
             long dataSize = tabletStat.dataSize != null ? tabletStat.dataSize : 0L;
             lakeTablet.setDataSize(dataSize);
-            lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L);
+            // These stats came back with the publish of exactly this version.
+            lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L, version);
             lakeTablet.setDataSizeUpdateTime(versionTime);
             maxTabletSize = Math.max(maxTabletSize, dataSize);
         }
@@ -212,10 +257,46 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         tabletStats.clear();
     }
 
+    /** Partition state a batch publish holds back until the whole batch has been applied. */
+    private static class DeferredPublish {
+        // Commit info of the last transaction in the batch that touched this partition.
+        private PartitionCommitInfo finalCommitInfo;
+        // An UNSHARE compaction in the batch asked for the query-layout cutover.
+        private boolean unshareCutoverPending;
+    }
+
+    /**
+     * A batch publish materializes a tablet metadata object for the batch's FINAL version only; the
+     * versions in between never get one. Advancing the partition's visible version transaction by
+     * transaction would briefly expose such an intermediate version, and a query that captured it -
+     * planning reads the shared mutable PhysicalPartition after releasing the db lock when
+     * {@code cbo_use_lock_db} is off - would then ask the BE for an object that will never exist and
+     * fail the query. So collect each partition's target version while applying the batch and advance
+     * the partition straight from its pre-batch version to the batch's final version.
+     */
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+        Map<Long, DeferredPublish> deferredPublishes = new LinkedHashMap<>();
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
-            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
-            applyVisibleLog(txnState, tableCommitInfo, db);
+            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(table.getId());
+            if (tableCommitInfo == null) {
+                // in a multi-table batch this txn does not write this applier's table
+                continue;
+            }
+            applyVisibleLog(txnState, tableCommitInfo, db, deferredPublishes);
+        }
+        for (Map.Entry<Long, DeferredPublish> entry : deferredPublishes.entrySet()) {
+            // Resolved under the same table write lock that resolved it above, so it is still present.
+            PhysicalPartition partition = table.getPhysicalPartition(entry.getKey());
+            DeferredPublish pending = entry.getValue();
+            PartitionCommitInfo partitionCommitInfo = pending.finalCommitInfo;
+            partition.updateVisibleVersion(partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionTime());
+            // Strictly after the version publication above, matching the single-transaction order: the
+            // planner resolves the queryable layout before it reads the visible version, so a layout
+            // cutover that landed first could be paired with a version older than the UNSHARE, whose
+            // child tablets have no metadata object at that version.
+            if (pending.unshareCutoverPending && partition.finishUnshare()) {
+                table.lastSchemaUpdateTime.set(System.nanoTime());
+            }
         }
     }
 }

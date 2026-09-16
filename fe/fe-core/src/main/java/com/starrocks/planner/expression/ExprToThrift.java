@@ -431,7 +431,10 @@ public final class ExprToThrift {
 
         @Override
         public Void visitSubqueryExpr(Subquery node, TExprNode msg) {
-            return null;
+            // A subquery has to be rewritten into a join/apply by the optimizer. Serializing it would produce a
+            // TExprNode without a node_type, which the BE rejects with an unhelpful thrift error.
+            throw new StarRocksPlannerException(
+                    "Subquery needs to be rewritten before it can be sent to the backend.", ErrorType.INTERNAL_ERROR);
         }
 
         @Override
@@ -509,6 +512,9 @@ public final class ExprToThrift {
                 msg.setFn(tfn);
                 if (fn.hasVarArgs()) {
                     msg.setVararg_start_idx(fn.getNumArgs() - 1);
+                }
+                if (fn.isAi() && node.getAiModelConfigId() != null) {
+                    msg.setAi_model_config_id(node.getAiModelConfigId());
                 }
             }
             return null;

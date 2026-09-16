@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "base/bit/bit_util.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
@@ -42,19 +43,6 @@ public:
         DCHECK(_function != nullptr);
     }
 
-    ~StateUnionFunction() override {
-        if (_nested_ctx != nullptr) {
-            delete _nested_ctx;
-        }
-    }
-
-    Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) override {
-        _nested_ctx =
-                FunctionContext::create_context(context->state(), context->mem_pool(),
-                                                _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
-        return Status::OK();
-    }
-
     StatusOr<ColumnPtr> execute(FunctionContext* context, const Columns& columns) override {
         RETURN_IF_UNLIKELY(
                 columns.size() != _arg_nullables.size(),
@@ -62,6 +50,17 @@ public:
                                       " not match with arg_nullables size " + std::to_string(_arg_nullables.size())));
 
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateMergeFunctionAllocator);
+
+        // Drive the wrapped aggregate through a nested FunctionContext backed by a MemPool private to
+        // this execute() call. The combinator object is shared across pipeline drivers and evaluated
+        // concurrently, so the pool must not be shared (MemPool is not thread-safe); allocating it on
+        // the stack also bounds its lifetime to this call, so the variable-length agg state copied out
+        // per row (e.g. array_agg_distinct's keys, which _function->destroy() does not reclaim from the
+        // pool) is released here instead of accumulating for the whole fragment.
+        MemPool nested_mem_pool;
+        FunctionContext* nested_ctx = FunctionContext::create_context(
+                context->state(), &nested_mem_pool, _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
+        DeferOp defer_nested_ctx([&]() { delete nested_ctx; });
 
         Columns new_columns;
         new_columns.reserve(columns.size());
@@ -90,41 +89,37 @@ public:
                 data_columns.emplace_back(ColumnHelper::get_data_column(new_columns[i]->as_mutable_raw_ptr()));
             }
             for (size_t i = 0; i < chunk_size; i++) {
-                _function->create(_nested_ctx, agg_state);
+                _function->create(nested_ctx, agg_state);
                 // merge input agg states into result
                 for (size_t j = 0; j < new_columns.size(); j++) {
                     if (UNLIKELY(new_columns[j]->is_null(i))) {
                         continue;
                     }
-                    _function->merge(_nested_ctx, data_columns[j], agg_state, i);
+                    _function->merge(nested_ctx, data_columns[j], agg_state, i);
                 }
                 // serialize the agg_state into result
-                _function->serialize_to_column(_nested_ctx, agg_state, result.get());
+                _function->serialize_to_column(nested_ctx, agg_state, result.get());
                 // destroy the agg_state
-                _function->destroy(_nested_ctx, agg_state);
+                _function->destroy(nested_ctx, agg_state);
             }
         } else {
             for (size_t i = 0; i < chunk_size; i++) {
-                _function->create(_nested_ctx, agg_state);
+                _function->create(nested_ctx, agg_state);
 
                 // merge input agg states into result
                 for (size_t j = 0; j < new_columns.size(); j++) {
-                    _function->merge(_nested_ctx, new_columns[j].get(), agg_state, i);
+                    _function->merge(nested_ctx, new_columns[j].get(), agg_state, i);
                 }
                 // serialize the agg_state into result
-                _function->serialize_to_column(_nested_ctx, agg_state, result.get());
+                _function->serialize_to_column(nested_ctx, agg_state, result.get());
 
                 // destroy the agg_state
-                _function->destroy(_nested_ctx, agg_state);
+                _function->destroy(nested_ctx, agg_state);
             }
         }
 
         return result;
     }
-
-private:
-    // for nested function, the nested function's context is injected to the parent function's context.
-    FunctionContext* _nested_ctx;
 };
 
 } // namespace starrocks

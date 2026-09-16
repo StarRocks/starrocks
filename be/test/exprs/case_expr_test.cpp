@@ -18,12 +18,17 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
+#include "column/variant_column.h"
+#include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/exprs_test_helper.h"
@@ -118,6 +123,46 @@ public:
     TExprNode expr_node;
     RuntimeState runtime_state;
 };
+
+static MutableColumnPtr create_case_variant_column(const std::vector<std::string>& json_values) {
+    auto column = VariantColumn::create();
+    for (const auto& json : json_values) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json);
+        CHECK(encoded.ok()) << encoded.status().to_string();
+        column->append(encoded.value());
+    }
+    CHECK(column->is_shredded_variant());
+    return column;
+}
+
+static void assert_case_variant_result(const ColumnPtr& result,
+                                       const std::vector<std::optional<std::string>>& expected) {
+    ASSERT_EQ(expected.size(), result->size());
+
+    const Column* data_column = result.get();
+    const bool is_const = data_column->is_constant();
+    if (is_const) {
+        data_column = down_cast<const ConstColumn*>(data_column)->data_column().get();
+    }
+    if (data_column->is_nullable()) {
+        data_column = down_cast<const NullableColumn*>(data_column)->data_column().get();
+    }
+    const auto* variant_column = down_cast<const VariantColumn*>(data_column);
+
+    for (size_t i = 0; i < expected.size(); ++i) {
+        SCOPED_TRACE(i);
+        if (!expected[i].has_value()) {
+            EXPECT_TRUE(result->is_null(i));
+            continue;
+        }
+
+        ASSERT_FALSE(result->is_null(i));
+        VariantRowValue row_buffer;
+        const VariantRowValue* row = variant_column->get_row_value(is_const ? 0 : i, &row_buffer);
+        ASSERT_NE(nullptr, row);
+        EXPECT_EQ(expected[i].value(), row->to_string());
+    }
+}
 
 TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
     expr_node.case_expr.has_case_expr = true;
@@ -967,5 +1012,112 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnElse) {
             ASSERT_TRUE(ptr->is_null(j));
         }
     }
+}
+
+TEST_F(VectorizedCaseExprTest, searchedCaseReturnsVariant) {
+    expr_node.case_expr.has_case_expr = false;
+    expr_node.case_expr.has_else_expr = true;
+    expr_node.child_type = TPrimitiveType::BOOLEAN;
+    expr_node.type = TypeDescriptor(TYPE_VARIANT).to_thrift();
+    expr_node.is_nullable = true;
+
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_VARIANT, TYPE_BOOLEAN));
+    ASSERT_NE(nullptr, expr);
+
+    auto when1_column = BooleanColumn::create();
+    when1_column->append(1);
+    when1_column->append(0);
+    when1_column->append(0);
+    when1_column->append(0);
+    MockExpr when1(TypeDescriptor(TYPE_BOOLEAN), when1_column);
+
+    auto when2_column = BooleanColumn::create();
+    when2_column->append(0);
+    when2_column->append(1);
+    when2_column->append(0);
+    when2_column->append(0);
+    MockExpr when2(TypeDescriptor(TYPE_BOOLEAN), when2_column);
+
+    MockExpr then1(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"10", "11", "12", "13"}));
+
+    auto then2_data = create_case_variant_column({"20", "21", "22", "23"});
+    auto then2_nulls = NullColumn::create();
+    then2_nulls->append(0);
+    then2_nulls->append(1);
+    then2_nulls->append(0);
+    then2_nulls->append(0);
+    MockExpr then2(TypeDescriptor(TYPE_VARIANT), NullableColumn::create(std::move(then2_data), std::move(then2_nulls)));
+
+    MockExpr else_expr(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"30", "31", "32", "33"}));
+
+    expr->_children.push_back(&when1);
+    expr->_children.push_back(&then1);
+    expr->_children.push_back(&when2);
+    expr->_children.push_back(&then2);
+    expr->_children.push_back(&else_expr);
+
+    Chunk chunk;
+    ColumnPtr result = expr->evaluate(nullptr, &chunk);
+    assert_case_variant_result(result, {"10", std::nullopt, "32", "33"});
+
+    // Also cover the implicit SQL NULL branch when searched CASE has no ELSE.
+    expr_node.case_expr.has_else_expr = false;
+    std::unique_ptr<Expr> no_else_expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_VARIANT, TYPE_BOOLEAN));
+    ASSERT_NE(nullptr, no_else_expr);
+
+    auto dynamic_when_column = BooleanColumn::create();
+    dynamic_when_column->append(0);
+    dynamic_when_column->append(1);
+    dynamic_when_column->append(0);
+    MockExpr dynamic_when(TypeDescriptor(TYPE_BOOLEAN), dynamic_when_column);
+    MockExpr dynamic_then(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"40", "41", "42"}));
+    no_else_expr->_children.push_back(&dynamic_when);
+    no_else_expr->_children.push_back(&dynamic_then);
+
+    Chunk no_else_chunk;
+    no_else_chunk.append_column(dynamic_when_column, 0);
+    ColumnPtr no_else_result = no_else_expr->evaluate(nullptr, &no_else_chunk);
+    assert_case_variant_result(no_else_result, {std::nullopt, "41", std::nullopt});
+}
+
+TEST_F(VectorizedCaseExprTest, simpleCaseReturnsVariant) {
+    expr_node.case_expr.has_case_expr = true;
+    expr_node.case_expr.has_else_expr = true;
+    expr_node.child_type = TPrimitiveType::INT;
+    expr_node.type = TypeDescriptor(TYPE_VARIANT).to_thrift();
+
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_VARIANT, TYPE_INT));
+    ASSERT_NE(nullptr, expr);
+
+    auto case_column = Int32Column::create();
+    case_column->append(1);
+    case_column->append(2);
+    case_column->append(3);
+    case_column->append(4);
+    MockExpr case_expr(TypeDescriptor(TYPE_INT), case_column);
+
+    auto when1_column = Int32Column::create();
+    auto when2_column = Int32Column::create();
+    for (size_t i = 0; i < case_column->size(); ++i) {
+        when1_column->append(1);
+        when2_column->append(2);
+    }
+    MockExpr when1(TypeDescriptor(TYPE_INT), when1_column);
+    MockExpr when2(TypeDescriptor(TYPE_INT), when2_column);
+
+    MockExpr then1(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"100", "101", "102", "103"}));
+    MockExpr then2(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"200", "201", "202", "203"}));
+    MockExpr else_expr(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"300", "301", "302", "303"}));
+
+    expr->_children.push_back(&case_expr);
+    expr->_children.push_back(&when1);
+    expr->_children.push_back(&then1);
+    expr->_children.push_back(&when2);
+    expr->_children.push_back(&then2);
+    expr->_children.push_back(&else_expr);
+
+    Chunk chunk;
+    ColumnPtr result = expr->evaluate(nullptr, &chunk);
+    assert_case_variant_result(result, {"100", "201", "302", "303"});
 }
 } // namespace starrocks

@@ -227,6 +227,48 @@ TEST_F(CSVReaderTest, test_split_record_multi_character_delimiter) {
     EXPECT_EQ("c", fields1[2].to_string());
 }
 
+// The multi-character delimiter path splits records in its own loop, so trim_space has to be
+// covered there as well and not only for a single-character delimiter.
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_multi_char_delimiter_with_trim_space) {
+    starrocks::CSVParseOptions options;
+    options.column_delimiter = "||";
+    options.row_delimiter = "\n";
+    options.trim_space = true;
+
+    MockCSVReader reader(options);
+
+    starrocks::CSVReader::Record record1{" a || b || c ", 13};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("a", fields1[0].to_string());
+    EXPECT_EQ("b", fields1[1].to_string());
+    EXPECT_EQ("c", fields1[2].to_string());
+
+    // Empty leading and trailing fields, which reach trim with a zero length. This is the
+    // multi-character counterpart of test_split_record_trim_space_empty_field.
+    starrocks::CSVReader::Record record2{"||x||", 5};
+    starrocks::CSVReader::Fields fields2;
+    reader.split_record(record2, &fields2);
+
+    EXPECT_EQ(3, fields2.size());
+    EXPECT_EQ("", fields2[0].to_string());
+    EXPECT_EQ("x", fields2[1].to_string());
+    EXPECT_EQ("", fields2[2].to_string());
+
+    // Fields that hold nothing but spaces must be trimmed down to empty ones.
+    starrocks::CSVReader::Record record3{" || x || ", 9};
+    starrocks::CSVReader::Fields fields3;
+    reader.split_record(record3, &fields3);
+
+    EXPECT_EQ(3, fields3.size());
+    EXPECT_EQ("", fields3[0].to_string());
+    EXPECT_EQ("x", fields3[1].to_string());
+    EXPECT_EQ("", fields3[2].to_string());
+}
+
 // NOLINTNEXTLINE
 TEST_F(CSVReaderTest, test_split_record_with_trim_space) {
     starrocks::CSVParseOptions options;

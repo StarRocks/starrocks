@@ -52,7 +52,7 @@ select * from v1;
 -- !result
 select * from v2;
 -- result:
-E: (5203, 'Access denied; you need (at least one of) the SELECT privilege(s) on VIEW v2 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the SELECT privilege(s) on TABLE t1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 select * from v3;
 -- result:
@@ -84,7 +84,7 @@ execute as u1_${uuid} with no revert;
 -- !result
 select * from v1;
 -- result:
-E: (5203, 'Access denied; you need (at least one of) the SELECT privilege(s) on VIEW v1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the SELECT privilege(s) on TABLE t1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 select * from v2;
 -- result:

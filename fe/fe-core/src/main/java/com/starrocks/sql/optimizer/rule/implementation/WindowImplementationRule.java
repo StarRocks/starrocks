@@ -45,6 +45,7 @@ public class WindowImplementationRule extends ImplementationRule {
                 logical.isSkewed(),
                 logical.getSkewColumn(),
                 logical.getSkewValues(),
+                logical.isForceMergeSort(),
                 logical.isInputIsBinary(),
                 logical.getLimit(),
                 logical.getPredicate(),

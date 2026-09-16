@@ -139,6 +139,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile::Counter* page_index_filter_group_counter = nullptr;
     RuntimeProfile::Counter* bloom_filter_tried_counter = nullptr;
     RuntimeProfile::Counter* bloom_filter_success_counter = nullptr;
+    // join runtime filter row-level pushdown
+    RuntimeProfile::Counter* rf_eval_timer = nullptr;
+    RuntimeProfile::Counter* rf_input_rows = nullptr;
+    RuntimeProfile::Counter* rf_output_rows = nullptr;
 
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
@@ -202,6 +206,12 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     bloom_filter_success_counter =
             ADD_CHILD_COUNTER(root, "BloomFilterSuccessCounter", TUnit::UNIT, "ReaderFilterCounter");
 
+    // Named to match the OLAP scan's counters so profiles diff directly against a
+    // native-table run of the same query.
+    rf_eval_timer = ADD_CHILD_TIMER(root, "RuntimeFilterEvalTime", kParquetProfileSectionPrefix);
+    rf_input_rows = ADD_CHILD_COUNTER(root, "RuntimeFilterInputRows", TUnit::UNIT, kParquetProfileSectionPrefix);
+    rf_output_rows = ADD_CHILD_COUNTER(root, "RuntimeFilterOutputRows", TUnit::UNIT, kParquetProfileSectionPrefix);
+
     COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
     COUNTER_UPDATE(value_decode_timer, _app_stats.value_decode_ns);
@@ -243,6 +253,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
     COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
+    COUNTER_UPDATE(rf_eval_timer, _app_stats.rf_cond_evaluate_ns);
+    COUNTER_UPDATE(rf_input_rows, _app_stats.rf_cond_input_rows);
+    COUNTER_UPDATE(rf_output_rows, _app_stats.rf_cond_output_rows);
+
     if (_runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter",
                               _scanner_ctx->predicates.predicate_tree.root().debug_string());
@@ -273,8 +287,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
+    ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
     // create file reader
-    _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
+    _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), file_size,
                                                     _scanner_ctx->datacache_options,
                                                     _shared_buffered_input_stream.get(), _skip_rows_ctx);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);

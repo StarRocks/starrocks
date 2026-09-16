@@ -145,7 +145,7 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     RETURN_IF_ERROR(_sort_exprs.init(group_by_expr, nullptr, &_pool, state));
     _sort_desc = SortDescs::asc_null_first(group_by_expr.size());
 
-    RETURN_IF_ERROR(_sort_exprs.prepare(state, {}, {}));
+    RETURN_IF_ERROR(_sort_exprs.prepare(state));
     RETURN_IF_ERROR(_sort_exprs.open(state));
 
     // init spill options

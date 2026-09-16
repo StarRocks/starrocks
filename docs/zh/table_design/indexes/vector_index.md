@@ -12,8 +12,6 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 本文介绍了StarRocks的向量索引功能及如何使用它进行近似最近邻搜索（ANNS）。
 
-向量索引功能仅在v3.4或更高版本的存算一体集群中支持。
-
 ## 概述
 
 目前，StarRocks支持在Segment文件级别进行向量索引。索引将每个搜索项映射到Segment文件中的行ID，通过直接定位相应的数据行实现快速数据检索，而无需进行暴力的向量距离计算。系统目前提供两种类型的向量索引：倒排文件与乘积量化（IVFPQ）和分层可导航小世界（HNSW），每种都有其独特的组织结构。
@@ -45,23 +43,15 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 
 ## 使用方法
 
-每个表仅支持一个向量索引。
+### 先决条件
 
-### 前提条件
-
-在创建向量索引之前，必须通过设置FE配置项`enable_experimental_vector`为`true`来启用它。
-
-执行以下语句以动态启用：
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
-```
-
-要永久启用它，必须将`enable_experimental_vector = true`添加到FE配置文件`fe.conf`中并重启FE。
+- 每个表仅支持一个向量索引。
+- 被索引的列必须为 `ARRAY<FLOAT> NOT NULL`。
+- 仅原生 DUPLICATE KEY 和 PRIMARY KEY 表支持向量索引。
 
 ### 创建向量索引
 
-本教程在创建表时创建向量索引。您也可以将向量索引附加到现有表中。有关详细说明，请参见[附加向量索引](#append-vector-index)。
+本教程在创建表时创建向量索引。您也可以将向量索引附加到现有表中。有关详细说明，请参见[附加向量索引](#附加向量索引)。
 
 - 以下示例在表`hnsw`的列`vector`上创建一个HNSW向量索引`hnsw_vector`。
 
@@ -92,13 +82,49 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
             "dim"="5", 
             "metric_type" = "l2_distance", 
             "is_vector_normed" = "false", 
-            "nbits" = "16", 
-            "nlist" = "40"
+            "nbits" = "8",
+            "nlist" = "40",
+            "M_IVFPQ" = "1"
         )
     ) ENGINE=OLAP
     DUPLICATE KEY(id)
     DISTRIBUTED BY HASH(id) BUCKETS 1;
     ```
+
+- 以下示例使用 `async` 构建模式，在存算分离集群中的云原生表上创建一个 HNSW 向量索引。
+
+    ```SQL
+    CREATE TABLE hnsw_async (
+        id BIGINT NOT NULL,
+        vector ARRAY<FLOAT> NOT NULL,
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw",
+            "dim" = "768",
+            "metric_type" = "cosine_similarity",
+            "is_vector_normed" = "true",
+            "index_build_mode" = "async"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id);
+    ```
+
+    您可以通过查询 `information_schema.partitions_meta` 来查看异步构建的进度。
+
+    ```SQL
+    SELECT
+        TABLE_NAME,
+        PARTITION_NAME,
+        VISIBLE_VERSION,
+        MIN_VI_BUILT_VERSION,
+        MAX_VI_BUILT_VERSION
+    FROM information_schema.partitions_meta
+    WHERE TABLE_NAME = 'hnsw_async';
+    ```
+
+    - 当 `MIN_VI_BUILT_VERSION` 等于 `VISIBLE_VERSION` 时，表明该分区中所有 Tablet 的索引均已达到可见版本。
+    - 当 `MIN_VI_BUILT_VERSION` 小于 `VISIBLE_VERSION` 时，表明至少有一个索引正在构建中。涉及此类 Segment 的查询将回退到暴力扫描。
+    - 当 `MIN_VI_BUILT_VERSION` 小于 `MAX_VI_BUILT_VERSION` 时，表明不同 Tablet 在索引构建进度上存在差异。
 
 #### 索引构建参数
 
@@ -127,6 +153,7 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 - **描述**: 向量索引的度量类型（测量函数）。有效值：
   - `l2_distance`: 欧氏距离。值越小，相似度越高。
   - `cosine_similarity`: 余弦相似度。值越大，相似度越高。
+  - `inner_product`: 内积。值越大，相似度越高。与余弦相似度不同，内积保留向量模长。精确计算使用 `inner_product`，向量索引 top-k 或范围查询使用 `approx_inner_product`。
 
 ##### is_vector_normed
 
@@ -136,9 +163,17 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 
 ##### index_build_threshold
 
-- **默认值**: 10000（由 BE 配置项 `config_vector_index_default_build_threshold` 决定）
+- **默认值**: 10000（由 BE 配置项 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) 决定）
 - **必需**: 否
 - **描述**: 触发向量索引构建的行数阈值。写入的数据行数低于该阈值时不构建索引，查询回退到暴力检索。取值必须为大于等于 `1` 的整数。对于 IVFPQ 索引，该值还必须大于等于 `nlist`，因为 IVFPQ 的 k-means 训练至少需要 `nlist` 条向量。违反该约束的 DDL 语句会被拒绝。
+
+##### index_build_mode
+
+- **默认值**: `sync`
+- **必需**: 否
+- **描述**: 存算分离集群中的索引构建方式。有效值：
+  - `sync`：在数据写入时同步构建索引。查询可立即使用索引，但导入延迟较高。
+  - `async`：数据写入完成后由后台任务构建索引。在构建完成前，涉及相应 Segment 的查询自动回退到暴力检索。可以通过 [`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) 选择构建 Warehouse，并通过 [`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) 控制 Load Tail 的调度延迟。
 
 ##### M
 
@@ -151,6 +186,12 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 - **默认值**: 40
 - **必需**: 否
 - **描述**: HNSW特定参数。包含最近邻居的候选列表的大小。必须是大于或等于`1`的整数。用于控制图构建过程中的搜索深度。具体来说，`efconstruction`定义了图构建过程中每个顶点的搜索列表（也称为候选列表）的大小。这个候选列表用于存储当前顶点的邻居候选者，列表的大小为`efconstruction`。`efconstruction`的值越大，在图构建过程中被视为顶点邻居的候选者越多，因此图的质量（如更好的连通性）越好，但图构建的时间消耗和计算复杂度也越高。
+
+##### efsearch
+
+- **默认值**: 40
+- **必需**: 否
+- **描述**: HNSW 专有参数。控制精度-速度权衡的参数。在分层图结构搜索中，此参数控制搜索期间候选列表的大小。`efsearch`的值越大，准确性越高，但速度越慢。该参数可在创建索引时指定。如果查询中的 `ann_params` 不包含此参数，系统将根据该值执行自适应缩放。在查询中显式指定该值具有优先级，并将绕过自适应缩放。
 
 ##### quantizer
 
@@ -175,9 +216,9 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 
 ##### nbits
 
-- **默认值**: 16
+- **默认值**: 8
 - **必需**: 否
-- **描述**: IVFPQ特定参数。乘积量化（PQ）的精度。必须是`8`的倍数。在IVFPQ中，每个向量被分割为多个子向量，然后每个子向量被量化。`Nbits`定义了量化的精度，即每个子向量被量化为多少个二进制位。`nbits`的值越大，量化精度越高，但存储和计算成本也越高。
+- **描述**: IVFPQ 特定参数。乘积量化（PQ）使用的位数，当前仅支持 `8`。
 
 ##### nlist
 
@@ -187,12 +228,17 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 
 ##### M_IVFPQ
 
+- **默认值**: N/A
 - **必需**: 是
-- **描述**: IVFPQ特定参数。原始向量将被分割成的子向量数量。IVFPQ索引将一个`dim`维向量分割成`M_IVFPQ`个等长的子向量。因此，它必须是`dim`值的因数。
+- **描述**: IVFPQ 特定参数。原始向量将被分割成的子向量数量。IVFPQ 索引将一个 `dim` 维向量分割成 `M_IVFPQ` 个等长的子向量，因此 `M_IVFPQ` 必须能整除 `dim`。SQL 属性名是 `M_IVFPQ`；`M` 是另一个仅适用于 HNSW 的属性。
 
 #### 附加向量索引
 
 您还可以使用[CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md)或[ALTER TABLE ADD INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)将向量索引添加到现有表中。
+
+:::note
+对于存算分离集群中的云原生表，ALTER TABLE ADD INDEX 语句会重写现有数据，并在其上构建索引。即使将 `index_build_mode` 设置为 `async`，系统也会在模式更改完成之前先完成索引构建。
+:::
 
 示例：
 
@@ -204,8 +250,9 @@ USING VECTOR (
     "metric_type" = "l2_distance", 
     "is_vector_normed" = "false",  
     "dim"="5", 
-    "nlist" = "256", 
-    "nbits"="10"
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
 );
 
 ALTER TABLE ivfpq 
@@ -215,8 +262,9 @@ USING VECTOR (
     "metric_type" = "l2_distance", 
     "is_vector_normed" = "false", 
     "dim"="5", 
-    "nlist" = "256", 
-    "nbits"="10"
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
 );
 ```
 
@@ -259,8 +307,6 @@ ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
 
 ### 使用向量索引执行ANNS
 
-在运行向量搜索之前，请确保FE配置项`enable_experimental_vector`设置为`true`。
-
 #### 基于向量索引的查询要求
 
 ```SQL
@@ -278,18 +324,21 @@ LIMIT 10
     - `<vector_index_distance_func>`的函数名要求：
       - 如果`metric_type`是`l2_distance`，函数名必须是`approx_l2_distance`。
       - 如果`metric_type`是`cosine_similarity`，函数名必须是`approx_cosine_similarity`。
+      - 如果`metric_type`是`inner_product`，函数名必须是`approx_inner_product`。
     - `<vector_index_distance_func>`的参数要求：
       - `constant_array`必须是一个与向量索引`dim`匹配的常量`ARRAY<FLOAT>`。
       - `vector_column`必须是与向量索引对应的列。
   - ORDER方向要求：
     - 如果`metric_type`是`l2_distance`，顺序必须是`ASC`。
     - 如果`metric_type`是`cosine_similarity`，顺序必须是`DESC`。
+    - 如果`metric_type`是`inner_product`，顺序必须是`DESC`。
   - 必须有`LIMIT N`子句。
 - **谓词要求：**
   - 所有谓词必须是`<vector_index_distance_func>`表达式，通过`AND`和比较运算符（`>`或`<`）组合。比较运算符的方向必须与`ASC`/`DESC`顺序一致。具体来说：
   - 要求1：
     - 如果`metric_type`是`l2_distance`：`col_ref <= constant`。
     - 如果`metric_type`是`cosine_similarity`：`col_ref >= constant`。
+    - 如果`metric_type`是`inner_product`：`col_ref >= constant`，其中常量可以为负数。
     - 这里，`col_ref`指的是`<vector_index_distance_func>(vector_column, constant_array)`的结果，可以转换为`FLOAT`或`DOUBLE`类型，例如：
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`
@@ -309,8 +358,9 @@ CREATE TABLE test_hnsw (
         "index_type" = "hnsw",
         "metric_type" = "l2_distance", 
         "is_vector_normed" = "false", 
-        "M" = "512", 
-        "dim"="5")
+        "M" = "512",
+        "dim" = "5",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
@@ -326,10 +376,11 @@ CREATE TABLE test_ivfpq (
         "index_type" = "ivfpq",
         "metric_type" = "l2_distance", 
         "is_vector_normed" = "false", 
-        "nlist" = "256", 
-        "nbits"="8",
-        "dim"="5",
-        "M_IVFPQ"="1")
+        "nlist" = "1",
+        "nbits" = "8",
+        "dim" = "5",
+        "M_IVFPQ" = "1",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
@@ -401,7 +452,7 @@ LIMIT 1;
 
 参数调优在向量搜索中至关重要，因为它影响性能和准确性。建议在小数据集上调优搜索参数，并在达到预期的召回率和延迟后再转向大数据集。
 
-搜索参数通过SQL语句中的提示传递。
+搜索参数可以通过 [`ann_params`](../../sql-reference/System_variable.md#ann_params) 会话变量或 SQL 语句中的 Hint 传递。
 
 ##### 对于HNSW索引
 
@@ -409,7 +460,7 @@ LIMIT 1;
 
 ```SQL
 SELECT 
-    /*+ SET_VAR (ann_params='{efsearch=256}') */ 
+    /*+ SET_VAR (ann_params='{"efsearch":"256"}') */
     id, approx_l2_distance([1,1,1,1,1], vector) 
 FROM test_hnsw 
 WHERE id = 1 
@@ -421,7 +472,7 @@ LIMIT 1;
 
 ###### efsearch
 
-- **默认值**: 16
+- **默认值**: 40
 - **必需**: 否
 - **描述**: 控制精度-速度权衡的参数。在分层图结构搜索中，此参数控制搜索期间候选列表的大小。`efsearch`的值越大，准确性越高，但速度越慢。
 
@@ -431,7 +482,7 @@ LIMIT 1;
 
 ```SQL
 SELECT 
-    /*+ SET_VAR (ann_params='{nprobe=256,max_codes=0,scan_table_threshold=0,polysemous_ht=0,range_search_confidence=0.1}') */ 
+    /*+ SET_VAR (ann_params='{"nprobe":"256","max_codes":"0","scan_table_threshold":"0","polysemous_ht":"0","range_search_confidence":"0.1"}') */
     id, approx_l2_distance([1,1,1,1,1], vector) 
 FROM test_ivfpq 
 ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
@@ -469,6 +520,24 @@ LIMIT 1;
 - **默认值**: 0.1
 - **必需**: 否
 - **描述**: 近似范围搜索的置信度。值范围：[0, 1]。将其设置为`1`可产生最准确的结果。
+
+#### 调整候选数量和结果精排
+
+以下会话变量控制索引返回的候选数量，以及 StarRocks 是否重新计算候选项的精确距离：
+
+- [`k_factor`](../../sql-reference/System_variable.md#k_factor)，默认值为 `1`：将 `LIMIT` 乘以该值，得到每个 Segment 请求的候选数量。增大该值可以提高多个 Segment 合并结果后的召回率，但会增加 CPU、内存和下游处理开销。
+- [`enable_vector_index_refine`](../../sql-reference/System_variable.md#enable_vector_index_refine)，默认值为 `false`：对于 IVFPQ 以及使用 `sq4`、`sq8` 或 `pq` 量化器的 HNSW 索引，基于原始向量重新计算精确距离并对候选项重排。该变量对未量化的 HNSW 索引（`quantizer = flat`）无效。
+- [`pq_refine_factor`](../../sql-reference/System_variable.md#pq_refine_factor)，默认值为 `1`：在启用精确距离精排的范围查询中，在 `k_factor` 的基础上进一步放大候选数量。
+
+例如：
+
+```SQL
+SET enable_vector_index_refine = true;
+SET k_factor = 2;
+SET pq_refine_factor = 2;
+```
+
+候选倍率越大，通常召回率越高，但索引检索、I/O 和距离计算开销也越大。可以通过 `EXPLAIN` 中的 `Refine: ON/OFF` 确认是否启用了精确距离精排。
 
 #### 计算近似召回率
 
@@ -555,7 +624,3 @@ LIMIT 5;
 |      avgRowSize=4.0                                                                                                                                 |
 +-----------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
-
-## 限制
-
-- 每个表仅支持一个向量索引。

@@ -180,7 +180,8 @@ BrpcStubCache::StubPool::~StubPool() {
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_or_create(
         const butil::EndPoint& endpoint) {
     if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
-        auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "");
+        auto stub =
+                std::make_shared<PInternalService_RecoverableStub>(endpoint, "", static_cast<int64_t>(_stubs.size()));
         if (!stub->reset_channel().ok()) {
             return nullptr;
         }

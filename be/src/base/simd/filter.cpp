@@ -36,7 +36,9 @@ namespace {
 // lanes survive. Below this many set bits in a batch the 64-bit path falls back
 // to scalar. (The 32-bit path packs 16 lanes/group, so its fixed cost is lower
 // and it always takes the vectorised path.)
+#if defined(__x86_64__)
 constexpr int kCompressMinBits = 6;
+#endif
 
 // Trivially-copyable stand-in for element widths without a native integer type
 // (3/12/16/32-byte: uint24 / int96 / decimal12 / int128 / DecimalV2 / int256).

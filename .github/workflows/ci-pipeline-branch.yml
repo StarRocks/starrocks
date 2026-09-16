@@ -75,20 +75,13 @@ jobs:
         if: github.base_ref != 'main'
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-          ref: refs/pull/${{ github.event.pull_request.number }}/head
-
-      - name: Checkout PR
-        id: checkout_pr
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
-          git fetch upstream
-          git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
+          fetch-depth: 1
+          ref: refs/heads/${{ github.base_ref }}
+          sparse-checkout: .github
 
       - name: Branch Access Check
         id: branch_access_check
-        if: steps.checkout_pr.outcome =='success'
+        if: steps.checkout_code.outcome == 'success'
         env:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
@@ -255,7 +248,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        linux: [centos7, ubuntu, rocky9]
+        linux: [rocky9, ubuntu]
     steps:
       - name: clean
         run: |
@@ -296,7 +289,7 @@ jobs:
     if: "!cancelled() && needs.be-checker.outputs.output1 == 'true'"
     name: Thirdparty Info
     outputs:
-      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      rocky9_image_cache_id: ${{ steps.info.outputs.rocky9_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
     steps:
       - name: Download Thirdparty Artifact
@@ -323,7 +316,7 @@ jobs:
           # `continue-on-error: true`, silent upload-artifact failures, and
           # empty image_cache.info files.
           missing=()
-          for platform in centos7 ubuntu; do
+          for platform in rocky9 ubuntu; do
             f="./outputs/THIRDPARTY-RESULT-${platform}/image_cache.info"
             if [[ ! -s "$f" ]]; then
               missing+=("${platform}")
@@ -338,12 +331,12 @@ jobs:
         id: info
         run: |
           if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
-            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-rocky9/image_cache.info")
+            echo "rocky9_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
             image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
             echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
           else
-            echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "rocky9_image_cache_id=" >> $GITHUB_OUTPUT
             echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
           fi
 
@@ -369,7 +362,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
+              export image_cache_id=${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
@@ -518,7 +511,7 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          IMAGE_CACHE_ID="${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}"
+          IMAGE_CACHE_ID="${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}"
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER

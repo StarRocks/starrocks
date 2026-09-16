@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -112,8 +113,7 @@ import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -732,6 +732,11 @@ public class OlapTable extends Table {
         }
         fullSchema = newFullSchema;
         updateSchemaIndex();
+        // The column set just changed and the cache is keyed by column NAME, so DROP COLUMN c +
+        // ADD COLUMN c would otherwise hand the new column the old one's min/max. Called on every
+        // schema-change job and on their replay; the calls from metadata load are a no-op because
+        // nothing is cached yet.
+        invalidateMinMaxStats();
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
@@ -799,7 +804,7 @@ public class OlapTable extends Table {
             Optional<PhysicalPartition> firstPhysicalPartition = partition.getSubPartitions().stream().findFirst();
             if (firstPhysicalPartition.isPresent()) {
                 PhysicalPartition physicalPartition = firstPhysicalPartition.get();
-                return physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+                return physicalPartition.getQueryableMaterializedIndices(IndexExtState.VISIBLE);
             }
         }
         return Lists.newArrayList();
@@ -998,18 +1003,73 @@ public class OlapTable extends Table {
         return partitionInfo;
     }
 
+    /**
+     * How long to wait for the targeted nodes to acknowledge a drop of their auto-increment map.
+     * Mutable only so a test can pin the strict variant's refusal without sitting out a full minute.
+     */
+    @VisibleForTesting
+    static long dropAutoIncrementMapTimeoutMs = 60L * 1000L;
+
+    /**
+     * Strict invalidation: tell every registered node, alive or not, to drop its cached
+     * auto-increment map for this table, and report failure unless all of them acknowledged.
+     *
+     * <p>Both callers move the table's counter, so an interval a node reserved earlier must not
+     * outlive the change - it would hand out ids below the value just set, or ids already issued.
+     * They differ in what they do about it:
+     *
+     * <ul>
+     * <li>{@code ALTER TABLE ... AUTO_INCREMENT} ({@code LocalMetastore.alterTableAutoIncrement})
+     * uses the result as a gate: it raises the counter only if this returned true.</li>
+     * <li>RESTORE ({@code RestoreJob}) calls this and <em>discards</em> the result, so a timeout
+     * here does not stop it from recovering the counter. That gap is pre-existing and tracked
+     * separately; do not read this contract as if RESTORE were guarded.</li>
+     * </ul>
+     *
+     * <p>RESTORE still needs this variant rather than the best-effort one, for a reason that has
+     * nothing to do with the return value: targeting a node that is not alive leaves its task queued
+     * in {@link AgentTaskQueue}, which is what lets {@code ReportHandler} resend it once that node
+     * reports again. The best-effort variant never builds that task, so such a node would never be
+     * told at all. And it does come back: a node goes {@code isAlive == false} after failed
+     * heartbeats and is marked alive again on the next successful one <em>without restarting</em>
+     * ({@code ComputeNode.handleHbResponse}), so its in-memory interval survives the outage.
+     *
+     * @see #sendDropAutoIncrementMapTaskBestEffort() for the drop path, which must not block
+     */
     public boolean sendDropAutoIncrementMapTask() {
-        Set<Long> nodeIds = Sets.newHashSet();
-        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
-        for (Backend backend : backends) {
-            nodeIds.add(backend.getId());
-        }
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(false));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(false));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
 
-        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
-        for (ComputeNode cn : computeNodes) {
-            nodeIds.add(cn.getId());
-        }
+    /**
+     * Best-effort invalidation: tell only the nodes that are alive, and do not wait for the rest.
+     *
+     * <p>For DROP TABLE / DROP DATABASE, where the result carries no guarantee and none is needed:
+     * table ids come from {@code getNextId()} and are never reused, so a stale entry left behind on
+     * a node that is not alive can never be hit by a future table.
+     *
+     * <p>Waiting for such a node is not merely useless here, it is harmful.
+     * {@link AgentBatchTask#run()} silently drops a task whose target node is gone or not alive, so
+     * no response ever arrives and nobody counts that latch mark down - the caller burns the full
+     * latch timeout. DROP DATABASE runs this once per auto-increment table while holding the
+     * database WRITE lock, so a single dead node turns into (table count * timeout) of lock hold
+     * time and stalls every other operation on the database.
+     *
+     * <p>The predicate is {@code isAlive()} - the same one {@code AgentBatchTask.run()} applies, so
+     * a node that passes here is a node the dispatch path will really send to - and not
+     * {@code isAvailable()}: a decommissioning node is alive, still serves loads, and still holds a
+     * map worth dropping.
+     */
+    public boolean sendDropAutoIncrementMapTaskBestEffort() {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(true));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(true));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
 
+    private boolean doSendDropAutoIncrementMapTask(Set<Long> nodeIds) {
         AgentBatchTask batchTask = new AgentBatchTask();
 
         for (long nodeId : nodeIds) {
@@ -1019,23 +1079,31 @@ public class OlapTable extends Table {
         }
 
         boolean ok = true;
+        boolean allQueued = true;
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
                 latch.addMark(task.getBackendId(), -1L);
                 ((DropAutoIncrementMapTask) task).setLatch(latch);
-                AgentTaskQueue.addTask(task);
+                if (!AgentTaskQueue.addTask(task)) {
+                    // Not enqueued (duplicate signature, or this node is demoting / not the leader):
+                    // no BE response will ever arrive, so do not wait for it. This runs inside the
+                    // DROP TABLE WAL applier during a demotion drain - waiting out the full latch
+                    // timeout there would burn the drain budget for nothing.
+                    allQueued = false;
+                    latch.markedCountDown(task.getBackendId(), -1L);
+                }
             }
             AgentTaskExecutor.submit(batchTask);
 
-            // estimate timeout, at most 10 min
-            long timeout = 60L * 1000L;
+            long timeout = dropAutoIncrementMapTimeoutMs;
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
                         batchTask.getTaskNum(), timeout);
-                ok = latch.await(timeout, TimeUnit.MILLISECONDS);
+                ok = latch.await(timeout, TimeUnit.MILLISECONDS) && allQueued;
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
+                ok = false;
             }
 
             if (!ok) {
@@ -1256,12 +1324,41 @@ public class OlapTable extends Table {
         }
     }
 
+    /**
+     * Drop this table's cached column min/max values.
+     *
+     * <p>{@code ColumnMinMaxMgr} keeps them keyed by (table id, column name) and validates an entry
+     * by comparing the table-level {@code max(visibleVersionTime)} it was loaded at against the
+     * current one, accepting the entry when it is not older. Loading data is the only operation that
+     * reliably advances that stamp. DDL does not:
+     *
+     * <ul>
+     *   <li>REPLACE PARTITION and INSERT OVERWRITE move the temporary {@link Partition} object into
+     *       the formal list as it stands, so the table-level maximum goes BACKWARDS whenever that
+     *       partition was loaded before the one it replaces;</li>
+     *   <li>dropping the most recently loaded partition moves it backwards the same way;</li>
+     *   <li>RECOVER PARTITION brings data back without necessarily raising it;</li>
+     *   <li>a fast schema change does not touch partitions at all, yet DROP COLUMN c + ADD COLUMN c
+     *       gives a brand new column the previous one's cache entry, since the key is the name.</li>
+     * </ul>
+     *
+     * <p>In every one of those cases a stale entry keeps passing the version check for as long as it
+     * lives -- the cache has no TTL -- so min()/max() constant-folds to values that no longer exist.
+     * Hence the explicit invalidation, hooked into the low-level mutators below rather than into the
+     * DDL entry points: these run identically on the leader and on edit-log replay, so followers
+     * (which fold min/max from their own cache) drop the entry too.
+     */
+    private void invalidateMinMaxStats() {
+        IMinMaxStatsMgr.invalidateTable(this);
+    }
+
     public void addPartition(Partition partition) {
         idToPartition.put(partition.getId(), partition);
         nameToPartition.put(partition.getName(), partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
         }
+        invalidateMinMaxStats();
     }
 
     public void removePhysicalPartition(PhysicalPartition physicalPartition) {
@@ -1294,6 +1391,7 @@ public class OlapTable extends Table {
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
+        invalidateMinMaxStats();
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
@@ -1609,6 +1707,7 @@ public class OlapTable extends Table {
             this.indexes = new TableIndexes(null);
         }
         this.indexes.setIndexes(indexes);
+        tryToAssignIndexId();
     }
 
     public String getColocateGroup() {
@@ -1687,7 +1786,7 @@ public class OlapTable extends Table {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
-                rowCount += partition.getLatestBaseIndex().getRowCount();
+                rowCount += partition.getQueryableBaseIndex().getRowCount();
             }
         }
         return rowCount;
@@ -1891,6 +1990,10 @@ public class OlapTable extends Table {
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, dataCacheInfo);
         }
 
+        // This swaps the partition maps directly instead of going through addPartition() /
+        // removePartitionFromInnerState(), so it needs its own call.
+        invalidateMinMaxStats();
+
         return oldPartition;
     }
 
@@ -1994,7 +2097,7 @@ public class OlapTable extends Table {
         for (Partition partition : getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long version = physicalPartition.getVisibleVersion();
-                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getQueryableMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         totalCount += tablet.getRowCount(version);
                     }
@@ -2422,6 +2525,18 @@ public class OlapTable extends Table {
 
     public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
         tableProperty.setHasForbiddenGlobalDict(hasForbiddenGlobalDict);
+    }
+
+    public boolean isNoDictColumn(String columnName) {
+        return tableProperty != null && tableProperty.isNoDictColumn(columnName);
+    }
+
+    public java.util.Set<String> getNoDictColumns() {
+        return tableProperty == null ? java.util.Collections.emptySet() : tableProperty.getNoDictColumns();
+    }
+
+    public void setNoDictColumns(java.util.Set<String> noDictColumns) {
+        tableProperty.setNoDictColumns(noDictColumns);
     }
 
     // return true if partition with given name already exist, both in partitions
@@ -2936,7 +3051,10 @@ public class OlapTable extends Table {
         // which make things easier.
         dropAllTempPartitions();
         if (!replay && hasAutoIncrementColumn()) {
-            sendDropAutoIncrementMapTask();
+            // Best-effort: the table is going away and its id is never reused, so an entry left on
+            // a node that is not alive is unreachable dead memory. Waiting for such a node would
+            // cost a full latch timeout per table with the database WRITE lock held.
+            sendDropAutoIncrementMapTaskBestEffort();
         }
 
         updateBaseCompactionForbiddenTimeRanges(true);

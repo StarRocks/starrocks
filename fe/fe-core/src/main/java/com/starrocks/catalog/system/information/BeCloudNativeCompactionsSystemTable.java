@@ -43,6 +43,7 @@ public class BeCloudNativeCompactionsSystemTable {
                         .column("PROGRESS", IntegerType.INT)
                         .column("STATUS", VarcharType.VARCHAR)
                         .column("PROFILE", VarcharType.VARCHAR)
+                        .column("SUBTASK_ID", IntegerType.INT)
                         .build(), TSchemaTableType.SCH_BE_CLOUD_NATIVE_COMPACTIONS);
     }
 }

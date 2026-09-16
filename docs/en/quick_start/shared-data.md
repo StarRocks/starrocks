@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 2
+sidebar_position: 30
 description: "Quick start guide for deploying StarRocks in shared-data mode with separate compute and storage."
 ---
 

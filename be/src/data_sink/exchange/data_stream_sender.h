@@ -54,7 +54,6 @@ class IOBuf;
 namespace starrocks {
 
 class ExprContext;
-class RowDescriptor;
 class TDataStreamSink;
 class TNetworkAddress;
 class TPlanFragmentDestination;
@@ -74,9 +73,8 @@ class DataStreamSender final : public DataSink {
 public:
     // Construct a sender according to the output specification (sink),
     // sending to the given destinations.
-    // The RowDescriptor must live until close() is called.
     // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
-    DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
+    DataStreamSender(RuntimeState* state, int sender_id, const TDataStreamSink& sink,
                      const std::vector<TPlanFragmentDestination>& destinations,
                      bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
                      bool enable_exchange_perf);

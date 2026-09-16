@@ -232,6 +232,11 @@ public class AlterHandlerEditLogTest {
         }
 
         @Override
+        protected void resetTransientState() {
+            // Mock: nothing transient to reset.
+        }
+
+        @Override
         protected void runPendingJob() throws AlterCancelException {
             // Mock implementation
         }

@@ -82,12 +82,29 @@ CONF_String(jaeger_endpoint, "");
 // other value means the default value
 CONF_Int32(exception_stack_level, "1");
 
-CONF_String(exception_stack_white_list, "std::");
+// `starrocks::BadStatusOrAccess` comes from an unguarded StatusOr::value() and is caught nowhere,
+// so every occurrence is a bug. The stack recorded at the throw site is the only way to locate it:
+// by the time a catch handler runs the throwing frames are already unwound, so a stack taken there
+// only shows the catch site.
+// Keep it an exact type rather than a bare `starrocks::` prefix, which would also match
+// starrocks::RuntimeException. That one exists specifically to opt out of this stack printing (see
+// be/src/runtime/exception.h) because it is thrown per row on hot paths such as cast failures.
+CONF_String(exception_stack_white_list, "std::,starrocks::BadStatusOrAccess");
 
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+
+// If the fatal-signal (crash) handler hangs, e.g. a jemalloc deadlock while releasing resources
+// before the core dump (https://github.com/StarRocks/starrocks/issues/59226), force the process to
+// exit after this many seconds so orchestrators can restart it. The crash flag is still set first,
+// so the FE keeps seeing SHUTDOWN heartbeats during the grace window; this only bounds how long a
+// crashing process can linger while alive (https://github.com/StarRocks/starrocks/issues/76441).
+// Disabled by default (0) so an upgrade keeps the existing crash/core-dump behavior unchanged; set a
+// positive value to opt in and force-exit after that many seconds. A value <= 0 keeps it disabled.
+// Read once at startup: the watchdog thread is only launched when the value is positive.
+CONF_Int64(process_force_exit_after_crash_handler_hang_second, "0");
 
 // Current supported modules:
 // 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
