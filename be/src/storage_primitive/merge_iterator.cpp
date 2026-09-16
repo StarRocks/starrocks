@@ -307,7 +307,10 @@ inline Status MergeIterator::init() {
     DCHECK_EQ(_children.size(), _bufs.size());
     _mem_tracker = tls_thread_status.mem_tracker();
     _buffers = std::max(1, config::compaction_merge_child_buffers);
-    _pool = tls_in_merge_prefill ? nullptr : merge_prefill_pool();
+    // The pool is the master switch's resource: with enable_compaction_parallel_merge_init off there
+    // is no prefill and no read-ahead pump, whatever compaction_merge_child_buffers says, so the
+    // documented "takes effect only with the switch" holds and an idle BE never builds the pool.
+    _pool = (config::enable_compaction_parallel_merge_init && !tls_in_merge_prefill) ? merge_prefill_pool() : nullptr;
 
     const size_t nslots = pipelined() ? _buffers : 1;
     for (auto& buf : _bufs) {
