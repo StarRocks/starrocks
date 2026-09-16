@@ -109,10 +109,10 @@ let
       md5 = "724cd1df9735de2b8939d298f0d95ea2";
       sha256 = "04ng0l997j8vxvsp60haf6nvhx4201qsrkhzm3y35qr57k3f4mh4";
     };
-    "fast-float-3.5.1.tar.gz" = {
-      url = "https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz";
-      md5 = "adb3789b99f47e0cd971b4d90727d4d0";
-      sha256 = "1nad5fihmv4g2i7cih7nwkv9rba9gw81lill7k8gglnccsfbyn45";
+    "fast-float-8.2.10.tar.gz" = {
+      url = "https://github.com/fastfloat/fast_float/archive/refs/tags/v8.2.10.tar.gz";
+      md5 = "ddcf64ffe15f1e1ed964a355db7a04f3";
+      sha256 = "07wnjlxxwh0gxwaswar58n4gmgfl8xm9iw6ica44vkxijzfmiybn";
     };
     "FlameGraph-20251015.tar.gz" = {
       url = "https://github.com/murphyatwork/FlameGraph/archive/refs/tags/20251015.tar.gz";
@@ -500,7 +500,7 @@ let
       "velocypack-XYZ1.0.tar.gz"
       "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
@@ -570,7 +570,7 @@ let
       "velocypack-XYZ1.0.tar.gz"
       "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
@@ -639,7 +639,7 @@ let
       "velocypack-XYZ1.0.tar.gz"
       "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
