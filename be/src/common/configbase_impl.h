@@ -221,10 +221,10 @@ private:
     FIELD_TYPE FIELD_NAME;                                                         \
     static FieldImpl<FIELD_TYPE> field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE);
 
-#define DEFINE_ENUM_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME, ENUM_SET, FALLBACK) \
-    FIELD_TYPE FIELD_NAME;                                                                                  \
-    static EnumField<FIELD_TYPE> field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT,     \
-                                                    VALMUTABLE, ENUM_SET, FALLBACK);
+#define DEFINE_ENUM_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME, ENUM_SET, FALLBACK)         \
+    FIELD_TYPE FIELD_NAME;                                                                                          \
+    static EnumField<FIELD_TYPE> field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, \
+                                                    ENUM_SET, FALLBACK);
 
 #define DEFINE_ALIAS(REAL_NAME, ALIAS_NAME) static Alias alias_##ALIAS_NAME(#ALIAS_NAME, &(field_##REAL_NAME));
 
