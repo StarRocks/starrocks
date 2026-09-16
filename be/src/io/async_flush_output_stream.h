@@ -71,13 +71,17 @@ public:
     Status close();
 
     // called exactly once
-    std::future<Status> io_status() { return _promise.get_future(); };
+    std::future<Status> io_status() { return _promise->get_future(); };
 
     void enqueue_tasks_and_maybe_submit_task(std::vector<Task> tasks);
 
 private:
     int64_t _total_size{0};
-    std::promise<Status> _promise;
+    // Held by shared_ptr so that it outlives the stream. Satisfying the promise hands this object
+    // to the waiter, who may destroy it immediately -- AsyncFlushStreamPoller::poll() drops the
+    // stream as soon as the future reads ready -- while set_value() is still finishing its wake of
+    // the waiters. The close task keeps its own reference for exactly that tail.
+    std::shared_ptr<std::promise<Status>> _promise = std::make_shared<std::promise<Status>>();
     std::unique_ptr<WritableFile> _file;
     PriorityThreadPool* _io_executor = nullptr;
     RuntimeState* _runtime_state = nullptr;
