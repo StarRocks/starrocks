@@ -309,8 +309,7 @@ void TEST_clear_configs() {
     (void)take_config_fallbacks();
 }
 
-bool fall_back_to_default(const std::string& field, std::string rejected_value,
-                          const std::string& allowed_values) {
+bool fall_back_to_default(const std::string& field, std::string rejected_value, const std::string& allowed_values) {
     auto it = Field::fields().find(field);
     if (it == Field::fields().end()) {
         return false;
