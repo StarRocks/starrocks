@@ -605,7 +605,7 @@ AWS S3 的 `StorageCredentialParams`：
 ###### aws.s3.sse.type
 
 - 必需：否
-- 描述：Iceberg 表对象所使用的 S3 服务端加密（Server-Side Encryption）类型。有效值：`none`（默认）和 `sse-c`（使用客户自备密钥的服务端加密，SSE-C）。当表的数据文件和元数据文件使用 SSE-C 加密时，请将其设置为 `sse-c`。自 v4.1 起支持。
+- 描述：Iceberg 表对象所使用的 S3 服务端加密（Server-Side Encryption）类型。有效值：`none`（默认）和 `sse-c`（使用客户自备密钥的服务端加密，SSE-C）。当表的数据文件和元数据文件使用 SSE-C 加密时，请将其设置为 `sse-c`。SSE-C 仅适用于读操作；不支持向使用 SSE-C 加密的 S3 上的 Iceberg 表写入（INSERT、UPDATE 或 DELETE），此类写入会被拒绝。自 v4.1 起支持。
 
 ###### aws.s3.sse.customer_key
 

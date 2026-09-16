@@ -472,29 +472,44 @@ static int64_t read_ahead_size_from_options(const FSOptions& options) {
     return read_ahead_size;
 }
 
-// Reads the SSE-C customer key from the cloud configuration and enables it on the input stream, so every
-// GetObject/HeadObject carries the customer key headers. No-op unless AWS SSE-C is configured. Read directly
-// from the property bag to avoid re-parsing the whole cloud configuration on each file open.
-static void apply_sse_c_from_options(io::S3InputStream* input_stream, const FSOptions& options) {
-    const THdfsProperties* hdfs_properties = FSOptionsHelper::hdfs_properties(options);
-    const TCloudConfiguration* cloud_configuration = nullptr;
+// Returns the cloud configuration carried by the FS options, either directly or via the hdfs properties.
+// Returns nullptr when none is set.
+static const TCloudConfiguration* cloud_configuration_from_options(const FSOptions& options) {
     if (options.cloud_configuration != nullptr) {
-        cloud_configuration = options.cloud_configuration;
-    } else if (hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) {
-        cloud_configuration = &hdfs_properties->cloud_configuration;
+        return options.cloud_configuration;
     }
+    const THdfsProperties* hdfs_properties = FSOptionsHelper::hdfs_properties(options);
+    if (hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) {
+        return &hdfs_properties->cloud_configuration;
+    }
+    return nullptr;
+}
+
+// Returns true when the cloud configuration requests AWS SSE-C. Reads apply the customer key per request;
+// writes are rejected (the output streams do not send the SSE-C headers), so new_writable_file uses this.
+static bool sse_c_enabled_in_options(const FSOptions& options) {
+    const TCloudConfiguration* cloud_configuration = cloud_configuration_from_options(options);
     if (cloud_configuration == nullptr || !cloud_configuration->__isset.cloud_properties) {
-        return;
+        return false;
     }
     const auto& properties = cloud_configuration->cloud_properties;
     auto type_itr = properties.find(AWS_S3_SSE_TYPE);
     if (type_itr == properties.end() || type_itr->second != "sse-c") {
-        return;
+        return false;
     }
     auto key_itr = properties.find(AWS_S3_SSE_KEY);
-    if (key_itr == properties.end() || key_itr->second.empty()) {
+    return key_itr != properties.end() && !key_itr->second.empty();
+}
+
+// Reads the SSE-C customer key from the cloud configuration and enables it on the input stream, so every
+// GetObject/HeadObject carries the customer key headers. No-op unless AWS SSE-C is configured. Read directly
+// from the property bag to avoid re-parsing the whole cloud configuration on each file open.
+static void apply_sse_c_from_options(io::S3InputStream* input_stream, const FSOptions& options) {
+    if (!sse_c_enabled_in_options(options)) {
         return;
     }
+    const auto& properties = cloud_configuration_from_options(options)->cloud_properties;
+    auto key_itr = properties.find(AWS_S3_SSE_KEY);
     auto md5_itr = properties.find(AWS_S3_SSE_KEY_MD5);
     input_stream->set_sse_customer_key(key_itr->second, md5_itr != properties.end() ? md5_itr->second : std::string());
 }
@@ -564,6 +579,11 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
     // here we assume that the caller can ensure that the file does not exist by themself.
     if (opts.mode != FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE && opts.mode != FileSystem::MUST_CREATE) {
         return Status::NotSupported(fmt::format("S3FileSystem does not support open mode {}", opts.mode));
+    }
+    // SSE-C applies to reads only: the output streams below do not send the SSE-C customer-key headers, so a
+    // write would either be rejected by S3 or silently produce objects the catalog cannot read back. Reject it.
+    if (sse_c_enabled_in_options(_options)) {
+        return Status::NotSupported("writing to SSE-C encrypted S3 is not supported");
     }
     auto client = new_s3client(uri, _options);
     // Use provided content_type or default to application/octet-stream

@@ -131,8 +131,7 @@ public class IcebergConnector implements Connector {
         if (!AwsSseCUtil.isSseCEnabled(catalogProperties)) {
             return catalogProperties;
         }
-        String keyMd5 = catalogProperties.getOrDefault(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5,
-                AwsSseCUtil.validateAndGetKeyMd5(catalogProperties));
+        String keyMd5 = AwsSseCUtil.validateAndGetKeyMd5(catalogProperties);
         Map<String, String> augmented = new HashMap<>(catalogProperties);
         augmented.put(S3FileIOProperties.SSE_TYPE, S3FileIOProperties.SSE_TYPE_CUSTOM);
         augmented.put(S3FileIOProperties.SSE_KEY, catalogProperties.get(CloudConfigurationConstants.AWS_S3_SSE_KEY));

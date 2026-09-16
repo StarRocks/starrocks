@@ -47,11 +47,13 @@ public class AwsSseCUtil {
     }
 
     /**
-     * Validates the SSE-C properties and, when enabled, returns the base64-encoded MD5 of the key (either
-     * the caller-provided one or a freshly computed one). Returns null when SSE-C is not enabled.
+     * Validates the SSE-C properties and, when enabled, returns the base64-encoded MD5 of the key. The MD5 is
+     * always computed from the (validated) key. When the caller also supplied {@code aws.s3.sse.customer_key_md5},
+     * it must equal the computed value, otherwise an IllegalArgumentException is thrown so the mismatch fails
+     * catalog creation instead of every later S3 request. Returns null when SSE-C is not enabled.
      *
-     * @throws IllegalArgumentException if the type is unknown, the key is missing, or the key is not a
-     *         base64-encoded 256-bit value.
+     * @throws IllegalArgumentException if the type is unknown, the key is missing, the key is not a
+     *         base64-encoded 256-bit value, or a supplied MD5 does not match the key.
      */
     public static String validateAndGetKeyMd5(Map<String, String> properties) {
         String type = properties.get(CloudConfigurationConstants.AWS_S3_SSE_TYPE);
@@ -88,7 +90,16 @@ public class AwsSseCUtil {
                     CloudConfigurationConstants.AWS_S3_SSE_KEY, rawKey.length));
         }
 
-        return computeMd5(rawKey);
+        String computedMd5 = computeMd5(rawKey);
+        String suppliedMd5 = properties.get(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5);
+        if (suppliedMd5 != null && !suppliedMd5.trim().isEmpty() && !suppliedMd5.trim().equals(computedMd5)) {
+            throw new IllegalArgumentException(String.format(
+                    "Property '%s' does not match the MD5 of the key in '%s'. Omit '%s' to have it computed "
+                            + "automatically.",
+                    CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5, CloudConfigurationConstants.AWS_S3_SSE_KEY,
+                    CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5));
+        }
+        return computedMd5;
     }
 
     /**

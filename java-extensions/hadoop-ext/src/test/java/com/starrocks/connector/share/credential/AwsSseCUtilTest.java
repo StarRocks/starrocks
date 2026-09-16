@@ -57,6 +57,28 @@ public class AwsSseCUtilTest {
     }
 
     @Test
+    public void testValidateAcceptsMatchingSuppliedMd5() throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("MD5");
+        String correctMd5 = Base64.getEncoder().encodeToString(digest.digest(Base64.getDecoder().decode(VALID_KEY)));
+
+        Map<String, String> props = new HashMap<>();
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_TYPE, "sse-c");
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_KEY, VALID_KEY);
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5, correctMd5);
+
+        Assertions.assertEquals(correctMd5, AwsSseCUtil.validateAndGetKeyMd5(props));
+    }
+
+    @Test
+    public void testValidateRejectsMismatchedSuppliedMd5() {
+        Map<String, String> props = new HashMap<>();
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_TYPE, "sse-c");
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_KEY, VALID_KEY);
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5, "not-the-right-md5");
+        Assertions.assertThrows(IllegalArgumentException.class, () -> AwsSseCUtil.validateAndGetKeyMd5(props));
+    }
+
+    @Test
     public void testValidateReturnsNullWhenDisabled() {
         Assertions.assertNull(AwsSseCUtil.validateAndGetKeyMd5(new HashMap<>()));
 

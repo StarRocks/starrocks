@@ -562,7 +562,7 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
 ###### aws.s3.sse.type
 
 - Required: No
-- Description: The S3 Server-Side Encryption type used by the objects of the Iceberg table. Valid values: `none` (default) and `sse-c` (Server-Side Encryption with Customer-provided keys). Set this to `sse-c` to read tables whose data and metadata files are encrypted with SSE-C. Supported from v4.1 onwards.
+- Description: The S3 Server-Side Encryption type used by the objects of the Iceberg table. Valid values: `none` (default) and `sse-c` (Server-Side Encryption with Customer-provided keys). Set this to `sse-c` to read tables whose data and metadata files are encrypted with SSE-C. SSE-C applies to read operations only; writing (INSERT, UPDATE, or DELETE) to an Iceberg table backed by SSE-C-encrypted S3 is not supported and is rejected. Supported from v4.1 onwards.
 
 ###### aws.s3.sse.customer_key
 

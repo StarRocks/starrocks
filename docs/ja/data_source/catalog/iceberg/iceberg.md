@@ -562,7 +562,7 @@ AWS S3 用の `StorageCredentialParams`:
 ###### aws.s3.sse.type
 
 - 必須: いいえ
-- 説明: Iceberg テーブルのオブジェクトに使用される S3 サーバーサイド暗号化 (Server-Side Encryption) のタイプです。有効な値: `none` (デフォルト) および `sse-c` (顧客提供キーによるサーバーサイド暗号化、SSE-C)。テーブルのデータファイルおよびメタデータファイルが SSE-C で暗号化されている場合は、`sse-c` に設定してください。v4.1 以降でサポートされます。
+- 説明: Iceberg テーブルのオブジェクトに使用される S3 サーバーサイド暗号化 (Server-Side Encryption) のタイプです。有効な値: `none` (デフォルト) および `sse-c` (顧客提供キーによるサーバーサイド暗号化、SSE-C)。テーブルのデータファイルおよびメタデータファイルが SSE-C で暗号化されている場合は、`sse-c` に設定してください。SSE-C は読み取り操作にのみ適用されます。SSE-C で暗号化された S3 上の Iceberg テーブルへの書き込み (INSERT、UPDATE、DELETE) はサポートされておらず、拒否されます。v4.1 以降でサポートされます。
 
 ###### aws.s3.sse.customer_key
 

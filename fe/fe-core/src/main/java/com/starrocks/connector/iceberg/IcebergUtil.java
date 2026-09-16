@@ -23,6 +23,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -315,12 +316,17 @@ public final class IcebergUtil {
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
 
+        // The catalog's own configuration carries SSE-C material (when configured). The vended-credentials
+        // builders below only copy the session credentials/region/endpoint, so we merge SSE-C back in before
+        // returning so BE data reads keep sending the SSE-C headers on every request.
+        CloudConfiguration catalogCloudConfiguration = connector.getMetadata().getCloudConfiguration();
+
         // Try to get vended credentials from loadTable response
         CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
                         icebergTable.getNativeTable().location());
         if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return vendedCredentialsCloudConfiguration;
+            return mergeSseC(vendedCredentialsCloudConfiguration, catalogCloudConfiguration);
         }
 
         // Try to get credentials from catalog config (/v1/config response).
@@ -329,13 +335,35 @@ public final class IcebergUtil {
                 buildCloudConfigurationForVendedCredentials(connector.getMetadata().getCatalogProperties(),
                         icebergTable.getNativeTable().location());
         if (catalogConfigCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return catalogConfigCloudConfiguration;
+            return mergeSseC(catalogConfigCloudConfiguration, catalogCloudConfiguration);
         }
 
-        // Fall back to user-provided catalog credentials
-        CloudConfiguration cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-        Preconditions.checkState(cloudConfiguration != null,
+        // Fall back to user-provided catalog credentials (already carries SSE-C).
+        Preconditions.checkState(catalogCloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
+        return catalogCloudConfiguration;
+    }
+
+    // Copies the SSE-C material from the catalog configuration onto a vended-credentials configuration that was
+    // rebuilt without it. No-op unless both are AWS configurations and the catalog one has SSE-C enabled.
+    private static CloudConfiguration mergeSseC(CloudConfiguration vended, CloudConfiguration catalog) {
+        if (vended instanceof AwsCloudConfiguration && catalog instanceof AwsCloudConfiguration) {
+            ((AwsCloudConfiguration) vended).copySseCFrom((AwsCloudConfiguration) catalog);
+        }
+        return vended;
+    }
+
+    // Like getVendedCloudConfiguration, but for Iceberg write sinks. Writing to SSE-C encrypted S3 is not
+    // supported (the BE output streams do not send the SSE-C customer-key headers), so reject it here with a
+    // clear error instead of letting the write fail at S3 or silently produce objects the catalog cannot read.
+    public static CloudConfiguration getVendedCloudConfigurationForWrite(String catalogName, IcebergTable icebergTable) {
+        CloudConfiguration cloudConfiguration = getVendedCloudConfiguration(catalogName, icebergTable);
+        if (cloudConfiguration instanceof AwsCloudConfiguration
+                && ((AwsCloudConfiguration) cloudConfiguration).isEnableSseC()) {
+            throw new StarRocksConnectorException(
+                    "Writing to Iceberg tables backed by SSE-C encrypted S3 (aws.s3.sse.type = sse-c) is not " +
+                            "supported; the SSE-C settings apply to reads only.");
+        }
         return cloudConfiguration;
     }
 
