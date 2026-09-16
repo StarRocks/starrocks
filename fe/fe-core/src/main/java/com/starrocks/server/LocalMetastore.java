@@ -1148,6 +1148,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+<<<<<<< HEAD
     private void updatePartitionInfo(PartitionInfo partitionInfo, List<Pair<Partition, PartitionDesc>> partitionList,
                                      Set<String> existPartitionNameSet, boolean isTempPartition,
                                      OlapTable olapTable)
@@ -1160,6 +1161,71 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             listPartitionInfo.handleNewListPartitionDescs(olapTable.getIdToColumn(),
                     partitionList, existPartitionNameSet, isTempPartition);
+=======
+    /**
+     * The lake tablets of a new partition (ADD PARTITION, TRUNCATE TABLE, the temp partitions of
+     * INSERT OVERWRITE / OPTIMIZE) are created outside the table lock and pinned to the colocation
+     * meta group looked up at that time (see {@link #createLakeTablets}). A concurrent
+     * {@code ALTER TABLE ... SET ('colocate_with' = ...)} in that window would leave the new shards in a
+     * meta group the table no longer belongs to: the post-commit {@code updateLakeTableColocationInfo}
+     * only knows the table's current group. Fail the DDL so the caller retries against the new colocation;
+     * the shards created by the failed attempt are reclaimed by StarMgrMetaSyncer.
+     */
+    public void checkIfColocateMetaGroupChange(OlapTable olapTable, ColocateTableIndex.GroupId expectedGroupId,
+                                               String tableName) throws DdlException {
+        ColocateTableIndex.GroupId currentGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
+        if (!Objects.equals(currentGroupId, expectedGroupId)) {
+            throw new DdlException("Table[" + tableName + "]'s colocation has been changed. try again.");
+        }
+    }
+
+    private static class PartitionInfoCheckResult {
+        private final Map<Long, Range<PartitionKey>> idToRange;
+        private final Map<Long, List<LiteralExpr>> idToLiteralExprValues;
+        private final Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues;
+
+        private PartitionInfoCheckResult(Map<Long, Range<PartitionKey>> idToRange,
+                                         Map<Long, List<LiteralExpr>> idToLiteralExprValues,
+                                         Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues) {
+            this.idToRange = idToRange;
+            this.idToLiteralExprValues = idToLiteralExprValues;
+            this.idToMultiLiteralExprValues = idToMultiLiteralExprValues;
+        }
+
+        private static PartitionInfoCheckResult empty() {
+            return new PartitionInfoCheckResult(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap());
+        }
+
+        private Range<PartitionKey> getRange(long partitionId) {
+            return idToRange.get(partitionId);
+        }
+
+        private List<LiteralExpr> getLiteralExprValues(long partitionId) {
+            return idToLiteralExprValues.get(partitionId);
+        }
+
+        private List<List<LiteralExpr>> getMultiLiteralExprValues(long partitionId) {
+            return idToMultiLiteralExprValues.get(partitionId);
+        }
+    }
+
+    private PartitionInfoCheckResult checkPartitionInfo(PartitionInfo partitionInfo, OlapTable olapTable,
+                                                        List<Pair<Partition, PartitionDesc>> partitionsToAdd,
+                                                        boolean isTempPartition) throws DdlException {
+        if (partitionInfo instanceof RangePartitionInfo rangePartitionInfo) {
+            Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo
+                    .checkNewRangePartitionDescs(olapTable.getIdToColumn(), partitionsToAdd, isTempPartition);
+            return new PartitionInfoCheckResult(idToRange, Collections.emptyMap(), Collections.emptyMap());
+        } else if (partitionInfo instanceof ListPartitionInfo listPartitionInfo) {
+            Map<Long, List<LiteralExpr>> idToLiteralExprValues = Maps.newHashMapWithExpectedSize(partitionsToAdd.size());
+            Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues =
+                    Maps.newHashMapWithExpectedSize(partitionsToAdd.size());
+            listPartitionInfo.checkNewListPartitionDescs(olapTable.getIdToColumn(),
+                    partitionsToAdd,
+                    idToLiteralExprValues,
+                    idToMultiLiteralExprValues);
+            return new PartitionInfoCheckResult(Collections.emptyMap(), idToLiteralExprValues, idToMultiLiteralExprValues);
+>>>>>>> 600c9b7 ([BugFix] Create hash-colocate lake shards on colocate-aligned workers (#79223))
         } else {
             throw new DdlException("Only support adding partition to range/list partitioned table");
         }
@@ -1330,6 +1396,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         DistributionInfo distributionInfo;
         OlapTable olapTable = checkTable(db, tableName);
         OlapTable copiedTable;
+        ColocateTableIndex.GroupId metaGroupColocateGroupId;
 
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
@@ -1351,6 +1418,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
+            // Snapshot the colocation meta group that the lock-free tablet creation below pins the new
+            // shards to; re-validated under the WRITE lock before commit.
+            metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
             copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
@@ -1398,6 +1468,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 // check if meta changed
                 checkIfMetaChange(olapTable, copiedTable, tableName);
+                checkIfColocateMetaGroupChange(olapTable, metaGroupColocateGroupId, tableName);
 
                 // get partition info
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -2282,11 +2353,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         int bucketNum = distributionInfo.getBucketNum();
+        // For meta-group colocate tables (hash colocate lake tables — the only groups that get a
+        // StarOS meta group), create the shards already joined to the colocation meta group (same
+        // effect as the later updateMetaGroup join), so the very first placement honors the
+        // colocation constraint. Otherwise the shards get generic placement first and are only
+        // migrated onto the colocate-aligned workers after their shard groups join the meta group
+        // (InsertOverwriteJobRunner post-commit / StarMgrMetaSyncer), which runs after the load
+        // has finished and therefore orphans the caches the load populated on the original
+        // workers.
+        // The join can only be honored once the meta group has buckets, i.e. once some shard group
+        // has joined it, which StarOS rejects otherwise. A table without any shard group yet cannot
+        // tell (its group may have been created empty, e.g. a colocate table created without any
+        // partition), so its first partition is created without the join and the post-commit join
+        // defines the buckets, as it always did for the first member of a meta group.
+        ColocateTableIndex.GroupId colocateGroupId = table.getShardGroupIds().isEmpty() ? null
+                : colocateTableIndex.getMetaGroupColocateGroupId(table.getId());
+        long metaGroupId = colocateGroupId == null ? 0 : colocateGroupId.grpId;
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
                 shardGroupId,
-                null, properties, computeResource);
+                null, properties, metaGroupId, computeResource);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             if (distributionInfoType == DistributionInfo.DistributionInfoType.RANGE) {
@@ -4875,6 +4962,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long tableId = MetaUtils.getSessionAwareTable(context, db, dbTbl).getId();
         Locker locker = new Locker();
         OlapTable olapTable = null;
+        ColocateTableIndex.GroupId metaGroupColocateGroupId;
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -4899,6 +4987,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
+            // Same as addPartitions: the new partitions' shards are pinned to this meta group outside the lock.
+            metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
@@ -4986,6 +5076,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (metaChanged) {
                 throw new DdlException("Table[" + copiedTbl.getName() + "]'s meta has been changed. try again.");
             }
+            checkIfColocateMetaGroupChange(olapTable, metaGroupColocateGroupId, copiedTbl.getName());
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
