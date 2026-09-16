@@ -28,6 +28,7 @@
 #include <thread>
 
 #include "common/config_update_registry.h"
+#include "common/glog_init.h"
 #include "common/status.h"
 #include "gutil/strings/join.h"
 
@@ -275,6 +276,158 @@ TEST_F(ConfigTest, test_string_enum_empty_value) {
         EXPECT_FALSE(config::init(ss));
         EXPECT_EQ("", cfg_optional_mode);
     }
+}
+
+TEST_F(ConfigTest, test_mutable_string_enum) {
+    CONF_mString_enum(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = warning
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("WARNING", cfg_level.value());
+    }
+    // A mutable enum can be set at runtime, and the declared spelling is what it ends up holding.
+    ASSERT_TRUE(config::set_config("cfg_level", "Error").ok());
+    EXPECT_EQ("ERROR", cfg_level.value());
+    ASSERT_TRUE(config::rollback_config("cfg_level").ok());
+    EXPECT_EQ("WARNING", cfg_level.value());
+
+    // A value matching no enum is rejected and leaves the config alone. It is a caller error, not
+    // something to paper over with the default, because the caller is told about it.
+    Status st = config::set_config("cfg_level", "WARN");
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_EQ("WARNING", cfg_level.value());
+    EXPECT_TRUE(config::take_config_fallbacks().empty());
+}
+
+TEST_F(ConfigTest, test_string_enum_or_default) {
+    CONF_mString_enum_or_default(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    // A value from the config file that matches no enum falls back to the declared default, and the
+    // rejection is recorded for whoever can report it once logging exists.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = WARN
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("INFO", cfg_level.value());
+
+        std::vector<ConfigFallback> fallbacks = config::take_config_fallbacks();
+        ASSERT_EQ(1, fallbacks.size());
+        EXPECT_EQ("cfg_level", fallbacks[0].name);
+        EXPECT_EQ("WARN", fallbacks[0].rejected_value);
+        EXPECT_EQ("INFO", fallbacks[0].effective_value);
+        EXPECT_THAT(fallbacks[0].allowed_values, HasSubstr("WARNING"));
+        // Taking them clears them, so the same fallback is never reported twice.
+        EXPECT_TRUE(config::take_config_fallbacks().empty());
+    }
+    // A value that does match is still used as-is.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = fatal
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("FATAL", cfg_level.value());
+        EXPECT_TRUE(config::take_config_fallbacks().empty());
+    }
+    // Falling back is only for the config file. At runtime the caller gets the error instead.
+    Status st = config::set_config("cfg_level", "WARN");
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_EQ("FATAL", cfg_level.value());
+    EXPECT_TRUE(config::take_config_fallbacks().empty());
+}
+
+TEST_F(ConfigTest, test_string_enum_or_default_duplicate_assignment) {
+    CONF_mString_enum_or_default(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    // Assigning a config twice is last-wins, so a later valid assignment leaves nothing to report:
+    // the fallback the first assignment took never reached the running config.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = WARN
+           cfg_level = FATAL
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("FATAL", cfg_level.value());
+        EXPECT_TRUE(config::take_config_fallbacks().empty());
+    }
+    // Two assignments that both fall back are reported once, naming the one that took effect.
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_level = WARN
+           cfg_level = TRACE
+           )DEL";
+        EXPECT_TRUE(config::init(ss));
+        EXPECT_EQ("INFO", cfg_level.value());
+
+        std::vector<ConfigFallback> fallbacks = config::take_config_fallbacks();
+        ASSERT_EQ(1, fallbacks.size());
+        EXPECT_EQ("TRACE", fallbacks[0].rejected_value);
+        EXPECT_EQ("INFO", fallbacks[0].effective_value);
+    }
+}
+
+TEST_F(ConfigTest, test_fall_back_to_default) {
+    CONF_String(cfg_roll_mode, "SIZE-MB-1024");
+
+    std::stringstream ss;
+    ss << R"DEL(
+       cfg_roll_mode = SIZE-MB-abc
+       )DEL";
+    // Nothing validates this config while it is parsed; whoever applies it decides it is unusable.
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ("SIZE-MB-abc", cfg_roll_mode);
+
+    // Deliberately passing the config variable itself, which fall_back_to_default overwrites.
+    ASSERT_TRUE(config::fall_back_to_default("cfg_roll_mode", cfg_roll_mode, "SIZE-MB-nnn"));
+    // The config variable now holds what is actually in use, because list_configs() publishes it.
+    EXPECT_EQ("SIZE-MB-1024", cfg_roll_mode);
+
+    std::vector<ConfigFallback> fallbacks = config::take_config_fallbacks();
+    ASSERT_EQ(1, fallbacks.size());
+    EXPECT_EQ("cfg_roll_mode", fallbacks[0].name);
+    EXPECT_EQ("SIZE-MB-abc", fallbacks[0].rejected_value);
+    EXPECT_EQ("SIZE-MB-1024", fallbacks[0].effective_value);
+
+    EXPECT_FALSE(config::fall_back_to_default("cfg_not_exist", "x", "y"));
+}
+
+TEST_F(ConfigTest, test_fallback_is_reported_on_stderr) {
+    CONF_mString_enum_or_default(cfg_level, "INFO", "INFO,WARNING,ERROR,FATAL");
+
+    std::stringstream ss;
+    ss << R"DEL(
+       cfg_level = WARN
+       )DEL";
+    ASSERT_TRUE(config::init(ss));
+
+    // Reported on stderr as well as through glog, because the glog message is dropped when
+    // sys_log_level itself is FATAL.
+    std::stringstream stringbuf;
+    {
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        report_config_fallbacks();
+    }
+    std::string reported = stringbuf.str();
+    EXPECT_THAT(reported, HasSubstr("cfg_level"));
+    EXPECT_THAT(reported, HasSubstr("WARN"));
+    EXPECT_THAT(reported, HasSubstr("INFO"));
+
+    // Reporting consumes the records, so nothing is reported twice.
+    EXPECT_TRUE(config::take_config_fallbacks().empty());
+    stringbuf.str("");
+    {
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        report_config_fallbacks();
+    }
+    EXPECT_TRUE(stringbuf.str().empty()) << stringbuf.str();
 }
 
 TEST_F(ConfigTest, test_invalid_default_value) {

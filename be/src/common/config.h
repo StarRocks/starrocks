@@ -270,8 +270,9 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 // If true, clear udf cache every time be starts
 CONF_Bool(clear_udf_cache_when_start, "false");
-// The sys log level, INFO, WARNING, ERROR, FATAL.
-CONF_mString(sys_log_level, "INFO");
+// The sys log level. Matched case-insensitively; a value that matches none of the four is reported
+// and INFO is used, so a typo cannot leave the process without working logging.
+CONF_mString_enum_or_default(sys_log_level, "INFO", "INFO,WARNING,ERROR,FATAL");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
