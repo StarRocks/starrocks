@@ -340,3 +340,64 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/merge-testcase.py --pr ${PR_NUMBER} --repo ${REPOSITORY} --branch ${BRANCH}
+
+  # thirdparty-update-image republishes the shared dev-env-<distro>:main-latest
+  # tag that every PR compiles against, and nothing reported it when it failed.
+  # On 2026-09-16 it failed on two merges (02:44 and 03:47 UTC); from 02:47 every
+  # PR that built BE from source failed on a symbol the stale image did not carry,
+  # the two failures sat unnoticed for hours, and PR authors were left thinking
+  # their own change was at fault. Job-level failure is a clean, already
+  # structured signal -- nothing was listening to it.
+  #
+  # Deliberately on ubuntu-latest, talking to Slack with curl: the self-hosted
+  # pools and /var/lib/ci-tool are part of what this is meant to report on, so the
+  # alarm must not be built out of them. Untrusted text (PR title) goes in through
+  # env and is assembled with jq --arg, never interpolated into the shell.
+  #
+  # Channel comes from the CI_SLACK_CHANNEL repo variable; with it or the token
+  # unset this logs and exits 0, so a missing config never fails the pipeline.
+  notify-thirdparty-image-failure:
+    name: Notify Thirdparty Image Failure
+    runs-on: ubuntu-latest
+    needs: thirdparty-update-image
+    if: always() && needs.thirdparty-update-image.result == 'failure'
+    steps:
+      - name: Notify Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: ${{ vars.CI_SLACK_CHANNEL }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          BASE_REF: ${{ github.base_ref }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eo pipefail
+
+          if [[ -z "${SLACK_BOT_TOKEN}" || -z "${SLACK_CHANNEL}" ]]; then
+            echo "::warning::SLACK_BOT_TOKEN or CI_SLACK_CHANNEL unset; logging only."
+            echo "thirdparty-update-image failed on ${PR_URL} (${RUN_URL})"
+            exit 0
+          fi
+
+          text=$(jq -rn \
+            --arg title "${PR_TITLE}" \
+            --arg pr "${PR_URL}" \
+            --arg base "${BASE_REF}" \
+            --arg repo "${REPOSITORY}" \
+            --arg run "${RUN_URL}" \
+            '":rotating_light: *Thirdparty image update FAILED* — \($repo) `\($base)`\n" +
+             "The shared `dev-env-<distro>:\($base)-latest` tag may be stale or broken; PR builds can start failing to compile BE.\n" +
+             "*PR:* <\($pr)|\($title)>\n*Run:* \($run)"')
+
+          code=$(jq -n --arg c "${SLACK_CHANNEL}" --arg t "${text}" '{channel: $c, text: $t}' \
+            | curl -sS -o /tmp/slack.json -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+                -H 'Content-Type: application/json; charset=utf-8' \
+                --data @- https://slack.com/api/chat.postMessage)
+
+          if [[ "${code}" != "200" ]] || [[ "$(jq -r '.ok' /tmp/slack.json)" != "true" ]]; then
+            echo "::error::Slack notification failed (http ${code}): $(jq -rc '.error // .' /tmp/slack.json)"
+            exit 1
+          fi
+          echo "notified ${SLACK_CHANNEL}"
