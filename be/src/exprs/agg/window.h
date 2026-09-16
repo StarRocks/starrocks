@@ -773,6 +773,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         }
     }
 
+    // Only `lead ... IGNORE NULLS` can look past the physical frame, so it is the only variant the
+    // analytor has to consult per row.
+    bool needs_window_result_ready_check() const override { return ignoreNulls && !isLag; }
+
     // `lead ... IGNORE NULLS` needs the offset-th non-null after the current row, which can lie
     // beyond the physical N FOLLOWING frame. Wait while the partition may still grow and that
     // non-null is not yet in [current+1, available_end). Once the partition is complete, the
@@ -831,7 +835,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 ++lead_state.lead_ready_non_null_count;
             }
             return lead_state.lead_ready_non_null_count >= offset;
-        } 
+        }
         return true;
     }
 

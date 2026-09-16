@@ -47,12 +47,18 @@
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
 // 1. When set_finishing(), the has_output() may be false, so add the check here.
 // 2. Reset state for the first partition. This cannot be invoded when there's no data.
-#define PRE_PROCESSING()                                    \
-    if (!_has_output()) {                                   \
-        return Status::OK();                                \
-    }                                                       \
-    if (_get_global_position(_current_row_position) == 0) { \
-        _reset_window_state();                              \
+//    It must run exactly once: a data-dependent wait (e.g. `lead ... IGNORE NULLS`) re-enters with
+//    `_current_row_position` still on the first row, and resetting again would discard the memoized
+//    scan progress and rescan the whole buffered prefix for every chunk. Nothing is evaluated before
+//    such a wait returns, so the already-initialized state stays valid. Later partitions are reset
+//    by `_reset_state_for_next_partition()`.
+#define PRE_PROCESSING()                  \
+    if (!_has_output()) {                 \
+        return Status::OK();              \
+    }                                     \
+    if (!_window_state_initialized) {     \
+        _window_state_initialized = true; \
+        _reset_window_state();            \
     }
 
 namespace starrocks {
@@ -199,6 +205,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
+    _window_result_ready_function_index.clear();
 
     // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
     // index, so _fns must be filled before any error return below can leave prepare half-done.
@@ -346,6 +353,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
         DCHECK(_agg_functions[i] != nullptr);
         _is_lead_lag_functions[i] = (_agg_functions[i]->get_name() == "lead-lag");
+        // Ask once which functions can defer a row, so the per-row streaming loop does not
+        // virtual-dispatch into every other window function.
+        if (_agg_functions[i]->needs_window_result_ready_check()) {
+            _window_result_ready_function_index.emplace_back(i);
+        }
     }
 
     // Compute agg state total size and offsets.
@@ -1105,7 +1117,8 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
             // already be buffered, but a function can still need more non-nulls ahead. Check every
             // function before mutating any state; if one is not ready, leave `_current_row_position`
             // unchanged so the next chunk resumes this row.
-            if (!_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end)) {
+            if (_has_window_result_ready_check() &&
+                !_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end)) {
                 return Status::OK();
             }
 
@@ -1406,17 +1419,12 @@ void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* stat
 
 bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
                                          int64_t frame_end) const {
-    for (size_t i = 0; i < _agg_functions.size(); i++) {
-        auto current_frame_start = frame_start;
-        auto current_frame_end = frame_end;
-        if (!_is_lead_lag_functions[i]) {
-            current_frame_start = std::max<int64_t>(current_frame_start, _partition.start);
-            current_frame_end = std::min<int64_t>(current_frame_end, _partition.end);
-        }
+    for (size_t i : _window_result_ready_function_index) {
+        // These functions are always lead/lag, so the frame is not clipped to the partition.
         if (!_agg_functions[i]->is_window_result_ready(_agg_fn_ctxs[i],
                                                        _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i],
                                                        _agg_intput_columns[i], partition_start, available_end,
-                                                       current_frame_start, current_frame_end, _partition.is_real)) {
+                                                       frame_start, frame_end, _partition.is_real)) {
             return false;
         }
     }
