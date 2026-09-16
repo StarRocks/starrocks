@@ -671,6 +671,10 @@ struct TSchemaScanNode {
 
   101: optional string catalog_name;
   102: optional TSchemaScanNodeExt ext;
+  // running_transactions has its own db and label filters rather than borrowing the shared
+  // `db` and `label` fields, whose meaning would otherwise depend on which scanner reads them.
+  103: optional string running_txn_db
+  104: optional string running_txn_label
 }
 
 enum TAccessPathType {
