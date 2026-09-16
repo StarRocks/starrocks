@@ -1138,7 +1138,8 @@ public class ExpressionStatisticCalculator {
                     .setDistinctValuesCount(distinctValues);
 
             if (!mcv.isEmpty()) {
-                builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+                builder.setHistogram(Histogram.ofSingleBucket(coalesceMin, coalesceMax,
+                        rowCount * (1 - nullsFraction), mcv));
             }
 
             return builder.build();
