@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
@@ -69,6 +70,21 @@ static bool iequals(const std::string& a, const std::string& b) {
         if (tolower(a[i]) != tolower(b[i])) {
             return false;
         }
+    }
+    return true;
+}
+
+static bool apply_log_level(const std::string& loglevel) {
+    if (iequals(loglevel, "INFO")) {
+        FLAGS_minloglevel = 0;
+    } else if (iequals(loglevel, "WARNING")) {
+        FLAGS_minloglevel = 1;
+    } else if (iequals(loglevel, "ERROR")) {
+        FLAGS_minloglevel = 2;
+    } else if (iequals(loglevel, "FATAL")) {
+        FLAGS_minloglevel = 3;
+    } else {
+        return false;
     }
     return true;
 }
@@ -356,16 +372,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 #endif
 
     // Set log level.
-    std::string loglevel = config::sys_log_level;
-    if (iequals(loglevel, "INFO")) {
-        FLAGS_minloglevel = 0;
-    } else if (iequals(loglevel, "WARNING")) {
-        FLAGS_minloglevel = 1;
-    } else if (iequals(loglevel, "ERROR")) {
-        FLAGS_minloglevel = 2;
-    } else if (iequals(loglevel, "FATAL")) {
-        FLAGS_minloglevel = 3;
-    } else {
+    if (!apply_log_level(config::sys_log_level)) {
         std::cerr << "sys_log_level needs to be INFO, WARNING, ERROR, FATAL" << std::endl;
         return false;
     }
@@ -476,18 +483,14 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
                         tm_time.tm_min, tm_time.tm_sec, usecs);
 }
 
-void update_logging() {
-    if (iequals(config::sys_log_level, "INFO")) {
-        FLAGS_minloglevel = 0;
-    } else if (iequals(config::sys_log_level, "WARNING")) {
-        FLAGS_minloglevel = 1;
-    } else if (iequals(config::sys_log_level, "ERROR")) {
-        FLAGS_minloglevel = 2;
-    } else if (iequals(config::sys_log_level, "FATAL")) {
-        FLAGS_minloglevel = 3;
-    } else {
-        LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
+Status update_logging() {
+    std::string loglevel = config::sys_log_level;
+    if (!apply_log_level(loglevel)) {
+        return Status::InvalidArgument(
+                fmt::format("sys_log_level needs to be INFO, WARNING, ERROR, FATAL, got '{}'", loglevel));
     }
+    LOG(INFO) << "sys_log_level is now " << loglevel;
+    return Status::OK();
 }
 
 } // namespace starrocks
