@@ -15,7 +15,11 @@
 package com.starrocks.planner;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.util.Utility;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -23,6 +27,12 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
@@ -165,5 +175,52 @@ public class PushDownHeavyExprsTest {
                 "FROM tbl_transaction_001 ORDER BY s LIMIT 3";
         String plan = UtFrameUtils.getPlanThriftString(ctx, q);
         Assertions.assertTrue(plan.contains("SORT_NODE"), plan);
+    }
+
+    /**
+     * Heavy exprs reach the BE in TPlanNodeCommon.heavy_exprs, a map keyed by slot id, and
+     * ScanNode materializes them in ascending slot-id order without honouring dependencies. A
+     * heavy expr that references another heavy expr's output slot therefore reads a column the
+     * chunk does not carry yet, which surfaces either as an FE "Cannot convert ColumnRefOperator
+     * to Expr" or as a BE "Expr evaluate meet error: slot_id N not found", depending on which
+     * entry the extraction happens to visit first. Nesting one regexp inside another produces
+     * exactly that pair: the inner call becomes a heavy common sub-expression and the outer one
+     * references it by slot.
+     */
+    @Test
+    public void testHeavyExprsNeverReferenceEachOther() throws Exception {
+        String q = "SELECT regexp_replace(regexp_replace(field_varchar_1, '^www\\\\.', ''), 'a', 'b') AS x, " +
+                "regexp_replace(field_varchar_1, '^www\\\\.', '') AS y " +
+                "FROM tbl_transaction_001";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(ctx, q);
+        List<String> violations = new ArrayList<>();
+        for (PlanFragment fragment : pair.second.getFragments()) {
+            collectHeavyExprViolations(fragment.getPlanRoot(), violations);
+        }
+        Assertions.assertTrue(violations.isEmpty(), String.valueOf(violations));
+    }
+
+    private static void collectHeavyExprViolations(PlanNode node, List<String> violations) {
+        if (node instanceof ScanNode) {
+            Map<SlotId, Expr> heavyExprs = ((ScanNode) node).getHeavyExprs();
+            if (heavyExprs != null && !heavyExprs.isEmpty()) {
+                Set<Integer> heavySlots = new HashSet<>();
+                heavyExprs.keySet().forEach(id -> heavySlots.add(id.asInt()));
+                for (Map.Entry<SlotId, Expr> entry : heavyExprs.entrySet()) {
+                    List<SlotRef> refs = new ArrayList<>();
+                    entry.getValue().collect(SlotRef.class, refs);
+                    for (SlotRef ref : refs) {
+                        int referenced = ref.getSlotId().asInt();
+                        if (referenced != entry.getKey().asInt() && heavySlots.contains(referenced)) {
+                            violations.add("heavy expr on slot " + entry.getKey().asInt()
+                                    + " references heavy slot " + referenced);
+                        }
+                    }
+                }
+            }
+        }
+        for (PlanNode child : node.getChildren()) {
+            collectHeavyExprViolations(child, violations);
+        }
     }
 }

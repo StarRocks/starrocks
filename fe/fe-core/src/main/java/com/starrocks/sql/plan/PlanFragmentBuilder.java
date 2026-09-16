@@ -582,6 +582,18 @@ public class PlanFragmentBuilder {
                 return Collections.emptyMap();
             }
 
+            // Heavy exprs reach the BE in TPlanNodeCommon.heavy_exprs, a map keyed by slot id, and ScanNode
+            // materializes them in ascending slot-id order without honouring dependencies. A heavy expr that
+            // references another hoisted heavy expr's slot therefore reads a column the chunk does not carry
+            // yet. Nesting one heavy call inside another produces exactly that pair: the inner call becomes a
+            // heavy common sub-expression and the outer one references it by slot. Give up the optimization for
+            // the whole projection in that case and let the ProjectNode evaluate everything itself, where the
+            // ordering is well defined. Bail out before commonSubExprs is touched so the projection is left
+            // exactly as it was found.
+            if (hasHeavyExprDependency(commonSubExprs, heavyCommonSubExprs, heavyExprs)) {
+                return Collections.emptyMap();
+            }
+
             // Heavy exprs should be removed from ProjectNode's commonSubExprs to avoid trivial mapping from
             // slotId to itself in commonSubExprs.
             heavyCommonSubExprs.forEach((k, v) -> commonSubExprs.remove(k));
@@ -591,6 +603,49 @@ public class PlanFragmentBuilder {
             exprs.replaceAll((k, v) -> heavyExprs.containsKey(k) ? k : v);
             heavyExprs.putAll(heavyCommonSubExprs);
             return heavyExprs;
+        }
+
+        // True when any expression that would be hoisted into the scan node reaches the output slot of
+        // another hoisted expression. Only the heavy common sub-expressions survive the hoist as slot
+        // references -- the ordinary ones are inlined by the rewriter above -- so a reference is followed
+        // through the ordinary common sub-expressions and stops at the heavy ones. The expressions
+        // themselves are never rebuilt here: inlining them just to probe would risk tripping the
+        // max_scalar_operator_flat_children guard on a query that is otherwise fine.
+        private boolean hasHeavyExprDependency(Map<ColumnRefOperator, ScalarOperator> commonSubExprs,
+                                               Map<ColumnRefOperator, ScalarOperator> heavyCommonSubExprs,
+                                               Map<ColumnRefOperator, ScalarOperator> heavyExprs) {
+            Set<ColumnRefOperator> hoisted = Sets.newHashSet(heavyExprs.keySet());
+            hoisted.addAll(heavyCommonSubExprs.keySet());
+
+            return Stream.concat(heavyExprs.entrySet().stream(), heavyCommonSubExprs.entrySet().stream())
+                    .anyMatch(entry -> reachesHoistedSlot(entry.getValue(), entry.getKey(), hoisted,
+                            commonSubExprs, heavyCommonSubExprs.keySet()));
+        }
+
+        private boolean reachesHoistedSlot(ScalarOperator expr, ColumnRefOperator self,
+                                           Set<ColumnRefOperator> hoisted,
+                                           Map<ColumnRefOperator, ScalarOperator> commonSubExprs,
+                                           Set<ColumnRefOperator> heavyCommonSubExprKeys) {
+            List<ScalarOperator> worklist = Lists.newArrayList(expr);
+            Set<ColumnRefOperator> expanded = Sets.newHashSet();
+            for (int i = 0; i < worklist.size(); i++) {
+                for (ColumnRefOperator ref : worklist.get(i).getColumnRefs()) {
+                    if (hoisted.contains(ref) && !ref.equals(self)) {
+                        return true;
+                    }
+                    // Heavy common sub-expressions stay behind as slot references, so their definitions are
+                    // not part of this expression and must not be followed. `expanded` also keeps a cyclic
+                    // common sub-expression map from looping forever.
+                    if (heavyCommonSubExprKeys.contains(ref) || !expanded.add(ref)) {
+                        continue;
+                    }
+                    ScalarOperator definition = commonSubExprs.get(ref);
+                    if (definition != null) {
+                        worklist.add(definition);
+                    }
+                }
+            }
+            return false;
         }
 
         @Override
