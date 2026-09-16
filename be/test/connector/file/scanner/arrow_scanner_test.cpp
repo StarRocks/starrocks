@@ -1765,18 +1765,21 @@ TEST_F(ArrowScannerTest, TestStreamOpenSuccessReadNextFailure) {
     auto scanner = std::make_unique<ArrowScanner>(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
     ASSERT_OK(scanner->open());
 
-    // Drain the scanner. It should handle the junk message gracefully (no crash)
-    // and either return data from the valid second message or clean EOF.
-    bool got_data = false;
+    // The malformed first message is filtered, then the scanner must recover
+    // and return all rows from the valid second message.
+    std::vector<int32_t> recovered_values;
     for (int i = 0; i < 10; i++) {
         auto res = scanner->get_next();
         if (res.status().is_end_of_file()) break;
-        if (res.status().ok() && res.value() && res.value()->num_rows() > 0) {
-            got_data = true;
+        ASSERT_OK(res.status());
+        ASSERT_NE(nullptr, res.value());
+        const auto& column = res.value()->columns()[0];
+        for (size_t row = 0; row < res.value()->num_rows(); ++row) {
+            recovered_values.emplace_back(column->get(row).get_int32());
         }
-        if (!res.status().ok() && !res.status().is_end_of_file()) break;
     }
-    (void)got_data; // No strict assertion: either outcome (data or error) is acceptable.
+    ASSERT_EQ((std::vector<int32_t>{7, 8, 9}), recovered_values);
+    EXPECT_EQ(1, ctx->counter->num_rows_filtered);
     scanner->close();
 }
 
