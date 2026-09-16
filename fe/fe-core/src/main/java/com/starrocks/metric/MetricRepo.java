@@ -443,6 +443,13 @@ public final class MetricRepo {
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
+<<<<<<< HEAD
+=======
+    public static GaugeMetric<Long> GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS;
+    public static Histogram HISTO_THRIFT_SERVER_QUEUE_WAIT_MS;
+>>>>>>> 3323784 ([BugFix] FailFast: drop stale queued thrift connections (#79173))
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -469,6 +476,30 @@ public final class MetricRepo {
         GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
         GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
 
+<<<<<<< HEAD
+=======
+        GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS = new GaugeMetric<>(
+                "thrift_server_acceptor_stall_ms", MetricUnit.MILLISECONDS,
+                "milliseconds since the thrift accept loop last made progress") {
+            @Override
+            public Long getValue() {
+                return ThriftServer.getAcceptorStallTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS);
+
+        COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_rejected_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed because its worker pool was saturated");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS);
+
+        COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_expired_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed unserved because they waited in the pending "
+                        + "queue longer than thrift_server_queue_timeout_ms");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS);
+
+>>>>>>> 3323784 ([BugFix] FailFast: drop stale queued thrift connections (#79173))
         // 1. gauge
         // load jobs
         LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
@@ -1077,6 +1108,12 @@ public final class MetricRepo {
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
+        // How long connections sat in the thrift server pending queue before a worker reached them,
+        // sampled whether the connection was then served or dropped as expired. This is the leading
+        // indicator of thrift saturation: it rises while the pool is still keeping up, well before
+        // rejections start.
+        HISTO_THRIFT_SERVER_QUEUE_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("thrift_server", "queue_wait", "ms"));
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
         HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(
