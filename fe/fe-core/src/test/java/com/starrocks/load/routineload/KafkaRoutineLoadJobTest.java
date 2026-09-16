@@ -1410,4 +1410,3 @@ public class KafkaRoutineLoadJobTest {
         Assertions.assertTrue(job.checkProgressVal("100"));
     }
 }
-
