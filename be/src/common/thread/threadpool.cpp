@@ -800,12 +800,25 @@ void ThreadPool::dispatch_thread() {
 }
 
 Status ThreadPool::create_thread() {
-    Status status;
-    TEST_SYNC_POINT_CALLBACK("ThreadPool::create_thread", &status);
-    if (!status.ok()) {
-        return status;
+    // Thread::create() allocates (a new Thread object among other things) and can throw std::bad_alloc.
+    // do_submit() calls this both before a task is accepted, where a throw would leave
+    // _num_threads_pending_start incremented and shutdown() waiting for it forever, and after, where
+    // submit() must not throw any more: the caller would take the exception as "the task was never
+    // accepted" and roll back what the queued task is about to do. Report the failure as a Status, so
+    // both call sites settle the pending-thread count the way they do for any other creation failure.
+    try {
+        Status status;
+        TEST_SYNC_POINT_CALLBACK("ThreadPool::create_thread", &status);
+        if (!status.ok()) {
+            return status;
+        }
+        return Thread::create("thread pool", _name, &ThreadPool::dispatch_thread, this, nullptr);
+    } catch (const std::exception& e) {
+        return Status::RuntimeError(strings::Substitute("Failed to create thread for pool $0: $1", _name, e.what()));
+    } catch (...) {
+        return Status::RuntimeError(
+                strings::Substitute("Failed to create thread for pool $0: unknown exception", _name));
     }
-    return Thread::create("thread pool", _name, &ThreadPool::dispatch_thread, this, nullptr);
 }
 
 void ThreadPool::check_not_pool_thread_unlocked() {

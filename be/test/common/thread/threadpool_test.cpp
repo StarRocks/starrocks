@@ -1278,4 +1278,59 @@ TEST_F(ThreadPoolTest, TestThrowingSubmitLeavesNothingBehind) {
     _pool->shutdown();
 }
 
+// Thread::create() allocates and can throw. do_submit() calls it after a task has been accepted (to add a
+// worker for it) and, for the pool's very first thread, before: a throw escaping the former would make the
+// caller roll back work the queued task is about to do (see TestThrowingSubmitLeavesNothingBehind for why
+// that matters), and either would leave _num_threads_pending_start incremented, which shutdown() waits on
+// forever. Both must come back as a Status with the pending count settled.
+TEST_F(ThreadPoolTest, TestThreadCreationThrowIsContained) {
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [](void*) { throw std::bad_alloc(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SCOPED_CLEANUP({
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // After acceptance: the one resident thread is busy, so the submit wants a second one.
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(4)).ok());
+    ASSERT_EQ(1, _pool->num_threads());
+    CountDownLatch block_latch(1);
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&block_latch)).ok());
+
+    std::atomic<int> run_count{0};
+    Status s;
+    ASSERT_NO_THROW(s = _pool->submit_func([&]() { run_count++; }));
+    // The task was accepted before the thread creation was attempted, so the pool owns it and runs it once
+    // the resident thread is free.
+    ASSERT_TRUE(s.ok()) << s;
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
+    block_latch.count_down();
+    _pool->wait();
+    ASSERT_EQ(1, run_count.load());
+    // Hangs here if the pending-thread count leaked.
+    _pool->shutdown();
+
+    // Before acceptance: no thread exists, so the submit has to create the sole thread first.
+    ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
+                                                  .set_min_threads(0)
+                                                  .set_max_threads(4)
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                        .ok());
+    ASSERT_EQ(0, _pool->num_threads());
+    ASSERT_NO_THROW(s = _pool->submit_func([&]() { run_count++; }));
+    ASSERT_FALSE(s.ok());
+    ASSERT_EQ(0, _pool->_total_queued_tasks);
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
+
+    // With thread creation working again the pool is usable, and shutdown() completes.
+    SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+    CountDownLatch latch(1);
+    ASSERT_TRUE(_pool->submit_func([&]() { latch.count_down(); }).ok());
+    latch.wait();
+    _pool->wait();
+    ASSERT_EQ(1, run_count.load());
+    _pool->shutdown();
+}
+
 } // namespace starrocks
