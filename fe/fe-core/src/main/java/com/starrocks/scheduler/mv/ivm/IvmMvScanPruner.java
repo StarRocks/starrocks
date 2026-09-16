@@ -95,8 +95,7 @@ public final class IvmMvScanPruner {
             }
             sawDelta = true;
             Table baseTable = snapshotInfo.getBaseTable();
-            PCellSetMapping mvPartitionsByBasePartition = mvPartitionsByBaseTable.get(baseTable);
-            if (mvPartitionsByBasePartition == null || !baseTable.isCloudNativeTableOrMaterializedView()) {
+            if (!baseTable.isCloudNativeTableOrMaterializedView()) {
                 return null;
             }
             // A self-join puts the same table in the partition-reference role and in another one, where its
@@ -108,6 +107,16 @@ public final class IvmMvScanPruner {
             Optional<Set<String>> changed = MvBookmarkOps.changedPartitionNames(
                     snapshotInfo.getBaseTableInfo().getDbId(), (OlapTable) baseTable, delta);
             if (changed.isEmpty()) {
+                return null;
+            }
+            // Asked before the topology, which only maps the partition reference: a table that wrote no row
+            // joins against nothing, so it needs no partition read on its account even when nothing can map
+            // it. Otherwise a compaction on a dimension table alone would send the join over the whole view.
+            if (changed.get().isEmpty()) {
+                continue;
+            }
+            PCellSetMapping mvPartitionsByBasePartition = mvPartitionsByBaseTable.get(baseTable);
+            if (mvPartitionsByBasePartition == null) {
                 return null;
             }
             for (String basePartition : changed.get()) {

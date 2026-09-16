@@ -171,6 +171,18 @@ public class IvmMvPartitionPruningTest {
      * rows of every partition through the second role, which the table-keyed topology cannot express.
      */
     @Test
+    public void testCompactedDimTableLeavesThePruningAlone() throws Exception {
+        MaterializedView mv = createMv("mv_join_compacted",
+                "SELECT f.dt, f.k, SUM(f.v * d.w) AS total FROM fact f JOIN dim d ON f.k = d.k GROUP BY f.dt, f.k");
+        seedBaseline(mv, "fact");
+        seedBaseline(mv, "dim");
+
+        bumpVersion("fact", "p2");
+        compact("dim", "dim");
+        assertMvScanPartitions(explainRefresh(mv), "partitions=1/4");
+    }
+
+    @Test
     public void testSelfJoinKeepsWholeMvScan() throws Exception {
         MaterializedView mv = createMv("mv_self",
                 "SELECT a.dt AS dt, a.k AS k, SUM(a.v * b.v) AS total "
