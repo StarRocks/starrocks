@@ -18,6 +18,7 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -47,6 +48,9 @@ public class PrepareStmtPlanner {
             }
             QueryStatement queryStmt = (QueryStatement) stmt;
             if (!queryStmt.isPointQuery()) {
+                return StatementPlanner.plan(stmt, session);
+            }
+            if (ResolvedAIFunctionDetector.contains(queryStmt)) {
                 return StatementPlanner.plan(stmt, session);
             }
 

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 2
+sidebar_position: 60
 toc_max_heading_level: 2
 description: "Quick start guide for streaming data from Kafka into StarRocks using Routine Load with shared-data storage."
 ---
@@ -743,6 +743,6 @@ In this tutorial you:
 
 [StarRocks Architecture](../introduction/Architecture.md)
 
-The sample used for this lab is very simple. Routine Load has many more options and capabilities. [learn more](../loading/RoutineLoad.md).
+The sample used for this lab is very simple. Routine Load has many more options and capabilities. [learn more](../loading/kafka/RoutineLoad.md).
 
 [JSONPath](https://goessner.net/articles/JsonPath/)

@@ -81,22 +81,25 @@ You can set the thresholds that trigger query queues via the following global se
 
 #### Specify resource thresholds for resource group-level query queues
 
-From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_limit`) and CPU core limits (`max_cpu_cores`) when creating a resource group. When a query is initiated, if any of the resource consumptions exceed the resource threshold at either the global or resource group level, the query will be placed in queue until all resource consumptions are within the threshold.
+From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_limit`) and CPU core limits (`max_cpu_cores`) when creating a resource group. You can also set a memory usage threshold (`mem_used_pct_limit`) for the resource group. When a query is initiated, if any of the resource consumptions exceed the resource threshold at either the global or resource group level, the query will be placed in queue until all resource consumptions are within the threshold.
 
-| **Variable**        | **Default** | **Description**                                              |
-| ------------------- | ----------- | ------------------------------------------------------------ |
-| concurrency_limit   | 0           | The concurrency limit for the resource group on a single BE node. It takes effect only when it is set to greater than `0`. |
-| max_cpu_cores       | 0           | The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. |
+| **Variable**       | **Default** | **Description**                                                                                                                                                                                                                                   |
+|--------------------|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| concurrency_limit  | 0           | The concurrency limit for the resource group on a single BE node. It takes effect only when it is set to greater than `0`.                                                                                                                        |
+| max_cpu_cores      | 0           | The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. |
+| mem_used_pct_limit | 0           | The memory usage percentage limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, 1]                                                                                             |
+
+`mem_used_pct_limit` applies only to Query Queue v1. After Query Queue v2 is enabled (`enable_query_queue_v2` is set to `true`), this parameter no longer takes effect.
 
 You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information for each resource group on each BE node, as described in [View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information).
 
 #### Manage query concurrency
 
-When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are placed in the queue. The way to obtain `num_running_queries` differs between versions &lt; v3.1.4 and &ge; v3.1.4.
+When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are placed in the queue. The way to obtain `num_running_queries` differs between versions `<` v3.1.4 and `>=` v3.1.4.
 
-- In versions &lt; v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identification of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit` before the next report, these incoming queries will be executed without waiting in the queue.
+- In versions `<` v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identification of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit` before the next report, these incoming queries will be executed without waiting in the queue.
 
-- In versions &ge; v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
+- In versions `>=` v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
 
 ### Configure Query Queue v1
 
@@ -300,7 +303,7 @@ You can check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` 
 
 ### Monitoring metrics
 
-You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/Monitor_and_Alert.md) feature. The following FE metrics are derived from the statistical data of each FE node.
+You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/monitoring.md) feature. The following FE metrics are derived from the statistical data of each FE node.
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |

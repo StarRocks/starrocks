@@ -74,7 +74,9 @@ public:
         for (int32_t x : elements) {
             column->append_datum(Datum((int32_t)x));
         }
-        down_cast<NullableColumn*>(column.get())->update_has_null();
+        if (nullable) {
+            down_cast<NullableColumn*>(column.get())->update_has_null();
+        }
 
         return {std::move(column), std::move(expr)};
     }
@@ -419,7 +421,8 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
         null_first.push_back(true);
         map[i] = i;
     }
-    ChunkPtr chunk1 = std::make_shared<Chunk>(columns, map);
+    // Chunk only takes its columns by rvalue, so the first chunk needs its own copy of the vector.
+    ChunkPtr chunk1 = std::make_shared<Chunk>(Columns(columns), map);
     ChunkPtr chunk2 = std::make_shared<Chunk>(std::move(columns), map);
 
     int64_t num_rows = 0;

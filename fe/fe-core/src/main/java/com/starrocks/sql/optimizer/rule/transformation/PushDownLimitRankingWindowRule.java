@@ -186,6 +186,14 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         }
 
         long limitValue = topNOperator.getOffset() + topNOperator.getLimit();
+        // A zero limit keeps no row at all, so there is nothing worth pushing down. A TopN built out of it
+        // breaks the `limit != 0` invariant of LogicalTopNOperator, and reaches the BE as
+        // `partition_limit = 0`, where creating the sorter of the first partition fails a CHECK.
+        // This only ever fires for an explicit `LIMIT 0`: DEFAULT_LIMIT is already filtered out by the
+        // hasLimit() check above, and the offset of a TopN is never negative.
+        if (limitValue <= 0) {
+            return Collections.emptyList();
+        }
         TopNType topNType = TopNType.parse(callOperator.getFnName());
 
         if (partitionByColumns.isEmpty() && rankRelatedWindowOperator.getEnforceSortColumns().isEmpty()) {

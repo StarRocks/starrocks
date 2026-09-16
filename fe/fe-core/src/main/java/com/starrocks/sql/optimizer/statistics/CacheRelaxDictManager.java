@@ -76,7 +76,13 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
             }
             return Optional.of(new ColumnDict(dict.build(), 0, 0));
         } else {
-            TreeSet<ByteBuffer> orderSet = new TreeSet<>(oldValue.get().getDict().keySet());
+            // Codes are re-assigned in key order below, and BE compares dictionary strings with memcmp
+            // (unsigned bytes) when it sorts on codes (min/max, ORDER BY, window). ByteBuffer's natural
+            // order compares bytes as signed, which puts every key with a high-bit byte (multi-byte
+            // UTF-8) first, so the merged codes would disagree with BE's order. Always merge with the
+            // unsigned comparator, the same one the union and join dictionary merges use.
+            TreeSet<ByteBuffer> orderSet = new TreeSet<>(ColumnDict.UNSIGNED_LEX);
+            orderSet.addAll(oldValue.get().getDict().keySet());
             int dictSize = statisticData.getIdsSize();
             for (int i = 0; i < dictSize; ++i) {
                 orderSet.add(statisticData.strings.get(i));

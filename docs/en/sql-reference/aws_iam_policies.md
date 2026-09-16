@@ -9,7 +9,7 @@ A policy in AWS IAM declares a set of permissions on a specific AWS resource. Af
 
 Different operations in StarRocks require you to have access permissions on different AWS resources, and therefore you need to configure different policies.
 
-This topic provides the IAM policies that you need to configure for StarRocks to integrate with different AWS resources in various business scenarios when you choose [the instance profile, assumed role, or IAM user-based authentication method](../integrations/authenticate_to_aws_resources.md#preparations).
+This topic provides the IAM policies that you need to configure for StarRocks to integrate with different AWS resources in various business scenarios when you choose [the instance profile, assumed role, or IAM user-based authentication method](../integrations/csp_auth/authenticate_to_aws_resources.md#preparations).
 
 ## Batch load data from AWS S3
 

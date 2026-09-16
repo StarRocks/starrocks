@@ -1,0 +1,82 @@
+-- name: test_skew_join_v2_derived_dict
+set cbo_enable_low_cardinality_optimize = true;
+-- result:
+-- !result
+set low_cardinality_optimize_v2 = true;
+-- result:
+-- !result
+set enable_optimize_skew_join_v2 = true;
+-- result:
+-- !result
+CREATE TABLE `skew_fact` (
+  `id` int NULL,
+  `lot_state` varchar(32) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into skew_fact
+select
+    case when generate_series % 3 = 0 then 1 else generate_series end,
+    case
+        when generate_series % 4 = 0 then 'created'
+        when generate_series % 7 = 0 then null
+        else 'running'
+    end
+from TABLE(generate_series(1, 4096));
+-- result:
+-- !result
+CREATE TABLE `skew_dim` (
+  `id` int NULL,
+  `tag` varchar(32) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into skew_dim
+select generate_series, concat('t', generate_series % 5)
+from TABLE(generate_series(1, 4096));
+-- result:
+-- !result
+[UC] analyze full table skew_fact;
+function: wait_global_dict_ready('lot_state', 'skew_fact')
+-- result:
+
+-- !result
+function: assert_explain_verbose_contains('select ifnull(t.u, \'x\') v, count(*) c from (select distinct upper(lot_state) u, id from skew_fact) t join[skew|t.id(1)] skew_dim d on t.id = d.id group by v order by v', 'SplitCastDataSink', 'Decode')
+-- result:
+None
+-- !result
+[ORDER]select ifnull(t.u, 'x') v, count(*) c
+from (select distinct upper(lot_state) u, id from skew_fact) t
+join[skew|t.id(1)] skew_dim d on t.id = d.id
+group by v
+order by v;
+-- result:
+CREATED	684
+RUNNING	1756
+x	293
+-- !result
+function: assert_explain_verbose_contains('select t.u, d.tag from (select distinct upper(lot_state) u, id from skew_fact) t join[skew|t.id(1)] skew_dim d on t.id = d.id where d.id <= 3 order by 1, 2', 'SplitCastDataSink', 'Decode')
+-- result:
+None
+-- !result
+[ORDER]select t.u, d.tag
+from (select distinct upper(lot_state) u, id from skew_fact) t
+join[skew|t.id(1)] skew_dim d on t.id = d.id
+where d.id <= 3
+order by 1, 2;
+-- result:
+None	t1
+CREATED	t1
+RUNNING	t1
+RUNNING	t2
+-- !result

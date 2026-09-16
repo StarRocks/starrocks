@@ -234,9 +234,10 @@ public:
 
     bool already_finished() const { return _already_finished; }
 
-private:
+    // Returns the status passed to `cancel()`, or OK if the writer has never been cancelled.
     Status current_cancel_status() const;
 
+private:
     Status reset_memtable();
 
     Status fill_auto_increment_id(Chunk& chunk);
@@ -442,6 +443,18 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         }
         if (_force_build_vector_index_inline) {
             _tablet_writer->force_set_build_vector_index_inline();
+        }
+        // A column partial-update publish routes through UpdateManager::_handle_delete_files, which erases
+        // every del file via the memtable path and never reads op_write.del_ssts(). Building a tombstone
+        // sstable here would cost a full sort+SST write at import and then leave the file orphaned (it never
+        // reaches sstable_meta(), so only a full vacuum's orphan scan reclaims it), with no publish speedup
+        // in return. The del file itself is still written and carried normally.
+        // The condition mirrors the publish-side dispatch exactly: txn_meta (and with it the mode publish
+        // reads) is only emitted for a real partial update, so a full-column write keeps the optimization
+        // even when the load carries a column mode.
+        if (is_partial_update() && (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+                                    _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
+            _tablet_writer->set_skip_del_tombstone_sstable();
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
@@ -912,6 +925,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
         }
     }
+    // Threshold-based pre-built tombstone sstables for the del files, parallel to dels_meta.
+    for (const auto& del_sst : _tablet_writer->del_ssts()) {
+        to_file_meta_pb(del_sst, op_write->add_del_ssts());
+    }
+    for (auto& del_sst_range : _tablet_writer->del_sst_ranges()) {
+        op_write->add_del_sst_ranges()->CopyFrom(del_sst_range);
+    }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segment_metas_size() > 1);
@@ -1220,6 +1240,10 @@ void DeltaWriter::close() {
 
 void DeltaWriter::cancel(const Status& st) {
     _impl->cancel(st);
+}
+
+Status DeltaWriter::cancel_status() const {
+    return _impl->current_cancel_status();
 }
 
 int64_t DeltaWriter::partition_id() const {

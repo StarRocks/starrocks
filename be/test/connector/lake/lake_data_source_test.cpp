@@ -16,6 +16,7 @@
 
 #include <array>
 #include <atomic>
+#include <sstream>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -675,7 +676,8 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     vec_opts.__set_vector_slot_id(999);
     vec_opts.__set_vector_limit_k(10);
     vec_opts.__set_query_vector(std::vector<std::string>{"0.1", "0.2", "0.3"});
-    vec_opts.__set_vector_range(0.5);
+    vec_opts.__set_vector_range(-1.5);
+    vec_opts.__set_has_vector_range(true);
     vec_opts.__set_result_order(0);
     vec_opts.__set_pq_refine_factor(1.0);
     vec_opts.__set_k_factor(1.0);
@@ -791,6 +793,8 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     EXPECT_EQ(params.vector_search_option->vector_distance_column_name, "vec_distance");
     ASSERT_EQ(params.vector_search_option->query_vector.size(), 3);
     EXPECT_FLOAT_EQ(params.vector_search_option->query_vector[0], 0.1f);
+    EXPECT_TRUE(params.vector_search_option->has_vector_range);
+    EXPECT_DOUBLE_EQ(params.vector_search_option->vector_range, -1.5);
 }
 
 TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
@@ -1453,6 +1457,55 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
             EXPECT_EQ(c->value(), 0) << name;
         }
     }
+    for (const auto* name : {"VectorIndex",
+                             "VectorIndexLoad",
+                             "VectorIndexSearch",
+                             "VectorIndexCacheLookup",
+                             "VectorIndexFileOpenAndGetSize",
+                             "VectorIndexFileRead",
+                             "VectorIndexDeserialize",
+                             "VectorIndexSearcherCreate",
+                             "VectorIndexCacheHit",
+                             "VectorIndexCacheMiss",
+                             "VectorANNSearch",
+                             "VectorResultProcess",
+                             "VectorIndexFilterRows",
+                             "SeedVectorIndex",
+                             "SeedVectorIndexLoad",
+                             "SeedVectorIndexSearch",
+                             "SeedVectorIndexCacheLookup",
+                             "SeedVectorIndexFileOpenAndGetSize",
+                             "SeedVectorIndexFileRead",
+                             "SeedVectorIndexDeserialize",
+                             "SeedVectorIndexSearcherCreate",
+                             "SeedVectorIndexCacheHit",
+                             "SeedVectorIndexCacheMiss",
+                             "SeedVectorANNSearch",
+                             "SeedVectorResultProcess",
+                             "SeedVectorIndexFilterRows"}) {
+        auto* c = profile->get_counter(name);
+        EXPECT_NE(c, nullptr) << name;
+        if (c != nullptr) {
+            EXPECT_EQ(c->value(), 0) << name;
+        }
+    }
+
+    std::stringstream rendered;
+    profile->pretty_print(&rendered);
+    const auto text = rendered.str();
+    EXPECT_NE(text.find("     - VectorIndex: 0.000ns\n"
+                        "       - VectorIndexLoad: 0.000ns\n"),
+              std::string::npos)
+            << text;
+    EXPECT_NE(text.find("         - VectorIndexCacheLookup: 0.000ns\n"
+                        "           - VectorIndexCacheHit: 0\n"
+                        "           - VectorIndexCacheMiss: 0\n"),
+              std::string::npos)
+            << text;
+    EXPECT_NE(text.find("       - VectorIndexSearch: 0.000ns\n"
+                        "         - VectorANNSearch: 0.000ns\n"),
+              std::string::npos)
+            << text;
 }
 
 TEST_F(LakeDataSourceTest, reopen_reader_requires_initialized_reader) {

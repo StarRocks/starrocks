@@ -66,6 +66,7 @@ public class OlapScanNodeTest {
         opts.setDistanceSlotId(1);
         opts.setQueryVector(Arrays.asList("1.0", "2.0", "3.0"));
         opts.setResultOrder(true);
+        opts.setPredicateRange(-1.5);
         scanNode.setVectorSearchOptions(opts);
 
         TPlanNode msg = new TPlanNode();
@@ -79,6 +80,8 @@ public class OlapScanNodeTest {
                 msg.lake_scan_node.getVector_search_options().getVector_distance_column_name());
         Assertions.assertEquals(Arrays.asList("1.0", "2.0", "3.0"),
                 msg.lake_scan_node.getVector_search_options().getQuery_vector());
+        Assertions.assertTrue(msg.lake_scan_node.getVector_search_options().isHas_vector_range());
+        Assertions.assertEquals(-1.5, msg.lake_scan_node.getVector_search_options().getVector_range());
     }
 
     @Test

@@ -21,11 +21,13 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.rule.NonDeterministicVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * Force cte reuse to avoid producing wrong result in the following cases:
@@ -33,22 +35,36 @@ import java.util.List;
  * 2. The opt expression contains LIMIT without ORDER BY (unstable result order)
  */
 public class ForceCTEReuseRule extends TransformationRule {
+    private final NonDeterministicVisitor functionVisitor;
+    private final boolean checkLimitWithoutOrderBy;
+
     public ForceCTEReuseRule() {
+        this(new NonDeterministicVisitor(), true);
+    }
+
+    public static ForceCTEReuseRule forCallsMatching(Predicate<CallOperator> callPredicate) {
+        return new ForceCTEReuseRule(new NonDeterministicVisitor(callPredicate), false);
+    }
+
+    private ForceCTEReuseRule(NonDeterministicVisitor functionVisitor, boolean checkLimitWithoutOrderBy) {
         super(RuleType.TF_FORCE_CTE_REUSE,
                 Pattern.create(OperatorType.LOGICAL_CTE_PRODUCE, OperatorType.PATTERN_LEAF));
+        this.functionVisitor = functionVisitor;
+        this.checkLimitWithoutOrderBy = checkLimitWithoutOrderBy;
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         boolean shouldForceReuse = false;
 
-        // Always force reuse for non-deterministic functions
-        if (hasNonDeterministicFunction(input)) {
+        // Always force reuse for calls selected by this rule instance.
+        if (hasMatchingFunction(input)) {
             shouldForceReuse = true;
         }
 
         // Force reuse for LIMIT without ORDER BY if enabled by session variable
-        if (context.getSessionVariable().isCboCTEForceReuseLimitWithoutOrderBy() && hasLimitWithoutOrderBy(input)) {
+        if (checkLimitWithoutOrderBy && context.getSessionVariable().isCboCTEForceReuseLimitWithoutOrderBy()
+                && hasLimitWithoutOrderBy(input)) {
             shouldForceReuse = true;
         }
 
@@ -62,8 +78,8 @@ public class ForceCTEReuseRule extends TransformationRule {
         return Collections.emptyList();
     }
 
-    private boolean hasNonDeterministicFunction(OptExpression root) {
-        return root.getOp().accept(new NonDeterministicVisitor(), root, null);
+    private boolean hasMatchingFunction(OptExpression root) {
+        return root.getOp().accept(functionVisitor, root, null);
     }
 
     /**

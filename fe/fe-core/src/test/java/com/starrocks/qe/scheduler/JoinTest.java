@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
@@ -34,6 +35,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
+import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
@@ -260,6 +262,56 @@ public class JoinTest extends SchedulerTestBase {
         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(
                 connectContext.getSessionVariable(),
                 new SystemVariable(SessionVariable.PROFILE_TIMEOUT, new IntLiteral(timeoutSecond)), true);
+    }
+
+    @Test
+    public void testSummarizeUnreportedInstances() throws Exception {
+        String sql = "insert into lineitem select * from lineitem";
+        DefaultCoordinator scheduler = startScheduling(sql);
+
+        // Nothing has reported yet, so every deployed instance is still pending.
+        DefaultCoordinator.UnreportedInstanceSummary summary = scheduler.summarizeUnreportedInstances();
+        Assertions.assertEquals(scheduler.getExecutionDAG().getExecutions().size(), summary.total());
+
+        // Each entry must name the worker that owns the instance, that is what makes the log actionable.
+        Set<String> expectedWorkers = scheduler.getExecutionDAG().getExecutions().stream()
+                .map(execState -> String.valueOf(execState.getWorker().getId()))
+                .collect(Collectors.toSet());
+        for (String description : summary.sample()) {
+            int at = description.indexOf('@');
+            int stateStart = description.indexOf('(');
+            Assertions.assertTrue(at > 0 && stateStart > at, description);
+            Assertions.assertTrue(expectedWorkers.contains(description.substring(at + 1, stateStart)), description);
+        }
+
+        // The per-worker breakdown is what the log leans on when the fan-out is too wide to name, so it
+        // must account for every pending instance.
+        Assertions.assertEquals(summary.total(),
+                summary.pendingPerWorker().values().stream().mapToLong(Long::longValue).sum());
+        Assertions.assertTrue(expectedWorkers.containsAll(
+                summary.pendingPerWorker().keySet().stream().map(String::valueOf).collect(Collectors.toSet())));
+
+        // A done report retires its instance, so it must drop out of the list.
+        FragmentInstanceExecState reported = scheduler.getExecutionDAG().getExecutions().iterator().next();
+        TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        request.setBackend_num(reported.getIndexInJob())
+                .setDone(true)
+                .setStatus(new TStatus(TStatusCode.OK))
+                .setFragment_instance_id(reported.getInstanceId());
+        scheduler.updateFragmentExecStatus(request);
+
+        Assertions.assertEquals(summary.total() - 1, scheduler.summarizeUnreportedInstances().total());
+
+        // Keep the expensive formatted descriptions bounded even if the profile latch contains a wide fan-out.
+        QueryRuntimeProfile queryProfile = Deencapsulation.getField(scheduler, "queryProfile");
+        List<TUniqueId> wideFanOut = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            wideFanOut.add(new TUniqueId(0, i));
+        }
+        queryProfile.attachInstances(wideFanOut);
+        summary = scheduler.summarizeUnreportedInstances();
+        Assertions.assertEquals(wideFanOut.size(), summary.total());
+        Assertions.assertEquals(20, summary.sample().size());
     }
 
     @Test

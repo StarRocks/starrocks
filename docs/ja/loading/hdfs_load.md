@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "HDFS から INSERT+FILES()、Broker Load、Spark Load を使用してデータをロードする方法。"
 toc_max_heading_level: 4

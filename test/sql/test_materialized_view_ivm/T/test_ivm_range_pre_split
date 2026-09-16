@@ -1,0 +1,61 @@
+-- name: test_ivm_range_pre_split @cloud
+-- A range-distributed incremental MV is keyed by its hidden auto-increment row-id column, so a
+-- refresh has no user data to sample: its pre-split boundaries are derived from the row-id space
+-- instead, which is knowable in advance only while the counter is still pristine.
+--
+-- This drives that path end to end at a scale where it deliberately declines to split: a tablet's
+-- share of 1000 rows cannot clear the gaps that per-node id caching leaves behind, so the planner
+-- clamps the count and the refresh proceeds on one tablet. The cut arithmetic itself is pinned by
+-- unit tests; what is asserted here is that the new hook is reached on an MV refresh without
+-- changing what the refresh produces -- including the delta refresh that follows it. Forcing a real
+-- split would mean shrinking auto_increment_cache_size cluster-wide, which is too costly to leak
+-- into a shared test cluster if this test fails midway.
+create external catalog ivm_ice_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ivm_ice_${uuid0};
+create database ivm_ice_db_${uuid0};
+use ivm_ice_db_${uuid0};
+create table base (region string, amount int);
+insert into base select concat('r', cast(x % 5 as string)), x from table(generate_series(1, 1000)) as g(x);
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+set enable_range_distribution = true;
+CREATE MATERIALIZED VIEW mv_range_pre_split
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, amount FROM ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+set enable_range_distribution = false;
+
+-- The precondition the derived boundaries key on: the view is keyed by the hidden row-id column.
+-- If an incremental MV ever stopped being row-id keyed, the derived tier would silently never apply.
+SELECT instr(PRIMARY_KEY, '__ROW_ID__') > 0 AS pk_is_row_id
+FROM information_schema.tables_config
+WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_range_pre_split';
+-- A range-distributed partition is created with a single tablet.
+SELECT BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'mv_range_pre_split';
+
+[UC]REFRESH MATERIALIZED VIEW mv_range_pre_split WITH SYNC MODE;
+
+-- Every row must survive the refresh exactly once.
+SELECT count(*), count(distinct amount), sum(amount) FROM mv_range_pre_split;
+SELECT region, count(*) FROM mv_range_pre_split GROUP BY region ORDER BY region;
+
+insert into ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base values ('r9', 5000);
+[UC]REFRESH MATERIALIZED VIEW mv_range_pre_split WITH SYNC MODE;
+SELECT count(*), sum(amount) FROM mv_range_pre_split;
+SELECT region, amount FROM mv_range_pre_split WHERE region = 'r9';
+
+drop materialized view mv_range_pre_split;
+drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+drop database ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
+drop catalog ivm_ice_${uuid0};
+drop database db_${uuid0};

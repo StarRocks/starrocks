@@ -23,6 +23,8 @@
 
 namespace starrocks {
 
+class GeoColumn;
+
 class ColumnVisitor {
 public:
     virtual ~ColumnVisitor() = default;
@@ -90,6 +92,7 @@ public:
     }
 
     virtual Status visit(const ColumnView& column) { return Status::NotSupported("ColumnView is not supported"); }
+    virtual Status visit(const GeoColumn& column);
 };
 
 } // namespace starrocks

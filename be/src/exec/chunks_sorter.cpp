@@ -58,6 +58,19 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
     profile->add_info_string("UseGermanString", is_use_german_string() ? "True" : "False");
 }
 
+// TODO: take the materialized slot ids directly instead of a RecordDescriptor.
+//
+// The only thing read out of `materialized_record_desc` below is `slot->id()` -- the slot types and
+// nullability come from `order_by_types`. Passing a whole descriptor is therefore over-general, and
+// it is what let a caller hand over a record that was not the sort tuple (the window pre-agg plan
+// gives the sort node a second tuple), which this function cannot detect beyond a DCHECK.
+//
+// The pre-aggregation half of the same node already does it the narrow way: it gets its output slot
+// ids straight off the thrift plan as `TSortNode.pre_agg_output_slot_id` and never consults a tuple
+// descriptor. Sending the sort tuple's materialized slot ids the same way would make the two halves
+// symmetric and let TopNNode::_materialized_record_descriptor, this parameter and the DCHECK below
+// all disappear. It needs a thrift field plus FE changes, so it is deliberately not part of the fix
+// for the crash.
 StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk,
                                                                const RecordDescriptor& materialized_record_desc,
                                                                const SortExecExprs& sort_exec_exprs,
@@ -69,6 +82,10 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk,
     auto slots_in_record_descriptor = materialized_record_desc.slots();
     const auto& slots_in_sort_exprs = sort_exec_exprs.sort_tuple_slot_expr_ctxs();
 
+    // One slot per sort-tuple expression: the expressions supply the values, the descriptor supplies
+    // the slot ids they are keyed by, and the two are paired POSITIONALLY below. This holds only if
+    // the caller passes the sort tuple ALONE -- passing a sort node's whole record, which may also
+    // carry the window pre-agg tuple, breaks it. See TopNNode::_materialized_record_descriptor.
     DCHECK_EQ(materialized_record_desc.num_slots(), slots_in_sort_exprs.size());
 
     auto slot_iter = slots_in_record_descriptor.begin();

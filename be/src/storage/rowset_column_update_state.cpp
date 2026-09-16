@@ -14,6 +14,8 @@
 
 #include "rowset_column_update_state.h"
 
+#include <algorithm>
+
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -311,11 +313,15 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
     return Status::OK();
 }
 
-int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(Rowset* rowset) {
+int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(int64_t total_update_row_size, int64_t num_rows_upt) {
     // `num_rows_upt` could be zero after upgrade from old version,
     // then we will return zero and no limit.
-    if ((rowset->num_rows_upt()) <= 0) return 0;
-    return rowset->total_update_row_size() / rowset->num_rows_upt();
+    if (num_rows_upt <= 0) return 0;
+    return total_update_row_size / num_rows_upt;
+}
+
+int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(Rowset* rowset) {
+    return calc_upt_memory_usage_per_row(rowset->total_update_row_size(), rowset->num_rows_upt());
 }
 
 // Read chunk from source segment file and call `update_func` to update it.
@@ -638,6 +644,7 @@ Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& sta
     rowset->rowset_meta()->set_total_disk_size(stat.total_data_size + stat.total_index_size);
     rowset->rowset_meta()->set_data_disk_size(stat.total_data_size);
     rowset->rowset_meta()->set_index_disk_size(stat.total_index_size);
+    rowset->rowset_meta()->set_standalone_index_size(stat.total_standalone_index_size);
     rowset->rowset_meta()->set_empty(stat.num_rows_written == 0);
     rowset->rowset_meta()->set_num_segments(stat.num_segment);
     if (stat.num_segment <= 1) {
@@ -694,8 +701,12 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             RETURN_IF_ERROR(writer->finalize(&segment_file_size, &index_size, &footer_position));
             // update statistic
             stat.num_segment++;
-            stat.total_data_size += static_cast<int64_t>(segment_file_size) - static_cast<int64_t>(index_size);
+            // index_size also counts standalone index files (vector index .vi) that are not in
+            // the segment file; subtract only the embedded part to get column data bytes.
+            const uint64_t embedded_index_size = index_size - std::min(writer->standalone_index_size(), index_size);
+            stat.total_data_size += static_cast<int64_t>(segment_file_size) - static_cast<int64_t>(embedded_index_size);
             stat.total_index_size += index_size;
+            stat.total_standalone_index_size += static_cast<int64_t>(index_size - embedded_index_size);
             stat.num_rows_written += static_cast<int64_t>(chunk_ptr->num_rows());
             stat.total_row_size += static_cast<int64_t>(chunk_ptr->bytes_usage());
             segid_to_chunk[segid] = std::move(chunk_ptr);

@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
@@ -306,6 +307,12 @@ public class TaskRun implements Comparable<TaskRun> {
         context.setIsLastStmt(true);
         context.setMultiStmt(false);
         context.resetSessionVariable();
+        if (task instanceof OptimizeTask) {
+            // OptimizeJobV2 executes its rewrite through a new task-run context, so the
+            // submitter's ConnectContext marker cannot reach the planner. Restore the marker
+            // from the task type before parsing and planning the internal INSERT.
+            context.setOptimizeRewrite(true);
+        }
         // Preserve critical session variables from parent context if available
         // This ensures that settings like enableSingleNodeSchedule are inherited
         if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {

@@ -576,6 +576,11 @@ public class ResourceGroupMgr implements Writable {
                     alterResourceGroupLog.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 
+                Double memUsedPctLimit = changedProperties.getMemUsedPctLimit();
+                if (memUsedPctLimit != null) {
+                    alterResourceGroupLog.setMemUsedPctLimit(memUsedPctLimit);
+                }
+
                 warehouses = changedProperties.getWarehouses();
                 if (warehouses != null) {
                     alterResourceGroupLog.setWarehouses(warehouses);
@@ -654,6 +659,9 @@ public class ResourceGroupMgr implements Writable {
         }
         if (log.getSpillMemLimitThreshold() != null) {
             wg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
+        }
+        if (log.getMemUsedPctLimit() != null) {
+            wg.setMemUsedPctLimit(log.getMemUsedPctLimit());
         }
         if (log.getWarehouses() != null) {
             wg.setWarehouses(log.getWarehouses());

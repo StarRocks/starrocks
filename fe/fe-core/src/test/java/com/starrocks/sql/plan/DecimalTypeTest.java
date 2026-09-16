@@ -228,6 +228,31 @@ public class DecimalTypeTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountOverArrayOfDecimal() throws Exception {
+        // count() is routed through the decimalv3 rewriting because the ARRAY's item type is decimal,
+        // but there is nothing to widen, and the rewriting used to leave the return type INVALID.
+        // That surfaced as "slot type shouldn't be invalid" while building the fragment.
+        starRocksAssert.withTable("CREATE TABLE arr_dec (" +
+                "k INT NULL," +
+                "a32 ARRAY<DECIMAL32(4, 2)> NULL," +
+                "a64 ARRAY<DECIMAL64(10, 2)> NULL," +
+                "a128 ARRAY<DECIMAL128(30, 2)> NULL) " +
+                "DUPLICATE KEY (k) " +
+                "DISTRIBUTED BY HASH (k) " +
+                "properties(\"replication_num\"=\"1\") ;");
+        try {
+            for (String col : new String[] {"a32", "a64", "a128"}) {
+                assertContains(getVerboseExplain("select count(" + col + ") from arr_dec"),
+                        "aggregate: count", "result: BIGINT;");
+                assertContains(getVerboseExplain("select k, count(" + col + ") from arr_dec group by k"),
+                        "aggregate: count", "result: BIGINT;");
+            }
+        } finally {
+            starRocksAssert.dropTable("arr_dec");
+        }
+    }
+
+    @Test
     public void testDecimalV2ArraySlice() throws Exception {
         try {
             Config.enable_decimal_v3 = false;

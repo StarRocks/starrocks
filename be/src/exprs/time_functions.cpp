@@ -1222,10 +1222,10 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
                minute * 100'000'000LL + second * 1'000'000LL + usec;
     };
 
-    if (year >= 0) {
+    if (year > 0) {
         year -= (func(month1, day1, hour1, minute1, second1, usec1) <
                  func(month2, day2, hour2, minute2, second2, usec2));
-    } else {
+    } else if (year < 0) {
         year += (func(month1, day1, hour1, minute1, second1, usec1) >
                  func(month2, day2, hour2, minute2, second2, usec2));
     }
@@ -1303,9 +1303,9 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
                second * 1'000'000LL + usec;
     };
 
-    if (month >= 0) {
+    if (month > 0) {
         month -= (func(day1, hour1, minute1, second1, usec1) < func(day2, hour2, minute2, second2, usec2));
-    } else {
+    } else if (month < 0) {
         month += (func(day1, hour1, minute1, second1, usec1) > func(day2, hour2, minute2, second2, usec2));
     }
 

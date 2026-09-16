@@ -12,8 +12,6 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 このトピックでは、StarRocks のベクターインデックス機能とそれを使用した近似最近傍探索 (ANNS) の方法について紹介します。
 
-ベクターインデックス機能は、v3.4 以降の共有なしクラスタでのみサポートされています。
-
 ## 概要
 
 現在、StarRocks はセグメントファイルレベルでのベクターインデックスをサポートしています。インデックスは各検索項目をセグメントファイル内の行 ID にマッピングし、ベクトル距離の計算を行わずに対応するデータ行を直接特定することで高速なデータ取得を可能にします。システムは現在、Inverted File with Product Quantization (IVFPQ) と Hierarchical Navigable Small World (HNSW) の 2 種類のベクターインデックスを提供しており、それぞれ独自の組織構造を持っています。
@@ -45,11 +43,15 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 
 ## 使用方法
 
-各テーブルは 1 つのベクターインデックスのみをサポートします。
+### 前提条件
+
+- 各テーブルは 1 つのベクターインデックスのみをサポートします。
+- インデックス対象の列は、`ARRAY<FLOAT> NOT NULL`でなければなりません。
+- ネイティブの DUPLICATE KEY および PRIMARY KEY テーブルのみが、ベクトルインデックスをサポートします。
 
 ### ベクターインデックスの作成
 
-このチュートリアルでは、テーブルを作成しながらベクターインデックスを作成します。既存のテーブルにベクターインデックスを追加することもできます。詳細な手順については、[Append vector index](#append-vector-index) を参照してください。
+このチュートリアルでは、テーブルを作成しながらベクターインデックスを作成します。既存のテーブルにベクターインデックスを追加することもできます。詳細な手順については、[ベクターインデックスの追加](#ベクターインデックスの追加) を参照してください。
 
 - 次の例では、テーブル `hnsw` のカラム `vector` に HNSW ベクターインデックス `hnsw_vector` を作成します。
 
@@ -89,6 +91,41 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
     DISTRIBUTED BY HASH(id) BUCKETS 1;
     ```
 
+- 以下の例では、`async` ビルドモードを使用して、共有データクラスタ内のクラウドネイティブテーブルに HNSW ベクトルインデックスを作成します。
+
+    ```SQL
+    CREATE TABLE hnsw_async (
+        id BIGINT NOT NULL,
+        vector ARRAY<FLOAT> NOT NULL,
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw",
+            "dim" = "768",
+            "metric_type" = "cosine_similarity",
+            "is_vector_normed" = "true",
+            "index_build_mode" = "async"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id);
+    ```
+
+    `information_schema.partitions_meta` をクエリすることで、非同期ビルドの進行状況を確認できます。
+
+    ```SQL
+    SELECT
+        TABLE_NAME,
+        PARTITION_NAME,
+        VISIBLE_VERSION,
+        MIN_VI_BUILT_VERSION,
+        MAX_VI_BUILT_VERSION
+    FROM information_schema.partitions_meta
+    WHERE TABLE_NAME = 'hnsw_async';
+    ```
+
+    - `MIN_VI_BUILT_VERSION` が `VISIBLE_VERSION` と等しい場合、パーティション内のすべてのタブレットのインデックスが可視バージョンに達していることを示します。
+    - `MIN_VI_BUILT_VERSION` が `VISIBLE_VERSION` より小さい場合、少なくとも 1 つのインデックスが構築中であることを示します。このようなセグメントを含むクエリは、ブルートフォーススキャンに切り替わります。
+    - `MIN_VI_BUILT_VERSION` が `MAX_VI_BUILT_VERSION` より小さい場合、タブレットごとにインデックスの構築進捗状況が異なることを示しています。
+
 #### インデックス構築パラメータ
 
 ##### USING VECTOR
@@ -116,6 +153,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **説明**: ベクターインデックスのメトリックタイプ（測定関数）。有効な値:
   - `l2_distance`: ユークリッド距離。値が小さいほど、類似性が高くなります。
   - `cosine_similarity`: コサイン類似度。値が大きいほど、類似性が高くなります。
+  - `inner_product`: 内積。値が大きいほど類似性が高くなります。コサイン類似度とは異なり、内積はベクトルの大きさを保持します。正確な計算には `inner_product`、ベクターインデックスによる top-k または範囲クエリには `approx_inner_product` を使用します。
 
 ##### is_vector_normed
 
@@ -125,7 +163,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 
 ##### index_build_threshold
 
-- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
+- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
 - **必須**: いいえ
 - **説明**: ベクトルインデックスの構築をトリガーする行数のしきい値。書き込まれた行数がこのしきい値未満の場合、インデックスは構築されず、検索はブルートフォーススキャンにフォールバックします。`1` 以上の整数である必要があります。IVFPQ インデックスの場合、IVFPQ の k-means 学習には少なくとも `nlist` 件のベクトルが必要なため、この値は `nlist` 以上である必要もあります。この制約に違反する DDL 文は拒否されます。
 
@@ -135,7 +173,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **必須**: いいえ
 - **説明**: 共有データクラスタでのインデックス構築方式です。有効な値：
   - `sync`：データ書き込み時に同期してインデックスを構築します。クエリはすぐにインデックスを使用できますが、ロード遅延が増加します。
-  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
+  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
 
 ##### M
 
@@ -148,6 +186,12 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **デフォルト**: 40
 - **必須**: いいえ
 - **説明**: HNSW 固有のパラメータ。最も近い隣接点を含む候補リストのサイズ。`1` 以上の整数である必要があります。グラフ構築プロセス中の検索深度を制御するために使用されます。具体的には、`efconstruction` はグラフ構築プロセス中の各頂点の検索リスト（候補リストとも呼ばれる）のサイズを定義します。この候補リストは、現在の頂点の隣接候補を格納するために使用され、リストのサイズは `efconstruction` です。`efconstruction` の値が大きいほど、グラフ構築プロセス中に頂点の隣接候補として考慮される候補が増え、その結果、グラフの品質（接続性の向上など）が向上しますが、グラフ構築の時間消費と計算の複雑さも増加します。
+
+##### efsearch
+
+- **デフォルト**: 40
+- **必須**: いいえ
+- **説明**:  HNSW 固有のパラメータ。精度と速度のトレードオフを制御するパラメータ。階層的なグラフ構造の検索中に、このパラメータは検索中の候補リストのサイズを制御します。`efsearch` の値が大きいほど、精度が高くなりますが、速度が低下します。このパラメータはインデックス作成時に指定できます。クエリ内の `ann_params` にこのパラメータが含まれていない場合、システムはこの値に基づいて適応的なスケーリングを実行します。明示的に指定されたクエリレベルの値が優先され、適応的なスケーリングはバイパスされます。
 
 ##### quantizer
 
@@ -192,6 +236,10 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 #### ベクターインデックスの追加
 
 既存のテーブルにベクターインデックスを追加するには、[CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md) または [ALTER TABLE ADD INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用します。
+
+:::note
+共有データクラスタ内のクラウドネイティブテーブルの場合、ALTER TABLE ADD INDEX ステートメントは既存のデータを書き換え、そのデータに基づいてインデックスを構築します。`index_build_mode` が `async` に設定されている場合でも、システムはスキーマ変更が完了する前にインデックスの構築を完了させます。
+:::
 
 例:
 
@@ -277,18 +325,21 @@ LIMIT 10
     - `<vector_index_distance_func>` の関数名要件:
       - `metric_type` が `l2_distance` の場合、関数名は `approx_l2_distance` でなければなりません。
       - `metric_type` が `cosine_similarity` の場合、関数名は `approx_cosine_similarity` でなければなりません。
+      - `metric_type` が `inner_product` の場合、関数名は `approx_inner_product` でなければなりません。
     - `<vector_index_distance_func>` のパラメータ要件:
       - カラムのうちの一つ `constant_array` は、ベクターインデックス `dim` と一致する次元を持つ定数 `ARRAY<FLOAT>` でなければなりません。
       - もう一つのカラム `vector_column` は、ベクターインデックスに対応するカラムでなければなりません。
   - ORDER の方向要件:
     - `metric_type` が `l2_distance` の場合、順序は `ASC` でなければなりません。
     - `metric_type` が `cosine_similarity` の場合、順序は `DESC` でなければなりません。
+    - `metric_type` が `inner_product` の場合、順序は `DESC` でなければなりません。
   - `LIMIT N` 句が必要です。
 - **述語要件:**
   - すべての述語は `<vector_index_distance_func>` 式でなければならず、`AND` と比較演算子（`>` または `<`）を使用して結合されます。比較演算子の方向は `ASC`/`DESC` の順序と一致している必要があります。具体的には:
   - 要件 1:
     - `metric_type` が `l2_distance` の場合: `col_ref <= constant`。
     - `metric_type` が `cosine_similarity` の場合: `col_ref >= constant`。
+    - `metric_type` が `inner_product` の場合: `col_ref >= constant`。定数には負の値も指定できます。
     - ここで、`col_ref` は `<vector_index_distance_func>(vector_column, constant_array)` の結果を指し、`FLOAT` または `DOUBLE` 型にキャストできます。例:
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`
@@ -574,7 +625,3 @@ LIMIT 5;
 |      avgRowSize=4.0                                                                                                                                 |
 +-----------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
-
-## 制限事項
-
-- 各テーブルは 1 つのベクターインデックスのみをサポートします。

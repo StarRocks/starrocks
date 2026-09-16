@@ -258,6 +258,67 @@ public class QueryDumpDeserializerTest {
     }
 
     @Test
+    public void testDeserializeStructuredObjectStatistics() {
+        // New structured (name-keyed) format written by the current serializer.
+        String queryDumpJson = "{"
+                + "\"statement\": \"select * from t1\","
+                + "\"table_meta\": {\"test.t1\": \"CREATE TABLE t1 (id INT)\"},"
+                + "\"table_row_count\": {\"test.t1\": {\"t1\": 1000}},"
+                + "\"column_statistics\": {"
+                + "  \"test.t1\": {"
+                + "    \"id\": {\"version\": 1, \"min\": \"1.0\", \"max\": \"100.0\", \"nullsFraction\": \"0.0\","
+                + "             \"averageRowSize\": \"4.0\", \"distinctValuesCount\": \"100.0\","
+                + "             \"collectionSize\": \"7.0\", \"type\": \"ESTIMATE\"}"
+                + "  }"
+                + "},"
+                + "\"be_number\": 3"
+                + "}";
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create();
+
+        QueryDumpInfo dumpInfo = gson.fromJson(queryDumpJson, QueryDumpInfo.class);
+
+        ColumnStatistic stats = dumpInfo.getTableStatisticsMap().get("test.t1").get("id");
+        assertThat(stats.getMinValue()).isEqualTo(1.0);
+        assertThat(stats.getMaxValue()).isEqualTo(100.0);
+        assertThat(stats.getNullsFraction()).isEqualTo(0.0);
+        assertThat(stats.getAverageRowSize()).isEqualTo(4.0);
+        assertThat(stats.getDistinctValuesCount()).isEqualTo(100.0);
+        assertThat(stats.getCollectionSize()).isEqualTo(7.0);
+        assertThat(stats.getType()).isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+    }
+
+    @Test
+    public void testDeserializeStructuredObjectWithInfinities() {
+        // Infinities are stored as strings so the JSON stays valid; verify they parse back.
+        String queryDumpJson = "{"
+                + "\"statement\": \"select * from t1\","
+                + "\"table_meta\": {\"test.t1\": \"CREATE TABLE t1 (id INT)\"},"
+                + "\"table_row_count\": {\"test.t1\": {\"t1\": 1000}},"
+                + "\"column_statistics\": {"
+                + "  \"test.t1\": {"
+                + "    \"id\": {\"version\": 1, \"min\": \"-Infinity\", \"max\": \"Infinity\", \"nullsFraction\": \"0.0\","
+                + "             \"averageRowSize\": \"1.0\", \"distinctValuesCount\": \"1.0\", \"type\": \"UNKNOWN\"}"
+                + "  }"
+                + "},"
+                + "\"be_number\": 3"
+                + "}";
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create();
+
+        QueryDumpInfo dumpInfo = gson.fromJson(queryDumpJson, QueryDumpInfo.class);
+
+        ColumnStatistic stats = dumpInfo.getTableStatisticsMap().get("test.t1").get("id");
+        assertThat(stats.getMinValue()).isEqualTo(Double.NEGATIVE_INFINITY);
+        assertThat(stats.getMaxValue()).isEqualTo(Double.POSITIVE_INFINITY);
+        assertThat(stats.getType()).isEqualTo(ColumnStatistic.StatisticType.UNKNOWN);
+    }
+
+    @Test
     public void testHistogramSerializeDeserializeRoundTrip() {
         // A bucket without distinctCount (4-element) and one with it (5-element), plus MCV entries.
         List<Bucket> buckets = Lists.newArrayList(
@@ -344,10 +405,18 @@ public class QueryDumpDeserializerTest {
         assertThat(parsed.getMinValue()).isEqualTo(1.0);
         assertThat(parsed.getMaxValue()).isEqualTo(100.0);
         assertThat(parsed.getDistinctValuesCount()).isEqualTo(50.0);
+        assertThat(parsed.getCollectionSize()).isEqualTo(5.0);
 
         // MCV-only tail (no collection size) must parse too.
         String withMcvOnly = "[1.0, 100.0, 0.0, 8.0, 50.0] MCV: [[5:10]] ESTIMATE";
-        assertThat(ColumnStatistic.buildFrom(withMcvOnly).build().getType())
-                .isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+        ColumnStatistic mcvOnly = ColumnStatistic.buildFrom(withMcvOnly).build();
+        assertThat(mcvOnly.getType()).isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+        assertThat(mcvOnly.getCollectionSize()).isEqualTo(ColumnStatistic.DEFAULT_COLLECTION_SIZE);
+
+        // COS-like text inside an MCV key is column data, not collection-size metadata.
+        String withCosInMcv = "[1.0, 100.0, 0.0, 8.0, 50.0] MCV: [[foo COS: 9:10]] ESTIMATE";
+        ColumnStatistic cosInMcv = ColumnStatistic.buildFrom(withCosInMcv).build();
+        assertThat(cosInMcv.getType()).isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+        assertThat(cosInMcv.getCollectionSize()).isEqualTo(ColumnStatistic.DEFAULT_COLLECTION_SIZE);
     }
 }

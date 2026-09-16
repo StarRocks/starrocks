@@ -14,59 +14,15 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Joiner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.Type;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.velocity.VelocityContext;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-
-import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 
 public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob {
-    private static final Logger LOG = LogManager.getLogger(ExternalHistogramStatisticsCollectJob.class);
-
-    private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
-            "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName'," +
-                    " histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double)), " +
-                    " $mcv," +
-                    " NOW()" +
-                    " FROM (SELECT $columnName as column_key FROM `$catalogName`.`$dbName`.`$tableName`" +
-                    " where rand() <= $sampleRatio" +
-                    " and $columnName is not null $MCVExclude" +
-                    " ORDER BY $columnName LIMIT $totalRows) t";
-
-    // For char-family columns we skip the histogram() bucket aggregate, but we still need
-    // Histogram.getTotalRows() to reflect the column's real cardinality. So instead of storing
-    // NULL buckets we store a single placeholder bucket that represents "all values excluding
-    // the MCVs".
-    private static final String COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE =
-            "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName'," +
-                    " $bucketExpr, $mcv, NOW()" +
-                    " FROM `$catalogName`.`$dbName`.`$tableName`";
-
-    private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
-            "select cast(version as INT), " +
-                    "cast(column_key as varchar), cast(column_value as varchar) from (" +
-                    "select " + StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as version, " +
-                    "$columnName as column_key, " +
-                    "count($columnName) as column_value " +
-                    "from `$catalogName`.`$dbName`.`$tableName` where $columnName is not null " +
-                    "group by $columnName " +
-                    "order by column_value desc limit $topN ) t";
-
     private final String catalogName;
 
     public ExternalHistogramStatisticsCollectJob(String catalogName, Database db, Table table, List<String> columnNames,
@@ -91,114 +47,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
-        double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
-        long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
-        long mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
-
-        long finishedSQLNum = 0;
-        long totalCollectSQL = columnNames.size();
-
-        for (int i = 0; i < columnNames.size(); i++) {
-            String columnName = columnNames.get(i);
-            Type columnType = columnTypes.get(i);
-            String sql = buildCollectMCV(db, table, mcvSize, columnName);
-            StatisticExecutor statisticExecutor = new StatisticExecutor();
-            List<TStatisticData> mcv = statisticExecutor.queryMCV(context, sql);
-
-            Map<String, String> mostCommonValues = new HashMap<>();
-            for (TStatisticData tStatisticData : mcv) {
-                mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
-            }
-
-            sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
-            collectStatisticSync(sql, context, analyzeStatus);
-            // Best-effort: remove the stale raw-keyed row this column's fresh hashed-keyed row just
-            // superseded. The read side no longer depends on this for correctness (it dedups by
-            // update_time), so this is purely storage hygiene - failures are logged, not fatal.
-            if (!statisticExecutor.dropExternalHistogramRawColumn(context, table.getUUID(), columnName)) {
-                LOG.warn("[ExternalStats] failed to clean up stale raw-keyed histogram row | catalog={} db={} table={} " +
-                        "column={}", catalogName, db.getOriginName(), table.getName(), columnName);
-            }
-
-            finishedSQLNum++;
-            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-        }
-    }
-
-    private String buildCollectMCV(Database database, Table table, Long topN, String columnName) {
-        VelocityContext context = new VelocityContext();
-        context.put("columnName", StatisticUtils.quoting(table, columnName));
-        context.put("catalogName", catalogName);
-        context.put("dbName", database.getOriginName());
-        context.put("tableName", table.getName());
-        context.put("topN", topN);
-
-        return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
-    }
-
-    private String buildCollectHistogram(Database database, Table table, double sampleRatio,
-                                         Long bucketNum, Map<String, String> mostCommonValues, String columnName,
-                                         Type columnType) {
-        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME).stream()
-                .map(ColumnDef::getName)
-                .collect(Collectors.toList());
-        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)
-                .append(columnNames).append(" ");
-
-        String quoteColumName = StatisticUtils.quoting(table, columnName);
-
-        VelocityContext context = new VelocityContext();
-        context.put("tableUUID", StatisticUtils.hashTableUuidForPkStorage(table.getUUID()));
-        context.put("columnName", quoteColumName);
-        context.put("columnNameStr", columnName);
-        context.put("catalogName", catalogName);
-        context.put("dbName", database.getOriginName());
-        context.put("tableName", table.getName());
-
-        List<String> mcvList = new ArrayList<>();
-        for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
-            mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
-        }
-
-        if (mostCommonValues.isEmpty()) {
-            context.put("mcv", "NULL");
-        } else {
-            context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
-        }
-
-        putMcvExclude(context, mostCommonValues, quoteColumName, columnType);
-
-        if (shouldSkipHistogramBuckets(columnType)) {
-            long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
-            context.put("bucketExpr",
-                    "concat('[[\"Infinity\",\"Infinity\",', cast(greatest(0, count(" + quoteColumName +
-                            ") - " + mcvSum + ") as varchar), ',0]]')");
-            builder.append(build(context, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE));
-            return builder.toString();
-        }
-
-        context.put("bucketNum", bucketNum);
-        context.put("sampleRatio", sampleRatio);
-        context.put("totalRows", Config.histogram_max_sample_row_count);
-
-        builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
-        return builder.toString();
-    }
-
-    private void putMcvExclude(VelocityContext context, Map<String, String> mostCommonValues, String quoteColumName,
-                               Type columnType) {
-        if (!mostCommonValues.isEmpty()) {
-            if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
-                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
-            } else {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
-                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
-            }
-        } else {
-            context.put("MCVExclude", "");
-        }
+        new HistogramCollector(new ExternalHistogramTraits(this, new HistogramCollectParams(properties)))
+                .collect(context, analyzeStatus);
     }
 }

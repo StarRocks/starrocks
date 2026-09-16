@@ -1,0 +1,20 @@
+-- name: test_range_substr_arity
+-- description: PARTITION BY RANGE(substr(col)) with too few arguments must surface a clean
+--              semantic error instead of a raw IndexOutOfBoundsException (PartitionExprAnalyzer
+--              read paramsExprList.get(0)/get(1) without an arity check).
+
+CREATE DATABASE IF NOT EXISTS test_range_substr_arity_db;
+USE test_range_substr_arity_db;
+
+-- 1-arg substr in a RANGE partition expression -> clean semantic error (was: raw AIOOBE)
+CREATE TABLE ddl3 (k VARCHAR(10) NOT NULL)
+DUPLICATE KEY(k)
+PARTITION BY RANGE(substr(k)) ()
+DISTRIBUTED BY HASH(k);
+
+-- 2-arg substr clears the arity guard (records whatever the downstream analysis does;
+-- the point is it no longer throws IndexOutOfBoundsException).
+CREATE TABLE ddl4 (k VARCHAR(10) NOT NULL)
+DUPLICATE KEY(k)
+PARTITION BY RANGE(substr(k, 1)) ()
+DISTRIBUTED BY HASH(k);

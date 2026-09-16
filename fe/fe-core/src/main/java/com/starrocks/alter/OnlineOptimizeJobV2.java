@@ -333,7 +333,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + ParseUtil.backquote(dbName) + "."
                         + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
-                        + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
+                        + ParseUtil.backquote(tmpPartitionName) + ") (" + Joiner.on(", ").join(tableColumnNames)
+                        + ") select " + Joiner.on(", ").join(tableColumnNames)
                         + " from " + ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(tableName)
                         + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
@@ -941,10 +942,13 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (context == null) {
             context = buildConnectContext();
         }
+        boolean originalOptimizeRewrite = context.isOptimizeRewrite();
+        context.setOptimizeRewrite(true);
         try (var scope = context.bindScope()) {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             if (parsedStmt instanceof InsertStmt) {
-                ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
+                InsertStmt insertStmt = (InsertStmt) parsedStmt;
+                insertStmt.setIsVersionOverwrite(true);
             }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
@@ -964,6 +968,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
                 throw new AlterCancelException(context.getState().getErrorMessage());
             }
+        } finally {
+            context.setOptimizeRewrite(originalOptimizeRewrite);
         }
     }
 
