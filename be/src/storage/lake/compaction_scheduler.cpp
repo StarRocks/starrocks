@@ -609,6 +609,9 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
             _limiter.no_memory_limit_exceeded();
         }
     };
+    // For tokens the planner reserved but never used: no outcome to judge, so nothing to count towards
+    // restoring concurrency reduced under memory pressure.
+    ReturnTokenFunc return_token = [this]() { _limiter.return_token(); };
 
     TabletParallelConfig parallel_config;
     parallel_config.set_enable_parallel(true);
@@ -624,7 +627,7 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
             return _parallel_mgr->create_parallel_tasks(
                     tablet_id, txn_id, context->version, parallel_config, context->callback,
                     context->force_base_compaction, _threads.get(), acquire_token, release_token, context->is_unshare,
-                    context->stats->in_queue_time_sec, context->stats->queue_wait_ns);
+                    context->stats->in_queue_time_sec, context->stats->queue_wait_ns, return_token);
         } catch (const std::exception& e) {
             LOG(WARNING) << "Exception while planning parallel compaction, compacting serially instead. tablet_id="
                          << tablet_id << ", txn_id=" << txn_id << ": " << e.what();

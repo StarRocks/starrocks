@@ -643,7 +643,7 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         int64_t tablet_id, int64_t txn_id, int64_t version, const TabletParallelConfig& config,
         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction, ThreadPool* thread_pool,
         const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token, bool is_unshare,
-        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns) {
+        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns, const ReturnTokenFunc& return_token) {
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0
@@ -727,10 +727,14 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     // before the exception is even handled, which would make the state look like "nothing was submitted".
     // Acting on that stale answer lets the caller fall back to normal compaction for a tablet that has
     // already completed, producing a second finish_task() for one tablet id and a SIGSEGV in it.
+    // A token reserved for a subtask that never ran goes back through `return_token`, which records no
+    // outcome. Callers that supply none (tests) get the old behaviour of reporting it as a completion.
+    const ReturnTokenFunc return_unused =
+            return_token ? return_token : ReturnTokenFunc([&release_token]() { release_token(false); });
     int submitted = 0;
     try {
         return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
-                                           acquire_token, release_token, &submitted);
+                                           acquire_token, release_token, return_unused, &submitted);
     } catch (const std::exception& e) {
         if (submitted > 0) {
             LOG(WARNING) << "Exception after submitting " << submitted << " parallel compaction subtask(s); they own "
@@ -2373,7 +2377,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_group
 StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         const std::shared_ptr<TabletParallelCompactionState>& state_ptr, std::vector<SubtaskGroup> groups,
         bool force_base_compaction, ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-        const ReleaseTokenFunc& release_token, int* submitted_out) {
+        const ReleaseTokenFunc& release_token, const ReturnTokenFunc& return_token, int* submitted_out) {
     int64_t tablet_id = state_ptr->tablet_id;
     int64_t txn_id = state_ptr->txn_id;
     int64_t version = state_ptr->version;
@@ -2402,9 +2406,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
             LOG(WARNING) << "Parallel compaction: failed to acquire limiter token " << i << "/" << total_groups
                          << " for tablet " << tablet_id << ", txn_id=" << txn_id << ". Releasing " << tokens_acquired
                          << " acquired tokens.";
-            // Release all acquired tokens
+            // Hand back the tokens acquired so far; none of them ran anything.
             for (int32_t j = 0; j < tokens_acquired; j++) {
-                release_token(false);
+                return_token();
             }
             cleanup_tablet(tablet_id, txn_id);
             return Status::ResourceBusy(strings::Substitute(
@@ -2425,13 +2429,17 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     // would otherwise strand them, and with compact_threads defaulting to 4, leaking a couple per failure
     // starves lake compaction for the whole BE until it restarts. So install this guard immediately after the
     // acquisition succeeds -- everything below it, including the split bookkeeping, can throw std::bad_alloc.
+    //
+    // The tokens go back through return_token(), not release_token(false): they never ran a subtask, and
+    // reporting them as successful completions would let one planning failure restore concurrency that the
+    // limiter had reduced under memory pressure.
     bool tokens_settled = false;
     DeferOp release_unused_tokens([&] {
         if (tokens_settled) {
             return;
         }
         for (int32_t j = subtasks_created; j < total_groups; j++) {
-            release_token(false);
+            return_token();
         }
     });
 
@@ -2620,13 +2628,11 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
             // repeating it.
             registered = false;
 
-            // Release token for this failed subtask
-            release_token(false);
-
-            // Release remaining tokens that haven't been used yet
+            // Hand back the token of this subtask, which never ran, and those of the groups after it.
+            return_token();
             int32_t remaining_tokens = total_groups - static_cast<int32_t>(group_idx) - 1;
             for (int32_t j = 0; j < remaining_tokens; j++) {
-                release_token(false);
+                return_token();
             }
             // This branch has accounted for every unused token; release_unused_tokens must not repeat it,
             // whether we return just below or break out of the loop.

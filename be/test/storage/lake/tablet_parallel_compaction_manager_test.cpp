@@ -23,6 +23,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
@@ -8305,6 +8306,120 @@ TEST_F(TabletParallelCompactionManagerTest, test_index_major_compaction_failure_
     auto ok = _manager->get_merged_txn_log(tablet_id, txn_id + 1);
     EXPECT_TRUE(ok.ok()) << ok.status();
     _manager->cleanup_tablet(tablet_id, txn_id + 1);
+}
+
+// A token reserved for a subtask that never ran must go back through the neutral return_token, not
+// through release_token(false): the limiter restores concurrency it reduced under memory pressure by
+// counting successful completions (Limiter::no_memory_limit_exceeded), and a reservation that did no work
+// is not one. Otherwise a single planning failure over several groups would undo that protection at
+// once. The three ways a reserved token ends up unused are covered: the all-or-nothing acquisition
+// failing part-way, the thread pool rejecting a subtask, and an exception unwinding the submission loop.
+TEST_F(TabletParallelCompactionManagerTest, test_unused_tokens_are_returned_not_released) {
+    int64_t tablet_id = 10009;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(3);
+    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    std::unique_ptr<ThreadPool> pool;
+    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
+
+    int acquired = 0;
+    int released = 0;
+    int returned = 0;
+    auto reset_counts = [&]() { acquired = released = returned = 0; };
+    ReleaseTokenFunc release_token = [&](bool) { released++; };
+    ReturnTokenFunc return_token = [&]() { returned++; };
+
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->EnableProcessing();
+    DeferOp disable_sync_point([&]() {
+        sync_point->ClearCallBack("ThreadPool::do_submit:1");
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        sync_point->DisableProcessing();
+    });
+
+    // 1. The all-or-nothing acquisition fails part-way: the one token acquired so far is returned.
+    {
+        int64_t txn_id = 20009;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true);
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(), [&]() { return ++acquired <= 1; },
+                release_token, false, 0, 0, return_token);
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(st.status().is_resource_busy()) << st.status();
+        EXPECT_EQ(1, returned);
+        EXPECT_EQ(0, released);
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        reset_counts();
+    }
+
+    // 2. The thread pool rejects the first subtask: its token and those of every later group are returned.
+    {
+        int64_t txn_id = 20010;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true);
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        sync_point->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *static_cast<int64_t*>(arg) = 0; });
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(),
+                [&]() {
+                    acquired++;
+                    return true;
+                },
+                release_token, false, 0, 0, return_token);
+        sync_point->ClearCallBack("ThreadPool::do_submit:1");
+        ASSERT_FALSE(st.ok());
+        // Every token the planner reserved -- one per group, so more than one -- came back untouched.
+        EXPECT_GE(acquired, 2);
+        EXPECT_EQ(acquired, returned);
+        EXPECT_EQ(0, released);
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        reset_counts();
+    }
+
+    // 3. An exception unwinds the submission loop before any subtask was handed to the pool: the guard
+    //    that keeps the tokens from leaking must return them, not report them as completions.
+    {
+        int64_t txn_id = 20011;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true);
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                                [](void*) { throw std::bad_alloc(); });
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(),
+                [&]() {
+                    acquired++;
+                    return true;
+                },
+                release_token, false, 0, 0, return_token);
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        ASSERT_FALSE(st.ok());
+        EXPECT_GE(acquired, 2);
+        EXPECT_EQ(acquired, returned);
+        EXPECT_EQ(0, released);
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        reset_counts();
+    }
+
+    pool->wait();
 }
 
 } // namespace starrocks::lake

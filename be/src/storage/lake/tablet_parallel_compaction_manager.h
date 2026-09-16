@@ -41,6 +41,10 @@ class ThreadPool;
 using AcquireTokenFunc = std::function<bool()>;
 // ReleaseTokenFunc: Releases a token, parameter indicates if memory limit was exceeded
 using ReleaseTokenFunc = std::function<void(bool mem_limit_exceeded)>;
+// ReturnTokenFunc: Hands back a token that was reserved for a subtask which never ran. Unlike
+// ReleaseTokenFunc it records no task outcome: the limiter restores concurrency it reduced under memory
+// pressure by counting successful completions, and a reservation that did no work is not one.
+using ReturnTokenFunc = std::function<void()>;
 
 namespace starrocks::lake {
 
@@ -229,7 +233,8 @@ public:
                                         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction,
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
                                         const ReleaseTokenFunc& release_token, bool is_unshare = false,
-                                        int64_t handoff_in_queue_time_sec = 0, int64_t handoff_queue_wait_ns = 0);
+                                        int64_t handoff_in_queue_time_sec = 0, int64_t handoff_queue_wait_ns = 0,
+                                        const ReturnTokenFunc& return_token = {});
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.
@@ -345,7 +350,8 @@ private:
     StatusOr<int> submit_subtasks_from_groups(const std::shared_ptr<TabletParallelCompactionState>& state_ptr,
                                               std::vector<SubtaskGroup> groups, bool force_base_compaction,
                                               ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-                                              const ReleaseTokenFunc& release_token, int* submitted_out = nullptr);
+                                              const ReleaseTokenFunc& release_token,
+                                              const ReturnTokenFunc& return_token, int* submitted_out = nullptr);
 
     // Execute a single subtask for large rowset split (segment range mode)
     void execute_subtask_segment_range(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
