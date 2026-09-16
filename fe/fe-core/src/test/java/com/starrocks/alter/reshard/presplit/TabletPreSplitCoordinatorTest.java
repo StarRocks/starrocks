@@ -183,7 +183,7 @@ public class TabletPreSplitCoordinatorTest {
 
     private PreSplitOutcome invokeMaybeAct() {
         return TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, /*sessionPreSplitEnabled*/ null);
     }
 
     private static void assertSkipped(PreSplitOutcome outcome, SkipReason expected) {
@@ -220,7 +220,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_broker_load = true;
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD, /*sessionPreSplitEnabled*/ null);
         Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, outcome);
     }
 
@@ -231,7 +231,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_broker_load = false;
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD, /*sessionPreSplitEnabled*/ null);
         assertSkipped(outcome, SkipReason.DISABLED_BY_CONFIG);
     }
 
@@ -243,7 +243,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_mv_refresh = true;
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH, /*sessionPreSplitEnabled*/ null);
         Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, outcome);
     }
 
@@ -254,7 +254,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_mv_refresh = false;
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH, /*sessionPreSplitEnabled*/ null);
         assertSkipped(outcome, SkipReason.DISABLED_BY_CONFIG);
     }
 
@@ -264,7 +264,7 @@ public class TabletPreSplitCoordinatorTest {
         ConnectContext.get().getSessionVariable().setEnableTabletPreSplit(false);
 
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
-                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH);
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH, /*sessionPreSplitEnabled*/ null);
         assertSkipped(outcome, SkipReason.DISABLED_BY_SESSION);
     }
 
@@ -273,6 +273,26 @@ public class TabletPreSplitCoordinatorTest {
         ConnectContext.get().getSessionVariable().setEnableTabletPreSplit(false);
 
         assertSkipped(invokeMaybeAct(), SkipReason.DISABLED_BY_SESSION);
+    }
+
+    @Test
+    public void testResolvedOptOutBeatsAnOptedInBoundSession() {
+        // A deferred load resolves this gate from the value its session held when the statement was
+        // accepted. The session bound here is the submitter's own live one, which it is free to SET
+        // again while the job sits pending; the resolved value is what must decide.
+        ConnectContext.get().getSessionVariable().setEnableTabletPreSplit(true);
+
+        assertSkipped(TabletPreSplitCoordinator.maybeAct(
+                        database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, false),
+                SkipReason.DISABLED_BY_SESSION);
+    }
+
+    @Test
+    public void testResolvedOptInBeatsAnOptedOutBoundSession() {
+        ConnectContext.get().getSessionVariable().setEnableTabletPreSplit(false);
+
+        Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.INSERT_FROM_FILES, true));
     }
 
     @Test
