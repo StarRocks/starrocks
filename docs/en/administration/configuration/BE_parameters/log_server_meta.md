@@ -110,7 +110,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. If the configured value is none of these, it is reported in the log and INFO is used, so an invalid value cannot leave the BE without working logging. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. At startup, if the value in the configuration file is none of these, it is reported in the log and INFO is used, so an invalid value cannot leave the BE without working logging. At runtime, an invalid value is instead rejected with an error and the level in effect is left unchanged. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
 - Introduced in: -
 
 ### sys_log_roll_mode
