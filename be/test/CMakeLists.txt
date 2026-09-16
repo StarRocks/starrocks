@@ -30,6 +30,7 @@ set(EXEC_FILES
         ./column/column_cow_test.cpp
         ./common/config_test.cpp
         ./common/crash_watchdog_test.cpp
+        ./common/logconfig_test.cpp
         ./common/process_exit_test.cpp
         ./common/prof/heap_prof_test.cpp
         ./common/status_test.cpp
