@@ -60,13 +60,18 @@ below, not an IP address.
 
 The connection appears in the sidebar. The SQL editor, the table browser, and the table and
 storage statistics all work against StarRocks, including correct row counts and sizes once
-StarRocks' own background statistics collector has caught up with a freshly loaded table. A few
-surfaces that a MySQL-protocol tool might expect are unavailable: StarRocks has no
-`information_schema.PROCESSLIST`, so the active-sessions view and the connection health check do
-not answer (the connection still works; only that one reading is unavailable); StarRocks has no
-`performance_schema` database, so slow-query history is not available either; StarRocks exposes no
-secondary-index catalog, so no index information is shown; and `EXPLAIN FORMAT='json'` is not
-accepted, so the graphical query-plan view does not render (a plain `EXPLAIN` still runs from the
-editor).
+StarRocks' own background statistics collector has caught up with a freshly loaded table.
+
+A few surfaces that a MySQL-protocol tool might expect are unavailable:
+
+- **Active sessions / connection health**: StarRocks has no `information_schema.PROCESSLIST`, so
+  the active-sessions view and the connection health check do not answer. The connection itself
+  still works; only that one reading is unavailable.
+- **Slow-query history**: StarRocks has no `performance_schema` database, so this is not
+  available.
+- **Index information**: StarRocks exposes no secondary-index catalog, so no index information is
+  shown.
+- **Graphical query plan**: `EXPLAIN FORMAT='json'` is not accepted, so the graphical query-plan
+  view does not render. A plain `EXPLAIN` still runs from the editor.
 
 ![LibreDB Studio - Query result against StarRocks](../../_assets/IDE_libredb_studio_1.png)
