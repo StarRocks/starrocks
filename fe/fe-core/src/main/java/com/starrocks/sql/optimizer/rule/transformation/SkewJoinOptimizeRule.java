@@ -249,7 +249,18 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         // 1. add salt for skew child and other child
         OptExpression newLeftChild;
         OptExpression newRightChild;
-        if (leftOutputColumns.containsAll(skewColumn.getUsedColumns())) {
+        boolean skewSideIsLeft = leftOutputColumns.containsAll(skewColumn.getUsedColumns());
+        // addSaltForOtherChild replicates the non-skewed child once per salt value. For the
+        // null-supplying side of an outer join that is harmless: a copy that matches nothing simply
+        // drops out. For the PRESERVED side it is not -- each copy that matches nothing emits its own
+        // null-padded row, so one input row comes back up to skew_join_rand_range + 1 times and the
+        // count moves with rand() from run to run. Only a hint can ask for this orientation; the
+        // stats-driven path always derives the skew column from the left child, which is the
+        // preserved side, so it never lands here.
+        if (!skewSideIsLeft && oldJoinOperator.getJoinType() == JoinOperator.LEFT_OUTER_JOIN) {
+            return Lists.newArrayList();
+        }
+        if (skewSideIsLeft) {
             newLeftChild = addSaltForSkewChild(input.inputAt(0), skewColumn,
                     oldJoinOperator.getSkewValues(), context);
             newRightChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(1), otherSideSkewColumn, context);
