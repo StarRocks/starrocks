@@ -542,6 +542,12 @@ struct TGetLoadsParams {
     3: optional i64 txn_id
     4: optional string label
     5: optional string load_type
+    // Ordinals 6-20 belong to the filter pushdown fields of later versions; the cursor
+    // stays at 21 so the wire format matches those branches.
+    // Only return loads whose job id >= this value. Setting the field is how a caller
+    // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
+    // result set unpaged when it is absent, so an old BE keeps its previous behavior.
+    21: optional i64 start_job_id_offset
 }
 
 struct TTrackingLoadInfo {
@@ -594,6 +600,8 @@ struct TLoadInfo {
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+    // max job id in loads + 1, if set to 0 or absent, it means reaches end
+    2: optional i64 next_job_id_offset
 }
 
 struct TRoutineLoadJobInfo {

@@ -70,14 +70,31 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
 
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
-    RETURN_IF_ERROR(SchemaHelper::get_loads(_ss_state, load_params, &_result));
+    _load_params = std::move(load_params);
+    return _fetch_page(0);
+}
+
+Status SchemaLoadsScanner::_fetch_page(int64_t start_job_id_offset) {
+    // Setting the cursor is also how this BE tells FE it can handle a paged response.
+    _load_params.__set_start_job_id_offset(start_job_id_offset);
+    // Reset so a response that omits next_job_id_offset does not inherit the previous
+    // page's cursor.
+    _result = TGetLoadsResult();
+    RETURN_IF_ERROR(SchemaHelper::get_loads(_ss_state, _load_params, &_result));
     _cur_idx = 0;
+    // An FE too old to paginate leaves next_job_id_offset unset, which reads as "no more
+    // pages" - that single response already carried the whole result set.
+    _next_job_id_offset = _result.__isset.next_job_id_offset ? _result.next_job_id_offset : 0;
     return Status::OK();
 }
 
 Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
-    for (; _cur_idx < _result.loads.size(); _cur_idx++) {
+    // SchemaChunkSource counts one row per get_next() call, so emit exactly one row
+    // here. Draining the whole buffer in a single call makes the caller accumulate
+    // the entire result set into one chunk, which defeats LIMIT and keeps peak
+    // memory proportional to the full scan rather than to a page.
+    if (_cur_idx < _result.loads.size()) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
             if (slot_id < 1 || slot_id > 26) {
@@ -299,6 +316,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
         }
+        _cur_idx++;
     }
     return Status::OK();
 }
@@ -307,12 +325,18 @@ Status SchemaLoadsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("call this before initial.");
     }
-    if (_cur_idx >= _result.loads.size()) {
-        *eos = true;
-        return Status::OK();
-    }
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("invalid parameter.");
+    }
+    // Pull pages until one has rows to hand out. FE only cuts a page once it is full, so
+    // this normally spins at most once; the loop is what keeps an empty page from ending
+    // the scan early or yielding an empty chunk.
+    while (_cur_idx >= _result.loads.size()) {
+        if (_next_job_id_offset == 0) {
+            *eos = true;
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(_fetch_page(_next_job_id_offset));
     }
     *eos = false;
     return fill_chunk(chunk);

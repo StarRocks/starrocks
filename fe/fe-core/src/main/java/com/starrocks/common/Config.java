@@ -4158,6 +4158,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
 
+    /**
+     *  max load record count will be returned when BE/CN call GetLoads
+     *  a page is cut at a job boundary, so a single job's rows are never split across pages.
+     */
+    @ConfField(mutable = true)
+    public static int max_get_loads_result_count = 10000;
+
     @ConfField(mutable = false)
     public static int max_spm_cache_baseline_size = 200;
 
