@@ -45,6 +45,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_thread_fwd.h"
 #include "common/logging.h"
@@ -1290,7 +1291,21 @@ TEST_F(ThreadPoolTest, TestThreadCreationThrowIsContained) {
             rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(4)).ok());
     ASSERT_EQ(1, _pool->num_threads());
     CountDownLatch block_latch(1);
+    // Whatever happens below, never leave the resident thread parked on this latch: it lives on this
+    // stack, and a worker still waiting on it would hang the pool's shutdown forever.
+    DeferOp unblock([&]() {
+        block_latch.count_down();
+        _pool->wait();
+    });
     ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&block_latch)).ok());
+    // num_threads() also counts a thread that is still starting up. Wait until the resident thread has
+    // really started and is the one blocked on the task, so the submit below sees a busy thread and not
+    // a pending one, and so _num_threads_pending_start is back to zero before this test reads it.
+    for (int i = 0; i < 10000 && _pool->active_threads() < 1; i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_EQ(1, _pool->active_threads());
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
 
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [](void*) { throw std::bad_alloc(); });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1309,6 +1324,7 @@ TEST_F(ThreadPoolTest, TestThreadCreationThrowIsContained) {
     block_latch.count_down();
     _pool->wait();
     ASSERT_EQ(1, run_count.load());
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
     // Hangs here if the pending-thread count leaked.
     _pool->shutdown();
 
