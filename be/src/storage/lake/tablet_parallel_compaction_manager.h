@@ -192,6 +192,15 @@ struct TabletParallelCompactionState {
     // first: the last finishing subtask, or the end of submission if every subtask already finished.
     bool completion_claimed = false;
 
+    // Limiter token left behind by the last subtask to finish while submission was still unsealed.
+    // That subtask cannot run the completion (see is_complete), so rather than releasing its token
+    // it parks it here for whoever seals and finalizes, which keeps the finalization -- LCRM
+    // rewriting, the PK SST compaction wait -- inside the limiter, exactly as when the last subtask
+    // finalizes itself. At most one token is parked; a later subtask releases its own as usual. Taken
+    // under `mutex` exactly once: by the sealer that claims completion, by shutdown, or by cleanup.
+    bool token_parked = false;
+    bool parked_token_mem_limit_exceeded = false;
+
     // Check if we can create a new subtask
     bool can_create_subtask() const { return running_subtasks.size() < static_cast<size_t>(max_parallel); }
 
@@ -241,8 +250,11 @@ public:
     std::shared_ptr<TabletParallelCompactionState> get_tablet_state(int64_t tablet_id, int64_t txn_id);
 
     // Subtask completion callback
-    void on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
-                             std::unique_ptr<CompactionTaskContext> context);
+    // |mem_limit_exceeded| is the outcome the subtask would report when releasing its limiter token.
+    // Returns true if the token was parked for the sealer instead (see
+    // TabletParallelCompactionState::token_parked); the caller must then not release it.
+    bool on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
+                             std::unique_ptr<CompactionTaskContext> context, bool mem_limit_exceeded = false);
 
     // Settles every tablet still being compacted in parallel, for shutdown. MUST be called only after the
     // compaction thread pool has shut down, because it assumes no subtask can still run: shutdown() drops
@@ -267,6 +279,15 @@ public:
     void finalize_tablet_completion(int64_t tablet_id, int64_t txn_id,
                                     const std::shared_ptr<TabletParallelCompactionState>& state,
                                     const std::shared_ptr<CompactionTaskCallback>& callback);
+
+    // The two halves of finalize_tablet_completion(): build the merged context from the completed
+    // subtasks (may throw), and build the failed completion that replaces it when that did throw.
+    std::unique_ptr<CompactionTaskContext> build_merged_context(
+            int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
+            const std::shared_ptr<CompactionTaskCallback>& callback);
+    std::unique_ptr<CompactionTaskContext> fail_merged_context(
+            int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
+            const std::shared_ptr<CompactionTaskCallback>& callback, const Status& failure);
 
     // Check if all subtasks for a tablet are complete
     bool is_tablet_complete(int64_t tablet_id, int64_t txn_id);

@@ -771,8 +771,9 @@ std::shared_ptr<TabletParallelCompactionState> TabletParallelCompactionManager::
     return it->second; // Return shared_ptr copy to keep state alive
 }
 
-void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
-                                                          std::unique_ptr<CompactionTaskContext> context) {
+bool TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
+                                                          std::unique_ptr<CompactionTaskContext> context,
+                                                          bool mem_limit_exceeded) {
     std::string state_key = make_state_key(tablet_id, txn_id);
 
     // Get a shared_ptr copy to prevent use-after-free if cleanup_tablet is called concurrently.
@@ -788,13 +789,14 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
             LOG(WARNING) << "Tablet state not found for subtask completion, tablet=" << tablet_id
                          << ", txn_id=" << txn_id << ", subtask_id=" << subtask_id
                          << ". Decremented running_subtasks counter.";
-            return;
+            return false;
         }
         state = it->second; // Copy shared_ptr to extend lifetime
     }
 
     std::shared_ptr<CompactionTaskCallback> callback;
     bool all_complete = false;
+    bool parked = false;
 
     {
         std::lock_guard<std::mutex> lock(state->mutex);
@@ -806,7 +808,7 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
             _running_subtasks--;
             LOG(WARNING) << "Subtask not found, tablet=" << tablet_id << ", txn_id=" << txn_id
                          << ", subtask_id=" << subtask_id << ". Decremented running_subtasks counter.";
-            return;
+            return false;
         }
 
         // Unmark rowsets
@@ -821,6 +823,13 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
 
         all_complete = state->claim_completion();
         callback = state->callback;
+        if (!all_complete && state->running_subtasks.empty() && !state->submission_done && !state->token_parked) {
+            // This was the last subtask, but submission is not sealed yet, so the sealer will run the
+            // completion: leave it this token so that it does so inside the limiter.
+            state->token_parked = true;
+            state->parked_token_mem_limit_exceeded = mem_limit_exceeded;
+            parked = true;
+        }
 
         VLOG(1) << "Parallel compaction subtask completed, tablet=" << tablet_id << ", txn_id=" << txn_id
                 << ", subtask_id=" << subtask_id << ", remaining=" << state->running_subtasks.size()
@@ -833,6 +842,7 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
     if (all_complete && callback) {
         finalize_tablet_completion(tablet_id, txn_id, state, callback);
     }
+    return parked;
 }
 
 void TabletParallelCompactionManager::abort_pending_states() {
@@ -859,6 +869,8 @@ void TabletParallelCompactionManager::abort_pending_states() {
     for (const auto& state : states) {
         bool claimed = false;
         std::shared_ptr<CompactionTaskCallback> callback;
+        ReleaseTokenFunc release_parked;
+        bool parked_mem_limit_exceeded = false;
         int64_t tablet_id = 0;
         int64_t txn_id = 0;
         int64_t version = 0;
@@ -877,6 +889,12 @@ void TabletParallelCompactionManager::abort_pending_states() {
             state->submission_done = true;
             claimed = state->claim_completion();
             callback = state->callback;
+            if (state->token_parked) {
+                // A token parked for a sealer that never came must not leave with the state.
+                state->token_parked = false;
+                parked_mem_limit_exceeded = state->parked_token_mem_limit_exceeded;
+                release_parked = state->release_token;
+            }
         }
         if (claimed && callback) {
             LOG(WARNING) << "Aborting parallel compaction on shutdown, its subtasks were dropped. tablet_id="
@@ -896,6 +914,9 @@ void TabletParallelCompactionManager::abort_pending_states() {
             context->is_parallel_merged = true;
             context->status = Status::Aborted("Parallel compaction aborted due to BE/CN shutdown!");
             callback->finish_task(std::move(context));
+        }
+        if (release_parked) {
+            release_parked(parked_mem_limit_exceeded);
         }
     }
 }
@@ -933,16 +954,27 @@ void TabletParallelCompactionManager::seal_submission(int64_t tablet_id, int64_t
     }
     bool claimed = false;
     std::shared_ptr<CompactionTaskCallback> callback;
+    ReleaseTokenFunc release_parked;
+    bool parked_mem_limit_exceeded = false;
     {
         std::lock_guard<std::mutex> lock(state->mutex);
         state->submission_done = true;
         claimed = state->claim_completion();
         callback = state->callback;
+        if (claimed && state->token_parked) {
+            // The last subtask left its token for this completion; it goes back once that has run.
+            state->token_parked = false;
+            parked_mem_limit_exceeded = state->parked_token_mem_limit_exceeded;
+            release_parked = state->release_token;
+        }
     }
     if (claimed && callback) {
         VLOG(1) << "Parallel compaction: all subtasks already finished when submission was sealed, tablet=" << tablet_id
                 << ", txn_id=" << txn_id;
         finalize_tablet_completion(tablet_id, txn_id, state, callback);
+    }
+    if (release_parked) {
+        release_parked(parked_mem_limit_exceeded);
     }
 }
 
@@ -951,6 +983,47 @@ void TabletParallelCompactionManager::seal_submission(int64_t tablet_id, int64_t
 // must already have won TabletParallelCompactionState::claim_completion(), which is what makes this
 // exactly-once; this function itself does not re-check completeness.
 void TabletParallelCompactionManager::finalize_tablet_completion(
+        int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
+        const std::shared_ptr<CompactionTaskCallback>& callback) {
+    // Whoever gets here has claimed the tablet's single completion (see claim_completion), so this
+    // must end in finish_task() no matter what: nothing else will ever complete the RPC. Everything
+    // below that allocates or touches storage can throw, so an exception is turned into a failed
+    // completion of the same merged context rather than escaping. Escaping would either crash the
+    // CN (from a subtask thread) or, when the sealer finalizes from create_parallel_tasks(), be
+    // caught there and reported as a successful hand-off -- leaving the RPC hanging forever.
+    std::unique_ptr<CompactionTaskContext> merged_context;
+    try {
+        merged_context = build_merged_context(tablet_id, txn_id, state, callback);
+    } catch (const std::exception& e) {
+        merged_context = fail_merged_context(tablet_id, txn_id, state, callback,
+                                             Status::InternalError(strings::Substitute(
+                                                     "exception while finalizing parallel compaction: $0", e.what())));
+    } catch (...) {
+        merged_context =
+                fail_merged_context(tablet_id, txn_id, state, callback,
+                                    Status::InternalError("unknown exception while finalizing parallel compaction"));
+    }
+    callback->finish_task(std::move(merged_context));
+    // Note: Do NOT call cleanup_tablet here. The cleanup will be done by
+    // CompactionScheduler::remove_states when RPC response is sent.
+}
+
+std::unique_ptr<CompactionTaskContext> TabletParallelCompactionManager::fail_merged_context(
+        int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
+        const std::shared_ptr<CompactionTaskCallback>& callback, const Status& failure) {
+    LOG(WARNING) << "Parallel compaction finalization failed, completing the tablet as failed. tablet_id=" << tablet_id
+                 << ", txn_id=" << txn_id << ": " << failure;
+    // A bare context: nothing of the partially built result may be published, FE must see this tablet as
+    // failed. (If even this small allocation fails, the exception escapes as it did before; there is no
+    // memory to be found for a completion vehicle in that case.)
+    auto merged_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, state->version, false,
+                                                                  callback->skip_write_txnlog(), callback);
+    merged_context->status = failure;
+    merged_context->is_parallel_merged = true;
+    return merged_context;
+}
+
+std::unique_ptr<CompactionTaskContext> TabletParallelCompactionManager::build_merged_context(
         int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
         const std::shared_ptr<CompactionTaskCallback>& callback) {
     // Build merged context.
@@ -964,6 +1037,8 @@ void TabletParallelCompactionManager::finalize_tablet_completion(
     const bool req_skip_write_txnlog = callback->skip_write_txnlog();
     auto merged_context = std::make_unique<CompactionTaskContext>(
             txn_id, tablet_id, state->version, false /* force_base_compaction */, req_skip_write_txnlog, callback);
+    // Lets a test throw from inside the finalization, after completion has been claimed.
+    TEST_SYNC_POINT("TabletParallelCompactionManager::finalize_tablet_completion:after_context");
 
     // Copy table_id and partition_id from one of the completed subtask contexts.
     // These values are populated in TabletManager::compact() from shard info,
@@ -1063,10 +1138,7 @@ void TabletParallelCompactionManager::finalize_tablet_completion(
         std::lock_guard<std::mutex> lock(state->mutex);
         merged_context->subtask_count = static_cast<int32_t>(state->completed_subtasks.size());
     }
-
-    callback->finish_task(std::move(merged_context));
-    // Note: Do NOT call cleanup_tablet here. The cleanup will be done by
-    // CompactionScheduler::remove_states when RPC response is sent.
+    return merged_context;
 }
 
 bool TabletParallelCompactionManager::is_tablet_complete(int64_t tablet_id, int64_t txn_id) {
@@ -1081,6 +1153,8 @@ bool TabletParallelCompactionManager::is_tablet_complete(int64_t tablet_id, int6
 void TabletParallelCompactionManager::cleanup_tablet(int64_t tablet_id, int64_t txn_id) {
     std::string state_key = make_state_key(tablet_id, txn_id);
 
+    ReleaseTokenFunc release_parked;
+    bool parked_mem_limit_exceeded = false;
     {
         std::lock_guard<std::mutex> lock(_states_mutex);
         auto it = _tablet_states.find(state_key);
@@ -1090,10 +1164,19 @@ void TabletParallelCompactionManager::cleanup_tablet(int64_t tablet_id, int64_t 
             // causing use-after-free when state_lock's destructor tries to unlock.
             {
                 std::lock_guard<std::mutex> state_lock(it->second->mutex);
-                // Just access to synchronize, no need to get subtask_count anymore
+                // A token parked for a sealer that never came (see TabletParallelCompactionState::
+                // token_parked) must not leave with the state.
+                if (it->second->token_parked) {
+                    it->second->token_parked = false;
+                    parked_mem_limit_exceeded = it->second->parked_token_mem_limit_exceeded;
+                    release_parked = it->second->release_token;
+                }
             }
             _tablet_states.erase(it);
         }
+    }
+    if (release_parked) {
+        release_parked(parked_mem_limit_exceeded);
     }
 
     // NOTE: Do NOT delete rows mapper files here!
@@ -1696,10 +1779,11 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
                       << " txn_id=" << txn_id << " subtask_id=" << subtask_id << " status=" << context->status
                       << " profile=" << context->stats->to_json_stats();
         }
-        on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-        // Release limiter token on early return
-        if (release_token) {
-            release_token(compaction_task_or.status().is_mem_limit_exceeded());
+        const bool mem_limit_exceeded = compaction_task_or.status().is_mem_limit_exceeded();
+        // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+        if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), mem_limit_exceeded) &&
+            release_token) {
+            release_token(mem_limit_exceeded);
         }
         return;
     }
@@ -1772,10 +1856,8 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
     bool mem_limit_exceeded = exec_st.is_mem_limit_exceeded();
 
     // Notify completion
-    on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-
-    // Release limiter token after subtask completes
-    if (release_token) {
+    // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+    if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), mem_limit_exceeded) && release_token) {
         release_token(mem_limit_exceeded);
     }
 }
@@ -2763,8 +2845,8 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
                       << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
                       << " status=" << context->status << " profile=" << context->stats->to_json_stats();
         }
-        on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-        if (release_token) {
+        // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+        if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), false) && release_token) {
             release_token(false);
         }
         return;
@@ -2794,8 +2876,8 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
                       << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
                       << " status=" << context->status << " profile=" << context->stats->to_json_stats();
         }
-        on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-        if (release_token) {
+        // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+        if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), false) && release_token) {
             release_token(false);
         }
         return;
@@ -2823,9 +2905,11 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
                       << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
                       << " status=" << context->status << " profile=" << context->stats->to_json_stats();
         }
-        on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-        if (release_token) {
-            release_token(compaction_task_or.status().is_mem_limit_exceeded());
+        const bool mem_limit_exceeded = compaction_task_or.status().is_mem_limit_exceeded();
+        // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+        if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), mem_limit_exceeded) &&
+            release_token) {
+            release_token(mem_limit_exceeded);
         }
         return;
     }
@@ -2896,9 +2980,8 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
     }
 
     bool mem_limit_exceeded = exec_st.is_mem_limit_exceeded();
-    on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-
-    if (release_token) {
+    // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+    if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), mem_limit_exceeded) && release_token) {
         release_token(mem_limit_exceeded);
     }
 }
@@ -3325,9 +3408,11 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
                       << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
                       << " status=" << context->status << " profile=" << context->stats->to_json_stats();
         }
-        on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-        if (release_token) {
-            release_token(compaction_task_or.status().is_mem_limit_exceeded());
+        const bool mem_limit_exceeded = compaction_task_or.status().is_mem_limit_exceeded();
+        // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+        if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), mem_limit_exceeded) &&
+            release_token) {
+            release_token(mem_limit_exceeded);
         }
         return;
     }
@@ -3404,9 +3489,8 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     }
 
     bool mem_limit_exceeded = exec_st.is_mem_limit_exceeded();
-    on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
-
-    if (release_token) {
+    // The token stays with the sealer when the subtask parked it there (see on_subtask_complete).
+    if (!on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context), mem_limit_exceeded) && release_token) {
         release_token(mem_limit_exceeded);
     }
 }
