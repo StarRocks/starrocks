@@ -446,7 +446,10 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                     () -> Assertions.assertEquals(Operator.DEFAULT_LIMIT, physicalLimit(clearedLimitFirst)),
                     () -> Assertions.assertEquals(Operator.DEFAULT_LIMIT, physicalLimit(clearedCachedFirst)),
                     () -> Assertions.assertEquals(scanBindings(fresh), scanBindings(clearedLimitFirst)),
-                    () -> Assertions.assertEquals(scanBindings(fresh), scanBindings(clearedCachedFirst)));
+                    () -> Assertions.assertEquals(scanBindings(fresh), scanBindings(clearedCachedFirst)),
+                    // the gate only suspends caching: a statement that met it is eligible again once cleared
+                    () -> Assertions.assertTrue(limitFirst.context().isCached()),
+                    () -> Assertions.assertTrue(cachedFirst.context().isCached()));
         } finally {
             connectContext.getSessionVariable().setSqlSelectLimit(oldLimit);
         }
