@@ -1683,7 +1683,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The number of hash buckets, that is, lock tables, across which Lock Manager shards metadata locks. Each resource is mapped to one bucket by its resource ID, and each bucket is guarded by its own mutex, so a larger value reduces contention between lockers that work on unrelated resources, at the cost of slightly more memory. The value is read once when Lock Manager is created, so a change takes effect only after the FE restarts. From v4.1.0 onwards, the default value is changed from `32` to `256`.
+- Description: The number of hash buckets, that is, lock tables, across which Lock Manager shards metadata locks. Each resource is mapped to one bucket by its resource ID, and each bucket is guarded by its own mutex, so a larger value reduces contention between lockers that work on unrelated resources, at the cost of slightly more memory. The value is read once when Lock Manager is created, so a change takes effect only after the FE restarts. The default value is changed from `32` to `256` from v4.1.0, v4.0.1, and v3.5.8 onwards.
 - Introduced in: v3.3.0
 
 ### `master_sync_policy`
