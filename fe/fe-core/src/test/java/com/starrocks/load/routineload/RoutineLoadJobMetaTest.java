@@ -341,4 +341,3 @@ public class RoutineLoadJobMetaTest {
         Assertions.assertEquals(com.starrocks.thrift.TFileFormatType.FORMAT_CSV_PLAIN, t.getFormat());
     }
 }
-
