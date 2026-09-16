@@ -1,0 +1,10 @@
+com/starrocks/load/loadv2/dpp/SparkRDDAggregatorTest.class
+com/starrocks/load/loadv2/dpp/StarRocksListPartitionerTest.class
+com/starrocks/load/loadv2/etl/SparkEtlJobTest$1.class
+com/starrocks/load/loadv2/etl/SparkEtlJobTest.class
+com/starrocks/load/loadv2/dpp/HllTest.class
+com/starrocks/load/loadv2/dpp/ColumnParserTest.class
+com/starrocks/load/loadv2/dpp/StarRocksRangePartitionerTest.class
+com/starrocks/load/loadv2/dpp/DppUtilsTest.class
+com/starrocks/load/loadv2/dpp/MinimumCoverageRollupTreeBuilderTest.class
+com/starrocks/load/loadv2/dpp/SparkDppTest.class

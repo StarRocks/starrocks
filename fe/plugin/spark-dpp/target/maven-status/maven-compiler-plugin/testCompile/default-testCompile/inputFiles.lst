@@ -1,0 +1,9 @@
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/ColumnParserTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/DppUtilsTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/HllTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/MinimumCoverageRollupTreeBuilderTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/SparkDppTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/SparkRDDAggregatorTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/StarRocksListPartitionerTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/StarRocksRangePartitionerTest.java
+/home/disk3/luoyixin/tmp/cf-bp-wt/fe/plugin/spark-dpp/src/test/java/com/starrocks/load/loadv2/etl/SparkEtlJobTest.java
