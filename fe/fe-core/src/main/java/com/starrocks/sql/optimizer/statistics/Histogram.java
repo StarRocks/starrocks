@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
 import java.util.List;
@@ -24,13 +26,20 @@ import java.util.Optional;
 import javax.annotation.Nonnull;
 
 public class Histogram {
+    private static final Logger LOG = LogManager.getLogger(Histogram.class);
 
     private final List<Bucket> buckets;
     private final Map<String, Long> mcv;
 
     public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
-        this.buckets = buckets == null ? List.of() : buckets;
         this.mcv = mcv == null ? Map.of() : mcv;
+        if (buckets != null && !buckets.isEmpty()) {
+            this.buckets = buckets;
+        } else {
+            LOG.warn("Histogram built without buckets, so its total row count covers the rows in its {} "
+                    + "MCV entries only.", this.mcv.size());
+            this.buckets = List.of();
+        }
     }
 
     public long getTotalRows() {
