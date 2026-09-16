@@ -1284,19 +1284,20 @@ TEST_F(ThreadPoolTest, TestThrowingSubmitLeavesNothingBehind) {
 // that matters), and either would leave _num_threads_pending_start incremented, which shutdown() waits on
 // forever. Both must come back as a Status with the pending count settled.
 TEST_F(ThreadPoolTest, TestThreadCreationThrowIsContained) {
+    // After acceptance: the one resident thread is busy, so the submit wants a second one. The pool is
+    // built before thread creation is made to throw, or init() would fail to start that resident thread.
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(4)).ok());
+    ASSERT_EQ(1, _pool->num_threads());
+    CountDownLatch block_latch(1);
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&block_latch)).ok());
+
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [](void*) { throw std::bad_alloc(); });
     SyncPoint::GetInstance()->EnableProcessing();
     SCOPED_CLEANUP({
         SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
         SyncPoint::GetInstance()->DisableProcessing();
     });
-
-    // After acceptance: the one resident thread is busy, so the submit wants a second one.
-    ASSERT_TRUE(
-            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(4)).ok());
-    ASSERT_EQ(1, _pool->num_threads());
-    CountDownLatch block_latch(1);
-    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&block_latch)).ok());
 
     std::atomic<int> run_count{0};
     Status s;
