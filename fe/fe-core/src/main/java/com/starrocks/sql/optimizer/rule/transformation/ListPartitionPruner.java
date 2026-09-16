@@ -609,8 +609,9 @@ public class ListPartitionPruner implements PartitionPruner {
             case NE:
                 // SlotRef != Literal
                 matches.addAll(allPartitions);
-                // remove null partitions
-                matches.removeAll(nullPartitions);
+                // remove NULL-only partitions
+                matches.removeIf(id -> nullPartitions.contains(id)
+                        && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
                 // remove partition matches literal
                 if (partitionValueMap.containsKey(literal)) {
                     if (listPartitionInfo == null) {
@@ -723,9 +724,10 @@ public class ListPartitionPruner implements PartitionPruner {
                 return Sets.newHashSet();
             }
 
-            // all partitions but remove null partitions
+            // all partitions but remove NULL-only partitions
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         }
 
         for (int i = 1; i < inPredicate.getChildren().size(); ++i) {
@@ -772,7 +774,9 @@ public class ListPartitionPruner implements PartitionPruner {
         if (isNullPredicate.isNotNull()) {
             // is not null
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            // all partitions but remove NULL-only partitions
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         } else {
             // is null
             matches.addAll(nullPartitions);
