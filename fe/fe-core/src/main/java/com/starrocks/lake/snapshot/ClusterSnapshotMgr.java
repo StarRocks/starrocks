@@ -66,8 +66,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     protected ClusterSnapshotJobScheduler clusterSnapshotJobScheduler;
 
+    // Floor for the unusable-credential skip cooldown below, so it still rate-limits when the configured
+    // snapshot interval is non-positive (0 means "as often as possible", which would otherwise warn ~100x/s).
+    private static final long UNUSABLE_CREDENTIAL_SKIP_COOLDOWN_MIN_MS = 60_000L;
+
     // In-memory rate limiter for the unusable-credential skip in canScheduleNextJob (not @SerializedName, so
-    // not persisted); it keeps that skip's volume lookup and warning to at most once per snapshot interval.
+    // not persisted); it keeps that skip's volume lookup and warning to at most once per cooldown.
     protected volatile long lastUnusableCredentialSkipMs = 0;
 
     public ClusterSnapshotMgr() {
@@ -225,12 +229,14 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 - lastAutomatedJobStartTimeMs < getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L) {
             return false;
         }
-        // The scheduler ticks every 10ms and does not advance lastAutomatedJobStartTimeMs when the check
-        // below skips a round, so the interval guard above stops throttling once a stuck volume's interval
-        // has elapsed. Gate the lookup and its warning behind their own once-per-interval cooldown so an
-        // unusable credential warns (and re-reads the file store) at most once per interval, not ~100x/s.
-        if (System.currentTimeMillis() - lastUnusableCredentialSkipMs
-                < getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L) {
+        // The scheduler ticks every 10ms and does not advance lastAutomatedJobStartTimeMs when the check below
+        // skips a round, so the interval guard above stops throttling once a stuck volume's interval has
+        // elapsed - and does not throttle at all when the interval is non-positive. Gate the lookup and its
+        // warning behind their own cooldown, floored to a positive minimum, so an unusable credential warns
+        // (and re-reads the file store) at most once per cooldown, not ~100x/s.
+        long skipCooldownMs = Math.max(getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L,
+                UNUSABLE_CREDENTIAL_SKIP_COOLDOWN_MIN_MS);
+        if (System.currentTimeMillis() - lastUnusableCredentialSkipMs < skipCooldownMs) {
             return false;
         }
         // ADMIN SET AUTOMATED SNAPSHOT ON refuses a volume whose credential cannot be used, but a

@@ -477,6 +477,24 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testSkipCooldownAppliesEvenWithNonPositiveInterval() {
+        setAutomatedSnapshotOn(false);
+        long oldValue = Config.automated_cluster_snapshot_interval_seconds;
+        Config.automated_cluster_snapshot_interval_seconds = 0L;
+        try {
+            ClusterSnapshotMgr mgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+            // A round just skipped an unusable credential. With a non-positive interval the interval-based
+            // cooldown would be <= 0 and never fire; the positive floor must still short-circuit the next tick
+            // so the lookup and warning do not run ~100x/second.
+            Deencapsulation.setField(mgr, "lastUnusableCredentialSkipMs", System.currentTimeMillis());
+            Assertions.assertFalse(mgr.canScheduleNextJob(System.currentTimeMillis() - 1));
+        } finally {
+            Config.automated_cluster_snapshot_interval_seconds = oldValue;
+            setAutomatedSnapshotOff(false);
+        }
+    }
+
+    @Test
     public void testAlterIntervalThroughExecutor() throws Exception {
         setAutomatedSnapshotOn(false);
         AdminAlterAutomatedSnapshotIntervalStmt stmt = (AdminAlterAutomatedSnapshotIntervalStmt)
