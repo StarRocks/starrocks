@@ -41,7 +41,10 @@ private:
 
 TEST_F(UpdateLoggingTest, test_each_severity_takes_effect) {
     const std::pair<const char*, int32_t> cases[] = {
-            {"INFO", 0}, {"WARNING", 1}, {"ERROR", 2}, {"FATAL", 3},
+            {"INFO", 0},
+            {"WARNING", 1},
+            {"ERROR", 2},
+            {"FATAL", 3},
             // sys_log_level is matched case-insensitively by the config layer, and the value that
             // reaches here is the declared spelling; accept either all the same.
             {"warning", 1},
