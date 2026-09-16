@@ -1,4 +1,4 @@
--- name: test_parallel_compaction_pk_table @cloud @sequential
+-- name: test_parallel_compaction_pk_table @cloud @sequential @slow
 -- Test parallel compaction for primary key table with different parallelism settings
 create database test_parallel_compaction_pk_${uuid0};
 use test_parallel_compaction_pk_${uuid0};
@@ -77,7 +77,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_${uuid0} FORCE;
 
--- name: test_parallel_compaction_pk_high_parallel @cloud @sequential
+-- name: test_parallel_compaction_pk_high_parallel @cloud @sequential @slow
 -- Test parallel compaction for primary key table with higher parallelism
 create database test_parallel_compaction_pk_high_${uuid0};
 use test_parallel_compaction_pk_high_${uuid0};
@@ -159,7 +159,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_high_${uuid0} FORCE;
 
--- name: test_parallel_compaction_dup_table @cloud @sequential
+-- name: test_parallel_compaction_dup_table @cloud @sequential @slow
 -- Test parallel compaction for duplicate key table
 create database test_parallel_compaction_dup_${uuid0};
 use test_parallel_compaction_dup_${uuid0};
@@ -238,7 +238,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_dup_${uuid0} FORCE;
 
--- name: test_parallel_compaction_agg_table @cloud @sequential
+-- name: test_parallel_compaction_agg_table @cloud @sequential @slow
 -- Test parallel compaction for aggregate key table
 create database test_parallel_compaction_agg_${uuid0};
 use test_parallel_compaction_agg_${uuid0};
@@ -317,7 +317,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_agg_${uuid0} FORCE;
 
--- name: test_parallel_compaction_unique_table @cloud @sequential
+-- name: test_parallel_compaction_unique_table @cloud @sequential @slow
 -- Test parallel compaction for unique key table
 create database test_parallel_compaction_uniq_${uuid0};
 use test_parallel_compaction_uniq_${uuid0};
@@ -396,7 +396,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_uniq_${uuid0} FORCE;
 
--- name: test_parallel_compaction_disabled @cloud @sequential
+-- name: test_parallel_compaction_disabled @cloud @sequential @slow
 -- Test when parallel compaction is disabled (max_parallel = 0)
 create database test_parallel_compaction_disabled_${uuid0};
 use test_parallel_compaction_disabled_${uuid0};
@@ -460,7 +460,7 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 
 DROP DATABASE test_parallel_compaction_disabled_${uuid0} FORCE;
 
--- name: test_parallel_compaction_alter_property @cloud @sequential
+-- name: test_parallel_compaction_alter_property @cloud @sequential @slow
 -- Test altering lake_compaction_max_parallel property
 create database test_parallel_compaction_alter_${uuid0};
 use test_parallel_compaction_alter_${uuid0};
@@ -501,7 +501,7 @@ SHOW CREATE TABLE pk_alter_parallel;
 
 DROP DATABASE test_parallel_compaction_alter_${uuid0} FORCE;
 
--- name: test_parallel_compaction_pk_with_updates @cloud @sequential
+-- name: test_parallel_compaction_pk_with_updates @cloud @sequential @slow
 -- Test parallel compaction for primary key table with updates
 create database test_parallel_compaction_pk_upd_${uuid0};
 use test_parallel_compaction_pk_upd_${uuid0};
@@ -590,7 +590,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_upd_${uuid0} FORCE;
 
--- name: test_parallel_compaction_pk_large_data @cloud @sequential
+-- name: test_parallel_compaction_pk_large_data @cloud @sequential @slow
 -- Test parallel compaction for primary key table with larger data volume
 create database test_parallel_compaction_pk_large_${uuid0};
 use test_parallel_compaction_pk_large_${uuid0};
@@ -668,7 +668,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 
 DROP DATABASE test_parallel_compaction_pk_large_${uuid0} FORCE;
 
--- name: test_parallel_compaction_multiple_buckets @cloud @sequential
+-- name: test_parallel_compaction_multiple_buckets @cloud @sequential @slow
 -- Test parallel compaction with multiple buckets
 create database test_parallel_compaction_buckets_${uuid0};
 use test_parallel_compaction_buckets_${uuid0};

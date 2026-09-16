@@ -1,4 +1,4 @@
--- name: test_parallel_compaction_pk_table @cloud @sequential
+-- name: test_parallel_compaction_pk_table @cloud @sequential @slow
 create database test_parallel_compaction_pk_${uuid0};
 -- result:
 -- !result
@@ -102,7 +102,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_pk_high_parallel @cloud @sequential
+-- name: test_parallel_compaction_pk_high_parallel @cloud @sequential @slow
 create database test_parallel_compaction_pk_high_${uuid0};
 -- result:
 -- !result
@@ -227,7 +227,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_high_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_dup_table @cloud @sequential
+-- name: test_parallel_compaction_dup_table @cloud @sequential @slow
 create database test_parallel_compaction_dup_${uuid0};
 -- result:
 -- !result
@@ -331,7 +331,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_dup_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_agg_table @cloud @sequential
+-- name: test_parallel_compaction_agg_table @cloud @sequential @slow
 create database test_parallel_compaction_agg_${uuid0};
 -- result:
 -- !result
@@ -427,7 +427,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_agg_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_unique_table @cloud @sequential
+-- name: test_parallel_compaction_unique_table @cloud @sequential @slow
 create database test_parallel_compaction_uniq_${uuid0};
 -- result:
 -- !result
@@ -525,7 +525,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_uniq_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_disabled @cloud @sequential
+-- name: test_parallel_compaction_disabled @cloud @sequential @slow
 create database test_parallel_compaction_disabled_${uuid0};
 -- result:
 -- !result
@@ -618,7 +618,7 @@ SELECT * FROM pk_no_parallel ORDER BY k1, k2;
 DROP DATABASE test_parallel_compaction_disabled_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_alter_property @cloud @sequential
+-- name: test_parallel_compaction_alter_property @cloud @sequential @slow
 create database test_parallel_compaction_alter_${uuid0};
 -- result:
 -- !result
@@ -745,7 +745,7 @@ PROPERTIES (
 DROP DATABASE test_parallel_compaction_alter_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_pk_with_updates @cloud @sequential
+-- name: test_parallel_compaction_pk_with_updates @cloud @sequential @slow
 create database test_parallel_compaction_pk_upd_${uuid0};
 -- result:
 -- !result
@@ -849,7 +849,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_upd_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_pk_large_data @cloud @sequential
+-- name: test_parallel_compaction_pk_large_data @cloud @sequential @slow
 create database test_parallel_compaction_pk_large_${uuid0};
 -- result:
 -- !result
@@ -934,7 +934,7 @@ UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake
 DROP DATABASE test_parallel_compaction_pk_large_${uuid0} FORCE;
 -- result:
 -- !result
--- name: test_parallel_compaction_multiple_buckets @cloud @sequential
+-- name: test_parallel_compaction_multiple_buckets @cloud @sequential @slow
 create database test_parallel_compaction_buckets_${uuid0};
 -- result:
 -- !result
