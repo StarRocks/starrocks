@@ -18,7 +18,6 @@
 #include <cstdint>
 
 namespace google::protobuf {
-class Closure;
 class RpcController;
 } // namespace google::protobuf
 
@@ -63,14 +62,13 @@ private:
     std::atomic<int64_t> _rejected{0};
 };
 
-// Fails `controller` because `endpoint`'s stub is at its in-flight limit, then completes the call.
+// Marks `controller` failed because `endpoint`'s stub is at its in-flight limit.
 //
-// `done` is never run on the caller's stack: brpc starts a new bthread on its own send-failure path
-// for exactly this reason, because a caller may hold a lock across CallMethod and take the same lock
-// inside done->Run(), which deadlocks if the closure runs in place. A null `done` means a
-// synchronous call whose caller is blocked inside CallMethod and sees the failed controller on
-// return, so there is nothing to complete.
-void reject_over_inflight_limit(const butil::EndPoint& endpoint, google::protobuf::RpcController* controller,
-                                google::protobuf::Closure* done);
+// The caller must still hand the call to brpc afterwards rather than returning early. brpc adopts
+// the correlation id and marks the controller used_by_rpc before it notices the failure, then runs
+// its own send-failure path, which destroys the id and completes the closure off the caller's
+// stack. Short-circuiting instead aborts the process in ~Controller, which CHECKs that a controller
+// whose call_id was taken was adopted by an RPC.
+void mark_over_inflight_limit(const butil::EndPoint& endpoint, google::protobuf::RpcController* controller);
 
 } // namespace starrocks

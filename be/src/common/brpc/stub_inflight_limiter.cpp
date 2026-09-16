@@ -15,25 +15,17 @@
 #include "common/brpc/stub_inflight_limiter.h"
 
 #include "base/brpc/brpc.h"
-#include "base/bthreads/util.h"
-#include "base/logging.h"
 #include "common/config_network_fwd.h"
 
 namespace starrocks {
 
-void reject_over_inflight_limit(const butil::EndPoint& endpoint, google::protobuf::RpcController* controller,
-                                google::protobuf::Closure* done) {
+void mark_over_inflight_limit(const butil::EndPoint& endpoint, google::protobuf::RpcController* controller) {
     auto* cntl = static_cast<brpc::Controller*>(controller);
+    // EAGAIN is deliberate: it is absent from RpcRetryPolicy::DoRetry, so a refused call is not
+    // retried past the limit. ELIMIT would be, and its registered meaning is the server's
+    // max_concurrency, which CircuitBreaker treats specially.
     cntl->SetFailed(EAGAIN, "%s has too many in-flight RPCs, raise brpc_max_inflight_rpc_per_stub (now %d)",
                     butil::endpoint2str(endpoint).c_str(), config::brpc_max_inflight_rpc_per_stub);
-    if (done == nullptr) {
-        return;
-    }
-    auto res = bthreads::start_bthread([done]() { done->Run(); });
-    if (!res.ok()) {
-        LOG(WARNING) << "Fail to run closure in a new bthread, running it in place: " << res.status();
-        done->Run();
-    }
 }
 
 } // namespace starrocks

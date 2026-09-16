@@ -78,7 +78,10 @@ void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcControl
                                                   ::starrocks::PublishVersionResponse* response,
                                                   ::google::protobuf::Closure* done) {
     if (!try_acquire_inflight()) {
-        reject_over_inflight_limit(_endpoint, controller, done);
+        // See RecoverableChannel::CallMethod: the call still has to go through brpc so that it
+        // adopts the correlation id and completes `done` on its own send-failure path.
+        mark_over_inflight_limit(_endpoint, controller);
+        stub()->publish_version(controller, request, response, done);
         return;
     }
     using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
@@ -90,7 +93,10 @@ void LakeService_RecoverableStub::compact(::google::protobuf::RpcController* con
                                           const ::starrocks::CompactRequest* request,
                                           ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
     if (!try_acquire_inflight()) {
-        reject_over_inflight_limit(_endpoint, controller, done);
+        // See RecoverableChannel::CallMethod: the call still has to go through brpc so that it
+        // adopts the correlation id and completes `done` on its own send-failure path.
+        mark_over_inflight_limit(_endpoint, controller);
+        stub()->compact(controller, request, response, done);
         return;
     }
     using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;

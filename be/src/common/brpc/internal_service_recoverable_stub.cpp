@@ -33,7 +33,16 @@ public:
                     const google::protobuf::Message* request, google::protobuf::Message* response,
                     google::protobuf::Closure* done) override {
         if (!_owner->try_acquire_inflight()) {
-            reject_over_inflight_limit(_owner->endpoint(), controller, done);
+            // Fail the controller but still hand the call to brpc instead of returning here.
+            // Channel::CallMethod locks the correlation id and marks the controller used_by_rpc
+            // before it notices the failure, then runs its own send-failure path, which destroys
+            // the id and completes `done` off this stack. Returning early aborts the process in
+            // ~Controller: a controller whose call_id was already taken -- SinkBuffer takes one to
+            // join on -- fails a CHECK there unless brpc adopted it.
+            // No RecoverableClosure is wrapped around `done` here. The call never reaches a socket,
+            // so there is no channel error to recover from, and no slot was taken to release.
+            mark_over_inflight_limit(_owner->endpoint(), controller);
+            _owner->stub()->CallMethod(method, controller, request, response, done);
             return;
         }
         if (done == nullptr) {
