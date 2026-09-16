@@ -23,6 +23,7 @@
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "storage_primitive/vector_chunk_iterator.h"

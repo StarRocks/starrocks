@@ -893,7 +893,7 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
             _mask_buffer->advance();
             _selection_buffer->advance();
             if (min_chunk.remaining_rows() == 0) {
-                st = fill(child);
+                st = refill(child);
                 if (!st.ok() && !st.is_end_of_file()) {
                     return st;
                 }
