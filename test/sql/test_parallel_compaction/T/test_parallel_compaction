@@ -58,6 +58,11 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction (should be reduced, typically to 1)
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Parallel compaction emits one rowset per subtask, so a settled parallel round leaves more than
+-- one behind; serial compaction merges the whole input into a single rowset, which is what
+-- test_parallel_compaction_disabled asserts. Without this the case still passes when
+-- lake_compaction_max_parallel stops taking effect and the table compacts serially.
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_parallel_2;
@@ -131,6 +136,11 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction (should be reduced)
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Parallel compaction emits one rowset per subtask, so a settled parallel round leaves more than
+-- one behind; serial compaction merges the whole input into a single rowset, which is what
+-- test_parallel_compaction_disabled asserts. Without this the case still passes when
+-- lake_compaction_max_parallel stops taking effect and the table compacts serially.
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_parallel_5;
@@ -201,6 +211,11 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Parallel compaction emits one rowset per subtask, so a settled parallel round leaves more than
+-- one behind; serial compaction merges the whole input into a single rowset, which is what
+-- test_parallel_compaction_disabled asserts. Without this the case still passes when
+-- lake_compaction_max_parallel stops taking effect and the table compacts serially.
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM dup_parallel;
@@ -271,6 +286,11 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Parallel compaction emits one rowset per subtask, so a settled parallel round leaves more than
+-- one behind; serial compaction merges the whole input into a single rowset, which is what
+-- test_parallel_compaction_disabled asserts. Without this the case still passes when
+-- lake_compaction_max_parallel stops taking effect and the table compacts serially.
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction (aggregated results should be same)
 SELECT COUNT(*) FROM agg_parallel;
@@ -341,6 +361,11 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Parallel compaction emits one rowset per subtask, so a settled parallel round leaves more than
+-- one behind; serial compaction merges the whole input into a single rowset, which is what
+-- test_parallel_compaction_disabled asserts. Without this the case still passes when
+-- lake_compaction_max_parallel stops taking effect and the table compacts serially.
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction (unique results should be same)
 SELECT COUNT(*) FROM uniq_parallel;
@@ -526,6 +551,11 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Parallel compaction emits one rowset per subtask, so a settled parallel round leaves more than
+-- one behind; serial compaction merges the whole input into a single rowset, which is what
+-- test_parallel_compaction_disabled asserts. Without this the case still passes when
+-- lake_compaction_max_parallel stops taking effect and the table compacts serially.
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_with_updates;
@@ -595,6 +625,11 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Parallel compaction emits one rowset per subtask, so a settled parallel round leaves more than
+-- one behind; serial compaction merges the whole input into a single rowset, which is what
+-- test_parallel_compaction_disabled asserts. Without this the case still passes when
+-- lake_compaction_max_parallel stops taking effect and the table compacts serially.
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_large_data;
@@ -665,6 +700,10 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
 -- Check rowset count after compaction (should be reduced for each bucket)
 [UC]rowset_after=SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
 SELECT ${rowset_after} < ${rowset_before} as rowset_reduced;
+-- Three buckets compact independently, so serial compaction would settle at exactly 3 rowsets.
+-- Anything above that means at least one bucket was split across subtasks. See the single-bucket
+-- cases above for why the reduction check alone is not enough.
+SELECT ${rowset_after} > 3 as parallel_compaction_triggered;
 
 -- Verify data correctness after compaction
 SELECT COUNT(*) FROM pk_multi_buckets;
