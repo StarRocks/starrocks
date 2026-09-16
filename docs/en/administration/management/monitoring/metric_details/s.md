@@ -84,7 +84,7 @@ description: "Alphabetical s"
 ## `sort_key_sampling_short_key_index_fallback_total`
 
 - Unit: Count
-- Description: Cumulative number of times short-key-index sort-key sampling was entered for a segment and then declined it, falling back to that segment's coarse `[min, max]` range: an index page that does not parse, geometry that does not cross-check against the segment's own row count, a sample outside the segment's declared bounds, or a segment of fewer than two index blocks. Note what this does NOT count: a schema whose short key index cannot encode the whole sort key (a VARCHAR key, for example) never enters this path at all, so such tables leave this counter at zero and appear in `sort_key_sampling_data_page_segments_total` instead.
+- Description: Cumulative number of times short-key-index sort-key sampling was entered for a segment and then declined it: geometry that does not cross-check against the segment's own row count, an index entry that fails to decode, or a sample that is out of order or outside the segment's declared bounds. Declining is not the end of the road for the segment: it goes on to data-page sampling whenever a data-page budget was apportioned to it, and only falls back to its coarse `[min, max]` range if that budget is zero or that path yields nothing either. Note what this does NOT count: a segment of fewer than two index blocks, which leaves this path without incrementing anything and gets sampled at row granularity instead; and a schema whose short key index cannot encode the whole sort key (a VARCHAR key, for example), which never enters this path at all, so such tables leave this counter at zero and appear in `sort_key_sampling_data_page_segments_total` instead.
 
 ## `sort_key_sampling_short_key_index_latency`
 
