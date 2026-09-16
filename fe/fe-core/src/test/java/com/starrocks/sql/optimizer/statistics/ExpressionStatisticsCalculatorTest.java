@@ -2353,6 +2353,53 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testDateTruncCarriesNonMcvRowsInABucket() {
+        // Given date_trunc('day', dt) over a histogram holding 700 rows outside its MCVs and 300
+        // rows in them
+        // CASE WHEN the MCV keys are truncated THEN the rows outside the MCVs are carried across
+        // unchanged, because date_trunc maps every row to exactly one truncated value END
+
+        final var minDateTime = LocalDateTime.of(2024, 1, 1, 0, 0, 0);
+        final var maxDateTime = LocalDateTime.of(2024, 2, 28, 0, 0, 0);
+        final long sourceNonMcvRows = 700L;
+        final Map<String, Long> sourceMcv = Map.of(
+                "2024-01-15 10:20:30", 100L,
+                "2024-02-20 08:00:00", 200L);
+        final long expectedNonMcvRows = 700L;
+        final long expectedUpperRepeats = 0L;
+        final long expectedTotalRows = 1000L;
+
+        final var col = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final var sourceHistogram = new Histogram(
+                List.of(new Bucket(getLongFromDateTime(minDateTime), getLongFromDateTime(maxDateTime),
+                        sourceNonMcvRows, 0L)),
+                sourceMcv);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(minDateTime))
+                        .setMaxValue(getLongFromDateTime(maxDateTime))
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(1000)
+                        .setHistogram(sourceHistogram)
+                        .build())
+                .build();
+        final var dateTruncDay = new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("day"), col));
+
+        final var actualStatistic = ExpressionStatisticCalculator.calculate(dateTruncDay, statistics);
+
+        final var actualBuckets = actualStatistic.getHistogram().getBuckets();
+        Assertions.assertEquals(1, actualBuckets.size());
+        Assertions.assertEquals(getLongFromDateTime(minDateTime), actualBuckets.get(0).getLower(), 0.001);
+        Assertions.assertEquals(getLongFromDateTime(maxDateTime), actualBuckets.get(0).getUpper(), 0.001);
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertEquals(expectedUpperRepeats, actualBuckets.get(0).getUpperRepeats());
+        Assertions.assertEquals(expectedTotalRows, actualStatistic.getHistogram().getTotalRows());
+    }
+
+    @Test
     public void testDateTruncMcvPropagation() {
         // GIVEN
         final var col = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
