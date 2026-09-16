@@ -121,23 +121,24 @@ public class RunningTransactionsSystemTable {
             // a WHERE TXN_ID = <n> predicate is applied by the BE as a residual filter on the returned rows).
             String labelFilter = params.isSetLabel() ? params.getLabel() : null;
 
-            // Cache the per-database visibility decision so N running txns on one database cost one privilege
-            // check, not N.
+            // Authorize per database BEFORE any row is built. The transaction manager tests this once per
+            // database as it walks its managers, so a database the caller cannot see costs a single check
+            // rather than a row per running transaction that is then discarded. Both caches are keyed by
+            // database id and shared with the loop below, so each database is resolved and authorized once.
+            Map<Long, Database> dbCache = new HashMap<>();
             Map<Long, Boolean> dbVisible = new HashMap<>();
 
-            List<TRunningTxnInfo> rows = globalStateMgr.getGlobalTransactionMgr().getRunningTransactions(filterDbId);
+            List<TRunningTxnInfo> rows = globalStateMgr.getGlobalTransactionMgr()
+                    .getRunningTransactions(filterDbId, dbId -> isDbVisible(authContext, metastore, dbId, dbCache,
+                            dbVisible));
             for (TRunningTxnInfo row : rows) {
                 if (labelFilter != null && !labelFilter.equals(row.getLabel())) {
                     continue;
                 }
-                // Resolve and authorize the database first; only resolve table names for rows the user is
-                // allowed to see, so denied databases do not pay for table-name lookups.
-                Database db = metastore.getDb(row.getDatabase_id());
+                // Already authorized above, so this only fills in the names.
+                Database db = dbCache.get(row.getDatabase_id());
                 if (db != null) {
                     row.setDatabase_name(db.getFullName());
-                }
-                if (!isDbVisible(authContext, row, dbVisible)) {
-                    continue;
                 }
                 resolveTableNames(db, row);
                 resolveWarehouseName(row);
@@ -156,24 +157,27 @@ public class RunningTransactionsSystemTable {
     // (dropped mid-flight, so database_name is unset) cannot be authorized and is hidden from every user,
     // including admins - a deliberate fail-closed choice, documented on the DATABASE_NAME column. Decisions
     // are cached per database id by the caller.
-    private static boolean isDbVisible(ConnectContext authContext, TRunningTxnInfo row, Map<Long, Boolean> cache) {
-        Boolean cached = cache.get(row.getDatabase_id());
+    private static boolean isDbVisible(ConnectContext authContext, LocalMetastore metastore, long dbId,
+                                       Map<Long, Database> dbCache, Map<Long, Boolean> visibleCache) {
+        Boolean cached = visibleCache.get(dbId);
         if (cached != null) {
             return cached;
         }
+        Database db = metastore.getDb(dbId);
+        dbCache.put(dbId, db);
         boolean visible;
-        if (!row.isSetDatabase_name() || Strings.isNullOrEmpty(row.getDatabase_name())) {
+        if (db == null || Strings.isNullOrEmpty(db.getFullName())) {
             visible = false;
         } else {
             try {
                 Authorizer.checkAnyActionOnOrInDb(authContext, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        row.getDatabase_name());
+                        db.getFullName());
                 visible = true;
             } catch (AccessDeniedException e) {
                 visible = false;
             }
         }
-        cache.put(row.getDatabase_id(), visible);
+        visibleCache.put(dbId, visible);
         return visible;
     }
 
