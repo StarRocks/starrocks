@@ -309,7 +309,6 @@ void TEST_clear_configs() {
     (void)take_config_fallbacks();
 }
 
-
 std::optional<std::string> default_value_of(const std::string& field) {
     auto it = Field::fields().find(field);
     if (it == Field::fields().end()) {
