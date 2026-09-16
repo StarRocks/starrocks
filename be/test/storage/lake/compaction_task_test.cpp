@@ -567,7 +567,8 @@ protected:
                 t.rows++;
                 t.c1 += chunk->get_column_by_index(1)->get(i).get_int32();
                 t.c2 += chunk->get_column_by_index(2)->get(i).get_int32();
-                for (const auto& e : chunk->get_column_by_index(3)->get(i).get_array()) {
+                const auto array_datum = chunk->get_column_by_index(3)->get(i);
+                for (const auto& e : array_datum.get_array()) {
                     t.elements++;
                     t.element_sum += e.get_int32();
                 }
