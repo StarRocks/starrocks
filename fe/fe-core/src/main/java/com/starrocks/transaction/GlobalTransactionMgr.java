@@ -79,6 +79,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -797,17 +798,26 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     // there is no cross-manager lock ordering. dbIdToDatabaseTransactionMgrs is a ConcurrentMap, so the
     // iteration needs no global lock. Rows carry raw db/table ids; name resolution happens off-lock in the
     // view's row producer.
-    public List<TRunningTxnInfo> getRunningTransactions(Long dbId) {
+    // dbAllowed decides, per database, whether the caller may see it. It is tested BEFORE that database's
+    // rows are built, so a database the caller cannot see costs one check rather than a row per running
+    // transaction. Pass a predicate that always returns true to collect everything.
+    public List<TRunningTxnInfo> getRunningTransactions(Long dbId, Predicate<Long> dbAllowed) {
         List<TRunningTxnInfo> out = Lists.newArrayList();
         if (dbId != null) {
+            if (!dbAllowed.test(dbId)) {
+                return out;
+            }
             DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
             if (dbTransactionMgr != null) {
                 out.addAll(dbTransactionMgr.getRunningTransactions());
             }
             return out;
         }
-        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            out.addAll(dbTransactionMgr.getRunningTransactions());
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            if (!dbAllowed.test(entry.getKey())) {
+                continue;
+            }
+            out.addAll(entry.getValue().getRunningTransactions());
         }
         return out;
     }

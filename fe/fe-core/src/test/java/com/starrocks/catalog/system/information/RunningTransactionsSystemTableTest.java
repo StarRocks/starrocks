@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -28,6 +27,7 @@ import com.starrocks.thrift.TGetRunningTxnsParams;
 import com.starrocks.thrift.TGetRunningTxnsResult;
 import com.starrocks.thrift.TRunningTxnInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -36,6 +36,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class RunningTransactionsSystemTableTest {
 
@@ -105,8 +108,18 @@ public class RunningTransactionsSystemTableTest {
                 minTimes = 0;
                 result = txnMgr;
 
-                txnMgr.getRunningTransactions((Long) any);
-                result = Lists.newArrayList(allowed, denied);
+                // Honour the predicate the view passes down, because that is where the privilege filtering
+                // now happens. Returning both rows unconditionally would make this test pass without ever
+                // exercising the check it exists to prove.
+                txnMgr.getRunningTransactions((Long) any, (Predicate<Long>) any);
+                result = new Delegate<List<TRunningTxnInfo>>() {
+                    @SuppressWarnings("unused")
+                    List<TRunningTxnInfo> delegate(Long dbId, Predicate<Long> dbAllowed) {
+                        return Stream.of(allowed, denied)
+                                .filter(row -> dbAllowed.test(row.getDatabase_id()))
+                                .collect(Collectors.toList());
+                    }
+                };
 
                 metastore.getDb(1001L);
                 minTimes = 0;
@@ -186,8 +199,17 @@ public class RunningTransactionsSystemTableTest {
                 globalStateMgr.getGlobalTransactionMgr();
                 minTimes = 0;
                 result = txnMgr;
-                txnMgr.getRunningTransactions((Long) any);
-                result = Lists.newArrayList(row);
+                // Same reason as the privilege test: the fail-closed decision now happens inside the
+                // manager, so the mock has to apply the predicate or this asserts nothing.
+                txnMgr.getRunningTransactions((Long) any, (Predicate<Long>) any);
+                result = new Delegate<List<TRunningTxnInfo>>() {
+                    @SuppressWarnings("unused")
+                    List<TRunningTxnInfo> delegate(Long dbId, Predicate<Long> dbAllowed) {
+                        return Stream.of(row)
+                                .filter(r -> dbAllowed.test(r.getDatabase_id()))
+                                .collect(Collectors.toList());
+                    }
+                };
                 metastore.getDb(1001L);
                 minTimes = 0;
                 result = null;

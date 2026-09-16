@@ -658,10 +658,10 @@ public class DatabaseTransactionMgrTest {
 
         // The global manager aggregates the same rows; filtering by this db id yields the db's rows, and an
         // unknown db id yields nothing.
-        assertEquals(rows.size(), masterTransMgr.getRunningTransactions(GlobalStateMgrTestUtil.testDbId1).size());
-        Assertions.assertTrue(masterTransMgr.getRunningTransactions(-1L).isEmpty());
+        assertEquals(rows.size(), masterTransMgr.getRunningTransactions(GlobalStateMgrTestUtil.testDbId1, dbId -> true).size());
+        Assertions.assertTrue(masterTransMgr.getRunningTransactions(-1L, dbId -> true).isEmpty());
         Assertions.assertTrue(
-                masterTransMgr.getRunningTransactions(null).size() >= rows.size());
+                masterTransMgr.getRunningTransactions(null, dbId -> true).size() >= rows.size());
 
         // Once every committed transaction becomes visible it leaves the running set, so no COMMITTED rows remain.
         for (TransactionState txn : masterDbTransMgr.getCommittedTxnList()) {
