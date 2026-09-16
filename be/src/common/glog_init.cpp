@@ -33,7 +33,6 @@
 #include "common/config_diagnostic_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/configbase.h"
-#include "fmt/format.h"
 #include "gutil/stringprintf.h"
 
 namespace starrocks {
@@ -282,14 +281,10 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
                         tm_time.tm_min, tm_time.tm_sec, usecs);
 }
 
-Status update_logging() {
-    std::string loglevel = config::sys_log_level;
-    if (!apply_log_level(loglevel)) {
-        return Status::InvalidArgument(
-                fmt::format("sys_log_level needs to be INFO, WARNING, ERROR, FATAL, got '{}'", loglevel));
+void update_logging() {
+    if (!apply_log_level(config::sys_log_level)) {
+        LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
     }
-    LOG(INFO) << "sys_log_level is now " << loglevel;
-    return Status::OK();
 }
 
 } // namespace starrocks
