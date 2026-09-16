@@ -47,6 +47,9 @@
 #endif
 #endif
 
+#include <unistd.h>
+
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -127,6 +130,22 @@ void MemInfo::init() {
     LOG(INFO) << "Physical Memory: " << PrettyPrinter::print(_s_physical_mem, TUnit::BYTES);
 
     _s_initialized = true;
+}
+
+int64_t MemInfo::process_resident_bytes() {
+    // /proc/self/statm: size resident shared text lib data dt, all in pages.
+    FILE* fp = fopen("/proc/self/statm", "r");
+    if (fp == nullptr) {
+        return -1;
+    }
+    long total_pages = 0;
+    long resident_pages = 0;
+    int matched = fscanf(fp, "%ld %ld", &total_pages, &resident_pages);
+    fclose(fp);
+    if (matched != 2) {
+        return -1;
+    }
+    return static_cast<int64_t>(resident_pages) * sysconf(_SC_PAGESIZE);
 }
 
 std::string MemInfo::debug_string() {
