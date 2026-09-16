@@ -147,6 +147,11 @@ public:
 
     StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override;
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override {
+        DCHECK(!_inited);
+        return std::exchange(_opts.stats, stats);
+    }
+
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
     // must ensure the segment's short-key index has already been loaded; this
@@ -2049,6 +2054,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
                         .max_dist_size = config::io_coalesce_read_max_distance_size,
                         .max_buffer_size = config::io_coalesce_read_max_buffer_size};
                 _cross_column_stream->set_coalesce_options(options);
+                // Registered ranges can span a whole column. Only prefetch may make those
+                // ranges resident; fallback reads (including a refused prefill submission) must
+                // keep reading pages directly instead of allocating the whole scan.
+                _cross_column_stream->set_prefetch_only();
             }
             iter_opts.read_file = _cross_column_stream.get();
             // is_io_coalesce deliberately stays false: its only consumers are the EOF-time
@@ -2851,7 +2860,13 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 
 StatusOr<bool> SegmentIterator::prefetch(std::atomic<int64_t>* budget) {
     if (!_inited) {
-        RETURN_IF_ERROR(_init());
+        auto st = _init();
+        if (st.is_end_of_file()) {
+            // A fully deleted segment legitimately ends during initialization. Let get_next()
+            // handle it normally: a wrapping UnionIterator may still have live later segments.
+            return false;
+        }
+        RETURN_IF_ERROR(st);
         _inited = true;
     }
     // Only bytes held in the iterator's own shared buffers count as resident: they cannot be
@@ -5008,10 +5023,8 @@ void SegmentIterator::close() {
             rfile.reset();
         }
     }
-    // The segment-wide stream is not in _column_files, but its reads are most of the segment's IO
-    // whenever it exists -- and the data-cache bypass decision reads the remote/local byte stats
-    // this collection feeds, so skipping it would blind that decision (and the task profile) to
-    // every read the stream carried.
+    // The segment-wide stream is not in _column_files. Include its remote/local IO in the task
+    // profile just like the per-column streams, including both prefetch and fallback reads.
     if (_cross_column_stream != nullptr) {
         _update_stats(_cross_column_stream.get());
         _cross_column_stream.reset();

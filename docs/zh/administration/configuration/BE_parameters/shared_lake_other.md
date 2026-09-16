@@ -125,34 +125,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：单个 Compaction 归并在其所有输入上可持有的预取读取缓冲区总字节数。在该预算内，预填在共享线程池上只执行纯 IO，解码仍在 Compaction 任务自己的线程上完成，从而将任务的 CPU 占用限制在其自身的工作线程内。扫描量超出剩余预算的输入会回退为在线程池上执行完整读取。设置为 `0` 将完全关闭 IO 与解码的拆分。
-- 引入版本：v4.2
-
-### enable_lake_compaction_data_cache_bypass
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：存算分离集群下，当 Data Cache 被证实无法容纳 Compaction 工作集时，是否允许 Vertical Compaction 切换为直接读取对象存储。该判断基于任务第二个 Column Group 阶段的实测数据：第一个 Column Group 阶段会预热缓存，因此第二个阶段仍出现远程读取，即说明缓存没能留住工作集。缓存已预热或容量充足时，该阶段的远程读取字节几乎为零，不会触发切换。直读同时会将每个 Segment 的列数据区域合并为少量大请求。需要开启 `enable_compaction_parallel_merge_init`。
-- 引入版本：v4.2
-
-### lake_compaction_data_cache_bypass_threshold_mb
-
-- 默认值：32
-- 类型：Int
-- 单位：MB
-- 是否动态：是
-- 描述：允许触发 Data Cache 绕行前，第二个 Column Group 阶段必须达到的最小远程读取字节数。作为绝对下限，保证小表和测量噪声不会触发切换。
-- 引入版本：v4.2
-
-### lake_compaction_data_cache_bypass_min_miss_ratio
-
-- 默认值：0.5
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：允许触发 Data Cache 绕行前，第二个 Column Group 阶段远程读取字节占全部读取字节的最小比例（remote / (remote + local)）。该条件保证即使远程读取的绝对字节数超过 `lake_compaction_data_cache_bypass_threshold_mb`，只要缓存仍能服务大部分读取，Compaction 就继续使用缓存。
+- 描述：单个 Compaction 归并为所有输入的预取范围分配的共享缓冲区总字节数上限。共享线程池负责初始化输入，并在预算内预取已登记的范围。范围已全部预取的输入随后在 Compaction 任务线程上解码；其他输入在线程池上读取和解码，按需读取时不会将未预取的扫描范围加载到共享缓冲区。该限制不包含底层文件缓冲区、解压后的数据页和字典、Chunk 以及 Segment 元数据。设置为 `0` 会关闭范围预取；当 enable_compaction_parallel_merge_init 开启时，仍可并行读取和解码。
 - 引入版本：v4.2
 
 ### lake_compaction_stream_buffer_size_bytes

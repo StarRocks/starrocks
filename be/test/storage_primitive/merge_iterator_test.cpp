@@ -17,15 +17,25 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
+#include "runtime/current_thread.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/storage_stats.h"
+#include "storage_primitive/union_iterator.h"
 #include "storage_primitive/vector_chunk_iterator.h"
 
 namespace starrocks {
@@ -240,6 +250,7 @@ class MergePipelineEquivalenceTest : public MergeIteratorTest {
 protected:
     void SetUp() override {
         MergeIteratorTest::SetUp();
+        CpuInfo::init(); // The focused test binary does not run the BE bootstrap before creating threads.
         _saved_parallel = config::enable_compaction_parallel_merge_init;
         _saved_buffers = config::compaction_merge_child_buffers;
     }
@@ -363,6 +374,200 @@ TEST_F(MergePipelineEquivalenceTest, mask_merge_read_ahead_matches_serial) {
             EXPECT_EQ(baseline.rows, got.rows) << "parallel=" << parallel << " buffers=" << buffers;
         }
     }
+}
+
+class StatisticsIterator final : public ChunkIterator {
+public:
+    StatisticsIterator(Schema schema, const std::vector<int32_t>& rows, OlapReaderStatistics* stats)
+            : ChunkIterator(schema, 4),
+              _inner(std::make_shared<VectorChunkIterator>(schema, COL_INT(rows))),
+              _stats(stats) {
+        _inner->chunk_size(4);
+    }
+
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return std::exchange(_stats, stats); }
+    OlapReaderStatistics* read_stats() const { return _stats; }
+
+    StatusOr<bool> prefetch(std::atomic<int64_t>*) override {
+        if (throw_prefetch) throw std::bad_alloc();
+        _stats->io_count += 11;
+        return false;
+    }
+
+    void close() override {
+        _stats->compressed_bytes_read_remote += 17;
+        _inner->close();
+        ++closed;
+    }
+
+    bool throw_prefetch = false;
+    bool throw_second_read = false;
+    std::atomic<int> closed{0};
+    std::atomic<int64_t> delivered{0};
+
+protected:
+    Status do_get_next(Chunk* chunk) override {
+        if (throw_second_read && ++_reads == 2) throw std::runtime_error("injected read failure");
+        auto status = _inner->get_next(chunk);
+        _stats->raw_rows_read += chunk->num_rows();
+        _stats->rows_del_filtered += 2 * chunk->num_rows();
+        _stats->flat_json_hits["$.shared"] += 3 * chunk->num_rows();
+        delivered += chunk->num_rows();
+        return status;
+    }
+
+private:
+    std::shared_ptr<VectorChunkIterator> _inner;
+    OlapReaderStatistics* _stats;
+    int _reads = 0;
+};
+
+TEST_F(MergePipelineEquivalenceTest, parallel_child_stats_preserve_progress_and_union_close) {
+    config::enable_compaction_parallel_merge_init = true;
+    for (int buffers : {1, 3}) {
+        config::compaction_merge_child_buffers = buffers;
+        OlapReaderStatistics stats;
+        stats.rows_del_filtered = 7; // counters produced before the iterator is installed survive
+        std::vector<ChunkIteratorPtr> children;
+        std::vector<std::shared_ptr<StatisticsIterator>> leaves;
+        RuntimeProfile::Counter scan_time(TUnit::TIME_NS);
+        for (int source = 0; source < 2; ++source) {
+            std::vector<int32_t> rows;
+            for (int row = 0; row < 24; ++row) rows.push_back(row * 2 + source);
+            auto empty = std::make_shared<StatisticsIterator>(_schema, std::vector<int32_t>{}, &stats);
+            auto live = std::make_shared<StatisticsIterator>(_schema, rows, &stats);
+            leaves.insert(leaves.end(), {empty, live});
+            // The empty first segment closes inside UnionIterator on a worker. Its final IO
+            // counters must stay private too, and its EOF must not discard the live segment.
+            auto child = new_union_iterator({empty, live});
+            children.push_back(timed_chunk_iterator(new_projection_iterator(_schema, child), &scan_time));
+        }
+        auto iter = new_heap_merge_iterator(children, kCompactionMerge);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        auto chunk = ChunkFactory::new_chunk(_schema, 0);
+        ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+        EXPECT_GT(stats.raw_rows_read, 0);
+        EXPECT_NE(leaves[0]->read_stats(), &stats);
+        EXPECT_EQ(leaves[0]->read_stats(), leaves[1]->read_stats());
+        EXPECT_NE(leaves[0]->read_stats(), leaves[2]->read_stats());
+        int64_t rows = chunk->num_rows();
+        Status status;
+        for (;;) {
+            chunk->reset();
+            status = iter->get_next(chunk.get());
+            if (!status.ok()) break;
+            rows += chunk->num_rows();
+        }
+        ASSERT_TRUE(status.is_end_of_file()) << status;
+        iter->close();
+        EXPECT_EQ(48, rows);
+        EXPECT_EQ(48, stats.raw_rows_read);
+        EXPECT_EQ(7 + 2 * 48, stats.rows_del_filtered);
+        EXPECT_EQ(3 * 48, stats.flat_json_hits["$.shared"]);
+        EXPECT_EQ(2 * 11, stats.io_count);
+        EXPECT_EQ(4 * 17, stats.compressed_bytes_read_remote);
+        for (const auto& leaf : leaves) EXPECT_EQ(1, leaf->closed.load());
+    }
+}
+
+TEST_F(MergePipelineEquivalenceTest, early_close_flushes_unconsumed_read_ahead_stats) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    iter->close();
+    const auto rows_read = left->delivered.load() + right->delivered.load();
+    EXPECT_EQ(rows_read, stats.raw_rows_read);
+    EXPECT_EQ(2 * rows_read, stats.rows_del_filtered);
+    EXPECT_EQ(3 * rows_read, stats.flat_json_hits["$.shared"]);
+    EXPECT_EQ(34, stats.compressed_bytes_read_remote);
+}
+
+TEST_F(MergePipelineEquivalenceTest, pump_completion_follows_tracker_cleanup) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+    // The focused binary has no ExecEnv bootstrap. Enable the existing tracker test seam
+    // only when a surrounding test main has not already installed a working source.
+    const bool needs_tracker_source = CurrentThread::mem_tracker() == nullptr;
+    if (needs_tracker_source) {
+        CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
+    }
+    DeferOp reset_tracker_source([&]() {
+        if (needs_tracker_source) CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+    });
+    MemTracker task_tracker(-1, "merge-pump-test");
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&task_tracker);
+    std::atomic<int> cleanups{0};
+    std::atomic<int> completions{0};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("MergeIterator::pump:before_tls_cleanup", [&](void*) {
+        EXPECT_EQ(&task_tracker, CurrentThread::mem_tracker());
+        tls_thread_status.mem_consume(73); // force a cached allocation that must be flushed
+        ++cleanups;
+    });
+    sync->SetCallBack("MergeIterator::pump:completed", [&](void*) {
+        EXPECT_NE(&task_tracker, CurrentThread::mem_tracker());
+        EXPECT_GE(task_tracker.consumption(), 73);
+        ++completions;
+    });
+    sync->EnableProcessing();
+    DeferOp disable([&]() {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    iter->close();
+    EXPECT_GT(completions.load(), 0);
+    EXPECT_EQ(cleanups.load(), completions.load());
+}
+
+TEST_F(MergePipelineEquivalenceTest, parallel_prefetch_exception_is_an_error) {
+    config::enable_compaction_parallel_merge_init = true;
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    left->throw_prefetch = true;
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    const auto status = iter->get_next(chunk.get());
+    EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
+    iter->close();
+    EXPECT_EQ(1, left->closed.load());
+    EXPECT_EQ(1, right->closed.load());
+}
+
+TEST_F(MergePipelineEquivalenceTest, pump_read_exception_is_an_error_and_close_finishes) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    left->throw_second_read = true;
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    Status status;
+    do {
+        chunk->reset();
+        status = iter->get_next(chunk.get());
+    } while (status.ok());
+    EXPECT_EQ(TStatusCode::RUNTIME_ERROR, status.code()) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("injected read failure"));
+    iter->close();
+    EXPECT_EQ(1, left->closed.load());
+    EXPECT_EQ(1, right->closed.load());
 }
 
 // A child whose prefetch() behavior is scripted per instance. The rows come from a wrapped

@@ -128,34 +128,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The total bytes one compaction merge may hold in prefetched read buffers across all of its inputs. Within this budget the prefill performs pure IO on the shared pool while decoding stays on the compaction task's own thread, which keeps the task's CPU usage bounded to its own worker. Inputs whose scans exceed the remaining budget fall back to full reads on the pool. Setting this to 0 disables the IO/decode split entirely.
-- Introduced in: v4.2
-
-### enable_lake_compaction_data_cache_bypass
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether a vertical compaction in a shared-data cluster may switch to direct object-storage reads when the data cache demonstrably cannot hold its working set. The decision is measured on the task's second column-group pass: the first pass warms the cache, so remote reads on the second pass mean the cache did not retain the working set. Warm or adequately sized caches read almost zero remote bytes there and never trigger the switch. Direct reads also merge each segment's column regions into few large requests. Requires enable_compaction_parallel_merge_init.
-- Introduced in: v4.2
-
-### lake_compaction_data_cache_bypass_threshold_mb
-
-- Default: 32
-- Type: Int
-- Unit: MB
-- Is mutable: Yes
-- Description: The minimum remote bytes the second column-group pass must read before the data cache bypass may engage. An absolute floor so that small tables and measurement noise never trigger the switch.
-- Introduced in: v4.2
-
-### lake_compaction_data_cache_bypass_min_miss_ratio
-
-- Default: 0.5
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: The minimum remote share of all bytes read (remote / (remote + local)) on the second column-group pass before the data cache bypass may engage. This keeps compaction on a cache that still serves most of its reads, even when the absolute remote bytes exceed lake_compaction_data_cache_bypass_threshold_mb.
+- Description: The maximum total bytes in shared buffers for ranges prefetched by one compaction merge across all of its inputs. The shared pool initializes inputs and prefetches registered ranges within this budget. Inputs whose ranges are fully prefetched subsequently decode on the compaction task's thread; other inputs read and decode on the pool, without loading unprefetched scan ranges into shared buffers on demand. This limit excludes underlying file buffers, decompressed pages and dictionaries, chunks, and segment metadata. Setting this to 0 disables range prefetch; parallel reads and decoding may still run when enable_compaction_parallel_merge_init is enabled.
 - Introduced in: v4.2
 
 ### lake_compaction_stream_buffer_size_bytes

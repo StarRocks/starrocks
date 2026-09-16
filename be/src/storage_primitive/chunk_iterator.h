@@ -34,6 +34,7 @@ class Status;
 namespace starrocks {
 
 class Chunk;
+struct OlapReaderStatistics;
 
 class ChunkIterator {
 public:
@@ -97,6 +98,12 @@ public:
     // sibling iterator of the same read: reserve from it before loading, and report false once it
     // runs out.
     virtual StatusOr<bool> prefetch(std::atomic<int64_t>* budget) { return false; }
+
+    // Redirect a not-yet-read iterator tree's counters. Returns the previous destination, or
+    // nullptr if the tree has no reader counters. Parallel merges give each child a private
+    // destination, then publish snapshots to the original destination on the consuming thread.
+    // All statistics-bearing leaves in a tree must share the same original destination.
+    virtual OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) { return nullptr; }
 
     // Release resources associated with this iterator, e.g, deallocate memory.
     // This routine can be called at most once.

@@ -764,6 +764,8 @@ public:
         _iter.reset();
     }
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return _iter->set_read_stats(stats); }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         return _iter->init_encoded_schema(dict_maps);

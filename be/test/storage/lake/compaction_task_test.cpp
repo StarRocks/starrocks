@@ -468,10 +468,8 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_zero_num_rows_no_crash) {
     EXPECT_EQ(100, task_context->progress.value());
 }
 
-// The read-side optimizations only engage for a compaction merge with the parallel prefill on, and
-// the direct-read switch only for a vertical task with more than two column groups; the two-column
-// fixture above never reaches either. This one is wide enough -- three INT columns and an ARRAY
-// column -- to run every pass shape the prefill has: INT-only passes coalesce onto the segment-wide
+// Exercise the parallel prefill with three INT columns and an ARRAY column:
+// INT-only passes coalesce onto the segment-wide
 // stream and become resident, the ARRAY pass stays off it (semi-typed columns keep their plain file)
 // and takes the full read on the pool with a read-ahead pump, and a horizontal task mixes both in
 // one pass. Rows, sums and array contents must match the serial result either way.
@@ -595,25 +593,14 @@ protected:
     int64_t _partition_id = next_id();
 };
 
-TEST_P(LakeWideDuplicateKeyCompactionTest, test_parallel_prefill_and_direct_read) {
+TEST_P(LakeWideDuplicateKeyCompactionTest, test_parallel_prefill_and_coalesced_read) {
     const bool saved_prefill = config::enable_compaction_parallel_merge_init;
     const int32_t saved_buffers = config::compaction_merge_child_buffers;
-    const bool saved_bypass = config::enable_lake_compaction_data_cache_bypass;
-    const int64_t saved_threshold_mb = config::lake_compaction_data_cache_bypass_threshold_mb;
-    const double saved_min_miss_ratio = config::lake_compaction_data_cache_bypass_min_miss_ratio;
     config::enable_compaction_parallel_merge_init = true;
     config::compaction_merge_child_buffers = 2;
-    config::enable_lake_compaction_data_cache_bypass = true;
-    // Both switch gates at zero: a vertical task then switches to direct reads deterministically
-    // after its second pass, whatever this test's tiny inputs read.
-    config::lake_compaction_data_cache_bypass_threshold_mb = 0;
-    config::lake_compaction_data_cache_bypass_min_miss_ratio = 0.0;
     DeferOp restore_config([&]() {
         config::enable_compaction_parallel_merge_init = saved_prefill;
         config::compaction_merge_child_buffers = saved_buffers;
-        config::enable_lake_compaction_data_cache_bypass = saved_bypass;
-        config::lake_compaction_data_cache_bypass_threshold_mb = saved_threshold_mb;
-        config::lake_compaction_data_cache_bypass_min_miss_ratio = saved_min_miss_ratio;
     });
 
     auto chunk0 = generate_data(kChunkSize);

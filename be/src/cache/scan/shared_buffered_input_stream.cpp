@@ -233,6 +233,7 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
 }
 
 StatusOr<bool> SharedBufferedInputStream::prefetch_registered(std::atomic<int64_t>* budget) {
+    set_prefetch_only();
     for (auto& [_, sb] : _map) {
         if (sb->buffer.capacity() != 0) {
             continue;
@@ -261,7 +262,7 @@ void SharedBufferedInputStream::release_to_offset(int64_t offset) {
 
 Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
     auto st = find_shared_buffer(offset, count);
-    if (!st.ok()) {
+    if (!st.ok() || (_prefetch_only && st.value()->buffer.capacity() == 0)) {
         SCOPED_RAW_TIMER(&_direct_io_timer);
         _direct_io_count += 1;
         _direct_io_bytes += count;

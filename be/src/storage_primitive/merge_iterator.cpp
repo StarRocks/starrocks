@@ -17,7 +17,6 @@
 #include <atomic>
 #include <climits>
 #include <condition_variable>
-#include <deque>
 #include <future>
 #include <limits>
 #include <memory>
@@ -25,6 +24,7 @@
 #include <queue>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -35,6 +35,7 @@
 #include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "storage_primitive/storage_stats.h"
 
 namespace starrocks {
 
@@ -230,6 +231,18 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override {
+        DCHECK(!_inited);
+        OlapReaderStatistics* previous = nullptr;
+        for (auto& child : _children) {
+            if (auto* original = child->set_read_stats(stats); original != nullptr) {
+                DCHECK(previous == nullptr || previous == original);
+                previous = original;
+            }
+        }
+        return previous;
+    }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         for (auto& i : _children) {
@@ -260,13 +273,24 @@ protected:
         std::vector<ChunkPtr> slots;
         // Read status per slot, produced by read_slot and interpreted by commit_slot.
         std::vector<Status> st;
-        std::deque<size_t> freelist; // slots the merge is done with
-        std::deque<size_t> ready;    // slots the pump has filled, in read order
+        // Fixed-capacity bookkeeping: returning or publishing a slot must never allocate after
+        // the reader has advanced. Free slots can be reused in any order; ready slots are FIFO.
+        std::vector<size_t> freelist;
+        std::vector<size_t> ready;
+        size_t ready_head = 0;
+        size_t ready_count = 0;
         std::mutex mu;
         std::condition_variable cv;
         bool pumping = false;   // a pump is filling this child right now
         bool exhausted = false; // the last read hit end-of-file or an error; stop reading
         size_t held = kNoSlot;  // the slot the merge state currently points at; merge thread only
+        struct ReadStats {
+            OlapReaderStatistics local;    // written only by this child's reader
+            OlapReaderStatistics snapshot; // published under mu after a read
+            OlapReaderStatistics merged;   // last snapshot merged by the consuming thread
+            OlapReaderStatistics* destination = nullptr;
+        };
+        std::unique_ptr<ReadStats> stats;
     };
 
     Status init();
@@ -281,6 +305,9 @@ protected:
     // different order than the serial path.
     virtual Status read_slot(size_t child, size_t slot) = 0;
     virtual Status commit_slot(size_t child, size_t slot) = 0;
+    Status read_child(size_t child, size_t slot);
+    void publish_stats(size_t child);
+    void merge_stats(size_t child);
 
     // Called when the merge has consumed everything in the child's held slot.
     Status refill(size_t child);
@@ -299,7 +326,7 @@ protected:
     std::vector<std::unique_ptr<ChildBuffer>> _bufs;
     // Set during the prefill for a child whose prefetch() made its whole scan locally available:
     // from then on its reads are decode-only, and they run on the merge thread -- never on the
-    // pool, whose job under the IO/decode split is the IO half alone.
+    // pool. Initializing those inputs on the pool can still involve index and dictionary work.
     std::vector<uint8_t> _bytes_resident;
     ThreadPool* _pool = nullptr;
     bool _compaction_merge = false;
@@ -323,10 +350,24 @@ inline Status MergeIterator::init() {
                     ? merge_prefill_pool()
                     : nullptr;
 
+    if (_pool != nullptr) {
+        for (size_t i = 0; i < _children.size(); ++i) {
+            auto stats = std::make_unique<ChildBuffer::ReadStats>();
+            stats->destination = _children[i]->set_read_stats(&stats->local);
+            if (stats->destination != nullptr) {
+                _bufs[i]->stats = std::move(stats);
+            }
+        }
+    }
+
     const size_t nslots = pipelined() ? _buffers : 1;
     for (auto& buf : _bufs) {
         buf->slots.resize(nslots);
         buf->st.assign(nslots, Status::OK());
+        if (pipelined()) {
+            buf->freelist.reserve(nslots);
+            buf->ready.resize(nslots);
+        }
         for (size_t s = 0; s < nslots; s++) {
             // No need to reserve, because it's already reserved in segment interators.
             // If we reserve here, for small segment files, it will consume large memory then need.
@@ -346,7 +387,7 @@ inline Status MergeIterator::init() {
         RETURN_IF_ERROR(parallel_prefill());
     } else {
         for (size_t i = 0; i < _children.size(); i++) {
-            RETURN_IF_ERROR(read_slot(i, 0));
+            RETURN_IF_ERROR(read_child(i, 0));
             RETURN_IF_ERROR(commit_slot(i, 0));
         }
     }
@@ -379,6 +420,10 @@ inline Status MergeIterator::parallel_prefill() {
     std::vector<std::future<void>> futures;
     futures.reserve(n);
 
+    // One residency allowance for the whole merge. Declare before the join guard: even an
+    // exception while submitting must join every task before destroying its borrowed budget.
+    std::atomic<int64_t> prefetch_budget{config::compaction_parallel_merge_prefetch_bytes};
+
     // The tasks capture `this`, so every submitted task must finish before returning -- a task
     // still running after the iterator is destroyed would touch freed memory.
     DeferOp wait_all([&futures]() {
@@ -388,11 +433,6 @@ inline Status MergeIterator::parallel_prefill() {
     });
 
     auto* mem_tracker = _mem_tracker;
-    // One residency allowance for the whole merge, drawn from by every child's prefetch: it caps
-    // what this merge may hold in prefetched buffers no matter how many children it has. Children
-    // past the budget fall back to the pre-split path, a graceful degradation for merges whose
-    // scans are too big to hold. Joined before this function returns, so a stack slot is safe.
-    std::atomic<int64_t> prefetch_budget{config::compaction_parallel_merge_prefetch_bytes};
     // Per-iterator in-flight limit: the shared pool is sized for concurrent merges, so without
     // this cap one task with many children would occupy the whole pool and past-the-knee
     // concurrency slows the task itself down (measured: 64 threads slower than 16 for one task).
@@ -420,39 +460,43 @@ inline Status MergeIterator::parallel_prefill() {
                 done();
             });
             // The IO half first: a child whose prefetch makes its bytes locally available keeps
-            // its decode half on the merge thread, so this pool thread only ever waits on IO and
-            // the task's CPU stays on its own worker.
-            auto covered = _children[i]->prefetch(&prefetch_budget);
-            if (!covered.ok()) {
-                // Land the error in the slot for commit_slot to interpret in child order, at the
-                // same point a serial read would have surfaced its error. Retrying via read_slot
-                // instead would re-run the child's init on a half-initialized iterator and mask
-                // the real error. commit_slot treats end-of-file as a clean child close, so an
-                // EOF-status here (which no prefetch should produce) must not slip through as one.
-                _bufs[i]->st[0] = covered.status().is_end_of_file()
-                                          ? Status::InternalError("unexpected EOF from prefetch")
-                                          : covered.status();
-                return;
+            // subsequent data decoding on the merge thread. Initializing the input during
+            // prefetch can still involve index and dictionary work on this worker.
+            const auto prefetch = [&]() -> Status {
+                TRY_CATCH_BAD_ALLOC({
+                    auto covered = _children[i]->prefetch(&prefetch_budget);
+                    if (!covered.ok()) {
+                        // Surface errors in child order without retrying a partially initialized
+                        // child. Prefetch must represent an empty child through normal get_next.
+                        return covered.status().is_end_of_file() ? Status::InternalError("unexpected EOF from prefetch")
+                                                                 : covered.status();
+                    }
+                    if (*covered) {
+                        _bytes_resident[i] = 1;
+                    } else {
+                        // Unsupported or over budget: keep the full read on the pool.
+                        RETURN_IF_ERROR(read_slot(i, 0));
+                    }
+                    publish_stats(i);
+                    return Status::OK();
+                });
+            };
+            auto status = prefetch();
+            if (!status.ok()) {
+                _bufs[i]->st[0] = std::move(status);
             }
-            if (*covered) {
-                _bytes_resident[i] = 1;
-                return;
-            }
-            // This child cannot be covered up front (non-lake file, complex column, cache off,
-            // or over budget): keep the pre-split behaviour, a full read on the pool.
-            (void)read_slot(i, 0);
         });
         auto st = _pool->submit_func([task]() { (*task)(); });
         if (!st.ok()) {
             // Pool refused the task: read this child inline. Still correct, just not overlapped.
             done();
-            (void)read_slot(i, 0);
+            (void)read_child(i, 0);
             continue;
         }
         futures.push_back(task->get_future());
     }
     for (auto& f : futures) {
-        f.wait();
+        f.get();
     }
     futures.clear();
 
@@ -461,9 +505,41 @@ inline Status MergeIterator::parallel_prefill() {
     // path uses, so a caller cannot tell the paths apart.
     for (size_t i = 0; i < n; i++) {
         if (_bytes_resident[i]) {
-            (void)read_slot(i, 0);
+            (void)read_child(i, 0);
         }
         RETURN_IF_ERROR(commit_slot(i, 0));
+    }
+    return Status::OK();
+}
+
+inline void MergeIterator::publish_stats(size_t child) {
+    ChildBuffer& b = *_bufs[child];
+    if (b.stats != nullptr) {
+        std::lock_guard<std::mutex> lock(b.mu);
+        b.stats->snapshot = b.stats->local;
+    }
+}
+
+inline void MergeIterator::merge_stats(size_t child) {
+    ChildBuffer& b = *_bufs[child];
+    if (b.stats != nullptr) {
+        std::lock_guard<std::mutex> lock(b.mu);
+        b.stats->destination->add_delta(b.stats->snapshot, b.stats->merged);
+        b.stats->merged = b.stats->snapshot;
+    }
+}
+
+inline Status MergeIterator::read_child(size_t child, size_t slot) {
+    const auto read = [&]() -> Status {
+        TRY_CATCH_BAD_ALLOC({
+            RETURN_IF_ERROR(read_slot(child, slot));
+            publish_stats(child);
+            return Status::OK();
+        });
+    };
+    auto status = read();
+    if (!status.ok()) {
+        _bufs[child]->st[slot] = std::move(status);
     }
     return Status::OK();
 }
@@ -474,7 +550,7 @@ inline Status MergeIterator::refill(size_t child) {
         // One slot, or the child's bytes are already resident: read straight back into the slot
         // the merge just released. For a resident child this is decode-only work, and it belongs
         // here on the merge thread -- handing it to the pump would put CPU back on the IO pool.
-        RETURN_IF_ERROR(read_slot(child, b.held));
+        RETURN_IF_ERROR(read_child(child, b.held));
         return commit_slot(child, b.held);
     }
 
@@ -490,17 +566,20 @@ inline Status MergeIterator::refill(size_t child) {
     start_pump(child);
     {
         std::unique_lock<std::mutex> l(b.mu);
-        while (b.ready.empty() && b.pumping) {
+        while (b.ready_count == 0 && b.pumping) {
             b.cv.wait(l);
         }
-        if (b.ready.empty()) {
+        if (b.ready_count == 0) {
             // The pump stopped without producing anything more: nothing left in this child.
             l.unlock();
             close_child(child);
             return Status::OK();
         }
-        slot = b.ready.front();
-        b.ready.pop_front();
+        slot = b.ready[b.ready_head];
+        if (++b.ready_head == b.ready.size()) {
+            b.ready_head = 0;
+        }
+        --b.ready_count;
     }
     return commit_slot(child, slot);
 }
@@ -519,13 +598,7 @@ inline void MergeIterator::start_pump(size_t child) {
 }
 
 inline void MergeIterator::submit_pump(size_t child) {
-    auto* mem_tracker = _mem_tracker;
-    auto st = _pool->submit_func([this, child, mem_tracker]() {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
-        tls_in_merge_prefill = true;
-        DeferOp reset_flag([]() { tls_in_merge_prefill = false; });
-        pump(child);
-    });
+    auto st = _pool->submit_func([this, child]() { pump(child); });
     if (!st.ok()) {
         // Pool refused the task: read inline. Correct, just not overlapped.
         pump(child);
@@ -536,28 +609,47 @@ inline void MergeIterator::submit_pump(size_t child) {
 // rows. Exactly one pump runs per child, which is what keeps the child iterator single-threaded.
 inline void MergeIterator::pump(size_t child) {
     ChildBuffer& b = *_bufs[child];
+    // Hold the mutex through the final TLS cleanup. Publishing pumping=false any earlier lets
+    // close() destroy the task's MemTracker before its worker flushes cached allocations to it.
+    // Keeping the exit decision and completion under this same lock also prevents losing a slot
+    // returned by refill() during that cleanup window.
+    std::unique_lock<std::mutex> lock(b.mu);
+    DeferOp finish([&]() {
+        if (!lock.owns_lock()) {
+            lock.lock();
+        }
+        b.pumping = false;
+        b.cv.notify_all();
+        TEST_SYNC_POINT("MergeIterator::pump:completed");
+    });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    const bool previous_prefill = tls_in_merge_prefill;
+    tls_in_merge_prefill = true;
+    DeferOp reset_flag([previous_prefill]() {
+        TEST_SYNC_POINT("MergeIterator::pump:before_tls_cleanup");
+        tls_in_merge_prefill = previous_prefill;
+    });
     for (;;) {
-        size_t slot;
-        {
-            std::lock_guard<std::mutex> l(b.mu);
-            if (b.exhausted || b.freelist.empty()) {
-                b.pumping = false;
-                b.cv.notify_all();
-                return;
-            }
-            slot = b.freelist.front();
-            b.freelist.pop_front();
+        if (b.exhausted || b.freelist.empty()) {
+            return;
         }
+        size_t slot = b.freelist.back();
+        b.freelist.pop_back();
+        lock.unlock();
         // The status lands in b.st[slot]; commit_slot on the merge thread interprets it.
-        (void)read_slot(child, slot);
-        {
-            std::lock_guard<std::mutex> l(b.mu);
-            if (!b.st[slot].ok()) {
-                b.exhausted = true;
-            }
-            b.ready.push_back(slot);
-            b.cv.notify_all();
+        (void)read_child(child, slot);
+        lock.lock();
+        if (!b.st[slot].ok()) {
+            b.exhausted = true;
         }
+        DCHECK_LT(b.ready_count, b.ready.size());
+        size_t tail = b.ready_head + b.ready_count;
+        if (tail >= b.ready.size()) {
+            tail -= b.ready.size();
+        }
+        b.ready[tail] = slot;
+        ++b.ready_count;
+        b.cv.notify_all();
     }
 }
 
@@ -571,6 +663,8 @@ inline void MergeIterator::stop_pump(size_t child) {
     }
     b.freelist.clear();
     b.ready.clear();
+    b.ready_head = 0;
+    b.ready_count = 0;
     b.held = kNoSlot;
 }
 
@@ -584,6 +678,8 @@ inline void MergeIterator::close_child(size_t child) {
     _bufs[child]->slots.clear();
     _merged_rows += _children[child]->merged_rows();
     _children[child]->close();
+    publish_stats(child);
+    merge_stats(child);
     _children[child].reset();
 }
 
@@ -600,6 +696,8 @@ class HeapMergeIterator final : public MergeIterator {
 public:
     explicit HeapMergeIterator(std::vector<ChunkIteratorPtr> children)
             : MergeIterator(std::move(children)), _rssid_slots(_children.size()) {}
+
+    ~HeapMergeIterator() override { close(); }
 
     std::string merge_condition;
 
@@ -743,6 +841,7 @@ inline Status HeapMergeIterator::read_slot(size_t child, size_t slot) {
 }
 
 inline Status HeapMergeIterator::commit_slot(size_t child, size_t slot) {
+    merge_stats(child);
     ChildBuffer& b = *_bufs[child];
     Chunk* chunk = b.slots[slot].get();
     const Status st = b.st[slot];
@@ -863,6 +962,8 @@ public:
               _selection_buffer(selection_buffer) {
         DCHECK(_mask_buffer);
     }
+
+    ~MaskMergeIterator() override { close(); }
 
 protected:
     Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
@@ -1024,6 +1125,7 @@ inline Status MaskMergeIterator::read_slot(size_t child, size_t slot) {
 }
 
 inline Status MaskMergeIterator::commit_slot(size_t child, size_t slot) {
+    merge_stats(child);
     ChildBuffer& b = *_bufs[child];
     Chunk* chunk = b.slots[slot].get();
     const Status st = b.st[slot];

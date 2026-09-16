@@ -280,6 +280,16 @@ TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_zero_budg
     ASSERT_EQ(0, sb_stream->shared_io_bytes());
     // the failed reservation is refunded.
     ASSERT_EQ(0, budget.load());
+
+    std::vector<uint8_t> out(4 * 1024);
+    ASSERT_OK(sb_stream->read_at_fully(200 * 1024, out.data(), out.size()));
+    ASSERT_EQ(0, memcmp(out.data(), _content.data() + 200 * 1024, out.size()));
+    ASSERT_EQ(0, sb_stream->shared_io_bytes());
+    ASSERT_EQ(out.size(), sb_stream->direct_io_bytes());
+    ASSIGN_OR_ABORT(auto buffer, sb_stream->find_shared_buffer(200 * 1024, out.size()));
+    ASSERT_EQ(0, buffer->buffer.capacity());
+    ASSERT_OK(sb_stream->seek(200 * 1024));
+    ASSERT_TRUE(sb_stream->peek(out.size()).status().is_not_supported());
 }
 
 TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_partial_budget) {
@@ -296,6 +306,70 @@ TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_partial_b
     // the failed reservation is refunded, leaving the un-spent remainder.
     ASSERT_GE(budget.load(), 0);
     ASSERT_EQ(100, budget.load());
+
+    // The fallback first-chunk read must not load the unbudgeted third buffer. The two
+    // prefetched buffers remain reusable, so the extra IO is only the requested third range.
+    std::vector<uint8_t> out(4 * 1024);
+    for (int64_t offset : {0, 200 * 1024, 400 * 1024}) {
+        ASSERT_OK(sb_stream->read_at_fully(offset, out.data(), out.size()));
+        ASSERT_EQ(0, memcmp(out.data(), _content.data() + offset, out.size()));
+    }
+    ASSERT_EQ(12 * 1024, sb_stream->shared_io_bytes());
+    ASSERT_EQ(4 * 1024, sb_stream->direct_io_bytes());
+    ASSIGN_OR_ABORT(auto buffer, sb_stream->find_shared_buffer(400 * 1024, out.size()));
+    ASSERT_EQ(0, buffer->buffer.capacity());
+}
+
+TEST_F(SharedBufferedInputStreamPrefetchTest, test_oversized_range_falls_back_without_prefetch) {
+    auto in = std::make_shared<io::TestInputStream>(_content, kFileSize);
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(in, "test", kFileSize);
+    SharedBufferedInputStream::CoalesceOptions options;
+    options.max_buffer_size = 8 * 1024;
+    sb_stream->set_coalesce_options(options);
+    // A scalar compaction column is registered as one contiguous range, possibly much larger
+    // than max_buffer_size. Pool rejection and one-input merges read without prefetch at all.
+    ASSERT_OK(sb_stream->set_io_ranges({{0, kFileSize}}));
+    sb_stream->set_prefetch_only();
+
+    std::vector<uint8_t> out(4 * 1024);
+    ASSERT_OK(sb_stream->read_at_fully(0, out.data(), out.size()));
+    ASSERT_EQ(0, memcmp(out.data(), _content.data(), out.size()));
+    ASSERT_EQ(0, sb_stream->shared_io_bytes());
+    ASSIGN_OR_ABORT(auto buffer, sb_stream->find_shared_buffer(0, out.size()));
+    ASSERT_EQ(0, buffer->buffer.capacity());
+
+    // A refused reservation must keep the same bounded behavior for subsequent reads.
+    std::atomic<int64_t> budget{8 * 1024};
+    ASSIGN_OR_ABORT(bool all_loaded, sb_stream->prefetch_registered(&budget));
+    ASSERT_FALSE(all_loaded);
+    ASSERT_EQ(8 * 1024, budget.load());
+    ASSERT_OK(sb_stream->read_at_fully(out.size(), out.data(), out.size()));
+    ASSERT_EQ(0, memcmp(out.data(), _content.data() + out.size(), out.size()));
+    ASSERT_EQ(0, buffer->buffer.capacity());
+    ASSERT_EQ(0, sb_stream->shared_io_bytes());
+    ASSERT_EQ(2 * out.size(), sb_stream->direct_io_bytes());
+}
+
+TEST_F(SharedBufferedInputStreamPrefetchTest, test_shared_budget_stays_bounded_during_fallback_reads) {
+    auto first = make_registered_stream();
+    auto second = make_registered_stream();
+    std::atomic<int64_t> budget{kTotalRegisteredBytes};
+    ASSIGN_OR_ABORT(bool first_loaded, first->prefetch_registered(&budget));
+    ASSIGN_OR_ABORT(bool second_loaded, second->prefetch_registered(&budget));
+    ASSERT_TRUE(first_loaded);
+    ASSERT_FALSE(second_loaded);
+
+    std::vector<uint8_t> out(4 * 1024);
+    for (auto& stream : {first, second}) {
+        for (int64_t offset : {0, 200 * 1024, 400 * 1024}) {
+            ASSERT_OK(stream->read_at_fully(offset, out.data(), out.size()));
+            ASSERT_EQ(0, memcmp(out.data(), _content.data() + offset, out.size()));
+        }
+    }
+    ASSERT_EQ(kTotalRegisteredBytes, first->shared_io_bytes() + second->shared_io_bytes());
+    ASSERT_EQ(0, budget.load());
+    ASSERT_EQ(0, first->direct_io_bytes());
+    ASSERT_EQ(12 * 1024, second->direct_io_bytes());
 }
 
 TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_idempotent) {
