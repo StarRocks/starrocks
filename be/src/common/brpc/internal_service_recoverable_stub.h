@@ -16,6 +16,7 @@
 
 #include "base/brpc/recoverable_closure.h"
 #include "base/status.h"
+#include "common/brpc/stub_inflight_limiter.h"
 #include "gen_cpp/internal_service.pb.h"
 
 namespace starrocks {
@@ -38,6 +39,16 @@ public:
 
     int64_t connection_group() const { return _connection_group.load(); }
 
+    const butil::EndPoint& endpoint() const { return _endpoint; }
+
+    // Reserves a slot for one outgoing RPC, or returns false when this stub is already at
+    // brpc_max_inflight_rpc_per_stub. Every successful acquire must be paired with release_inflight().
+    bool try_acquire_inflight();
+    void release_inflight() { _inflight_limiter.release(); }
+
+    int32_t inflight() const { return _inflight_limiter.inflight(); }
+    int64_t rejected() const { return _inflight_limiter.rejected(); }
+
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
     const butil::EndPoint _endpoint;
@@ -46,6 +57,7 @@ private:
     const int64_t _connection_group_seed = 0;
     mutable std::shared_mutex _mutex;
     std::string _protocol;
+    StubInflightLimiter _inflight_limiter;
 
     GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(PInternalService_RecoverableStub);
 };

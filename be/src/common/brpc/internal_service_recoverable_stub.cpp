@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
+#include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 
 namespace starrocks {
@@ -30,11 +32,19 @@ public:
     void CallMethod(const google::protobuf::MethodDescriptor* method, google::protobuf::RpcController* controller,
                     const google::protobuf::Message* request, google::protobuf::Message* response,
                     google::protobuf::Closure* done) override {
-        google::protobuf::Closure* closure = done;
-        if (done != nullptr) {
-            closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
-                                                                                   controller, done);
+        if (!_owner->try_acquire_inflight()) {
+            reject_over_inflight_limit(_owner->endpoint(), controller, done);
+            return;
         }
+        if (done == nullptr) {
+            // Synchronous call: brpc blocks until the RPC ends, so no closure exists to release the
+            // slot and it has to be released once the inner call returns.
+            DeferOp release([this]() { _owner->release_inflight(); });
+            _owner->stub()->CallMethod(method, controller, request, response, nullptr);
+            return;
+        }
+        auto* closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
+                                                                                     controller, done);
         _owner->stub()->CallMethod(method, controller, request, response, closure);
     }
 
@@ -50,6 +60,15 @@ PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::
           _protocol(std::move(protocol)) {}
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
+
+bool PInternalService_RecoverableStub::try_acquire_inflight() {
+    // Read the config on every call so the limit can be changed at runtime.
+    if (_inflight_limiter.try_acquire(config::brpc_max_inflight_rpc_per_stub)) {
+        return true;
+    }
+    _inflight_limiter.add_rejected();
+    return false;
+}
 
 Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_group) {
     if (next_connection_group == 0) {

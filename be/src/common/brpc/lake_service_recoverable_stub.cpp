@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 
 namespace starrocks {
@@ -25,6 +26,15 @@ LakeService_RecoverableStub::LakeService_RecoverableStub(const butil::EndPoint& 
         : _endpoint(endpoint), _connection_group_seed(connection_group_seed), _protocol(std::move(protocol)) {}
 
 LakeService_RecoverableStub::~LakeService_RecoverableStub() = default;
+
+bool LakeService_RecoverableStub::try_acquire_inflight() {
+    // Read the config on every call so the limit can be changed at runtime.
+    if (_inflight_limiter.try_acquire(config::brpc_max_inflight_rpc_per_stub)) {
+        return true;
+    }
+    _inflight_limiter.add_rejected();
+    return false;
+}
 
 Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group) {
     if (next_connection_group == 0) {
@@ -67,6 +77,10 @@ void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcControl
                                                   const ::starrocks::PublishVersionRequest* request,
                                                   ::starrocks::PublishVersionResponse* response,
                                                   ::google::protobuf::Closure* done) {
+    if (!try_acquire_inflight()) {
+        reject_over_inflight_limit(_endpoint, controller, done);
+        return;
+    }
     using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
     auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
     stub()->publish_version(controller, request, response, closure);
@@ -75,6 +89,10 @@ void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcControl
 void LakeService_RecoverableStub::compact(::google::protobuf::RpcController* controller,
                                           const ::starrocks::CompactRequest* request,
                                           ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
+    if (!try_acquire_inflight()) {
+        reject_over_inflight_limit(_endpoint, controller, done);
+        return;
+    }
     using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
     auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
     stub()->compact(controller, request, response, closure);
