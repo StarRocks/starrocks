@@ -383,9 +383,6 @@ private:
 
     // Refer to the position of current row.
     int64_t _current_row_position = 0;
-    // Whether the one-time window state initialization for the first partition has run.
-    // See PRE_PROCESSING().
-    bool _window_state_initialized = false;
 
     Segment _partition;
     SegmentStatistics _partition_statistics;
