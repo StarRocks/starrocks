@@ -36,6 +36,18 @@ Before a GRANT operation is performed, make sure that the related user or role h
 
 <GrantCreateWarehouse />
 
+#### AI functions and providers
+
+```sql
+GRANT USE AI FUNCTIONS ON SYSTEM TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI FUNCTION <function_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+```
+
+AI FUNCTION uses an unqualified public builtin family name without a parameter signature. `USE AI FUNCTIONS` does not include provider usage or grant options on AI FUNCTION objects. Provider names retain their exact spelling. See [AI privileges](../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges).
+
+
 #### Resource group
 
 ```SQL
@@ -271,4 +283,3 @@ GRANT db_admin, user_admin, cluster_admin TO EXTERNAL GROUP admin_group;
 <UserPrivilegeCase />
 
 <MultiServiceAccess />
-

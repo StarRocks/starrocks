@@ -31,6 +31,17 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
+#### AI 函数与 Provider
+
+```sql
+REVOKE USE AI FUNCTIONS ON SYSTEM FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI FUNCTION <function_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI PROVIDER <provider_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON ALL AI PROVIDERS FROM {ROLE <role_name> | USER <user_identity>};
+```
+
+撤权影响后续执行和重新规划，包括预处理语句 EXECUTE，不会取消已经运行的查询。本功能接入原生授权；未实现 AI 检查的外部访问控制器将拒绝这些操作。
+
 #### Resource group 相关
 
 ```SQL

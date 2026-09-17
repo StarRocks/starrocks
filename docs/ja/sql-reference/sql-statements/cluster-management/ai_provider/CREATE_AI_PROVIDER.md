@@ -27,6 +27,10 @@ description: "外部 AI サービスプロバイダー (embedding または rera
 > FE のメタイメージ / BDB ジャーナルディレクトリへの読み取りアクセス権を持つ人は誰でもプロバイダーの `api_key`
 > の値を読むことができます。これらのファイルはファイルシステムの権限で保護してください。
 
+## 権限
+
+プロバイダーの作成や管理には SYSTEM `OPERATE` が必要です。AI 関数から呼び出す場合は、[AI 関数の権限](../../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)と、その AI PROVIDER の `USAGE` の両方が必要です。作成しても一般ユーザーに使用権限は自動付与されません。
+
 ## 構文
 
 ```SQL

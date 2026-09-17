@@ -31,6 +31,17 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
+#### AI 関数と Provider
+
+```sql
+REVOKE USE AI FUNCTIONS ON SYSTEM FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI FUNCTION <function_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI PROVIDER <provider_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON ALL AI PROVIDERS FROM {ROLE <role_name> | USER <user_identity>};
+```
+
+権限の取り消しは、プリペアド EXECUTE を含む後続の実行と再計画に適用されます。実行中のクエリはキャンセルしません。この機能はネイティブ認可に対応します。AI チェックを実装していない外部アクセスコントローラーは対象操作を拒否します。
+
 #### リソースグループ
 
 ```SQL

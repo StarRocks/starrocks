@@ -26,6 +26,19 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 <PrivCreateWarehouse />
 
+| 権限 | 説明 |
+| --- | --- |
+| USE AI FUNCTIONS | AI 関数の実行には SYSTEM の `USE AI FUNCTIONS` または対象 AI FUNCTION ファミリーの `USAGE` が必要です。Provider を使用する呼び出しには、選択した AI PROVIDER の `USAGE` も必要です。これらの権限は互いを包含しません。 |
+
+### AI FUNCTION / AI PROVIDER
+
+| 権限 | 説明 |
+| --- | --- |
+| USAGE | 指定した公開 AI 関数ファミリーまたは Provider を使用します。 |
+
+SYSTEM 関数は既存の設定経路を維持し、Provider の権限を必要としません。Provider の CREATE、ALTER、DROP、SET DEFAULT、SHOW、DESC には従来どおり SYSTEM OPERATE が必要です。USAGE はこれらの管理操作を許可しません。
+
+
 ### RESOURCE GROUP
 
 | 権限 | 説明                                           |

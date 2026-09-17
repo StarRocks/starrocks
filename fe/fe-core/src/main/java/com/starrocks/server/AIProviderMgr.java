@@ -143,6 +143,12 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         }
     }
 
+    public AIProvider getProviderById(String id) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return idToProvider.get(id);
+        }
+    }
+
     /** Default provider of the given type, or null. */
     public AIProvider getDefaultProvider(AIProviderType type) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {

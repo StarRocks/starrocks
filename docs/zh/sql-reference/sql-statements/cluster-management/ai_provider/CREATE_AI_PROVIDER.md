@@ -26,6 +26,10 @@ provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 i
 >
 > 任何能读取 FE meta image / BDB journal 目录的人都能看到 `api_key`；请用文件系统权限保护这些文件。
 
+## 权限
+
+创建或管理 Provider 需要 SYSTEM `OPERATE` 权限。通过 AI 函数调用 Provider，同时需要相应的 [AI 函数权限](../../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)和该 AI PROVIDER 的 `USAGE` 权限。创建 Provider 不会自动授予普通用户使用权限。
+
 ## 语法
 
 ```SQL
