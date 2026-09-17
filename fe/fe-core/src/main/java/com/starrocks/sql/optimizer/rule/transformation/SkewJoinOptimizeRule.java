@@ -222,7 +222,11 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         final var overlapRows = DataSkew.getOverlappingMcvRowCount(otherColumnStats.getHistogram().getMCV(),
                                 skewInfoMcvs.get());
                         if (overlapRows > maxOverlapRowCount) {
-                            continue;
+                            if (skewInfo.hasNullSkew()) {
+                                skewValues = Lists.newArrayList(ConstantOperator.createNull(skewJoinColumn.getType()));
+                            } else {
+                                continue;
+                            }
                         }
                     }
                 }
