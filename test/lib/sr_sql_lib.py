@@ -2494,8 +2494,15 @@ class StarrocksSQLApiLib(object):
 
             job_id, status = res["result"][0][0], res["result"][0][off]
             if seen is not None and int(job_id) <= int(seen):
-                # No job of our own: the alter was applied inline, nothing to wait for.
-                return ""
+                # No job of our own: either the alter was applied inline, or it created a job of
+                # a different type than the one being listed (a caller that leaves alter_type at
+                # COLUMN after an ADD ROLLUP, say). Nothing to wait for either way.
+                #
+                # Return None, not "": the value a `function:` line produces is recorded into the
+                # R file, and the path this replaces fell through to the end of the method. ""
+                # is reserved for the pre-existing "no rows at all" return above, whose recorded
+                # value callers already depend on.
+                return None
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
