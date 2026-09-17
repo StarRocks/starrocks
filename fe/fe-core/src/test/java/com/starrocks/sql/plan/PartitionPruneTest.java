@@ -517,6 +517,346 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testRangeExprPruneKeepsUnixTimestampPartitions() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_unix_range` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime(dt))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_unix_range where dt < 1609689600")
+                .explainContains("partitions=3/9");
+        starRocksAssert.query("select * from t_unix_range where dt = 1609689600")
+                .explainContains("partitions=1/9");
+
+        starRocksAssert.withTable("CREATE TABLE `t_unix_ms_range` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime_ms(dt))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_unix_ms_range where dt < 1609689600000")
+                .explainContains("partitions=3/9");
+    }
+
+    @Test
+    public void testRangeExprPruneWidensStrictBoundOnPlateau() throws Exception {
+        // from_unixtime_ms() divides the milliseconds by 1000, so a thousand source values collapse
+        // onto one partition value and the expression is monotonic without being strictly increasing.
+        starRocksAssert.withTable("CREATE TABLE `t_plateau_ms` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime_ms(dt))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        // 1609689600000 and 1609689600500 both truncate to 2021-01-04 00:00:00, so the rows at
+        // 1609689600000 satisfy "dt < 1609689600500" and live on the partition the constant maps to.
+        // Mapping "<" onto "<" would prune that partition and lose them; the bound has to widen.
+        starRocksAssert.query("select * from t_plateau_ms where dt < 1609689600500")
+                .explainContains("partitions=4/9");
+        starRocksAssert.query("select * from t_plateau_ms where dt = 1609689600000")
+                .explainContains("partitions=1/9");
+        // a constant on a whole second is not inside a plateau -- nothing below it shares its
+        // partition value -- so it keeps the tighter bound
+        starRocksAssert.query("select * from t_plateau_ms where dt < 1609689600000")
+                .explainContains("partitions=3/9");
+
+        // from_unixtime() on seconds is strictly increasing -- a second is the finest value it maps --
+        // so no constant sits inside a plateau and the strict bound always stands
+        starRocksAssert.withTable("CREATE TABLE `t_plateau_s` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime(dt))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_plateau_s where dt < 1609689601")
+                .explainContains("partitions=4/9");
+        starRocksAssert.query("select * from t_plateau_s where dt < 1609689600")
+                .explainContains("partitions=3/9");
+    }
+
+    @Test
+    public void testRangeExprPruneKeepsStrictBoundOnVarcharPartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_plateau_s2d` (\n" +
+                "    `b` varchar(32) NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`b`, `id`)\n" +
+                "PARTITION BY RANGE(str2date(b, '%Y%m%d'))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        // Documents a known gap rather than a fix. str2date() strips leading and trailing blanks and a
+        // blank sorts below every digit, so " 20210104" is a smaller string landing on the same day as
+        // "20210104" and this bound prunes the partition holding it. Closing it costs more than it
+        // buys: widening the bound loosens pruning for every str2date() partition, and the widened
+        // bound then has to be declared a plateau -- which withdraws predicate elimination from those
+        // tables as well, since the probe cannot tell a blank-padded value from an ordinary one. Both
+        // prices are paid by every table using str2date(), to guard against data that is padded with
+        // whitespace. The bound stays strict.
+        starRocksAssert.query("select * from t_plateau_s2d where b < '20210104'")
+                .explainContains("partitions=3/9");
+        starRocksAssert.query("select * from t_plateau_s2d where b = '20210104'")
+                .explainContains("partitions=1/9");
+    }
+
+    @Test
+    public void testExprPartitionKeepsPredicateAfterPruning() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_keep_pred_ms` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime_ms(dt))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        // Pruning needs every matching row to fall in a kept partition; dropping the predicate claims
+        // the reverse -- that every row in the kept partitions matches. A filter mapped through a
+        // partition expression cannot support the reverse: from_unixtime_ms() collapses a thousand
+        // source values onto one partition value, so the partition 1609689600500 maps to also holds
+        // the rows at 1609689600000, and dropping the predicate would return them.
+        starRocksAssert.query("select id from t_keep_pred_ms where dt >= 1609689600500")
+                .explainContains("PREDICATES: 1: dt >= 1609689600500");
+        starRocksAssert.query("select id from t_keep_pred_ms where not (dt < 1609689600500)")
+                .explainContains("PREDICATES: 1: dt >= 1609689600500");
+        starRocksAssert.query("select id from t_keep_pred_ms where dt > 1609689600500")
+                .explainContains("PREDICATES: 1: dt > 1609689600500");
+        starRocksAssert.query("select id from t_keep_pred_ms where dt < 1609689600500")
+                .explainContains("PREDICATES: 1: dt < 1609689600500");
+
+        // date_trunc() is not on ExprRewriter's whitelist, so its filter is the original predicate on
+        // the source column and the elimination stays sound there -- it must keep working.
+        starRocksAssert.withTable("CREATE TABLE `t_keep_pred_trunc` (\n" +
+                "    `dt` datetime NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-05-02\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        String plan = getFragmentPlan("select id from t_keep_pred_trunc where dt >= '2025-04-29 00:00:00'");
+        assertContains(plan, "partitions=3/4");
+        Assertions.assertFalse(plan.contains("PREDICATES"),
+                "date_trunc partitions do not map the constant, so the elimination still applies:\n" + plan);
+    }
+
+    @Test
+    public void testDbgDstGuard() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `dst_t` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime(dt))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        String saved = connectContext.getSessionVariable().getTimeZone();
+        try {
+            for (String tz : new String[] {"UTC", "Asia/Shanghai", "America/New_York", "Europe/London"}) {
+                connectContext.getSessionVariable().setTimeZone(tz);
+                String plan = getFragmentPlan("select id from dst_t where dt < 1609689600");
+                String parts = "?";
+                for (String line : plan.split("\n")) {
+                    if (line.contains("partitions=")) {
+                        parts = line.trim();
+                    }
+                }
+                System.err.println("DSTG " + tz + " ==> " + parts);
+            }
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(saved);
+        }
+    }
+
+    @Test
+    public void testRangeExprPrunePinnedTimeZone() throws Exception {
+        // from_unixtime(ts, format, time_zone) pins the rendering, so the partition values -- and the
+        // order the mapping relies on -- no longer follow the session. A rollback in the SESSION zone
+        // then costs nothing, because the expression never renders in it.
+        starRocksAssert.withTable("CREATE TABLE `t_pinned_utc` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime(dt, '%Y-%m-%d', 'UTC'))(\n" +
+                " START (\"2021-11-01\") END (\"2021-11-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        // the same table with the zone left to the session, for contrast
+        starRocksAssert.withTable("CREATE TABLE `t_session_tz` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime(dt))(\n" +
+                " START (\"2021-11-01\") END (\"2021-11-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        String saved = connectContext.getSessionVariable().getTimeZone();
+        try {
+            connectContext.getSessionVariable().setTimeZone("America/New_York");
+            // 1636264800 is inside New_York's rollback window. The session-zone table has to decline;
+            // the pinned-UTC one is unaffected and prunes.
+            starRocksAssert.query("select id from t_session_tz where dt < 1636264800")
+                    .explainContains("partitions=9/9");
+            starRocksAssert.query("select id from t_pinned_utc where dt < 1636264800")
+                    .explainContains("partitions=7/9");
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(saved);
+        }
+
+        // A zone pinned to one that rolls back is still checked against the window.
+        starRocksAssert.withTable("CREATE TABLE `t_pinned_ny` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime(dt, '%Y-%m-%d', 'America/New_York'))(\n" +
+                " START (\"2021-11-01\") END (\"2021-11-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select id from t_pinned_ny where dt < 1636264800")
+                .explainContains("partitions=9/9");
+
+        // A format that does not lay the fields out biggest-first is not monotonic whatever the zone
+        // says -- the three-argument form used to skip that check entirely.
+        starRocksAssert.withTable("CREATE TABLE `t_pinned_scrambled` (\n" +
+                "    `dt` bigint NOT NULL,\n" +
+                "    `id` int(11) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY RANGE(from_unixtime(dt, '%m-%Y-%d', 'UTC'))(\n" +
+                " START (\"2021-11-01\") END (\"2021-11-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select id from t_pinned_scrambled where dt < 1635811200")
+                .explainContains("partitions=9/9");
+
+        // The format and the zone have to be spelled out: a partition value must be computable at
+        // load time, and the checks that license pruning can only read a literal.
+        for (String bad : new String[] {
+                "from_unixtime(dt, '')",
+                "from_unixtime(dt, '%Y-%m-%d', '')",
+                "from_unixtime(dt, concat('%Y', '-%m-%d'))"}) {
+            Assertions.assertThrows(Exception.class, () -> starRocksAssert.withTable(
+                    "CREATE TABLE `t_bad_" + Math.abs(bad.hashCode()) + "` (\n" +
+                            "    `dt` bigint NOT NULL,\n" +
+                            "    `id` int(11) NULL\n" +
+                            ") ENGINE=OLAP\n" +
+                            "DUPLICATE KEY(`dt`, `id`)\n" +
+                            "PARTITION BY RANGE(" + bad + ")(\n" +
+                            " START (\"2021-11-01\") END (\"2021-11-03\") EVERY (INTERVAL 1 DAY)\n" +
+                            ")\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                            "PROPERTIES (\"replication_num\" = \"1\");"), bad);
+        }
+    }
+
+    @Test
+    public void testGeneratedColumnPruneSkipsReversedExpression() throws Exception {
+        // A partition expression that runs *backwards* from its column (100 - c1, datediff(const, c1))
+        // still passes isMonotonicFunction(), because that check only asks whether the function
+        // preserves order -- not in which direction. Rewriting `c1 < 20` to `c2 < 80` then keeps the
+        // wrong side of the partition list and silently drops rows, so those expressions must not be
+        // rewritten at all.
+        starRocksAssert.withTable("CREATE TABLE t_reversed (c1 int NOT NULL, c2 bigint NULL AS (100 - c1))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z0 VALUES IN ('90')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z1 VALUES IN ('80')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z2 VALUES IN ('70')");
+
+        starRocksAssert.withTable("CREATE TABLE t_days_until (c1 datetime NOT NULL,"
+                + " c2 int NULL AS (datediff('2021-01-10', c1)))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z0 VALUES IN ('9')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z1 VALUES IN ('7')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z2 VALUES IN ('5')");
+
+        // The column sits in the leading argument, so the expression still grows with it: prunable.
+        starRocksAssert.withTable("CREATE TABLE t_minus_const (c1 int NOT NULL, c2 bigint NULL AS (c1 - 7))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z0 VALUES IN ('3')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z1 VALUES IN ('13')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z2 VALUES IN ('23')");
+
+        starRocksAssert.withTable("CREATE TABLE t_increasing (c1 int NOT NULL, c2 bigint NULL AS (c1 + 1))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z0 VALUES IN ('11')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z1 VALUES IN ('21')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z2 VALUES IN ('31')");
+
+        // c1 < 20 covers partitions 90 and 80; c1 > 20 covers 80 and 70. Deducing either way round
+        // from a reversed expression would be wrong, so no range predicate may prune here.
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 < 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 > 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 <= 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_days_until where c1 < '2021-01-03 00:00:00'"),
+                "partitions=3/3");
+
+        // Equality is unaffected: 100 - 10 = 90 is exact whichever way the expression runs.
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 = 10"), "partitions=1/3");
+
+        // No collateral damage: expressions that do grow with the column still prune.
+        assertContains(getFragmentPlan("select c1 from t_minus_const where c1 < 20"), "partitions=2/3");
+        assertContains(getFragmentPlan("select c1 from t_increasing where c1 < 20"), "partitions=2/3");
+    }
+
+    @Test
+    public void testGeneratedColumnPruneSkipsArgumentSensitiveExpression() throws Exception {
+        // Running backwards is not the only way a monotonic function fails its callers. next_day()
+        // is registered monotonic and is monotonic in its date, but its day-of-week argument orders
+        // results arbitrarily: 'Friday' sorts before 'Monday' as a string while next_day() sends them
+        // the other way. A rewrite that keeps the comparison operator is unsound over that argument
+        // just as it is over a decreasing one.
+        starRocksAssert.withTable("CREATE TABLE t_next_day (dow varchar(10) NOT NULL,"
+                + " p date NULL AS (next_day('2024-01-01 00:00:00', dow)))"
+                + " DUPLICATE KEY(dow) PARTITION BY (p) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z0 VALUES IN ('2024-01-07')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z1 VALUES IN ('2024-01-08')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z2 VALUES IN ('2024-01-02')");
+        // 'Monday' < 'Sunday' holds as a string, but next_day('2024-01-01','Monday') is 2024-01-08,
+        // which sits ABOVE next_day('2024-01-01','Sunday') = 2024-01-07. Deducing p < '2024-01-07'
+        // would drop the partition holding the matching row.
+        assertContains(getFragmentPlan("select dow from t_next_day where dow < 'Sunday'"), "partitions=3/3");
+        assertContains(getFragmentPlan("select dow from t_next_day where dow = 'Sunday'"), "partitions=1/3");
+
+    }
+
+    @Test
+>>>>>>> c071ef4 ([BugFix] Refuse a partition expression that runs backwards from its column (#79187))
     public void testMinMaxPrune_Check() throws Exception {
         starRocksAssert.withTable("create table t5_dup " +
                 "(c1 datetime NOT NULL, c2 int) " +
