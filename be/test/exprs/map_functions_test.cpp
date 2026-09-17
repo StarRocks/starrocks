@@ -439,6 +439,79 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     }
 }
 
+// _filter_map_items() walks the filter's ARRAY<BOOLEAN> elements through raw pointers rather than
+// per-entry is_null()/get(). The shapes that decide which pointer is live - a filter column with no
+// nulls at all, a filter whose elements carry nulls, and a filter row shorter than the map row -
+// have to keep producing what the per-entry accessors produced.
+PARALLEL_TEST(MapFunctionsTest, test_map_filter_element_shapes) {
+    TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
+    TypeDescriptor type_array_boolean = array_type(TYPE_BOOLEAN);
+
+    //   [1->11, 2->22, 3->33]
+    //   [4->44, 5->55]
+    //   []
+    MutableColumnPtr map_column = ColumnHelper::create_column(type_map_int_int, false);
+    {
+        DatumMap map1;
+        map1[(int32_t)1] = (int32_t)11;
+        map1[(int32_t)2] = (int32_t)22;
+        map1[(int32_t)3] = (int32_t)33;
+        map_column->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)4] = (int32_t)44;
+        map2[(int32_t)5] = (int32_t)55;
+        map_column->append_datum(map2);
+
+        map_column->append_datum(DatumMap());
+    }
+
+    // No null anywhere: the elements' null column is absent, so the fast path runs without one.
+    {
+        MutableColumnPtr filter = ColumnHelper::create_column(type_array_boolean, false);
+        filter->append_datum(DatumArray{true, false, true});
+        filter->append_datum(DatumArray{false, true});
+        filter->append_datum(DatumArray{});
+
+        auto result = MapFunctions::map_filter(nullptr, {map_column->clone(), std::move(filter)}).value();
+        EXPECT_FALSE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "{1:11,3:33}, {5:55}, {}");
+    }
+
+    // Null elements are dropped, exactly like false.
+    {
+        MutableColumnPtr filter = ColumnHelper::create_column(type_array_boolean, false);
+        filter->append_datum(DatumArray{Datum(), true, Datum()});
+        filter->append_datum(DatumArray{true, Datum()});
+        filter->append_datum(DatumArray{});
+
+        auto result = MapFunctions::map_filter(nullptr, {map_column->clone(), std::move(filter)}).value();
+        EXPECT_STREQ(result->debug_string().c_str(), "{2:22}, {4:44}, {}");
+    }
+
+    // A filter row shorter than the map row: the entries past its end are dropped, not read.
+    {
+        MutableColumnPtr filter = ColumnHelper::create_column(type_array_boolean, false);
+        filter->append_datum(DatumArray{true});
+        filter->append_datum(DatumArray{});
+        filter->append_datum(DatumArray{});
+
+        auto result = MapFunctions::map_filter(nullptr, {map_column->clone(), std::move(filter)}).value();
+        EXPECT_STREQ(result->debug_string().c_str(), "{1:11}, {}, {}");
+    }
+
+    // Nothing survives: the shared index buffer stays empty and the offsets still advance per row.
+    {
+        MutableColumnPtr filter = ColumnHelper::create_column(type_array_boolean, false);
+        filter->append_datum(DatumArray{false, false, false});
+        filter->append_datum(DatumArray{false, false});
+        filter->append_datum(DatumArray{});
+
+        auto result = MapFunctions::map_filter(nullptr, {map_column->clone(), std::move(filter)}).value();
+        EXPECT_STREQ(result->debug_string().c_str(), "{}, {}, {}");
+    }
+}
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
     {

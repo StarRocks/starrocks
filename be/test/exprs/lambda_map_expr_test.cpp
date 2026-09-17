@@ -314,6 +314,61 @@ TEST_F(MapApplyExprTest, test_map_wider_than_one_slice) {
     ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
+// map_apply() has to empty out null rows that still span entries, and doing so means cloning the
+// whole input map - which is why it now asks has_payload_under_null_rows() first and skips the clone
+// when there is nothing to empty. Appending a NULL through append_datum() produces an empty range,
+// so the clone path is only reachable by building the null column separately, as a reader that
+// leaves the payload in place does. The lambda is the identity, so the result must have the null row
+// as NULL, and the caller's column must come back untouched - the clone is what protects it.
+// NOLINTNEXTLINE
+TEST_F(MapApplyExprTest, test_map_with_payload_under_null_rows) {
+    TypeDescriptor type_map_int_int;
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    create_lambda_expr(type_map_int_int);
+
+    // Five non-empty rows, one per row of `cur_chunk`, then mark row 1 and row 3 null *without*
+    // collapsing their ranges.
+    MutableColumnPtr data_column = ColumnHelper::create_column(type_map_int_int, false);
+    for (int32_t row = 0; row < 5; ++row) {
+        DatumMap entries;
+        entries[(int32_t)(row * 10 + 1)] = (int32_t)(row * 100 + 11);
+        entries[(int32_t)(row * 10 + 2)] = (int32_t)(row * 100 + 22);
+        data_column->append_datum(entries);
+    }
+    auto null_column = NullColumn::create();
+    null_column->append_datum((uint8_t)0);
+    null_column->append_datum((uint8_t)1);
+    null_column->append_datum((uint8_t)0);
+    null_column->append_datum((uint8_t)1);
+    null_column->append_datum((uint8_t)0);
+    ColumnPtr column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    const std::string before = column->debug_string();
+
+    std::unique_ptr<MapApplyExpr> map_apply_expr = create_map_apply_expr(type_map_int_int);
+    map_apply_expr->add_child(_lambda_func[0]);
+    map_apply_expr->add_child(new_fake_const_expr(column, type_map_int_int));
+
+    ExprContext exprContext(map_apply_expr.get());
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+    ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
+
+    ASSERT_TRUE(result->is_nullable());
+    ASSERT_EQ(column->size(), result->size());
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_TRUE(result->is_null(3));
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_FALSE(result->is_null(4));
+    EXPECT_EQ(column->debug_string(), before) << "map_apply must not mutate its input";
+
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
+}
+
 // NOLINTNEXTLINE
 TEST_F(MapApplyExprTest, test_map_varchar_int) {
     TypeDescriptor type_map_varchar_int;

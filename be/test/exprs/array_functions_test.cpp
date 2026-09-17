@@ -5412,6 +5412,92 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_across_hash_blocks) {
     }
 }
 
+// array_distinct_any_type collects the surviving element indices for the whole chunk and copies them
+// with a single append_selective(), so the per-row offsets and the shared index buffer have to stay
+// in step across rows that keep everything, keep nothing, and are NULL.
+TEST_F(ArrayFunctionsTest, array_distinct_any_type_batched_across_rows) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{"a", "b", "c"});         // nothing to drop
+    src_column->append_datum(DatumArray{"x", "x", "x", "x"});    // collapses to one
+    src_column->append_datum(DatumArray{});                      // empty
+    src_column->append_nulls(1);                                 // NULL row
+    src_column->append_datum(DatumArray{"q"});                   // single element (array_size <= 1)
+    src_column->append_datum(DatumArray{Datum(), Datum(), "z"}); // NULL elements dedup too
+    src_column->append_datum(DatumArray{"b", "a", "b", "a"});    // order of first appearance
+
+    auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
+    ASSERT_EQ(7, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[['a','b','c'], ['x'], [], NULL, ['q'], [NULL,'z'], ['b','a']]");
+}
+
+// array_top_n also batches the element copy, and its offsets are advanced independently of the
+// element column - so every shape that produces fewer elements than the row holds has to line up.
+TEST_F(ArrayFunctionsTest, array_top_n_int) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{(int32_t)3, (int32_t)1, (int32_t)5, (int32_t)4}); // top 2 -> 5,4
+    src_column->append_datum(DatumArray{(int32_t)7});                                     // n > size
+    src_column->append_datum(DatumArray{});                                               // empty row
+    src_column->append_nulls(1);                                                          // NULL row
+    src_column->append_datum(DatumArray{(int32_t)9, Datum(), (int32_t)8});                // NULLs go last
+
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), std::move(count_column)}).value();
+    ASSERT_EQ(5, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[[5,4], [7], [], NULL, [9,8]]");
+}
+
+// n <= 0 short-circuits before the sort and must still advance the offsets, or the element column
+// and the offsets drift apart once the copy is batched to the end of the chunk.
+TEST_F(ArrayFunctionsTest, array_top_n_non_positive_count) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    src_column->append_datum(DatumArray{(int32_t)3, (int32_t)1});
+    src_column->append_datum(DatumArray{(int32_t)9, (int32_t)8});
+    src_column->append_datum(DatumArray{(int32_t)6, (int32_t)7});
+
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)0);
+    count_column->append_datum((int32_t)-1);
+    count_column->append_datum((int32_t)1);
+
+    // Row 2 keeps nothing (n < 0) and row 3 keeps the larger of {6, 7}.
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), std::move(count_column)}).value();
+    ASSERT_EQ(3, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[[], [], [7]]");
+}
+
+// A constant n is the shape the planner produces for `array_top_n(col, 3)`.
+TEST_F(ArrayFunctionsTest, array_top_n_const_count) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column->append_datum(DatumArray{"b", "d", "a", "c"});
+    src_column->append_datum(DatumArray{"z", "y"});
+
+    auto count_data = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_data->append_datum((int32_t)3);
+    ColumnPtr count_column = ConstColumn::create(std::move(count_data), 2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), count_column}).value();
+    ASSERT_EQ(2, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[['d','c','b'], ['z','y']]");
+}
+
+TEST_F(ArrayFunctionsTest, array_top_n_only_null) {
+    auto src_column = ColumnHelper::create_const_null_column(3);
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {src_column, std::move(count_column)}).value();
+    ASSERT_EQ(3, dest_column->size());
+    ASSERT_TRUE(dest_column->only_null());
+}
+
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
