@@ -106,6 +106,7 @@ set(EXPR_TEST_FILES
     subfield_expr_test.cpp
     udf/python/env_test.cpp
     unary_function_test.cpp
+    unnest_variant_test.cpp
     variant_functions_test.cpp
     vectorized_literal_test.cpp
 )
