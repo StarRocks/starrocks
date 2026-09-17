@@ -64,7 +64,7 @@ under the License.
         <grpc.version>1.76.0</grpc.version>
         <io.netty.version>4.1.137.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
-        <aws-v2-sdk.version>2.52.0</aws-v2-sdk.version>
+        <aws-v2-sdk.version>2.52.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
         <nimbusds.version>9.37.4</nimbusds.version>
@@ -1178,7 +1178,7 @@ under the License.
             <dependency>
                 <groupId>io.opentelemetry</groupId>
                 <artifactId>opentelemetry-bom</artifactId>
-                <version>1.15.0</version>
+                <version>1.62.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

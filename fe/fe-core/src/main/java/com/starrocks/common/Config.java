@@ -3251,19 +3251,14 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_cnt = 100;
 
     /**
-     * Endpoint for exporting Jaeger gRPC spans.
+     * OTLP/gRPC endpoint for exporting OpenTelemetry spans.
+     * Jaeger users should configure its OTLP receiver, normally on port 4317.
+     * The legacy jaeger_grpc_endpoint name is retained as a configuration alias,
+     * but Jaeger's native gRPC protocol on port 14250 is no longer supported.
      * Empty string disables span export.
      * Default is empty string.
      */
-    @ConfField
-    public static String jaeger_grpc_endpoint = "";
-
-    /**
-     * Endpoint for exporting OpenTelemetry gRPC spans.
-     * Empty string disables span export.
-     * Default is empty string.
-     */
-    @ConfField
+    @ConfField(aliases = {"jaeger_grpc_endpoint"})
     public static String otlp_exporter_grpc_endpoint = "";
 
     @ConfField
