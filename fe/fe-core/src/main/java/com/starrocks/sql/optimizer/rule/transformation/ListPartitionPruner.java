@@ -281,7 +281,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
+                        OperatorFunctionChecker.onlyContainIncreasingFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
                     for (ColumnRefOperator ref : columnRefOperatorList) {
                         result.add(ref.getName());
@@ -369,7 +369,7 @@ public class ListPartitionPruner implements PartitionPruner {
                     continue;
                 }
                 if (!binaryPredicate.getBinaryType().isEqual()) {
-                    if (!OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) generatedExpr).first) {
+                    if (!OperatorFunctionChecker.onlyContainIncreasingFunctions((CallOperator) generatedExpr).first) {
                         // skip non-monotonic function for not equal predicate
                         continue;
                     }
