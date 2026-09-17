@@ -463,11 +463,23 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         java.util.function.Function.identity()));
         int skewRandRange = context.getSessionVariable().getSkewJoinRandRange();
 
+        // These two pairs are the argument list of `generate_series(start, stop)`, which takes its
+        // arguments positionally. Collecting them out of a HashMap handed the BE (stop, start) instead:
+        // `generate_series(skewRandRange, 0)` walks upwards from a start that is already past its stop and
+        // emits nothing, so the salt table comes out empty. Every row on this side then keeps the default
+        // salt of 0 while the other side still salts the skewed keys at random, no skewed key finds a
+        // match, and its rows are dropped from the result without any error.
+        ColumnRefOperator seriesStart = columnRefFactory.create("0", IntegerType.BIGINT, false);
+        ColumnRefOperator seriesStop =
+                columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false);
+        List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList(
+                Pair.create(seriesStart, (ScalarOperator) ConstantOperator.createBigint(0)),
+                Pair.create(seriesStop, (ScalarOperator) ConstantOperator.createBigint(skewRandRange)));
+
         Map<ColumnRefOperator, ScalarOperator> generateSeriesChildProjectMap = Maps.newHashMap();
-        generateSeriesChildProjectMap.put(columnRefFactory.create("0", IntegerType.BIGINT, false),
-                ConstantOperator.createBigint(0));
-        generateSeriesChildProjectMap.put(columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false),
-                ConstantOperator.createBigint(skewRandRange));
+        for (Pair<ColumnRefOperator, ScalarOperator> pair : generateSeriesChildProjectPairs) {
+            generateSeriesChildProjectMap.put(pair.first, pair.second);
+        }
         unnestProjectMap.putAll(generateSeriesChildProjectMap);
         OptExpression unnestProjectOpt = OptExpression.create(new LogicalProjectOperator(unnestProjectMap),
                 unnestOpt);
@@ -477,10 +489,6 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 new Type[] {IntegerType.BIGINT, IntegerType.BIGINT}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<ColumnRefOperator> generateSeriesOutputColumns = Lists.newArrayList();
         generateSeriesOutputColumns.add(columnRefFactory.create("generate_serials", IntegerType.BIGINT, true));
-        List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : generateSeriesChildProjectMap.entrySet()) {
-            generateSeriesChildProjectPairs.add(Pair.create(entry.getKey(), entry.getValue()));
-        }
         List<ColumnRefOperator> generateSeriesOuterColRefs = Lists.newArrayList();
         generateSeriesOuterColRefs.add(unnestColumnOperator);
 
