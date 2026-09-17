@@ -12,6 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
+=======
+// The whole starrocks_test_objs target is compiled with -fno-access-control, which already
+// grants this test access to the private members it touches. Do not add `#define private public`
+// here: this is the first header the TU pulls in, so the macro also rewrites the access
+// specifiers of libstdc++'s own headers, and <sstream> then redeclares basic_stringbuf's
+// __xfer_bufptrs with a different access than its forward declaration (a hard error on gcc 14).
+>>>>>>> 4280119fdd2... [BugFix] Fix two BE build breaks: the `#define private public` hack in exchange_sink_operator_test and the Arrow bitpacking header probe (#63060)
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
 #include <brpc/server.h>
