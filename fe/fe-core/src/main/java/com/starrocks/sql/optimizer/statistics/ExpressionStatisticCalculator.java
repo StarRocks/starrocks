@@ -599,6 +599,7 @@ public class ExpressionStatisticCalculator {
             double minValue = columnStatistic.getMinValue();
             double maxValue = columnStatistic.getMaxValue();
             double distinctValue = Math.min(rowCount, columnStatistic.getDistinctValuesCount());
+            double nullsFraction = columnStatistic.getNullsFraction();
             final boolean minMaxValueInfinite = Double.isInfinite(minValue) || Double.isInfinite(maxValue);
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.SIGN:
@@ -786,7 +787,21 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.SQRT:
                 case FunctionSet.DSQRT:
                     if (minValue < 0) {
-                        return ColumnStatistic.unknown();
+                        if (maxValue < 0) {
+                            // Every input evaluates to NULL. unknown() would claim 0% nulls and
+                            // trip isUnknown() fallbacks; report an all-null estimate instead.
+                            // [0, 0] is the limit of [0, sqrt(max)] as max approaches 0.
+                            nullsFraction = 1;
+                            distinctValue = 1;
+                        } else if (!minMaxValueInfinite) {
+                            // An infinite endpoint makes the negative share Inf/Inf or finite/Inf,
+                            // so leave NDV/nulls unchanged rather than writing NaN or 0.
+                            double negativeShare = maxValue > minValue ? -minValue / (maxValue - minValue) : 1.0;
+                            nullsFraction = Math.min(1.0, nullsFraction + (1 - nullsFraction) * negativeShare);
+                            distinctValue = Math.max(1, distinctValue * (1 - negativeShare));
+                        }
+                        minValue = 0;
+                        maxValue = Math.max(maxValue, 0);
                     }
                     minValue = Math.sqrt(minValue);
                     maxValue = Math.sqrt(maxValue);
@@ -885,7 +900,7 @@ public class ExpressionStatisticCalculator {
             return ColumnStatistic.builder()
                     .setMinValue(minValue)
                     .setMaxValue(maxValue)
-                    .setNullsFraction(columnStatistic.getNullsFraction())
+                    .setNullsFraction(nullsFraction)
                     .setAverageRowSize(averageRowSize)
                     .setDistinctValuesCount(distinctValue)
                     .setHistogram(transformHistogramForUnary(callOperator, columnStatistic).orElse(null))
