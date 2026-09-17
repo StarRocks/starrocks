@@ -1064,6 +1064,14 @@ public class StmtExecutor {
                 for (int i = 0; i < retryTime; i++) {
                     boolean needRetry = false;
                     retryContext.setRetryTime(i);
+                    // The plan this attempt actually runs. A previous iteration's
+                    // ExecuteExceptionHandler.handle() may have replaced it via rebuildExecPlan(), so the
+                    // profile and EXPLAIN ANALYZE below must describe this plan rather than the one the
+                    // first planning produced -- otherwise the new coordinator's runtime counters are
+                    // paired with a stale operator tree. retryContext owns the current plan; this is only
+                    // a per-attempt snapshot of it, distinct from lastExecPlan, which tracks the latest
+                    // generated plan for the failure dump in fe.plan.log.
+                    final ExecPlan attemptPlan = retryContext.getExecPlan();
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -1074,7 +1082,7 @@ public class StmtExecutor {
                             retryContext.prepareRetry();
                         }
 
-                        handleQueryStmt(retryContext.getExecPlan());
+                        handleQueryStmt(attemptPlan);
                         break;
                     } catch (Exception e) {
                         // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE.
@@ -1115,7 +1123,7 @@ public class StmtExecutor {
                                 }
 
                                 if (context.isProfileEnabled()) {
-                                    isAsync = tryProcessProfileAsync(execPlan, i);
+                                    isAsync = tryProcessProfileAsync(attemptPlan, i);
                                     if (parsedStmt.isExplainAnalyze()) {
                                         if (coord != null && coord.isShortCircuit()) {
                                             throw new StarRocksException(
@@ -1123,7 +1131,7 @@ public class StmtExecutor {
                                                             "you can set it off by using  set enable_short_circuit=false");
                                         }
                                         handleExplainStmt(ExplainAnalyzer.analyze(
-                                                ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                                ProfilingExecPlan.buildFrom(attemptPlan), profile, null,
                                                 context.getSessionVariable().getColorExplainOutput()));
                                     }
                                 }
