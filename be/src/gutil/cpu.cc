@@ -17,6 +17,10 @@
 #include <intrin.h>
 #endif
 #endif
+#if defined(__linux__) && defined(__aarch64__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#endif
 
 namespace base {
 #if defined(ARCH_CPU_X86_FAMILY)
@@ -228,6 +232,16 @@ void CPU::Initialize() {
 #elif defined(ARCH_CPU_ARM_FAMILY)
 #if (defined(OS_ANDROID) || defined(OS_LINUX))
     cpu_brand_ = *CpuInfoBrand();
+#if defined(__linux__) && defined(__aarch64__)
+    const unsigned long hwcap = getauxval(AT_HWCAP);
+#ifndef HWCAP_CRC32
+#define HWCAP_CRC32 (1UL << 7)
+#endif
+    has_crc32_ = (hwcap & HWCAP_CRC32) != 0;
+#endif
+#elif defined(OS_MACOSX) && defined(__aarch64__)
+    // Apple Silicon (M1-M4) supports ARMv8-A CRC32
+    has_crc32_ = true;
 #elif defined(OS_WIN)
     // Windows makes high-resolution thread timing information available in
     // user-space.
@@ -272,7 +286,8 @@ std::string CPU::debug_string() const {
        << (has_avx2_ ? " avx2" : "")
        << (has_avx512f_ ? " avx512f" : "")
        << (has_avx512bw_ ? " avx512bw" : "")
-       << (has_popcnt_ ? " popcnt" : "");
+       << (has_popcnt_ ? " popcnt" : "")
+       << (has_crc32_ ? " crc32" : "");
     // clang-format on
     return ss.str();
 }

@@ -18,9 +18,12 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <iosfwd>
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "common/logging.h"
@@ -41,6 +44,18 @@ public:
     static const int64_t AVX2 = (1 << 6);
     static const int64_t AVX512F = (1 << 7);
     static const int64_t AVX512BW = (1 << 8);
+
+    // ARM64 feature flags (bits 9–17).
+    // Detected at runtime via /proc/cpuinfo "Features" and getauxval(AT_HWCAP/AT_HWCAP2).
+    static const int64_t ARM_NEON = (1LL << 9);   ///< Advanced SIMD (NEON); mandatory on aarch64
+    static const int64_t ARM_CRC32 = (1LL << 10); ///< Hardware CRC-32C (__crc32cw / __crc32cd)
+    static const int64_t ARM_PMULL = (1LL << 11); ///< Polynomial multiply (vmull_p64 / PMULL)
+    static const int64_t ARM_AES = (1LL << 12);   ///< Hardware AES encryption/decryption
+    static const int64_t ARM_LSE = (1LL << 13);   ///< ARMv8.1-A Large System Extensions atomics
+    static const int64_t ARM_SVE = (1LL << 14);   ///< Scalable Vector Extension
+    static const int64_t ARM_SVE2 = (1LL << 15);  ///< Scalable Vector Extension 2
+    static const int64_t ARM_SHA1 = (1LL << 16);  ///< Hardware SHA-1
+    static const int64_t ARM_SHA2 = (1LL << 17);  ///< Hardware SHA-256
 
     /// Cache enums for L1 (data), L2 and L3
     enum CacheLevel {
@@ -119,10 +134,26 @@ public:
 
     // For TEST only
     static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
+    static int64_t TEST_parse_cpu_flags(const std::string& values) { return _parse_cpu_flags(values); }
+    static int64_t TEST_init_arm_auxval(unsigned long hwcap, unsigned long hwcap2) {
+        return _init_arm_auxval(hwcap, hwcap2);
+    }
+    static int64_t TEST_init_arm_procfs(std::istream& stream) { return _init_arm_procfs(stream); }
+    static int64_t TEST_init_arm_darwin(const std::function<bool(const char*)>& check_sysctl) {
+        return _init_arm_darwin(check_sysctl);
+    }
+    static int64_t TEST_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags) {
+        return _resolve_arm_flags(aux_available, aux_flags, procfs_flags);
+    }
 
 private:
+    static int64_t _init_arm_auxval(unsigned long hwcap, unsigned long hwcap2);
+    static int64_t _init_arm_procfs(std::istream& stream);
+    static int64_t _init_arm_darwin(const std::function<bool(const char*)>& check_sysctl);
+    static int64_t _resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags);
+
     struct FlagMapping {
-        std::string name;
+        std::string_view name;
         int64_t flag;
     };
 

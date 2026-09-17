@@ -44,6 +44,10 @@
 #ifdef __linux__
 #include <linux/magic.h>
 #endif
+#if defined(__linux__) && defined(__aarch64__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#endif
 #include <sched.h>
 #ifdef __linux__
 #include <sys/sysinfo.h>
@@ -63,11 +67,13 @@
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <cctype>
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 #include <system_error>
 
 #include "base/path/file_util.h"
@@ -112,21 +118,168 @@ std::vector<long> CpuInfo::cache_line_sizes;
 
 const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
     static const std::vector<FlagMapping> mappings = {
-            {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
-            {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
-            {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
+            // x86 flags — sourced from /proc/cpuinfo "flags" line.
+            {"ssse3", CpuInfo::SSSE3},
+            {"sse4_1", CpuInfo::SSE4_1},
+            {"sse4_2", CpuInfo::SSE4_2},
+            {"popcnt", CpuInfo::POPCNT},
+            {"avx", CpuInfo::AVX},
+            {"avx2", CpuInfo::AVX2},
+            {"avx512f", CpuInfo::AVX512F},
+            {"avx512bw", CpuInfo::AVX512BW},
+            // ARM64 flags — sourced from /proc/cpuinfo "Features" line.
+            // Kernel string names match what appears in "Features: asimd crc32 pmull aes ..."
+            {"asimd", CpuInfo::ARM_NEON},
+            {"crc32", CpuInfo::ARM_CRC32},
+            {"pmull", CpuInfo::ARM_PMULL},
+            {"aes", CpuInfo::ARM_AES},
+            {"atomics", CpuInfo::ARM_LSE},
+            {"sve", CpuInfo::ARM_SVE},
+            {"sve2", CpuInfo::ARM_SVE2},
+            {"sha1", CpuInfo::ARM_SHA1},
+            {"sha2", CpuInfo::ARM_SHA2},
     };
     return mappings;
 }
 
 int64_t CpuInfo::_parse_cpu_flags(const string& values) {
     int64_t flags = 0;
-    for (const auto& flag_mapping : _flag_mappings()) {
-        if (contains(values, flag_mapping.name)) {
-            flags |= flag_mapping.flag;
+    for (StringPiece token : strings::Split(values, " ", strings::SkipWhitespace())) {
+        const std::string_view token_view(token.data(), token.size());
+        for (const auto& flag_mapping : _flag_mappings()) {
+            if (token_view == flag_mapping.name) {
+                flags |= flag_mapping.flag;
+                break;
+            }
         }
     }
     return flags;
+}
+
+// ARM64 Linux HWCAP / HWCAP2 constants for getauxval
+#ifndef HWCAP_ASIMD
+#define HWCAP_ASIMD (1UL << 1)
+#endif
+#ifndef HWCAP_AES
+#define HWCAP_AES (1UL << 3)
+#endif
+#ifndef HWCAP_PMULL
+#define HWCAP_PMULL (1UL << 4)
+#endif
+#ifndef HWCAP_SHA1
+#define HWCAP_SHA1 (1UL << 5)
+#endif
+#ifndef HWCAP_SHA2
+#define HWCAP_SHA2 (1UL << 6)
+#endif
+#ifndef HWCAP_CRC32
+#define HWCAP_CRC32 (1UL << 7)
+#endif
+#ifndef HWCAP_ATOMICS
+#define HWCAP_ATOMICS (1UL << 8)
+#endif
+#ifndef HWCAP_SVE
+#define HWCAP_SVE (1UL << 22)
+#endif
+#ifndef HWCAP2_SVE2
+#define HWCAP2_SVE2 (1UL << 1)
+#endif
+
+int64_t CpuInfo::_init_arm_auxval(unsigned long hwcap, unsigned long hwcap2) {
+    int64_t flags = 0;
+    if (hwcap & HWCAP_ASIMD) flags |= ARM_NEON;
+    if (hwcap & HWCAP_CRC32) flags |= ARM_CRC32;
+    if (hwcap & HWCAP_PMULL) flags |= ARM_PMULL;
+    if (hwcap & HWCAP_AES) flags |= ARM_AES;
+    if (hwcap & HWCAP_ATOMICS) flags |= ARM_LSE;
+    if (hwcap & HWCAP_SVE) flags |= ARM_SVE;
+    if (hwcap2 & HWCAP2_SVE2) flags |= ARM_SVE2;
+    if (hwcap & HWCAP_SHA1) flags |= ARM_SHA1;
+    if (hwcap & HWCAP_SHA2) flags |= ARM_SHA2;
+    return flags;
+}
+
+int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
+    std::string line;
+    std::string name;
+    std::string value;
+    int64_t intersection_flags = 0;
+    bool first_features_line = true;
+
+    while (getline(stream, line)) {
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            name = line.substr(0, colon);
+            value = line.substr(colon + 1);
+            trim(name);
+            trim(value);
+            if (name == "Features") {
+                int64_t core_flags = _parse_cpu_flags(value);
+                if (first_features_line) {
+                    intersection_flags = core_flags;
+                    first_features_line = false;
+                } else {
+                    intersection_flags &= core_flags;
+                }
+            }
+        }
+    }
+    if (stream.bad() || (stream.fail() && !stream.eof())) {
+        return 0; // Fail closed on truncated or corrupted stream
+    }
+    return intersection_flags;
+}
+
+int64_t CpuInfo::_init_arm_darwin(const std::function<bool(const char*)>& check_sysctl) {
+    int64_t flags = 0;
+
+    // Advanced SIMD / NEON
+    if (check_sysctl("hw.optional.AdvSIMD") || check_sysctl("hw.optional.neon") ||
+        check_sysctl("hw.optional.arm.AdvSIMD") || check_sysctl("hw.optional.floatingpoint")) {
+        flags |= ARM_NEON;
+    }
+
+    // CRC32
+    if (check_sysctl("hw.optional.armv8_crc32") || check_sysctl("hw.optional.arm.FEAT_CRC32")) {
+        flags |= ARM_CRC32;
+    }
+
+    // Large System Extensions (LSE Atomics)
+    if (check_sysctl("hw.optional.armv8_1_atomics") || check_sysctl("hw.optional.arm.FEAT_LSE")) {
+        flags |= ARM_LSE;
+    }
+
+    // Crypto extensions
+    if (check_sysctl("hw.optional.arm.FEAT_PMULL")) {
+        flags |= ARM_PMULL;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_AES")) {
+        flags |= ARM_AES;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_SHA1")) {
+        flags |= ARM_SHA1;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_SHA256") || check_sysctl("hw.optional.arm.FEAT_SHA2")) {
+        flags |= ARM_SHA2;
+    }
+
+    // SVE / SVE2
+    if (check_sysctl("hw.optional.arm.FEAT_SVE")) {
+        flags |= ARM_SVE;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_SVE2")) {
+        flags |= ARM_SVE2;
+    }
+
+    // Fail closed: Unknown capability state must NOT enable optional extensions blindly.
+    return flags;
+}
+
+int64_t CpuInfo::_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags) {
+    if (aux_available) {
+        return aux_flags;
+    }
+    return procfs_flags;
 }
 
 void CpuInfo::init() {
@@ -138,18 +291,49 @@ void CpuInfo::init() {
     float max_mhz = 0;
     int num_cores = 0;
 
+#if defined(__linux__) && defined(__aarch64__)
+    errno = 0;
+    const unsigned long hwcap = getauxval(AT_HWCAP);
+    const bool hwcap_available = (errno == 0);
+
+    errno = 0;
+    const unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    const bool hwcap2_available = (errno == 0);
+
+    int64_t aux_flags = _init_arm_auxval(hwcap, hwcap2);
+    int64_t procfs_arm_flags = 0;
+    bool first_arm_features_line = true;
+#endif
+
     // Read from /proc/cpuinfo
     std::ifstream cpuinfo("/proc/cpuinfo");
+#if defined(__linux__)
+    if (!cpuinfo.is_open()) {
+        LOG(ERROR) << "Unable to open /proc/cpuinfo; CPU feature detection may be incomplete";
+    }
+#endif
     while (cpuinfo) {
         getline(cpuinfo, line);
         size_t colon = line.find(':');
         if (colon != string::npos) {
-            name = line.substr(0, colon - 1);
+            name = line.substr(0, colon);
             value = line.substr(colon + 1, string::npos);
             trim(name);
             trim(value);
             if (name.compare("flags") == 0) {
                 hardware_flags_ |= _parse_cpu_flags(value);
+            } else if (name.compare("Features") == 0) {
+#if defined(__linux__) && defined(__aarch64__)
+                int64_t core_flags = _parse_cpu_flags(value);
+                if (first_arm_features_line) {
+                    procfs_arm_flags = core_flags;
+                    first_arm_features_line = false;
+                } else {
+                    procfs_arm_flags &= core_flags;
+                }
+#else
+                hardware_flags_ |= _parse_cpu_flags(value);
+#endif
             } else if (name.compare("cpu MHz") == 0) {
                 // Every core will report a different speed.  We'll take the max, assuming
                 // that when impala is running, the core will not be in a lower power state.
@@ -164,6 +348,27 @@ void CpuInfo::init() {
             }
         }
     }
+#if defined(__linux__)
+    if (cpuinfo.bad() || (cpuinfo.fail() && !cpuinfo.eof())) {
+        LOG(ERROR) << "I/O error reading /proc/cpuinfo; ARM feature detection may be incomplete";
+#if defined(__aarch64__)
+        procfs_arm_flags = 0; // Fail closed on truncated read to prevent heterogeneous core poisoning
+#endif
+    }
+#endif
+
+#if defined(__linux__) && defined(__aarch64__)
+    hardware_flags_ |= _resolve_arm_flags(hwcap_available && hwcap2_available, aux_flags, procfs_arm_flags);
+#endif
+
+#if defined(__APPLE__) && defined(__aarch64__)
+    auto check_sysctl = [](const char* name) -> bool {
+        int val = 0;
+        size_t len = sizeof(val);
+        return sysctlbyname(name, &val, &len, nullptr, 0) == 0 && val != 0;
+    };
+    hardware_flags_ |= _init_arm_darwin(check_sysctl);
+#endif
 
     if (max_mhz != 0) {
         cycles_per_ms_ = max_mhz * 1000;
@@ -491,9 +696,54 @@ std::vector<std::string> CpuInfo::unsupported_cpu_flags_from_current_env() {
                 unsupported = true;
                 break;
 #endif
+#if defined(__aarch64__) && defined(__ARM_NEON)
+            case CpuInfo::ARM_NEON:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+            case CpuInfo::ARM_CRC32:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_PMULL))
+            case CpuInfo::ARM_PMULL:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_AES))
+            case CpuInfo::ARM_AES:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_ATOMICS)
+            case CpuInfo::ARM_LSE:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+            case CpuInfo::ARM_SVE:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE2)
+            case CpuInfo::ARM_SVE2:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_SHA1))
+            case CpuInfo::ARM_SHA1:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_SHA2))
+            case CpuInfo::ARM_SHA2:
+                unsupported = true;
+                break;
+#endif
             }
             if (unsupported) {
-                unsupported_flags.push_back(flag_mapping.name);
+                unsupported_flags.emplace_back(flag_mapping.name);
             }
         }
     }
