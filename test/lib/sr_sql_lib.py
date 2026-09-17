@@ -2474,8 +2474,11 @@ class StarrocksSQLApiLib(object):
         index swap, under the table's write lock (SchemaChangeJobV2.java:1215-1227), so it means
         the new schema is in effect.
 
-        The first call in a process has no watermark to compare against and keeps the old
-        one-second grace period.
+        The first call has no watermark, but it does not need one: registration being
+        synchronous rules out the only reading that would have to keep waiting -- our job
+        submitted but not yet listed -- so both remaining readings return straight away. The flat
+        second is gone from every path; the loop now only sleeps while a job is genuinely running,
+        and polls at 100ms so a fast job is not rounded up.
         """
         seen = getattr(self, "_last_alter_job_id", None)
         deadline = time.time() + timeout
@@ -2495,8 +2498,6 @@ class StarrocksSQLApiLib(object):
                 return ""
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
-                if seen is None:
-                    time.sleep(1)
                 break
 
             tools.assert_true(
@@ -2504,7 +2505,7 @@ class StarrocksSQLApiLib(object):
                 "wait alter table %s finish timeout after %ss, job %s is %s"
                 % (alter_type, timeout, job_id, status),
             )
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         self._last_alter_job_id = int(job_id)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
