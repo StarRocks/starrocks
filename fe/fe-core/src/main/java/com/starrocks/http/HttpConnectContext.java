@@ -77,9 +77,9 @@ public class HttpConnectContext extends ConnectContext {
     // finishHttpRequest/close so drain cannot observe active==0 while bytes remain.
     private volatile ChannelFuture lastHttpWrite;
 
-    // Admitted HTTP requests still in flight on this channel. HTTP/1.1 pipelined requests share
-    // one HttpConnectContext, so closing the channel while this is non-zero would kill another
-    // admitted request still running; only close once it hits zero (and rejecting).
+    // SQL keep-alive only. Pipelined SQL requests share one HttpConnectContext;
+    // do not close the channel while this is non-zero. Non-SQL actions use a
+    // per-request context and must not touch this counter.
     private final AtomicInteger channelAdmittedRequests = new AtomicInteger();
 
     // right now only support json type
@@ -164,31 +164,40 @@ public class HttpConnectContext extends ConnectContext {
         }
     }
 
-    // Called once per request after a successful HTTP admission claim on this channel. Matched by
-    // channelAdmittedRequests.decrementAndGet() in completeAdmittedHttpRequest. Synchronized on
-    // this context so the count and the decrement-then-close decision in
-    // completeAdmittedHttpRequest are atomic w.r.t. each other.
+    // SQL keep-alive only: HTTP/1.1 pipelined requests share one channel-scoped
+    // HttpConnectContext. Non-SQL actions must not call this — they get a fresh
+    // context per request, so the count is not per-channel.
     public void incrementAdmittedRequests() {
         synchronized (this) {
             channelAdmittedRequests.incrementAndGet();
         }
     }
 
-    // Wait for this request's final HTTP write, then drop the admission count. Always decrements
-    // the per-channel admitted count; closes the channel only when rejecting and that count
-    // reaches zero (so a pipelined admitted request sharing this channel is not killed).
-    // If called on the Netty event loop, defer via listener to avoid deadlock.
+    // SQL keep-alive: wait for this request's last write, then drop the per-channel
+    // admitted count. Close the channel only when rejecting and that count reaches
+    // zero (do not kill another pipelined admitted request on the same context).
     public void finishAdmittedHttpRequest() {
+        runAfterLastHttpWrite(this::completeAdmittedHttpRequest);
+    }
+
+    // Non-SQL: one context per request, so there is no per-channel admitted count.
+    // Await the write, drop the global admission, and if rejecting close this
+    // request's channel (immediate release of keep-alive).
+    public void finishHttpRequestAndMaybeClose() {
+        runAfterLastHttpWrite(this::completeHttpRequestAndMaybeClose);
+    }
+
+    private void runAfterLastHttpWrite(Runnable next) {
         ChannelFuture f = lastHttpWrite;
         if (f != null) {
             Channel ch = f.channel();
             if (ch != null && ch.eventLoop() != null && ch.eventLoop().inEventLoop()) {
-                f.addListener(future -> completeAdmittedHttpRequest());
+                f.addListener(future -> next.run());
                 return;
             }
             f.awaitUninterruptibly();
         }
-        completeAdmittedHttpRequest();
+        next.run();
     }
 
     private void completeAdmittedHttpRequest() {
@@ -196,19 +205,28 @@ public class HttpConnectContext extends ConnectContext {
         // decrement while the window is still open, inflating the count so it never returns to
         // zero once rejecting). Decrement, the close decision, and the close itself all share one
         // monitor with incrementAdmittedRequests: otherwise a decrement-to-zero racing an increment
-        // for a just-admitted pipelined request could close the channel under it. HTTP/1.1
-        // pipelined requests share one HttpConnectContext; closing on one request's completion
-        // while another admitted request is still running on the same channel would kill it.
+        // for a just-admitted pipelined SQL request could close the channel under it.
         synchronized (this) {
             int remaining = channelAdmittedRequests.decrementAndGet();
             if (GracefulExitFlag.isHttpRejecting() && remaining == 0) {
-                ChannelHandlerContext ch = nettyChannel;
-                if (ch != null && ch.channel().isActive()) {
-                    ch.close();
-                }
+                closeNettyChannelIfActive();
             }
         }
         GracefulExitFlag.finishHttpRequest();
+    }
+
+    private void completeHttpRequestAndMaybeClose() {
+        if (GracefulExitFlag.isHttpRejecting()) {
+            closeNettyChannelIfActive();
+        }
+        GracefulExitFlag.finishHttpRequest();
+    }
+
+    private void closeNettyChannelIfActive() {
+        ChannelHandlerContext ch = nettyChannel;
+        if (ch != null && ch.channel().isActive()) {
+            ch.close();
+        }
     }
 
     public boolean isOnlyOutputResultRaw() {

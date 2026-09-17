@@ -258,9 +258,6 @@ public class TransactionLoadAction extends RestBaseAction {
                 return;
             }
             admitted = true;
-            if (context != null) {
-                context.incrementAdmittedRequests();
-            }
             if (redirectToLeader(request, response)) {
                 return;
             }
@@ -288,7 +285,7 @@ public class TransactionLoadAction extends RestBaseAction {
             }
             if (admitted) {
                 if (context != null) {
-                    context.finishAdmittedHttpRequest();
+                    context.finishHttpRequestAndMaybeClose();
                 } else {
                     GracefulExitFlag.finishHttpRequest();
                 }

@@ -220,13 +220,10 @@ public class LoadAction extends RestBaseAction {
                 return;
             }
             admitted = true;
-            if (context != null) {
-                context.incrementAdmittedRequests();
-            }
             executeWithoutPasswordInternal(request, response);
         } catch (AccessDeniedException e) {
-            // Write 401 here so lastHttpWrite is recorded before finishAdmittedHttpRequest, which
-            // would otherwise close the channel (rejecting) before the outer handler writes 401.
+            // Write 401 here so lastHttpWrite is recorded before finishHttpRequestAndMaybeClose,
+            // which would otherwise close the channel (rejecting) before the outer handler writes 401.
             response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
             response.appendContent(new RestBaseResult(getErrorRespWhenUnauthorized(e)).toJson());
             writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
@@ -245,7 +242,7 @@ public class LoadAction extends RestBaseAction {
         } finally {
             if (admitted) {
                 if (context != null) {
-                    context.finishAdmittedHttpRequest();
+                    context.finishHttpRequestAndMaybeClose();
                 } else {
                     GracefulExitFlag.finishHttpRequest();
                 }
