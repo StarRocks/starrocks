@@ -295,6 +295,11 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void replayOnCommitted(TransactionState txnState) {
+        // The live txnCallback is not persisted, so the replaying node asks the factory instead.
+        InsertLoadTxnCallback replayCallback = InsertLoadTxnCallbackFactory.ofReplay(dbId, tableId, txnState);
+        if (replayCallback != null) {
+            replayCallback.replayOnCommitted(txnState);
+        }
     }
 
     @Override
