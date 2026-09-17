@@ -176,6 +176,73 @@ public class RunningTransactionsSystemTableTest {
         Assertions.assertTrue(result.getTxns().isEmpty());
     }
 
+    // TXN_ID is pushed down by the planner, so the FE has to honour it. Without this the caller still gets
+    // the right answer, because the BE applies every predicate as a residual filter anyway, but the FE would
+    // have built and shipped every running transaction to deliver one row.
+    @Test
+    public void testTxnIdFilterNarrowsRows(@Mocked GlobalStateMgr globalStateMgr,
+                                           @Mocked LocalMetastore metastore,
+                                           @Mocked GlobalTransactionMgr txnMgr,
+                                           @Mocked Database db) {
+        TRunningTxnInfo wanted = new TRunningTxnInfo();
+        wanted.setTxn_id(42);
+        wanted.setDatabase_id(1001);
+        wanted.setLabel("wanted");
+        wanted.setState("COMMITTED");
+
+        TRunningTxnInfo other = new TRunningTxnInfo();
+        other.setTxn_id(43);
+        other.setDatabase_id(1001);
+        other.setLabel("other");
+        other.setState("PREPARE");
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = metastore;
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = txnMgr;
+                txnMgr.getRunningTransactions((Long) any, (Predicate<Long>) any);
+                result = new Delegate<List<TRunningTxnInfo>>() {
+                    @SuppressWarnings("unused")
+                    List<TRunningTxnInfo> delegate(Long dbId, Predicate<Long> dbAllowed) {
+                        return Stream.of(wanted, other)
+                                .filter(r -> dbAllowed.test(r.getDatabase_id()))
+                                .collect(Collectors.toList());
+                    }
+                };
+                metastore.getDb(1001L);
+                minTimes = 0;
+                result = db;
+                db.getFullName();
+                minTimes = 0;
+                result = "db1";
+            }
+        };
+
+        // This test is about the id filter, not privileges, so let every database through.
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext context, String catalog, String db) {
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("alice", "%"));
+
+        TGetRunningTxnsParams params = new TGetRunningTxnsParams();
+        params.setTxn_id(42);
+        TGetRunningTxnsResult result = RunningTransactionsSystemTable.query(params, context);
+
+        Assertions.assertEquals(1, result.getTxns().size());
+        Assertions.assertEquals(42, result.getTxns().get(0).getTxn_id());
+    }
+
     // A running transaction whose database was dropped mid-flight cannot be authorized (its name never
     // resolves), so it is hidden even from an authenticated user.
     @Test

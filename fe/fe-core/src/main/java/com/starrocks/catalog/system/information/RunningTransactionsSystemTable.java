@@ -117,9 +117,10 @@ public class RunningTransactionsSystemTable {
                 }
                 filterDbId = db.getId();
             }
-            // Only db and label are pushed down (TXN_ID is BIGINT, which the BE scanner cannot push down;
-            // a WHERE TXN_ID = <n> predicate is applied by the BE as a residual filter on the returned rows).
+            // db, label and txn_id are all pushed down. Every predicate is also applied by the BE as a
+            // residual filter, so pushdown is purely about not building rows the caller will discard.
             String labelFilter = params.isSetLabel() ? params.getLabel() : null;
+            Long txnIdFilter = params.isSetTxn_id() ? params.getTxn_id() : null;
 
             // Authorize per database BEFORE any row is built. The transaction manager tests this once per
             // database as it walks its managers, so a database the caller cannot see costs a single check
@@ -133,6 +134,9 @@ public class RunningTransactionsSystemTable {
                             dbVisible));
             for (TRunningTxnInfo row : rows) {
                 if (labelFilter != null && !labelFilter.equals(row.getLabel())) {
+                    continue;
+                }
+                if (txnIdFilter != null && txnIdFilter != row.getTxn_id()) {
                     continue;
                 }
                 // Already authorized above, so this only fills in the names.
