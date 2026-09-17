@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -61,15 +62,25 @@ enum class AIProviderErrorAction : uint8_t {
 
 AIProviderErrorAction ai_provider_error_action(AIProviderErrorCode code);
 
+struct AIProviderUsage {
+    std::optional<int64_t> prompt_tokens;
+    std::optional<int64_t> completion_tokens;
+    std::optional<int64_t> total_tokens;
+};
+
 struct AIProviderSuccess {
     std::string content;
+    AIProviderUsage usage;
 };
 
 struct AIProviderStructuredError {
     AIProviderErrorCode code = AIProviderErrorCode::UNKNOWN;
+    AIProviderUsage usage;
 };
 
-struct AIProviderMalformed {};
+struct AIProviderMalformed {
+    AIProviderUsage usage;
+};
 
 using AIProviderParseResult = std::variant<AIProviderSuccess, AIProviderStructuredError, AIProviderMalformed>;
 
