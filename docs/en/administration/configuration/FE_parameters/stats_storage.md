@@ -79,6 +79,15 @@ This topic introduces the following types of FE configurations:
 - Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
 - Introduced in: v3.2.12
 
+### `enable_temporary_table_statistic_collect`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether analyze jobs collect statistics for temporary tables. It applies to the collection jobs built from analyze job definitions, that is, the automatic analyze jobs and the jobs created with CREATE ANALYZE. When this item is set to `false`, temporary tables are skipped while those jobs are built, and only non-temporary tables are analyzed. A one-off `ANALYZE TABLE` statement is not affected and still collects statistics for a temporary table. Set it to `false` when short-lived temporary tables generate collection work whose cost outweighs the value of their statistics.
+- Introduced in: v3.4.0
+
 ## Storage
 
 ### `allow_implicit_key_column_in_agg_add_column`
