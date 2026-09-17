@@ -2013,8 +2013,17 @@ class StarrocksSQLApiLib(object):
         status = ""
         job_id = None
         while True:
+            # Order by JobId, not State: ShowAlterStmtAnalyzer resolves the order-by column
+            # against SchemaChangeProcDir's list whatever the alter type, while these rows come
+            # from RollupProcDir, and the two diverge from the fourth column on. JobId is index 0
+            # in both; State is 9 in one and 8 in the other.
             res = self.execute_sql("SHOW ALTER MATERIALIZED VIEW ORDER BY JobId DESC LIMIT 1", True)
-            if (not res["status"]) or len(res["result"]) <= 0:
+            # A failed query and a successful empty one both arrive with no rows, and only one of
+            # them means "no job to wait for". Conflating them would turn a parser, permission or
+            # connection error into a wait that silently succeeds -- including a typo in the SQL
+            # just above, which would make all 76 call sites no-ops without a single failure.
+            tools.assert_true(res["status"], "show alter materialized view failed: %s" % res["msg"])
+            if len(res["result"]) <= 0:
                 return None
             job_id, status = res["result"][0][0], res["result"][0][8]
             if seen is not None and int(job_id) <= int(seen):
