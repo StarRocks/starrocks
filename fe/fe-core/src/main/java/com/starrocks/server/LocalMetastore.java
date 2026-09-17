@@ -63,6 +63,7 @@ import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -4087,6 +4088,31 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Column currentColumn = olapTable.getColumn(newColName);
         if (currentColumn != null) {
             throw ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
+        }
+
+        // A rename can create the ambiguity that CREATE TABLE refuses: zstd_compression_columns is
+        // rendered as "<name>:<bytes>", and the parser resolves a whole token as a column name before
+        // splitting it, so a column renamed INTO that rendered form would make the table's own DDL name
+        // the wrong column. The property is not restated here and nothing else revalidates it.
+        Map<ColumnId, Integer> zstdCompressionPageSizes = olapTable.getZstdCompressionPageSizes();
+        if (zstdCompressionPageSizes != null && !zstdCompressionPageSizes.isEmpty()) {
+            for (Map.Entry<ColumnId, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                Column nominated = olapTable.getColumn(entry.getKey());
+                if (nominated == null || entry.getValue() == null) {
+                    continue;
+                }
+                // The nominated column's own new name matters too: renaming v to w changes what the
+                // entry renders as, so check the post-rename name in both roles.
+                String nominatedName = nominated.getName().equalsIgnoreCase(colName) ? newColName : nominated.getName();
+                String rendered = nominatedName + ":" + entry.getValue();
+                if (rendered.equalsIgnoreCase(newColName)) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": that is exactly how "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " renders column "
+                                    + nominatedName + ", so the table's own DDL could not tell the two apart. "
+                                    + "Drop the page size from that entry first, or pick another name.");
+                }
+            }
         }
 
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(db.getId(), table.getId(), colName, newColName);

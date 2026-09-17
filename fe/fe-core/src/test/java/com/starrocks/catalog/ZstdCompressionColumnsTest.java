@@ -671,6 +671,36 @@ public class ZstdCompressionColumnsTest {
         Assertions.assertTrue(snapshot.getZstdCompressionColumnNames().contains(ColumnId.create("v1")));
     }
 
+    @Test
+    public void testCollisionCannotBeIntroducedAfterTheFact() throws Exception {
+        // CREATE TABLE refuses a nominated column whose rendered "<name>:<bytes>" form is also a column
+        // name. The same ambiguity can be built afterwards, by renaming or adding a column INTO that
+        // rendered form, and neither statement restates the property -- so both have to refuse it too,
+        // or the table ends up emitting DDL that names the wrong column.
+        starRocksAssert.withTable(createTableSql("t_cdict_collide",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:256k\""));
+        OlapTable table = getTable("t_cdict_collide");
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 262144),
+                table.getZstdCompressionPageSizes());
+
+        Exception renamed = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE " + DB_NAME + ".t_cdict_collide RENAME COLUMN v3 TO `v1:262144`"));
+        Assertions.assertTrue(renamed.getMessage() != null && renamed.getMessage().contains("could not tell the two apart"),
+                "unexpected message: " + renamed.getMessage());
+
+        Exception added = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE " + DB_NAME + ".t_cdict_collide ADD COLUMN `v1:262144` string"));
+        Assertions.assertTrue(added.getMessage() != null && added.getMessage().contains("can no longer be a zstd"),
+                "unexpected message: " + added.getMessage());
+
+        // Neither attempt changed anything, and an unrelated rename still works.
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 262144),
+                table.getZstdCompressionPageSizes());
+        Assertions.assertNull(table.getColumn("v1:262144"));
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_collide RENAME COLUMN v3 TO v3_renamed");
+        Assertions.assertNotNull(table.getColumn("v3_renamed"));
+    }
+
     private static void assertCreateTableFails(String tableName, String spec, String expectedMessage) {
         Exception e = Assertions.assertThrows(Exception.class,
                 () -> starRocksAssert.withTable(createTableSql(tableName,

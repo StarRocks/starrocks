@@ -1170,13 +1170,10 @@ public class PropertyAnalyzer {
                 // CREATE TABLE LIKE, or pasting the property out of SHOW CREATE TABLE, would configure
                 // the wrong column at the wrong page size. Refuse the pair rather than emit text that
                 // does not mean what it says.
-                if (pageSize > 0 && findColumnIgnoreCase(columns, column.getName() + ":" + pageSize) != null) {
-                    throw new AnalysisException(String.format(
-                            "Invalid zstd compression column '%s': this table also has a column named "
-                                    + "'%s:%d', which is exactly how SHOW CREATE TABLE would render this "
-                                    + "entry, so the two cannot be told apart. Rename one of them, or "
-                                    + "leave the page size off this column.",
-                            zstdCompressionColumn, column.getName(), pageSize));
+                String collision = zstdCompressionRenderCollision(columns, column.getName(), pageSize);
+                if (collision != null) {
+                    throw new AnalysisException(
+                            String.format("Invalid zstd compression column '%s': %s", zstdCompressionColumn, collision));
                 }
 
                 if (zstdCompressionColumnSet.contains(zstdCompressionColumn)) {
@@ -1191,6 +1188,27 @@ public class PropertyAnalyzer {
         }
 
         return zstdCompressionPageSizes;
+    }
+
+    /**
+     * Why rendering {@code columnName} at {@code pageSize} back into the property would be ambiguous, or
+     * null if it would not. SHOW CREATE TABLE writes the entry as "&lt;name&gt;:&lt;bytes&gt;" and the parser
+     * resolves a whole token as a column name before it splits one, so if that rendered form is itself a
+     * column on this table, the emitted DDL names the other column at the default page size. Kept apart
+     * from the property text because the collision can also be created AFTER the property is set, by
+     * renaming or adding a column into the rendered name.
+     */
+    public static String zstdCompressionRenderCollision(List<Column> columns, String columnName, int pageSize) {
+        if (pageSize <= 0) {
+            return null;
+        }
+        String rendered = columnName + ":" + pageSize;
+        if (findColumnIgnoreCase(columns, rendered) == null) {
+            return null;
+        }
+        return String.format("this table also has a column named '%s', which is exactly how SHOW CREATE TABLE "
+                + "would render this entry, so the two cannot be told apart. Rename one of them, or leave the "
+                + "page size off this column.", rendered);
     }
 
     /**

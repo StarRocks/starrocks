@@ -205,6 +205,18 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private static void checkZstdCompressionColumnsStillEligible(Set<ColumnId> zstdCompressionColumnIds,
                                                                  List<Column> newBaseSchema) throws DdlException {
+        checkZstdCompressionColumnsStillEligible(zstdCompressionColumnIds, newBaseSchema, null);
+    }
+
+    /**
+     * As above, and additionally rejects a schema in which a nominated column's rendered
+     * "&lt;name&gt;:&lt;bytes&gt;" form has become another column's name -- which a plain ADD COLUMN can do
+     * without ever restating the property. {@code pageSizes} may be null when the caller has none.
+     */
+    private static void checkZstdCompressionColumnsStillEligible(Set<ColumnId> zstdCompressionColumnIds,
+                                                                 List<Column> newBaseSchema,
+                                                                 Map<ColumnId, Integer> pageSizes)
+            throws DdlException {
         if (zstdCompressionColumnIds == null || newBaseSchema == null) {
             return;
         }
@@ -217,6 +229,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Column " + column.getName() + " can no longer be a zstd compression "
                         + "column: " + rejection + ". Remove it from "
                         + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " first.");
+            }
+            Integer pageSize = pageSizes == null ? null : pageSizes.get(column.getColumnId());
+            if (pageSize == null) {
+                continue;
+            }
+            String collision = PropertyAnalyzer.zstdCompressionRenderCollision(newBaseSchema, column.getName(),
+                    pageSize);
+            if (collision != null) {
+                throw new DdlException("Column " + column.getName() + " can no longer be a zstd compression "
+                        + "column: " + collision);
             }
         }
     }
@@ -1937,11 +1959,6 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        // A MODIFY COLUMN in this same statement can change the type or the keyness of a column the
-        // property still names, and the property survives that untouched.
-        checkZstdCompressionColumnsStillEligible(zstdCompressionColumnIds,
-                indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
-
         // Page sizes travel with the column set: when the property is restated they
         // come from it, and when it is not restated the existing ones stay.
         Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;
@@ -1963,6 +1980,13 @@ public class SchemaChangeHandler extends AlterHandler {
                 zstdCompressionPageSizeIds = olapTable.getZstdCompressionPageSizes();
             }
         }
+
+        // Two things this same statement can do to a column the property still names, without ever
+        // restating the property: change its type or keyness so it is no longer eligible, and -- via a
+        // plain ADD COLUMN -- introduce a column whose name is exactly how this entry renders, which
+        // makes the emitted DDL ambiguous. Both are checked against the schema about to be installed.
+        checkZstdCompressionColumnsStillEligible(zstdCompressionColumnIds,
+                indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()), zstdCompressionPageSizeIds);
 
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
@@ -3018,10 +3042,19 @@ public class SchemaChangeHandler extends AlterHandler {
                         throw new DdlException("MODIFY COLUMN that changes keyness on a range-distribution table "
                                 + "can not be combined with other alter operations");
                     }
-                    // This return bypasses finalAnalyze, so its check that the nominated ZSTD
-                    // columns are still eligible has to run here too: promoting one of them to a key
-                    // would otherwise leave the property naming a key column, which CREATE TABLE
-                    // rejects when the emitted DDL is replayed.
+                    // This return bypasses finalAnalyze, so two of its jobs have to be done here.
+                    // First: a property attached to this same statement would be collected into
+                    // propertyMap and then never consumed -- the rewrite job builds its shadow
+                    // schema from the table's current set and nothing writes a new one back, so the
+                    // flip would succeed while the compression request disappeared.
+                    if (propertyMap.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+                        throw new DdlException(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                                + " can not be changed by the same ALTER that changes the keyness of a column "
+                                + "on a range-distribution table; run it as a separate ALTER TABLE ... SET");
+                    }
+                    // Second: the nominated columns must still be eligible under the post-flip schema.
+                    // Promoting one of them to a key would otherwise leave the property naming a key
+                    // column, which CREATE TABLE rejects when the emitted DDL is replayed.
                     checkZstdCompressionColumnsStillEligible(olapTable.getZstdCompressionColumnIds(),
                             postFlipBaseSchema);
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
