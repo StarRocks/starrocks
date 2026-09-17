@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#define private public
+// The whole starrocks_test_objs target is compiled with -fno-access-control, which already
+// grants this test access to the private members it touches. Do not add `#define private public`
+// here: this is the first header the TU pulls in, so the macro also rewrites the access
+// specifiers of libstdc++'s own headers, and <sstream> then redeclares basic_stringbuf's
+// __xfer_bufptrs with a different access than its forward declaration (a hard error on gcc 14).
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
-#undef private
 
 #include <brpc/server.h>
 #include <gtest/gtest.h>

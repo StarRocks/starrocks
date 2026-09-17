@@ -31,10 +31,7 @@ ADD_BE_BENCH(${SRC_DIR}/bench/binary_column_copy_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/selective_copy_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hyperscan_vec_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/mem_equal_bench)
-# bit_unpack_bench is the only user of base/bit/bit_packing_arrow.h, which calls
-# arrow::internal::unpack32_avx2(). The thirdparty arrow we link carries no unpack32_* symbol at all,
-# so the bench cannot link. Nothing in production depends on that header.
-# ADD_BE_BENCH(${SRC_DIR}/bench/bit_unpack_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/bit_unpack_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/filter_data_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/cow_bench)
 # ADD_BE_BENCH(${SRC_DIR}/bench/object_cache_bench)

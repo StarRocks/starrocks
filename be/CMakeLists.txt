@@ -129,6 +129,21 @@ if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
     endif()
 endif()
 
+# arrow::internal::unpack32/unpack64 are an Arrow-internal API, and newer Arrow releases no longer
+# install the bpacking headers that declare them. Decide here whether they are usable instead of
+# letting bit_packing_arrow.h probe with __has_include: that probe also searches the default system
+# prefixes, so a stray Arrow under /usr/local/include makes the header take the Arrow path while the
+# thirdparty libarrow.a we actually link defines none of those symbols (undefined symbols at link
+# time). Only the thirdparty prefix counts, because that is the Arrow that gets linked.
+set(STARROCKS_ARROW_BPACKING_H "${THIRDPARTY_DIR}/include/arrow/util/bpacking.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_ARROW_BPACKING_H}")
+if (EXISTS "${STARROCKS_ARROW_BPACKING_H}")
+    add_compile_definitions(STARROCKS_HAVE_ARROW_BITPACKING_HEADERS=1)
+    message(STATUS "Arrow bit-unpacking kernels are available in ${THIRDPARTY_DIR}")
+else()
+    message(STATUS "Arrow bit-unpacking kernels are unavailable, falling back to bitpacking_default")
+endif()
+
 if (APPLE)
     find_library(STARROCKS_LIBEVENT_LIBRARY NAMES libevent.dylib event PATHS ${THIRDPARTY_DIR}/lib
                  ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
