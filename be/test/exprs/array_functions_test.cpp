@@ -5354,6 +5354,191 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
 }
 
+<<<<<<< HEAD
+=======
+// array_distinct_any_type hashes the elements one block of rows at a time instead of materializing
+// a hash per element for the whole chunk, so the block bookkeeping has to hold up across a block
+// boundary, across a row longer than the whole budget, and across null/empty rows in between.
+// Compare every row against a plain first-occurrence dedup.
+TEST_F(ArrayFunctionsTest, array_distinct_any_type_across_hash_blocks) {
+    // 600 rows x 8 elements is well past the 4096-element block budget.
+    constexpr size_t kShortRows = 600;
+    // Longer than the whole budget, so this row must form a block of its own.
+    constexpr int32_t kLongRowDistinct = 4200;
+
+    // std::nullopt as a row marks a NULL array; std::nullopt as an element marks a NULL element.
+    using Row = std::vector<std::optional<int32_t>>;
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    std::vector<std::optional<Row>> rows;
+
+    auto add_row = [&](std::optional<Row> row) {
+        if (!row.has_value()) {
+            src_column->append_nulls(1);
+        } else {
+            DatumArray datums;
+            for (const auto& v : *row) {
+                datums.emplace_back(v.has_value() ? Datum(*v) : Datum());
+            }
+            src_column->append_datum(datums);
+        }
+        rows.emplace_back(std::move(row));
+    };
+
+    for (size_t i = 0; i < kShortRows; i++) {
+        if (i % 37 == 0) {
+            add_row(std::nullopt);
+        } else if (i % 53 == 0) {
+            add_row(Row{});
+        } else if (i % 71 == 0) {
+            add_row(Row{static_cast<int32_t>(i)});
+        } else {
+            // Duplicates within the row exercise the collision fallback, which rescans the row
+            // with absolute element indices — the part that breaks if a block is misaddressed.
+            add_row(Row{static_cast<int32_t>(i % 3), static_cast<int32_t>(i % 3), std::nullopt,
+                        static_cast<int32_t>(i % 5), 7, 7, std::nullopt, static_cast<int32_t>(i % 2)});
+        }
+    }
+
+    Row long_row;
+    long_row.reserve(kLongRowDistinct + 6);
+    for (int32_t j = 0; j < kLongRowDistinct; j++) {
+        long_row.emplace_back(j);
+    }
+    // A few duplicates so the fallback also runs inside the oversized block.
+    for (int32_t j : {0, 1, kLongRowDistinct - 1, kLongRowDistinct / 2, 0, 1}) {
+        long_row.emplace_back(j);
+    }
+    add_row(long_row);
+
+    // Short rows after the oversized one: the next block starts from a fresh offset.
+    add_row(Row{1, 1, 2});
+    add_row(std::nullopt);
+    add_row(Row{3, 4, 3, 4, 5, std::nullopt, std::nullopt});
+
+    auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
+    ASSERT_EQ(rows.size(), dest_column->size());
+
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (!rows[i].has_value()) {
+            ASSERT_TRUE(dest_column->is_null(i)) << "row " << i;
+            continue;
+        }
+        ASSERT_FALSE(dest_column->is_null(i)) << "row " << i;
+
+        Row expected;
+        for (const auto& v : *rows[i]) {
+            bool seen = false;
+            for (const auto& kept : expected) {
+                if (kept == v) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                expected.emplace_back(v);
+            }
+        }
+
+        auto actual = dest_column->get(i).get_array();
+        ASSERT_EQ(expected.size(), actual.size()) << "row " << i;
+        for (size_t j = 0; j < expected.size(); j++) {
+            if (!expected[j].has_value()) {
+                ASSERT_TRUE(actual[j].is_null()) << "row " << i << " element " << j;
+            } else {
+                ASSERT_FALSE(actual[j].is_null()) << "row " << i << " element " << j;
+                ASSERT_EQ(*expected[j], actual[j].get_int32()) << "row " << i << " element " << j;
+            }
+        }
+    }
+}
+
+// array_distinct_any_type collects the surviving element indices for the whole chunk and copies them
+// with a single append_selective(), so the per-row offsets and the shared index buffer have to stay
+// in step across rows that keep everything, keep nothing, and are NULL.
+TEST_F(ArrayFunctionsTest, array_distinct_any_type_batched_across_rows) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{"a", "b", "c"});         // nothing to drop
+    src_column->append_datum(DatumArray{"x", "x", "x", "x"});    // collapses to one
+    src_column->append_datum(DatumArray{});                      // empty
+    src_column->append_nulls(1);                                 // NULL row
+    src_column->append_datum(DatumArray{"q"});                   // single element (array_size <= 1)
+    src_column->append_datum(DatumArray{Datum(), Datum(), "z"}); // NULL elements dedup too
+    src_column->append_datum(DatumArray{"b", "a", "b", "a"});    // order of first appearance
+
+    auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
+    ASSERT_EQ(7, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[['a','b','c'], ['x'], [], NULL, ['q'], [NULL,'z'], ['b','a']]");
+}
+
+// array_top_n also batches the element copy, and its offsets are advanced independently of the
+// element column - so every shape that produces fewer elements than the row holds has to line up.
+TEST_F(ArrayFunctionsTest, array_top_n_int) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{(int32_t)3, (int32_t)1, (int32_t)5, (int32_t)4}); // top 2 -> 5,4
+    src_column->append_datum(DatumArray{(int32_t)7});                                     // n > size
+    src_column->append_datum(DatumArray{});                                               // empty row
+    src_column->append_nulls(1);                                                          // NULL row
+    src_column->append_datum(DatumArray{(int32_t)9, Datum(), (int32_t)8});                // NULLs go last
+
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), std::move(count_column)}).value();
+    ASSERT_EQ(5, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[[5,4], [7], [], NULL, [9,8]]");
+}
+
+// n <= 0 short-circuits before the sort and must still advance the offsets, or the element column
+// and the offsets drift apart once the copy is batched to the end of the chunk.
+TEST_F(ArrayFunctionsTest, array_top_n_non_positive_count) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    src_column->append_datum(DatumArray{(int32_t)3, (int32_t)1});
+    src_column->append_datum(DatumArray{(int32_t)9, (int32_t)8});
+    src_column->append_datum(DatumArray{(int32_t)6, (int32_t)7});
+
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)0);
+    count_column->append_datum((int32_t)-1);
+    count_column->append_datum((int32_t)1);
+
+    // Row 2 keeps nothing (n < 0) and row 3 keeps the larger of {6, 7}.
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), std::move(count_column)}).value();
+    ASSERT_EQ(3, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[[], [], [7]]");
+}
+
+// A constant n is the shape the planner produces for `array_top_n(col, 3)`.
+TEST_F(ArrayFunctionsTest, array_top_n_const_count) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    src_column->append_datum(DatumArray{"b", "d", "a", "c"});
+    src_column->append_datum(DatumArray{"z", "y"});
+
+    auto count_data = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_data->append_datum((int32_t)3);
+    ColumnPtr count_column = ConstColumn::create(std::move(count_data), 2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {std::move(src_column), count_column}).value();
+    ASSERT_EQ(2, dest_column->size());
+    ASSERT_STREQ(dest_column->debug_string().c_str(), "[['d','c','b'], ['z','y']]");
+}
+
+TEST_F(ArrayFunctionsTest, array_top_n_only_null) {
+    auto src_column = ColumnHelper::create_const_null_column(3);
+    auto count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+    count_column->append_datum((int32_t)2);
+
+    auto dest_column = ArrayFunctions::array_top_n(nullptr, {src_column, std::move(count_column)}).value();
+    ASSERT_EQ(3, dest_column->size());
+    ASSERT_TRUE(dest_column->only_null());
+}
+
+>>>>>>> 88bfa22c43f... [Enhancement] Cut the redundant map copies out of map_filter / map_apply (#62909)
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
