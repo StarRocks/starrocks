@@ -1143,6 +1143,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
 
+    public static final String ENABLE_VECTOR_INDEX_SPLIT_AT_SEGMENT_BOUNDARY =
+            "enable_vector_index_split_at_segment_boundary";
+
     // BM25 scoring parameters (Lucene/Doris defaults). Passed to the BE BM25 scorer via TBM25SearchOptions.
     public static final String BM25_K1 = "bm25_k1";
     public static final String BM25_B = "bm25_b";
@@ -3419,6 +3422,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_VECTOR_INDEX_REFINE)
     private boolean enableVectorIndexRefine = false;
 
+    // A vector index is searched once per segment, so a split that cuts inside a segment makes every
+    // child repeat the whole search over its own row range. This keeps tablet-internal parallel scan
+    // splitting a vector query at segment boundaries; it constrains where a split cuts, not which split
+    // strategy runs. Turning it off restores the row-count split, at that cost.
+    @VarAttr(name = ENABLE_VECTOR_INDEX_SPLIT_AT_SEGMENT_BOUNDARY)
+    private boolean enableVectorIndexSplitAtSegmentBoundary = true;
+
     @VarAttr(name = BM25_K1)
     private double bm25K1 = 1.2;
 
@@ -3427,6 +3437,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableVectorIndexRefine() {
         return enableVectorIndexRefine;
+    }
+
+    public boolean isEnableVectorIndexSplitAtSegmentBoundary() {
+        return enableVectorIndexSplitAtSegmentBoundary;
     }
 
     public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {

@@ -82,6 +82,15 @@ public:
     std::string name() const override { return "physical_split_morsel_queue"; }
     Type type() const override { return PHYSICAL_SPLIT; }
 
+    // Stop splitting at segment boundaries instead of at `_splitted_scan_rows`: every morsel then
+    // covers exactly one segment in full. Required by vector-index (ANN) scans -- each split child
+    // re-runs the whole index search over its own rowid range
+    // (SegmentIterator::_get_row_ranges_by_vector_index), so cutting one segment into N children
+    // walks the same graph N times and yields N per-slice top-k lists instead of the segment's own.
+    void set_split_at_segment_boundary(bool split_at_segment_boundary) {
+        _split_at_segment_boundary = split_at_segment_boundary;
+    }
+
 private:
     bool _is_last_split_of_current_morsel();
 
@@ -118,6 +127,7 @@ private:
     SparseRangeIterator<> _segment_range_iter;
     // The number of unprocessed rows of the current segment.
     size_t _num_segment_rest_rows = 0;
+    bool _split_at_segment_boundary = false;
 
     MemPool _mempool;
 };

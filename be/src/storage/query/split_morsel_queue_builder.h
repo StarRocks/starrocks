@@ -21,8 +21,11 @@
 
 namespace starrocks::pipeline {
 
+// `split_at_segment_boundary` makes every morsel cover exactly one segment; see
+// PhysicalSplitMorselQueue::set_split_at_segment_boundary.
 MorselQueueBuilderPtr make_physical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
-                                                               int64_t splitted_scan_rows);
+                                                               int64_t splitted_scan_rows,
+                                                               bool split_at_segment_boundary);
 MorselQueueBuilderPtr make_logical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
                                                               int64_t splitted_scan_rows);
 MorselQueueBuilderPtr make_lake_prepared_physical_split_morsel_queue_builder(Morsels&& morsels,

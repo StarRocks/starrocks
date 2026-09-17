@@ -89,16 +89,24 @@ private:
 
 class PhysicalSplitMorselQueueBuilder final : public SplitMorselQueueBuilderBase {
 public:
-    using SplitMorselQueueBuilderBase::SplitMorselQueueBuilderBase;
+    PhysicalSplitMorselQueueBuilder(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows,
+                                    bool split_at_segment_boundary)
+            : SplitMorselQueueBuilderBase(std::move(morsels), degree_of_parallelism, splitted_scan_rows),
+              _split_at_segment_boundary(split_at_segment_boundary) {}
     ~PhysicalSplitMorselQueueBuilder() override = default;
 
 protected:
     StatusOr<MorselQueuePtr> build_split_queue(Morsels&& morsels) const override {
-        MorselQueuePtr queue = std::make_unique<PhysicalSplitMorselQueue>(std::move(morsels), degree_of_parallelism(),
-                                                                          splitted_scan_rows());
+        auto physical_split_queue = std::make_unique<PhysicalSplitMorselQueue>(
+                std::move(morsels), degree_of_parallelism(), splitted_scan_rows());
+        physical_split_queue->set_split_at_segment_boundary(_split_at_segment_boundary);
+        MorselQueuePtr queue = std::move(physical_split_queue);
         apply_flags(queue.get());
         return queue;
     }
+
+private:
+    const bool _split_at_segment_boundary;
 };
 
 class LogicalSplitMorselQueueBuilder final : public SplitMorselQueueBuilderBase {
@@ -203,12 +211,23 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
         }
 
         SparseRange<> taken_range;
-        _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
-        _num_segment_rest_rows -= taken_range.span_size();
-        if (_num_segment_rest_rows < _splitted_scan_rows) {
-            // If there are too few rows left in the segment, take them all this time.
-            _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
+        if (_split_at_segment_boundary) {
+            // Take the segment whole. next_range() stops early on an unsorted range, so keep
+            // draining until the iterator reports nothing left.
+            size_t rest_rows = _segment_range_iter.remaining_rows();
+            while (rest_rows > 0 && _segment_range_iter.has_more()) {
+                _segment_range_iter.next_range(static_cast<rowid_t>(rest_rows), &taken_range);
+                rest_rows = _segment_range_iter.remaining_rows();
+            }
             _num_segment_rest_rows = 0;
+        } else {
+            _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
+            _num_segment_rest_rows -= taken_range.span_size();
+            if (_num_segment_rest_rows < _splitted_scan_rows) {
+                // If there are too few rows left in the segment, take them all this time.
+                _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
+                _num_segment_rest_rows = 0;
+            }
         }
 
         VLOG_ROW << "PhysicalSplitMorselQueue::_try_get_split_from_single_tablet "
@@ -223,7 +242,8 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
                          _is_first_split_of_segment);
         _is_first_split_of_segment = false;
 
-        if (_is_last_split_of_current_morsel()) {
+        // One segment per morsel: return before the accumulating loop pulls in the next segment.
+        if (_split_at_segment_boundary || _is_last_split_of_current_morsel()) {
             return rowid_range;
         }
     }
@@ -990,9 +1010,10 @@ StatusOr<MorselPtr> LakePreparedPhysicalSplitMorselQueue::allocate_pre_refinemen
 }
 
 MorselQueueBuilderPtr make_physical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
-                                                               int64_t splitted_scan_rows) {
+                                                               int64_t splitted_scan_rows,
+                                                               bool split_at_segment_boundary) {
     return std::make_unique<PhysicalSplitMorselQueueBuilder>(std::move(morsels), degree_of_parallelism,
-                                                             splitted_scan_rows);
+                                                             splitted_scan_rows, split_at_segment_boundary);
 }
 
 MorselQueueBuilderPtr make_logical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,

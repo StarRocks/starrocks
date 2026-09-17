@@ -36,12 +36,15 @@
 #include "common/logging.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/InternalService_types.h"
+#include "gutil/casts.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/query/split_morsel_queue.h"
+#include "storage/query/split_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -707,6 +710,101 @@ public:
         return params;
     }
 
+    // Writes two rowsets holding three segments in total (rowset 1 has two, rowset 2 has one),
+    // every segment carrying the same rows. Reports the per-segment row count through
+    // `rows_per_segment`; the return type stays void so the ASSERT_* macros below are usable.
+    void write_two_rowsets_with_three_segments(size_t* rows_per_segment = nullptr) {
+        std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+        std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+        std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
+        std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        auto c3 = Int32Column::create();
+        c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+        c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+        c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+        Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
+
+        VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+        {
+            // write rowset 1 with 2 segments
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+            ASSERT_OK(writer->open());
+
+            // write rowset data
+            // segment #1
+            ASSERT_OK(writer->write(chunk0));
+            ASSERT_OK(writer->write(chunk1));
+            ASSERT_OK(writer->finish());
+
+            // segment #2
+            ASSERT_OK(writer->write(chunk0));
+            ASSERT_OK(writer->write(chunk1));
+            ASSERT_OK(writer->finish());
+
+            const auto& files = writer->segments();
+            ASSERT_EQ(2, files.size());
+
+            // add rowset metadata
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(true);
+            rowset->set_id(1);
+            rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
+            for (const auto& file : writer->segments()) {
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(file.path);
+                segment_meta->set_size(file.size.value());
+            }
+
+            writer->close();
+        }
+
+        {
+            // write rowset 2 with 1 segment
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+            ASSERT_OK(writer->open());
+
+            // write rowset data
+            // segment #1
+            ASSERT_OK(writer->write(chunk0));
+            ASSERT_OK(writer->write(chunk1));
+            ASSERT_OK(writer->finish());
+
+            const auto& files = writer->segments();
+            ASSERT_EQ(1, files.size());
+
+            // add rowset metadata
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(false);
+            rowset->set_id(2);
+            rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
+            for (const auto& file : writer->segments()) {
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(file.path);
+                segment_meta->set_size(file.size.value());
+            }
+
+            writer->close();
+        }
+
+        // write tablet metadata
+        _tablet_metadata->set_version(3);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        if (rows_per_segment != nullptr) {
+            *rows_per_segment = chunk0.num_rows() + chunk1.num_rows();
+        }
+    }
+
 protected:
     constexpr static const char* const kTestDirectory = "test_tablet_reader_split";
 
@@ -717,92 +815,7 @@ protected:
 };
 
 TEST_F(LakeTabletReaderSpit, test_reader_split) {
-    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
-    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
-
-    std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
-    std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-
-    auto c0 = Int32Column::create();
-    auto c1 = Int32Column::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
-    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
-    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
-
-    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
-    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
-
-    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
-
-    {
-        // write rowset 1 with 2 segments
-        int64_t txn_id = next_id();
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
-        ASSERT_OK(writer->open());
-
-        // write rowset data
-        // segment #1
-        ASSERT_OK(writer->write(chunk0));
-        ASSERT_OK(writer->write(chunk1));
-        ASSERT_OK(writer->finish());
-
-        // segment #2
-        ASSERT_OK(writer->write(chunk0));
-        ASSERT_OK(writer->write(chunk1));
-        ASSERT_OK(writer->finish());
-
-        const auto& files = writer->segments();
-        ASSERT_EQ(2, files.size());
-
-        // add rowset metadata
-        auto* rowset = _tablet_metadata->add_rowsets();
-        rowset->set_overlapped(true);
-        rowset->set_id(1);
-        rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
-        for (const auto& file : writer->segments()) {
-            auto* segment_meta = rowset->add_segment_metas();
-            segment_meta->set_filename(file.path);
-            segment_meta->set_size(file.size.value());
-        }
-
-        writer->close();
-    }
-
-    {
-        // write rowset 2 with 1 segment
-        int64_t txn_id = next_id();
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
-        ASSERT_OK(writer->open());
-
-        // write rowset data
-        // segment #1
-        ASSERT_OK(writer->write(chunk0));
-        ASSERT_OK(writer->write(chunk1));
-        ASSERT_OK(writer->finish());
-
-        const auto& files = writer->segments();
-        ASSERT_EQ(1, files.size());
-
-        // add rowset metadata
-        auto* rowset = _tablet_metadata->add_rowsets();
-        rowset->set_overlapped(false);
-        rowset->set_id(2);
-        rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
-        for (const auto& file : writer->segments()) {
-            auto* segment_meta = rowset->add_segment_metas();
-            segment_meta->set_filename(file.path);
-            segment_meta->set_size(file.size.value());
-        }
-
-        writer->close();
-    }
-
-    // write tablet metadata
-    _tablet_metadata->set_version(3);
-    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    write_two_rowsets_with_three_segments();
 
     {
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);
@@ -856,6 +869,275 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         read_chunk_ptr->reset();
         ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
 
+        reader->close();
+    }
+}
+
+// A vector-index scan must not be split below a segment boundary. Each split child re-runs the whole
+// ANN search over its own rowid range (SegmentIterator::_get_row_ranges_by_vector_index), so cutting
+// one segment into N children walks the same graph N times and returns N per-slice top-k lists
+// instead of the per-segment top-k the unsplit scan defines.
+TEST_F(LakeTabletReaderSpit, test_reader_splits_at_segment_boundary_for_ann) {
+    constexpr size_t kNumSegments = 3;
+    size_t rows_per_segment = 0;
+    write_two_rowsets_with_three_segments(&rows_per_segment);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    // Baseline: the row-count split cuts inside segments, so it yields more splits than segments.
+    size_t num_row_splits = 0;
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        reader->get_split_tasks(&split_tasks);
+        num_row_splits = split_tasks.size();
+        reader->close();
+    }
+    ASSERT_GT(num_row_splits, kNumSegments);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);
+    auto params = generate_tablet_reader_params(&scan_range);
+    params.use_vector_index = true;
+    params.split_at_segment_boundary = true;
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    reader->get_split_tasks(&split_tasks);
+    ASSERT_EQ(kNumSegments, split_tasks.size());
+
+    std::set<std::pair<RowsetId, uint64_t>> covered_segments;
+    for (const auto& task : split_tasks) {
+        auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+        ASSERT_NE(nullptr, ctx->rowid_range);
+        ASSERT_EQ(1, ctx->rowid_range->rowid_range_per_segment_per_rowset.size());
+        const auto& [rowset_id, segment_map] = *ctx->rowid_range->rowid_range_per_segment_per_rowset.begin();
+        ASSERT_EQ(1, segment_map.size());
+        const auto& [segment_id, split] = *segment_map.begin();
+        // The whole segment in one piece, and marked first split so the storage layer keeps treating
+        // it as the segment's own scan range.
+        ASSERT_NE(nullptr, split.row_id_range);
+        EXPECT_EQ(rows_per_segment, split.row_id_range->span_size());
+        EXPECT_TRUE(split.is_first_split_of_segment);
+        EXPECT_TRUE(covered_segments.emplace(rowset_id, segment_id).second);
+    }
+    EXPECT_EQ(kNumSegments, covered_segments.size());
+    reader->close();
+}
+
+// The shared-nothing scan node reaches the same queue through make_physical_split_morsel_queue_builder,
+// so the segment-boundary mode has to survive that path as well. splitted_scan_rows is set above the
+// tablet's whole row count on purpose: the queue's outer loop keeps pulling the next segment into the
+// same morsel until that budget is met, so this is what proves a morsel never spans two segments. (The
+// lake reader tests cannot cover it -- a budget that large trips the tablet-too-small gate in open().)
+TEST_F(LakeTabletReaderSpit, test_physical_split_builder_splits_at_segment_boundary) {
+    constexpr size_t kNumSegments = 3;
+    size_t rows_per_segment = 0;
+    write_two_rowsets_with_three_segments(&rows_per_segment);
+
+    auto tablet = std::make_shared<Tablet>(_tablet_mgr.get(), _tablet_metadata->id());
+    tablet->set_version_hint(_tablet_metadata->version());
+    std::vector<BaseTabletSharedPtr> tablets{tablet};
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets(1);
+    for (auto& rowset : Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata)) {
+        tablet_rowsets[0].emplace_back(rowset);
+    }
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    pipeline::Morsels morsels;
+    morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(1, scan_range));
+    const int64_t whole_tablet_rows = static_cast<int64_t>(kNumSegments * rows_per_segment) + 1;
+    auto builder = pipeline::make_physical_split_morsel_queue_builder(std::move(morsels), /*degree_of_parallelism=*/4,
+                                                                      /*splitted_scan_rows=*/whole_tablet_rows,
+                                                                      /*split_at_segment_boundary=*/true);
+    ASSIGN_OR_ABORT(auto queue, builder->build());
+    auto* olap_queue = down_cast<pipeline::OlapMorselQueue*>(queue.get());
+    olap_queue->set_tablets(tablets);
+    olap_queue->set_tablet_rowsets(tablet_rowsets);
+    olap_queue->set_tablet_schema(_tablet_schema);
+
+    size_t num_morsels = 0;
+    while (true) {
+        ASSIGN_OR_ABORT(auto morsel, queue->try_get());
+        if (morsel == nullptr) {
+            break;
+        }
+        auto* physical_split = down_cast<pipeline::PhysicalSplitScanMorsel*>(morsel.get());
+        const auto& per_rowset = physical_split->get_rowid_range_option()->rowid_range_per_segment_per_rowset;
+        ASSERT_EQ(1, per_rowset.size());
+        const auto& segment_map = per_rowset.begin()->second;
+        ASSERT_EQ(1, segment_map.size());
+        EXPECT_EQ(rows_per_segment, segment_map.begin()->second.row_id_range->span_size());
+        ++num_morsels;
+    }
+    EXPECT_EQ(kNumSegments, num_morsels);
+}
+
+// The lake prepared physical split seeds its own per-segment ranges, so it has to honour the segment
+// boundary as well -- otherwise enabling that scan would hand ANN queries back the sub-segment split.
+TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_at_segment_boundary_for_ann) {
+    constexpr size_t kNumSegments = 3;
+    size_t rows_per_segment = 0;
+    write_two_rowsets_with_three_segments(&rows_per_segment);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    // Sums the rows the seed tasks cover, asserting one task per segment along the way.
+    auto seeded_rows = [&](bool split_at_segment_boundary) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, /*could_split_physically=*/true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.enable_prepared_physical_split_scan = true;
+        params.use_vector_index = true;
+        params.split_at_segment_boundary = split_at_segment_boundary;
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(params));
+
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        reader->get_split_tasks(&split_tasks);
+        EXPECT_EQ(kNumSegments, split_tasks.size());
+
+        size_t total_rows = 0;
+        for (const auto& task : split_tasks) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            EXPECT_EQ(pipeline::LakeSplitContext::RowidRangeSource::INITIAL_COARSE, ctx->rowid_range_source);
+            const auto& per_rowset = ctx->rowid_range->rowid_range_per_segment_per_rowset;
+            EXPECT_EQ(1, per_rowset.size());
+            const auto& segment_map = per_rowset.begin()->second;
+            EXPECT_EQ(1, segment_map.size());
+            total_rows += segment_map.begin()->second.row_id_range->span_size();
+        }
+        reader->close();
+        return total_rows;
+    };
+
+    // Baseline: a seed only covers splitted_scan_rows of its segment; the rest is refined later.
+    EXPECT_LT(seeded_rows(/*split_at_segment_boundary=*/false), kNumSegments * rows_per_segment);
+    // ANN: the seed already covers its whole segment, so nothing is left to refine.
+    EXPECT_EQ(kNumSegments * rows_per_segment, seeded_rows(/*split_at_segment_boundary=*/true));
+}
+
+// Kill switch: with the segment-boundary split off, an ANN scan falls back to the row-count split on
+// both the plain and the prepared path.
+TEST_F(LakeTabletReaderSpit, test_split_at_segment_boundary_can_be_disabled) {
+    constexpr size_t kNumSegments = 3;
+    size_t rows_per_segment = 0;
+    write_two_rowsets_with_three_segments(&rows_per_segment);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    // Plain split path: back to more morsels than segments.
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, /*could_split_physically=*/true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.use_vector_index = true;
+        params.split_at_segment_boundary = false;
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        reader->get_split_tasks(&split_tasks);
+        EXPECT_GT(split_tasks.size(), kNumSegments);
+        reader->close();
+    }
+
+    // Prepared split path: back to seeds that cover only part of their segment.
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, /*could_split_physically=*/true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.enable_prepared_physical_split_scan = true;
+        params.use_vector_index = true;
+        params.split_at_segment_boundary = false;
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        reader->get_split_tasks(&split_tasks);
+        size_t total_rows = 0;
+        for (const auto& task : split_tasks) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            for (const auto& [rowset_id, segment_map] : ctx->rowid_range->rowid_range_per_segment_per_rowset) {
+                for (const auto& [segment_id, split] : segment_map) {
+                    total_rows += split.row_id_range->span_size();
+                }
+            }
+        }
+        EXPECT_LT(total_rows, kNumSegments * rows_per_segment);
+        reader->close();
+    }
+}
+
+// rows_per_split() and the split queue are shared by every query on these paths, so the ANN-only flag
+// must not act on a scan that has no vector index. Pins the guard at the point of use, independently of
+// whether the connector keeps the flag confined to the vector-index branch.
+TEST_F(LakeTabletReaderSpit, test_split_at_segment_boundary_needs_a_vector_index) {
+    constexpr size_t kNumSegments = 3;
+    size_t rows_per_segment = 0;
+    write_two_rowsets_with_three_segments(&rows_per_segment);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    // Plain split path: the row-count split still cuts inside segments.
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, /*could_split_physically=*/true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.use_vector_index = false;
+        params.split_at_segment_boundary = true;
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        reader->get_split_tasks(&split_tasks);
+        EXPECT_GT(split_tasks.size(), kNumSegments);
+        reader->close();
+    }
+
+    // Prepared split path: the seeds still cover only splitted_scan_rows of their segment.
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, /*could_split_physically=*/true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.enable_prepared_physical_split_scan = true;
+        params.use_vector_index = false;
+        params.split_at_segment_boundary = true;
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        reader->get_split_tasks(&split_tasks);
+        size_t total_rows = 0;
+        for (const auto& task : split_tasks) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            for (const auto& [rowset_id, segment_map] : ctx->rowid_range->rowid_range_per_segment_per_rowset) {
+                for (const auto& [segment_id, split] : segment_map) {
+                    total_rows += split.row_id_range->span_size();
+                }
+            }
+        }
+        EXPECT_LT(total_rows, kNumSegments * rows_per_segment);
         reader->close();
     }
 }

@@ -808,6 +808,7 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     vec_opts.__set_vector_range(-1.5);
     vec_opts.__set_has_vector_range(true);
     vec_opts.__set_result_order(0);
+    vec_opts.__set_split_at_segment_boundary(true);
     vec_opts.__set_pq_refine_factor(1.0);
     vec_opts.__set_k_factor(1.0);
     lake_scan_node.__set_vector_search_options(vec_opts);
@@ -916,6 +917,9 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
 
     const auto& params = ds.TEST_params();
     EXPECT_TRUE(params.use_vector_index);
+    // FE folds enable_vector_index_split_at_segment_boundary into this thrift field; it must survive
+    // into the reader params, which is what keeps a split off a sub-segment range.
+    EXPECT_TRUE(params.split_at_segment_boundary);
     EXPECT_TRUE(params.has_predicate_above_iterator);
     ASSERT_NE(params.vector_search_option, nullptr);
     EXPECT_EQ(params.vector_search_option->k, 10);
@@ -1108,6 +1112,10 @@ TEST_F(LakeDataSourceTest, open_with_bm25_search_options) {
     EXPECT_DOUBLE_EQ(params.bm25_search_option->b, 0.75);
     ASSERT_NE(params.bm25_stats, nullptr);
     EXPECT_EQ(params.bm25_stats->N, 3);
+    // The segment-boundary flag is ANN-only: this scan node carries no vector_search_options, so the
+    // flag must stay off and leave the row-count split alone.
+    EXPECT_FALSE(params.use_vector_index);
+    EXPECT_FALSE(params.split_at_segment_boundary);
 
     // 6) Read the scored rows back: the segment iterator emits the synthetic __bm25_score column per row.
     std::unordered_map<int32_t, double> k_to_score;

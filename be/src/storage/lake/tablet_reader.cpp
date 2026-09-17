@@ -263,6 +263,13 @@ static bool allocate_initial_coarse_split(const PreparedSegmentReadStatePtr& seg
 }
 
 static rowid_t rows_per_split(const TabletReaderParams& params) {
+    // A vector-index scan searches the index once per segment, so every sub-segment child would repeat
+    // the whole search over its own rowid range. Take the segment whole instead. This function is shared
+    // by every query on the prepared-split path, so the vector-index conjunct is what keeps the segment
+    // budget out of a scan that has no index to repeat.
+    if (params.use_vector_index && params.split_at_segment_boundary) {
+        return std::numeric_limits<rowid_t>::max();
+    }
     return params.splitted_scan_rows > 0 ? static_cast<rowid_t>(std::min<int64_t>(params.splitted_scan_rows,
                                                                                   std::numeric_limits<rowid_t>::max()))
                                          : std::numeric_limits<rowid_t>::max();
@@ -396,8 +403,14 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         std::shared_ptr<pipeline::SplitMorselQueue> split_morsel_queue = nullptr;
 
         if (_could_split_physically) {
-            split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
+            auto physical_split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
                     std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+            // A vector-index scan searches the index once per segment, so a sub-segment split would
+            // repeat the whole search in every child. Split at segment boundaries instead. The queue is
+            // shared with every other query, hence the vector-index conjunct.
+            physical_split_morsel_queue->set_split_at_segment_boundary(read_params.use_vector_index &&
+                                                                       read_params.split_at_segment_boundary);
+            split_morsel_queue = std::move(physical_split_morsel_queue);
         } else {
             // logical
             split_morsel_queue = std::make_shared<pipeline::LogicalSplitMorselQueue>(

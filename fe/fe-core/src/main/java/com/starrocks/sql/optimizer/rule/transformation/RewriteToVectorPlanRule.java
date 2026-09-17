@@ -134,6 +134,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
         opts.setEnableUseANN(true);
         opts.setRefineDistance(doRefine);
+        opts.setSplitAtSegmentBoundary(context.getSessionVariable().isEnableVectorIndexSplitAtSegmentBoundary());
         opts.setLimitK(topNOp.getLimit());
         opts.setResultOrder(info.isAscending);
         opts.setDistanceColumnName("__vector_" + info.outColumnRef.getName());

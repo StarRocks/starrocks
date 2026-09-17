@@ -27,6 +27,9 @@ public class VectorSearchOptions {
     // When true, re-rank the ANN result by recomputing the exact distance on the full-precision
     // vectors (used for a quantized index whose index distance is lossy).
     private boolean refineDistance = false;
+    // Whether a split of this scan must land on a segment boundary. Folded from the
+    // enable_vector_index_split_at_segment_boundary session variable; see TVectorSearchOptions.
+    private boolean splitAtSegmentBoundary = true;
 
     private String distanceColumnName = "";
     private int distanceSlotId = 0;
@@ -52,6 +55,10 @@ public class VectorSearchOptions {
 
     public void setRefineDistance(boolean refineDistance) {
         this.refineDistance = refineDistance;
+    }
+
+    public void setSplitAtSegmentBoundary(boolean splitAtSegmentBoundary) {
+        this.splitAtSegmentBoundary = splitAtSegmentBoundary;
     }
 
     public String getDistanceColumnName() {
@@ -94,6 +101,7 @@ public class VectorSearchOptions {
         opts.setHas_vector_range(hasPredicateRange);
         opts.setResult_order(resultOrder);
         opts.setRefine_distance(refineDistance);
+        opts.setSplit_at_segment_boundary(splitAtSegmentBoundary);
         // Also set the deprecated use_ivfpq to the same value during the deprecation window: an older BE
         // (which only understands use_ivfpq) then runs the same path under a rolling upgrade. The two
         // flags always mean the same thing -- "run the refine path". Remove once no old BE remains.

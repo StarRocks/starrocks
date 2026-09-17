@@ -844,6 +844,12 @@ struct TVectorSearchOptions {
   // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
   // Whether vector_range is present. Kept separate because similarity metrics can have negative bounds.
   14: optional bool has_vector_range;
+  // When true, a split of this scan must land on a segment boundary. The index is searched once per
+  // segment, so a sub-segment split makes every child repeat the whole search over its own row range.
+  // FE folds the enable_vector_index_split_at_segment_boundary session variable into this flag. It
+  // constrains where an existing split cuts -- it does not select a split strategy, and is orthogonal
+  // to use_prepared_physical_split_scan.
+  15: optional bool split_at_segment_boundary;
 }
 
 // One (indexed column, query string) unit of a BM25 full-text ranking scan. v1 always carries exactly

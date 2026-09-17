@@ -1273,6 +1273,13 @@ The following variables tune the back-pressure behavior and only take effect whe
 * **Data type**: Boolean
 * **Scope**: Session
 
+### enable_vector_index_split_at_segment_boundary
+
+* **Description**: Whether a split of a vector query lands on a segment boundary when tablet internal parallel scan is used. A vector index is searched once per segment, so a split that cuts inside a segment makes every resulting subtask search that whole index again over its own row range. This variable constrains where a split cuts; it does not choose a split strategy, and it does not affect queries that do not use a vector index. Setting it to `false` restores the row-count split and the repeated index searches that come with it.
+* **Default**: `true`
+* **Data type**: Boolean
+* **Scope**: Session
+
 ### enable_view_based_mv_rewrite
 
 * **Description**: Whether to enable query rewrite for logical view-based materialized views. If this item is set to `true`, the logical view is used as a unified node to rewrite the queries against itself for better performance. If this item is set to `false`, the system transcribes the queries against logical views into queries against physical tables or materialized views and then rewrites them.

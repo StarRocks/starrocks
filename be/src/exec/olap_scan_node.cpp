@@ -507,10 +507,19 @@ StatusOr<pipeline::MorselQueueBuilderPtr> OlapScanNode::convert_scan_range_to_mo
         return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
+    // A vector-index scan searches the index once per segment, so any split below a segment boundary
+    // repeats the whole search in every child. FE folds the session switch into split_at_segment_boundary;
+    // this only constrains where the physical split cuts. A vector index is restricted to
+    // DUPLICATE/PRIMARY tables, which always take the physical-split path.
+    const auto& vector_options = _olap_scan_node.vector_search_options;
+    const bool split_at_segment_boundary = _olap_scan_node.__isset.vector_search_options &&
+                                           vector_options.enable_use_ann && vector_options.split_at_segment_boundary;
+
     // Split tablet physically.
     ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(pruned_scan_ranges));
     if (ok) {
-        return pipeline::make_physical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);
+        return pipeline::make_physical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows,
+                                                                  split_at_segment_boundary);
     }
 
     return pipeline::make_logical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);

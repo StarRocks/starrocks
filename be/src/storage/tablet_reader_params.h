@@ -124,6 +124,10 @@ struct TabletReaderParams {
     bool enable_gin_filter = false;
 
     bool use_vector_index = false;
+    // A split of this scan must land on a segment boundary: the index is searched once per segment, so
+    // a sub-segment split repeats the whole search in every child. Folded by FE from the
+    // enable_vector_index_split_at_segment_boundary session variable.
+    bool split_at_segment_boundary = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 

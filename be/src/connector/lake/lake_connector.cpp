@@ -554,6 +554,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.use_vector_index = _use_vector_index;
     if (_use_vector_index) {
         const auto& vector_options = thrift_lake_scan_node.vector_search_options;
+        _params.split_at_segment_boundary = vector_options.split_at_segment_boundary;
         _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
         _params.vector_search_option->k = vector_options.vector_limit_k;
         for (const std::string& str : vector_options.query_vector) {

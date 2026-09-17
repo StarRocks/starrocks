@@ -173,7 +173,8 @@ TEST_F(MorselQueueBuilderTest, olap_dynamic_builder_from_preserves_generic_build
 }
 
 TEST_F(MorselQueueBuilderTest, split_builders_build_split_queues) {
-    auto physical_builder = make_physical_split_morsel_queue_builder(make_morsels(1), 4, 1024);
+    auto physical_builder =
+            make_physical_split_morsel_queue_builder(make_morsels(1), 4, 1024, /*split_at_segment_boundary=*/false);
     ASSERT_FALSE(physical_builder->can_uniform_distribute());
     ASSERT_EQ(1, physical_builder->num_original_morsels());
     ASSERT_EQ(4, physical_builder->max_degree_of_parallelism());
@@ -203,7 +204,8 @@ TEST_F(MorselQueueBuilderTest, split_builders_build_split_queues) {
 }
 
 TEST_F(MorselQueueBuilderTest, split_builders_reject_build_from_morsels) {
-    auto builder = make_physical_split_morsel_queue_builder(make_morsels(1), 4, 1024);
+    auto builder =
+            make_physical_split_morsel_queue_builder(make_morsels(1), 4, 1024, /*split_at_segment_boundary=*/false);
     auto queue_or = builder->build_from_morsels(make_morsels(1));
     ASSERT_FALSE(queue_or.ok());
     ASSERT_TRUE(queue_or.status().is_not_supported());
