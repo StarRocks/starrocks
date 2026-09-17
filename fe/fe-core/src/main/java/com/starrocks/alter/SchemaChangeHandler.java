@@ -3109,6 +3109,18 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         }
 
+        // Both routed branches below return before the fastSchemaEvolution flag set above is ever
+        // read, and neither job carries this property: the async trailing-key job updates the tablet
+        // schemas but its updateCatalogUnprotected never calls setZstdCompressionColumns, and the
+        // K-tablet rewrite builds its shadow schema from the table's current (old) set. Accepting the
+        // request here would report success and then lose it, so say no and let the caller issue it
+        // on its own. (bloom_filter_columns has the same hole on these routes; it predates this.)
+        if ((rangeKeyAddPending || rangeKeyWidenPending) && schemaChangeData.isZstdCompressionColumnsChanged()) {
+            throw new DdlException(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                    + " can not be changed by the same ALTER that adds or widens a key column of a "
+                    + "range-distribution table; run it as a separate ALTER TABLE ... SET");
+        }
+
         if (rangeKeyAddPending) {
             // A routed ADD of a key column on a shared-data range table: if the resolved change is a
             // metadata-only trailing sort-key add, run the async schema-evolution job that reprojects

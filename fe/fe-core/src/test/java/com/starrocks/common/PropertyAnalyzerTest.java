@@ -204,6 +204,27 @@ public class PropertyAnalyzerTest {
         Assertions.assertEquals(Sets.newHashSet("v:4096"), colonPageSizes.keySet());
         Assertions.assertEquals(Integer.valueOf(0), colonPageSizes.get("v:4096"));
 
+        // The rendered form is "<name>:<bytes>". If THAT is also a column here, SHOW CREATE TABLE
+        // would emit text naming the other column, so the pair is refused up front.
+        List<Column> clashColumns = Lists.newArrayList(columns);
+        clashColumns.add(new Column("v", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        clashColumns.add(new Column("v:262144", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        Map<String, String> clashProperties = Maps.newHashMap();
+        clashProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v:256k");
+        try {
+            PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(clashProperties, clashColumns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("cannot be told apart"), e.getMessage());
+        }
+
+        // The same column set without the colliding name is fine, and so is naming the odd column
+        // itself -- it is only the pair that is ambiguous.
+        Map<String, String> oddNameProperties = Maps.newHashMap();
+        oddNameProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v:262144");
+        Assertions.assertEquals(Sets.newHashSet("v:262144"),
+                PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(oddNameProperties, clashColumns).keySet());
+
         // Without that column, the same text still means "column v at 4KB".
         Map<String, String> splitProperties = Maps.newHashMap();
         splitProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v1:4096");

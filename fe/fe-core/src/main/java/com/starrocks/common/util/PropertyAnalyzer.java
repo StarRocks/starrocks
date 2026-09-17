@@ -1164,6 +1164,21 @@ public class PropertyAnalyzer {
                             String.format("Invalid zstd compression column '%s': %s", zstdCompressionColumn, rejection));
                 }
 
+                // SHOW CREATE TABLE renders this property back as "<name>:<bytes>", and the parser
+                // above resolves a whole token as a column name before it splits one. If the rendered
+                // form is itself a column here, the emitted DDL would name that other column -- so
+                // CREATE TABLE LIKE, or pasting the property out of SHOW CREATE TABLE, would configure
+                // the wrong column at the wrong page size. Refuse the pair rather than emit text that
+                // does not mean what it says.
+                if (pageSize > 0 && findColumnIgnoreCase(columns, column.getName() + ":" + pageSize) != null) {
+                    throw new AnalysisException(String.format(
+                            "Invalid zstd compression column '%s': this table also has a column named "
+                                    + "'%s:%d', which is exactly how SHOW CREATE TABLE would render this "
+                                    + "entry, so the two cannot be told apart. Rename one of them, or "
+                                    + "leave the page size off this column.",
+                            zstdCompressionColumn, column.getName(), pageSize));
+                }
+
                 if (zstdCompressionColumnSet.contains(zstdCompressionColumn)) {
                     throw new AnalysisException(String.format("Duplicate zstd compression column '%s'", zstdCompressionColumn));
                 }

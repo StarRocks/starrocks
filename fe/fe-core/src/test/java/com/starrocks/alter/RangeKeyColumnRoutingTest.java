@@ -142,6 +142,40 @@ public class RangeKeyColumnRoutingTest {
     }
 
     @Test
+    public void testZstdCompressionColumnsRejectedOnRoutedKeyAdd() throws Exception {
+        // The routed add returns before the fastSchemaEvolution flag is read, and neither routed job
+        // persists this table-level property: the async trailing-key job updates the tablet schemas
+        // without ever calling setZstdCompressionColumns, and the K-tablet rewrite builds its shadow
+        // schema from the table's current (old) set. Accepting it would report success and lose it, so
+        // the combination is refused and the user is told to issue it separately.
+        //
+        // A dedicated table rather than buildLakeRangeTable: this property only accepts string/JSON
+        // columns, and adding one to the shared fixture would change what the other cases test.
+        String tableName = "t_rangekey_zstd_" + TABLE_SEQ.incrementAndGet();
+        starRocksAssert.withTable("create table " + tableName + " (k1 int NOT NULL, v1 string)\n"
+                + "duplicate key(k1)\n"
+                + "order by(k1)\n"
+                + "properties('replication_num' = '1', 'zstd_compression_columns' = 'v1:64k');");
+        OlapTable dup = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", tableName);
+        Assertions.assertEquals(65536,
+                dup.getZstdCompressionPageSizes().get(dup.getColumn("v1").getColumnId()).intValue());
+
+        // Sanity: this add really does take the routed path, or the guard under test is not reached.
+        Assertions.assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(dup,
+                parseAlterClause(dup, "ADD COLUMN k2 INT KEY DEFAULT '0'")));
+
+        assertThrowsDdl("can not be changed by the same ALTER that adds or widens a key column",
+                () -> alter(dup, "ADD COLUMN k2 INT KEY DEFAULT \"0\" "
+                        + "PROPERTIES ('zstd_compression_columns' = 'v1:256k')"));
+
+        // Refused means refused: nothing was applied by halves.
+        Assertions.assertEquals(65536,
+                dup.getZstdCompressionPageSizes().get(dup.getColumn("v1").getColumnId()).intValue());
+        Assertions.assertNull(dup.getColumn("k2"));
+    }
+
+    @Test
     public void testAddKeyColumnRejectedForPk() throws Exception {
         // PK add-key stays rejected regardless of routing. In practice the rejection surfaces earlier, at
         // analysis time: AlterTableClauseAnalyzer.visitAddColumnClause stamps REPLACE onto every added

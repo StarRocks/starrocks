@@ -80,15 +80,18 @@ namespace starrocks {
 
 ColumnWriterOptions::ColumnWriterOptions()
         : data_page_size(config::data_page_size),
+          // Declaration order, which -Wreorder enforces under the -Werror that non-test builds use:
+          // the gain is declared before the sample size in column_writer.h.
+          //
+          // Clamped, because a negative value would mean "keep the dictionary
+          // whatever it measures". Tests reach that on purpose by setting the field
+          // directly; an operator should not reach it by mis-typing a config.
+          zstd_compression_dict_min_gain(std::max(0.0, config::zstd_compression_dict_min_gain)),
           // Signed config into an unsigned field: a negative value would wrap to 4G and turn the
           // cap into "no cap", making the dictionary the whole of the first eligible page -- up to
           // the 1MB a per-column page size allows, or a single oversized row.
           zstd_compression_dict_sample_bytes(static_cast<uint32_t>(
-                  std::clamp<int64_t>(config::zstd_compression_dict_sample_bytes, 0, 1024 * 1024))),
-          // Clamped, because a negative value would mean "keep the dictionary
-          // whatever it measures". Tests reach that on purpose by setting the field
-          // directly; an operator should not reach it by mis-typing a config.
-          zstd_compression_dict_min_gain(std::max(0.0, config::zstd_compression_dict_min_gain)) {}
+                  std::clamp<int64_t>(config::zstd_compression_dict_sample_bytes, 0, 1024 * 1024))) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -712,9 +715,19 @@ Status ScalarColumnWriter::finish_current_page() {
     // without a dictionary and the flush goes on. Compressing against one is not --
     // once a dictionary exists, a failure to compress a page with it, or to write the
     // dictionary page in write_data(), fails the flush like any other write error.
+    // Both plain variants qualify. PLAIN_ENCODING_DELTA_OFFSET (picked for high-cardinality strings
+    // when enable_binary_plain_delta_offset is on) differs from PLAIN_ENCODING only in what the offset
+    // trailer stores -- deltas instead of absolutes -- at the same size and position inside the encoded
+    // values, and the dictionary is raw content, so the sample is equally usable. The read path cannot
+    // tell them apart either: the dictionary is applied at the codec layer, before any page decoder
+    // exists. Excluding it would have made the whole feature a silent no-op for exactly the columns it
+    // targets whenever that switch is on. DICT_ENCODING is still excluded, deliberately: those values
+    // are already deduplicated.
+    const auto encoding = _encoding_info != nullptr ? _encoding_info->encoding() : DEFAULT_ENCODING;
     if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && !_zstd_compression_dict_abandoned &&
-        _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
-        _encoding_info->encoding() == PLAIN_ENCODING && _page_builder->count() > 0 &&
+        _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD &&
+        _encoding_info != nullptr &&
+        (encoding == PLAIN_ENCODING || encoding == PLAIN_ENCODING_DELTA_OFFSET) && _page_builder->count() > 0 &&
         _opts.zstd_compression_dict_sample_bytes > 0 &&
         encoded_values->size() >= static_cast<size_t>(config::zstd_compression_dict_min_sample_bytes)) {
         // The first data page is always format v2 -- the format only drops to v1 when the
