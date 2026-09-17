@@ -47,18 +47,12 @@
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
 // 1. When set_finishing(), the has_output() may be false, so add the check here.
 // 2. Reset state for the first partition. This cannot be invoded when there's no data.
-//    It must run exactly once: a data-dependent wait (e.g. `lead ... IGNORE NULLS`) re-enters with
-//    `_current_row_position` still on the first row, and resetting again would discard the memoized
-//    scan progress and rescan the whole buffered prefix for every chunk. Nothing is evaluated before
-//    such a wait returns, so the already-initialized state stays valid. Later partitions are reset
-//    by `_reset_state_for_next_partition()`.
-#define PRE_PROCESSING()                  \
-    if (!_has_output()) {                 \
-        return Status::OK();              \
-    }                                     \
-    if (!_window_state_initialized) {     \
-        _window_state_initialized = true; \
-        _reset_window_state();            \
+#define PRE_PROCESSING()                                    \
+    if (!_has_output()) {                                   \
+        return Status::OK();                                \
+    }                                                       \
+    if (_get_global_position(_current_row_position) == 0) { \
+        _reset_window_state();                              \
     }
 
 namespace starrocks {
