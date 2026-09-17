@@ -198,7 +198,7 @@ public class ExecuteAsExecutorTest {
             authenticationMgr.createUser(new CreateUserStmt(
                     new UserRef("u1", "%", false, NodePosition.ZERO), true,
                     new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", null, false, NodePosition.ZERO),
-                    null, null, List.of(), Map.of(), NodePosition.ZERO));
+                    List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
             AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
@@ -339,7 +339,7 @@ public class ExecuteAsExecutorTest {
             authenticationMgr.createUser(new CreateUserStmt(
                     new UserRef("u1", "%", false, NodePosition.ZERO), true,
                     new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", null, false, NodePosition.ZERO),
-                    null, null, List.of(), Map.of(), NodePosition.ZERO));
+                    List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
             AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);

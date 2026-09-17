@@ -279,7 +279,6 @@ public class LDAPMemberOfGroupResolutionTest {
                 true,
                 // no AS '<dn>': the DN is resolved at login time
                 new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", null, false, NodePosition.ZERO),
-                null, null,
                 List.of(), Map.of(), NodePosition.ZERO));
 
         ConnectContext context = login(USER);
@@ -303,7 +302,6 @@ public class LDAPMemberOfGroupResolutionTest {
                 new UserRef(USER, "%", false, NodePosition.ZERO),
                 true,
                 new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", USER_DN, false, NodePosition.ZERO),
-                null, null,
                 List.of(), Map.of(), NodePosition.ZERO));
 
         ConnectContext context = login(USER);

@@ -135,7 +135,7 @@ public class GrantRoleToGroupTest {
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
-        AuthorizationMgr authorizationMgr = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
         GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
 
