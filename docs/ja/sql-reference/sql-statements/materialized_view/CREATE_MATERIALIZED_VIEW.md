@@ -529,7 +529,7 @@ StarRocks v4.1 では、マテリアライズドビューのリフレッシュ�
 | Select                       | サポート済み                                                                                                              |
 | From `<Table>`               | Iceberg テーブルのみサポート；その他のテーブルタイプは未対応                                                                  |
 | Filter                       | サポート済み                                                                                                              |
-| Group By付き集約              | サポート済み<ul><li>`distinct`を伴う集約関数は未対応</li><li>GROUP BYなし集約も未対応</li></ul>                                                |
+| Group By付き集約              | サポート済み<ul><li>`distinct`を伴う集約関数は未対応</li><li>GROUP BYなし集約も未対応</li><li>ARRAY、MAP、STRUCT などの複合型の列を GROUP BY または SELECT DISTINCT のキーにすることは未対応で、CREATE 時に拒否されます</li></ul>                                                |
 | Inner Join                   | サポート済み                                                                                                              |
 | Union All                    | サポート済み                                                                                                              |
 | Left/Right/Full Outer Join   | まだサポートされていません                                                                                                                |

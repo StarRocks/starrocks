@@ -501,7 +501,7 @@ The following operators are currently supported for incremental refresh:
 | Select                     | Supported                                                                                                                |
 | From `<Table>`             | Supported only for Iceberg tables; not yet available for other table types.                                              |
 | Filter                     | Supported                                                                                                                |
-| Aggregate with Group By    | Supported  <ul><li>Aggregation functions with `distinct` are not yet supported.</li><li>Aggregation without GROUP BY is not supported yet.</li></ul> |
+| Aggregate with Group By    | Supported  <ul><li>Aggregation functions with `distinct` are not yet supported.</li><li>Aggregation without GROUP BY is not supported yet.</li><li>A GROUP BY or SELECT DISTINCT key of a complex type (ARRAY, MAP, STRUCT) is not supported; such a key is rejected at CREATE.</li></ul> |
 | Inner Join                 | Supported                                                                                                                |
 | Union All                  | Supported                                                                                                                |
 | Left/Right/Full Outer Join | Not supported yet                                                                                                        |
