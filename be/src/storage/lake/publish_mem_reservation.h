@@ -36,7 +36,9 @@ namespace starrocks::lake {
 //                               when limit==0), keeping release symmetric. MUST precede the oversized
 //                               check: with limit==-1, estimate>limit is always true and every publish
 //                               would otherwise serialize through the oversized slot.
-//   4. no process headroom   -> reject (retryable) before either admitting route. Applies to BOTH the
+//   3b. no process headroom  -> reject (retryable) before EVERY admitting route, including the kill
+//                               switch. The two knobs are independent: the tracker percent disables the
+//                               reservation, the urgent percent disables this check. Applies to BOTH the
 //                               oversized and the normal route, because the lake tracker is off-tree and
 //                               says nothing about process pressure: a node already near the urgent line
 //                               can otherwise admit a publish that fits the mostly empty lake budget and
@@ -85,17 +87,13 @@ public:
             _admitted = true; // nothing to reserve
             return;
         }
-        const int64_t limit = _tracker->limit();
-        if (limit <= 0) {
-            // Kill switch / unlimited (or a pathological 0). Gate disabled: always admit. Consume for
-            // observability only if it actually lands, so the dtor's release stays symmetric.
-            if (_tracker->try_consume(estimate) == nullptr) {
-                _consumed = estimate;
-            }
-            _admitted = true;
-            return;
-        }
-        // Process headroom, checked before EITHER admitting route.
+        // Process headroom, checked before EVERY admitting route, including the kill switch below.
+        //
+        // The two knobs are independent. lake_publish_memory_limit_percent = 0 disables the per tracker
+        // reservation, and lake_publish_process_memory_urgent_pct = 0 disables this check. Testing this
+        // after the unlimited tracker return would mean rolling back the reservation silently threw away
+        // the process guard as well, which is the opposite of what an operator reaching for that lever
+        // during an incident wants.
         //
         // The lake tracker is off-tree, so fitting inside it says nothing about whether the process can
         // absorb the allocation. The entry backstop asks "is usage already above the urgent percent", not
@@ -111,6 +109,16 @@ public:
         // than the whole process, which would OOM rather than succeed.
         if (lacks_process_headroom(process_tracker, process_urgent_pct, estimate)) {
             _admitted = false; // reject (retryable), take no slot and charge nothing
+            return;
+        }
+        const int64_t limit = _tracker->limit();
+        if (limit <= 0) {
+            // Kill switch / unlimited (or a pathological 0). The per tracker gate is disabled, so admit
+            // without reserving. The process headroom check above still applies.
+            if (_tracker->try_consume(estimate) == nullptr) {
+                _consumed = estimate;
+            }
+            _admitted = true;
             return;
         }
         if (estimate > limit) {

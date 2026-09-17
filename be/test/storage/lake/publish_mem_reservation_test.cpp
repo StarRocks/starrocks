@@ -349,6 +349,37 @@ TEST(PublishMemReservationTest, ZeroAndNegativeEstimateAdmitWithoutReserving) {
     EXPECT_EQ(0, t.consumption());
 }
 
+// The two knobs are independent. Rolling back the per tracker reservation must not silently take the
+// process guard with it, because that lever gets pulled during an incident, which is exactly when the
+// guard matters most.
+TEST(PublishMemReservationTest, KillSwitchStillHonoursProcessHeadroom) {
+    MemTracker t(0, "p3-test", nullptr); // per tracker gate disabled
+    MemTracker proc(10000 * KB, "p3-test-process", nullptr);
+    std::atomic<bool> slot{false};
+
+    // Sit exactly on the urgent line so the entry backstop would pass and only the projected check bites.
+    const int64_t ceiling = proc.limit() / 100 * 85;
+    proc.consume(ceiling);
+    {
+        PublishMemReservation resv(&t, 2000 * KB, slot, &proc, 85);
+        EXPECT_FALSE(resv.admitted()) << "disabling the tracker must not disable the process backstop";
+    }
+    proc.release(ceiling);
+
+    // With headroom back, the disabled tracker admits as before.
+    {
+        PublishMemReservation resv(&t, 2000 * KB, slot, &proc, 85);
+        EXPECT_TRUE(resv.admitted());
+    }
+    // And with the urgent percent at 0 both checks are off, which is the documented way to disable it.
+    proc.consume(ceiling);
+    {
+        PublishMemReservation resv(&t, 2000 * KB, slot, &proc, 0);
+        EXPECT_TRUE(resv.admitted());
+    }
+    proc.release(ceiling);
+}
+
 // --- nullptr tracker (gate not wired): admit, touch nothing ------------------------------------
 TEST(PublishMemReservationTest, NullTrackerAlwaysAdmits) {
     std::atomic<bool> slot{false};
