@@ -452,9 +452,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         // emits nothing, so the salt table comes out empty. Every row on this side then keeps the default
         // salt of 0 while the other side still salts the skewed keys at random, no skewed key finds a
         // match, and its rows are dropped from the result without any error.
-        ColumnRefOperator seriesStart = columnRefFactory.create("0", IntegerType.BIGINT, false);
+        ColumnRefOperator seriesStart = columnRefFactory.create("0", Type.BIGINT, false);
         ColumnRefOperator seriesStop =
-                columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false);
+                columnRefFactory.create(String.valueOf(skewRandRange), Type.BIGINT, false);
         List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList(
                 Pair.create(seriesStart, (ScalarOperator) ConstantOperator.createBigint(0)),
                 Pair.create(seriesStop, (ScalarOperator) ConstantOperator.createBigint(skewRandRange)));
@@ -471,7 +471,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         TableFunction generateSeriesFn = (TableFunction) Expr.getBuiltinFunction("generate_series",
                 new Type[] {ScalarType.BIGINT, ScalarType.BIGINT}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<ColumnRefOperator> generateSeriesOutputColumns = Lists.newArrayList();
-        generateSeriesOutputColumns.add(columnRefFactory.create("generate_serials", IntegerType.BIGINT, true));
+        generateSeriesOutputColumns.add(columnRefFactory.create("generate_serials", Type.BIGINT, true));
         List<ColumnRefOperator> generateSeriesOuterColRefs = Lists.newArrayList();
         generateSeriesOuterColRefs.add(unnestColumnOperator);
 
