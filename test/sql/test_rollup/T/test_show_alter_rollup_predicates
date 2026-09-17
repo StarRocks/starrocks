@@ -1,0 +1,53 @@
+-- name: test_show_alter_rollup_predicates
+-- Test Point:
+--   SHOW ALTER TABLE ROLLUP honours WHERE, ORDER BY and LIMIT. The grammar accepts them for
+--   every alter type and the analyzer validates them, but only SchemaChangeProcDir and
+--   OptimizeProcDir used to apply them, so a rollup predicate was parsed, checked and then
+--   dropped -- the statement answered as if it had not been written.
+-- Method: two rollups on two tables, then project each result to the columns that do not change
+--         between runs. The rows also carry a job id, two timestamps and a progress counter.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE t2 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+ALTER TABLE t1 ADD ROLLUP rollup_alpha (k1, v1) FROM t1;
+function: wait_alter_table_finish("ROLLUP", 8)
+
+ALTER TABLE t2 ADD ROLLUP rollup_beta (k1, v1) FROM t2;
+function: wait_alter_table_finish("ROLLUP", 8)
+
+-- Both jobs are there to begin with.
+function: print_query_columns("SHOW ALTER TABLE ROLLUP", "TableName", "RollupIndexName", "State")
+
+-- WHERE matching nothing. Unapplied, both rows come back.
+function: print_query_columns("SHOW ALTER TABLE ROLLUP WHERE TableName = 'no_such_table'", "TableName", "RollupIndexName")
+
+-- WHERE selecting one of the two.
+function: print_query_columns("SHOW ALTER TABLE ROLLUP WHERE TableName = 't2'", "TableName", "RollupIndexName", "State")
+
+-- ORDER BY and LIMIT. t2's rollup was submitted second, so descending must answer with it and
+-- ascending with t1's. The two directions agreeing is the symptom of an ORDER BY that never ran,
+-- since getAlterJobInfosByDb already returns the rows in ascending job id order.
+function: print_query_columns("SHOW ALTER TABLE ROLLUP ORDER BY JobId DESC LIMIT 1", "TableName", "RollupIndexName")
+function: print_query_columns("SHOW ALTER TABLE ROLLUP ORDER BY JobId ASC LIMIT 1", "TableName", "RollupIndexName")
+
+-- ORDER BY on a column whose index differs between the two layouts -- State is 8 here and 9 in
+-- SchemaChangeProcDir. Both jobs end FINISHED so the order cannot tell the two apart; this only
+-- checks the column resolves and the sort runs. RollupProcDirTest carries the index assertion.
+function: print_query_columns("SHOW ALTER TABLE ROLLUP ORDER BY State DESC", "TableName", "State")
+
+drop database db_${uuid0} force;

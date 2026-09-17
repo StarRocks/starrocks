@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -118,7 +119,15 @@ public class ShowAlterStmtAnalyzer {
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
                     try {
-                        index = SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
+                        // Resolve against the columns the statement will actually return. Rollup
+                        // and materialized view rows come from RollupProcDir, whose layout parts
+                        // company with SchemaChangeProcDir's at the fourth column -- State is 8
+                        // there and 9 here -- so resolving everything against one list sorted by
+                        // the wrong column.
+                        index = (type == ShowAlterStmt.AlterType.ROLLUP
+                                || type == ShowAlterStmt.AlterType.MATERIALIZED_VIEW)
+                                ? RollupProcDir.analyzeColumn(slotRef.getColumnName())
+                                : SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
                     } catch (AnalysisException e) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                     }
