@@ -2061,25 +2061,13 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
         _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : 0);
     }
 
-    // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
-    // FIX (row-mode partial-update duplicate PK regression): only advance the rssid offset for a
-    // contribution that actually deposited segments. get_rowset_id_step() returns 1 even for a
-    // 0-segment op_write, so a leading zero-segment op_write would bump assigned_segment_idx while
-    // leaving the pending rowset at segment_metas_size()==0; the next segment-bearing op_write then
-    // re-enters the first-call branch above and stamps its first segment with
-    // segment_idx = assigned_segment_idx(1) + 0 = 1 (non-positional). At read the segment's effective
-    // rssid = rowset.id() + segment_idx lands one slot above where the base-row delete vector was keyed
-    // at apply (the positional rssid), so the superseded base rows are never hidden -> duplicate PKs.
-    //
-    // This does NOT remove the slot a pure-delete statement reserves (see the del comment above and
-    // delta_writer.cpp flush_chunk_with_deletes): a delete-only flush still writes a 0-row segment for its
-    // empty upsert chunk, so such a statement has segment_metas_size() == 1 and advances the offset here
-    // exactly as get_rowset_id_step() would. Only a statement that deposited NO segment at all is skipped.
-    // The ordering guarantee for a middle pure-delete statement therefore rests on that empty segment
-    // existing (pinned by LakeMergedDelOpOffsetTest); dropping it as a cleanup would bring this bug back.
-    if (rowset_pb.segment_metas_size() > 0) {
-        _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
-    }
+    // Track cumulative rssid slots already assigned when batch applying multiple opwrites. Advance
+    // for EVERY op_write, including one that deposited no segment (a pure-delete statement):
+    // get_rowset_id_step() reserves one slot for it, apply parks its delete there
+    // (UpdateManager::publish_primary_key_tablet defaults max_segment_id to assigned_global_segments)
+    // and reshard preserves the resulting gap in segment_idx. Skipping the advance would land the
+    // next statement's first segment ON that slot, so the delete replays after the rows it re-inserted.
+    _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
 }
 
 Status MetaFileBuilder::set_final_rowset() {
