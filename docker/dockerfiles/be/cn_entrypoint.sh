@@ -45,6 +45,11 @@ show_compute_nodes(){
     timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e 'SHOW COMPUTE NODES;'
 }
 
+# run one SQL statement against the FE service held in $svc (set by the caller)
+run_sql(){
+    timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e "$1"
+}
+
 parse_confval_from_cn_conf()
 {
     # a naive script to grep given confkey from cn conf file
@@ -79,16 +84,25 @@ add_self()
     while true
     do
         log_stderr "Add myself ($MY_SELF:$HEARTBEAT_PORT) into FE ..."
-        # if KUBE_STARROCKS_MULTI_WAREHOUSE environment variable is set, add compute node to the specified warehouse
-        if  [[ "x$KUBE_STARROCKS_MULTI_WAREHOUSE" != "x" ]] ; then
-            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
-              "CREATE WAREHOUSE IF NOT EXISTS $KUBE_STARROCKS_MULTI_WAREHOUSE;"
-            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
-              "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\" INTO WAREHOUSE $KUBE_STARROCKS_MULTI_WAREHOUSE;"
-        else
-            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
-              "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\";"
+        # Where the compute node lands is determined by two optional environment variables:
+        #   KUBE_STARROCKS_MULTI_WAREHOUSE  the warehouse to join, created if missing; default_warehouse if unset.
+        #   KUBE_STARROCKS_CNGROUP          the CN group inside that warehouse, created if missing.
+        # When no CN group is given the CNGROUP clause is omitted and FE picks the group itself: it accepts an
+        # omitted group only while the warehouse has exactly one CN group (whichever that is — the built-in
+        # group can be dropped and replaced by a custom one), and rejects it once there are several. So a
+        # warehouse with several CN groups requires KUBE_STARROCKS_CNGROUP to be set.
+        local warehouse=${KUBE_STARROCKS_MULTI_WAREHOUSE:-default_warehouse}
+        local cngroup=$KUBE_STARROCKS_CNGROUP
+        local cngroup_clause=
+
+        if [[ "x$KUBE_STARROCKS_MULTI_WAREHOUSE" != "x" ]] ; then
+            run_sql "CREATE WAREHOUSE IF NOT EXISTS $warehouse;"
         fi
+        if [[ "x$cngroup" != "x" ]] ; then
+            run_sql "ALTER WAREHOUSE $warehouse ADD CNGROUP IF NOT EXISTS $cngroup;"
+            cngroup_clause=" CNGROUP $cngroup"
+        fi
+        run_sql "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\" INTO WAREHOUSE $warehouse$cngroup_clause;"
 
         memlist=`show_compute_nodes $svc`
         if echo "$memlist" | grep -q -w "$MY_SELF" &>/dev/null ; then
