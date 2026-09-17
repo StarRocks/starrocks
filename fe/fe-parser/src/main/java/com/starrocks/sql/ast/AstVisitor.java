@@ -1078,6 +1078,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowCreateUserStatement(ShowCreateUserStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowCatalogsStatement(ShowCatalogsStmt statement, C context) {
         return visitShowStatement(statement, context);
     }

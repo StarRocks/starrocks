@@ -175,6 +175,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -802,6 +803,12 @@ public class RedirectStatusTest {
     @Test
     public void testShowCreateTableStmt() {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.TABLE);
+        Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testShowCreateUserStmt() {
+        ShowCreateUserStmt stmt = new ShowCreateUserStmt(new UserRef("jack", "%"));
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 

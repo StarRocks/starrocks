@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
@@ -226,6 +227,20 @@ public class AuthenticationAnalyzer {
                 analyzeUser(user, true);
                 checkUserExist(user, true);
             } else if (!statement.isAll()) {
+                statement.setUser(new UserRef(context.getCurrentUserIdentity().getUser(),
+                        context.getCurrentUserIdentity().getHost(),
+                        context.getCurrentUserIdentity().isDomain()));
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateUserStatement(ShowCreateUserStmt statement, ConnectContext context) {
+            UserRef user = statement.getUser();
+            if (user != null) {
+                analyzeUser(user, true);
+                checkUserExist(user, true);
+            } else {
                 statement.setUser(new UserRef(context.getCurrentUserIdentity().getUser(),
                         context.getCurrentUserIdentity().getHost(),
                         context.getCurrentUserIdentity().isDomain()));

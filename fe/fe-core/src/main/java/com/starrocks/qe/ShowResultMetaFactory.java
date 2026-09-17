@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -522,6 +523,14 @@ public class ShowResultMetaFactory implements AstVisitorEPack<ShowResultSetMetaD
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Table", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Create Table", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitShowCreateUserStatement(ShowCreateUserStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("User", TypeFactory.createVarcharType(100)))
+                .addColumn(new Column("Create User", TypeFactory.createVarcharType(500)))
                 .build();
     }
 

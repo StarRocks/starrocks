@@ -395,13 +395,13 @@ privilege_sync_exclude_roles=
 | one_time_run_mode                                 | 是否启用一次性同步模式。启用后，迁移工具只执行全量同步而不进行增量同步。 |
 | source_fe_host                                    | 源集群 FE 的 IP 地址或 FQDN（全限定域名）。                  |
 | source_fe_query_port                              | 源集群 FE 的查询端口（`query_port`）。                       |
-| source_cluster_user                               | 登录源集群使用的用户名。该用户必须被授予 SYSTEM 级别的 OPERATE 权限。 |
+| source_cluster_user                               | 登录源集群使用的用户名。该用户必须被授予 SYSTEM 级别的 OPERATE 权限。开启 `enable_privilege_sync` 后，还需要 SYSTEM 级别的 GRANT 和 SHOW SECRET 权限，用于读取其他用户的定义和密码密文。 |
 | source_cluster_password                           | 登录源集群使用的用户密码。                                   |
 | source_cluster_password_secret_key                | 用于加密源集群登录用户密码的密钥。默认值为空字符串，表示登录密码不加密。如需加密 `source_cluster_password`，可以通过 SQL 语句 `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_ secret_key>'))` 获取加密后的 `source_cluster_password` 字符串。 |
 | source_cluster_token                              | 源集群的 Token。有关如何获取集群 Token，请参阅下方的[获取集群 Token](#获取集群-token)。<br />**注意**<br />在存算分离集群之间迁移时不需要集群 Token，因为文件直接从对象存储读取。如果要在存算分离源集群之间迁移数据，可以留空或省略此项。 |
 | target_fe_host                                    | 目标集群 FE 的 IP 地址或 FQDN（全限定域名）。                |
 | target_fe_query_port                              | 目标集群 FE 的查询端口（`query_port`）。                     |
-| target_cluster_user                               | 登录目标集群使用的用户名。该用户必须被授予 SYSTEM 级别的 OPERATE 权限。 |
+| target_cluster_user                               | 登录目标集群使用的用户名。该用户必须被授予 SYSTEM 级别的 OPERATE 权限。开启 `enable_privilege_sync` 后，还需要 SYSTEM 级别的 GRANT 和 SHOW SECRET 权限，因为迁移工具要读取并比对两个集群的用户定义。 |
 | target_cluster_password                           | 登录目标集群使用的用户密码。                                 |
 | target_cluster_password_secret_key                | 用于加密目标集群登录用户密码的密钥。默认值为空字符串，表示登录密码不加密。如需加密 `target_cluster_password`，可以通过 SQL 语句 `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_ secret_key>'))` 获取加密后的 `target_cluster_password` 字符串。 |
 | jdbc_connect_timeout_ms                           | FE 查询的 JDBC 连接超时时间，单位为毫秒。默认值：`30000`。   |
@@ -583,7 +583,7 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 
 默认情况下，迁移工具不同步账户元数据。如果将 `enable_privilege_sync` 设置为 `true`，迁移工具还会将源集群的用户、角色及其权限同步到目标集群。
 
-迁移工具每次获取元数据时，都会读取源集群和目标集群的用户、角色及其权限，进行比对，并执行使目标集群与源集群保持一致所需的 DDL 语句。用户定义通过 `SHOW CREATE USER` 获取，该语句返回的密码为密文，因此迁移过程中不会处理明文密码。
+迁移工具每次获取元数据时，都会读取源集群和目标集群的用户、角色及其权限，进行比对，并执行使目标集群与源集群保持一致所需的 DDL 语句。用户定义通过 `SHOW CREATE USER` 获取，该语句返回的密码为密文，因此迁移过程中不会处理明文密码。只有拥有 SYSTEM 级别 SHOW SECRET 权限的用户才能拿到密文。
 
 以下对象始终不会被迁移工具修改：
 
@@ -593,6 +593,7 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 
 :::note
 
+- 两个集群的登录用户都需要 SYSTEM 级别的 GRANT 和 SHOW SECRET 权限。缺少 GRANT 时，`SHOW CREATE USER` 只能查看自己；缺少 SHOW SECRET 时，密码位置返回的是 `<secret>`，据此回放会建出密码不可用的账号。
 - 两个集群的 FE 都必须支持 `SHOW CREATE USER`。如果任一集群的 FE 不支持该语句，迁移工具将跳过用户及其权限，仅同步角色和角色权限。
 - 权限同步的进度会以 `Sync privilege progress` 为前缀打印到日志文件 **log/sync.INFO.log** 中，其中列出角色、角色权限、用户和用户权限四个部分各自的状态。
 - 在一次性同步模式（`one_time_run_mode=true`）下，只有权限也同步一致后，迁移工具才会成功退出。如果任一集群不支持 `SHOW CREATE USER`，或者权限在连续三次比对后仍不一致，迁移工具将以失败状态退出。

@@ -176,6 +176,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -1201,6 +1202,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitShowAuthenticationStatement(ShowAuthenticationStmt statement, Void context) {
+            return visitShowStatement(statement, context);
+        }
+
+        @Override
+        public RedirectStatus visitShowCreateUserStatement(ShowCreateUserStmt statement, Void context) {
             return visitShowStatement(statement, context);
         }
 

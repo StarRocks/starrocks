@@ -1,0 +1,74 @@
+-- name: test_show_create_user
+drop user if exists u_scu;
+drop role if exists scu_role;
+create user u_scu identified by '123456';
+show create user u_scu;
+create role scu_role;
+grant scu_role to user u_scu;
+set default role scu_role to u_scu;
+show create user u_scu;
+alter user u_scu set properties ("max_user_connections" = "100");
+show create user u_scu;
+alter user u_scu lock;
+alter user u_scu expire_password = true;
+show create user u_scu;
+drop user if exists u_scu;
+drop role if exists scu_role;
+
+-- name: test_show_create_user_lock_and_expire_in_one_statement
+drop user if exists u_scu_both;
+create user u_scu_both identified by '123456' expire_password = true lock;
+show create user u_scu_both;
+drop user if exists u_scu_both;
+
+-- name: test_show_create_user_no_password
+drop user if exists u_scu_nopwd;
+create user u_scu_nopwd;
+show create user u_scu_nopwd;
+drop user if exists u_scu_nopwd;
+
+-- name: test_show_create_user_secret_masked
+drop user if exists u_scu_target;
+drop user if exists u_scu_reader;
+create user u_scu_target identified by '123456';
+create user u_scu_reader;
+grant user_admin to user u_scu_reader;
+set default role user_admin to u_scu_reader;
+grant impersonate on user root to u_scu_reader;
+execute as u_scu_reader with no revert;
+show create user u_scu_target;
+execute as root with no revert;
+drop user if exists u_scu_target;
+drop user if exists u_scu_reader;
+
+-- name: test_show_create_user_secret_visible
+drop user if exists u_scu_target2;
+drop user if exists u_scu_reader2;
+drop role if exists scu_secret_role;
+create user u_scu_target2 identified by '123456';
+create user u_scu_reader2;
+create role scu_secret_role;
+grant show secret on system to role scu_secret_role;
+grant user_admin to user u_scu_reader2;
+grant scu_secret_role to user u_scu_reader2;
+set default role user_admin, scu_secret_role to u_scu_reader2;
+grant impersonate on user root to u_scu_reader2;
+execute as u_scu_reader2 with no revert;
+show create user u_scu_target2;
+execute as root with no revert;
+drop user if exists u_scu_target2;
+drop user if exists u_scu_reader2;
+drop role if exists scu_secret_role;
+
+-- name: test_show_create_user_denied
+drop user if exists u_scu_target3;
+drop user if exists u_scu_plain;
+create user u_scu_target3 identified by '123456';
+create user u_scu_plain;
+grant impersonate on user root to u_scu_plain;
+execute as u_scu_plain with no revert;
+show create user current_user();
+show create user u_scu_target3;
+execute as root with no revert;
+drop user if exists u_scu_target3;
+drop user if exists u_scu_plain;

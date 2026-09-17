@@ -354,6 +354,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -7698,6 +7699,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         visitShowPredicateClauses(context.showPredicateClauses(), showUserStmt);
         return showUserStmt;
+    }
+
+    @Override
+    public ParseNode visitShowCreateUserStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowCreateUserStatementContext context) {
+        NodePosition pos = createPos(context);
+        if (context.user() != null) {
+            return new ShowCreateUserStmt((UserRef) visit(context.user()), pos);
+        } else {
+            return new ShowCreateUserStmt(null, pos);
+        }
     }
 
     @Override

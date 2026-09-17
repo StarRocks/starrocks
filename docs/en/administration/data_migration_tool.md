@@ -395,13 +395,13 @@ The description of the parameters is as follows:
 | one_time_run_mode                         | Whether to enable one-time synchronization mode. When one-time synchronization mode is enabled, the migration tool only performs full synchronization instead of incremental synchronization. |
 | source_fe_host                            | The IP address or FQDN (Fully Qualified Domain Name) of the source cluster's FE. |
 | source_fe_query_port                      | The query port (`query_port`) of the source cluster's FE.    |
-| source_cluster_user                       | The username used to log in to the source cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
+| source_cluster_user                       | The username used to log in to the source cluster. This user must be granted the OPERATE privilege on the SYSTEM level. If `enable_privilege_sync` is `true`, it must also be granted the GRANT and SHOW SECRET privileges on the SYSTEM level, because privilege synchronization reads other users' definitions and their password ciphertext. |
 | source_cluster_password                   | The user password used to log in to the source cluster.      |
 | source_cluster_password_secret_key        | The secret key used to encrypt the password of the login user for the source cluster. The default value is an empty string, which means that the login password is not encrypted. If you want to encrypt `source_cluster_password`, you can get the encrypted `source_cluster_password` string by using SQL statement `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_ secret_key>'))`. |
 | source_cluster_token                      | Token of the source cluster. For information on how to obtain the cluster token, refer to [Obtain Cluster Token](#obtain-cluster-token) below. <br />**NOTE**<br />The Cluster Token is not required for migration between shared-data clusters because files are read directly from object storage. You can leave this empty or omit it if you want to migrate data between shared-data source clusters. |
 | target_fe_host                            | The IP address or FQDN (Fully Qualified Domain Name) of the target cluster's FE. |
 | target_fe_query_port                      | The query port (`query_port`) of the target cluster's FE.    |
-| target_cluster_user                       | The username used to log in to the target cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
+| target_cluster_user                       | The username used to log in to the target cluster. This user must be granted the OPERATE privilege on the SYSTEM level. If `enable_privilege_sync` is `true`, it must also be granted the GRANT and SHOW SECRET privileges on the SYSTEM level, because the tool reads and compares user definitions on both clusters. |
 | target_cluster_password                   | The user password used to log in to the target cluster.      |
 | target_cluster_password_secret_key        | The secret key used to encrypt the password of the login user for the target cluster. The default value is an empty string, which means that the login password is not encrypted. If you want to encrypt `target_cluster_password`, you can get the encrypted `target_cluster_password` string by using SQL statement `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_ secret_key>'))`. |
 | jdbc_connect_timeout_ms                   | JDBC connection timeout in milliseconds for FE queries. Default: `30000`. |
@@ -583,7 +583,7 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 
 By default, the migration tool does not synchronize account metadata. If you set `enable_privilege_sync` to `true`, the tool also synchronizes users, roles, and their privileges from the source cluster to the target cluster.
 
-Each time the tool retrieves metadata, it reads the users, roles, and privileges of both clusters, compares them, and executes the DDL statements needed to make the target cluster consistent with the source cluster. User definitions are obtained using `SHOW CREATE USER`, which returns the password as ciphertext, so no plaintext password is handled during migration.
+Each time the tool retrieves metadata, it reads the users, roles, and privileges of both clusters, compares them, and executes the DDL statements needed to make the target cluster consistent with the source cluster. User definitions are obtained using `SHOW CREATE USER`, which returns the password as ciphertext, so no plaintext password is handled during migration. The ciphertext is returned only to a user that holds the SHOW SECRET privilege on the SYSTEM level.
 
 The following objects are never modified by the migration tool:
 
@@ -593,6 +593,7 @@ The following objects are never modified by the migration tool:
 
 :::note
 
+- Both cluster users need the GRANT and SHOW SECRET privileges on the SYSTEM level. Without GRANT, `SHOW CREATE USER` can only read the caller's own account. Without SHOW SECRET, the password is returned as `<secret>`, and replaying such a statement creates an account whose password does not work.
 - The FE of both clusters must support `SHOW CREATE USER`. If the FE of either cluster does not support this statement, users and their privileges are skipped, and only roles and role privileges are synchronized.
 - The progress of privilege synchronization is printed to the log file **log/sync.INFO.log** with the prefix `Sync privilege progress`. It lists the status of each of the four units: roles, role privileges, users, and user privileges.
 - In one-time synchronization mode (`one_time_run_mode=true`), the tool exits successfully only after privileges have also converged. It exits with a failure if either cluster does not support `SHOW CREATE USER`, or if privileges remain inconsistent across three consecutive comparisons.

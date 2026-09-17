@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.CreateUserDdlBuilder;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
@@ -48,6 +49,7 @@ import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ShowGrantsExecutor;
 import com.starrocks.backup.AbstractJob;
@@ -193,6 +195,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -3081,6 +3084,42 @@ public class ShowExecutor {
         public ShowResultSet visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
             List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos();
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), computeNodesInfos);
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateUserStatement(ShowCreateUserStmt statement, ConnectContext context) {
+            UserRef user = statement.getUser();
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            UserAuthenticationInfo authenticationInfo =
+                    authenticationManager.getUserAuthenticationInfoByUserIdentity(userIdentity);
+            if (authenticationInfo == null) {
+                throw new SemanticException("Unknown user: " + userIdentity);
+            }
+
+            AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+            List<String> defaultRoles;
+            try {
+                defaultRoles = authorizationManager.getRoleNamesByRoleIds(
+                        authorizationManager.getDefaultRoleIdsByUser(userIdentity));
+            } catch (PrivilegeException e) {
+                throw new SemanticException(e.getMessage(), e);
+            }
+
+            boolean showSecret = true;
+            try {
+                Authorizer.checkSystemAction(context, PrivilegeType.SHOW_SECRET);
+            } catch (AccessDeniedException e) {
+                showSecret = false;
+            }
+
+            String ddl = CreateUserDdlBuilder.build(userIdentity, authenticationInfo, defaultRoles,
+                    authenticationManager.getUserProperty(userIdentity.getUser()), showSecret);
+
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList(userIdentity.toString(), ddl));
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
 
         @Override

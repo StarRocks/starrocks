@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -101,6 +102,7 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
@@ -314,6 +316,15 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
         Assertions.assertEquals("Create Table", metaData.getColumn(1).getName());
+    }
+
+    @Test
+    public void testShowCreateUserStmt() {
+        ShowCreateUserStmt stmt = new ShowCreateUserStmt(new UserRef("jack", "%"));
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(2, metaData.getColumnCount());
+        Assertions.assertEquals("User", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Create User", metaData.getColumn(1).getName());
     }
 
     @Test

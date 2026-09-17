@@ -138,6 +138,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
@@ -863,6 +864,12 @@ public class Analyzer {
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            AuthenticationAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateUserStatement(ShowCreateUserStmt statement, ConnectContext context) {
             AuthenticationAnalyzer.analyze(statement, context);
             return null;
         }

@@ -395,13 +395,13 @@ privilege_sync_exclude_roles=
 | one_time_run_mode                                         | ワンタイム同期モードを有効にするかどうか。ワンタイム同期モードが有効な場合、移行ツールは増分同期ではなく、フル同期のみを実行します。 |
 | source_fe_host                                            | ソースクラスターの FE の IP アドレスまたは FQDN（完全修飾ドメイン名）。 |
 | source_fe_query_port                                      | ソースクラスターの FE のクエリポート（`query_port`）。       |
-| source_cluster_user                                       | ソースクラスターへのログインに使用するユーザー名。このユーザーには SYSTEM レベルの OPERATE 権限が付与されている必要があります。 |
+| source_cluster_user                                       | ソースクラスターへのログインに使用するユーザー名。このユーザーには SYSTEM レベルの OPERATE 権限が付与されている必要があります。`enable_privilege_sync` が `true` の場合、権限同期は他ユーザーの定義とパスワードの暗号文を読み取るため、SYSTEM レベルの GRANT および SHOW SECRET 権限も必要です。 |
 | source_cluster_password                                   | ソースクラスターへのログインに使用するユーザーパスワード。   |
 | source_cluster_password_secret_key                        | ソースクラスターのログインユーザーパスワードを暗号化するために使用するシークレットキー。デフォルト値は空文字列で、ログインパスワードが暗号化されないことを意味します。`source_cluster_password` を暗号化したい場合は、SQL ステートメント `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_ secret_key>'))` を使用して暗号化された `source_cluster_password` 文字列を取得できます。 |
 | source_cluster_token                                      | ソースクラスターのトークン。クラスタートークンの取得方法については、以下の[クラスタートークンの取得](#obtain-cluster-token)を参照してください。<br />**注意**<br />共有データクラスター間の移行では、ファイルがオブジェクトストレージから直接読み取られるため、クラスタートークンは必要ありません。共有データソースクラスター間でデータを移行する場合は、空のままにするか省略できます。 |
 | target_fe_host                                            | ターゲットクラスターの FE の IP アドレスまたは FQDN（完全修飾ドメイン名）。 |
 | target_fe_query_port                                      | ターゲットクラスターの FE のクエリポート（`query_port`）。   |
-| target_cluster_user                                       | ターゲットクラスターへのログインに使用するユーザー名。このユーザーには SYSTEM レベルの OPERATE 権限が付与されている必要があります。 |
+| target_cluster_user                                       | ターゲットクラスターへのログインに使用するユーザー名。このユーザーには SYSTEM レベルの OPERATE 権限が付与されている必要があります。`enable_privilege_sync` が `true` の場合、移行ツールは両クラスターのユーザー定義を読み取って比較するため、SYSTEM レベルの GRANT および SHOW SECRET 権限も必要です。 |
 | target_cluster_password                                   | ターゲットクラスターへのログインに使用するユーザーパスワード。 |
 | target_cluster_password_secret_key                        | ターゲットクラスターのログインユーザーパスワードを暗号化するために使用するシークレットキー。デフォルト値は空文字列で、ログインパスワードが暗号化されないことを意味します。`target_cluster_password` を暗号化したい場合は、SQL ステートメント `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_ secret_key>'))` を使用して暗号化された `target_cluster_password` 文字列を取得できます。 |
 | jdbc_connect_timeout_ms                                   | FE クエリの JDBC 接続タイムアウト（ミリ秒）。デフォルト: `30000`。 |
@@ -583,7 +583,7 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 
 デフォルトでは、移行ツールはアカウントメタデータを同期しません。`enable_privilege_sync` を `true` に設定すると、ソースクラスターのユーザー、ロール、およびそれらの権限もターゲットクラスターに同期されます。
 
-移行ツールはメタデータを取得するたびに、両クラスターのユーザー、ロール、権限を読み取って比較し、ターゲットクラスターをソースクラスターと一致させるために必要な DDL ステートメントを実行します。ユーザー定義は `SHOW CREATE USER` で取得され、このステートメントはパスワードを暗号文で返すため、移行中に平文のパスワードが扱われることはありません。
+移行ツールはメタデータを取得するたびに、両クラスターのユーザー、ロール、権限を読み取って比較し、ターゲットクラスターをソースクラスターと一致させるために必要な DDL ステートメントを実行します。ユーザー定義は `SHOW CREATE USER` で取得され、このステートメントはパスワードを暗号文で返すため、移行中に平文のパスワードが扱われることはありません。暗号文が返されるのは、SYSTEM レベルの SHOW SECRET 権限を持つユーザーに対してのみです。
 
 以下のオブジェクトは移行ツールによって変更されることはありません。
 
@@ -593,6 +593,7 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 
 :::note
 
+- 両クラスターのログインユーザーには、SYSTEM レベルの GRANT および SHOW SECRET 権限が必要です。GRANT がない場合、`SHOW CREATE USER` は自分自身しか参照できません。SHOW SECRET がない場合、パスワードは `<secret>` として返され、そのまま再実行するとパスワードが使えないアカウントが作成されます。
 - 両クラスターの FE が `SHOW CREATE USER` をサポートしている必要があります。いずれかのクラスターの FE がこのステートメントをサポートしていない場合、ユーザーとその権限はスキップされ、ロールとロール権限のみが同期されます。
 - 権限同期の進捗は、`Sync privilege progress` というプレフィックスでログファイル **log/sync.INFO.log** に出力され、ロール、ロール権限、ユーザー、ユーザー権限の 4 つの単位それぞれの状態が示されます。
 - 一回限りの同期モード（`one_time_run_mode=true`）では、権限も一致した後にのみツールは正常終了します。いずれかのクラスターが `SHOW CREATE USER` をサポートしていない場合、または 3 回連続した比較で権限が一致しないままの場合、ツールは異常終了します。

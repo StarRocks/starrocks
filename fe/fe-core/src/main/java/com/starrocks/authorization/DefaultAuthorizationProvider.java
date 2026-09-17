@@ -66,7 +66,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.CREATE_STORAGE_VOLUME,
                 PrivilegeType.CREATE_WAREHOUSE,
                 PrivilegeType.SECURITY,
-                PrivilegeType.CREATE_CONTEXTBASE));
+                PrivilegeType.CREATE_CONTEXTBASE,
+                PrivilegeType.SHOW_SECRET));
 
         typeToActionList.put(ObjectType.USER, Lists.newArrayList(
                 PrivilegeType.IMPERSONATE));

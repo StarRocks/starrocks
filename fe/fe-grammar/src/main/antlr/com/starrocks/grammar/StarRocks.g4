@@ -222,6 +222,7 @@ statement
     | dropUserStatement
     | alterUserStatement
     | showUserStatement
+    | showCreateUserStatement
     | showAuthenticationStatement
     | executeAsStatement
     | createRoleStatement
@@ -2102,7 +2103,7 @@ helpStatement
 // ------------------------------------------- Authz Statement -----------------------------------------------------
 
 createUserStatement
-    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)? (passwordOption | lockOption)? properties?
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)? passwordOption? lockOption? properties?
     ;
 
 dropUserStatement
@@ -2110,13 +2111,17 @@ dropUserStatement
     ;
 
 alterUserStatement
-    : ALTER USER (IF EXISTS)? user authOption? (passwordOption | lockOption)?
+    : ALTER USER (IF EXISTS)? user authOption? passwordOption? lockOption?
     | ALTER USER (IF EXISTS)? user DEFAULT ROLE (NONE| ALL | roleList)
     | ALTER USER (IF EXISTS)? user SET properties
     ;
 
 showUserStatement
     : SHOW (USER | USERS) showPredicateClauses
+    ;
+
+showCreateUserStatement
+    : SHOW CREATE USER (user | CURRENT_USER ('(' ')')?)
     ;
 
 passwordOption
@@ -2259,7 +2264,7 @@ privilegeType
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW| RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG
         | MASKING POLICY | ROW ACCESS POLICY | STORAGE VOLUME | WAREHOUSE | CNGROUP | FAILOVER GROUP | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE | SECURITY
-    | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
+    | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE | SHOW SECRET
     ;
 
 privObjectType
@@ -3869,7 +3874,7 @@ nonReserved
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES | RECURSIVE
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECRET | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_KW | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRANSFER | TRACE | TRANSLATE

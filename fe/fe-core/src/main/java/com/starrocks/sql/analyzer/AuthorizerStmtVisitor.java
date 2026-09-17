@@ -194,6 +194,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateUserStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
@@ -1501,6 +1502,27 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitShowUserStatement(ShowUserStmt statement, ConnectContext context) {
         if (statement.isAll()) {
+            try {
+                Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.GRANT.name(), ObjectType.SYSTEM.name(), null);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitShowCreateUserStatement(ShowCreateUserStmt statement, ConnectContext context) {
+        UserRef user = statement.getUser();
+        UserRef contextUser = new UserRef(
+                context.getCurrentUserIdentity().getUser(),
+                context.getCurrentUserIdentity().getHost(),
+                context.getCurrentUserIdentity().isDomain());
+
+        if (user != null && !user.equals(contextUser)) {
             try {
                 Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
             } catch (AccessDeniedException e) {

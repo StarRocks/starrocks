@@ -1,0 +1,226 @@
+-- name: test_show_create_user
+drop user if exists u_scu;
+-- result:
+-- !result
+drop role if exists scu_role;
+-- result:
+-- !result
+create user u_scu identified by '123456';
+-- result:
+-- !result
+show create user u_scu;
+-- result:
+'u_scu'@'%'	CREATE USER 'u_scu'@'%'
+IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
+-- !result
+create role scu_role;
+-- result:
+-- !result
+grant scu_role to user u_scu;
+-- result:
+-- !result
+set default role scu_role to u_scu;
+-- result:
+-- !result
+show create user u_scu;
+-- result:
+'u_scu'@'%'	CREATE USER 'u_scu'@'%'
+IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
+DEFAULT ROLE 'scu_role'
+-- !result
+alter user u_scu set properties ("max_user_connections" = "100");
+-- result:
+-- !result
+show create user u_scu;
+-- result:
+'u_scu'@'%'	CREATE USER 'u_scu'@'%'
+IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
+DEFAULT ROLE 'scu_role'
+PROPERTIES ("max_user_connections" = "100")
+-- !result
+alter user u_scu lock;
+-- result:
+-- !result
+alter user u_scu expire_password = true;
+-- result:
+-- !result
+show create user u_scu;
+-- result:
+'u_scu'@'%'	CREATE USER 'u_scu'@'%'
+IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
+DEFAULT ROLE 'scu_role'
+EXPIRE_PASSWORD = true
+LOCK
+PROPERTIES ("max_user_connections" = "100")
+-- !result
+drop user if exists u_scu;
+-- result:
+-- !result
+drop role if exists scu_role;
+-- result:
+-- !result
+
+-- name: test_show_create_user_lock_and_expire_in_one_statement
+drop user if exists u_scu_both;
+-- result:
+-- !result
+create user u_scu_both identified by '123456' expire_password = true lock;
+-- result:
+-- !result
+show create user u_scu_both;
+-- result:
+'u_scu_both'@'%'	CREATE USER 'u_scu_both'@'%'
+IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
+EXPIRE_PASSWORD = true
+LOCK
+-- !result
+drop user if exists u_scu_both;
+-- result:
+-- !result
+
+-- name: test_show_create_user_no_password
+drop user if exists u_scu_nopwd;
+-- result:
+-- !result
+create user u_scu_nopwd;
+-- result:
+-- !result
+show create user u_scu_nopwd;
+-- result:
+'u_scu_nopwd'@'%'	CREATE USER 'u_scu_nopwd'@'%'
+-- !result
+drop user if exists u_scu_nopwd;
+-- result:
+-- !result
+
+-- name: test_show_create_user_secret_masked
+drop user if exists u_scu_target;
+-- result:
+-- !result
+drop user if exists u_scu_reader;
+-- result:
+-- !result
+create user u_scu_target identified by '123456';
+-- result:
+-- !result
+create user u_scu_reader;
+-- result:
+-- !result
+grant user_admin to user u_scu_reader;
+-- result:
+-- !result
+set default role user_admin to u_scu_reader;
+-- result:
+-- !result
+grant impersonate on user root to u_scu_reader;
+-- result:
+-- !result
+execute as u_scu_reader with no revert;
+-- result:
+-- !result
+show create user u_scu_target;
+-- result:
+'u_scu_target'@'%'	CREATE USER 'u_scu_target'@'%'
+IDENTIFIED WITH mysql_native_password AS '<secret>'
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user if exists u_scu_target;
+-- result:
+-- !result
+drop user if exists u_scu_reader;
+-- result:
+-- !result
+
+-- name: test_show_create_user_secret_visible
+drop user if exists u_scu_target2;
+-- result:
+-- !result
+drop user if exists u_scu_reader2;
+-- result:
+-- !result
+drop role if exists scu_secret_role;
+-- result:
+-- !result
+create user u_scu_target2 identified by '123456';
+-- result:
+-- !result
+create user u_scu_reader2;
+-- result:
+-- !result
+create role scu_secret_role;
+-- result:
+-- !result
+grant show secret on system to role scu_secret_role;
+-- result:
+-- !result
+grant user_admin to user u_scu_reader2;
+-- result:
+-- !result
+grant scu_secret_role to user u_scu_reader2;
+-- result:
+-- !result
+set default role user_admin, scu_secret_role to u_scu_reader2;
+-- result:
+-- !result
+grant impersonate on user root to u_scu_reader2;
+-- result:
+-- !result
+execute as u_scu_reader2 with no revert;
+-- result:
+-- !result
+show create user u_scu_target2;
+-- result:
+'u_scu_target2'@'%'	CREATE USER 'u_scu_target2'@'%'
+IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user if exists u_scu_target2;
+-- result:
+-- !result
+drop user if exists u_scu_reader2;
+-- result:
+-- !result
+drop role if exists scu_secret_role;
+-- result:
+-- !result
+
+-- name: test_show_create_user_denied
+drop user if exists u_scu_target3;
+-- result:
+-- !result
+drop user if exists u_scu_plain;
+-- result:
+-- !result
+create user u_scu_target3 identified by '123456';
+-- result:
+-- !result
+create user u_scu_plain;
+-- result:
+-- !result
+grant impersonate on user root to u_scu_plain;
+-- result:
+-- !result
+execute as u_scu_plain with no revert;
+-- result:
+-- !result
+show create user current_user();
+-- result:
+'u_scu_plain'@'%'	CREATE USER 'u_scu_plain'@'%'
+-- !result
+show create user u_scu_target3;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user if exists u_scu_target3;
+-- result:
+-- !result
+drop user if exists u_scu_plain;
+-- result:
+-- !result

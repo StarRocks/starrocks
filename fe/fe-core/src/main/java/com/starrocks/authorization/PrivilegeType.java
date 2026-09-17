@@ -79,6 +79,19 @@ public class PrivilegeType {
 
     /**
      * NOTICE: PrivilegeType cannot use a value exceeding 20000, please follow the above sequence number
+     * <p>
+     * Ids at and above 20000 are the enterprise range. 20001-20003 and 20006 belong to
+     * {@code PrivilegeTypeEPack} (CREATE MASKING/ROW ACCESS POLICY, APPLY, CREATE FAILOVER GROUP); the rest
+     * are declared below. {@link #equals} and {@link #hashCode} are keyed solely by id, so a colliding id
+     * would make two system privileges indistinguishable.
+     * <p>
+     * Ids are further constrained by persistence: {@link ActionSet} stores a grant as
+     * {@code 1L << getId()}, and Java truncates a long shift distance to its low 6 bits. Two ids that
+     * are congruent modulo 64 therefore share one bit and cannot be told apart once persisted. Bits
+     * 0-28 are taken by the ids below 64 and bits 33-40 by 20001-20008, so a new id must land on a
+     * residue no other privilege occupies. 20009-20031 is the next contiguous safe range; beyond it
+     * 20032 would silently alias {@link #ANY}, while the still-free bits 29-32 and 41-63 remain
+     * reachable from higher ids.
      */
     public static final PrivilegeType CREATE_WAREHOUSE = new PrivilegeType(20004, "CREATE WAREHOUSE");
     public static final PrivilegeType SECURITY = new PrivilegeType(20005, "SECURITY");
@@ -89,12 +102,11 @@ public class PrivilegeType {
     //   GRANT DROP  ON CONTEXTBASE <name> ...   -- DROP CONTEXTBASE
     // (This mirrors the enforcement contract in ContextVisibility.checkOnContextBase: collection and
     // workspace operations are data-plane and require USAGE, not ALTER.)
-    //
-    // NOTE: ids 20001-20003 and 20006 are reserved by the enterprise PrivilegeTypeEPack
-    // (CREATE MASKING/ROW ACCESS POLICY, APPLY, CREATE FAILOVER GROUP). PrivilegeType.equals/hashCode
-    // are keyed solely by id, so a colliding id would make two system privileges indistinguishable.
-    // Pick the next free id (20007) rather than any of the EPack-reserved ones.
     public static final PrivilegeType CREATE_CONTEXTBASE = new PrivilegeType(20007, "CREATE CONTEXTBASE");
+
+    // Gates disclosure of stored secrets in SHOW CREATE statements; without it the secret is
+    // rendered as <secret>.
+    public static final PrivilegeType SHOW_SECRET = new PrivilegeType(20008, "SHOW SECRET");
 
     public static final Set<PrivilegeType> VALID_PRIVILEGE_TYPE = new ImmutableSet.Builder<PrivilegeType>().add(
             GRANT,
@@ -127,7 +139,8 @@ public class PrivilegeType {
             CREATE_PIPE,
             CREATE_WAREHOUSE,
             SECURITY,
-            CREATE_CONTEXTBASE
+            CREATE_CONTEXTBASE,
+            SHOW_SECRET
     ).build();
 
     public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE = VALID_PRIVILEGE_TYPE.stream().collect(Collectors.toMap(
