@@ -379,6 +379,15 @@ This topic introduces the following types of BE configurations:
 - Description: The jemalloc runtime options that `bin/start_backend.sh` exports as the `JEMALLOC_CONF` environment variable when the BE is started in the normal mode. This item is ignored if `JEMALLOC_CONF` is already set in the environment, and if the BE is started with `--jemalloc_debug` or `--check_mem_leak`, because those modes force their own option string. jemalloc reads `JEMALLOC_CONF` before the BE parses its configuration, so modifying this item at runtime only re-applies the options that jemalloc itself allows to be changed after initialization: `dirty_decay_ms`, `muzzy_decay_ms`, and `prof_active`. Adding, removing, or changing any other option is rejected with an error and the configuration value is rolled back, which means those options require restarting the BE. `prof_active` can only be changed if the BE was started with `prof:true`. Setting `dirty_decay_ms` or `muzzy_decay_ms` to `0` purges all unused pages synchronously and can therefore make the modification take a while, and setting it to `-1` disables purging.
 - Introduced in: v4.0.15, v4.1.3
 
+### large_memory_alloc_report_threshold
+
+- Default: 1073741824
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: When a single allocation requests more than this many bytes, the BE logs a WARNING containing the query ID, the fragment instance ID, the requested size, and the allocating stack trace. A value of `0` or below disables the report. The threshold check runs on every allocation, but it is only a comparison and its cost is negligible. The report is not: it captures and symbolizes a stack trace and takes the logging lock, so a threshold low enough that ordinary allocations cross it floods the log and slows down the whole process. Lower it only temporarily, to find the source of an unexpected memory spike, and restore it afterwards. The default only applies once BE configuration has been loaded; allocations made earlier, during process startup, are never reported.
+- Introduced in: v4.2.0
+
 ### local_library_dir
 
 - Default: `${UDF_RUNTIME_DIR}`

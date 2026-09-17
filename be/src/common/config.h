@@ -112,6 +112,16 @@ CONF_mString(jemalloc_conf,
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
 
+// Log a WARNING with the query id and the allocating stack whenever a single allocation
+// requests more than this many bytes. A value of 0 or below disables the report.
+// The check itself sits in the allocation hot path, but it is only a comparison against this
+// value; the expensive part is the report, which captures and symbolizes a stack trace and
+// takes the glog lock. Lowering the threshold far enough that ordinary allocations cross it
+// therefore degrades the whole process, so only lower it temporarily for diagnosis.
+// NOTE: the declared default only applies once config::init() has run. Allocations made before
+// that, during static initialization, see 0 and are never reported.
+CONF_mInt64(large_memory_alloc_report_threshold, "1073741824");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
