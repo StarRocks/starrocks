@@ -79,81 +79,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
-<<<<<<< HEAD
-=======
-### `low_cardinality_dict_cache_max_bytes`
-
-- 默认值: 1073741824
-- 类型: Long
-- 单位: 字节
-- 是否可变: Yes
-- 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。
-- 引入版本: v4.1.0
-
-### `enable_dict_thrash_guard`
-
-- 默认值: true
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 是否启用全局字典抖动守卫（thrash guard）。对于"滚动"低基数列——其瞬时不同值数量始终低于字典阈值，但取值集合持续轮换（例如按天分区、每天导入新值的列）——不会触发基数黑名单，但每次导入都会引入当前全局字典中缺失的值并使其失效。每次失效都会触发一次全表字典重采集，浪费 IO，并在存算分离集群中严重争用 segment 元数据缓存锁。启用该守卫后，StarRocks 会统计每个列的字典在 `dict_thrash_guard_window_sec` 时间窗口内的失效次数；当某列达到 `dict_thrash_guard_threshold` 次失效时，StarRocks 会禁止采集该列的全局字典。该禁用立即生效，并作为表的 `no_dict_columns` 属性持久化，因此能在 FE 重启和 Leader 切换后保留。如需重新启用某列的字典采集，执行 `ALTER TABLE ... ENABLE DICTIONARY (column)`。
-- 引入版本: v4.2.0
-
-### `dict_thrash_guard_window_sec`
-
-- 默认值: 60
-- 类型: Int
-- 单位: 秒
-- 是否可变: Yes
-- 描述: 全局字典抖动守卫统计某列字典失效次数所用的时间窗口长度（秒）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
-- 引入版本: v4.2.0
-
-### `dict_thrash_guard_threshold`
-
-- 默认值: 5
-- 类型: Int
-- 单位: -
-- 是否可变: Yes
-- 描述: 在 `dict_thrash_guard_window_sec` 时间窗口内，触发全局字典抖动守卫禁止采集某列全局字典的失效次数阈值。设置为 `0` 可在保持守卫启用的同时禁用次数检查（不会自动禁用任何列）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
-- 引入版本: v4.2.0
-
-
-### `min_max_stats_collect_interval_sec`
-
-- 默认值: 60
-- 类型: Int
-- 单位: 秒
-- 是否可变: Yes
-- 描述: 同一列两次 min/max 统计采集之间的最小间隔。min/max 统计（用于将 `min()`/`max()` 折叠为常量、以及构建压缩 group-by key）通过读取每个 segment zone-map 元数据的 `[_META_]` MetaScan 按需采集；若不节流，频繁导入的列会在每次导入后重扫，和全局字典重采集一样争用 segment 元数据缓存。间隔窗口内跳过 min/max 优化而非重新采集——绝不返回陈旧值，因此只影响优化、不影响正确性。设置为 `0` 可禁用节流。
-- 引入版本: v4.2.0
-
-### `enable_external_predicate_columns_collection`
-
-- 默认值: true
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 是否在查询优化过程中记录外部表（非原生表）的谓词列使用情况（WHERE/JOIN/GROUP BY 中用到的列）。StarRocks 利用这些使用信息缩小宽外部表 ANALYZE 时需要收集统计信息的列范围。禁用后不再记录外部表的谓词列，ANALYZE 会回退为收集所有列的统计信息。
-- 引入版本: v4.2.0
-
-### `statistic_external_predicate_columns_ttl_hours`
-
-- 默认值: 168
-- 类型: Long
-- 单位: 小时
-- 是否可变: Yes
-- 描述: 记录的外部表谓词列使用信息的存活时间（TTL）。`last_used` 时间早于该值的记录会被周期性的 vacuum 任务清除。设置为负值（例如 -1）可禁用 vacuum。默认值为一周，因为外部表 ANALYZE 的执行频率远低于内表，如果 TTL 太短（如内表默认的 24 小时），会导致两次收集之间使用信息被提前清除。
-- 引入版本: v4.2.0
-
-### `statistic_external_predicate_columns_cache_ttl_sec`
-
-- 默认值: 300
-- 类型: Long
-- 单位: 秒
-- 是否可变: Yes
-- 描述: 用于响应外部表谓词列查询（例如自动 ANALYZE 选列时）的内存缓存的 TTL。值越小，新记录的使用信息越快可见，但会增加对底层存储表的查询压力；值越大则降低该压力，但会增加数据的陈旧程度。
-- 引入版本: v4.2.0
-
 ### `enable_temporary_table_statistic_collect`
 
 - 默认值: true
@@ -163,7 +88,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 采集作业是否为临时表收集统计信息。该项作用于根据采集作业定义构建的收集任务，即自动采集作业以及通过 CREATE ANALYZE 创建的作业。设置为 `false` 时，构建这些作业时会跳过临时表，仅对非临时表进行采集。单次执行的 `ANALYZE TABLE` 语句不受该项影响，仍会为临时表收集统计信息。当生命周期很短的临时表带来的采集开销超过其统计信息的价值时，可将该项设置为 `false`。
 - 引入版本: v3.4.0
 
->>>>>>> 4797dc1 ([Doc] Document enable_temporary_table_statistic_collect and lock_manager_lock_table_num (#79232))
 ## 存储
 
 ### `allow_implicit_key_column_in_agg_add_column`
