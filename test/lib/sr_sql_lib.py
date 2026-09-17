@@ -2481,7 +2481,7 @@ class StarrocksSQLApiLib(object):
         and polls at 100ms so a fast job is not rounded up.
         """
         seen = getattr(self, "_last_alter_job_id", None)
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
         status = ""
         job_id = None
         while True:
@@ -2501,7 +2501,7 @@ class StarrocksSQLApiLib(object):
                 break
 
             tools.assert_true(
-                time.time() < deadline,
+                time.monotonic() < deadline,
                 "wait alter table %s finish timeout after %ss, job %s is %s"
                 % (alter_type, timeout, job_id, status),
             )
