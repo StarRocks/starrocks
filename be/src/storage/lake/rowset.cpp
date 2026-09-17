@@ -867,6 +867,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_s
         ASSIGN_OR_RETURN(auto seg_ptr,
                          Segment::open(seg_options.fs, segment_info, get_segment_idx(metadata(), index), segment_schema,
                                        &footer_size_hint, nullptr, lake_io_opts, _tablet_mgr));
+        // Same contract as get_each_segment_iterator(): a zero-row segment (a delete-only flush leaves
+        // one for its empty upsert chunk) has no last block, so a tablet-range iterator cannot be set up
+        // on it. Hand back a non-null EMPTY iterator so the slot reads as "this segment has no rows"
+        // instead of the EndOfFile hole below, which callers take to mean "no rows for this tablet".
+        if (seg_ptr->num_rows() == 0) {
+            seg_iterators[index] = new_empty_iterator(schema, config::vector_chunk_size);
+            continue;
+        }
         seg_options.tablet_range = std::nullopt;
         if (index < _metadata->segment_metas_size() && _metadata->segment_metas(index).shared() &&
             shared_segment_range.has_value()) {
