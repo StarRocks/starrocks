@@ -700,7 +700,7 @@ struct TGetLoadsResult {
 
 struct TGetRunningTxnsParams {
     1: optional string db
-    2: optional i64 txn_id // reserved; TXN_ID is BIGINT so it is not pushed down (applied as a residual filter)
+    2: optional i64 txn_id // pushed down from the planner; the FE filters on it before building rows
     3: optional string label
     4: optional Types.TUserIdentity current_user_ident // querying user; the FE filters rows by db privilege
 }

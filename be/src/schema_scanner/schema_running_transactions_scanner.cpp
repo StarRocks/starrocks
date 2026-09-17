@@ -63,10 +63,11 @@ Status SchemaRunningTransactionsScanner::start(RuntimeState* state) {
     } else if (std::string label; _parse_expr_predicate("LABEL", label)) {
         txn_params.__set_label(label);
     }
-    // NOTE: no TXN_ID pushdown. _parse_expr_predicate only extracts SLOT_REF == STRING_LITERAL, and TXN_ID
-    // is a BIGINT column, so a `WHERE TXN_ID = <n>` predicate never matches here; the BE applies it as a
-    // residual filter on the returned chunk instead. (Only the db/label VARCHAR predicates are pushed down
-    // through this helper.)
+    // TXN_ID arrives already extracted by the planner rather than through _parse_expr_predicate, which
+    // only reads string literals. -1 is the unset default.
+    if (_param->txn_id != -1) {
+        txn_params.__set_txn_id(_param->txn_id);
+    }
 
     // Forward the querying user so the leader FE can filter rows by database privilege.
     if (nullptr != _param->current_user_ident) {
