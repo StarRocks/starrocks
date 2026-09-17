@@ -3202,6 +3202,32 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             time.sleep(1)
         tools.assert_true(False, f"no compaction published on {table_name} within {timeout_sec}s")
 
+    def wait_compaction_committed(self, table_name: str, version_before, timeout: int = 60):
+        """Block until a compaction of `table_name` commits, i.e. until the tablet's visible
+        version moves past `version_before`.
+
+        `ALTER TABLE ... COMPACT` is fire-and-forget on shared-data tables: CompactionHandler only
+        raises the partition's priority to MANUAL_COMPACT and returns, CompactionScheduler
+        dispatches it on a 1s loop, and the CN runs it asynchronously. SQL exposes no synchronous
+        completion signal, which is why these cases used to sleep a fixed 30s -- pure wall clock
+        when compaction is quick, and still not enough when it is not.
+        """
+        sql = (
+            "SELECT MAX(t.MAX_VERSION) FROM information_schema.be_tablets t, "
+            "information_schema.tables_config c "
+            "WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = '%s' "
+            "AND c.TABLE_SCHEMA = DATABASE()" % table_name
+        )
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            res = self.execute_sql(sql, True)
+            tools.assert_true(res["status"], f'Fail to read MAX_VERSION, error=[{res["msg"]}]')
+            rows = list(res["result"])
+            if rows and rows[0][0] is not None and int(rows[0][0]) > int(version_before):
+                return
+            time.sleep(0.5)
+        tools.assert_true(False, "compaction of %s did not commit within %ss" % (table_name, timeout))
+
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.
 
