@@ -18,7 +18,15 @@
 
 #include <utility>
 
+<<<<<<< HEAD:be/src/io/cache_input_stream.cpp
 #include "common/config.h"
+=======
+#include "base/hash/hash_std.hpp"
+#include "base/hash/murmur_hash3.h"
+#include "common/config_network_fwd.h"
+#include "common/runtime_profile.h"
+#include "common/system/backend_options.h"
+>>>>>>> 9b21b3a ([BugFix] Pin the DataCache key hash to MurmurHash3 (#79262)):be/src/cache/scan/cache_input_stream.cpp
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
 #include "service/backend_options.h"
@@ -46,7 +54,11 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
     _cache_key.resize(12);
 
     char* data = _cache_key.data();
-    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    // MurmurHash3 explicitly, NOT HashUtil::hash64(): this key is persisted in the local disk cache
+    // and is sent to peer BEs, so it must stay identical across releases and architectures, while
+    // hash64() picks its implementation from a hardware dispatch table that is free to change.
+    uint64_t hash_value = 0;
+    murmur_hash3_x64_64(filename.data(), static_cast<int>(filename.size()), 0, &hash_value);
     memcpy(data, &hash_value, sizeof(hash_value));
     // The modification time is more appropriate to indicate the different file versions.
     // While some data source, such as Hudi, have no modification time because their files
