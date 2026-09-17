@@ -1590,7 +1590,7 @@ public class QueryAnalyzer {
          * @return Final RelationFields - deduplicated if USING clause present, original joinedFields otherwise
          *
          * @see com.starrocks.sql.optimizer.transformer.RelationTransformer#buildFullOuterJoinUsingPlan(
-         * JoinRelation, OptExprBuilder, ScalarOperator)
+         * JoinRelation, OptExprBuilder, LogicalPlan, LogicalPlan)
          */
         private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join,
                                                         Scope leftScope, Scope rightScope) {
