@@ -22,10 +22,14 @@
 #include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "column/binary_column.h"
+#include "column/chunk.h"
+#include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "common/bloom_filter.h"
 #include "exprs/cast_expr.h"
+#include "exprs/compound_predicate.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -33,6 +37,196 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+
+class NgramBloomFilterNotPredicateTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        ASSERT_OK(BloomFilter::create(BLOCK_BLOOM_FILTER, &_bf));
+        ASSERT_OK(_bf->init(64, 0.01, HashStrategyPB::HASH_MURMUR3_X64_64));
+        _options.index_gram_num = 4;
+        _options.index_case_sensitive = true;
+    }
+
+    void TearDown() override {
+        if (_context != nullptr) {
+            _context->close(&_state);
+        }
+    }
+
+    ColumnPtr make_input(std::initializer_list<const char*> values) {
+        ColumnBuilder<TYPE_VARCHAR> builder(values.size());
+        for (const char* value : values) {
+            if (value == nullptr) {
+                builder.append_null();
+                continue;
+            }
+            Slice slice(value);
+            builder.append(slice);
+            // These test inputs are ASCII, so each four-byte window is a gram.
+            for (size_t i = 0; i + _options.index_gram_num <= slice.size; ++i) {
+                _bf->add_bytes(slice.data + i, _options.index_gram_num);
+            }
+        }
+        _input = builder.build(false);
+        return _input;
+    }
+
+    Expr* make_like(const ColumnPtr& input, const std::string& pattern) {
+        TFunction function;
+        TFunctionName name;
+        name.__set_function_name("LIKE");
+        function.__set_name(name);
+        function.__set_binary_type(TFunctionBinaryType::BUILTIN);
+        function.__set_fid(60010);
+        function.__set_has_var_args(false);
+        function.__set_arg_types({gen_type_desc(TPrimitiveType::VARCHAR), gen_type_desc(TPrimitiveType::VARCHAR)});
+        function.__set_ret_type(gen_type_desc(TPrimitiveType::BOOLEAN));
+
+        TExprNode node;
+        node.node_type = TExprNodeType::FUNCTION_CALL;
+        node.num_children = 2;
+        node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        node.__set_fn(function);
+        auto* like = _pool.add(new VectorizedFunctionCallExpr(node));
+
+        TExprNode argument;
+        argument.node_type = TExprNodeType::SLOT_REF;
+        argument.type = gen_type_desc(TPrimitiveType::VARCHAR);
+        like->add_child(_pool.add(new MockColumnExpr(argument, input)));
+        like->add_child(_pool.add(new MockConstVectorizedExpr<TYPE_VARCHAR>(argument, pattern)));
+        return like;
+    }
+
+    Expr* make_compound(TExprOpcode::type opcode, std::initializer_list<Expr*> children) {
+        TExprNode node;
+        node.node_type = TExprNodeType::COMPOUND_PRED;
+        node.__set_opcode(opcode);
+        node.num_children = children.size();
+        node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        auto* expr = _pool.add(VectorizedCompoundPredicateFactory::from_thrift(node));
+        for (Expr* child : children) {
+            expr->add_child(child);
+        }
+        return expr;
+    }
+
+    void prepare(Expr* root) {
+        _context = std::make_unique<ExprContext>(root);
+        ASSERT_OK(_context->prepare(&_state));
+        ASSERT_OK(_context->open(&_state));
+    }
+
+    void check_rows(std::initializer_list<int> expected) {
+        Chunk chunk;
+        chunk.append_column(_input, 0);
+        auto result = _context->evaluate(&chunk);
+        ASSERT_OK(result);
+        ASSERT_EQ(expected.size(), result.value()->size());
+        ColumnViewer<TYPE_BOOLEAN> viewer(result.value());
+        size_t row = 0;
+        for (int value : expected) {
+            EXPECT_EQ(value < 0, viewer.is_null(row)) << "row " << row;
+            if (value >= 0) {
+                EXPECT_EQ(value, viewer.value(row)) << "row " << row;
+            }
+            ++row;
+        }
+    }
+
+    RuntimeState _state;
+    ObjectPool _pool;
+    std::unique_ptr<ExprContext> _context;
+    std::unique_ptr<BloomFilter> _bf;
+    ColumnPtr _input;
+    NgramBloomFilterReaderOptions _options;
+};
+
+TEST_F(NgramBloomFilterNotPredicateTest, MissingGramsKeepNonmatchingRows) {
+    auto* like = make_like(make_input({"alpha", "", nullptr}), "%30:30%");
+    auto* not_like = make_compound(TExprOpcode::COMPOUND_NOT, {like});
+    ASSERT_NO_FATAL_FAILURE(prepare(not_like));
+
+    ASSERT_TRUE(like->support_ngram_bloom_filter(_context.get()));
+    ASSERT_FALSE(like->ngram_bloom_filter(_context.get(), _bf.get(), _options));
+    EXPECT_FALSE(_context->support_ngram_bloom_filter());
+    EXPECT_TRUE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({1, 1, -1});
+}
+
+TEST_F(NgramBloomFilterNotPredicateTest, MatchingGramsKeepMixedPage) {
+    auto* like = make_like(make_input({"prefix30:30suffix", "alpha", "", nullptr}), "%30:30%");
+    ASSERT_NO_FATAL_FAILURE(prepare(make_compound(TExprOpcode::COMPOUND_NOT, {like})));
+
+    ASSERT_TRUE(like->ngram_bloom_filter(_context.get(), _bf.get(), _options));
+    EXPECT_FALSE(_context->support_ngram_bloom_filter());
+    // A positive bloom-filter probe cannot be inverted: some rows still match NOT LIKE.
+    EXPECT_TRUE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({0, 1, 1, -1});
+}
+
+TEST_F(NgramBloomFilterNotPredicateTest, AllMatchingRowsAreRejectedByRowEvaluation) {
+    auto* like = make_like(make_input({"30:30", "prefix30:30suffix"}), "%30:30%");
+    ASSERT_NO_FATAL_FAILURE(prepare(make_compound(TExprOpcode::COMPOUND_NOT, {like})));
+
+    ASSERT_TRUE(like->ngram_bloom_filter(_context.get(), _bf.get(), _options));
+    EXPECT_FALSE(_context->support_ngram_bloom_filter());
+    EXPECT_TRUE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({0, 0});
+}
+
+TEST_F(NgramBloomFilterNotPredicateTest, NullOnlyPagePreservesNullSemantics) {
+    auto* like = make_like(make_input({nullptr, nullptr}), "%30:30%");
+    ASSERT_NO_FATAL_FAILURE(prepare(make_compound(TExprOpcode::COMPOUND_NOT, {like})));
+
+    EXPECT_FALSE(_context->support_ngram_bloom_filter());
+    EXPECT_TRUE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({-1, -1});
+}
+
+TEST_F(NgramBloomFilterNotPredicateTest, NestedNegationsKeepPage) {
+    Expr* root = make_like(make_input({"alpha", nullptr}), "%30:30%");
+    for (int i = 0; i < 3; ++i) {
+        root = make_compound(TExprOpcode::COMPOUND_NOT, {root});
+    }
+    ASSERT_NO_FATAL_FAILURE(prepare(root));
+
+    EXPECT_FALSE(_context->support_ngram_bloom_filter());
+    EXPECT_TRUE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({1, -1});
+}
+
+TEST_F(NgramBloomFilterNotPredicateTest, NegatedDisjunctionKeepsPage) {
+    auto input = make_input({"alpha", "", nullptr});
+    auto* either_like =
+            make_compound(TExprOpcode::COMPOUND_OR, {make_like(input, "%30:30%"), make_like(input, "%missing%")});
+    ASSERT_NO_FATAL_FAILURE(prepare(make_compound(TExprOpcode::COMPOUND_NOT, {either_like})));
+
+    EXPECT_FALSE(_context->support_ngram_bloom_filter());
+    EXPECT_TRUE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({1, 1, -1});
+}
+
+TEST_F(NgramBloomFilterNotPredicateTest, ConjunctionDoesNotPruneUsingNegatedChild) {
+    auto input = make_input({"keep", "skip", nullptr});
+    auto* not_like = make_compound(TExprOpcode::COMPOUND_NOT, {make_like(input, "%30:30%")});
+    ASSERT_NO_FATAL_FAILURE(prepare(make_compound(TExprOpcode::COMPOUND_AND, {not_like, make_like(input, "%keep%")})));
+
+    // The positive LIKE enables bloom-filter evaluation of the parent. Its
+    // recursive evaluation must still leave the NOT child's page unpruned.
+    EXPECT_TRUE(_context->support_ngram_bloom_filter());
+    EXPECT_TRUE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({1, 0, -1});
+}
+
+TEST_F(NgramBloomFilterNotPredicateTest, ConjunctionStillPrunesUsingPositiveChild) {
+    auto input = make_input({"alpha", "", nullptr});
+    auto* not_like = make_compound(TExprOpcode::COMPOUND_NOT, {make_like(input, "%30:30%")});
+    ASSERT_NO_FATAL_FAILURE(prepare(make_compound(TExprOpcode::COMPOUND_AND, {not_like, make_like(input, "%keep%")})));
+
+    EXPECT_TRUE(_context->support_ngram_bloom_filter());
+    EXPECT_FALSE(_context->ngram_bloom_filter(_bf.get(), _options));
+    check_rows({0, 0, -1});
+}
 
 class VectorizedFunctionCallExprTest : public ::testing::Test {
 public:
