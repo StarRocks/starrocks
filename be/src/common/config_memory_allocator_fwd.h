@@ -53,6 +53,67 @@ CONF_mString(jemalloc_conf,
              "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
              "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
 
+// Whether to tighten jemalloc's dirty/muzzy decay as the process resident size approaches
+// `mem_limit`.
+//
+// The process memory tracker counts the bytes the BE asked for, while the OOM killer counts the
+// pages the kernel still holds. When jemalloc cannot reuse what the BE freed -- a freed extent
+// only serves a request within 2^opt.lg_extent_max_active_fit of its own size -- the two drift
+// apart: the tracker stays under `mem_limit` and keeps admitting queries while the resident size
+// runs to the machine ceiling and the process is killed from outside.
+//
+// With this on, a scan thread compares /proc/self/statm against `mem_limit` and shortens the
+// decay in steps -- 60% of the configured decay at 70% of the limit, 20% at 85%, and 0 at 100%,
+// which is 3000ms/1000ms/0 at the 5000ms the BE ships with -- restoring the decay configured in
+// `jemalloc_conf` once the resident size has stayed below a step for the step-down hold. The steps are fractions
+// so that a BE configured tighter than the default never gets a step looser than its baseline.
+// A decay of 0 purges synchronously and costs seconds on a large heap, which is why the cheaper
+// steps run first.
+//
+// Off by default: it trades allocator throughput for a resident size that tracks what was
+// actually freed, and only a BE whose resident size runs ahead of its tracker needs that trade.
+// Turning it off restores the configured decay.
+CONF_mBool(enable_jemalloc_decay_under_rss_pressure, "false");
+
+// How often the scan thread of `enable_jemalloc_decay_under_rss_pressure` compares the process
+// resident size against `mem_limit`.
+//
+// This is what decides how far the resident size can climb between two decisions, so it is the
+// knob to reach for when a load allocates fast enough to cross a step and overshoot before the
+// next scan sees it: a load allocating 16GiB/s covers 1.6GiB in the default 100ms. Each pass
+// reads /proc/self/statm, which costs a syscall pair and nothing else, so shortening it is
+// cheap; lengthening it past the time the load needs to cross a whole step defeats the ladder.
+//
+// The hold before relaxing a step is wall-clock, so it does not change with this value. Accepted
+// values are 10 to 1000, clamped to the nearer bound outside that: below 10 a non-positive one
+// would spin and a few milliseconds buy nothing, since the cheapest decay transition already
+// costs ~5ms; above 1000 a single interval covers more than the gap between two steps at the
+// allocation rates this guards against, so a step can be skipped entirely.
+CONF_mInt32(jemalloc_decay_rss_scan_interval_ms, "100");
+
+// How long the resident size must stay below a step before `enable_jemalloc_decay_under_rss_pressure`
+// relaxes the decay back to that step.
+//
+// The two directions are not symmetric. Tightening is applied as soon as a threshold is crossed,
+// because a load allocating fast enough can be killed while a hold elapses. Relaxing waits,
+// because it is the direction that can be wrong twice: the step to a decay of 0 purges
+// synchronously and was measured at 3.6-7.5s on a large heap, so relaxing into pressure that has
+// not actually passed pays that cost again. A 3s hold was observed letting the resident size come
+// back to 80% one second after the decay had been relaxed, and under a load that kept the
+// pressure up a 5s hold still cycled through that step 18 times in under four minutes, spending
+// more than half the run inside those walks.
+//
+// This is a hold in addition to the 5% gap between the ratio that enters a step and the ratio that
+// leaves it, not instead of it. The gap stops oscillation at a threshold; this stops relaxing into
+// a load that is merely pausing. It is wall-clock, so it does not change with
+// `jemalloc_decay_rss_scan_interval_ms`. ClickHouse's equivalent, its server setting
+// `memory_worker_decay_adjustment_period_ms`, defaults to the same 5000 but applies it in both
+// directions.
+//
+// Accepted values are 0 to 300000, clamped to the nearer bound outside that. 0 relaxes as soon
+// as the resident size is under the step, leaving only the ratio gap.
+CONF_mInt32(jemalloc_decay_rss_step_down_hold_ms, "10000");
+
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");

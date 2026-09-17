@@ -52,10 +52,16 @@
 #endif
 #include <fmt/ranges.h>
 
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <optional>
+#include <thread>
+#include <utility>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
@@ -64,6 +70,7 @@
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
 #include "common/util/debug_util.h"
 #include "common/util/misc.h"
 #include "common/util/thrift_util.h"
@@ -74,6 +81,7 @@
 #include "jemalloc/jemalloc.h"
 #include "platform/platform_metrics.h"
 #include "platform/user_function_cache.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "runtime/memory/memory_lock.h"
 #include "runtime/process_memory_metrics.h"
 #include "runtime/remote_arrow_queue_mgr.h"
@@ -84,6 +92,7 @@
 #include "service/backend_metrics_initializer.h"
 #include "service/failure_handler.h"
 #include "service/mem_hook.h"
+#include "service/mem_purge_policy.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "types/time_types.h"
@@ -223,6 +232,208 @@ static void retrieve_jemalloc_stats(JemallocStats* stats) {
     }
     if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
         stats->retained = value;
+    }
+}
+
+// The process memory tracker counts the bytes the BE asked for, while the OOM killer counts
+// the pages the kernel still holds. When jemalloc cannot reuse what the BE freed the two drift
+// apart: the tracker stays well under its limit and keeps admitting queries while the resident
+// size runs away.
+//
+// Waiting for the limit and then switching to eager reclaim in one step does not work. Setting
+// a decay of 0 purges each arena's backlog synchronously as it goes, so the arenas only come
+// under backpressure one after another -- measured as 1.8s to cover all 32, during which a
+// load allocating ~18GiB/s overshot by another 18GiB and settled at 97% of the machine.
+//
+// So tighten the decay in steps instead. Draining early keeps the backlog small, which is what
+// makes the final switch fast, and the resident size is nudged down long before anything has to
+// be forced. The rungs and the rules for moving between them are in service/mem_purge_policy.h;
+// what is left here is reading the resident size, applying a decay, and waiting.
+void mem_purge_daemon(void* arg_this) {
+    auto* daemon = static_cast<Daemon*>(arg_this);
+    // Both configs below are mutable and so are read on every pass, and both have values outside
+    // which the loop breaks rather than merely tunes.
+    //
+    // The scan interval cannot go under 10ms -- a non-positive one spins, and a few milliseconds
+    // buys nothing because the cheapest decay transition already costs ~5ms -- nor over a second.
+    // At the ~16GiB/s this was built against, a second is more than the 15GiB between two rungs,
+    // so an interval above it can step over a rung entirely; it is also what a sleep holds up
+    // shutdown by, since Daemon::stop() sets the flag and then joins.
+    //
+    // The step-down hold can be 0 -- relax as soon as the resident size is under the rung,
+    // leaving only the ratio gap to damp it -- but not negative, and not so long that the ladder
+    // stays tight for an hour after the pressure has gone.
+    constexpr int32_t kMinScanIntervalMs = 10;
+    constexpr int32_t kMaxScanIntervalMs = 1000;
+    constexpr int32_t kMinStepDownHoldMs = 0;
+    constexpr int32_t kMaxStepDownHoldMs = 300000;
+    // Each floor doubles as "nothing refused yet" for its own warning: it is inside the accepted
+    // range and so can never be a refused value -- unlike a fixed 0, which is the value a
+    // misconfigured interval most often has.
+    int32_t warned_scan_interval_ms = kMinScanIntervalMs;
+    int32_t warned_step_down_hold_ms = kMinStepDownHoldMs;
+
+    // The baseline is read at every transition rather than captured once here. `dirty_decay_ms`
+    // and `muzzy_decay_ms` are two of the three jemalloc options a running BE may change, so a
+    // baseline captured at thread start goes stale the moment an operator updates
+    // `jemalloc_conf`: the ladder would scale from a value the arenas no longer run with -- a
+    // rung derived from 5000ms is looser than a BE actually running at 1000ms -- and would later
+    // "restore" a value the operator had already replaced.
+    //
+    // A read is a snapshot, not a reservation: an update can land between it and the write that
+    // follows, leaving the arenas on a rung derived from a baseline that is already gone. That
+    // is what decay_write_generation() is watched for -- the next pass sees the update, drops
+    // the rung and derives it again.
+    constexpr ssize_t kDefaultDecayMs = 5000;
+
+    // Level 0 puts back the configured decay, whatever it is now; level N applies a fraction of
+    // it. Restoring and scaling are not the same value: restoring hands back exactly what is
+    // configured, -1 ("never purge") included, while scaling needs a finite positive duration
+    // and falls back to the default when -1 or an unreadable config offers none -- rather than
+    // refusing to engage on the configuration most likely to need it. Each kind scales from its
+    // own baseline, since the two may be configured differently.
+    auto decay_of = [&](int level) -> std::pair<ssize_t, ssize_t> {
+        const ssize_t restore_dirty = configured_decay_ms(/*dirty=*/true).value_or(kDefaultDecayMs);
+        const ssize_t restore_muzzy = configured_decay_ms(/*dirty=*/false).value_or(kDefaultDecayMs);
+        if (level <= 0) {
+            return {restore_dirty, restore_muzzy};
+        }
+        return {decay_ms_at_level(level, decay_ladder_reference_ms(restore_dirty, kDefaultDecayMs)),
+                decay_ms_at_level(level, decay_ladder_reference_ms(restore_muzzy, kDefaultDecayMs))};
+    };
+    // A decay of 0 purges every arena's backlog as it is applied, and walking the arenas one
+    // at a time leaves the ones at the end of the walk without backpressure for as long as the
+    // walk takes -- measured as a walk that never finished. Spread it over a pool; each arena
+    // has its own lock.
+    //
+    // min_threads is 1 because this pool is idle for the whole life of a BE that never comes
+    // under pressure, and the feature is off by default. The threads it does grow are kept for
+    // kPurgePoolIdleMs, long enough to span one pressure episode: the ladder climbs through its
+    // levels within seconds and a step down cannot happen for at least the step-down hold, so
+    // the transitions of an episode share the threads the first of them paid for.
+    constexpr int64_t kPurgePoolIdleMs = 30000;
+    const int purge_parallelism = std::max(4, static_cast<int>(std::thread::hardware_concurrency()) / 2);
+    std::unique_ptr<ThreadPool> purge_pool;
+    if (Status st = ThreadPoolBuilder("mem_purge")
+                            .set_min_threads(1)
+                            .set_max_threads(purge_parallelism)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(kPurgePoolIdleMs))
+                            .build(&purge_pool);
+        !st.ok()) {
+        // Not fatal: a null pool makes the walk serial, which is what it was before the pool.
+        LOG(WARNING) << "could not build the arena purge pool, the walk will be serial: " << st;
+        purge_pool.reset();
+    }
+    auto write_decay = [&purge_pool](ssize_t dirty_ms, ssize_t muzzy_ms) {
+        Status st = set_jemalloc_decay_ms(/*dirty=*/true, dirty_ms, purge_pool.get());
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to set dirty_decay_ms to " << dirty_ms << ": " << st;
+        }
+        st = set_jemalloc_decay_ms(/*dirty=*/false, muzzy_ms, purge_pool.get());
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to set muzzy_decay_ms to " << muzzy_ms << ": " << st;
+        }
+    };
+
+    // What the arenas were left holding, as far as this thread knows. Only as far as it knows: a
+    // `jemalloc_conf` update writes the same per-arena nodes, so an update makes this stale
+    // until the rung is written again. `seen_decay_generation` is what says one has landed.
+    int level = 0;
+    uint64_t seen_decay_generation = decay_write_generation();
+    MonotonicStopWatch below_level;
+
+    auto apply_rung = [&](int target) {
+        const auto [dirty_ms, muzzy_ms] = decay_of(target);
+        write_decay(dirty_ms, muzzy_ms);
+    };
+
+    while (!daemon->stopped()) {
+        // A `jemalloc_conf` update writes the same per-arena nodes, so once one lands the arenas
+        // no longer hold what this thread put there. Write the current rung again rather than
+        // work out what was clobbered: the write is what makes the two agree, and deriving it
+        // from the baseline picks up the operator's new value at the same time.
+        //
+        // Unconditionally: at level 0 as well as at a rung, and whether the feature is enabled or
+        // not. Both exceptions look safe and are not. At level 0 the arenas may hold a baseline
+        // this thread restored just before the update landed. Disabled is the same case -- the
+        // restore that turning it off performs is itself a write that can land last -- so
+        // skipping the rewrite there strands the arenas on a decay the operator has replaced,
+        // with level already 0 and nothing else that would ever write again.
+        //
+        // No attempt to prove the write was not itself raced: whatever order two writes land in,
+        // the last update bumps the generation last, so the last rewrite is the one derived from
+        // the settled baseline. When nothing was wrong this costs one extra walk per config
+        // change, which is a rare, deliberate act.
+        if (const uint64_t generation = decay_write_generation(); generation != seen_decay_generation) {
+            seen_decay_generation = generation;
+            LOG(INFO) << "a jemalloc_conf update rewrote the arenas' decay; applying level " << level
+                      << " again from the new baseline";
+            apply_rung(level);
+        }
+
+        const int32_t interval_ms =
+                config_ms_in_range("jemalloc_decay_rss_scan_interval_ms", config::jemalloc_decay_rss_scan_interval_ms,
+                                   kMinScanIntervalMs, kMaxScanIntervalMs, &warned_scan_interval_ms);
+        const int32_t step_down_hold_ms =
+                config_ms_in_range("jemalloc_decay_rss_step_down_hold_ms", config::jemalloc_decay_rss_step_down_hold_ms,
+                                   kMinStepDownHoldMs, kMaxStepDownHoldMs, &warned_step_down_hold_ms);
+
+        if (!config::enable_jemalloc_decay_under_rss_pressure) {
+            // The config is mutable, so this is also the path taken when it is turned off at
+            // runtime. Hand jemalloc back the configured decay before going idle; leaving the
+            // arenas at whatever level the last scan set would make the switch look like it
+            // had no effect until the next restart.
+            if (level != 0) {
+                LOG(INFO) << "enable_jemalloc_decay_under_rss_pressure turned off at level " << level
+                          << "; restoring the configured jemalloc decay";
+                apply_rung(0);
+                level = 0;
+            }
+            below_level.reset();
+            std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
+            continue;
+        }
+
+        auto* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
+        const int64_t limit = tracker != nullptr ? tracker->limit() : -1;
+        // MemInfo::process_resident_bytes() rather than jemalloc's stats.resident: the latter
+        // needs an epoch refresh that walks every arena, far too heavy to poll at this interval,
+        // and it is not what the kernel kills on anyway.
+        const int64_t rss = MemInfo::process_resident_bytes();
+
+        if (limit > 0 && rss > 0) {
+            const int up_target = decay_level_to_enter(rss, limit);
+            const int down_target = decay_level_to_hold(rss, limit);
+
+            if (up_target > level) {
+                LOG(INFO) << "rss " << rss << " reached " << kDecayLevels[up_target - 1].enter_ratio * 100
+                          << "% of the process mem limit " << limit << " while the tracker only counted "
+                          << tracker->consumption() << "; tightening jemalloc decay to level " << up_target;
+                apply_rung(up_target);
+                level = up_target;
+                below_level.reset();
+            } else if (down_target < level) {
+                below_level.start();
+                // The floor guarantees step_down_hold_ms is not negative, so the cast is safe;
+                // elapsed_time() is unsigned nanoseconds.
+                if (below_level.elapsed_time() / 1000000 >= static_cast<uint64_t>(step_down_hold_ms)) {
+                    LOG(INFO) << "rss " << rss << " back under the level " << level
+                              << " threshold of the process mem limit " << limit << "; relaxing jemalloc decay to "
+                              << "level " << down_target;
+                    apply_rung(down_target);
+                    level = down_target;
+                    below_level.reset();
+                }
+            } else {
+                below_level.reset();
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
+    }
+
+    if (level != 0) {
+        apply_rung(0);
     }
 }
 
@@ -430,6 +641,12 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
         std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
         Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_track");
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
+    }
+
+    {
+        std::thread mem_purge_thread(mem_purge_daemon, this);
+        Thread::set_thread_name(mem_purge_thread, "mem_purge");
+        _daemon_threads.emplace_back(std::move(mem_purge_thread));
     }
 #endif
 

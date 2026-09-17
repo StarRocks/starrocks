@@ -17,17 +17,21 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <optional>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "base/string/trim.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
 #include "jemalloc/jemalloc.h"
@@ -42,6 +46,11 @@ namespace {
 // internal headers, so the name is spelled out here the way bin/start_backend.sh spells it out.
 const char* const kJemallocConfEnv = "JEMALLOC_CONF";
 const char* const kJemallocConfName = "jemalloc_conf";
+
+// Bumped whenever a jemalloc_conf update writes a decay, so that a caller holding the arenas at
+// a decay of its own can notice that it was overwritten. Not under the updater's mutex on the
+// read side: a reader only needs to see that it changed, not to be ordered against the write.
+std::atomic<uint64_t> g_decay_write_generation{0};
 
 const char* const kDirtyDecayMs = "dirty_decay_ms";
 const char* const kMuzzyDecayMs = "muzzy_decay_ms";
@@ -198,6 +207,130 @@ Status apply_prof_active(bool active) {
 }
 
 } // namespace
+
+// Exposed for the memory watchdog: under pressure it switches the arenas to returning every
+// freed page immediately, and puts the configured decay back once the pressure is gone.
+//
+// Setting a decay of 0 purges that arena's backlog synchronously, so the cost of the walk is
+// proportional to how much is dirty. With ~65GiB spread over 32 arenas a serial walk did not
+// finish before the process was killed. The arenas have their own locks, so a pool turns that
+// into a fraction of the time; a null pool asks for the serial walk back.
+Status set_jemalloc_decay_ms(bool dirty, ssize_t decay_ms, ThreadPool* pool) {
+    const char* option = dirty ? kDirtyDecayMs : kMuzzyDecayMs;
+    const std::string default_name = dirty ? "arenas.dirty_decay_ms" : "arenas.muzzy_decay_ms";
+    if (int err = je_mallctl(default_name.c_str(), nullptr, nullptr, &decay_ms, sizeof(decay_ms)); err != 0) {
+        return mallctl_failed(default_name, err);
+    }
+
+    // No "epoch" refresh here either, for the reasons in apply_decay_ms().
+    unsigned narenas = 0;
+    size_t narenas_size = sizeof(narenas);
+    if (int err = je_mallctl("arenas.narenas", &narenas, &narenas_size, nullptr, 0); err != 0) {
+        return mallctl_failed("arenas.narenas", err);
+    }
+    ASSIGN_OR_RETURN(unsigned narenas_auto, auto_arena_count());
+    narenas = std::min(narenas, narenas_auto);
+
+    MonotonicStopWatch watch;
+    watch.start();
+    std::atomic<size_t> updated{0};
+    std::atomic<size_t> absent{0};
+    // The first errno that was neither success nor "not created yet", kept so the walk can
+    // report a failure the way the serial path does instead of returning OK with an arena left
+    // on its old decay.
+    std::atomic<int> first_error{0};
+    // Only the calling thread walks inline, so this needs no synchronization.
+    size_t inline_walked = 0;
+    bool logged_fallback = false;
+    auto set_one = [&](unsigned i) {
+        std::string name = fmt::format("arena.{}.{}_decay_ms", i, dirty ? "dirty" : "muzzy");
+        const int err = je_mallctl(name.c_str(), nullptr, nullptr, &decay_ms, sizeof(decay_ms));
+        if (err == 0) {
+            updated.fetch_add(1);
+            return;
+        }
+        if (err == EFAULT) {
+            // The arena has not been created yet. Under `percpu_arena` arenas are created
+            // lazily, and such an arena picks up the default written above.
+            absent.fetch_add(1);
+            return;
+        }
+        int none = 0;
+        first_error.compare_exchange_strong(none, err);
+        LOG(WARNING) << "failed to set " << name << " to " << decay_ms << ": " << std::strerror(err);
+    };
+
+    // One task per arena rather than one per thread: an arena's share of the work is whatever it
+    // has dirty, which is wildly uneven -- a single arena has held 97% of it -- so letting the
+    // pool hand out arenas as threads free up balances what a fixed split cannot.
+    //
+    // A submission that is refused runs inline instead. The pool can refuse because it is shut
+    // down or because it could not start a thread, and the second is most likely exactly here:
+    // this runs only when the machine is out of memory. Falling back to the calling thread keeps
+    // a failure to parallelize from becoming a failure to reclaim.
+    std::unique_ptr<ThreadPoolToken> token;
+    if (pool != nullptr) {
+        token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    }
+    for (unsigned i = 0; i < narenas; i++) {
+        if (token == nullptr) {
+            set_one(i);
+            inline_walked++;
+            continue;
+        }
+        Status st = token->submit_func([&set_one, i]() { set_one(i); });
+        if (!st.ok()) {
+            if (!logged_fallback) {
+                // Once per call: a pool that refuses one arena usually refuses the rest, and the
+                // count of arenas walked inline is in the summary below anyway.
+                LOG(WARNING) << "arena walk fell back to the calling thread at arena " << i << ": " << st;
+                logged_fallback = true;
+            }
+            set_one(i);
+            inline_walked++;
+        }
+    }
+    if (token != nullptr) {
+        token->wait();
+    }
+
+    // WARNING only for a decay of 0, matching apply_decay_ms(): that is the walk that purges
+    // every arena's backlog in these threads, so the duration is both how long the last arena
+    // went without backpressure and a stall worth seeing on its own. Every other value restarts
+    // the decay backlog and returns in milliseconds, which is routine.
+    const size_t failed = narenas - updated.load() - absent.load();
+    LOG_AT_LEVEL(decay_ms == 0 ? google::GLOG_WARNING : google::GLOG_INFO)
+            << "set jemalloc " << option << " to " << decay_ms << " on " << updated.load() << " of " << narenas
+            << " arenas (" << absent.load() << " not created yet, " << failed << " failed, " << inline_walked
+            << " inline), took " << watch.elapsed_time() / 1000 << "us";
+    if (const int err = first_error.load(); err != 0) {
+        return mallctl_failed(fmt::format("arena.<i>.{}", option), err);
+    }
+    return Status::OK();
+}
+
+// The decay the arenas are currently running with, so the watchdog can scale from it and put it
+// back. Read from the options applied so far rather than from opt.dirty_decay_ms, which is a
+// read-only snapshot of what the process started with: dirty_decay_ms is one of the three
+// options a running BE may change, and a watchdog scaling from the startup value would tighten
+// to something looser than what the arenas actually run with, then "restore" a value the
+// operator had already replaced.
+uint64_t decay_write_generation() {
+    return g_decay_write_generation.load(std::memory_order_relaxed);
+}
+
+std::optional<ssize_t> configured_decay_ms(bool dirty) {
+    const JemallocOptions applied = JemallocConfUpdater::instance().applied_options();
+    const auto it = applied.find(dirty ? kDirtyDecayMs : kMuzzyDecayMs);
+    if (it == applied.end()) {
+        return std::nullopt;
+    }
+    StatusOr<ssize_t> parsed = parse_decay_ms(it->first, it->second);
+    if (!parsed.ok()) {
+        return std::nullopt;
+    }
+    return parsed.value();
+}
 
 StatusOr<JemallocOptions> parse_jemalloc_conf(std::string_view conf) {
     JemallocOptions options;
@@ -367,10 +500,12 @@ Status JemallocConfUpdater::update(std::string_view new_conf) {
     if (dirty_decay_ms.has_value()) {
         RETURN_IF_ERROR(apply_decay_ms(kDirtyDecayMs, true, *dirty_decay_ms));
         _applied[kDirtyDecayMs] = changed.at(kDirtyDecayMs);
+        g_decay_write_generation.fetch_add(1, std::memory_order_relaxed);
     }
     if (muzzy_decay_ms.has_value()) {
         RETURN_IF_ERROR(apply_decay_ms(kMuzzyDecayMs, false, *muzzy_decay_ms));
         _applied[kMuzzyDecayMs] = changed.at(kMuzzyDecayMs);
+        g_decay_write_generation.fetch_add(1, std::memory_order_relaxed);
     }
     if (prof_active.has_value()) {
         RETURN_IF_ERROR(apply_prof_active(*prof_active));

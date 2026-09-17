@@ -16,6 +16,7 @@
 
 #include <map>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -23,6 +24,8 @@
 #include "common/statusor.h"
 
 namespace starrocks {
+
+class ThreadPool;
 
 // Parsed form of a jemalloc option string such as
 // "percpu_arena:percpu,dirty_decay_ms:5000,prof_active:false". A duplicated key
@@ -51,6 +54,46 @@ StatusOr<std::string> jemalloc_conf_with_prof_active(std::string_view conf, bool
 // bindings call; it must never be reached from HeapProf itself, because the config update hook
 // calls into HeapProf and a call back the other way would deadlock on HeapProf's own mutex.
 Status set_prof_active_via_config(bool active);
+
+// Sets dirty/muzzy decay on every automatic arena. 0 purges each arena's backlog synchronously
+// as it is applied; a positive value only restarts the decay backlog and leaves the work to the
+// background threads.
+//
+// `pool` spreads the walk over its threads, one task per arena. A null pool walks in the calling
+// thread, which is also what happens for any arena the pool refuses. Walking serially is worth
+// avoiding when the decay is 0: the cost is proportional to how much is dirty, so every arena
+// after the current one stays without backpressure for as long as the walk takes, and with
+// ~65GiB of dirty over 32 arenas the walk did not finish before the process was killed.
+//
+// Not serialized against a `jemalloc_conf` update, which writes the same per-arena nodes. The
+// two can interleave and leave the arenas holding a mix for a scan interval or two; what makes
+// that safe is decay_write_generation(), which lets a caller holding the arenas at a decay of
+// its own notice that an update happened and derive the decay again. Serializing instead would
+// make a config update wait out a walk -- seconds, for a decay of 0 -- and it is an operator
+// under memory pressure who is most likely to be issuing one.
+Status set_jemalloc_decay_ms(bool dirty, ssize_t decay_ms, ThreadPool* pool);
+
+// Counts the times a `jemalloc_conf` update has written a decay to the arenas.
+//
+// A caller that keeps arenas at a decay of its own -- the memory purge daemon's ladder -- cannot
+// tell from its own state whether the arenas still hold what it wrote, because an update
+// overwrites it. Reading this before a write and comparing it later says whether anything came
+// in between, so the caller can drop its assumption and derive the decay again from the current
+// resident size and the current baseline.
+uint64_t decay_write_generation();
+
+// The dirty/muzzy decay the arenas are currently running with: the value last applied through
+// the `jemalloc_conf` config, or nullopt when the config carries no decay for `dirty` or the
+// process started with a `jemalloc_conf` that could not be parsed.
+//
+// Deliberately not opt.dirty_decay_ms. That node is read-only and holds what the process was
+// started with, while `dirty_decay_ms` is one of the three options a running BE may change, so
+// reading it would make anything derived from it disagree with what the arenas actually run
+// with the moment an operator updates the config.
+//
+// Must not be called while holding the serialization the two setters above take -- read the
+// baseline first, then write.
+std::optional<ssize_t> configured_decay_ms(bool dirty);
 
 // Applies the runtime-mutable subset of the `jemalloc_conf` config.
 //

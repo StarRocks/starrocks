@@ -286,6 +286,56 @@ TEST_F(JemallocConfUpdaterTest, apply_decay_ms) {
     EXPECT_EQ(0, read_default_decay_ms(false));
 }
 
+// The watchdog scales its rungs from this and puts it back when the pressure passes, so it has
+// to follow a runtime update. Reading opt.dirty_decay_ms instead would pin it to what the process
+// started with: the watchdog would then tighten to a fraction of 5000ms on a BE the operator had
+// already moved to 1000ms -- looser than what the arenas run with -- and later "restore" the
+// 5000ms the operator had replaced.
+TEST_F(JemallocConfUpdaterTest, configured_decay_follows_a_runtime_update) {
+    auto& updater = JemallocConfUpdater::instance();
+
+    ASSERT_OK(updater.update(make_conf("5000", "6000", "false")));
+    EXPECT_EQ(5000, configured_decay_ms(/*dirty=*/true).value());
+    EXPECT_EQ(6000, configured_decay_ms(/*dirty=*/false).value());
+
+    ASSERT_OK(updater.update(make_conf("1000", "2000", "false")));
+    EXPECT_EQ(1000, configured_decay_ms(/*dirty=*/true).value()) << "a later update has to be visible";
+    EXPECT_EQ(2000, configured_decay_ms(/*dirty=*/false).value());
+
+    // What the arenas actually run with agrees, which is the point of reading the applied
+    // options rather than the startup ones.
+    EXPECT_EQ(configured_decay_ms(/*dirty=*/true).value(), read_default_decay_ms(true));
+    EXPECT_EQ(configured_decay_ms(/*dirty=*/false).value(), read_default_decay_ms(false));
+}
+
+// The memory purge daemon keeps the arenas at a decay of its own while the resident size is
+// high. An update overwrites that without the daemon's state changing, so it watches this
+// instead: what it wrote is only still there if nothing has been written since.
+TEST_F(JemallocConfUpdaterTest, decay_write_generation_moves_only_when_a_decay_lands) {
+    auto& updater = JemallocConfUpdater::instance();
+    ASSERT_OK(updater.update(make_conf("5000", "5000", "false")));
+
+    const uint64_t before = decay_write_generation();
+    ASSERT_OK(updater.update(make_conf("5000", "5000", "false")));
+    EXPECT_EQ(before, decay_write_generation()) << "an update that changes nothing writes nothing";
+
+    ASSERT_OK(updater.update(make_conf("4000", "5000", "false")));
+    const uint64_t after_dirty = decay_write_generation();
+    EXPECT_GT(after_dirty, before) << "a changed dirty decay has to be visible";
+
+    ASSERT_OK(updater.update(make_conf("4000", "3000", "false")));
+    EXPECT_GT(decay_write_generation(), after_dirty) << "so does a changed muzzy decay";
+}
+
+// -1 is a legal decay meaning "never purge". It has to come back as itself so that it can be
+// restored; turning it into "unknown" here would let a watchdog replace the operator's choice.
+TEST_F(JemallocConfUpdaterTest, configured_decay_reports_never_purge_as_itself) {
+    auto& updater = JemallocConfUpdater::instance();
+    ASSERT_OK(updater.update(make_conf("-1", "0", "false")));
+    EXPECT_EQ(-1, configured_decay_ms(/*dirty=*/true).value());
+    EXPECT_EQ(0, configured_decay_ms(/*dirty=*/false).value());
+}
+
 TEST_F(JemallocConfUpdaterTest, apply_prof_active) {
     auto& updater = JemallocConfUpdater::instance();
     Status st = updater.update(make_conf("5000", "5000", "true"));

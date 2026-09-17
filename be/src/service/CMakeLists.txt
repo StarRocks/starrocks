@@ -24,6 +24,7 @@ set(EXEC_FILES
     backend_base.cpp
     core_dump_resource_releaser.cpp
     daemon.cpp
+    mem_purge_policy.cpp
     failure_handler.cpp
     internal_service.cpp
     service_metrics.cpp
