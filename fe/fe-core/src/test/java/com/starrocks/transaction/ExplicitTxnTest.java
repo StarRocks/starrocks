@@ -26,6 +26,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -1691,6 +1692,59 @@ public class ExplicitTxnTest {
             }
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testSecondaryReadonlyRejectionLeavesNoRegisteredTransaction() throws StarRocksException {
+        // A failover-group secondary rejects the first data statement of an explicit transaction.
+        // The rejection must happen before the transaction is registered with its database:
+        // registration publishes the transaction into that database's running set, while COMMIT and
+        // ROLLBACK take a shortcut for a transaction that carries no item and never abort it. A
+        // transaction registered by a statement that then fails would therefore sit in PREPARE,
+        // holding a running-transaction slot and its label, until the timeout checker reaps it.
+        new MockUp<FailoverGroupMgr>() {
+            @Mock
+            public boolean isSecondaryReadonly(long dbId, List<Long> tableIdList) {
+                return true;
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        context.setExecutionId(new TUniqueId(41, 42));
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+        long txnId = context.getTxnId();
+
+        try {
+            String sql = "insert into db1.tbl1 values(1,2,3)";
+            DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+            Analyzer.analyze(stmt, context);
+
+            ErrorReportException e = Assertions.assertThrows(ErrorReportException.class,
+                    () -> TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), stmt,
+                            stmt.getOrigStmt(), context));
+            Assertions.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, e.getErrorCode());
+
+            Assertions.assertNull(globalTransactionMgr.getTransactionState(database.getId(), txnId),
+                    "a rejected statement must not leave the transaction registered with its database");
+
+            // COMMIT reports success through its no-item shortcut, so nothing else would ever abort
+            // a transaction that registration had already published.
+            TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+            Assertions.assertFalse(context.getState().isError());
+            Assertions.assertNull(globalTransactionMgr.getTransactionState(database.getId(), txnId));
+        } finally {
+            globalTransactionMgr.clearExplicitTxnState(txnId);
+            abortRunningTransactions(globalTransactionMgr, database.getId());
         }
     }
 }
