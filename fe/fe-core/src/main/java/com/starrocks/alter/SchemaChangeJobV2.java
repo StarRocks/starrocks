@@ -83,6 +83,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -740,10 +741,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     new RewriteAliasVisitor(sourceScope, outputScope,
                                             outputExprs, ConnectContext.get());
 
-                            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
-                                            new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                                    col.getType(), tableName, null)).collect(Collectors.toList()))),
-                                    ConnectContext.get());
+                            try {
+                                ExpressionAnalyzer.analyzeGeneratedColumnExpression(expr, new AnalyzeState(),
+                                        new Scope(RelationId.anonymous(), new RelationFields(tbl.getBaseSchema().stream()
+                                                .map(col -> new Field(col.getName(), col.getType(), tableName, null))
+                                                .collect(Collectors.toList()))), ConnectContext.get());
+                            } catch (SemanticException e) {
+                                throw new AlterCancelException(e.getMessage());
+                            }
 
                             Expr generatedColumnExpr = expr.accept(visitor, null);
 

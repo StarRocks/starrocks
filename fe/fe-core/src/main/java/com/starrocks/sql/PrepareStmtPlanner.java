@@ -75,7 +75,7 @@ public class PrepareStmtPlanner {
             if (!queryStmt.isPointQuery()) {
                 return StatementPlanner.plan(stmt, session);
             }
-            if (ResolvedAIFunctionDetector.contains(queryStmt)) {
+            if (ResolvedAIFunctionDetector.containsForAuthorization(queryStmt)) {
                 return StatementPlanner.plan(stmt, session);
             }
             // get_query_profile() is authorized at analysis time against the literal query id; a cached plan would

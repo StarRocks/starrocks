@@ -26,6 +26,15 @@ This section describes privileges that are available on different objects.
 
 <PrivCreateWarehouse />
 
+### AI FUNCTION / AI PROVIDER
+
+| Privilege | Description |
+| --- | --- |
+| USAGE | Uses the specified public AI function family or provider. `ON ALL AI FUNCTIONS` and `ON ALL AI PROVIDERS` grant usage across the respective object type, including future objects. Function and provider privileges remain independent. |
+
+SYSTEM functions keep their existing configuration route and do not require a provider grant. Provider CREATE, ALTER, DROP, SET DEFAULT, SHOW, and DESC still require SYSTEM OPERATE; USAGE does not authorize those management operations.
+
+
 ### RESOURCE GROUP
 
 | Privilege | Description                                       |

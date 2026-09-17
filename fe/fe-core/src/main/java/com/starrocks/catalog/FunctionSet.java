@@ -84,6 +84,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -1214,6 +1215,33 @@ public class FunctionSet {
             return matchFuncCandidates(desc, mode, Collections.singletonList(fn));
         }
         return null;
+    }
+
+    /** Legacy ai_query uses ordinary builtin execution but shares AI function authorization. */
+    public static boolean requiresAIFunctionPrivilege(Function function) {
+        return function != null && (function.isAi()
+                || (function.getBinaryType() == TFunctionBinaryType.BUILTIN
+                && function.getFunctionName().getDb() == null && "ai_query".equals(function.functionName())));
+    }
+
+    /** Returns the public AI family name shared by its overloads, or null for a non-grantable name. */
+    public String getGrantableAIFunctionFamily(String name) {
+        if (name == null || name.contains(".")) {
+            return null;
+        }
+        String canonicalName = name.toLowerCase(Locale.ROOT);
+        List<Function> family = vectorizedFunctions.get(canonicalName);
+        if (family == null || family.isEmpty()) {
+            return null;
+        }
+        boolean aiExecution = family.get(0).isAi();
+        TAIModelSource modelSource = family.get(0).getAiModelSource();
+        if ((aiExecution && modelSource == null) || (!aiExecution && modelSource != null)
+                || family.stream().anyMatch(fn -> !requiresAIFunctionPrivilege(fn) || !fn.isUserVisible()
+                || fn.isAi() != aiExecution || fn.getAiModelSource() != modelSource)) {
+            return null;
+        }
+        return canonicalName;
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {

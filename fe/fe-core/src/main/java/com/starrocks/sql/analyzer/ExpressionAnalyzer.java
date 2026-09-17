@@ -2295,6 +2295,14 @@ public class ExpressionAnalyzer {
         expressionAnalyzer.analyze(expression, state, scope);
     }
 
+    public static void analyzeGeneratedColumnExpression(Expr expression, AnalyzeState state, Scope scope,
+                                                         ConnectContext session) {
+        analyzeExpression(expression, state, scope, session);
+        // Generated expressions can also run in load/schema-change jobs without an authenticated caller.
+        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expression, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
+    }
+
     public static void analyzeExpressionIgnoreSlot(Expr expression, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyzeIgnoreSlot(expression, new AnalyzeState(),

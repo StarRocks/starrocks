@@ -6,6 +6,8 @@ sidebar_position: 22
 
 # ai_embed
 
+For function and provider privilege requirements, see [AI function privileges](ai_functions.mdx#ai-function-privileges).
+
 Generates a text embedding through a SYSTEM OpenAI-compatible embeddings endpoint. The result is a nullable `ARRAY<FLOAT>`, not a Snowflake VECTOR type. Upgrade all FE and BE nodes before using this function.
 
 :::warning

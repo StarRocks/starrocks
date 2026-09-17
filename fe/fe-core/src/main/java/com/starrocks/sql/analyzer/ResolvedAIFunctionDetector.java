@@ -14,13 +14,19 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -40,7 +46,20 @@ public final class ResolvedAIFunctionDetector {
     }
 
     public static List<FunctionCallExpr> findAll(ParseNode node) {
-        Visitor visitor = new Visitor(true);
+        return findAll(node, false);
+    }
+
+    public static boolean containsForAuthorization(ParseNode node) {
+        return !findAllForAuthorization(node).isEmpty();
+    }
+
+    /** Includes legacy builtins and analyzed SQL UDF bodies without changing AI execution placement rules. */
+    public static List<FunctionCallExpr> findAllForAuthorization(ParseNode node) {
+        return findAll(node, true);
+    }
+
+    private static List<FunctionCallExpr> findAll(ParseNode node, boolean forAuthorization) {
+        Visitor visitor = new Visitor(true, forAuthorization);
         visitor.visit(node);
         return List.copyOf(visitor.aiFunctions);
     }
@@ -54,18 +73,20 @@ public final class ResolvedAIFunctionDetector {
     }
 
     private static Optional<FunctionCallExpr> findFirst(ParseNode node, boolean descendIntoSubqueries) {
-        Visitor visitor = new Visitor(descendIntoSubqueries);
+        Visitor visitor = new Visitor(descendIntoSubqueries, false);
         visitor.visit(node);
         return Optional.ofNullable(visitor.firstAIFunction);
     }
 
     private static class Visitor extends AstTraverser<Void, Void> {
         private final boolean descendIntoSubqueries;
+        private final boolean forAuthorization;
         private FunctionCallExpr firstAIFunction;
         private final List<FunctionCallExpr> aiFunctions = new ArrayList<>();
 
-        private Visitor(boolean descendIntoSubqueries) {
+        private Visitor(boolean descendIntoSubqueries, boolean forAuthorization) {
             this.descendIntoSubqueries = descendIntoSubqueries;
+            this.forAuthorization = forAuthorization;
         }
 
         @Override
@@ -79,12 +100,36 @@ public final class ResolvedAIFunctionDetector {
         }
 
         @Override
-        public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
-            if (expr.getFn() != null && expr.getFn().isAi()) {
-                aiFunctions.add(expr);
+        public Void visitPrepareStatement(PrepareStmt node, Void context) {
+            return visit(node.getInnerStmt(), context);
+        }
+
+        @Override
+        public Void visitSubmitTaskStatement(SubmitTaskStmt node, Void context) {
+            super.visitSubmitTaskStatement(node, context);
+            if (node.getDataCacheSelectStmt() != null) {
+                visit(node.getDataCacheSelectStmt(), context);
             }
-            if (firstAIFunction == null && expr.getFn() != null && expr.getFn().isAi()) {
-                firstAIFunction = expr;
+            return null;
+        }
+
+        @Override
+        public Void visitDataCacheSelectStatement(DataCacheSelectStatement node, Void context) {
+            return visit(node.getInsertStmt(), context);
+        }
+
+        @Override
+        public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+            Function function = expr.getFn();
+            if (forAuthorization ? FunctionSet.requiresAIFunctionPrivilege(function)
+                    : function != null && function.isAi()) {
+                aiFunctions.add(expr);
+                if (firstAIFunction == null) {
+                    firstAIFunction = expr;
+                }
+            }
+            if (forAuthorization && function instanceof SqlFunction sqlFunction && sqlFunction.getAnalyzeExpr() != null) {
+                visit(sqlFunction.getAnalyzeExpr(), context);
             }
             return super.visitExpression(expr, context);
         }

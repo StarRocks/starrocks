@@ -57,6 +57,22 @@ public class AuthenticationHandler {
     public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
                                             byte[] authResponse)
             throws AuthenticationException {
+        // A reused connection (COM_CHANGE_USER) must not resolve the new principal's groups with the old DN.
+        String previousDN = context.getDistinguishedName();
+        TaskExecutionIdentity previousTaskIdentity = context.getAuthenticatedTaskIdentity();
+        context.setAuthenticatedTaskIdentity(null);
+        context.setDistinguishedName("");
+        try {
+            return authenticateInternal(context, user, remoteHost, authResponse);
+        } catch (AuthenticationException | RuntimeException e) {
+            context.setDistinguishedName(previousDN);
+            context.setAuthenticatedTaskIdentity(previousTaskIdentity);
+            throw e;
+        }
+    }
+
+    private static UserIdentity authenticateInternal(ConnectContext context, String user, String remoteHost,
+                                                     byte[] authResponse) throws AuthenticationException {
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", authResponse.length == 0 ? "NO" : "YES");
         }
@@ -330,6 +346,8 @@ public class AuthenticationHandler {
                 // Cleared per attempt: a value left by an earlier provider in the chain says nothing
                 // about the one that ends up succeeding.
                 authContext.setAuthenticatedUserName(null);
+                // A failed integration must not supply the next integration's group-resolution identity.
+                authContext.setDistinguishedName("");
                 provider.authenticate(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
             } catch (AuthenticationException e) {
                 // A provider that could not reach its directory / IdP reports a transient failure: the same
@@ -453,6 +471,9 @@ public class AuthenticationHandler {
             UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
                     .getUserProperty(user);
             context.updateByUserProperty(userProperty);
+        }
+        if (Config.enable_auth_check) {
+            TaskExecutionIdentity.recordAuthentication(context);
         }
     }
 
