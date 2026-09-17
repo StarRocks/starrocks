@@ -233,4 +233,53 @@ public class PartitionCommitInfoTest {
                 3000, "label", null, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 0, 60_000);
         Assertions.assertFalse(normal.isShadowRewrite());
     }
+
+    @Test
+    public void testShouldLogPublishErrorThrottlesRepeatedFailures() {
+        PartitionCommitInfo pci = new PartitionCommitInfo(PID, 2, 0);
+        long t0 = 1_000_000L;
+
+        // The first failure is always worth a line.
+        Assertions.assertTrue(pci.shouldLogPublishError(t0, 10_000L));
+        // A partition that keeps failing retries about once a second; those must not each log.
+        Assertions.assertFalse(pci.shouldLogPublishError(t0 + 1_000L, 10_000L));
+        Assertions.assertFalse(pci.shouldLogPublishError(t0 + 5_000L, 10_000L));
+        Assertions.assertFalse(pci.shouldLogPublishError(t0 + 9_999L, 10_000L));
+        // Once the interval has elapsed the partition is still stuck, so say so again.
+        Assertions.assertTrue(pci.shouldLogPublishError(t0 + 10_000L, 10_000L));
+        Assertions.assertFalse(pci.shouldLogPublishError(t0 + 10_001L, 10_000L));
+    }
+
+    @Test
+    public void testShouldLogPublishErrorIsNotPersisted() {
+        PartitionCommitInfo pci = new PartitionCommitInfo(PID, 2, 0);
+        Assertions.assertTrue(pci.shouldLogPublishError(1_000_000L, 10_000L));
+
+        // The throttle only paces logging inside one process, so it must not travel through the
+        // image; a replayed copy starts fresh rather than staying silent.
+        PartitionCommitInfo copied = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(pci), PartitionCommitInfo.class);
+        Assertions.assertTrue(copied.shouldLogPublishError(1_000_001L, 10_000L));
+    }
+
+    @Test
+    public void testPublishFailureIsSeparateFromVersionTime() {
+        PartitionCommitInfo pci = new PartitionCommitInfo(PID, 2, 0);
+        Assertions.assertEquals(0, pci.getLastPublishFailureTime());
+
+        // A failed attempt must not negate versionTime: that field is the timestamp handed to
+        // Partition#updateVisibleVersion, and it is serialized into the image.
+        pci.markPublishFailed(1_000_000L);
+        Assertions.assertEquals(1_000_000L, pci.getLastPublishFailureTime());
+        Assertions.assertEquals(0, pci.getVersionTime());
+
+        pci.markPublishSucceeded(1_000_500L);
+        Assertions.assertEquals(1_000_500L, pci.getVersionTime());
+        Assertions.assertEquals(0, pci.getLastPublishFailureTime());
+
+        // The retry state is per process, so it must not survive the image either.
+        pci.markPublishFailed(1_001_000L);
+        PartitionCommitInfo copied = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(pci), PartitionCommitInfo.class);
+        Assertions.assertEquals(0, copied.getLastPublishFailureTime());
+        Assertions.assertEquals(1_000_500L, copied.getVersionTime());
+    }
 }
