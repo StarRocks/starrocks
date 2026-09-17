@@ -22,12 +22,12 @@
 #include <paimon/table/source/table_read.h>
 
 #include <algorithm>
-#include <string_view>
 #include <utility>
 
 #include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_paimon_fwd.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
@@ -40,11 +40,8 @@ namespace starrocks {
 namespace {
 
 constexpr int64_t kPaimonReadBatchSize = 10000;
-constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
-constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
-constexpr int64_t kPaimonParquetBitmapCoalesceHoleSizeLimit = 32;
-constexpr std::string_view kPaimonParquetBitmapRefiningStrategy = "coalesce";
-constexpr bool kPaimonEnablePrefetch = true;
+// 0 leaves the process-wide Arrow CPU pool alone; paimon-cpp's default of 3 caps every reader in the BE.
+constexpr int32_t kPaimonParquetExecutorThreadCount = 0;
 constexpr bool kPaimonEnableMultiThreadRowToBatch = true;
 constexpr uint32_t kPaimonRowToBatchThreadNum = 3;
 
@@ -137,14 +134,9 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     // These option keys are defined in paimon-cpp's internal parquet_format_defs.h, which is not
     // part of its installed public headers, so they have to be spelled out as string literals here.
     context_builder.AddOption("parquet.read.cache-option.hole-size-limit",
-                              std::to_string(kPaimonParquetCacheHoleSizeLimit));
-    context_builder.AddOption("parquet.read.cache-option.range-size-limit",
-                              std::to_string(kPaimonParquetCacheRangeSizeLimit));
-    context_builder.AddOption("parquet.read.bitmap.row-range-refining-strategy",
-                              std::string(kPaimonParquetBitmapRefiningStrategy));
-    context_builder.AddOption("parquet.read.bitmap.coalesce-hole-size-limit",
-                              std::to_string(kPaimonParquetBitmapCoalesceHoleSizeLimit));
-    context_builder.EnablePrefetch(kPaimonEnablePrefetch);
+                              std::to_string(config::paimon_native_parquet_cache_hole_size_limit));
+    context_builder.AddOption("parquet.read.executor.thread-count", std::to_string(kPaimonParquetExecutorThreadCount));
+    // Prefetch is left at paimon-cpp's default (off): 0.3.0 rereads every row group on that path.
     context_builder.EnableMultiThreadRowToBatch(kPaimonEnableMultiThreadRowToBatch);
     context_builder.SetRowToBatchThreadNumber(kPaimonRowToBatchThreadNum);
     context_builder.WithMemoryPool(_memory_pool);
