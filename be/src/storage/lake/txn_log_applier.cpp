@@ -66,10 +66,6 @@ bool rowset_holds_rows(const RowsetMetadataPB& rowset) {
 
 namespace {
 
-<<<<<<< HEAD
-Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
-                            TabletManager* tablet_mgr) {
-=======
 // True when the caller must drop this rowset because it references nothing at all: no segments, no
 // del files, and no delete predicate. It has no rows to read and no files to keep, and
 // range-distribution tablet merge rejects the shape outright, so recording one wedges every later
@@ -94,27 +90,8 @@ bool drop_rowset_that_references_no_data(const RowsetMetadataPB& rowset, int64_t
     return true;
 }
 
-// Non-clearing archival of the tablet's current schema before a new schema is installed: map every
-// currently-unmapped rowset to the current schema id, and record the current schema in
-// historical_schemas only if it is absent. Must be called BEFORE the caller overwrites
-// metadata->schema() with the new schema.
-void archive_current_schema_into_history(TabletMetadataPB* metadata) {
-    const auto& old_schema = metadata->schema();
-    bool record_old_schema_in_history = false;
-    for (const auto& rowset : metadata->rowsets()) {
-        if (metadata->rowset_to_schema().count(rowset.id()) <= 0) {
-            record_old_schema_in_history = true;
-            metadata->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
-        }
-    }
-    if (record_old_schema_in_history && metadata->historical_schemas().count(old_schema.id()) <= 0) {
-        auto& item = (*metadata->mutable_historical_schemas())[old_schema.id()];
-        item.CopyFrom(old_schema);
-    }
-}
-
-Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas) {
->>>>>>> 95dedf7 ([BugFix] Stop a lake schema change from recording a rowset that references no data (#79167))
+Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
+                            TabletManager* tablet_mgr) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
         if (alter_meta.has_enable_persistent_index()) {
             auto update_mgr = tablet_mgr->update_mgr();
