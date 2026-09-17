@@ -3264,9 +3264,11 @@ public class OlapTable extends Table {
         if (keysType == KeysType.PRIMARY_KEYS) {
             // persistent index
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, enablePersistentIndex().toString());
-            if (isCloudNativeTable()) {
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE,
-                        enableChangeDataCapture().toString());
+            // Change data capture is off by default, so only surface it once a table opts in --
+            // rendering the default would add a line to every primary-key cloud-native table's
+            // SHOW CREATE TABLE without telling the reader anything.
+            if (isCloudNativeTable() && enableChangeDataCapture()) {
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE, "true");
             }
 
             // index cache expire

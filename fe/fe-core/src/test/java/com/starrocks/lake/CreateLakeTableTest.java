@@ -362,13 +362,18 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTableEnableChangeDataCapture() throws Exception {
-        // default off
+        // default off, and stays out of SHOW CREATE TABLE entirely -- rendering the default would
+        // put a line on every primary-key cloud-native table that tells the reader nothing
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.cdc_default\n" +
                         "(c0 int, c1 string)\n" +
                         "PRIMARY KEY(c0)\n" +
                         "distributed by hash(c0) buckets 2;"));
         Assertions.assertFalse(getLakeTable("lake_test", "cdc_default").enableChangeDataCapture());
+        ShowCreateTableStmt defaultStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "show create table lake_test.cdc_default", connectContext);
+        String defaultDdl = ShowExecutor.execute(defaultStmt, connectContext).getResultRows().get(0).get(1);
+        Assertions.assertFalse(defaultDdl.contains("enable_change_data_capture"), defaultDdl);
 
         // explicit on, surfaces in SHOW CREATE TABLE
         ExceptionChecker.expectThrowsNoException(() -> createTable(
