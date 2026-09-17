@@ -51,7 +51,7 @@ memory::Allocator* kCachedBufferBenchAllocator = memory::get_default_allocator()
 struct ScopedBenchMemTrackerContext {
     explicit ScopedBenchMemTrackerContext(benchmark::State& state)
             : tracker(RuntimeEnv::GetInstance()->process_mem_tracker()), mem_tracker_setter(tracker) {
-        if (state.thread_index == 0) {
+        if (state.thread_index() == 0) {
             tracker->set(0);
         }
     }

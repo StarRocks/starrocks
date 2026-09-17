@@ -46,15 +46,13 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/system/cpu_info.h"
 #include "exec/analytor.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
-#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/cpu_info.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -186,13 +184,11 @@ BENCHMARK_CAPTURE(BM_LagIgnoreNulls, head_then_null_streaming, HEAD_THEN_NULL, t
 } // namespace starrocks
 
 int main(int argc, char** argv) {
-    // Standalone benchmarks do not run the BE's GlobalEnv initialization, which normally creates
-    // the process-wide allocator used by MemPool or load config defaults. Analytor::open() allocates
-    // its aggregate state from a MemPool, and its processing mode depends on those config defaults.
+    // Standalone benchmarks do not run the BE's GlobalEnv initialization, which normally loads the
+    // config defaults that Analytor::open()'s processing mode depends on. MemChunkAllocator no
+    // longer carries an instance to seed - it allocates through the process allocator directly.
     if (!starrocks::config::init(nullptr)) return 1;
     starrocks::CpuInfo::init();
-    starrocks::StarRocksMetrics::instance()->initialize();
-    starrocks::MemChunkAllocator::init_instance(nullptr, starrocks::config::chunk_reserved_bytes_limit);
 
     ::benchmark::Initialize(&argc, argv);
     if (::benchmark::ReportUnrecognizedArguments(argc, argv)) return 1;

@@ -17,6 +17,8 @@
 #include <cstdlib>
 
 #include "base/testutil/assert.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/persistent_index.h"

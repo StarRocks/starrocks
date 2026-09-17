@@ -67,7 +67,7 @@ static void BM_memtracker_try_consume(benchmark::State& state) {
     MemTracker* tracker = shared_tracker();
 
     // Reset consumption before each run to keep iterations comparable.
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         tracker->set(0);
     }
 
@@ -89,7 +89,7 @@ static void BM_memtracker_try_consume_unlimited(benchmark::State& state) {
     MemTracker* tracker = shared_unlimited_tracker();
 
     // Reset consumption before each run to keep iterations comparable.
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         tracker->set(0);
         if (tracker->parent() != nullptr) {
             tracker->parent()->set(0);
@@ -150,7 +150,7 @@ static void BM_current_thread_try_mem_consume_without_cache(benchmark::State& st
 // Benchmark consume/release on single-level tracker (baseline for CAS overhead)
 static void BM_memtracker_consume(benchmark::State& state) {
     MemTracker* tracker = shared_tracker();
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         tracker->set(0);
     }
 
@@ -172,7 +172,7 @@ static void BM_memtracker_consume(benchmark::State& state) {
 // consume/release on 3-level hierarchy (process -> pool -> query)
 static void BM_memtracker_consume_hierarchy_3level(benchmark::State& state) {
     MemTracker* tracker = shared_hierarchy_3level_leaf();
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         tracker->set(0);
         tracker->parent()->set(0);
         tracker->parent()->parent()->set(0);
@@ -194,7 +194,7 @@ static void BM_memtracker_consume_hierarchy_3level(benchmark::State& state) {
 // try_consume/release on 3-level hierarchy
 static void BM_memtracker_try_consume_hierarchy_3level(benchmark::State& state) {
     MemTracker* tracker = shared_hierarchy_3level_leaf();
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         tracker->set(0);
         tracker->parent()->set(0);
         tracker->parent()->parent()->set(0);
@@ -223,10 +223,10 @@ static void BM_memtracker_shared_parent_contention(benchmark::State& state) {
     // Each thread creates its own child tracker.
     thread_local std::unique_ptr<MemTracker> tl_child;
     if (!tl_child || tl_child->parent() != parent) {
-        tl_child = std::make_unique<MemTracker>(-1, "bench_child_" + std::to_string(state.thread_index), parent);
+        tl_child = std::make_unique<MemTracker>(-1, "bench_child_" + std::to_string(state.thread_index()), parent);
     }
 
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         parent->set(0);
     }
     tl_child->set(0);
@@ -250,7 +250,7 @@ static void BM_memtracker_shared_parent_contention(benchmark::State& state) {
 // Measures the benefit of skipping the CAS loop when value < peak.
 static void BM_memtracker_consume_peak_stable(benchmark::State& state) {
     MemTracker* tracker = shared_tracker();
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         // Establish a high peak, then reset current to 0
         tracker->set(static_cast<int64_t>(kBytesPerOp) * kOpsPerIteration);
         tracker->set(0);

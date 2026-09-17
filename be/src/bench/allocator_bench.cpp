@@ -44,7 +44,7 @@ namespace {
 template <typename Alloc>
 void BM_allocator_alloc_free(benchmark::State& state) {
     MemTracker* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
-    if (state.thread_index == 0) {
+    if (state.thread_index() == 0) {
         tracker->set(0);
     }
 

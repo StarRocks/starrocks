@@ -47,7 +47,7 @@ protected:
 };
 
 BENCHMARK_DEFINE_F(TableMetricsBench, BM_RegisterTable)(benchmark::State& state) {
-    const int thread_id = state.thread_index;
+    const int thread_id = state.thread_index();
     if (thread_id == 0) {
         manager = std::make_unique<TableMetricsManager>();
     }
@@ -60,7 +60,7 @@ BENCHMARK_DEFINE_F(TableMetricsBench, BM_RegisterTable)(benchmark::State& state)
 }
 
 BENCHMARK_DEFINE_F(TableMetricsBench, BM_UnregisterTable)(benchmark::State& state) {
-    const int thread_id = state.thread_index;
+    const int thread_id = state.thread_index();
     if (thread_id == 0) {
         manager = std::make_unique<TableMetricsManager>();
         for (uint64_t i = 0; i < kMaxTableId; ++i) {
@@ -77,7 +77,7 @@ BENCHMARK_DEFINE_F(TableMetricsBench, BM_UnregisterTable)(benchmark::State& stat
 }
 
 BENCHMARK_DEFINE_F(TableMetricsBench, BM_GetTableMetrics)(benchmark::State& state) {
-    const int thread_id = state.thread_index;
+    const int thread_id = state.thread_index();
     if (thread_id == 0) {
         manager = std::make_unique<TableMetricsManager>();
         for (uint64_t i = 0; i < kMaxTableId; ++i) {
