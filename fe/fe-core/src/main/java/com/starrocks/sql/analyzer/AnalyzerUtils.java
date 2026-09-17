@@ -1207,6 +1207,12 @@ public class AnalyzerUtils {
          */
         private final Map<TableName, Table> overTheMvLimit = Maps.newHashMap();
 
+        /**
+         * The INSERT target, when it is a table planning could work off a snapshot of. Held aside for the same
+         * reason {@link #overTheMvLimit} is -- see {@link #isCopySafe()} for what lets it through.
+         */
+        private final Map<TableName, Table> snapshotableInsertTarget = Maps.newHashMap();
+
         /** Whether the statement touches a table the meta lock cannot protect, i.e. one in an external catalog. */
         private boolean readsThroughAConnector;
 
@@ -1227,9 +1233,50 @@ public class AnalyzerUtils {
          * {@code cbo_materialized_view_rewrite_related_mvs_limit} (16 by default), not by how many the table
          * carries. A bounded local copy is the better trade against an unbounded remote wait, so the limit does
          * not get to decide here.
+         *
+         * <p><b>Why the INSERT target is held to the same rule.</b> Same trade, same answer: an INSERT whose
+         * SELECT reads through a connector runs the whole optimization -- external statistics, partition lists,
+         * file lists -- and today it does all of it under the lock, because the target lands in the copy-unsafe
+         * set unconditionally (see {@link #visitInsertStatement}). The target itself is snapshot-able exactly
+         * like any other native table, so what is gated here is not its safety but whether the trade is worth
+         * making. Requiring a connector read keeps every purely local INSERT on the path it has always taken.
          */
         public boolean isCopySafe() {
-            return tables.isEmpty() && (readsThroughAConnector || overTheMvLimit.isEmpty());
+            return tables.isEmpty()
+                    && (readsThroughAConnector || (overTheMvLimit.isEmpty() && snapshotableInsertTarget.isEmpty()));
+        }
+
+        /**
+         * The INSERT target does not reach {@link #visitTable}: {@link TableCollector} puts it straight into
+         * {@code tables}. That was added for the privilege collector (#18808) -- collecting every table a
+         * statement names -- long before this subclass reused the same map as a verdict, so ever since, no
+         * INSERT has been copy-safe and {@code StatementPlanner.isLockFreeInsertStmt} has always answered
+         * false. Put the target through the same verdict the other tables get instead.
+         */
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            Table target = node.getTargetTable();
+            TableName targetName = TableName.fromTableRef(node.getTableRef());
+            if (target == null) {
+                // Not analyzed yet, so there is nothing to judge: stay on the locked path.
+                tables.put(targetName, target);
+            } else if (!target.isMetaLockTarget()) {
+                // INSERT INTO an external catalog. The lock never covered it, so it has no say -- same
+                // abstention visitTable applies to a table read through a connector.
+                readsThroughAConnector = true;
+            } else if (target.isNativeTableOrMaterializedView()) {
+                snapshotableInsertTarget.put(targetName, target);
+            } else {
+                // A lock target with no snapshot to plan against: ENGINE=MYSQL, ExternalOlapTable, and
+                // resource-mapping external tables. Unchanged -- the lock has to stay for the whole phase.
+                tables.put(targetName, target);
+            }
+            // Deliberately not super.visitInsertStatement: that is the blanket put this override replaces.
+            // AstTraverser only walks the query statement from here, so do exactly that.
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
         }
 
         @Override

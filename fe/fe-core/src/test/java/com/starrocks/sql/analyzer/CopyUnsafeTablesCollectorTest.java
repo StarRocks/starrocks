@@ -293,19 +293,44 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
     }
 
     /**
-     * An INSERT target is put into the copy-unsafe set by TableCollector.visitInsertStatement before
-     * visitTable ever runs, so no INSERT has ever been copy-safe and StatementPlanner.isLockFreeInsertStmt has
-     * always answered false. Pinned as it stands rather than changed here: making the INSERT path lock-free is
-     * a separate question about the target table's own protection, not about the MV limit this change is
-     * concerned with. It is also why the MV limit is unreachable for an INSERT, with or without this change.
+     * A purely local INSERT keeps holding the lock for the whole planning phase. The target is snapshot-able
+     * like any other native table, so what decides here is the same trade the MV limit makes: for a statement
+     * whose planning is local, both sides of the scale are CPU and the lock stays.
      */
     @Test
-    public void testInsertIsCopyUnsafeRegardlessOfWhatItReads() throws Throwable {
+    public void testAPurelyLocalInsertStillHoldsTheLock() throws Throwable {
         Assertions.assertFalse(isCopySafe("insert into test.t0 select v4, v5, v6 from test.t1"));
-        Assertions.assertFalse(isCopySafe(
+        Assertions.assertFalse(isCopySafe("insert into test.t0 values (1, 2, 3)"));
+    }
+
+    /**
+     * ... but not when the SELECT reads through a connector. Then the whole optimization -- external
+     * statistics, partition lists, file lists -- runs with the lock held while protecting nothing on that
+     * side, which is the shape {@code INSERT INTO internal SELECT FROM external} takes.
+     *
+     * <p>This used to be unreachable for a different reason than the MV limit: TableCollector puts the INSERT
+     * target into the copy-unsafe set unconditionally (it was added there to collect tables for the privilege
+     * check), so no INSERT had ever been copy-safe and StatementPlanner.isLockFreeInsertStmt had always
+     * answered false.
+     */
+    @Test
+    public void testAnInsertReadingThroughAConnectorDoesNotHoldTheLock() throws Throwable {
+        Assertions.assertTrue(isCopySafe(
                 "insert into test.t0 select l_orderkey, l_partkey, l_suppkey from hive0.tpch.lineitem"));
-        withT0OverTheMvLimit(() -> Assertions.assertFalse(isCopySafe(
+        // The target being over the MV limit does not bring the lock back: same trade, same answer.
+        withT0OverTheMvLimit(() -> Assertions.assertTrue(isCopySafe(
                 "insert into test.t0 select l_orderkey, l_partkey, l_suppkey from hive0.tpch.lineitem")));
+    }
+
+    /**
+     * A target with no snapshot to plan against stays copy-unsafe whatever the SELECT reads -- the gate the
+     * target now passes through is the same one {@link #testInternalDbExternalEngineTableIsUnchanged}
+     * asserts for a table on the read side.
+     */
+    @Test
+    public void testAnInsertTargetWithNoSnapshotIsStillCopyUnsafe() throws Throwable {
+        Assertions.assertFalse(isCopySafe(
+                "insert into test.mysql_ext_tbl select l_orderkey, l_comment from hive0.tpch.lineitem"));
     }
 
     /**

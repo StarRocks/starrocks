@@ -459,9 +459,12 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "except select sum(ss_store_sk), avg(ss_promo_sk) from store_sales " +
                 "where ss_item_sk = 3 group by ss_sold_date_sk";
         String plan = getFragmentPlan(sql);
+        // Merge phase: SplitAggregateRule does not append the first constant argument, so any_value_if
+        // takes one argument here. The three other assertions in this class were corrected in #60522;
+        // this one was missed and has been failing since.
         assertContains(plan, "output: sum_if(97: sum), avg_if(98: avg), " +
-                "any_value_if(99: row_hit, TRUE), sum_if(92: sum), " +
-                "avg_if(94: avg), any_value_if(95: row_hit, TRUE)\n" +
+                "any_value_if(99: row_hit), sum_if(92: sum), " +
+                "avg_if(94: avg), any_value_if(95: row_hit)\n" +
                 "  |  group by: 85: ss_sold_date_sk");
     }
 }
