@@ -79,6 +79,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
+### `enable_temporary_table_statistic_collect`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 采集作业是否为临时表收集统计信息。该项作用于根据采集作业定义构建的收集任务，即自动采集作业以及通过 CREATE ANALYZE 创建的作业。设置为 `false` 时，构建这些作业时会跳过临时表，仅对非临时表进行采集。单次执行的 `ANALYZE TABLE` 语句不受该项影响，仍会为临时表收集统计信息。当生命周期很短的临时表带来的采集开销超过其统计信息的价值时，可将该项设置为 `false`。
+- 引入版本: v3.4.0
+
 ## 存储
 
 ### `allow_implicit_key_column_in_agg_add_column`

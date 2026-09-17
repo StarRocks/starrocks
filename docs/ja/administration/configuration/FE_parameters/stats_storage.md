@@ -79,6 +79,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：単一プロセスプロファイル収集の期間 (秒単位)。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が `true` に設定されている場合、AsyncProfiler が起動し、コレクタースレッドはこの期間だけスリープし、その後プロファイラーが停止してプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、その後の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルが生成される可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` などの保持設定とこの値が一致していることを確認してください。
 - 導入時期：v3.2.12
 
+### `enable_temporary_table_statistic_collect`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：分析ジョブが一時テーブルの統計情報を収集するかどうかを指定します。この項目は、分析ジョブ定義から構築される収集ジョブ、つまり自動分析ジョブと CREATE ANALYZE で作成されたジョブに適用されます。`false` に設定すると、それらのジョブを構築する際に一時テーブルはスキップされ、一時テーブル以外のテーブルのみが分析されます。単発の `ANALYZE TABLE` ステートメントはこの項目の影響を受けず、一時テーブルの統計情報を収集します。短命な一時テーブルの収集コストがその統計情報の価値を上回る場合は、`false` に設定してください。
+- 導入時期：v3.4.0
+
 ## ストレージ
 
 ### `allow_implicit_key_column_in_agg_add_column`
