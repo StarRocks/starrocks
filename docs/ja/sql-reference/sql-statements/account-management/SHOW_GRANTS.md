@@ -11,6 +11,8 @@ description: "SHOW GRANTS displays all privileges and roles granted to a user or
 
 ロールと権限の詳細については、[権限の概要](../../../administration/user_privs/authorization/user_privs.md)を参照してください。
 
+AI 権限も同じ出力形式を使用します。`USE AI FUNCTIONS ON SYSTEM`、`USAGE ON AI FUNCTION`、`USAGE ON AI PROVIDER` が表示されます。プロバイダー名は引用され、削除済みプロバイダーへの付与は省略されます。付与は UUID に結び付くため、同じ名前で再作成しても以前の付与は復元されません。
+
 :::tip
 すべてのロールとユーザーは、自分に付与された権限や割り当てられたロールを確認できます。指定されたユーザーまたはロールの権限を表示できるのは、`user_admin` ロールを持つユーザーのみです。
 :::

@@ -15,6 +15,8 @@ package com.starrocks.catalog.system.sys;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AIFunctionPEntryObject;
+import com.starrocks.authorization.AIProviderPEntryObject;
 import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.CatalogPEntryObject;
@@ -44,7 +46,9 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -383,6 +387,24 @@ public class GrantsTo {
                     }
                 } else if (ObjectType.SYSTEM.equals(privEntry.getKey())) {
                     objects.add(Lists.newArrayList(null, null, null));
+                } else if (ObjectType.AI_FUNCTION.equals(privEntry.getKey())) {
+                    AIFunctionPEntryObject function = (AIFunctionPEntryObject) privilegeEntry.getObject();
+                    if (function.validate()) {
+                        objects.add(Lists.newArrayList(null, null, function.getName()));
+                    }
+                } else if (ObjectType.AI_PROVIDER.equals(privEntry.getKey())) {
+                    AIProviderPEntryObject object = (AIProviderPEntryObject) privilegeEntry.getObject();
+                    AIProviderMgr providerMgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+                    if (object.isFuzzyMatching()) {
+                        for (AIProvider provider : providerMgr.listProviders()) {
+                            objects.add(Lists.newArrayList(null, null, provider.getName()));
+                        }
+                    } else {
+                        AIProvider provider = providerMgr.getProviderById(object.getId());
+                        if (provider != null) {
+                            objects.add(Lists.newArrayList(null, null, provider.getName()));
+                        }
+                    }
                 } else if (ObjectType.STORAGE_VOLUME.equals(privEntry.getKey())) {
                     StorageVolumePEntryObject storageVolumePEntryObject =
                             (StorageVolumePEntryObject) privilegeEntry.getObject();

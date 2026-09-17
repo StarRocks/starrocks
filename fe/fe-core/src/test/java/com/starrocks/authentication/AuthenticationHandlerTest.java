@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -61,6 +62,82 @@ public class AuthenticationHandlerTest {
                 // do nothing
             }
         };
+    }
+
+    @Test
+    public void testNativeReauthenticationDoesNotInheritPreviousDN() throws Exception {
+        AuthenticationMgr previousManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        String[] previousProviders = Config.group_provider;
+        try {
+            GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+            Config.group_provider = new String[0];
+            ConnectContext context = new ConnectContext();
+            context.setDistinguishedName("uid=previous_user,ou=people,dc=example,dc=com");
+
+            AuthenticationHandler.authenticate(context, "root", "127.0.0.1", new byte[0]);
+
+            Assertions.assertEquals("root", context.getDistinguishedName());
+        } finally {
+            Config.group_provider = previousProviders;
+            GlobalStateMgr.getCurrentState().setAuthenticationMgr(previousManager);
+        }
+    }
+
+    @Test
+    public void testFailedReauthenticationPreservesDNButNextLoginReplacesIt() throws Exception {
+        AuthenticationMgr previousManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        String[] previousProviders = Config.group_provider;
+        String[] previousChain = Config.authentication_chain;
+        try {
+            GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+            Config.group_provider = new String[0];
+            Config.authentication_chain = new String[0];
+            ConnectContext context = new ConnectContext();
+            String previousDN = "uid=previous_user,ou=people,dc=example,dc=com";
+            context.setDistinguishedName(previousDN);
+
+            Assertions.assertThrows(AuthenticationException.class,
+                    () -> AuthenticationHandler.authenticate(context, "missing_reauthentication_user",
+                            "127.0.0.1", new byte[0]));
+            Assertions.assertEquals(previousDN, context.getDistinguishedName());
+            AuthenticationHandler.authenticate(context, "root", "127.0.0.1", new byte[0]);
+            Assertions.assertEquals("root", context.getDistinguishedName());
+        } finally {
+            Config.group_provider = previousProviders;
+            Config.authentication_chain = previousChain;
+            GlobalStateMgr.getCurrentState().setAuthenticationMgr(previousManager);
+        }
+    }
+
+    @Test
+    public void testFailedIntegrationCannotSupplyDNForTheNextIntegration() throws Exception {
+        String[] previousChain = Config.authentication_chain;
+        try {
+            Config.authentication_chain = new String[] {"task_failed_ldap", "task_successful_ldap"};
+            new MockUp<AuthenticationMgr>() {
+                @Mock
+                public SecurityIntegration getSecurityIntegration(String name) {
+                    return new SecurityIntegration(name, Map.of("type", "AUTHENTICATION_LDAP_SIMPLE")) {
+                        @Override
+                        public AuthenticationProvider getAuthenticationProvider() {
+                            return (authContext, identity, response) -> {
+                                if (name.equals("task_failed_ldap")) {
+                                    authContext.setDistinguishedName("uid=failed_attempt,dc=example");
+                                    throw new AuthenticationException("Rejected test provider");
+                                }
+                            };
+                        }
+                    };
+                }
+            };
+            ConnectContext context = new ConnectContext();
+            context.setAuthPlugin(AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString());
+            AuthenticationHandler.authenticate(context, "task_external_user", "127.0.0.1", new byte[0]);
+            Assertions.assertEquals("task_successful_ldap", context.getSecurityIntegration());
+            Assertions.assertEquals("task_external_user", context.getDistinguishedName());
+        } finally {
+            Config.authentication_chain = previousChain;
+        }
     }
 
     @Test

@@ -157,6 +157,7 @@ import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
+import com.starrocks.scheduler.SqlTaskRunProcessor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -922,9 +923,27 @@ public class StmtExecutor {
             catalogTypesInvolved = catalogTypeFromSession();
             throw e;
         }
+        checkAITaskExecution(parsedStmt);
         lastExecPlan = execPlan;
         catalogTypesInvolved = extractCatalogTypes(execPlan);
         return execPlan;
+    }
+
+    private void checkAITaskExecution(StatementBase statement) {
+        try {
+            SqlTaskRunProcessor.checkAIExecution(context, statement);
+        } catch (SemanticException e) {
+            // Planning may already have started the DML transaction. Match the planner's ownership policy.
+            if (statement instanceof DmlStmt && context.getTxnId() == 0) {
+                try {
+                    StatementPlanner.abortTransaction((DmlStmt) statement, context, e.getMessage());
+                } catch (RuntimeException cleanupFailure) {
+                    // Metadata may have disappeared during cleanup; retain the original execution refusal.
+                    LOG.warn("Failed to clean up an implicit transaction after execution validation", cleanupFailure);
+                }
+            }
+            throw e;
+        }
     }
 
     private void logOptimizerTraceOnGenerateExecPlanFailure(Throwable e) {
@@ -2058,6 +2077,7 @@ public class StmtExecutor {
 
     // Process a select statement.
     private void handleQueryStmt(ExecPlan execPlan) throws Exception {
+        checkAITaskExecution(parsedStmt);
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
 
@@ -3388,6 +3408,7 @@ public class StmtExecutor {
      * NOTE: `writeProfile` can only be called once, otherwise the profile detail will be lost.
      */
     public void handleDMLStmtWithProfile(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+        checkAITaskExecution(stmt);
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {

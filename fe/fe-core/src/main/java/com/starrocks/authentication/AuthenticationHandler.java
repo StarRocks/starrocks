@@ -50,6 +50,20 @@ public class AuthenticationHandler {
     public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
                                             byte[] authResponse)
             throws AuthenticationException {
+        // A reused connection (COM_CHANGE_USER) must not resolve the new principal's groups with the old DN.
+        String previousDN = context.getDistinguishedName();
+        context.setAuthenticatedTaskIdentity(null);
+        context.setDistinguishedName("");
+        try {
+            return authenticateInternal(context, user, remoteHost, authResponse);
+        } catch (AuthenticationException | RuntimeException e) {
+            context.setDistinguishedName(previousDN);
+            throw e;
+        }
+    }
+
+    private static UserIdentity authenticateInternal(ConnectContext context, String user, String remoteHost,
+                                                     byte[] authResponse) throws AuthenticationException {
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", authResponse.length == 0 ? "NO" : "YES");
         }
@@ -151,6 +165,8 @@ public class AuthenticationHandler {
 
             try {
                 authContext.setAuthenticationProvider(provider);
+                // A failed integration must not supply the next integration's group-resolution identity.
+                authContext.setDistinguishedName("");
                 provider.authenticate(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
             } catch (AuthenticationException e) {
                 exceptions.add(new Pair<>(authMechanism, e));
@@ -226,6 +242,9 @@ public class AuthenticationHandler {
             UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
                     .getUserProperty(user);
             context.updateByUserProperty(userProperty);
+        }
+        if (Config.enable_auth_check) {
+            TaskExecutionIdentity.recordAuthentication(context);
         }
     }
 
