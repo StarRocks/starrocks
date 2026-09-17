@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -262,6 +263,101 @@ TEST(OpenAICompatibleProviderTest, ParsesTheFirstChoiceAndPreservesEmptyOrNulCon
     auto with_nul = provider.parse_response(R"({"choices":[{"message":{"content":"a\u0000b"}}]})");
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(with_nul));
     EXPECT_EQ(std::string("a\0b", 3), std::get<AIProviderSuccess>(with_nul).content);
+}
+
+TEST(OpenAICompatibleProviderTest, UsagePreservesReportedZeroAndDoesNotInferMissingTotal) {
+    OpenAICompatibleProvider provider;
+
+    auto result = provider.parse_response(
+            R"({"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":0,"completion_tokens":7}})");
+
+    ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
+    const auto& success = std::get<AIProviderSuccess>(result);
+    EXPECT_EQ("ok", success.content);
+    ASSERT_TRUE(success.usage.prompt_tokens.has_value());
+    EXPECT_EQ(0, *success.usage.prompt_tokens);
+    ASSERT_TRUE(success.usage.completion_tokens.has_value());
+    EXPECT_EQ(7, *success.usage.completion_tokens);
+    EXPECT_FALSE(success.usage.total_tokens.has_value());
+}
+
+TEST(OpenAICompatibleProviderTest, MissingOrNonObjectUsageDoesNotChangeSuccess) {
+    OpenAICompatibleProvider provider;
+    const std::array<std::string_view, 5> bodies = {
+            R"({"choices":[{"message":{"content":"ok"}}]})",
+            R"({"choices":[{"message":{"content":"ok"}}],"usage":null})",
+            R"({"choices":[{"message":{"content":"ok"}}],"usage":7})",
+            R"({"choices":[{"message":{"content":"ok"}}],"usage":[]})",
+            R"({"choices":[{"message":{"content":"ok"}}],"usage":{}})",
+    };
+
+    for (std::string_view body : bodies) {
+        auto result = provider.parse_response(body);
+        ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result)) << body;
+        const auto& usage = std::get<AIProviderSuccess>(result).usage;
+        EXPECT_FALSE(usage.prompt_tokens.has_value()) << body;
+        EXPECT_FALSE(usage.completion_tokens.has_value()) << body;
+        EXPECT_FALSE(usage.total_tokens.has_value()) << body;
+    }
+}
+
+TEST(OpenAICompatibleProviderTest, InvalidUsageFieldsAreIgnoredIndependently) {
+    OpenAICompatibleProvider provider;
+    const std::array<std::string_view, 8> invalid_values = {
+            "-1", "1.5", "0.0", "9223372036854775808", "null", "true", R"("3")", "[]",
+    };
+
+    for (std::string_view invalid : invalid_values) {
+        const std::string body = R"({"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":)" +
+                                 std::string(invalid) + R"(,"completion_tokens":2,"total_tokens":9}})";
+        auto result = provider.parse_response(body);
+        ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result)) << body;
+        const auto& usage = std::get<AIProviderSuccess>(result).usage;
+        EXPECT_FALSE(usage.prompt_tokens.has_value()) << body;
+        ASSERT_TRUE(usage.completion_tokens.has_value()) << body;
+        EXPECT_EQ(2, *usage.completion_tokens) << body;
+        ASSERT_TRUE(usage.total_tokens.has_value()) << body;
+        EXPECT_EQ(9, *usage.total_tokens) << body;
+    }
+}
+
+TEST(OpenAICompatibleProviderTest, UsageIsPreservedWithoutChangingStructuredErrorPrecedence) {
+    OpenAICompatibleProvider provider;
+
+    auto result = provider.parse_response(
+            R"({"choices":[{"message":{"content":"must-not-win"}}],"error":{"code":"server_error"},"usage":{"prompt_tokens":5,"completion_tokens":0,"total_tokens":5}})");
+
+    ASSERT_TRUE(std::holds_alternative<AIProviderStructuredError>(result));
+    const auto& error = std::get<AIProviderStructuredError>(result);
+    EXPECT_EQ(AIProviderErrorCode::SERVER_ERROR, error.code);
+    EXPECT_EQ(AIProviderErrorAction::RETRYABLE, ai_provider_error_action(error.code));
+    ASSERT_TRUE(error.usage.prompt_tokens.has_value());
+    EXPECT_EQ(5, *error.usage.prompt_tokens);
+    ASSERT_TRUE(error.usage.completion_tokens.has_value());
+    EXPECT_EQ(0, *error.usage.completion_tokens);
+    ASSERT_TRUE(error.usage.total_tokens.has_value());
+    EXPECT_EQ(5, *error.usage.total_tokens);
+}
+
+TEST(OpenAICompatibleProviderTest, ValidUsageSurvivesMalformedSuccessShapeButNotMalformedJson) {
+    OpenAICompatibleProvider provider;
+
+    auto missing_content = provider.parse_response(
+            R"({"choices":[{"message":{}}],"usage":{"prompt_tokens":4,"total_tokens":9223372036854775807}})");
+    ASSERT_TRUE(std::holds_alternative<AIProviderMalformed>(missing_content));
+    const auto& usage = std::get<AIProviderMalformed>(missing_content).usage;
+    ASSERT_TRUE(usage.prompt_tokens.has_value());
+    EXPECT_EQ(4, *usage.prompt_tokens);
+    EXPECT_FALSE(usage.completion_tokens.has_value());
+    ASSERT_TRUE(usage.total_tokens.has_value());
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), *usage.total_tokens);
+
+    auto malformed_json = provider.parse_response(R"({"usage":{"prompt_tokens":4},)");
+    ASSERT_TRUE(std::holds_alternative<AIProviderMalformed>(malformed_json));
+    const auto& malformed_usage = std::get<AIProviderMalformed>(malformed_json).usage;
+    EXPECT_FALSE(malformed_usage.prompt_tokens.has_value());
+    EXPECT_FALSE(malformed_usage.completion_tokens.has_value());
+    EXPECT_FALSE(malformed_usage.total_tokens.has_value());
 }
 
 TEST(OpenAICompatibleProviderTest, MalformedSuccessShapesReturnOnlyTheMalformedKind) {

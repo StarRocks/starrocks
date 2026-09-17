@@ -27,6 +27,7 @@
 #include "base/statusor.h"
 #include "base/uid_util.h"
 #include "platform/llm/ai_admission_controller.h"
+#include "platform/llm/ai_execution_statistics.h"
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_provider.h"
 #include "platform/llm/ai_runtime.h"
@@ -82,7 +83,10 @@ using AITaskResult = std::variant<AITaskSuccess, AISanitizedRowFailure, AILifecy
 // Callbacks may run on the admission scheduler, a completion worker, or the native HTTP I/O rejection path. They must
 // be O(1) and non-blocking, and may only publish terminal task state or wake an observer; downstream expression work
 // must be scheduled by that observer, never inline here.
-using AITaskCallback = std::function<void(AITaskResult)>;
+// Statistics are an immutable terminal snapshot and are valid only during the
+// callback. Consumers retaining the snapshot must copy it. In-flight tasks do
+// not publish partial statistics through this query-local interface.
+using AITaskCallback = std::function<void(AITaskResult, const AIExecutionStatistics&)>;
 
 struct AIDispatchRequest {
     AIWorkGroupKey workgroup_key;

@@ -117,6 +117,54 @@ TEST(QueryRuntimeStateTest, TracksReadStats) {
     EXPECT_EQ(20, state.get_read_remote_cnt());
 }
 
+TEST(QueryRuntimeStateTest, AIStatisticsDeltaDoesNotConsumeTotal) {
+    QueryRuntimeState state;
+    EXPECT_TRUE(state.ai_statistics().empty());
+    EXPECT_TRUE(state.consume_delta_ai_statistics().empty());
+    AIExecutionStatistics task;
+    static_assert(noexcept(state.add_ai_statistics(task)), "Terminal statistics publication must not throw");
+    task.task_count = 1;
+    task.request_count = 2;
+    task.total_tokens = 0; // Reported zero must remain distinguishable from no report.
+    task.total_usage_count = 1;
+    state.add_ai_statistics(task);
+    state.add_ai_statistics(task);
+    const auto delta = state.consume_delta_ai_statistics();
+    EXPECT_EQ(2, delta.task_count);
+    EXPECT_EQ(4, delta.request_count);
+    EXPECT_EQ(2, delta.total_usage_count);
+    EXPECT_TRUE(state.consume_delta_ai_statistics().empty());
+    EXPECT_EQ(2, state.ai_statistics().task_count);
+    state.add_ai_statistics(task);
+    EXPECT_EQ(1, state.consume_delta_ai_statistics().task_count);
+    EXPECT_EQ(3, state.ai_statistics().task_count);
+}
+
+TEST(QueryRuntimeStateTest, AIStatisticsConcurrentSnapshotsRetainTotals) {
+    QueryRuntimeState state;
+    constexpr int kTasks = 1000;
+    std::thread producer([&] {
+        AIExecutionStatistics task;
+        task.task_count = 1;
+        task.prompt_tokens = 7;
+        task.prompt_usage_count = 1;
+        for (int i = 0; i < kTasks; ++i) {
+            state.add_ai_statistics(task);
+        }
+    });
+    AIExecutionStatistics drained;
+    for (int i = 0; i < kTasks; ++i) {
+        drained.add(state.consume_delta_ai_statistics());
+    }
+    producer.join();
+    drained.add(state.consume_delta_ai_statistics());
+    EXPECT_EQ(kTasks, drained.task_count);
+    EXPECT_EQ(kTasks, drained.prompt_usage_count);
+    EXPECT_EQ(7 * kTasks, drained.prompt_tokens);
+    EXPECT_EQ(kTasks, state.ai_statistics().task_count);
+    EXPECT_EQ(7 * kTasks, state.ai_statistics().prompt_tokens);
+}
+
 TEST(QueryRuntimeStateTest, ProfileControlsDefaultToDisabledMergeProfile) {
     QueryRuntimeState state;
 

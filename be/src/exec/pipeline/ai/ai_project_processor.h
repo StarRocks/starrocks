@@ -132,6 +132,7 @@ public:
     Status set_status(int32_t driver_sequence, const Status& status);
     StatusOr<bool> lane_finished(int32_t driver_sequence) const;
     bool pending_finish(int32_t driver_sequence) const;
+    AIExecutionStatistics statistics(int32_t driver_sequence) const;
     Status set_source_finished(int32_t driver_sequence);
 
     Status attach_source_observer(int32_t driver_sequence, RuntimeState* state, PipelineObserver* observer);
@@ -153,7 +154,8 @@ private:
     Status _prepare_and_submit(RuntimeState* state, int32_t driver_sequence, const std::shared_ptr<Lane>& lane,
                                ChunkPtr slice);
     static void _complete_task(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                               size_t output_index, size_t row_index, AITaskResult result) noexcept;
+                               size_t output_index, size_t row_index, AITaskResult result,
+                               const AIExecutionStatistics& statistics) noexcept;
     static void _complete_submit_failure(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
                                          size_t output_index, size_t row_index, const Status& status);
     static StatusOr<ChunkPtr> _materialize(const std::shared_ptr<ActiveSubchunk>& subchunk);

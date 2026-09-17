@@ -720,11 +720,13 @@ protected:
 
     void submit(AIDispatchRequest request) {
         const uint64_t task_id = request.task_id;
-        auto handle = _dispatcher.submit(std::move(request), [this, task_id](AITaskResult result) {
-            if (_before_result_callback) _before_result_callback();
-            _result_task_ids.emplace_back(task_id);
-            _results.emplace_back(std::move(result));
-        });
+        auto handle = _dispatcher.submit(std::move(request),
+                                         [this, task_id](AITaskResult result, const AIExecutionStatistics& statistics) {
+                                             if (_before_result_callback) _before_result_callback();
+                                             _result_task_ids.emplace_back(task_id);
+                                             _results.emplace_back(std::move(result));
+                                             _statistics.emplace_back(statistics);
+                                         });
         ASSERT_TRUE(handle.ok()) << handle.status();
         _handles.emplace_back(std::move(handle).value());
     }
@@ -753,6 +755,7 @@ protected:
     std::vector<AITaskHandle> _handles;
     std::vector<uint64_t> _result_task_ids;
     std::vector<AITaskResult> _results;
+    std::vector<AIExecutionStatistics> _statistics;
     std::function<void()> _before_result_callback;
 };
 
@@ -785,9 +788,10 @@ TEST_F(AITaskDispatcherTest, InitialAdmissionMaterializationExceptionCompletesSy
     std::optional<StatusOr<AITaskHandle>> submitted;
 
     EXPECT_NO_THROW({
-        submitted.emplace(_dispatcher.submit(request(1, UniqueId{1, 42}, 1), [this](AITaskResult result) {
-            _results.emplace_back(std::move(result));
-        }));
+        submitted.emplace(_dispatcher.submit(request(1, UniqueId{1, 42}, 1),
+                                             [this](AITaskResult result, const AIExecutionStatistics&) {
+                                                 _results.emplace_back(std::move(result));
+                                             }));
     });
 
     ASSERT_TRUE(submitted.has_value());
@@ -1176,20 +1180,21 @@ TEST_F(AITaskDispatcherTest, AdmissionFailureCallbackCanCancelCompletingTaskWith
     bool cancellation_finished_inside_callback = false;
     std::thread cancellation_thread;
     std::optional<AITaskResult> blocked_result;
-    auto blocked = _dispatcher.submit(request(2, UniqueId{8, 4}, 2), [&](AITaskResult result) {
-        blocked_result.emplace(std::move(result));
-        cancellation_thread = std::thread([&] {
-            _handles.front().cancel();
-            {
-                std::lock_guard lock(cancellation_mutex);
-                cancellation_finished = true;
-            }
-            cancellation_cv.notify_all();
-        });
-        std::unique_lock lock(cancellation_mutex);
-        cancellation_finished_inside_callback =
-                cancellation_cv.wait_for(lock, std::chrono::seconds(5), [&] { return cancellation_finished; });
-    });
+    auto blocked =
+            _dispatcher.submit(request(2, UniqueId{8, 4}, 2), [&](AITaskResult result, const AIExecutionStatistics&) {
+                blocked_result.emplace(std::move(result));
+                cancellation_thread = std::thread([&] {
+                    _handles.front().cancel();
+                    {
+                        std::lock_guard lock(cancellation_mutex);
+                        cancellation_finished = true;
+                    }
+                    cancellation_cv.notify_all();
+                });
+                std::unique_lock lock(cancellation_mutex);
+                cancellation_finished_inside_callback =
+                        cancellation_cv.wait_for(lock, std::chrono::seconds(5), [&] { return cancellation_finished; });
+            });
     ASSERT_TRUE(blocked.ok()) << blocked.status();
     _handles.emplace_back(std::move(blocked).value());
     _control.run_until_idle();
@@ -1251,20 +1256,21 @@ TEST_F(AITaskDispatcherTest, AdmissionFailureCallbackCanCancelRetryingTaskDuring
         _control.run_until_idle();
         if (cancellation_thread.joinable()) cancellation_thread.join();
     });
-    auto blocked = _dispatcher.submit(request(2, UniqueId{8, 8}, 2), [&](AITaskResult result) {
-        blocked_result.emplace(std::move(result));
-        cancellation_thread = std::thread([&] {
-            _handles.front().cancel();
-            {
-                std::lock_guard lock(cancellation_mutex);
-                cancellation_finished = true;
-            }
-            cancellation_cv.notify_all();
-        });
-        std::unique_lock lock(cancellation_mutex);
-        cancellation_finished_inside_callback =
-                cancellation_cv.wait_for(lock, std::chrono::seconds(5), [&] { return cancellation_finished; });
-    });
+    auto blocked =
+            _dispatcher.submit(request(2, UniqueId{8, 8}, 2), [&](AITaskResult result, const AIExecutionStatistics&) {
+                blocked_result.emplace(std::move(result));
+                cancellation_thread = std::thread([&] {
+                    _handles.front().cancel();
+                    {
+                        std::lock_guard lock(cancellation_mutex);
+                        cancellation_finished = true;
+                    }
+                    cancellation_cv.notify_all();
+                });
+                std::unique_lock lock(cancellation_mutex);
+                cancellation_finished_inside_callback =
+                        cancellation_cv.wait_for(lock, std::chrono::seconds(5), [&] { return cancellation_finished; });
+            });
     ASSERT_TRUE(blocked.ok()) << blocked.status();
     _handles.emplace_back(std::move(blocked).value());
     _control.run_until_idle();
@@ -1317,8 +1323,10 @@ TEST_F(AITaskDispatcherTest, ThrowingCancellationProbeBeforeAdmissionFailsClosed
     std::optional<StatusOr<AITaskHandle>> submitted;
 
     EXPECT_NO_THROW({
-        submitted.emplace(_dispatcher.submit(
-                std::move(dispatch), [this](AITaskResult result) { _results.emplace_back(std::move(result)); }));
+        submitted.emplace(
+                _dispatcher.submit(std::move(dispatch), [this](AITaskResult result, const AIExecutionStatistics&) {
+                    _results.emplace_back(std::move(result));
+                }));
     });
 
     ASSERT_TRUE(submitted.has_value());
@@ -1729,8 +1737,8 @@ TEST_F(AITaskDispatcherTest, CancellationReplacementReleasesSuccessOutsideStateM
     auto callback_destruction = std::make_shared<PhysicalScopeDestructionState>(&memory);
     AITaskCallback callback;
     run_in_memory_scope(memory.context(), [&] {
-        callback = [this, callback_destruction,
-                    observer = PhysicalScopeDestructionObserver(callback_destruction)](AITaskResult result) {
+        callback = [this, callback_destruction, observer = PhysicalScopeDestructionObserver(callback_destruction)](
+                           AITaskResult result, const AIExecutionStatistics&) {
             if (_before_result_callback) _before_result_callback();
             _result_task_ids.emplace_back(1);
             _results.emplace_back(std::move(result));
@@ -2063,6 +2071,144 @@ TEST_F(AITaskDispatcherTest, MetricsCountOnlyAcceptedInitialAndRetryAttempts) {
     _completion.run_until_idle();
     ASSERT_EQ(1, _results.size());
     EXPECT_TRUE(std::holds_alternative<AITaskSuccess>(_results.front()));
+    ASSERT_EQ(1, _statistics.size());
+    EXPECT_EQ(1, _statistics.front().task_count);
+    EXPECT_EQ(3, _statistics.front().request_count);
+    EXPECT_EQ(2, _statistics.front().retry_count);
+    EXPECT_EQ(0, _statistics.front().error_count);
+}
+
+TEST_F(AITaskDispatcherTest, TerminalStatisticsExcludeBackoffAndCompletionQueueTime) {
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 503);
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 200);
+    _provider.push_parse(AIProviderSuccess{.content = "ok", .usage = {.prompt_tokens = 0, .completion_tokens = 7}});
+
+    submit_and_run_control(request(1, UniqueId{20, 1}, 1));
+    _clock.advance_ns(11);
+    complete_next_transport_and_run_control();
+    _clock.advance_ns(100);
+    _completion.run_until_idle();
+    EXPECT_TRUE(_statistics.empty()) << "only terminal tasks publish query-local statistics";
+    _clock.advance_ns(kSecond);
+    _control.run_until_idle();
+    _clock.advance_ns(23);
+    complete_next_transport_and_run_control();
+    _clock.advance_ns(200);
+    _completion.run_until_idle();
+
+    ASSERT_EQ(1, _statistics.size());
+    const auto& statistics = _statistics.front();
+    EXPECT_EQ(1, statistics.task_count);
+    EXPECT_EQ(2, statistics.request_count);
+    EXPECT_EQ(1, statistics.retry_count);
+    EXPECT_EQ(34, statistics.http_time_ns);
+    EXPECT_EQ(0, statistics.prompt_tokens);
+    EXPECT_EQ(1, statistics.prompt_usage_count);
+    EXPECT_EQ(7, statistics.completion_tokens);
+    EXPECT_EQ(1, statistics.completion_usage_count);
+    EXPECT_EQ(0, statistics.total_tokens);
+    EXPECT_EQ(0, statistics.total_usage_count);
+}
+
+TEST_F(AITaskDispatcherTest, TerminalStatisticsRetainUsageAcrossRetryAndCancellationAfterParse) {
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 400);
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 200);
+    _provider.push_parse(AIProviderStructuredError{.code = AIProviderErrorCode::SERVER_ERROR,
+                                                   .usage = {.prompt_tokens = 5, .total_tokens = 5}});
+    _provider.push_parse(AIProviderSuccess{.content = "discarded",
+                                           .usage = {.prompt_tokens = 7, .completion_tokens = 3, .total_tokens = 10}});
+
+    submit_and_run_control(request(1, UniqueId{20, 2}, 1));
+    complete_next_transport_and_run_control();
+    _completion.run_until_idle();
+    _clock.advance_ns(kSecond);
+    _control.run_until_idle();
+    _provider.set_parse_hook([&] { _handles.front().cancel(); });
+    complete_next_transport_and_run_control();
+    _completion.run_until_idle();
+
+    ASSERT_EQ(1, _results.size());
+    EXPECT_TRUE(std::holds_alternative<AILifecycleCancelled>(_results.front()));
+    ASSERT_EQ(1, _statistics.size());
+    const auto& statistics = _statistics.front();
+    EXPECT_EQ(1, statistics.task_count);
+    EXPECT_EQ(2, statistics.request_count);
+    EXPECT_EQ(1, statistics.retry_count);
+    EXPECT_EQ(0, statistics.error_count);
+    EXPECT_EQ(12, statistics.prompt_tokens);
+    EXPECT_EQ(2, statistics.prompt_usage_count);
+    EXPECT_EQ(3, statistics.completion_tokens);
+    EXPECT_EQ(1, statistics.completion_usage_count);
+    EXPECT_EQ(15, statistics.total_tokens);
+    EXPECT_EQ(2, statistics.total_usage_count);
+}
+
+TEST_F(AITaskDispatcherTest, RejectedSubmitPublishesTaskErrorButNoHttpAttemptOrTime) {
+    _http.push_sync_failure();
+    _http.before_submit = [&](const AIHttpRequest&) { _clock.advance_ns(17); };
+    submit_and_run_control(request(1, UniqueId{20, 3}, 1));
+
+    ASSERT_EQ(1, _statistics.size());
+    const auto& statistics = _statistics.front();
+    EXPECT_EQ(1, statistics.task_count);
+    EXPECT_EQ(1, statistics.error_count);
+    EXPECT_EQ(0, statistics.request_count);
+    EXPECT_EQ(0, statistics.retry_count);
+    EXPECT_EQ(0, statistics.http_time_ns);
+}
+
+TEST_F(AITaskDispatcherTest, InlineCompletionStatisticsStopAtCallbackAndRequireAcceptedSubmit) {
+    _http.push_http(ScriptedAIHttpClient::Mode::INLINE_COMPLETION, 200);
+    _http.before_submit = [&](const AIHttpRequest&) { _clock.advance_ns(17); };
+    _http.after_inline_callback_before_return = [&] { _clock.advance_ns(31); };
+    submit_and_run_control(request(1, UniqueId{20, 4}, 1));
+    _completion.run_until_idle();
+    ASSERT_EQ(1, _statistics.size());
+    EXPECT_EQ(1, _statistics.front().request_count);
+    EXPECT_EQ(17, _statistics.front().http_time_ns);
+
+    _http.push_http(ScriptedAIHttpClient::Mode::INLINE_COMPLETION_THEN_THROW, 200);
+    submit_and_run_control(request(2, UniqueId{20, 5}, 2));
+    _completion.run_until_idle();
+    ASSERT_EQ(2, _statistics.size());
+    EXPECT_EQ(1, _statistics.back().task_count);
+    EXPECT_EQ(1, _statistics.back().error_count);
+    EXPECT_EQ(0, _statistics.back().request_count);
+    EXPECT_EQ(0, _statistics.back().http_time_ns);
+}
+
+TEST_F(AITaskDispatcherTest, ProviderBuildRejectionPublishesOneTaskErrorWithoutUsage) {
+    _provider.set_build_status(Status::InvalidArgument("invalid provider request"));
+    submit_and_run_control(request(1, UniqueId{20, 6}, 1));
+    ASSERT_EQ(1, _statistics.size());
+    EXPECT_EQ(1, _statistics.front().task_count);
+    EXPECT_EQ(1, _statistics.front().error_count);
+    EXPECT_EQ(0, _statistics.front().request_count);
+    EXPECT_EQ(0, _statistics.front().prompt_usage_count);
+}
+
+TEST(AIExecutionStatisticsTest, AdditionSaturatesAndIgnoresNegativeInputs) {
+    AIExecutionStatistics statistics;
+    EXPECT_TRUE(statistics.empty());
+    const int64_t maximum = std::numeric_limits<int64_t>::max();
+    statistics.add({.task_count = maximum, .http_time_ns = maximum, .prompt_tokens = maximum, .prompt_usage_count = 1});
+    statistics.add({.task_count = 1,
+                    .request_count = -1,
+                    .http_time_ns = 1,
+                    .prompt_tokens = 1,
+                    .completion_tokens = -7,
+                    .prompt_usage_count = 1});
+    EXPECT_FALSE(statistics.empty());
+    EXPECT_EQ(maximum, statistics.task_count);
+    EXPECT_EQ(0, statistics.request_count);
+    EXPECT_EQ(maximum, statistics.http_time_ns);
+    EXPECT_EQ(maximum, statistics.prompt_tokens);
+    EXPECT_EQ(0, statistics.completion_tokens);
+    EXPECT_EQ(2, statistics.prompt_usage_count);
+
+    AIExecutionStatistics known_zero;
+    known_zero.total_usage_count = 1;
+    EXPECT_FALSE(known_zero.empty()) << "a known zero usage field is still observable";
 }
 
 TEST_F(AITaskDispatcherTest, MetricsDoNotCountRejectedOrCancelledRetryAttempts) {
@@ -2108,6 +2254,9 @@ TEST_F(AITaskDispatcherTest, MetricsCountEachAcceptedTransportTimeoutOnce) {
     complete_next_transport_and_run_control();
     _completion.run_until_idle();
     EXPECT_EQ(1, _metrics.ai_http_timeouts_total.value());
+    ASSERT_EQ(1, _statistics.size());
+    EXPECT_EQ(1, _statistics.front().timeout_count);
+    EXPECT_EQ(2, _statistics.front().request_count);
 }
 
 TEST_F(AITaskDispatcherTest, MetricsDoNotClassifyOtherTransportFailuresAsTimeout) {
@@ -2332,7 +2481,7 @@ TEST_F(AITaskDispatcherTest, SerializesSharedRandomSourceAcrossConcurrentComplet
     for (size_t index = 0; index < std::size(dispatchers); ++index) {
         const uint64_t task_id = index + 1;
         auto handle = dispatchers[index]->submit(request(task_id, UniqueId{2, static_cast<int64_t>(task_id)}, task_id),
-                                                 [this, task_id](AITaskResult result) {
+                                                 [this, task_id](AITaskResult result, const AIExecutionStatistics&) {
                                                      _result_task_ids.emplace_back(task_id);
                                                      _results.emplace_back(std::move(result));
                                                  });
@@ -2600,10 +2749,11 @@ TEST_F(AITaskDispatcherTest, ConcurrentRetryReentryCannotReplaceTheCurrentAdmiss
         coordination_cv.wait(lock, [&] { return release_first_retry_store; });
     });
 
-    auto submitted = dispatcher.submit(request(1, UniqueId{4, 5}, 1), [this](AITaskResult result) {
-        _result_task_ids.emplace_back(1);
-        _results.emplace_back(std::move(result));
-    });
+    auto submitted =
+            dispatcher.submit(request(1, UniqueId{4, 5}, 1), [this](AITaskResult result, const AIExecutionStatistics&) {
+                _result_task_ids.emplace_back(1);
+                _results.emplace_back(std::move(result));
+            });
     ASSERT_TRUE(submitted.ok()) << submitted.status();
     _handles.emplace_back(std::move(submitted).value());
 
@@ -2764,10 +2914,11 @@ TEST_F(AITaskDispatcherTest, CancellationObservedAfterAdmissionCannotTerminateAn
 
     std::optional<StatusOr<AITaskHandle>> submitted_handle;
     std::thread submit_thread([&] {
-        submitted_handle.emplace(_dispatcher.submit(std::move(dispatch), [this](AITaskResult result) {
-            _result_task_ids.emplace_back(1);
-            _results.emplace_back(std::move(result));
-        }));
+        submitted_handle.emplace(
+                _dispatcher.submit(std::move(dispatch), [this](AITaskResult result, const AIExecutionStatistics&) {
+                    _result_task_ids.emplace_back(1);
+                    _results.emplace_back(std::move(result));
+                }));
     });
     {
         std::unique_lock lock(coordination_mutex);
