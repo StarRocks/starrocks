@@ -143,14 +143,20 @@ void CompactionTaskCallback::cache_txn_log(const CompactionTaskContext& context)
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
     std::unique_lock l(_mtx);
 
-    if (!context->status.ok()) {
-        _response->add_failed_tablets(context->tablet_id);
-    } else {
-        _success_compaction_input_file_size += context->stats->input_file_size;
-    }
+    // Everything that can throw happens up here, before the response or the completed-context list is
+    // touched, so that a std::bad_alloc leaves this callback exactly as it was and |context| still with
+    // the caller. Whoever holds a tablet's single completion (see
+    // TabletParallelCompactionManager::finalize_tablet_completion) can then still complete it with a
+    // failed context, whereas a throw after a partial update would leave the RPC unable to ever
+    // complete. Nothing below the marker allocates.
+    _contexts.reserve(_contexts.size() + 1);
+    // A tablet can land in failed_tablets twice: for its own failure and for a txn log that could not
+    // be normalized.
+    _response->mutable_failed_tablets()->Reserve(_response->failed_tablets_size() + 2);
+    _response->mutable_compact_stats()->Reserve(_response->compact_stats_size() + 1);
+    _response->mutable_txn_logs()->Reserve(_response->txn_logs_size() + 1);
 
-    // process compact stat
-    auto compact_stat = _response->add_compact_stats();
+    auto compact_stat = std::make_unique<CompactStat>();
     compact_stat->set_tablet_id(context->tablet_id);
     compact_stat->set_read_time_remote(context->stats->io_ns_read_remote);
     compact_stat->set_read_bytes_remote(context->stats->io_bytes_read_remote);
@@ -163,35 +169,46 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
     compact_stat->set_sub_task_count(context->subtask_count);
     compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
+
+    std::unique_ptr<TxnLogPB> normalized;
+    Status normalize_st;
     if (context->skip_write_txnlog && context->txn_log != nullptr) {
         // context->txn_log could be nullptr if the task is failed before writing txn log.
         // Dual-write the legacy arrays into the RPC payload so an aggregator without the segment_metas
-        // refactor (not-yet-upgraded or rolled-back) persists old-readable metadata. Normalize a temp
-        // copy and only return it on success; never put a non-dual-written / bad txn log in the response.
-        TxnLogPB normalized(*context->txn_log);
-        if (auto st = normalize_txn_log_before_save(&normalized); st.ok()) {
-            _response->add_txn_logs()->Swap(&normalized);
-            if (context->status.ok()) {
-                // Skip a tablet whose own compaction failed -- publish will never ask for its log.
-                // That is ALL this guard establishes; it does not make the cached log guaranteed
-                // durable. write_combined_txn_log() is gated on the whole AggregateCompactRequest
-                // succeeding (FE pins allow_partial_success to false on this path), so when a
-                // SIBLING tablet fails this log is cached while the combined object is never
-                // written, and the entry then survives until LRU eviction -- abort_txn()'s combined
-                // branch bails out on the NotFound before reaching collect_files_in_log(), the only
-                // place that erases the per-tablet key. Harmless: txn_id is never reused, so no
-                // later publish can read the stale entry.
-                cache_txn_log(*context);
-            }
-        } else {
-            LOG(WARNING) << "Fail to normalize aggregate-compact txn log: " << st
+        // refactor (not-yet-upgraded or rolled-back) persists old-readable metadata. Normalize a copy
+        // and only return it on success; never put a non-dual-written / bad txn log in the response.
+        normalized = std::make_unique<TxnLogPB>(*context->txn_log);
+        normalize_st = normalize_txn_log_before_save(normalized.get());
+        if (!normalize_st.ok()) {
+            LOG(WARNING) << "Fail to normalize aggregate-compact txn log: " << normalize_st
                          << " tablet_id=" << context->tablet_id;
-            _response->add_failed_tablets(context->tablet_id);
-            _status.update(st);
+            normalized.reset();
         }
     }
     DCHECK(_request != nullptr);
+    // Assigning a Status is strong-exception-safe, and a status recorded for a tablet whose acceptance
+    // then fails is still the right one.
+    if (!normalize_st.ok()) {
+        _status.update(normalize_st);
+    }
     _status.update(context->status);
+    // Lets a test fail the acceptance the way an allocation failure would: after everything above,
+    // before anything below.
+    TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:before_accept");
+
+    // ---- Nothing below throws. ----
+    if (!context->status.ok()) {
+        _response->add_failed_tablets(context->tablet_id);
+    } else {
+        _success_compaction_input_file_size += context->stats->input_file_size;
+    }
+    _response->mutable_compact_stats()->AddAllocated(compact_stat.release());
+    const bool txn_log_returned = normalized != nullptr;
+    if (txn_log_returned) {
+        _response->mutable_txn_logs()->AddAllocated(normalized.release());
+    } else if (!normalize_st.ok()) {
+        _response->add_failed_tablets(context->tablet_id);
+    }
 
     // Register a parallel merged context so remove_states() can defer cleanup of
     // its individual subtask rows until the RPC response is sent. list_tasks()
@@ -203,8 +220,30 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
     // Keep the context until the RPC request finishes. Regular contexts remain
     // visible through list_tasks(); a merged context anchors parallel-state cleanup.
+    CompactionTaskContext* accepted = context.get();
     _contexts.emplace_back(std::move(context));
     //                     ^^^^^^^^^^^^^^^^^ Do NOT touch "context" since here, it has been `move`ed.
+
+    if (txn_log_returned && accepted->status.ok()) {
+        // Skip a tablet whose own compaction failed -- publish will never ask for its log.
+        // That is ALL this guard establishes; it does not make the cached log guaranteed
+        // durable. write_combined_txn_log() is gated on the whole AggregateCompactRequest
+        // succeeding (FE pins allow_partial_success to false on this path), so when a
+        // SIBLING tablet fails this log is cached while the combined object is never
+        // written, and the entry then survives until LRU eviction -- abort_txn()'s combined
+        // branch bails out on the NotFound before reaching collect_files_in_log(), the only
+        // place that erases the per-tablet key. Harmless: txn_id is never reused, so no
+        // later publish can read the stale entry.
+        //
+        // The cache only speeds up the following publish; it allocates, so it runs after the
+        // acceptance above and must not be allowed to undo it.
+        try {
+            cache_txn_log(*accepted);
+        } catch (const std::exception& e) {
+            LOG(WARNING) << "Fail to cache aggregate-compact txn log, tablet_id=" << accepted->tablet_id << ": "
+                         << e.what();
+        }
+    }
 
     if (_contexts.size() == _request->tablet_ids_size()) { // All tasks finished, send RPC response to FE
         _status.to_protobuf(_response->mutable_status());

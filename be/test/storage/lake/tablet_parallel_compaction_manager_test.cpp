@@ -8607,4 +8607,192 @@ TEST_F(TabletParallelCompactionManagerTest, test_last_unsealed_subtask_parks_tok
     EXPECT_EQ(0, released_mem_limit_exceeded);
 }
 
+// The interleaving the parked token was never returned in: subtask 0 finishes before the next group is
+// registered and parks its token; submission is then sealed while subtask 1 is still running, so the
+// sealer does not claim the completion. Subtask 1 later finalizes on its own token, and nothing took the
+// parked one -- it stayed held until the whole RPC's cleanup. With a sibling tablet queued in the same
+// RPC and needing a token, that cleanup could never come. Sealing must return a parked token it is not
+// going to use, right away.
+TEST_F(TabletParallelCompactionManagerTest, test_parked_token_is_returned_at_seal_when_a_subtask_still_runs) {
+    int64_t tablet_id = 10013;
+    int64_t txn_id = 20015;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    // Two tablets in the RPC: this one and a sibling that never completes here, so the RPC's cleanup --
+    // the only other place a parked token was returned -- cannot run.
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    request.add_tablet_ids(tablet_id + 1);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    int released = 0;
+    int released_mem_limit_exceeded = 0;
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+    state->release_token = [&](bool mem_limit_exceeded) {
+        released++;
+        if (mem_limit_exceeded) {
+            released_mem_limit_exceeded++;
+        }
+    };
+    auto register_running = [&](int32_t subtask_id, std::vector<uint32_t> rowset_ids) {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        SubtaskInfo info;
+        info.subtask_id = subtask_id;
+        info.input_rowset_ids = rowset_ids;
+        info.input_bytes = 5 * 1024 * 1024;
+        info.start_time = ::time(nullptr);
+        for (auto id : rowset_ids) {
+            state->compacting_rowsets[id] = 1;
+        }
+        state->running_subtasks[subtask_id] = std::move(info);
+        state->total_subtasks_created++;
+    };
+    auto finished_context = [&](int32_t subtask_id, uint32_t input_rowset) {
+        auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+        ctx->subtask_id = subtask_id;
+        ctx->txn_log = std::make_unique<TxnLogPB>();
+        ctx->txn_log->mutable_op_compaction()->add_input_rowsets(input_rowset);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+        return ctx;
+    };
+    register_running(0, {0, 1, 2, 3, 4});
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->submission_done = false;
+    }
+
+    // Subtask 0 finishes before the next group exists and parks its token.
+    EXPECT_TRUE(_manager->on_subtask_complete(tablet_id, txn_id, 0, finished_context(0, 0),
+                                              /*mem_limit_exceeded=*/true));
+    EXPECT_EQ(0, released);
+
+    // Subtask 1 is registered and still running when submission is sealed: the sealer cannot claim the
+    // completion, so the parked token has nothing to cover and comes back now, with the outcome its
+    // subtask reported -- before this tablet, let alone the RPC, completes.
+    register_running(1, {5, 6, 7, 8, 9});
+    _manager->seal_submission(tablet_id, txn_id, state);
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(1, released_mem_limit_exceeded);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        EXPECT_FALSE(state->token_parked);
+    }
+    EXPECT_FALSE(closure.is_finished());
+
+    // Subtask 1 finishes after the seal and runs the completion on its own token, which its caller
+    // releases as usual; the manager returns nothing more.
+    EXPECT_FALSE(_manager->on_subtask_complete(tablet_id, txn_id, 1, finished_context(1, 5),
+                                               /*mem_limit_exceeded=*/false));
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(1, response.compact_stats_size());
+    EXPECT_EQ(0, response.failed_tablets_size());
+    // The tablet is complete but the RPC is not: its sibling is still pending.
+    EXPECT_FALSE(closure.is_finished());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    EXPECT_EQ(1, released);
+}
+
+// finish_task() can fail before it accepts the merged context (its allocations come first). The sealer
+// holds the completion claim, so the tablet must still be completed -- as failed, on a second and safe
+// attempt, since the callback was left untouched -- and the parked token the sealer finalized on must
+// come back exactly once regardless.
+TEST_F(TabletParallelCompactionManagerTest, test_acceptance_failure_completes_tablet_once_and_returns_parked_token) {
+    int64_t tablet_id = 10014;
+    int64_t txn_id = 20016;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    int released = 0;
+    int released_mem_limit_exceeded = 0;
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 1;
+    state->callback = callback;
+    state->release_token = [&](bool mem_limit_exceeded) {
+        released++;
+        if (mem_limit_exceeded) {
+            released_mem_limit_exceeded++;
+        }
+    };
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        SubtaskInfo info;
+        info.subtask_id = 0;
+        info.input_rowset_ids = {0};
+        info.start_time = ::time(nullptr);
+        state->compacting_rowsets[0] = 1;
+        state->running_subtasks[0] = std::move(info);
+        state->total_subtasks_created = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->submission_done = false;
+    }
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    EXPECT_TRUE(_manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0), /*mem_limit_exceeded=*/true));
+    EXPECT_EQ(0, released);
+
+    // The first acceptance fails the way an allocation failure would; the retry goes through.
+    std::atomic<bool> failed_once{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("lake::CompactionTaskCallback::finish_task:before_accept", [&](void*) {
+        if (!failed_once.exchange(true)) {
+            throw std::bad_alloc();
+        }
+    });
+    sync_point->EnableProcessing();
+    DeferOp disable_sync_point([&]() {
+        sync_point->ClearCallBack("lake::CompactionTaskCallback::finish_task:before_accept");
+        sync_point->DisableProcessing();
+    });
+
+    _manager->seal_submission(tablet_id, txn_id, state);
+
+    EXPECT_TRUE(failed_once.load());
+    EXPECT_TRUE(closure.is_finished());
+    ASSERT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(tablet_id, response.failed_tablets(0));
+    EXPECT_EQ(0, response.txn_logs_size());
+    // Only the accepted attempt left a trace in the response.
+    EXPECT_EQ(1, response.compact_stats_size());
+    // The parked token came back exactly once, after the completion, with its subtask's outcome.
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(1, released_mem_limit_exceeded);
+
+    // The claim was consumed once; sealing again completes nothing and returns nothing.
+    _manager->seal_submission(tablet_id, txn_id, state);
+    EXPECT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(1, released);
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    EXPECT_EQ(1, released);
+}
+
 } // namespace starrocks::lake

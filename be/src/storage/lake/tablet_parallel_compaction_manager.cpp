@@ -797,6 +797,8 @@ bool TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
     std::shared_ptr<CompactionTaskCallback> callback;
     bool all_complete = false;
     bool parked = false;
+    ReleaseTokenFunc release_parked;
+    bool parked_mem_limit_exceeded = false;
 
     {
         std::lock_guard<std::mutex> lock(state->mutex);
@@ -823,7 +825,15 @@ bool TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
 
         all_complete = state->claim_completion();
         callback = state->callback;
-        if (!all_complete && state->running_subtasks.empty() && !state->submission_done && !state->token_parked) {
+        if (all_complete) {
+            // Not expected: a token is only parked while submission is unsealed, and sealing takes it.
+            // Return it after the completion anyway rather than leave it stranded.
+            if (state->token_parked) {
+                state->token_parked = false;
+                parked_mem_limit_exceeded = state->parked_token_mem_limit_exceeded;
+                release_parked = state->release_token;
+            }
+        } else if (state->running_subtasks.empty() && !state->submission_done && !state->token_parked) {
             // This was the last subtask, but submission is not sealed yet, so the sealer will run the
             // completion: leave it this token so that it does so inside the limiter.
             state->token_parked = true;
@@ -839,6 +849,11 @@ bool TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
     // If all subtasks are complete, notify the callback
     // The completion transition is claimed exactly once (see claim_completion), so whoever gets
     // here -- the last finishing subtask, or the end of submission -- is the only one who runs it.
+    DeferOp return_parked([&]() {
+        if (release_parked) {
+            release_parked(parked_mem_limit_exceeded);
+        }
+    });
     if (all_complete && callback) {
         finalize_tablet_completion(tablet_id, txn_id, state, callback);
     }
@@ -896,6 +911,11 @@ void TabletParallelCompactionManager::abort_pending_states() {
                 release_parked = state->release_token;
             }
         }
+        DeferOp return_parked([&]() {
+            if (release_parked) {
+                release_parked(parked_mem_limit_exceeded);
+            }
+        });
         if (claimed && callback) {
             LOG(WARNING) << "Aborting parallel compaction on shutdown, its subtasks were dropped. tablet_id="
                          << tablet_id << ", txn_id=" << txn_id;
@@ -914,9 +934,6 @@ void TabletParallelCompactionManager::abort_pending_states() {
             context->is_parallel_merged = true;
             context->status = Status::Aborted("Parallel compaction aborted due to BE/CN shutdown!");
             callback->finish_task(std::move(context));
-        }
-        if (release_parked) {
-            release_parked(parked_mem_limit_exceeded);
         }
     }
 }
@@ -961,20 +978,27 @@ void TabletParallelCompactionManager::seal_submission(int64_t tablet_id, int64_t
         state->submission_done = true;
         claimed = state->claim_completion();
         callback = state->callback;
-        if (claimed && state->token_parked) {
-            // The last subtask left its token for this completion; it goes back once that has run.
+        // Take a parked token whether or not this sealer runs the completion. It was parked for the
+        // sealer's finalization; when a later subtask is still running, that subtask finalizes on its
+        // own token and the parked one would only be held hostage until the whole RPC's cleanup --
+        // which can never come if a sibling tablet in that RPC is itself waiting for a token.
+        if (state->token_parked) {
             state->token_parked = false;
             parked_mem_limit_exceeded = state->parked_token_mem_limit_exceeded;
             release_parked = state->release_token;
         }
     }
+    // Returned on every exit: after the completion when this sealer runs it, so that the finalization
+    // stays inside the limiter, and right away otherwise.
+    DeferOp return_parked([&]() {
+        if (release_parked) {
+            release_parked(parked_mem_limit_exceeded);
+        }
+    });
     if (claimed && callback) {
         VLOG(1) << "Parallel compaction: all subtasks already finished when submission was sealed, tablet=" << tablet_id
                 << ", txn_id=" << txn_id;
         finalize_tablet_completion(tablet_id, txn_id, state, callback);
-    }
-    if (release_parked) {
-        release_parked(parked_mem_limit_exceeded);
     }
 }
 
@@ -1003,9 +1027,34 @@ void TabletParallelCompactionManager::finalize_tablet_completion(
                 fail_merged_context(tablet_id, txn_id, state, callback,
                                     Status::InternalError("unknown exception while finalizing parallel compaction"));
     }
-    callback->finish_task(std::move(merged_context));
+    try {
+        callback->finish_task(std::move(merged_context));
+    } catch (const std::exception& e) {
+        retry_failed_acceptance(tablet_id, txn_id, state, callback, std::move(merged_context), e.what());
+    } catch (...) {
+        retry_failed_acceptance(tablet_id, txn_id, state, callback, std::move(merged_context), "unknown exception");
+    }
     // Note: Do NOT call cleanup_tablet here. The cleanup will be done by
     // CompactionScheduler::remove_states when RPC response is sent.
+}
+
+void TabletParallelCompactionManager::retry_failed_acceptance(
+        int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
+        const std::shared_ptr<CompactionTaskCallback>& callback, std::unique_ptr<CompactionTaskContext> merged_context,
+        const char* what) {
+    // finish_task() allocates before it accepts a context and leaves the callback untouched when that
+    // fails, with the context still ours, so completing the tablet as failed is safe to try once more.
+    // A second failure escapes as before: there is no memory left to complete the RPC with.
+    LOG(WARNING) << "Parallel compaction result was not accepted, completing the tablet as failed. tablet_id="
+                 << tablet_id << ", txn_id=" << txn_id << ": " << what;
+    auto failure = Status::InternalError(strings::Substitute("parallel compaction result was not accepted: $0", what));
+    if (merged_context == nullptr) {
+        merged_context = fail_merged_context(tablet_id, txn_id, state, callback, failure);
+    } else {
+        merged_context->status = failure;
+        merged_context->txn_log.reset();
+    }
+    callback->finish_task(std::move(merged_context));
 }
 
 std::unique_ptr<CompactionTaskContext> TabletParallelCompactionManager::fail_merged_context(
