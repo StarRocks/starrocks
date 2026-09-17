@@ -2453,12 +2453,37 @@ class StarrocksSQLApiLib(object):
                 plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
             )
 
-    def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
+    def wait_alter_table_finish(self, alter_type="COLUMN", off=9, timeout=600):
         """
-        wait alter table job finish and return status
+        Block until the alter submitted just before this call has landed.
+
+        `SHOW ALTER TABLE` lists jobs newest first and this helper cannot name the one it is
+        waiting for, so a row in a terminal state is ambiguous. It is either the job this call
+        should wait for, finished quickly, or the *previous* job -- because the alter took the
+        fast-schema-evolution path and created no job at all (SchemaChangeHandler#process returns
+        early when analyzeAndCreateJob gives null). Both cases look identical, and the old code
+        paid a flat second to cover the difference.
+
+        JobId separates them. A job is registered inside the DDL's own execution path, atomically
+        with its edit log (SchemaChangeHandler.java:3004-3012), so by the time this runs a heavy
+        alter is already listed: an id above the last one waited on means the job is ours, and no
+        new id means the change was applied inline and there is nothing left to wait for. Ids only
+        increase, so the watermark stays valid across databases and alter types.
+
+        What it waits for is then a real signal rather than a guess -- FINISHED is set after the
+        index swap, under the table's write lock (SchemaChangeJobV2.java:1215-1227), so it means
+        the new schema is in effect.
+
+        The first call has no watermark, but it does not need one: registration being
+        synchronous rules out the only reading that would have to keep waiting -- our job
+        submitted but not yet listed -- so both remaining readings return straight away. The flat
+        second is gone from every path; the loop now only sleeps while a job is genuinely running,
+        and polls at 100ms so a fast job is not rounded up.
         """
+        seen = getattr(self, "_last_alter_job_id", None)
+        deadline = time.monotonic() + timeout
         status = ""
-        sleep_time = 0
+        job_id = None
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
@@ -2467,13 +2492,29 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            status = res["result"][0][off]
+            job_id, status = res["result"][0][0], res["result"][0][off]
+            if seen is not None and int(job_id) <= int(seen):
+                # No job of our own: either the alter was applied inline, or it created a job of
+                # a different type than the one being listed (a caller that leaves alter_type at
+                # COLUMN after an ADD ROLLUP, say). Nothing to wait for either way.
+                #
+                # Return None, not "": the value a `function:` line produces is recorded into the
+                # R file, and the path this replaces fell through to the end of the method. ""
+                # is reserved for the pre-existing "no rows at all" return above, whose recorded
+                # value callers already depend on.
+                return None
+
             if status == "FINISHED" or status == "CANCELLED" or status == "":
-                if sleep_time <= 1:
-                    time.sleep(1)
                 break
-            time.sleep(0.5)
-            sleep_time += 0.5
+
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait alter table %s finish timeout after %ss, job %s is %s"
+                % (alter_type, timeout, job_id, status),
+            )
+            time.sleep(0.1)
+
+        self._last_alter_job_id = int(job_id)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     @staticmethod
