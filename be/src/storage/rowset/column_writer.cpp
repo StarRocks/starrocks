@@ -725,8 +725,7 @@ Status ScalarColumnWriter::finish_current_page() {
     // are already deduplicated.
     const auto encoding = _encoding_info != nullptr ? _encoding_info->encoding() : DEFAULT_ENCODING;
     if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && !_zstd_compression_dict_abandoned &&
-        _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD &&
-        _encoding_info != nullptr &&
+        _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
         (encoding == PLAIN_ENCODING || encoding == PLAIN_ENCODING_DELTA_OFFSET) && _page_builder->count() > 0 &&
         _opts.zstd_compression_dict_sample_bytes > 0 &&
         encoded_values->size() >= static_cast<size_t>(config::zstd_compression_dict_min_sample_bytes)) {
