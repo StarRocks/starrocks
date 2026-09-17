@@ -236,6 +236,18 @@ void PaimonScanner::do_close(RuntimeState*) noexcept {
     _pool.clear();
 }
 
+int64_t PaimonScanner::estimated_mem_usage() const {
+    // The base class reports 0 here, which the adaptive IO-task limiter reads as "no observation"
+    // and keeps its pessimistic file-length guess. _memory_pool is per-scanner, so its peak is real.
+    // Null when open() short-circuited (count / min-max optimization) and never reached do_open().
+    if (_memory_pool == nullptr) {
+        return 0;
+    }
+    const auto peak = static_cast<int64_t>(_memory_pool->MaxMemoryUsage());
+    DCHECK_GE(peak, 0);
+    return std::max<int64_t>(peak, 0);
+}
+
 void PaimonScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile* runtime_profile = profile->runtime_profile;
     auto metrics = _reader != nullptr ? _reader->GetReaderMetrics() : nullptr;
