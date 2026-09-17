@@ -159,7 +159,7 @@ class ChooseCase(object):
                 sr_sql_lib.self_print(f'skip file {file} because it is in skip_files', color=ColorEnum.YELLOW)
                 continue
 
-            self.read_t_r_file(file, case_regex)
+            self.read_t_r_file(file, case_regex, record_mode)
 
         self.case_list = list(filter(lambda x: x.name.strip() != "", self.case_list))
 
@@ -308,7 +308,7 @@ class ChooseCase(object):
 
         self.case_list = new_case_list
 
-    def read_t_r_file(self, file, case_regex):
+    def read_t_r_file(self, file, case_regex, record_mode=False):
         """read t r file and get case & result"""
 
         def __read_single_stat_and_result(_line_content, _line_id, _stat_list, _res_list, _is_in_loop=False,
@@ -417,8 +417,11 @@ class ChooseCase(object):
                             or (no_attr and any(each_attr in tags for each_attr in no_attr)):
                         # case attrs don't match attr filter
                         pass
-                    elif not attr and "sequential" in tags:
-                        # no attr is confirmed, skip sequential cases in default
+                    elif not attr and not record_mode and "sequential" in tags:
+                        # No attr given: sequential cases stay opt-in for the validate pass.
+                        # Recording exists to produce R files and -r is already serial, so
+                        # never hide a case from it - a skipped case is written out as an
+                        # empty block and silently loses its recorded results.
                         pass
                     else:
                         self.case_list.append(
@@ -671,8 +674,11 @@ class ChooseCase(object):
                     or (no_attr and any(each_attr in tags for each_attr in no_attr)):
                 # case attrs don't match attr filter
                 pass
-            elif not attr and "sequential" in tags:
-                # no attr is confirmed, skip sequential cases in default
+            elif not attr and not record_mode and "sequential" in tags:
+                # No attr given: sequential cases stay opt-in for the validate pass.
+                # Recording exists to produce R files and -r is already serial, so
+                # never hide a case from it - a skipped case is written out as an
+                # empty block and silently loses its recorded results.
                 pass
             else:
                 self.case_list.append(
