@@ -83,6 +83,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -1198,6 +1199,24 @@ public class FunctionSet {
             return matchFuncCandidates(desc, mode, Collections.singletonList(fn));
         }
         return null;
+    }
+
+    /** Returns the public AI family name shared by its overloads, or null for a non-grantable name. */
+    public String getGrantableAIFunctionFamily(String name) {
+        if (name == null || name.contains(".")) {
+            return null;
+        }
+        String canonicalName = name.toLowerCase(Locale.ROOT);
+        List<Function> family = vectorizedFunctions.get(canonicalName);
+        if (family == null || family.isEmpty()) {
+            return null;
+        }
+        TAIModelSource modelSource = family.get(0).getAiModelSource();
+        if (modelSource == null || family.stream().anyMatch(fn -> !fn.isAi() || !fn.isUserVisible()
+                || fn.getAiModelSource() != modelSource)) {
+            return null;
+        }
+        return canonicalName;
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {

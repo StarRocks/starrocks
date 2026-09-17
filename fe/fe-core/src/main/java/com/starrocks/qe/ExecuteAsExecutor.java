@@ -53,6 +53,9 @@ public class ExecuteAsExecutor {
     public static void execute(ExecuteAsStmt stmt, ConnectContext ctx) throws DdlException {
         // only support WITH NO REVERT for now
         Preconditions.checkArgument(!stmt.isAllowRevert());
+        // The session's SI/DN describe the authenticated principal, not necessarily the impersonated principal.
+        // Preserve synchronous EXECUTE AS semantics, but do not allow that metadata to own a new AI task.
+        ctx.setAuthenticatedTaskIdentity(null);
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
         UserRef user = stmt.getToUser();

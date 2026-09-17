@@ -29,6 +29,10 @@ settings.
 > Anyone with read access to the FE meta image / BDB journal directory can read provider `api_key`
 > values; protect those files with filesystem permissions.
 
+## Privileges
+
+Creating or managing providers requires SYSTEM `OPERATE`. Calling a provider through an AI function requires both the [AI function privilege](../../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges) and `USAGE` on that AI PROVIDER. Creating a provider does not automatically grant usage to ordinary users.
+
 ## Syntax
 
 ```SQL
