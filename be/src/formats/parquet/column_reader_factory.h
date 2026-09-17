@@ -23,6 +23,9 @@
 
 namespace starrocks::parquet {
 
+// Compare file-side geo metadata with the source semantics supplied by FE.
+Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field);
+
 struct VariantShreddedReadHints {
     // String form of the paths, kept in sync with parsed_shredded_paths via add_path().
     // Used for string-level deduplication during hint collection (see _get_variant_shredded_hints).

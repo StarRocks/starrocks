@@ -101,6 +101,9 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
         auto& scalar = curr_type_node.scalar_type;
 
         LogicalType field_type = thrift_to_type(scalar.type);
+        if (field_type == TYPE_GEOGRAPHY || field_type == TYPE_GEOMETRY) {
+            return Status::NotSupported("Native geo column persistence is not supported");
+        }
         column_pb->set_type(logical_type_to_string(field_type));
         column_pb->set_length(get_tablet_column_field_length_by_type(field_type, scalar.len));
         column_pb->set_index_length(column_pb->length());

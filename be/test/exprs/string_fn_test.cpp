@@ -160,6 +160,30 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstASCIITest) {
     }
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, substrTruncatedUtf8TailTest) {
+    // a lead byte at the tail that claims more bytes than remain must not extend the result past the input
+    auto str = BinaryColumn::create();
+    str->append(Slice("A\xF0", 2));
+    str->append(Slice("\xE4\xBD", 2));
+    str->append("壹贰");
+
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto state = std::make_unique<SubstrState>();
+    ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
+    state->is_const = true;
+    state->pos = 1;
+    state->len = 2;
+    starrocks::Columns columns;
+    columns.emplace_back(str);
+
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
+    auto* binary = down_cast<const BinaryColumn*>(result.get());
+    ASSERT_EQ(3, binary->size());
+    ASSERT_EQ(Slice("A\xF0", 2), binary->get_slice(0));
+    ASSERT_EQ(Slice("\xE4\xBD", 2), binary->get_slice(1));
+    ASSERT_EQ("壹贰", binary->get_slice(2).to_string());
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, substrConstZhTest) {
     auto str = BinaryColumn::create();
     str->append("壹贰叁肆伍陆柒捌玖");

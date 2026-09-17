@@ -11,6 +11,10 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+  # get_next_release_tag.sh (version-label steps) reads /tags and /branches with
+  # GITHUB_TOKEN; with an explicit permissions block, unlisted scopes default to
+  # none, so grant contents:read or those queries are denied.
+  contents: read
 env:
   PR_NUMBER: ${{ github.event.number }}
 
@@ -223,7 +227,9 @@ jobs:
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
           contains(github.event.pull_request.title, '(backport #')
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo `gh label create`, no cascade; the sibling "add merge label"
+          # step already uses GITHUB_TOKEN. Off the shared PAT.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LABEL="${GITHUB_BASE_REF##*-}-merged"
           gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
@@ -244,7 +250,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -275,7 +284,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)

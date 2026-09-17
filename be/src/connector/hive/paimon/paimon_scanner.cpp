@@ -22,12 +22,12 @@
 #include <paimon/table/source/table_read.h>
 
 #include <algorithm>
-#include <string_view>
 #include <utility>
 
 #include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_paimon_fwd.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
@@ -40,11 +40,8 @@ namespace starrocks {
 namespace {
 
 constexpr int64_t kPaimonReadBatchSize = 10000;
-constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
-constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
-constexpr int64_t kPaimonParquetBitmapCoalesceHoleSizeLimit = 32;
-constexpr std::string_view kPaimonParquetBitmapRefiningStrategy = "coalesce";
-constexpr bool kPaimonEnablePrefetch = true;
+// 0 leaves the process-wide Arrow CPU pool alone; paimon-cpp's default of 3 caps every reader in the BE.
+constexpr int32_t kPaimonParquetExecutorThreadCount = 0;
 constexpr bool kPaimonEnableMultiThreadRowToBatch = true;
 constexpr uint32_t kPaimonRowToBatchThreadNum = 3;
 
@@ -137,14 +134,9 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     // These option keys are defined in paimon-cpp's internal parquet_format_defs.h, which is not
     // part of its installed public headers, so they have to be spelled out as string literals here.
     context_builder.AddOption("parquet.read.cache-option.hole-size-limit",
-                              std::to_string(kPaimonParquetCacheHoleSizeLimit));
-    context_builder.AddOption("parquet.read.cache-option.range-size-limit",
-                              std::to_string(kPaimonParquetCacheRangeSizeLimit));
-    context_builder.AddOption("parquet.read.bitmap.row-range-refining-strategy",
-                              std::string(kPaimonParquetBitmapRefiningStrategy));
-    context_builder.AddOption("parquet.read.bitmap.coalesce-hole-size-limit",
-                              std::to_string(kPaimonParquetBitmapCoalesceHoleSizeLimit));
-    context_builder.EnablePrefetch(kPaimonEnablePrefetch);
+                              std::to_string(config::paimon_native_parquet_cache_hole_size_limit));
+    context_builder.AddOption("parquet.read.executor.thread-count", std::to_string(kPaimonParquetExecutorThreadCount));
+    // Prefetch is left at paimon-cpp's default (off): 0.3.0 rereads every row group on that path.
     context_builder.EnableMultiThreadRowToBatch(kPaimonEnableMultiThreadRowToBatch);
     context_builder.SetRowToBatchThreadNumber(kPaimonRowToBatchThreadNum);
     context_builder.WithMemoryPool(_memory_pool);
@@ -216,7 +208,7 @@ Status PaimonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) 
     // Unlike other hive-family scanners there is no need to fill not-existed or partition
     // columns here: schema evolution is resolved inside paimon-cpp, and paimon partition
     // columns are materialized by the reader as regular data columns.
-    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_on_conjunct_ctxs_by_slot(chunk, &_conjunct_filter));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(chunk));
     // rows_read is accounted by HdfsScanner::get_next() after do_get_next() returns.
     return Status::OK();
 }
@@ -231,10 +223,21 @@ void PaimonScanner::do_close(RuntimeState*) noexcept {
     _convert_functions.clear();
     _cast_exprs.clear();
     _chunk_filter.clear();
-    _conjunct_filter.clear();
     _paimon_file_system.reset();
     _memory_pool.reset();
     _pool.clear();
+}
+
+int64_t PaimonScanner::estimated_mem_usage() const {
+    // The base class reports 0 here, which the adaptive IO-task limiter reads as "no observation"
+    // and keeps its pessimistic file-length guess. _memory_pool is per-scanner, so its peak is real.
+    // Null when open() short-circuited (count / min-max optimization) and never reached do_open().
+    if (_memory_pool == nullptr) {
+        return 0;
+    }
+    const auto peak = static_cast<int64_t>(_memory_pool->MaxMemoryUsage());
+    DCHECK_GE(peak, 0);
+    return std::max<int64_t>(peak, 0);
 }
 
 void PaimonScanner::do_update_counter(HdfsScannerProfile* profile) {

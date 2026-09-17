@@ -116,6 +116,16 @@ This topic introduces the following types of FE configurations:
 - Description: The number of dictionary invalidations within `dict_thrash_guard_window_sec` at which the global-dictionary thrash guard forbids collecting a column's global dictionary. Set to `0` to disable the count check while keeping the guard enabled (no column is automatically forbidden). This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
 - Introduced in: v4.2.0
 
+
+### `min_max_stats_collect_interval_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Minimum interval between two min/max statistics collections for the same column. Min/max stats (used to constant-fold `min()`/`max()` and to build compressed group-by keys) are collected on demand via a `[_META_]` MetaScan that reads every segment's zone-map metadata; without throttling a frequently loaded column re-scans on every load, contending on the segment metadata cache the same way global-dictionary re-collection does. Within the interval the min/max optimization is skipped rather than re-collected -- a stale value is never served, so this only affects the optimization, never correctness. Set to `0` to disable throttling.
+- Introduced in: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - Default: true
@@ -143,7 +153,25 @@ This topic introduces the following types of FE configurations:
 - Description: The TTL of the in-memory cache that serves external table predicate column queries (for example, during automatic ANALYZE column selection). A shorter value makes newly recorded usage visible sooner but increases the query load on the underlying storage table; a longer value reduces that load at the cost of staleness.
 - Introduced in: v4.2.0
 
+### `enable_temporary_table_statistic_collect`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether analyze jobs collect statistics for temporary tables. It applies to the collection jobs built from analyze job definitions, that is, the automatic analyze jobs and the jobs created with CREATE ANALYZE. When this item is set to `false`, temporary tables are skipped while those jobs are built, and only non-temporary tables are analyzed. A one-off `ANALYZE TABLE` statement is not affected and still collects statistics for a temporary table. Set it to `false` when short-lived temporary tables generate collection work whose cost outweighs the value of their statistics.
+- Introduced in: v3.4.0
+
 ## Storage
+
+### `allow_implicit_key_column_in_agg_add_column`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether `ALTER TABLE ... ADD COLUMN` on an Aggregate table may create a key column when the new column specifies neither an aggregate function nor the `KEY` keyword. Such a statement is ambiguous, and creating a key column changes the table's aggregation key and rewrites existing data. When set to `false`, the statement is rejected and the error names both options. Set to `true` to restore the earlier behavior, where the column is created as a key column. This item is mutable but is not persisted across a restart unless it is set with `WITH PERSISTENT`.
+- Introduced in: v4.2.0
 
 ### `alter_table_timeout_second`
 
@@ -624,7 +652,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The target size of the tablets after the SPLIT or MERGE operation.
+- Description: The target size of tablets after a SPLIT or MERGE operation. `0` disables automatic size-based tablet splitting and merging. When a shared-data online range rewrite runs with this value set to `0`, it uses each latest base index's current tablet count as the requested count and recomputes boundaries in the new sort-key space instead of reusing the old boundaries. The actual count can be smaller if sampling cannot produce enough distinct boundaries.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_max_split_count`

@@ -377,6 +377,15 @@ replication_job_batch_size=10
 report_interval_seconds=300
 
 enable_table_property_sync=false
+
+# privilege config
+enable_privilege_sync=false
+ddl_job_allow_drop_user_target_only=false
+ddl_job_allow_drop_role_target_only=false
+ddl_job_allow_drop_inconsistent_user=true
+ddl_job_allow_revoke_grant_target_only=false
+privilege_sync_exclude_users=
+privilege_sync_exclude_roles=
 ```
 
 パラメーターの説明は以下の通りです。
@@ -427,6 +436,13 @@ enable_table_property_sync=false
 | ddl_job_allow_drop_inconsistent_view                      | ソースクラスターとターゲットクラスター間で一致しないビューを移行ツールが削除することを許可するかどうか。デフォルトは `true`（削除する）。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたビューを自動的に同期します。 |
 | ddl_job_allow_drop_view_target_only                       | ソースクラスターで削除されたビューをターゲットクラスターでも削除してビューの整合性を保つことを移行ツールに許可するかどうか。デフォルトは `true`（削除する）。この項目にはデフォルト値を使用できます。 |
 | enable_table_property_sync                                | テーブルプロパティの同期を有効にするかどうか。               |
+| enable_privilege_sync                                     | ユーザー、ロール、およびそれらの権限の同期を有効にするかどうか。デフォルトは `false`（アカウントメタデータを同期しない）。 |
+| ddl_job_allow_drop_user_target_only                       | ソースクラスターに存在せず、ターゲットクラスターにのみ存在するユーザーを移行ツールが削除することを許可するかどうか。デフォルトは `false`（削除しない）。 |
+| ddl_job_allow_drop_role_target_only                       | ソースクラスターに存在せず、ターゲットクラスターにのみ存在するロールを移行ツールが削除することを許可するかどうか。デフォルトは `false`（削除しない）。 |
+| ddl_job_allow_drop_inconsistent_user                      | ソースクラスターとターゲットクラスター間で定義が一致しないユーザーを移行ツールが再作成（削除してから作成）することを許可するかどうか。デフォルトは `true`。ユーザーが再作成されるのは、同じサイクルでそのユーザーの権限が読み取られている場合のみで、再作成後ただちに権限を再付与できるようにするためです。 |
+| ddl_job_allow_revoke_grant_target_only                    | ソースクラスターでは付与されておらず、ターゲットクラスターにのみ付与されている権限を移行ツールが取り消すことを許可するかどうか。デフォルトは `false`（取り消さない）。 |
+| privilege_sync_exclude_users                              | 移行ツールが変更しないユーザー。複数のユーザーはカンマ（`,`）で区切ります。ユーザーはユーザー名（`jack`）でも、完全なユーザー識別子（`'jack'@'%'`）でも指定できます。`root` と `target_cluster_user` に指定されたユーザーは常に除外されます。 |
+| privilege_sync_exclude_roles                              | 移行ツールが変更しないロール。複数のロールはカンマ（`,`）で区切ります。 |
 
 <Tabs groupId="migrationPath">
 <TabItem value="sourceNothing" label="共有なしからの移行" default>
@@ -563,6 +579,26 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 </TabItem>
 </Tabs>
 
+### ユーザー、ロール、権限の同期（オプション）
+
+デフォルトでは、移行ツールはアカウントメタデータを同期しません。`enable_privilege_sync` を `true` に設定すると、ソースクラスターのユーザー、ロール、およびそれらの権限もターゲットクラスターに同期されます。
+
+移行ツールはメタデータを取得するたびに、両クラスターのユーザー、ロール、権限を読み取って比較し、ターゲットクラスターをソースクラスターと一致させるために必要な DDL ステートメントを実行します。ユーザー定義は `SHOW CREATE USER` で取得され、このステートメントはパスワードを暗号文で返すため、移行中に平文のパスワードが扱われることはありません。
+
+以下のオブジェクトは移行ツールによって変更されることはありません。
+
+- `root` および `target_cluster_user` に指定されたユーザー。ターゲットクラスターの `root` のパスワードを上書きするとその運用者がログインできなくなり、ツールが接続に使用しているアカウントを削除するとツール自身の接続が切断されるためです。
+- 変更不可能な組み込みロール `root`、`db_admin`、`cluster_admin`、`user_admin`、`security_admin`。`public` は組み込みロールですが変更可能であるため、その権限は同期され、ロール自体は変更されません。
+- `privilege_sync_exclude_users` に指定されたユーザーおよび `privilege_sync_exclude_roles` に指定されたロール。
+
+:::note
+
+- 両クラスターの FE が `SHOW CREATE USER` をサポートしている必要があります。いずれかのクラスターの FE がこのステートメントをサポートしていない場合、ユーザーとその権限はスキップされ、ロールとロール権限のみが同期されます。
+- 権限同期の進捗は、`Sync privilege progress` というプレフィックスでログファイル **log/sync.INFO.log** に出力され、ロール、ロール権限、ユーザー、ユーザー権限の 4 つの単位それぞれの状態が示されます。
+- 一回限りの同期モード（`one_time_run_mode=true`）では、権限も一致した後にのみツールは正常終了します。いずれかのクラスターが `SHOW CREATE USER` をサポートしていない場合、または 3 回連続した比較で権限が一致しないままの場合、ツールは異常終了します。
+
+:::
+
 ## ステップ 3：移行ツールの起動
 
 ツールの設定が完了したら、移行ツールを起動してデータ移行プロセスを開始します。
@@ -690,6 +726,7 @@ ORDER BY TABLE_NAME;
 - 内部テーブルとそのデータ
 - マテリアライズドビューのスキーマおよびそのビルドステートメント（マテリアライズドビューのデータは同期されません。また、マテリアライズドビューのベーステーブルがターゲットクラスターに同期されていない場合、マテリアライズドビューのバックグラウンド更新タスクはエラーを報告します。）
 - 論理ビュー
+- ユーザー、ロール、およびそれらの権限（デフォルトでは同期されません。`enable_privilege_sync` で有効化します）
 
 共有データクラスター間の移行の場合：
 

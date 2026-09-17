@@ -47,6 +47,15 @@ public:
     Status write_ordinal_index() override;
     Status write_zone_map() override;
     Status write_bitmap_index() override;
+    // Same order as write_ordinal_index(): the flat children first, then the root JSON writer.
+    // Omitting the root leaves its ColumnMetaPB without an ordinal index, which ColumnReader::_init()
+    // rejects as a corrupt segment.
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        for (auto& w : _flat_writers) {
+            w->take_ordinal_index_builders(out);
+        }
+        _json_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override;
     ordinal_t get_next_rowid() const override;
 

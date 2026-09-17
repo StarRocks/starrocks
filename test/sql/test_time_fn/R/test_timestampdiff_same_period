@@ -1,0 +1,29 @@
+-- name: test_timestampdiff_same_period
+select timestampdiff(MONTH, '2021-01-02', '2021-01-01'), timestampdiff(MONTH, '2021-01-01', '2021-01-02');
+-- result:
+0	0
+-- !result
+select timestampdiff(MONTH, '2021-01-31 23:59:59', '2021-01-31 00:00:00'), timestampdiff(MONTH, '2021-01-31 00:00:00', '2021-01-31 23:59:59');
+-- result:
+0	0
+-- !result
+select timestampdiff(YEAR, '2021-03-02', '2021-01-01'), timestampdiff(YEAR, '2021-01-01', '2021-03-02');
+-- result:
+0	0
+-- !result
+select timestampdiff(YEAR, '2021-12-31', '2021-01-01'), timestampdiff(YEAR, '2021-01-01', '2021-12-31');
+-- result:
+0	0
+-- !result
+select months_diff('2021-01-01', '2021-01-02'), years_diff('2021-01-01', '2021-12-31');
+-- result:
+0	0
+-- !result
+select timestampdiff(MONTH, '2021-01-15', '2021-03-01'), timestampdiff(MONTH, '2021-03-01', '2021-01-15');
+-- result:
+1	-1
+-- !result
+select timestampdiff(YEAR, '2021-03-02', '2023-01-01'), timestampdiff(YEAR, '2023-01-01', '2021-03-02');
+-- result:
+1	-1
+-- !result

@@ -14,6 +14,8 @@
 
 #include "service/service_be/config_update_hooks.h"
 
+#include <gflags/gflags_declare.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -36,12 +38,15 @@
 #include "common/config_llm_fwd.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_merge_commit_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_path_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_runtime_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/glog_init.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
@@ -79,6 +84,12 @@
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #endif // USE_STAROS
+
+namespace brpc {
+
+DECLARE_int32(max_connection_pool_size);
+
+} // namespace brpc
 
 namespace starrocks {
 namespace {
@@ -150,6 +161,17 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     const auto* runtime_env_ptr = &runtime_env;
 
     register_ai_config_update_hooks(exec_env);
+
+    // Without this, changing sys_log_level at runtime reports success and changes nothing.
+    registry->register_callback("sys_log_level", []() -> Status { return update_logging(); });
+
+    // brpc reads FLAGS_max_connection_pool_size on every pooled get/return, so lowering it only stops
+    // further connections from being cached; connections already in flight are left untouched.
+    registry->register_callback("brpc_max_connection_pool_size", []() -> Status {
+        LOG(INFO) << "set brpc max_connection_pool_size:" << config::brpc_max_connection_pool_size;
+        brpc::FLAGS_max_connection_pool_size = config::brpc_max_connection_pool_size;
+        return Status::OK();
+    });
 
     registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
         refresh_core_dump_resource_releaser_config();
@@ -586,6 +608,11 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     });
     UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
     UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_gcs_max_single_part_size, fslib_gs_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
 #undef UPDATE_STARLET_CONFIG
 
 #ifndef BUILD_FORMAT_LIB

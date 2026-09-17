@@ -1334,6 +1334,13 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
 // (2) every value roundtrips (exercises DDict load on read, the page-0 dict
 // frame, subsequent dict pages, and any no-dict frames under I5).
 TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
+    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
+    // about whether the dictionary is kept, not about which offset trailer the page uses. The
+    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
+    config::enable_binary_plain_delta_offset = false;
+    DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
+
     const std::string fname = strings::Substitute("$0/test_zstd_compression_dict_roundtrip.data", TEST_DIR);
 
     // Enough rows to get past the trial. The sample page plus the trial pages are
@@ -1632,6 +1639,13 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_works_with_delta_offset_enc
 // offer, and keeping it would cost a page per column per segment plus the work
 // of loading it on every read.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_when_it_does_not_pay) {
+    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
+    // about whether the dictionary is kept, not about which offset trailer the page uses. The
+    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
+    config::enable_binary_plain_delta_offset = false;
+    DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
+
     const int N = 4000;
     // Pseudo-random bytes: distinct, high-entropy, nothing to share between rows.
     std::vector<std::string> strs(N);
@@ -1703,6 +1717,13 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_when_it_does_not_pa
 // pages bigger. On data with nothing to share, the dictionary has to be dropped at
 // this setting too.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_at_zero_min_gain) {
+    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
+    // about whether the dictionary is kept, not about which offset trailer the page uses. The
+    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
+    config::enable_binary_plain_delta_offset = false;
+    DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
+
     const double saved_min_gain = config::zstd_compression_dict_min_gain;
     config::zstd_compression_dict_min_gain = 0.0;
     DeferOp restore([&]() { config::zstd_compression_dict_min_gain = saved_min_gain; });
@@ -1763,6 +1784,13 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_at_zero_min_gain) {
 // The other half of the same rule: on data the dictionary does help, it is kept
 // and the column really does get smaller.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_kept_when_it_pays) {
+    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
+    // about whether the dictionary is kept, not about which offset trailer the page uses. The
+    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
+    config::enable_binary_plain_delta_offset = false;
+    DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
+
     // A row about the size of a page, so a page holds one of them and there is no
     // repetition inside a page for a plain codec to find. Every row opens with the
     // same long preamble, which a plain page has to spell out again and again while

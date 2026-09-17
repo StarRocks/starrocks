@@ -732,6 +732,8 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+        # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -928,4 +930,15 @@ if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $HADOOPSRC_SOURCE"
+fi
+
+# snappy patch to prevent CMake from forcibly disabling RTTI (-fno-rtti), maintaining compiler flag and ABI consistency with StarRocks
+if [[ -d $TP_SOURCE_DIR/$SNAPPY_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$SNAPPY_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $SNAPPY_SOURCE == "snappy-1.2.1" ]] ; then
+        apply_patch -p1 "$TP_PATCH_DIR/snappy-1.2.1-rtti.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $SNAPPY_SOURCE"
 fi

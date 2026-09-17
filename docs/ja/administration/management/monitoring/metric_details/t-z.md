@@ -113,6 +113,30 @@ description: "Alphabetical t - z"
 - 単位: カウント
 - 説明: 現在開かれているthriftクライアントの数。
 
+## `thrift_server_acceptor_stall_ms`
+
+- 単位: ms
+- タイプ: 瞬間
+- 説明: FE Thrift の accept ループが最後に接続を返してからの経過時間（ミリ秒）。accept ループが停止すると増加しますが、Thrift トラフィックがない FE でも同様に増加するため、この指標のみで警報を出さず、接続の到着レートと併せて判断してください。また、accept ループがまったく動作していない場合（Thrift サーバーの起動前および停止後）もこの値は `0` になるため、しきい値による警報では Thrift サービスの停止と正常稼働を区別できません。
+
+## `thrift_server_expired_connections_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 待機キューでの滞留時間が `thrift_server_queue_timeout_ms` を超えたため、FE Thrift サーバーが処理せずにクローズした接続の総数。このチェックはデフォルトで無効なため、運用者がタイムアウトを有効化するまでこの値は 0 のままです。値が増加している場合、呼び出し元がすでに諦めている可能性が高い接続のバックログを FE が処理していたことを意味します。キューの遅れ具合を把握するには `thrift_server_queue_wait_ms` と併せて確認してください。
+
+## `thrift_server_queue_wait_ms`
+
+- 単位: ms
+- タイプ: 瞬間的
+- 説明: 接続がワーカー スレッドに取り出されるまで FE Thrift サーバーの待機キューに滞留した時間の分位数。期限切れとして破棄された接続も含め、キューから取り出されたすべての接続がサンプリングされるため、分布が `thrift_server_queue_timeout_ms` で頭打ちになることはありません。これは Thrift 飽和の先行指標であり、ワーカー プールがまだ追いついている段階、つまり `thrift_server_rejected_connections_total` が動き出すよりかなり前から上昇します。
+
+## `thrift_server_rejected_connections_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: ワーカー スレッド プールが飽和したために FE Thrift サーバーが即座にクローズした接続の総数。レート制限によって警告ログが抑制されたものも含め、すべての拒否がカウントされます。値が増加している場合はクライアントが拒否されていることを意味します。`thrift-server-pool` の `thread_pool` メトリックと併せて確認してください。増加の速さからワーカー容量の不足量を判断できます。
+
 ## `thrift_used_clients`
 
 - 単位: カウント

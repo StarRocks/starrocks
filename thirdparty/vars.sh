@@ -130,10 +130,10 @@ GTEST_SOURCE=googletest-release-1.10.0
 GTEST_MD5SUM="ecd1fa65e7de707cd5c00bdac56022cd"
 
 # snappy
-SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.8.tar.gz"
-SNAPPY_NAME=snappy-1.1.8.tar.gz
-SNAPPY_SOURCE=snappy-1.1.8
-SNAPPY_MD5SUM="70e48cba7fecf289153d009791c9977f"
+SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.2.1.tar.gz"
+SNAPPY_NAME=snappy-1.2.1.tar.gz
+SNAPPY_SOURCE=snappy-1.2.1
+SNAPPY_MD5SUM="dd6f9b667e69491e1dbf7419bdf68823"
 
 # gperftools
 GPERFTOOLS_DOWNLOAD="https://github.com/gperftools/gperftools/archive/gperftools-2.7.tar.gz"
@@ -353,10 +353,10 @@ BENCHMARK_SOURCE=benchmark-1.9.5
 BENCHMARK_MD5SUM="12c6c0c228fc07106c62634222bd2541"
 
 # fast-float
-FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
-FAST_FLOAT_NAME="fast-float-3.5.1.tar.gz"
-FAST_FLOAT_SOURCE="fast-float-3.5.1"
-FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
+FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v8.2.10.tar.gz"
+FAST_FLOAT_NAME="fast-float-8.2.10.tar.gz"
+FAST_FLOAT_SOURCE="fast-float-8.2.10"
+FAST_FLOAT_MD5SUM="ddcf64ffe15f1e1ed964a355db7a04f3"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
@@ -401,10 +401,10 @@ FIU_SOURCE="libfiu-1.1"
 FIU_MD5SUM="51092dcb7801efb511b7b962388d9ff4"
 
 # libdeflate
-LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.18.zip"
-LIBDEFLATE_NAME="libdeflate-1.18.zip"
-LIBDEFLATE_SOURCE="libdeflate-1.18"
-LIBDEFLATE_MD5SUM="1ec42dfe7d777929ade295281560d750"
+LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.26.zip"
+LIBDEFLATE_NAME="libdeflate-1.26.zip"
+LIBDEFLATE_SOURCE="libdeflate-1.26"
+LIBDEFLATE_MD5SUM="15fde5dcbc584d1adee99c0ed13212db"
 
 # llvm
 LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/llvm-project-18.1.8.src.tar.xz"
@@ -438,10 +438,10 @@ GRPC_SOURCE="grpc-1.43.0"
 GRPC_MD5SUM="92559743e7b5d3f67486c4c0de2f5cbe"
 
 # simdutf
-SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz"
-SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
-SIMDUTF_SOURCE="simdutf-5.2.8"
-SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
+SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz"
+SIMDUTF_NAME="simdutf-9.1.0.tar.gz"
+SIMDUTF_SOURCE="simdutf-9.1.0"
+SIMDUTF_MD5SUM="e55123960edadb8d9987fa30f877e588"
 
 # icu
 ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"
