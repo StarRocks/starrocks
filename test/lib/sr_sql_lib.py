@@ -2014,45 +2014,50 @@ class StarrocksSQLApiLib(object):
 
     def wait_materialized_view_finish(self, timeout=60):
         """
-        Block until the synchronous materialized view created just before this call has landed.
+        Block until the synchronous materialized view created just before this call is usable.
 
-        This is the rollup handler's view of the world -- ShowAlterStmtAnalyzer treats
-        MATERIALIZED_VIEW and ROLLUP alike, so the columns are RollupProcDir's: JobId first, State
-        at index 8.
+        Two things stand between "the statement returned" and "the next statement may run", and
+        the old code covered both by sleeping a second whenever it saw a terminal state -- on top
+        of polling once a second, which rounds a sub-second rollup up to two.
 
-        The job cannot be named, so a terminal row is ambiguous between the job this call should
-        wait for and a leftover from an earlier one, and the old code covered the gap by sleeping
-        a second whenever it saw a terminal state -- on top of polling once a second, which rounds
-        a sub-second rollup up to two. JobId separates the two readings: MaterializedViewHandler
-        registers the job inside the DDL's own execution path, atomically with its edit log
-        (MaterializedViewHandler.java:238-240), so by the time this runs the job is already
-        listed, and an id no higher than the last one waited on means no job was created.
+        First, the row cannot be attributed. SHOW ALTER MATERIALIZED VIEW resolves to the rollup
+        proc dir, so a terminal row is either the job this call should wait for or a leftover from
+        an earlier one. JobId separates them: MaterializedViewHandler registers the job inside the
+        DDL's own execution path, atomically with its edit log (.java:238-240), so by the time
+        this runs the job is listed, and an id no higher than the last one waited on means no job
+        was created. Note the rows are read whole and the newest picked here -- ShowExecutor
+        applies WHERE/ORDER BY/LIMIT only for SchemaChangeProcDir ("Only SchemaChangeProc support
+        where/order by/limit syntax", ShowExecutor.java:1755), so asking the server to sort would
+        silently do nothing.
 
-        Waiting is a real signal rather than a guess -- the state reaches FINISHED only after the
-        rollup index is in place -- so nothing needs to be added to it afterwards.
+        Second, FINISHED is not the end. RollupJobV2#onFinished only swaps the shadow index in;
+        the table returns to NORMAL later, in MaterializedViewHandler#onJobDone, and only once
+        this is the table's last unfinished job. Both happen in one pass of runAlterJobV2, so the
+        gap is short, but it is real and documented there: "there is still a short gap between
+        job finish and table become normal, so if user send next alter job right after the job
+        finish, it may encounter table's state not NORMAL error". A case that creates two MVs on
+        one table back to back -- test_load_channel_profile, say -- runs straight into it. So wait
+        for the state rather than guessing how long it takes to arrive.
         """
         seen = getattr(self, "_last_alter_mv_job_id", None)
         deadline = time.monotonic() + timeout
         status = ""
         job_id = None
+        table_name = None
         while True:
-            # Order by JobId, not State: ShowAlterStmtAnalyzer resolves the order-by column
-            # against SchemaChangeProcDir's list whatever the alter type, while these rows come
-            # from RollupProcDir, and the two diverge from the fourth column on. JobId is index 0
-            # in both; State is 9 in one and 8 in the other.
-            res = self.execute_sql("SHOW ALTER MATERIALIZED VIEW ORDER BY JobId DESC LIMIT 1", True)
+            res = self.execute_sql("SHOW ALTER MATERIALIZED VIEW", True)
             # A failed query and a successful empty one both arrive with no rows, and only one of
-            # them means "no job to wait for". Conflating them would turn a parser, permission or
-            # connection error into a wait that silently succeeds -- including a typo in the SQL
-            # just above, which would make all 76 call sites no-ops without a single failure.
+            # them means "no job to wait for".
             tools.assert_true(res["status"], "show alter materialized view failed: %s" % res["msg"])
-            if len(res["result"]) <= 0:
+            rows = list(res["result"])
+            if not rows:
                 return None
-            job_id, status = res["result"][0][0], res["result"][0][8]
-            if seen is not None and int(job_id) <= int(seen):
-                # No job of our own: nothing was created, so there is nothing to wait for.
-                # Return None like every other path -- a `function:` line's value is recorded
-                # into the R file, and all 38 recorded results for this helper are None.
+
+            row = max(rows, key=lambda r: int(r[0]))
+            job_id, table_name, status = int(row[0]), row[1], row[8]
+            if seen is not None and job_id <= seen:
+                # No job of our own. Return None like every other path: a `function:` line's value
+                # is recorded into the R file, and all 38 recorded results here are None.
                 return None
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
@@ -2064,8 +2069,21 @@ class StarrocksSQLApiLib(object):
             )
             time.sleep(0.1)
 
-        self._last_alter_mv_job_id = int(job_id)
+        self._last_alter_mv_job_id = job_id
         tools.assert_equal("FINISHED", status, "wait materialized view finish error")
+
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+        db_name = res["result"][0][0]
+        while True:
+            if self.get_table_state(db_name, table_name) == "NORMAL":
+                return None
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "table %s.%s did not return to NORMAL within %ss after job %s finished"
+                % (db_name, table_name, timeout, job_id),
+            )
+            time.sleep(0.1)
 
     """
         Return True or error message if refresh mv failed
