@@ -970,8 +970,11 @@ build_arrow() {
     export ARROW_THRIFT_URL=${TP_SOURCE_DIR}/${THRIFT_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        # ARROW_RUNTIME_SIMD_LEVEL only accepts MAX|NONE|SSE4_2|AVX2|AVX512, and arrow
+        # consumes it exclusively in its x86 branch, so NEON is rejected by the option
+        # validator. Disable runtime dispatch here; NEON is selected at compile time.
         arrow_simd_level=NEON
-        arrow_runtime_simd_level=NEON
+        arrow_runtime_simd_level=NONE
     elif [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
         # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
         # default to SSE4_2 on x86 and NEON on Arm
