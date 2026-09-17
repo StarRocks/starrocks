@@ -22,6 +22,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -55,9 +56,9 @@ public final class MvBookmarkOps {
 
     /**
      * Acquire a bookmark for {@code mvId} on a Lake {@code baseTable}: create
-     * (or reuse via {@link AlreadyAtLatestException}), then drop every orphan
-     * reference this holder still pins except the new id and the MV's
-     * last-committed id. Orphans are reachable because
+     * (or reuse via {@link AlreadyAtLatestException}, which also renews the reused
+     * reference's lease), then drop every orphan reference this holder still pins
+     * except the new id and the MV's last-committed id. Orphans are reachable because
      * {@code TableBookmarkTracker.findLatestEquivalent} only dedups against
      * the latest active bookmark, so older equivalent state (e.g. ADD then
      * DROP between two refreshes) gets a fresh id.
@@ -73,6 +74,7 @@ public final class MvBookmarkOps {
             newId = bookmarkManager.create(dbId, tableId, holder).getBookmarkId();
         } catch (AlreadyAtLatestException e) {
             newId = e.getBookmarkId();
+            renewLease(bookmarkManager, dbId, tableId, newId, holder);
         } catch (LockTimeoutException e) {
             throw new StarRocksConnectorException("acquire bookmark timed out: " + e.getMessage());
         } catch (PartitionUnsharingException e) {
@@ -108,7 +110,8 @@ public final class MvBookmarkOps {
                 ? null
                 : bookmarkManager.findBookmarkById(dbId, tableId, fromSnapshotExclusive.getSnapshotId())
                 .orElseThrow(() -> new StarRocksConnectorException(
-                        "from-snapshot bookmark not found: db=" + dbId + ", table=" + tableId
+                        MaterializedViewExceptions.BASELINE_BOOKMARK_MISSING_MARKER
+                                + ": db=" + dbId + ", table=" + tableId
                                 + ", id=" + fromSnapshotExclusive.getSnapshotId()));
         Bookmark head = bookmarkManager.findBookmarkById(dbId, tableId, toSnapshotInclusive.getSnapshotId())
                 .orElseThrow(() -> new StarRocksConnectorException(
@@ -178,6 +181,32 @@ public final class MvBookmarkOps {
             if (info.isInternalCatalog()) {
                 bookmarkManager.releaseAllForHolder(info.getDbId(), info.getTableId(), holderId);
             }
+        }
+    }
+
+    /**
+     * Restart the lease of a reference this holder already owns.
+     *
+     * <p>Reuse means the base table has produced no version since the bookmark was taken, so the
+     * reference pins nothing that could otherwise be reclaimed and its lease has no reason to keep
+     * running down. Without this, a base table that stops changing hands back the same reference
+     * every round until the cluster ceiling expires it, and the MV loses the baseline it refreshes
+     * against even though every one of its runs succeeded.
+     *
+     * <p>Passing no per-reference TTL keeps the reference under the cluster ceiling alone, which is
+     * how this holder created it.
+     *
+     * <p>The TTL sweep -- or a concurrent release by the same holder -- can reclaim the reference
+     * between the create call that reported it and this renew. Fail the round in that case instead
+     * of handing back an id this holder no longer pins: the refresh would otherwise read versions
+     * that nothing is protecting from vacuum. The next round acquires again.
+     */
+    private static void renewLease(BookmarkManager bookmarkManager, long dbId, long tableId,
+                                   long bookmarkId, BookmarkHolder holder) {
+        try {
+            bookmarkManager.renewReference(dbId, tableId, bookmarkId, holder, -1L);
+        } catch (BookmarkNotFoundException | ReferenceNotFoundException e) {
+            throw new StarRocksConnectorException("acquire bookmark lost its reference: " + e.getMessage());
         }
     }
 

@@ -73,6 +73,7 @@ public class MVActiveChecker extends LeaderDaemon {
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING,
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH
     );
 

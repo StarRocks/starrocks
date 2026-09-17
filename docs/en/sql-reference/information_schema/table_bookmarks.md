@@ -53,10 +53,10 @@ Join the three tables on `(DB_ID, TABLE_ID, BOOKMARK_ID)`.
 | DB_ID, TABLE_ID, BOOKMARK_ID | (mirror summary) | Join keys. |
 | HOLDER_ID | VARCHAR | Holder identity. Materialized views encode as `mv:<dbId>-<mvId>`. |
 | CREATE_TIME | DATETIME | When this holder acquired the bookmark. Not moved by renewals. |
-| TTL_MS | BIGINT | Effective lease duration in milliseconds. This is the smaller of the per-reference TTL (set at acquire time and replaced by each `bookmark_renew`) and the cluster ceiling `bookmark_reference_max_ttl_ms`. `<= 0` on either side means that side is unlimited, so this column is `-1` only when neither limit is set. Measured from `LAST_RENEW_TIME` when set, else from `CREATE_TIME`. |
-| LAST_RENEW_TIME | DATETIME | When the holder last renewed its lease via `bookmark_renew`; NULL if never renewed. |
+| TTL_MS | BIGINT | Effective lease duration in milliseconds. This is the smaller of the per-reference TTL (set at acquire time and replaced by each renewal) and the cluster ceiling `bookmark_reference_max_ttl_ms`. `<= 0` on either side means that side is unlimited, so this column is `-1` only when neither limit is set. Measured from `LAST_RENEW_TIME` when set, else from `CREATE_TIME`. |
+| LAST_RENEW_TIME | DATETIME | When this holder's lease was last renewed -- by a `bookmark_renew` call, or automatically when an incremental materialized view reuses this pin on a base table that has not changed. NULL if never renewed. |
 | EXPIRE_TIME | DATETIME | When the cleanup sweep will recycle this reference: lease start plus `TTL_MS`. NULL when `TTL_MS` is `-1` (no expiry). |
-| RENEW_COUNT | BIGINT | Number of successful `bookmark_renew` calls on this reference. `0` if never renewed. |
+| RENEW_COUNT | BIGINT | Number of times this reference's lease has been renewed. `0` if never renewed. |
 
 ## Query patterns
 

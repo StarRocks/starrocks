@@ -115,5 +115,13 @@ public class MaterializedViewExceptionsTest {
         assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
                         new RuntimeException("x " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " y"), "mv1")
                 .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING));
+        // an unreachable baseline rides along with the non-append-only marker, which is what makes it
+        // breaking -- but it must not be reported as a base change that never happened
+        assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
+                        new RuntimeException(MaterializedViewExceptions.SNAPSHOT_ANCESTRY_BROKEN_MARKER
+                                + " for base table db.t (" + MaterializedViewExceptions.BASELINE_BOOKMARK_MISSING_MARKER
+                                + ": db=1, table=2, id=3). " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER),
+                        "mv1")
+                .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE));
     }
 }

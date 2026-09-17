@@ -28,6 +28,7 @@ import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.lake.bookmark.HolderId;
+import com.starrocks.lake.bookmark.Reference;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -67,6 +68,18 @@ public class LocalMetastoreLakeBookmarkTest extends BookmarkTestBase {
         return localMetastore().getDb(dbId).getTable(tableId);
     }
 
+    /** The reference {@code mvId} holds on one bookmark, so a test can read its lease. */
+    private Reference.View mvReference(long tableId, long bookmarkId, MvId mvId) {
+        List<Bookmark.View> views = bookmarkManager()
+                .listAllBookmarks(Optional.of(dbId), Optional.of(tableId), Optional.of(bookmarkId));
+        assertEquals(1, views.size(), "expected exactly one bookmark for id " + bookmarkId);
+        String holderId = HolderId.forMv(mvId).getId();
+        return views.get(0).getReferences().stream()
+                .filter(r -> holderId.equals(r.getHolderId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no reference for holder " + holderId));
+    }
+
     /* ---------- acquireTvrSnapshot ---------- */
 
     @Test
@@ -82,6 +95,8 @@ public class LocalMetastoreLakeBookmarkTest extends BookmarkTestBase {
         assertTrue(bm.findBookmarkById(dbId, tableId, bookmarkId).isPresent());
         assertEquals(List.of(bookmarkId),
                 bm.listBookmarkIdsByHolder(dbId, tableId, HolderId.forMv(mvId)));
+        // The reference was taken just now, so its lease has nothing to restart.
+        assertEquals(0, mvReference(tableId, bookmarkId, mvId).getRenewCount());
     }
 
     @Test
@@ -98,6 +113,17 @@ public class LocalMetastoreLakeBookmarkTest extends BookmarkTestBase {
         // rather than fanning out another reference.
         assertEquals(first.getSnapshotId(), second.getSnapshotId());
         assertEquals(1, bookmarkManager().referenceCount(dbId, tableId, first.getSnapshotId()));
+
+        // Reuse means the table produced no version since the bookmark was taken, so the reference
+        // pins nothing that could be reclaimed and its lease restarts instead of running down to
+        // the cluster ceiling.
+        assertEquals(1, mvReference(tableId, first.getSnapshotId(), mvId).getRenewCount());
+        assertTrue(mvReference(tableId, first.getSnapshotId(), mvId).getRenewedAtMs() > 0);
+
+        // Every further round renews again, which is what keeps a base table that stops changing
+        // from losing the baseline its MV refreshes against.
+        lm.acquireTvrSnapshot(DB_NAME, table, mvId);
+        assertEquals(2, mvReference(tableId, first.getSnapshotId(), mvId).getRenewCount());
     }
 
     @Test

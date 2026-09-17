@@ -2090,17 +2090,51 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);
         advanceTableVersionTo(1);
-        mockListTableDeltaTraitsThrowsConnector(
-                "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
+
+        // Iceberg: the recorded baseline snapshot is no longer an ancestor of the head.
+        assertBaselineUnreachable(mv, "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
+    }
+
+    /**
+     * On Lake the baseline goes unreachable a second way: its bookmark's lease ran out and the
+     * cleanup sweep reclaimed it. Needs a view of its own -- the first failure of this class
+     * inactivates the view, so a second attempt never reaches the planner.
+     */
+    @Test
+    public void testIncrementalRefreshSurfacesBaselineBookmarkReclaimed() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+
+        assertBaselineUnreachable(mv,
+                MaterializedViewExceptions.BASELINE_BOOKMARK_MISSING_MARKER + ": db=1, table=2, id=3");
+    }
+
+    /**
+     * A connector reason that leaves the recorded baseline unreachable must reach the caller as a
+     * broken incremental chain -- carrying the marker that inactivates a pure INCREMENTAL view
+     * instead of failing it the same way every round -- with the original reason still readable, and
+     * must inactivate the view under its own reason rather than blaming a base change that never
+     * happened.
+     */
+    private void assertBaselineUnreachable(MaterializedView mv, String connectorMessage) {
+        mockListTableDeltaTraitsThrowsConnector(connectorMessage);
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
         String chain = collectMessages(thrown);
-        Assertions.assertTrue(chain.contains("snapshot ancestry broken"),
-                "expected 'snapshot ancestry broken' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains(MaterializedViewExceptions.SNAPSHOT_ANCESTRY_BROKEN_MARKER),
+                "expected baseline-unreachable framing in chain, got: " + chain);
         Assertions.assertTrue(chain.contains("Drop and recreate"),
                 "expected drop-and-recreate guidance in chain, got: " + chain);
-        Assertions.assertTrue(chain.contains("is not a parent ancestor"),
+        Assertions.assertTrue(chain.contains(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER),
+                "expected incremental-breaking marker in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains(connectorMessage),
                 "expected original connector reason preserved in chain, got: " + chain);
+        Assertions.assertFalse(mv.isActive(), "expected the view to be inactivated");
+        Assertions.assertTrue(
+                mv.getInactiveReason().startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE),
+                "expected the baseline-unreachable inactive reason, got: " + mv.getInactiveReason());
     }
 
     private static String collectMessages(Throwable t) {

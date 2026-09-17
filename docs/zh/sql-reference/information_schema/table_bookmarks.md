@@ -52,10 +52,10 @@ Bookmark 是 OlapTable 分区状态的一份不可变记录，在某一时刻取
 | DB_ID, TABLE_ID, BOOKMARK_ID | （同 summary） | 关联键。 |
 | HOLDER_ID | VARCHAR | 持有者标识。物化视图的编码形式为 `mv:<dbId>-<mvId>`。 |
 | CREATE_TIME | DATETIME | 该持有者获取此 Bookmark 的时间。续租不会改变该时间。 |
-| TTL_MS | BIGINT | 有效租约时长，单位为毫秒。取引用级 TTL（acquire 时设置、每次 `bookmark_renew` 替换）与集群上限 `bookmark_reference_max_ttl_ms` 中较小的一个；任一侧 `<= 0` 表示该侧不限，因此仅当两侧都不设上限时本列为 `-1`。起算点为 `LAST_RENEW_TIME`（从未续租则为 `CREATE_TIME`）。 |
-| LAST_RENEW_TIME | DATETIME | 持有者最近一次通过 `bookmark_renew` 续租的时间；从未续租则为 NULL。 |
+| TTL_MS | BIGINT | 有效租约时长，单位为毫秒。取引用级 TTL（acquire 时设置、每次续租时替换）与集群上限 `bookmark_reference_max_ttl_ms` 中较小的一个；任一侧 `<= 0` 表示该侧不限，因此仅当两侧都不设上限时本列为 `-1`。起算点为 `LAST_RENEW_TIME`（从未续租则为 `CREATE_TIME`）。 |
+| LAST_RENEW_TIME | DATETIME | 该持有者最近一次续租的时间——可能来自 `bookmark_renew` 调用，也可能来自增量物化视图在基表未变化时复用该 pin 所触发的自动续租。从未续租则为 NULL。 |
 | EXPIRE_TIME | DATETIME | 清理任务将回收该引用的时刻：租约起点加上 `TTL_MS`。`TTL_MS` 为 `-1`（永不过期）时为 NULL。 |
-| RENEW_COUNT | BIGINT | 该引用成功执行 `bookmark_renew` 的次数。从未续租则为 `0`。 |
+| RENEW_COUNT | BIGINT | 该引用的租约被续租的次数。从未续租则为 `0`。 |
 
 ## 查询示例
 

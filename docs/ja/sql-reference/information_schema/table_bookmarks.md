@@ -49,10 +49,10 @@ description: OlapTable のアクティブなブックマーク（インベント
 | DB_ID, TABLE_ID, BOOKMARK_ID | (summary と同じ) | 結合キー。 |
 | HOLDER_ID | VARCHAR | 保持者の識別子。マテリアライズドビューは `mv:<dbId>-<mvId>` の形式でエンコードされます。 |
 | CREATE_TIME | DATETIME | この保持者がブックマークを取得した時刻。更新（renew）では変わりません。 |
-| TTL_MS | BIGINT | 実効リース期間（ミリ秒）。取得時に設定され `bookmark_renew` のたびに置き換えられる参照単位 TTL と、クラスター上限 `bookmark_reference_max_ttl_ms` のうち小さい方です。どちらか一方が `<= 0` の場合はその側を制限なしとして扱うため、本カラムが `-1` になるのは両方とも未設定のときだけです。起点は `LAST_RENEW_TIME`（更新されたことがない場合は `CREATE_TIME`）です。 |
-| LAST_RENEW_TIME | DATETIME | 保持者が `bookmark_renew` で最後にリースを更新した時刻。一度も更新されていない場合は NULL。 |
+| TTL_MS | BIGINT | 実効リース期間（ミリ秒）。取得時に設定され、更新のたびに置き換えられる参照単位 TTL と、クラスター上限 `bookmark_reference_max_ttl_ms` のうち小さい方です。どちらか一方が `<= 0` の場合はその側を制限なしとして扱うため、本カラムが `-1` になるのは両方とも未設定のときだけです。起点は `LAST_RENEW_TIME`（更新されたことがない場合は `CREATE_TIME`）です。 |
+| LAST_RENEW_TIME | DATETIME | この保持者のリースが最後に更新された時刻。`bookmark_renew` の呼び出しによる場合と、インクリメンタルマテリアライズドビューが変化のないベーステーブル上でこの pin を再利用した際に自動的に更新される場合があります。一度も更新されていない場合は NULL。 |
 | EXPIRE_TIME | DATETIME | クリーンアップスイープがこの参照を回収する時刻。リース起点に `TTL_MS` を加えた値です。`TTL_MS` が `-1`（期限なし）の場合は NULL。 |
-| RENEW_COUNT | BIGINT | この参照に対する成功した `bookmark_renew` の回数。一度も更新されていない場合は `0`。 |
+| RENEW_COUNT | BIGINT | この参照のリースが更新された回数。一度も更新されていない場合は `0`。 |
 
 ## クエリパターン
 

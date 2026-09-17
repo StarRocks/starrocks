@@ -3,7 +3,7 @@
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
 -- bookmark_create returns the same id on an unchanged table without refreshing its lease;
--- bookmark_renew is the only way to move that clock.
+-- bookmark_renew is what moves that clock for a caller-managed holder.
 CREATE TABLE rn_t (k int NOT NULL, v int)
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');

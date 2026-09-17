@@ -1,0 +1,45 @@
+-- name: test_ivm_bookmark_lease_renewal @cloud
+-- An incremental MV reuses its pin on every round where the base table has produced no version.
+-- That reuse restarts the lease: otherwise a base table that stops receiving data loses the
+-- baseline to bookmark_reference_max_ttl_ms while every one of the MV's refreshes still succeeds.
+-- A round that does find new versions takes a new pin instead, and that one is not renewed --
+-- which is what keeps the ceiling able to reclaim a view that stops making progress.
+
+CREATE TABLE ivm_rn_t (k int NOT NULL, v int NOT NULL)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO ivm_rn_t VALUES (1, 10), (2, 20);
+
+CREATE MATERIALIZED VIEW mv_ivm_rn
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental", "replication_num" = "1")
+AS SELECT k, v FROM ivm_rn_t;
+
+-- the first round takes the pin; nothing changes afterwards, so the next two reuse it
+REFRESH MATERIALIZED VIEW mv_ivm_rn WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ivm_rn WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ivm_rn WITH SYNC MODE;
+
+SELECT k, v FROM mv_ivm_rn ORDER BY k;
+
+-- The MV's pin carries renewals, and its expiry now runs from the last one instead of from when
+-- the pin was taken. 259200 is bookmark_reference_max_ttl_ms at its 3-day default; changing that
+-- default changes this expected value.
+SELECT max(r.RENEW_COUNT) > 0 AS renewed,
+       max(unix_timestamp(r.EXPIRE_TIME) - unix_timestamp(r.LAST_RENEW_TIME)) AS lease_seconds
+FROM information_schema.table_bookmark_references r, information_schema.tables_config c
+WHERE r.TABLE_ID = c.TABLE_ID AND c.TABLE_SCHEMA = '${db[0]}' AND c.TABLE_NAME = 'ivm_rn_t'
+  AND r.HOLDER_ID LIKE 'mv:%';
+
+-- New data means the next round takes a new pin rather than reusing one. That pin carries no
+-- renewal, so the history it holds back still ages out at the ceiling.
+INSERT INTO ivm_rn_t VALUES (3, 30);
+REFRESH MATERIALIZED VIEW mv_ivm_rn WITH SYNC MODE;
+
+SELECT r.RENEW_COUNT
+FROM information_schema.table_bookmark_references r, information_schema.tables_config c
+WHERE r.TABLE_ID = c.TABLE_ID AND c.TABLE_SCHEMA = '${db[0]}' AND c.TABLE_NAME = 'ivm_rn_t'
+  AND r.HOLDER_ID LIKE 'mv:%'
+ORDER BY r.BOOKMARK_ID DESC LIMIT 1;

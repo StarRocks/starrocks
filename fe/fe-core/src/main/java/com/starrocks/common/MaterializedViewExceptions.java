@@ -40,6 +40,9 @@ public class MaterializedViewExceptions {
     public static final String INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH =
             "incremental refresh broken: materialized view schema no longer matches its definition: ";
 
+    public static final String INACTIVE_REASON_FOR_BASELINE_UNREACHABLE =
+            "incremental refresh broken: the base table state this view refreshes from is no longer available: ";
+
     /**
      * Create the inactive reason when base table not exists
      */
@@ -82,6 +85,9 @@ public class MaterializedViewExceptions {
      * Which reason to inactivate with, for a failure {@link #isIncrementalBreakingFailure} accepted.
      * A base-table column change and a column ALTER on the MV itself raise the same two schema
      * markers, so that branch states the condition without attributing a cause it cannot tell apart.
+     * A baseline that can no longer be reached gets its own reason as well: it is the one breakage an
+     * operator can act on by adjusting retention, and the default reason would blame a base change
+     * that never happened.
      */
     public static String inactiveReasonForBreakingFailure(Throwable e, String mvName) {
         for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
@@ -90,6 +96,9 @@ public class MaterializedViewExceptions {
                     || msg.contains(MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER))) {
                 return INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH + mvName;
             }
+            if (msg != null && msg.contains(SNAPSHOT_ANCESTRY_BROKEN_MARKER)) {
+                return INACTIVE_REASON_FOR_BASELINE_UNREACHABLE + mvName;
+            }
         }
         return inactiveReasonForIncrementalBreaking(mvName);
     }
@@ -97,6 +106,21 @@ public class MaterializedViewExceptions {
     // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
     // its message from this constant and isIncrementalBreakingFailure matches it, so wording and detection can't drift.
     public static final String FE_NON_APPEND_ONLY_MARKER = "do not support non-append-only base changes";
+
+    // The bookmark an incremental MV recorded as its baseline no longer exists, so the range it would
+    // refresh has no reachable left endpoint. MvBookmarkOps builds its message from this constant and
+    // MVIVMRefreshProcessor matches it, so wording and detection can't drift. Only the baseline endpoint
+    // gets this treatment: the other endpoint is the bookmark the current round just took, and losing
+    // that one is transient -- the next round takes a new one.
+    public static final String BASELINE_BOOKMARK_MISSING_MARKER = "from-snapshot bookmark not found";
+
+    // How a view reports that the baseline it refreshes from cannot be reached any more -- an expired
+    // Iceberg snapshot or a reclaimed Lake bookmark. MVIVMRefreshProcessor builds its message from this
+    // constant and inactiveReasonForBreakingFailure matches it, so wording and detection can't drift. It
+    // rides along with FE_NON_APPEND_ONLY_MARKER, which is what makes the failure breaking; this one only
+    // decides which reason the view is inactivated with, so an operator is not told a DELETE or OVERWRITE
+    // happened when the base table history simply aged out.
+    public static final String SNAPSHOT_ANCESTRY_BROKEN_MARKER = "snapshot ancestry broken";
 
     // Both classifiers of a stored schema that no longer matches the maintenance query --
     // isIncrementalBreakingFailure and MVRefreshSchemaChecker#isLikelyDriftException -- match these,

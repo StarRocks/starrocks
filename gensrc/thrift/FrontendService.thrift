@@ -1825,7 +1825,7 @@ struct TTableBookmarkReferenceInfo {
     7: optional i64 last_renew_time
     // Epoch millis when the effective lease ends; unset when there is no expiry.
     8: optional i64 expire_time
-    // Successful bookmark_renew calls on this reference; 0 if never renewed.
+    // Successful renewals of this reference; 0 if never renewed.
     9: optional i64 renew_count
 }
 

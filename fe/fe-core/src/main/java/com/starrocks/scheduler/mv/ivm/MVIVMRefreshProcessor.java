@@ -296,7 +296,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 recordRefreshModeReason(MaterializedView.RefreshModeReason.BASELINE_UNREACHABLE,
                         baseTableInfo.getReadableString());
                 throw new SemanticException(formatNonAppendOnlyBreakingError(
-                        String.format("snapshot ancestry broken for base table %s.%s (%s)",
+                        String.format("%s for base table %s.%s (%s)",
+                                MaterializedViewExceptions.SNAPSHOT_ANCESTRY_BROKEN_MARKER,
                                 baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
                         e);
             }
@@ -349,9 +350,17 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
     }
 
+    /**
+     * Whether the connector reports that the recorded baseline can no longer be reached: an Iceberg
+     * snapshot that is no longer an ancestor of the head, or a Lake bookmark that has been reclaimed.
+     * Either way the range has no usable left endpoint, so the run declares the incremental chain
+     * broken instead of failing the same way every round. The Iceberg wording comes from the connector
+     * and can only be matched as text; the Lake one is built from the shared marker.
+     */
     private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
         String message = e.getMessage();
-        return message != null && message.contains("is not a parent ancestor");
+        return message != null && (message.contains("is not a parent ancestor")
+                || message.contains(MaterializedViewExceptions.BASELINE_BOOKMARK_MISSING_MARKER));
     }
 
     private String formatNonAppendOnlyBreakingError(String reasonFragment) {
