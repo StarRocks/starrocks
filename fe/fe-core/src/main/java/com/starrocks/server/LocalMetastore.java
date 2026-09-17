@@ -1148,20 +1148,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-<<<<<<< HEAD
-    private void updatePartitionInfo(PartitionInfo partitionInfo, List<Pair<Partition, PartitionDesc>> partitionList,
-                                     Set<String> existPartitionNameSet, boolean isTempPartition,
-                                     OlapTable olapTable)
-            throws DdlException {
-        if (partitionInfo instanceof RangePartitionInfo) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            rangePartitionInfo.handleNewRangePartitionDescs(olapTable.getIdToColumn(),
-                    partitionList, existPartitionNameSet, isTempPartition);
-        } else if (partitionInfo instanceof ListPartitionInfo) {
-            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-            listPartitionInfo.handleNewListPartitionDescs(olapTable.getIdToColumn(),
-                    partitionList, existPartitionNameSet, isTempPartition);
-=======
     /**
      * The lake tablets of a new partition (ADD PARTITION, TRUNCATE TABLE, the temp partitions of
      * INSERT OVERWRITE / OPTIMIZE) are created outside the table lock and pinned to the colocation
@@ -1179,53 +1165,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    private static class PartitionInfoCheckResult {
-        private final Map<Long, Range<PartitionKey>> idToRange;
-        private final Map<Long, List<LiteralExpr>> idToLiteralExprValues;
-        private final Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues;
-
-        private PartitionInfoCheckResult(Map<Long, Range<PartitionKey>> idToRange,
-                                         Map<Long, List<LiteralExpr>> idToLiteralExprValues,
-                                         Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues) {
-            this.idToRange = idToRange;
-            this.idToLiteralExprValues = idToLiteralExprValues;
-            this.idToMultiLiteralExprValues = idToMultiLiteralExprValues;
-        }
-
-        private static PartitionInfoCheckResult empty() {
-            return new PartitionInfoCheckResult(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap());
-        }
-
-        private Range<PartitionKey> getRange(long partitionId) {
-            return idToRange.get(partitionId);
-        }
-
-        private List<LiteralExpr> getLiteralExprValues(long partitionId) {
-            return idToLiteralExprValues.get(partitionId);
-        }
-
-        private List<List<LiteralExpr>> getMultiLiteralExprValues(long partitionId) {
-            return idToMultiLiteralExprValues.get(partitionId);
-        }
-    }
-
-    private PartitionInfoCheckResult checkPartitionInfo(PartitionInfo partitionInfo, OlapTable olapTable,
-                                                        List<Pair<Partition, PartitionDesc>> partitionsToAdd,
-                                                        boolean isTempPartition) throws DdlException {
-        if (partitionInfo instanceof RangePartitionInfo rangePartitionInfo) {
-            Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo
-                    .checkNewRangePartitionDescs(olapTable.getIdToColumn(), partitionsToAdd, isTempPartition);
-            return new PartitionInfoCheckResult(idToRange, Collections.emptyMap(), Collections.emptyMap());
-        } else if (partitionInfo instanceof ListPartitionInfo listPartitionInfo) {
-            Map<Long, List<LiteralExpr>> idToLiteralExprValues = Maps.newHashMapWithExpectedSize(partitionsToAdd.size());
-            Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues =
-                    Maps.newHashMapWithExpectedSize(partitionsToAdd.size());
-            listPartitionInfo.checkNewListPartitionDescs(olapTable.getIdToColumn(),
-                    partitionsToAdd,
-                    idToLiteralExprValues,
-                    idToMultiLiteralExprValues);
-            return new PartitionInfoCheckResult(Collections.emptyMap(), idToLiteralExprValues, idToMultiLiteralExprValues);
->>>>>>> 600c9b7 ([BugFix] Create hash-colocate lake shards on colocate-aligned workers (#79223))
+    private void updatePartitionInfo(PartitionInfo partitionInfo, List<Pair<Partition, PartitionDesc>> partitionList,
+                                     Set<String> existPartitionNameSet, boolean isTempPartition,
+                                     OlapTable olapTable)
+            throws DdlException {
+        if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            rangePartitionInfo.handleNewRangePartitionDescs(olapTable.getIdToColumn(),
+                    partitionList, existPartitionNameSet, isTempPartition);
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            listPartitionInfo.handleNewListPartitionDescs(olapTable.getIdToColumn(),
+                    partitionList, existPartitionNameSet, isTempPartition);
         } else {
             throw new DdlException("Only support adding partition to range/list partitioned table");
         }
