@@ -54,9 +54,12 @@ public class PartitionCommitInfo implements Writable {
     private long version;
 
     // For LakeTable, the value of versionTime indicates different circumstances:
-    //  = 0 : no publish version task has been executed since process starts
-    //  < 0 : last publish version task failed and Math.abs(versionTime) is the last execution time
+    //  = 0 : this partition has not published yet
     //  > 0 : last publish version task succeeded and versionTime is the last execution time
+    //
+    // A failed attempt is recorded in lastPublishFailureTime instead of by negating this field:
+    // versionTime is also the timestamp handed to Partition#updateVisibleVersion, so it must never
+    // carry a negative value into the image.
     //
     // For OlapTable, versionTime always greater than 0.
     @SerializedName(value = "versionTime")
@@ -92,6 +95,16 @@ public class PartitionCommitInfo implements Writable {
 
     private boolean isDoubleWrite = false;
 
+    // Paces the "fail to publish partition" error log for this partition. Deliberately not
+    // serialized: it only throttles logging inside one FE process. Races between publish
+    // threads can at worst let one extra line through, which is not worth a lock here.
+    private long lastPublishErrorLogTime = 0;
+
+    // When the last publish attempt for this partition failed, used to space out retries.
+    // Deliberately not serialized: it is in-process retry state, and a leader that has just taken
+    // over should attempt a publish immediately rather than inherit a stale back-off.
+    private long lastPublishFailureTime = 0;
+
     public PartitionCommitInfo() {
 
     }
@@ -118,6 +131,33 @@ public class PartitionCommitInfo implements Writable {
 
     public void setVersionTime(long time) {
         this.versionTime = time;
+    }
+
+    // Records a failed publish attempt. versionTime is left alone so it keeps meaning
+    // "the time this partition became visible", which is what the txn log appliers read.
+    public void markPublishFailed(long now) {
+        this.lastPublishFailureTime = now;
+    }
+
+    public void markPublishSucceeded(long now) {
+        this.lastPublishFailureTime = 0;
+        this.versionTime = now;
+    }
+
+    // 0 when the last attempt did not fail.
+    public long getLastPublishFailureTime() {
+        return lastPublishFailureTime;
+    }
+
+    // Returns true at most once per intervalMs. A partition that keeps failing to publish is
+    // retried continuously, so logging every failure turns one stuck partition into a steady
+    // stream of identical messages.
+    public boolean shouldLogPublishError(long now, long intervalMs) {
+        if (now - lastPublishErrorLogTime < intervalMs) {
+            return false;
+        }
+        lastPublishErrorLogTime = now;
+        return true;
     }
 
     public long getPhysicalPartitionId() {
