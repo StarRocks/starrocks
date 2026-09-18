@@ -59,7 +59,6 @@ set(EXPR_TEST_FILES
     map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
-    multi_unnest_core_test.cpp
     ngram_search_test.cpp
     percentile_functions_test.cpp
     condition_expr_core_test.cpp
@@ -100,6 +99,7 @@ set(EXPR_TEST_FILES
     string_fn_url_extract_parameter_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
+    table_function/multi_unnest_core_test.cpp
     udf/python/env_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp
