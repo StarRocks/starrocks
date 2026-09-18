@@ -1170,7 +1170,9 @@ public class PropertyAnalyzer {
                 // CREATE TABLE LIKE, or pasting the property out of SHOW CREATE TABLE, would configure
                 // the wrong column at the wrong page size. Refuse the pair rather than emit text that
                 // does not mean what it says.
-                String collision = zstdCompressionRenderCollision(columns, column.getName(), pageSize);
+                String collision = zstdCompressionRenderCollision(
+                        columns.stream().map(Column::getName).collect(Collectors.toList()),
+                        column.getName(), pageSize);
                 if (collision != null) {
                     throw new AnalysisException(
                             String.format("Invalid zstd compression column '%s': %s", zstdCompressionColumn, collision));
@@ -1198,12 +1200,12 @@ public class PropertyAnalyzer {
      * from the property text because the collision can also be created AFTER the property is set, by
      * renaming or adding a column into the rendered name.
      */
-    public static String zstdCompressionRenderCollision(List<Column> columns, String columnName, int pageSize) {
+    public static String zstdCompressionRenderCollision(List<String> columnNames, String columnName, int pageSize) {
         if (pageSize <= 0) {
             return null;
         }
         String rendered = columnName + ":" + pageSize;
-        if (findColumnIgnoreCase(columns, rendered) == null) {
+        if (columnNames.stream().noneMatch(rendered::equalsIgnoreCase)) {
             return null;
         }
         return String.format("this table also has a column named '%s', which is exactly how SHOW CREATE TABLE "

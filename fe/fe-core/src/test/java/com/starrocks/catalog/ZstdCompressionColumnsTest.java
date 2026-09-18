@@ -701,6 +701,39 @@ public class ZstdCompressionColumnsTest {
         Assertions.assertNotNull(table.getColumn("v3_renamed"));
     }
 
+    @Test
+    public void testCollisionCheckedAgainstFinalNames() throws Exception {
+        // Two ways the previous guards compared the wrong names.
+        //
+        // (a) Renaming the NOMINATED column can make its rendered form collide with a column that was
+        // there all along -- the guard used to compare only against the new name.
+        starRocksAssert.withTable("CREATE TABLE " + DB_NAME + ".t_cdict_final_a (\n"
+                + "  k1 int,\n  v1 string,\n  `w1:262144` string\n) ENGINE=OLAP\n"
+                + "DUPLICATE KEY(k1)\nDISTRIBUTED BY HASH(k1) BUCKETS 1\n"
+                + "PROPERTIES (\"replication_num\" = \"1\", \""
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:256k\");");
+        OlapTable a = getTable("t_cdict_final_a");
+        Exception renamed = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE " + DB_NAME + ".t_cdict_final_a RENAME COLUMN v1 TO w1"));
+        Assertions.assertTrue(renamed.getMessage() != null && renamed.getMessage().contains("could not tell the two apart"),
+                "unexpected message: " + renamed.getMessage());
+        Assertions.assertEquals(Sets.newHashSet("v1"), a.getZstdCompressionColumnNames());
+
+        // (b) A column modified by the same statement is carried under a shadow name, so the rendered
+        // form was looked up as "__starrocks_shadow_v1:262144" and missed the column being added.
+        starRocksAssert.withTable(createTableSql("t_cdict_final_b",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:256k\""));
+        OlapTable b = getTable("t_cdict_final_b");
+        Exception combined = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE " + DB_NAME + ".t_cdict_final_b MODIFY COLUMN v1 varchar(64), "
+                        + "ADD COLUMN `v1:262144` string"));
+        Assertions.assertTrue(combined.getMessage() != null
+                        && combined.getMessage().contains("can no longer be a zstd compression"),
+                "unexpected message: " + combined.getMessage());
+        Assertions.assertNull(b.getColumn("v1:262144"));
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 262144), b.getZstdCompressionPageSizes());
+    }
+
     private static void assertCreateTableFails(String tableName, String spec, String expectedMessage) {
         Exception e = Assertions.assertThrows(Exception.class,
                 () -> starRocksAssert.withTable(createTableSql(tableName,

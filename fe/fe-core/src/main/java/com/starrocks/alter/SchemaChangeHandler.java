@@ -197,6 +197,12 @@ public class SchemaChangeHandler extends AlterHandler {
         return normalized;
     }
 
+    /** The name a column will carry once the job finishes, i.e. without the in-flight shadow prefix. */
+    private static String unshadowedName(String columnName) {
+        return columnName.startsWith(SHADOW_NAME_PREFIX) ? columnName.substring(SHADOW_NAME_PREFIX.length())
+                : columnName;
+    }
+
     /**
      * Rejects a schema this ALTER is about to install in which a column the property still names is
      * no longer eligible -- its type or its keyness changed underneath it. Such a table emits a SHOW
@@ -234,10 +240,20 @@ public class SchemaChangeHandler extends AlterHandler {
             if (pageSize == null) {
                 continue;
             }
-            String collision = PropertyAnalyzer.zstdCompressionRenderCollision(newBaseSchema, column.getName(),
-                    pageSize);
+            // A column this same statement modifies is carried here under a shadow name
+            // (processModifyColumn renames it to __starrocks_shadow_<name>), and the prefix is
+            // stripped again when the job finishes -- without anything revalidating. Compare the
+            // names the table will actually end up with, on both sides, or MODIFY COLUMN v ... plus
+            // ADD COLUMN `v:<bytes>` slips through: the rendered form would be looked up as
+            // "__starrocks_shadow_v:<bytes>" and never match the column just added.
+            String finalName = unshadowedName(column.getName());
+            List<String> finalNames = new ArrayList<>(newBaseSchema.size());
+            for (Column candidate : newBaseSchema) {
+                finalNames.add(unshadowedName(candidate.getName()));
+            }
+            String collision = PropertyAnalyzer.zstdCompressionRenderCollision(finalNames, finalName, pageSize);
             if (collision != null) {
-                throw new DdlException("Column " + column.getName() + " can no longer be a zstd compression "
+                throw new DdlException("Column " + finalName + " can no longer be a zstd compression "
                         + "column: " + collision);
             }
         }
