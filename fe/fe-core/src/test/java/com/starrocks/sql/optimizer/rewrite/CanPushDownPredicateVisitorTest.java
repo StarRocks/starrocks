@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Per-dialect gating truth table for {@link CanPushDownPredicateVisitor}. Each operator below is a
@@ -41,7 +42,7 @@ public class CanPushDownPredicateVisitorTest {
     private static final ColumnRefOperator COL = new ColumnRefOperator(1, IntegerType.INT, "c", true);
 
     private void assertPush(ScalarOperator op, ProtocolType dialect, boolean expected) {
-        Assertions.assertEquals(expected, CanPushDownPredicateVisitor.canPushDown(op, dialect),
+        Assertions.assertEquals(expected, CanPushDownPredicateVisitor.canPushDown(op, dialect, Set.of()),
                 dialect + " push-down of " + op);
     }
 
@@ -124,11 +125,11 @@ public class CanPushDownPredicateVisitorTest {
         // jdbc_predicate_pushdown_max_in_list_size: -1 unlimited, 0 never, N cap-at-N.
         InPredicateOperator in4 = inList(4);
         InPredicateOperator in2 = inList(2);
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in4, ProtocolType.MYSQL, -1));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in4, ProtocolType.MYSQL, 0));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in4, ProtocolType.MYSQL, 3));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in2, ProtocolType.MYSQL, 3));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in2, ProtocolType.MYSQL, 2));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in4, ProtocolType.MYSQL, -1, Set.of()));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in4, ProtocolType.MYSQL, 0, Set.of()));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in4, ProtocolType.MYSQL, 3, Set.of()));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in2, ProtocolType.MYSQL, 3, Set.of()));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in2, ProtocolType.MYSQL, 2, Set.of()));
     }
 
     @Test
@@ -136,10 +137,10 @@ public class CanPushDownPredicateVisitorTest {
         // Oracle has no built-in IN-list floor: size is governed purely by the session cap, like
         // every dialect (ORA-01795's limit is Oracle-version-specific, so it is not hardcoded).
         InPredicateOperator in1001 = inList(1001);
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, ProtocolType.ORACLE, -1));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, ProtocolType.MYSQL, -1));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, ProtocolType.ORACLE, -1, Set.of()));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, ProtocolType.MYSQL, -1, Set.of()));
         // A cap set below the list size keeps it local — on Oracle just like the other dialects.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in1001, ProtocolType.ORACLE, 1000));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in1001, ProtocolType.ORACLE, 1000, Set.of()));
     }
     @Test
     public void testPostgresArraysStayLocal() {

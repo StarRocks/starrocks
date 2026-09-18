@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
+import com.starrocks.sql.optimizer.rewrite.PostgresCollation;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.join.MultiJoinNode;
@@ -399,7 +400,8 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
             // CanPushDownPredicateVisitor mirrors the node coverage ScalarOperatorToJDBCSQLVisitor
             // renders, so predicate gating and SQL rendering stay in sync.
             boolean allPushable = group.ownedPredicates.stream()
-                    .allMatch(p -> CanPushDownPredicateVisitor.canPushDown(p, group.dialect()));
+                    .allMatch(p -> CanPushDownPredicateVisitor.canPushDown(
+                            p, group.dialect(), group.collatableColumns()));
             // A merge needs at least one cross-table (join) predicate, else it degenerates into a
             // remote Cartesian product.
             group.shouldMerge = allPushable && !group.onPredicates.isEmpty();
@@ -589,6 +591,20 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
 
         JDBCTable.ProtocolType dialect() {
             return entries.get(0).table.getProtocolType();
+        }
+
+        /**
+         * The group's columns a pushed ordering comparison may name {@code COLLATE "C"} on, so a
+         * cross-table string comparison orders the same way StarRocks would. Empty for every
+         * dialect but PostgreSQL; see {@link PostgresCollation}.
+         */
+        Set<ColumnRefOperator> collatableColumns() {
+            Set<ColumnRefOperator> collatable = new HashSet<>();
+            for (AtomEntry entry : entries) {
+                collatable.addAll(PostgresCollation.collatableColumns(
+                        entry.table, entry.scanOp.getColRefToColumnMetaMap()));
+            }
+            return collatable;
         }
 
         /** True if {@code pred} touches columns of 2 or more scans in this group. */

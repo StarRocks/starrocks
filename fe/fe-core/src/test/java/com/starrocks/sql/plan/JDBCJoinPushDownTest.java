@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
 
@@ -839,44 +840,44 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         ColumnRefOperator intCol = new ColumnRefOperator(2, IntegerType.INT, "c", true);
 
         // Arithmetic functions: must be binary, dialect-independent.
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertTrue(canPushDownNoCollation(
                 new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol, intCol)),
                 JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol)),
                 JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(intCol, intCol, intCol)),
                 JDBCTable.ProtocolType.MYSQL));
 
         // concat: arity >= 2 only on MySQL-compatible dialects; everything else rejected.
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertTrue(canPushDownNoCollation(
                 new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
                 JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertTrue(canPushDownNoCollation(
                 new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
                 JDBCTable.ProtocolType.MARIADB));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol)),
                 JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR,
                         List.of(varcharCol, varcharCol, varcharCol)),
                 JDBCTable.ProtocolType.ORACLE));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
                 JDBCTable.ProtocolType.POSTGRES));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, List.of(varcharCol, varcharCol)),
                 JDBCTable.ProtocolType.UNKNOWN));
 
         // Cast: every dialect enforces the same 7-type whitelist via JDBCCastTypeMapper.
         // BIGINT is outside the whitelist, so non-implicit casts are rejected on all dialects.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CastOperator(IntegerType.BIGINT, intCol, false), JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertFalse(canPushDownNoCollation(
                 new CastOperator(IntegerType.BIGINT, intCol, false), JDBCTable.ProtocolType.POSTGRES));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
+        Assertions.assertTrue(canPushDownNoCollation(
                 new CastOperator(IntegerType.BIGINT, intCol, true), JDBCTable.ProtocolType.MYSQL));
     }
 
@@ -886,13 +887,13 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
         BinaryPredicateOperator nullSafe = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, a, b);
 
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.MARIADB));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.POSTGRES));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.CLICKHOUSE));
+        Assertions.assertTrue(canPushDownNoCollation(nullSafe, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(canPushDownNoCollation(nullSafe, JDBCTable.ProtocolType.MARIADB));
+        Assertions.assertTrue(canPushDownNoCollation(nullSafe, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(canPushDownNoCollation(nullSafe, JDBCTable.ProtocolType.CLICKHOUSE));
         // Oracle has no native null-safe equality and we don't synthesize the OR expansion.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.ORACLE));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(nullSafe, JDBCTable.ProtocolType.UNKNOWN));
+        Assertions.assertFalse(canPushDownNoCollation(nullSafe, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertFalse(canPushDownNoCollation(nullSafe, JDBCTable.ProtocolType.UNKNOWN));
     }
 
     @Test
@@ -904,14 +905,14 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         // MySQL/MariaDB evaluate `/` as DECIMAL bounded by div_precision_increment (default 4),
         // and PG truncates int/int -- both diverge from StarRocks DOUBLE division, so reject up
         // front. Oracle/ClickHouse use float division and stay pushable.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.MARIADB));
+        Assertions.assertFalse(canPushDownNoCollation(divide, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertFalse(canPushDownNoCollation(divide, JDBCTable.ProtocolType.MARIADB));
         // PG truncates int/int; the renderer strips implicit casts so the original int columns
         // would reach PG and silently produce wrong results — reject up front.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.POSTGRES));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.ORACLE));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.CLICKHOUSE));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(divide, JDBCTable.ProtocolType.UNKNOWN));
+        Assertions.assertFalse(canPushDownNoCollation(divide, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(canPushDownNoCollation(divide, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertTrue(canPushDownNoCollation(divide, JDBCTable.ProtocolType.CLICKHOUSE));
+        Assertions.assertFalse(canPushDownNoCollation(divide, JDBCTable.ProtocolType.UNKNOWN));
     }
 
     @Test
@@ -920,24 +921,24 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
         CallOperator mod = new CallOperator(FunctionSet.MOD, IntegerType.INT, List.of(a, b));
 
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.MARIADB));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.POSTGRES));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.CLICKHOUSE));
+        Assertions.assertTrue(canPushDownNoCollation(mod, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(canPushDownNoCollation(mod, JDBCTable.ProtocolType.MARIADB));
+        Assertions.assertTrue(canPushDownNoCollation(mod, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(canPushDownNoCollation(mod, JDBCTable.ProtocolType.CLICKHOUSE));
         // Single-table scan path renders mod as `%` via AstToStringBuilder, which Oracle rejects.
         // Until that path becomes dialect-aware, gate Oracle/UNKNOWN out.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.ORACLE));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(mod, JDBCTable.ProtocolType.UNKNOWN));
+        Assertions.assertFalse(canPushDownNoCollation(mod, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertFalse(canPushDownNoCollation(mod, JDBCTable.ProtocolType.UNKNOWN));
     }
 
     @Test
     public void testCanPushExpressionOracleConstants() {
         ConstantOperator trueLit = ConstantOperator.createBoolean(true);
         // Oracle SQL has no BOOLEAN type at all — gate must reject boolean constants.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.ORACLE));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.UNKNOWN));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertFalse(canPushDownNoCollation(trueLit, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertFalse(canPushDownNoCollation(trueLit, JDBCTable.ProtocolType.UNKNOWN));
+        Assertions.assertTrue(canPushDownNoCollation(trueLit, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(canPushDownNoCollation(trueLit, JDBCTable.ProtocolType.POSTGRES));
     }
 
     @Test
@@ -947,24 +948,24 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         InPredicateOperator in1001 = inPredicateOf(intCol, 1001);
 
         // -1 = no limit: non-Oracle dialects push any size.
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, -1));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.MYSQL, -1));
+        Assertions.assertTrue(canPushDownNoCollation(in600, JDBCTable.ProtocolType.MYSQL, -1));
+        Assertions.assertTrue(canPushDownNoCollation(in1001, JDBCTable.ProtocolType.MYSQL, -1));
 
         // 0 = never push an IN list down, on any dialect.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, 0));
+        Assertions.assertFalse(canPushDownNoCollation(in600, JDBCTable.ProtocolType.MYSQL, 0));
 
         // N > 0 = cap: a larger list stays local, a list within the cap pushes.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, 500));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.POSTGRES, 500));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, 600));
+        Assertions.assertFalse(canPushDownNoCollation(in600, JDBCTable.ProtocolType.MYSQL, 500));
+        Assertions.assertFalse(canPushDownNoCollation(in600, JDBCTable.ProtocolType.POSTGRES, 500));
+        Assertions.assertTrue(canPushDownNoCollation(in600, JDBCTable.ProtocolType.MYSQL, 600));
 
         // Oracle uses the same configurable cap as every dialect — no special hard floor.
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.ORACLE, -1));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.ORACLE, 5000));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.ORACLE, 500));
+        Assertions.assertTrue(canPushDownNoCollation(in1001, JDBCTable.ProtocolType.ORACLE, -1));
+        Assertions.assertTrue(canPushDownNoCollation(in1001, JDBCTable.ProtocolType.ORACLE, 5000));
+        Assertions.assertFalse(canPushDownNoCollation(in600, JDBCTable.ProtocolType.ORACLE, 500));
         // A cap can still be set to Oracle's per-version limit (e.g. 1000) when desired.
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.ORACLE, 1000));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.ORACLE, -1));
+        Assertions.assertFalse(canPushDownNoCollation(in1001, JDBCTable.ProtocolType.ORACLE, 1000));
+        Assertions.assertTrue(canPushDownNoCollation(in600, JDBCTable.ProtocolType.ORACLE, -1));
     }
 
     private static InPredicateOperator inPredicateOf(ColumnRefOperator col, int items) {
@@ -981,18 +982,18 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         ColumnRefOperator intCol = new ColumnRefOperator(1, IntegerType.INT, "c", true);
         // DATE is in the 7-type whitelist for every dialect → allowed.
         CastOperator toDate = new CastOperator(DateType.DATE, intCol, false);
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.POSTGRES));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.ORACLE));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.CLICKHOUSE));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(toDate, JDBCTable.ProtocolType.UNKNOWN));
+        Assertions.assertTrue(canPushDownNoCollation(toDate, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(canPushDownNoCollation(toDate, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertTrue(canPushDownNoCollation(toDate, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertTrue(canPushDownNoCollation(toDate, JDBCTable.ProtocolType.CLICKHOUSE));
+        Assertions.assertFalse(canPushDownNoCollation(toDate, JDBCTable.ProtocolType.UNKNOWN));
 
         // JSON is excluded specifically on Oracle.
         CastOperator toJson = new CastOperator(JsonType.JSON, intCol, false);
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.MYSQL));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.POSTGRES));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.ORACLE));
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(toJson, JDBCTable.ProtocolType.CLICKHOUSE));
+        Assertions.assertTrue(canPushDownNoCollation(toJson, JDBCTable.ProtocolType.MYSQL));
+        Assertions.assertTrue(canPushDownNoCollation(toJson, JDBCTable.ProtocolType.POSTGRES));
+        Assertions.assertFalse(canPushDownNoCollation(toJson, JDBCTable.ProtocolType.ORACLE));
+        Assertions.assertTrue(canPushDownNoCollation(toJson, JDBCTable.ProtocolType.CLICKHOUSE));
     }
 
     @Test
@@ -1007,7 +1008,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         Assertions.assertEquals("(`a` <=> `b`)",
                 nullSafe.accept(new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(names), null));
         Assertions.assertEquals("(`a` IS NOT DISTINCT FROM `b`)",
-                nullSafe.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names), null));
+                nullSafe.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names, Set.of()), null));
         Assertions.assertEquals("(`a` <=> `b`)",
                 nullSafe.accept(new ScalarOperatorToJDBCSQLVisitor.ClickHouseSQLRenderer(names), null));
     }
@@ -1026,7 +1027,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         Assertions.assertEquals("(`a` % `b`)",
                 mod.accept(new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(names), null));
         Assertions.assertEquals("(`a` % `b`)",
-                mod.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names), null));
+                mod.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names, Set.of()), null));
         Assertions.assertEquals("(`a` % `b`)",
                 mod.accept(new ScalarOperatorToJDBCSQLVisitor.ClickHouseSQLRenderer(names), null));
     }
@@ -1041,7 +1042,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         Assertions.assertEquals("CAST(`c` AS date)",
                 toDate.accept(new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(names), null));
         Assertions.assertEquals("CAST(`c` AS date)",
-                toDate.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names), null));
+                toDate.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names, Set.of()), null));
         Assertions.assertEquals("CAST(`c` AS DATE)",
                 toDate.accept(new ScalarOperatorToJDBCSQLVisitor.OracleSQLRenderer(names), null));
         Assertions.assertEquals("CAST(`c` AS Date)",
@@ -1143,4 +1144,19 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
             connectContext.getSessionVariable().setEnableJdbcProjectPushDown(false);
         }
     }
+
+    /**
+     * These cases exercise the dialect-agnostic node coverage (calls, casts, IN arity), none of
+     * which consults the collatable-column set, so they pass an empty one.
+     */
+    private static boolean canPushDownNoCollation(ScalarOperator op, JDBCTable.ProtocolType dialect) {
+        return CanPushDownPredicateVisitor.canPushDown(op, dialect, Set.of());
+    }
+
+    /** As above, for the cases that pin the IN-list cap explicitly. */
+    private static boolean canPushDownNoCollation(ScalarOperator op, JDBCTable.ProtocolType dialect,
+                                                  int maxInListSize) {
+        return CanPushDownPredicateVisitor.canPushDown(op, dialect, maxInListSize, Set.of());
+    }
+
 }

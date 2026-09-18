@@ -31,13 +31,17 @@ import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
 import com.starrocks.sql.optimizer.rewrite.ExternalTablePredicateExtractor;
+import com.starrocks.sql.optimizer.rewrite.PostgresCollation;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -63,7 +67,10 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         ScalarOperator predicate = Utils.compoundAnd(lfo.getPredicate(), operator.getPredicate());
         ScalarOperator scanPredicate = operator.getPredicate();
         ScalarOperator filterPredicate = lfo.getPredicate();
-        ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(dialectOf(operator));
+        JDBCTable.ProtocolType dialect = dialectOf(operator);
+        Set<ColumnRefOperator> collatableColumns = collatableColumnsOf(operator);
+        ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(
+                p -> CanPushDownPredicateVisitor.canPushDown(p, dialect, collatableColumns));
         extractor.extract(predicate);
         ScalarOperator pushedPredicate = extractor.getPushPredicate();
         ScalarOperator reservedPredicate = extractor.getReservePredicate();
@@ -121,6 +128,19 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
 
             return Lists.newArrayList(project);
         }
+    }
+
+    /**
+     * The scan's columns a pushed ordering comparison may name {@code COLLATE "C"} on, so the
+     * remote order matches the byte order StarRocks applies. Empty for a non-JDBC scan and for
+     * every dialect but PostgreSQL; see {@link PostgresCollation}.
+     */
+    private Set<ColumnRefOperator> collatableColumnsOf(Operator operator) {
+        if (operator.getOpType() != OperatorType.LOGICAL_JDBC_SCAN) {
+            return Collections.emptySet();
+        }
+        LogicalJDBCScanOperator scan = (LogicalJDBCScanOperator) operator;
+        return PostgresCollation.collatableColumns((JDBCTable) scan.getTable(), scan.getColRefToColumnMetaMap());
     }
 
     private JDBCTable.ProtocolType dialectOf(Operator operator) {

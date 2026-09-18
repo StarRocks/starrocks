@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
+import com.starrocks.sql.optimizer.rewrite.PostgresCollation;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -91,7 +92,8 @@ public class PushDownTopNToJDBCScanRule extends TransformationRule {
         }
         if (table.getProtocolType() != JDBCTable.ProtocolType.POSTGRES
                 || (scan.getPredicate() != null && !CanPushDownPredicateVisitor.canPushDown(
-                        scan.getPredicate(), table.getProtocolType()))) {
+                        scan.getPredicate(), table.getProtocolType(),
+                        PostgresCollation.collatableColumns(table, scan.getColRefToColumnMetaMap())))) {
             return false;
         }
         for (Ordering ordering : topN.getOrderByElements()) {

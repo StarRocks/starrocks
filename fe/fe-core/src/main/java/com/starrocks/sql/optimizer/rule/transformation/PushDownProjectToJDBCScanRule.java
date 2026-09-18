@@ -32,10 +32,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
+import com.starrocks.sql.optimizer.rewrite.PostgresCollation;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Fold a projection sitting on a single JDBC scan into the scan's pushed-down SQL, so derived
@@ -116,12 +118,14 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
             return null;
         }
         JDBCTable.ProtocolType dialect = ((JDBCTable) scan.getTable()).getProtocolType();
+        Set<ColumnRefOperator> collatableColumns = PostgresCollation.collatableColumns(
+                (JDBCTable) scan.getTable(), scan.getColRefToColumnMetaMap());
         Map<ColumnRefOperator, ScalarOperator> outputColumnRefToExpr = Maps.newLinkedHashMap();
         boolean hasProjectExpression = false;
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
             ColumnRefOperator outputRef = entry.getKey();
             ScalarOperator outputExpr = entry.getValue();
-            if (!CanPushDownPredicateVisitor.canPushDown(outputExpr, dialect)) {
+            if (!CanPushDownPredicateVisitor.canPushDown(outputExpr, dialect, collatableColumns)) {
                 return null;
             }
             // Never push a boolean comparison as a SELECT item, even when nested under another pushable

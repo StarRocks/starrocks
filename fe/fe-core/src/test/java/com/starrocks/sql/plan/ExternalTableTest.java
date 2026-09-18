@@ -374,11 +374,18 @@ public class ExternalTableTest extends PlanTestBase {
     public void testPostgreSQLJDBCTableFilter() throws Exception {
         String sql = "select * from test.jdbc_pg_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);
+        // The integer comparison pushes down; the string one does not. PostgreSQL compares strings
+        // under the column's collation while StarRocks compares bytes, so a pushed string ordering
+        // comparison has to name COLLATE "C" -- and naming it requires knowing the column really is
+        // text/varchar remotely. This table is declared through a RESOURCE, so its schema is the
+        // user's DDL rather than metadata read from PostgreSQL: b is VARCHAR here, but the remote
+        // type could be one PostgreSQL refuses to collate (an unconstrained numeric, an enum, json).
+        // Without that metadata the comparison stays local; see PostgresCollation.
         Assertions.assertTrue(plan.contains("0:SCAN JDBC\n" +
                 "     TABLE: \"test_table\"\n" +
                 "     QUERY: SELECT \"a\", \"b\", \"c\" FROM \"test_table\" " +
-                "WHERE ((\"a\" > 10)) AND ((\"b\" < 'abc')) LIMIT 10\n" +
-                "     limit: 10"), plan);
+                "WHERE ((\"a\" > 10))\n"), plan);
+        assertContains(plan, "predicates: b < 'abc'");
     }
 
     @Test

@@ -16,6 +16,7 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
@@ -32,11 +33,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
 import com.starrocks.sql.optimizer.rewrite.JDBCCastTypeMapper;
+import com.starrocks.sql.optimizer.rewrite.PostgresCollation;
 
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -78,7 +81,22 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
                                                             Map<ColumnRefOperator, String> columnNames) {
         JDBCTable.ProtocolType dialect = ((JDBCTable) scans.get(0).getTable()).getProtocolType();
         return forDialect(dialect, columnNames,
-                dialect == JDBCTable.ProtocolType.ORACLE ? oracleTemporalColumns(scans) : Collections.emptyMap());
+                dialect == JDBCTable.ProtocolType.ORACLE ? oracleTemporalColumns(scans) : Collections.emptyMap(),
+                postgresCollatableColumns(scans));
+    }
+
+    /**
+     * The scans' columns a comparison may be pushed down for under {@code COLLATE "C"}, unioned
+     * across all scans. Empty for every dialect but PostgreSQL (see {@link PostgresCollation}), so
+     * only the PostgreSQL renderer ever finds anything here.
+     */
+    private static Set<ColumnRefOperator> postgresCollatableColumns(List<LogicalJDBCScanOperator> scans) {
+        Set<ColumnRefOperator> collatable = new HashSet<>();
+        for (LogicalJDBCScanOperator scan : scans) {
+            collatable.addAll(PostgresCollation.collatableColumns(
+                    (JDBCTable) scan.getTable(), scan.getColRefToColumnMetaMap()));
+        }
+        return collatable;
     }
 
     /**
@@ -93,18 +111,20 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
         JDBCTable.ProtocolType dialect = table.getProtocolType();
         return forDialect(dialect, columnNames,
                 dialect == JDBCTable.ProtocolType.ORACLE
-                        ? oracleTemporalColumns(table, colRefToColumnMetaMap) : Collections.emptyMap());
+                        ? oracleTemporalColumns(table, colRefToColumnMetaMap) : Collections.emptyMap(),
+                PostgresCollation.collatableColumns(table, colRefToColumnMetaMap));
     }
 
     private static ScalarOperatorToJDBCSQLVisitor forDialect(JDBCTable.ProtocolType dialect,
                                                              Map<ColumnRefOperator, String> columnNames,
-                                                             Map<ColumnRefOperator, String> oracleTemporalColumns) {
+                                                             Map<ColumnRefOperator, String> oracleTemporalColumns,
+                                                             Set<ColumnRefOperator> collatableColumns) {
         switch (dialect) {
             case MYSQL:
             case MARIADB:
                 return new MySQLLikeSQLRenderer(columnNames);
             case POSTGRES:
-                return new PostgresSQLRenderer(columnNames);
+                return new PostgresSQLRenderer(columnNames, collatableColumns);
             case ORACLE:
                 return new OracleSQLRenderer(columnNames, oracleTemporalColumns);
             case CLICKHOUSE:
@@ -384,7 +404,7 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
             if (op.isCountStar()) {
                 return fnName + "(*)";
             }
-            String arg = op.getChild(0).accept(this, null);
+            String arg = renderAggregateArgument(fnName, op.getChild(0));
             // AVG over an integer column integer-divides on some engines (e.g. SQL Server) and may
             // return a narrower JDBC type than the DOUBLE avg slot; multiplying by 1.0 forces the
             // remote AVG into floating point, matching StarRocks' avg semantics. Only dialects that
@@ -396,6 +416,15 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
         }
         // Fallback for unknown functions — shouldn't reach here if CanPushDownPredicateVisitor was checked
         return op.toString();
+    }
+
+    /**
+     * Renders an aggregate's argument. A dialect overrides this when the remote aggregate needs the
+     * argument qualified — PostgreSQL's MIN/MAX pick the extreme under the argument's collation, so
+     * they have to name the same one the comparisons do.
+     */
+    protected String renderAggregateArgument(String fnName, ScalarOperator arg) {
+        return arg.accept(this, null);
     }
 
     /** MYSQL / MARIADB: base behavior. */
@@ -415,8 +444,15 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
      * {@code IS NOT DISTINCT FROM}; Postgres has no MySQL-style operator.
      */
     public static class PostgresSQLRenderer extends ScalarOperatorToJDBCSQLVisitor {
-        public PostgresSQLRenderer(Map<ColumnRefOperator, String> columnNames) {
+        // Columns whose remote comparison order is made to match StarRocks' by COLLATE "C";
+        // CanPushDownPredicateVisitor kept every other string comparison local, so anything
+        // reaching this renderer that is not in here compares under an order both sides agree on.
+        private final Set<ColumnRefOperator> collatableColumns;
+
+        public PostgresSQLRenderer(Map<ColumnRefOperator, String> columnNames,
+                                   Set<ColumnRefOperator> collatableColumns) {
             super(columnNames);
+            this.collatableColumns = collatableColumns;
         }
 
         @Override
@@ -431,7 +467,39 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
                 String right = op.getChild(1).accept(this, null);
                 return "(" + left + " IS NOT DISTINCT FROM " + right + ")";
             }
+            if (op.getBinaryType().isRange()) {
+                // PostgreSQL derives one collation for the whole comparison, and an explicit one
+                // wins over the columns' implicit collations. Naming it on both collatable sides is
+                // accepted because they agree; two different explicit collations would be an error.
+                return "(" + collated(op.getChild(0)) + " " + op.getBinaryType().toString() + " "
+                        + collated(op.getChild(1)) + ")";
+            }
             return super.visitBinaryPredicate(op, context);
+        }
+
+        @Override
+        public String visitBetweenPredicate(BetweenPredicateOperator op, Void context) {
+            // The collation has to sit on the value: naming it on a bound would only govern that
+            // one comparison and leave value-vs-other-bound under the column's own collation.
+            String betweenClause = op.isNotBetween() ? " NOT BETWEEN " : " BETWEEN ";
+            return "(" + collated(op.getChild(0)) + betweenClause
+                    + op.getChild(1).accept(this, null) + " AND " + op.getChild(2).accept(this, null) + ")";
+        }
+
+        @Override
+        protected String renderAggregateArgument(String fnName, ScalarOperator arg) {
+            // MIN/MAX return the extreme under the comparison order, so they need the same
+            // collation the comparisons carry. SUM/AVG/COUNT do not depend on string order.
+            if (FunctionSet.MIN.equals(fnName) || FunctionSet.MAX.equals(fnName)) {
+                return collated(arg);
+            }
+            return super.renderAggregateArgument(fnName, arg);
+        }
+
+        /** Renders {@code operand}, appending {@code COLLATE "C"} when it is a collatable column. */
+        private String collated(ScalarOperator operand) {
+            String sql = operand.accept(this, null);
+            return collatableColumns.contains(operand) ? sql + PostgresCollation.COLLATE_C : sql;
         }
     }
 

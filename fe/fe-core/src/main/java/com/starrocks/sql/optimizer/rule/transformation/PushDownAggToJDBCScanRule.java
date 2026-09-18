@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
+import com.starrocks.sql.optimizer.rewrite.PostgresCollation;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.Type;
@@ -153,7 +154,9 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
             JDBCTable.ProtocolType dialect = ((JDBCTable) scanOperator.getTable()).getProtocolType();
             // A HAVING predicate may reference the aggregates folded into the remote SELECT
             // (e.g. HAVING MAX(c) > 5), so it is vetted with aggregate calls allowed.
-            if (!CanPushDownPredicateVisitor.canPushDownHaving(havingPredicate, dialect)) {
+            if (!CanPushDownPredicateVisitor.canPushDownHaving(havingPredicate, dialect,
+                    PostgresCollation.collatableColumns((JDBCTable) scanOperator.getTable(),
+                            scanOperator.getColRefToColumnMetaMap()))) {
                 return null;
             }
         }
@@ -218,15 +221,25 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
                         !(aggregation.getChild(0) instanceof ConstantOperator))) {
             return false;
         }
-        JDBCTable.ProtocolType dialect = ((JDBCTable) scanOperator.getTable()).getProtocolType();
-        return isSupportedJDBCAggregateArgument(fnName, aggregation.getChild(0), dialect);
+        JDBCTable table = (JDBCTable) scanOperator.getTable();
+        return isSupportedJDBCAggregateArgument(fnName, aggregation.getChild(0), table.getProtocolType(),
+                PostgresCollation.collatableColumns(table, scanOperator.getColRefToColumnMetaMap()));
     }
 
     private boolean isSupportedJDBCAggregateArgument(String fnName, ScalarOperator argument,
-                                                     JDBCTable.ProtocolType dialect) {
+                                                     JDBCTable.ProtocolType dialect,
+                                                     Set<ColumnRefOperator> collatableColumns) {
         if (dialect == JDBCTable.ProtocolType.POSTGRES && argument.getType().isBoolean() &&
                 (FunctionSet.MIN.equals(fnName) || FunctionSet.MAX.equals(fnName) ||
                         FunctionSet.SUM.equals(fnName) || FunctionSet.AVG.equals(fnName))) {
+            return false;
+        }
+        // MIN/MAX return the extreme under the remote comparison order, which for a string is the
+        // column's collation rather than StarRocks' byte order. The renderer can only reconcile the
+        // two by naming COLLATE "C", so a string argument it cannot name one on stays local.
+        if (dialect == JDBCTable.ProtocolType.POSTGRES && argument.getType().isStringType()
+                && (FunctionSet.MIN.equals(fnName) || FunctionSet.MAX.equals(fnName))
+                && !collatableColumns.contains(argument)) {
             return false;
         }
         return true;

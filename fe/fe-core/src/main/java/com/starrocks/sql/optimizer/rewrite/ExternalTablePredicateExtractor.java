@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.starrocks.catalog.JDBCTable;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -24,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Predicate;
 
 // Extract predicates that can be pushed down to external table
 // and predicates that must be reserved
@@ -31,12 +31,15 @@ import java.util.List;
 // To be safe, we only allow push down simple  predicates
 public class ExternalTablePredicateExtractor {
 
-    private final JDBCTable.ProtocolType dialect;
+    // Whether one predicate can be rendered as remote SQL. Supplied by the caller, which owns the
+    // dialect and whatever else the decision needs, so splitting a predicate tree stays independent
+    // of what makes a given operator pushable.
+    private final Predicate<ScalarOperator> pushable;
     private List<ScalarOperator> pushedPredicates = new LinkedList<>();
     private List<ScalarOperator> reservedPredicates = new LinkedList<>();
 
-    public ExternalTablePredicateExtractor(JDBCTable.ProtocolType dialect) {
-        this.dialect = dialect;
+    public ExternalTablePredicateExtractor(Predicate<ScalarOperator> pushable) {
+        this.pushable = pushable;
     }
 
     public ScalarOperator getPushPredicate() {
@@ -55,7 +58,7 @@ public class ExternalTablePredicateExtractor {
                     List<ScalarOperator> conjuncts = Utils.extractConjuncts(operator);
                     // for CNF, we can push down each predicate independently
                     for (ScalarOperator conjunct : conjuncts) {
-                        if (CanPushDownPredicateVisitor.canPushDown(conjunct, dialect)) {
+                        if (pushable.test(conjunct)) {
                             pushedPredicates.add(removeImplicitCast(conjunct));
                         } else {
                             reservedPredicates.add(conjunct);
@@ -66,7 +69,7 @@ public class ExternalTablePredicateExtractor {
                 case OR: {
                     // for DNF, pushdown is only possible if all children can be pushed down
                     for (ScalarOperator child : operator.getChildren()) {
-                        if (!CanPushDownPredicateVisitor.canPushDown(child, dialect)) {
+                        if (!pushable.test(child)) {
                             reservedPredicates.add(op);
                             return;
                         }
@@ -75,7 +78,7 @@ public class ExternalTablePredicateExtractor {
                     return;
                 }
                 case NOT: {
-                    if (CanPushDownPredicateVisitor.canPushDown(op.getChild(0), dialect)) {
+                    if (pushable.test(op.getChild(0))) {
                         pushedPredicates.add(removeImplicitCast(op));
                     } else {
                         reservedPredicates.add(op);
@@ -86,7 +89,7 @@ public class ExternalTablePredicateExtractor {
             }
             return;
         }
-        if (CanPushDownPredicateVisitor.canPushDown(op, dialect)) {
+        if (pushable.test(op)) {
 
             pushedPredicates.add(removeImplicitCast(op));
         } else {
