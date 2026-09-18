@@ -174,6 +174,11 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
     }
 
     private boolean isSimpleJDBCColumnRef(ScalarOperator scalarOperator, LogicalJDBCScanOperator scanOperator) {
+        if (((JDBCTable) scanOperator.getTable()).getProtocolType() == JDBCTable.ProtocolType.POSTGRES
+                && scalarOperator.getType().isArrayType()) {
+            // PostgreSQL array grouping/distinct includes dimensions and lower bounds, which SR arrays do not retain.
+            return false;
+        }
         return scalarOperator instanceof ColumnRefOperator &&
                 scanOperator.getColRefToColumnMetaMap().containsKey((ColumnRefOperator) scalarOperator);
     }

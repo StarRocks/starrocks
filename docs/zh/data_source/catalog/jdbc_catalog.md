@@ -87,6 +87,12 @@ StarRocks 会缓存 JDBC 数据源的每张表的行数，以避免在查询规�
 >
 > FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE（或 CN）会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。
 
+### PostgreSQL 字符串数组
+
+使用 `org.postgresql.Driver` 时，PostgreSQL 的 `text[]` 和 `varchar[]` 列映射为 `ARRAY<VARCHAR>`。一维数组保留元素顺序、UTF-8 字符串、NULL 数组、空数组以及 NULL 元素。查询这些列前，需要一起升级 FE、BE/CN、JDBC Bridge 和安装包中的 JDBC 类型映射。
+
+StarRocks 数组的位置从 1 开始，不保留 PostgreSQL 的数组下界。例如 PostgreSQL 的 `[0:1]={a,b}` 读取后为 `["a","b"]`，因此在 StarRocks 中 `items[1]` 返回 `a`。数组下标、数组谓词、按数组值连接以及数组的分组或去重聚合在 StarRocks 中执行。读取多维数组值会返回明确的不支持错误，不会将其展开为一维。其他 PostgreSQL 数组元素类型暂不支持。
+
 ### 创建示例
 
 以下示例创建了五个不同的 JDBC Catalog。

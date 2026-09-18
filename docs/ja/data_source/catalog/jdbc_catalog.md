@@ -86,6 +86,12 @@ StarRocks は JDBC データソースのテーブルごとの行数をキャッ�
 >
 > FEs は JDBC catalog 作成時に JDBC ドライバー JAR パッケージをダウンロードし、BEs または CNs は最初のクエリ時に JDBC ドライバー JAR パッケージをダウンロードします。ダウンロードにかかる時間はネットワークの状況によって異なります。
 
+### PostgreSQL の文字列配列
+
+`org.postgresql.Driver` を使用すると、PostgreSQL の `text[]` と `varchar[]` 列は `ARRAY<VARCHAR>` にマッピングされます。一次元配列の要素順序、UTF-8 文字列、NULL 配列、空配列、NULL 要素は保持されます。これらの列をクエリする前に、FE、BE/CN、JDBC Bridge、およびパッケージ内の JDBC 型マッピングを一緒にアップグレードしてください。
+
+StarRocks 配列の位置は 1 から始まり、PostgreSQL の配列の下限は保持されません。たとえば PostgreSQL の `[0:1]={a,b}` は `["a","b"]` として読み込まれ、StarRocks の `items[1]` は `a` を返します。配列の添字、述語、配列値による結合、および配列のグループ化や重複排除集約は StarRocks で実行されます。多次元配列の読み込みは明示的な未対応エラーとなり、一次元には展開されません。その他の PostgreSQL 配列要素型は未対応です。
+
 ### 例
 
 以下の例では、5 つの異なる JDBC catalog を作成します。

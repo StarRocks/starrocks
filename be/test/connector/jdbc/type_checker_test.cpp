@@ -25,6 +25,44 @@ protected:
     TypeCheckerManager& type_checker_manager_ = TypeCheckerManager::getInstance();
 };
 
+TEST_F(TypeCheckerTest, SupportStringArray) {
+    TypeDescriptor array(TYPE_ARRAY);
+    array.children.emplace_back(TYPE_VARCHAR);
+    SlotDescriptor slot(0, "string_array", array);
+    auto result = type_checker_manager_.checkType("java.util.List", &slot);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(TYPE_ARRAY, result.value());
+}
+
+TEST_F(TypeCheckerTest, RejectUnsupportedArrayElementTypes) {
+    for (auto element_type : {TYPE_INT, TYPE_CHAR, TYPE_ARRAY, TYPE_JSON}) {
+        TypeDescriptor array(TYPE_ARRAY);
+        array.children.emplace_back(element_type);
+        SlotDescriptor slot(0, "unsupported_array", array);
+        auto result = type_checker_manager_.checkType("java.util.List", &slot);
+        ASSERT_FALSE(result.ok());
+        EXPECT_NE(std::string::npos, result.status().message().find("only ARRAY<VARCHAR>"));
+    }
+    SlotDescriptor malformed(0, "no_element_type", TypeDescriptor(TYPE_ARRAY));
+    EXPECT_FALSE(type_checker_manager_.checkType("java.util.List", &malformed).ok());
+    SlotDescriptor scalar(0, "scalar", TypeDescriptor(TYPE_INT));
+    EXPECT_FALSE(type_checker_manager_.checkType("java.util.List", &scalar).ok());
+    TypeDescriptor array(TYPE_ARRAY);
+    array.children.emplace_back(TYPE_VARCHAR);
+    SlotDescriptor slot(0, "string_array", array);
+    EXPECT_FALSE(type_checker_manager_.checkType("java.lang.String", &slot).ok());
+    EXPECT_FALSE(type_checker_manager_.checkType("org.postgresql.jdbc.PgArray", &slot).ok());
+}
+
+TEST_F(TypeCheckerTest, PreserveListScalarFallback) {
+    for (auto type : {TYPE_VARCHAR, TYPE_BINARY, TYPE_VARBINARY}) {
+        SlotDescriptor slot(0, "list_as_string", TypeDescriptor(type));
+        auto result = type_checker_manager_.checkType("java.util.List", &slot);
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ(TYPE_VARCHAR, result.value());
+    }
+}
+
 // Define unit test for java.lang.Byte
 TEST_F(TypeCheckerTest, SupportByteType) {
     SlotDescriptor boolean_type_slot(0, "boolean_type_slot", TypeDescriptor(TYPE_BOOLEAN));

@@ -21,6 +21,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -121,6 +122,13 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
         switch (dataType) {
+            case Types.ARRAY:
+                // PostgreSQL reports built-in array names with an underscore prefix.
+                // Dimensions and lower bounds belong to individual values, not the column type.
+                if ("_text".equalsIgnoreCase(typeName) || "_varchar".equalsIgnoreCase(typeName)) {
+                    return new ArrayType(TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength()));
+                }
+                return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
             case Types.BIT:
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;

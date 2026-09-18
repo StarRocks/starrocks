@@ -86,6 +86,12 @@ StarRocks caches per-table row counts from JDBC sources to avoid blocking query 
 >
 > The FEs download the JDBC driver JAR package at the time of JDBC catalog creation, and the BEs or CNs download the JDBC driver JAR package at the time of the first query. The amount of time taken for the download varies depending on network conditions.
 
+### PostgreSQL string arrays
+
+Using `org.postgresql.Driver`, PostgreSQL `text[]` and `varchar[]` columns map to `ARRAY<VARCHAR>`. One-dimensional values preserve element order, UTF-8 strings, NULL arrays, empty arrays, and NULL elements. Upgrade the FE, BE/CN, JDBC bridge, and packaged JDBC type mappings together before querying these columns.
+
+StarRocks arrays use positions starting at 1. PostgreSQL lower bounds are not retained: for example, PostgreSQL `[0:1]={a,b}` becomes `["a","b"]`, so `items[1]` returns `a` in StarRocks. Array subscripts, predicates, joins on array values, and grouping or distinct aggregation on arrays execute in StarRocks. Multidimensional values fail with an explicit unsupported-array error; they are not flattened. Other PostgreSQL array element types remain unsupported.
+
 ### Examples
 
 The following example creates five different JDBC catalogs.

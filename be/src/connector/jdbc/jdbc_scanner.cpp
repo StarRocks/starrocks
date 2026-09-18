@@ -269,7 +269,7 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
         // so we need to write directly to the intermediate type and then cast to the target type:
         // eg:
         // JDBC(java.sql.Date) -> SR(TYPE_VARCHAR) -> SR(cast(varchar as TYPE_DATE))
-        auto intermediate = TypeDescriptor(ret_type);
+        auto intermediate = ret_type == TYPE_ARRAY ? _slot_descs[i]->type() : TypeDescriptor(ret_type);
         auto result_column = ColumnHelper::create_column(intermediate, true);
         _result_chunk->append_column(std::move(result_column), i);
         auto column_ref = _pool.add(new ColumnRef(intermediate, i));
@@ -361,7 +361,7 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
             auto* result_column = _result_chunk->get_column_raw_ptr_by_index(i);
             auto st = helper.get_result_from_boxed_array(_result_column_types[i], result_column, jcolumn, num_rows);
             RETURN_IF_ERROR(st);
-            down_cast<NullableColumn*>(result_column)->update_has_null();
+            RETURN_IF_ERROR(ColumnHelper::update_nested_has_null(result_column));
         }
     }
 

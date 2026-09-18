@@ -110,9 +110,26 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
                         "Invalid logical type in type-rule: allowed=$0, return=$1", allowed_type_str, return_type_str));
             }
 
+            // Optional: constrain the element type of a complex allowed_type, so a rule can say
+            // ARRAY<VARCHAR> rather than any ARRAY. Absent means unconstrained.
+            LogicalType element_type = TYPE_UNKNOWN;
+            xmlChar* element_type_attr = xmlGetProp(rule_node, BAD_CAST "element_type");
+            if (element_type_attr != nullptr) {
+                std::string element_type_str = reinterpret_cast<const char*>(element_type_attr);
+                xmlFree(element_type_attr);
+                element_type = parse_logical_type(element_type_str);
+                if (element_type == TYPE_UNKNOWN) {
+                    xmlFreeDoc(doc);
+                    xmlCleanupParser();
+                    return Status::InvalidArgument(
+                            strings::Substitute("Invalid logical type in type-rule: element=$0", element_type_str));
+                }
+            }
+
             ConfigurableTypeChecker::TypeRule rule;
             rule.allowed_type = allowed_type;
             rule.return_type = return_type;
+            rule.element_type = element_type;
             mapping.rules.push_back(rule);
         }
 
@@ -148,6 +165,7 @@ LogicalType TypeCheckerXMLLoader::parse_logical_type(const std::string& type_str
             {"TYPE_FLOAT", TYPE_FLOAT},
             {"TYPE_DOUBLE", TYPE_DOUBLE},
             {"TYPE_VARCHAR", TYPE_VARCHAR},
+            {"TYPE_ARRAY", TYPE_ARRAY},
             {"TYPE_CHAR", TYPE_CHAR},
             {"TYPE_VARBINARY", TYPE_VARBINARY},
             {"TYPE_BINARY", TYPE_BINARY},

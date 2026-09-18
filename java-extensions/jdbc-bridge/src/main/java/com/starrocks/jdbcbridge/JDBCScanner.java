@@ -31,6 +31,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -68,6 +69,7 @@ public class JDBCScanner {
     private List<Boolean> postgresTimeWithTimezoneColumns;
     private List<Boolean> postgresTimestampWithTimezoneColumns;
     private List<Class<?>> postgresLocalTemporalColumns;
+    private List<Boolean> postgresStringArrayColumns;
     private List<Object[]> resultChunk;
     private int resultNumRows = 0;
     private final boolean isOracleDriver;
@@ -132,10 +134,25 @@ public class JDBCScanner {
         postgresTimeWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresTimestampWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresLocalTemporalColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
+        postgresStringArrayColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
             String typeName = resultSetMetaData.getColumnTypeName(i);
             String className = resultSetMetaData.getColumnClassName(i);
+            boolean isPostgresStringArray = isPostgresStringArrayColumn(resultSetMetaData.getColumnType(i), typeName);
+            postgresStringArrayColumns.add(isPostgresStringArray);
+            if (isPostgresStringArray) {
+                // The bridge exposes its converted representation to the BE type checker.
+                resultColumnClassNames.add(List.class.getName());
+                resultChunk.add(new List<?>[scanContext.getStatementFetchSize()]);
+                postgresTimeWithTimezoneColumns.add(false);
+                postgresTimestampWithTimezoneColumns.add(false);
+                // Every per-column list is indexed by ordinal in getNextChunk, so each one has to
+                // gain an entry for this column too -- skipping this one would shift every later
+                // column's temporal class down by one and make an array column read as a timestamp.
+                postgresLocalTemporalColumns.add(null);
+                continue;
+            }
             boolean isPostgresTimeWithTimezone = isPostgresTimeWithTimezoneTypeName(typeName);
             boolean isPostgresTimestampWithTimezone = isPostgresTimestampWithTimezoneTypeName(typeName);
             postgresTimeWithTimezoneColumns.add(isPostgresTimeWithTimezone);
@@ -174,6 +191,30 @@ public class JDBCScanner {
 
     private static String computeCacheKey(String username, String password, String jdbcUrl) {
         return username + "/" + password + "/" + jdbcUrl;
+    }
+
+    private boolean isPostgresStringArrayColumn(int jdbcType, String typeName) {
+        return isPostgresDriver && jdbcType == Types.ARRAY
+                && ("_text".equalsIgnoreCase(typeName) || "_varchar".equalsIgnoreCase(typeName));
+    }
+
+    private List<String> readPostgresStringArray(int columnIndex) throws SQLException {
+        java.sql.Array array = resultSet.getArray(columnIndex);
+        if (array == null) {
+            return null;
+        }
+        try {
+            Object value = array.getArray();
+            // pgJDBC returns String[] for one dimension and String[][] (etc.) for multiple dimensions.
+            // The JDBC array representation discards PostgreSQL lower bounds: SR arrays start at 1.
+            if (!(value instanceof String[])) {
+                throw new SQLException("Unsupported PostgreSQL array on column[" + columnIndex
+                        + "]: only one-dimensional text[] and varchar[] values are supported");
+            }
+            return Arrays.asList((String[]) value);
+        } finally {
+            array.free();
+        }
     }
 
     private void initOracleSessionTimeZoneIfNeeded() throws Exception {
@@ -314,10 +355,16 @@ public class JDBCScanner {
         do {
             for (int i = 0; i < columnCount; i++) {
                 Object[] dataColumn = resultChunk.get(i);
+                // A column carries at most one of these strict reads: the temporal one keys off a
+                // date/timestamp type name, the array one off a PostgreSQL array type.
                 Class<?> localTemporalClass = postgresLocalTemporalColumns == null
                         ? null : postgresLocalTemporalColumns.get(i);
                 if (localTemporalClass != null) {
                     dataColumn[resultNumRows] = readPostgresLocalTemporalValue(i, localTemporalClass);
+                    continue;
+                }
+                if (postgresStringArrayColumns != null && postgresStringArrayColumns.get(i)) {
+                    dataColumn[resultNumRows] = readPostgresStringArray(i + 1);
                     continue;
                 }
                 Object resultObject = resultSet.getObject(i + 1);

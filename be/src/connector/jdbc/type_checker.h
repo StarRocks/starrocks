@@ -84,6 +84,9 @@ public:
     struct TypeRule {
         LogicalType allowed_type; // Input type that's allowed
         LogicalType return_type;  // What to return when this type is matched
+        // Optional: the single element type a complex allowed_type must carry. TYPE_UNKNOWN
+        // leaves the slot's element types unconstrained, which is what a scalar rule wants.
+        LogicalType element_type = TYPE_UNKNOWN;
     };
 
     ConfigurableTypeChecker(std::string display_name, std::vector<TypeRule> rules)

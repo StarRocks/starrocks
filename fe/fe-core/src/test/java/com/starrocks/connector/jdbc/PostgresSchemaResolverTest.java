@@ -330,4 +330,17 @@ public class PostgresSchemaResolverTest {
         long count = resolver.getTableRowCount(connection, "public", "orders");
         Assertions.assertEquals(-1L, count, "Should return -1 when reltuples is NULL");
     }
+    @Test
+    public void testPostgresStringArrayMapping() {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        for (String typeName : List.of("_text", "_varchar", "_TEXT", "_VARCHAR")) {
+            com.starrocks.type.Type type = resolver.convertColumnType(Types.ARRAY, typeName, 0, 0);
+            Assertions.assertTrue(type.isArrayType(), typeName);
+            Assertions.assertTrue(((com.starrocks.type.ArrayType) type).getItemType().isVarchar());
+        }
+        for (String typeName : Arrays.asList("_int4", "_bpchar", "_jsonb", "text", "text[]", null)) {
+            Assertions.assertEquals(com.starrocks.type.PrimitiveType.UNKNOWN_TYPE,
+                    resolver.convertColumnType(Types.ARRAY, typeName, 0, 0).getPrimitiveType(), typeName);
+        }
+    }
 }

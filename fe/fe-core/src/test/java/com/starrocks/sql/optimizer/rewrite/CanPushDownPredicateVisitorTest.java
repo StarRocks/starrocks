@@ -141,4 +141,17 @@ public class CanPushDownPredicateVisitorTest {
         // A cap set below the list size keeps it local — on Oracle just like the other dialects.
         Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in1001, ProtocolType.ORACLE, 1000));
     }
+    @Test
+    public void testPostgresArraysStayLocal() {
+        com.starrocks.type.ArrayType type = new com.starrocks.type.ArrayType(VarcharType.VARCHAR);
+        ColumnRefOperator array = new ColumnRefOperator(2, type, "items", true);
+        assertPush(array, ProtocolType.POSTGRES, false);
+        assertPush(new BinaryPredicateOperator(BinaryType.EQ, array, array), ProtocolType.POSTGRES, false);
+        assertPush(new com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator(false, array),
+                ProtocolType.POSTGRES, false);
+        assertPush(ConstantOperator.createNull(type), ProtocolType.POSTGRES, false);
+        assertPush(new com.starrocks.sql.optimizer.operator.scalar.CastOperator(VarcharType.VARCHAR, array),
+                ProtocolType.POSTGRES, false);
+        assertPush(COL, ProtocolType.POSTGRES, true);
+    }
 }

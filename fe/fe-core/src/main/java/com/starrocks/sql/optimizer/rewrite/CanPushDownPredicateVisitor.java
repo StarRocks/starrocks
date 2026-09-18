@@ -236,6 +236,18 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
      */
     public static class PostgresPushDownGate extends CanPushDownPredicateVisitor {
         @Override
+        public Boolean visitVariableReference(ColumnRefOperator op, Void ctx) {
+            // Reading rebases PostgreSQL array bounds to 1. Array comparison and indexing must
+            // therefore use SR semantics, including in predicates, joins and projections.
+            return !op.getType().isArrayType();
+        }
+
+        @Override
+        public Boolean visitConstant(ConstantOperator op, Void ctx) {
+            return !op.getType().isArrayType();
+        }
+
+        @Override
         protected JDBCTable.ProtocolType dialect() {
             return JDBCTable.ProtocolType.POSTGRES;
         }

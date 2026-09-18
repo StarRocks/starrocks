@@ -10,6 +10,9 @@
   - display_name: Human-readable name for error messages
   - <type-rule> child elements defining allowed type conversions
   
+  A <type-rule> may also carry an optional element_type, which constrains the single
+  element type a complex allowed_type must have (ARRAY<VARCHAR> rather than any ARRAY).
+
   Each <type-rule> specifies:
   - allowed_type: StarRocks type that can accept this Java type
   - return_type: StarRocks type to return for this conversion
@@ -80,6 +83,15 @@
     <type-rule allowed_type="TYPE_JSON" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
+  <!-- PostgreSQL string arrays converted by JDBCScanner to List<String>. -->
+  <type-mapping java_class="java.util.List" display_name="List">
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_VARCHAR"/>
+    <!-- Preserve the scalar fallback used by drivers whose List values are read through getString. -->
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+
   <!-- java.sql.Timestamp type -->
   <type-mapping java_class="java.sql.Timestamp" display_name="Timestamp">
     <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>

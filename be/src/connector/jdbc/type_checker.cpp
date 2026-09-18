@@ -26,6 +26,15 @@ StatusOr<LogicalType> ConfigurableTypeChecker::check(const std::string& java_cla
     // Check if the slot type matches any of our configured rules
     for (const auto& rule : _rules) {
         if (type == rule.allowed_type) {
+            if (rule.element_type != TYPE_UNKNOWN) {
+                const auto& children = slot_desc->type().children;
+                if (children.size() != 1 || children[0].type != rule.element_type) {
+                    return Status::NotSupported(
+                            fmt::format("Unsupported element type on column[{}]: {} accepts only {}<{}>",
+                                        slot_desc->col_name(), _display_name, logical_type_to_string(rule.allowed_type),
+                                        logical_type_to_string(rule.element_type)));
+                }
+            }
             return rule.return_type;
         }
     }

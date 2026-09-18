@@ -157,6 +157,45 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadMalformedXMLMissingAttributes) {
     EXPECT_TRUE(result.status().is_invalid_argument());
 }
 
+// Test the optional element_type attribute: present constrains, absent does not
+TEST_F(TypeCheckerXMLLoaderTest, LoadOptionalElementType) {
+    std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
+<type-checkers>
+  <type-mapping java_class="java.util.List" display_name="List">
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+</type-checkers>)";
+
+    std::string xml_file = "/tmp/type_checker_test/element_type.xml";
+    create_test_xml(xml_file, xml_content);
+
+    auto result = TypeCheckerXMLLoader::load_from_xml(xml_file);
+    ASSERT_TRUE(result.ok());
+
+    const auto& rules = result.value()[0].rules;
+    ASSERT_EQ(rules.size(), 2);
+    EXPECT_EQ(rules[0].element_type, TYPE_VARCHAR);
+    EXPECT_EQ(rules[1].element_type, TYPE_UNKNOWN);
+}
+
+// Test that an unparsable element_type is rejected rather than silently unconstrained
+TEST_F(TypeCheckerXMLLoaderTest, LoadInvalidElementType) {
+    std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
+<type-checkers>
+  <type-mapping java_class="java.util.List" display_name="List">
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_NOT_A_TYPE"/>
+  </type-mapping>
+</type-checkers>)";
+
+    std::string xml_file = "/tmp/type_checker_test/bad_element_type.xml";
+    create_test_xml(xml_file, xml_content);
+
+    auto result = TypeCheckerXMLLoader::load_from_xml(xml_file);
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
 // Test loading empty XML file
 TEST_F(TypeCheckerXMLLoaderTest, LoadEmptyXML) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>

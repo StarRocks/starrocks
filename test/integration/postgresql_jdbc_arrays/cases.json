@@ -1,0 +1,146 @@
+[
+  {
+    "name": "text_values",
+    "sr": "SELECT id, array_map(x -> hex(x), items) FROM {table} ORDER BY id",
+    "pg": "SELECT id, CASE WHEN items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(items) WITH ORDINALITY u(v,n) ORDER BY n))::text END FROM p ORDER BY id",
+    "array_operation": false
+  },
+  {
+    "name": "varchar_values",
+    "sr": "SELECT id, array_map(x -> hex(x), labels) FROM {table} ORDER BY id",
+    "pg": "SELECT id, CASE WHEN labels IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(labels) WITH ORDINALITY u(v,n) ORDER BY n))::text END FROM p ORDER BY id",
+    "array_operation": false
+  },
+  {
+    "name": "array_lengths",
+    "sr": "SELECT id, array_length(items), array_length(labels) FROM {table} ORDER BY id",
+    "pg": "SELECT id, cardinality(items), cardinality(labels) FROM p ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "subscript_1",
+    "sr": "SELECT id, hex(items[1]), hex(labels[1]) FROM {table} ORDER BY id",
+    "pg": "SELECT id, upper(encode(convert_to(items[1], 'UTF8'),'hex')), upper(encode(convert_to(labels[1], 'UTF8'),'hex')) FROM p ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "subscript_2",
+    "sr": "SELECT id, hex(items[2]), hex(labels[2]) FROM {table} ORDER BY id",
+    "pg": "SELECT id, upper(encode(convert_to(items[2], 'UTF8'),'hex')), upper(encode(convert_to(labels[2], 'UTF8'),'hex')) FROM p ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "subscript_3",
+    "sr": "SELECT id, hex(items[3]), hex(labels[3]) FROM {table} ORDER BY id",
+    "pg": "SELECT id, upper(encode(convert_to(items[3], 'UTF8'),'hex')), upper(encode(convert_to(labels[3], 'UTF8'),'hex')) FROM p ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "subscript_0",
+    "sr": "SELECT id, hex(items[0]), hex(labels[0]) FROM {table} ORDER BY id",
+    "pg": "SELECT id, upper(encode(convert_to(items[0], 'UTF8'),'hex')), upper(encode(convert_to(labels[0], 'UTF8'),'hex')) FROM p ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "subscript_minus1",
+    "sr": "SELECT id, hex(items[-1]), hex(labels[-1]) FROM {table} ORDER BY id",
+    "pg": "SELECT id, upper(encode(convert_to(items[-1], 'UTF8'),'hex')), upper(encode(convert_to(labels[-1], 'UTF8'),'hex')) FROM p ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "subscript_99",
+    "sr": "SELECT id, hex(items[99]), hex(labels[99]) FROM {table} ORDER BY id",
+    "pg": "SELECT id, upper(encode(convert_to(items[99], 'UTF8'),'hex')), upper(encode(convert_to(labels[99], 'UTF8'),'hex')) FROM p ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "subscript_filter",
+    "sr": "SELECT id FROM {table} WHERE items[1] = 'abc' ORDER BY id",
+    "pg": "SELECT id FROM p WHERE items[1] = 'abc' ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "null_arrays",
+    "sr": "SELECT id FROM {table} WHERE items IS NULL ORDER BY id",
+    "pg": "SELECT id FROM p WHERE items IS NULL ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "null_elements",
+    "sr": "SELECT id FROM {table} WHERE items[1] IS NULL ORDER BY id",
+    "pg": "SELECT id FROM p WHERE items[1] IS NULL ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "mixed_scalar_filter",
+    "sr": "SELECT id, array_map(x -> hex(x), items) FROM {table} WHERE id < 10 AND items[1] = 'abc' ORDER BY id",
+    "pg": "SELECT id, CASE WHEN items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(items) WITH ORDINALITY u(v,n) ORDER BY n))::text END FROM p WHERE id < 10 AND items[1] = 'abc' ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "scalar_filter_with_array_output",
+    "sr": "SELECT id, array_map(x -> hex(x), items) FROM {table} WHERE id >= 2240 ORDER BY id",
+    "pg": "SELECT id, CASE WHEN items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(items) WITH ORDINALITY u(v,n) ORDER BY n))::text END FROM p WHERE id >= 2240 ORDER BY id",
+    "array_operation": false
+  },
+  {
+    "name": "group_arrays",
+    "sr": "SELECT array_map(x -> hex(x), items), COUNT(*) n FROM {table} WHERE id IN (1,6,7,8) GROUP BY items",
+    "pg": "SELECT CASE WHEN items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(items) WITH ORDINALITY u(v,n) ORDER BY n))::text END, COUNT(*) n FROM p WHERE id IN (1,6,7,8) GROUP BY items",
+    "array_operation": true
+  },
+  {
+    "name": "distinct_arrays",
+    "sr": "SELECT DISTINCT array_map(x -> hex(x), items) FROM {table} WHERE id IN (1,6,7,8)",
+    "pg": "SELECT DISTINCT CASE WHEN items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(items) WITH ORDINALITY u(v,n) ORDER BY n))::text END FROM p WHERE id IN (1,6,7,8)",
+    "array_operation": true
+  },
+  {
+    "name": "count_distinct_arrays",
+    "sr": "SELECT COUNT(DISTINCT items) FROM {table} WHERE id IN (1,6,7,8)",
+    "pg": "SELECT COUNT(DISTINCT items) FROM p WHERE id IN (1,6,7,8)",
+    "array_operation": true
+  },
+  {
+    "name": "array_equal_join",
+    "sr": "SELECT a.id, b.id FROM {table} a JOIN {table} b ON a.items = b.items WHERE a.id = 1 AND b.id IN (6,7,8) ORDER BY a.id,b.id",
+    "pg": "SELECT a.id, b.id FROM p a JOIN p b ON a.items = b.items WHERE a.id = 1 AND b.id IN (6,7,8) ORDER BY a.id,b.id",
+    "array_operation": true
+  },
+  {
+    "name": "scalar_join_array_output",
+    "sr": "SELECT a.id, array_map(x -> hex(x), b.items) FROM {table} a JOIN {table} b ON a.id = b.id WHERE a.id < 10 ORDER BY a.id",
+    "pg": "SELECT a.id, CASE WHEN b.items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(b.items) WITH ORDINALITY u(v,n) ORDER BY n))::text END FROM p a JOIN p b ON a.id = b.id WHERE a.id < 10 ORDER BY a.id",
+    "array_operation": false
+  },
+  {
+    "name": "empty_result",
+    "sr": "SELECT array_map(x -> hex(x), items) FROM {table} WHERE id < 0",
+    "pg": "SELECT CASE WHEN items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(items) WITH ORDINALITY u(v,n) ORDER BY n))::text END FROM p WHERE id < 0",
+    "array_operation": false
+  },
+  {
+    "name": "local_array_filter_limit",
+    "sr": "SELECT id FROM {table} WHERE items[1] = 'abc' ORDER BY id LIMIT 2",
+    "pg": "SELECT id FROM p WHERE items[1] = 'abc' ORDER BY id LIMIT 2",
+    "array_operation": true
+  },
+  {
+    "name": "contains_string",
+    "sr": "SELECT id FROM {table} WHERE array_contains(items, 'abc') ORDER BY id",
+    "pg": "SELECT id FROM p WHERE EXISTS (SELECT 1 FROM unnest(items) u(v) WHERE v = 'abc') ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "contains_null_element",
+    "sr": "SELECT id FROM {table} WHERE array_contains(items, NULL) ORDER BY id",
+    "pg": "SELECT id FROM p WHERE array_position(items, NULL) IS NOT NULL ORDER BY id",
+    "array_operation": true
+  },
+  {
+    "name": "group_null_empty_arrays",
+    "sr": "SELECT array_map(x -> hex(x), items), COUNT(*) n FROM {table} WHERE id < 10 GROUP BY items ORDER BY array_length(items) NULLS FIRST",
+    "pg": "SELECT CASE WHEN items IS NULL THEN NULL ELSE array_to_json(ARRAY(SELECT upper(encode(convert_to(v, 'UTF8'), 'hex')) FROM unnest(items) WITH ORDINALITY u(v,n) ORDER BY n))::text END, COUNT(*) n FROM p WHERE id < 10 GROUP BY items ORDER BY cardinality(items) NULLS FIRST",
+    "array_operation": true
+  }
+]
