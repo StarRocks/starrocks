@@ -299,7 +299,12 @@ set(EXEC_FILES
         ./geo/wkt_parse_test.cpp
         ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
+<<<<<<< HEAD
         ./http/ev_http_server_test.cpp
+=======
+        ./http/dump_tablet_metadata_action_test.cpp
+        ./http/greplog_action_test.cpp
+>>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
         ./http/handler_required_privilege_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
