@@ -918,8 +918,8 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testCoalesceCarriesNonMcvRowsInABucket() {
-        // Given COALESCE(input1, input2) over 1000 rows, where input1 is 20% null with 300 rows in
-        // one MCV and input2 is 50% null with no MCV, so the result is 10% null and 900 rows survive
+        // Given COALESCE(input1, input2) on 1000 rows, where input1 is 20% null with 300 rows in
+        // MCV and input2 is 50% null with no MCV, so the result is 10% null and 900 rows survive
         // CASE WHEN the coalesce propagates MCVs THEN it also carries the 600 non-MCV rows in a
         // bucket over the merged range, instead of reporting only its MCV rows END
 
