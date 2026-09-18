@@ -708,3 +708,4 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - FULL OUTER JOIN USING 现在遵循 SQL 标准语义：USING 列在输出中只出现一次，而不是两次。[#65122](https://github.com/StarRocks/starrocks/pull/65122)
 - `query_queue_v2` 现已默认启用。[#67462](https://github.com/StarRocks/starrocks/pull/67462)
 - SQL 事务默认通过会话变量 `enable_sql_transaction` 进行控制。[#63535](https://github.com/StarRocks/starrocks/pull/63535)
+- 此前，FE 配置项 `max_scalar_operator_flat_children`（默认值 `10000`）仅在构造 `CASE WHEN` 表达式时校验节点数。现在，优化器重写的所有标量表达式都会校验，且节点数在每次重写后重新计算，不再复用缓存值。因此，升级后此前可以正常执行的查询可能在分析阶段报错 `Expression too complex. Current nodes: N, Limit: M.`，通常出现在内联视图、CTE 或子查询导致表达式树膨胀的场景。如遇此报错，可简化表达式，或调大 `max_scalar_operator_flat_children`（支持动态修改）。[#66324](https://github.com/StarRocks/starrocks/pull/66324)
