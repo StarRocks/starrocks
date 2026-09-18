@@ -1635,7 +1635,7 @@ public class ExpressionStatisticCalculator {
                 newMcv.merge(outConst.get().toString(), e.getValue(), Long::sum);
             }
 
-            return Optional.of(new Histogram(newBuckets, newMcv));
+            return Optional.of(newBuckets.isEmpty() ? new Histogram(newMcv) : new Histogram(newBuckets, newMcv));
         }
 
         /**
@@ -1758,7 +1758,7 @@ public class ExpressionStatisticCalculator {
                 }
             }
 
-            return Optional.of(new Histogram(newBuckets, newMcv));
+            return Optional.of(newBuckets.isEmpty() ? new Histogram(newMcv) : new Histogram(newBuckets, newMcv));
         }
 
         private Optional<ConstantOperator> toConstantOperator(ScalarOperator op) {
