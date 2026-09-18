@@ -14,6 +14,14 @@
 
 #include "platform/aws/poco_http_client.h"
 
+#include <Poco/Exception.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPResponse.h>
+#include <Poco/Net/NetSSL.h>
+#include <Poco/Net/ServerSocket.h>
+#include <Poco/Net/SocketAddress.h>
+#include <Poco/Net/StreamSocket.h>
+#include <Poco/Timestamp.h>
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/client/DefaultRetryStrategy.h>
@@ -22,9 +30,12 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "common/config_object_storage_fwd.h"
@@ -304,6 +315,62 @@ TEST(PocoSessionTimeoutTest, KeepAliveTimeoutIsLeftAlone) {
     apply_request_timeouts(session, timeouts);
 
     EXPECT_EQ(before.totalMicroseconds(), session.getKeepAliveTimeout().totalMicroseconds());
+}
+
+// A peer that completes the TCP handshake and then never answers -- the half-open flow a NAT
+// leaves behind when it forgets an idle entry -- used to cost connect_timeout + 2 x receive_timeout
+// on a single socket. The TLS handshake spent the connect timeout without failing, because
+// connectSSL() discarded the ERR_SSL_WANT_READ that handleError() returns instead of throwing; the
+// first write then re-entered the handshake for a full receive timeout; and mustRetry() polled for
+// another full receive timeout on top before giving up. With the timeouts below that is 1 + 5 + 5
+// seconds to fail a request the caller asked to bound at 5, and with the defaults a stalled
+// PutObject cost 30 + 60 + 60 on a production CN. Fixed in thirdparty/patches, so this test only
+// passes against a Poco built with that patch applied.
+TEST(PocoSessionTimeoutTest, StalledPeerCostsOneTimeoutNotThree) {
+    Poco::Net::initializeSSL();
+
+    // Accept connections and hold them open without ever writing a byte.
+    Poco::Net::ServerSocket listener(Poco::Net::SocketAddress("127.0.0.1", 0));
+    std::atomic<bool> stop{false};
+    std::vector<Poco::Net::StreamSocket> accepted;
+    std::thread acceptor([&] {
+        while (!stop.load(std::memory_order_relaxed)) {
+            if (listener.poll(Poco::Timespan(0, 100 * 1000), Poco::Net::Socket::SELECT_READ)) {
+                accepted.push_back(listener.acceptConnection());
+            }
+        }
+    });
+
+    const Poco::Timespan connect(1 * 1000000);
+    const Poco::Timespan request(5 * 1000000);
+    const Poco::URI uri("https://127.0.0.1:" + std::to_string(listener.address().port()) + "/");
+
+    Poco::Timestamp started;
+    {
+        auto session = makeHTTPSession(uri, ConnectionTimeouts(connect, request, request), false);
+        Poco::Net::HTTPRequest req(Poco::Net::HTTPRequest::HTTP_GET, "/", Poco::Net::HTTPMessage::HTTP_1_1);
+        Poco::Net::HTTPResponse response;
+        EXPECT_THROW(
+                {
+                    session->sendRequest(req);
+                    session->receiveResponse(response);
+                },
+                Poco::TimeoutException);
+    }
+    const int64_t elapsed_us = started.elapsed();
+
+    stop.store(true, std::memory_order_relaxed);
+    acceptor.join();
+
+    // Lower bound: the request has to have actually waited on the peer, so a session that fails
+    // for some unrelated reason does not pass this test by being fast.
+    EXPECT_GE(elapsed_us, connect.totalMicroseconds() / 2)
+            << "gave up after " << elapsed_us / 1000000.0 << " s, before it could have reached the peer";
+    // Upper bound: one timeout, not three. Unpatched Poco takes connect + 2 x receive = 11 s here.
+    EXPECT_LT(elapsed_us, (connect + request).totalMicroseconds())
+            << "one stalled connection took " << elapsed_us / 1000000.0 << " s";
+
+    Poco::Net::uninitializeSSL();
 }
 
 } // namespace starrocks::poco
