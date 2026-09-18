@@ -5,11 +5,19 @@ on:
   # build (per-branch, keyed by commit sha) and OSS auto-deletes those packages
   # after 3 days, so the schedule must run to keep a fresh package available for
   # each reviewed branch (main, branch-4.0.x, branch-4.1.x).
+  # Times are UTC; Beijing is UTC+8. Every trigger sits in the Beijing 23:00-06:00
+  # window: a full run takes ~3h, and these used to hold the runners through the
+  # morning (08:00-11:00) and the afternoon (12:30-15:30). Triggers are spaced 3h
+  # apart so the runs queue rather than pile up.
+  #
+  # Anything at or after 16:00 UTC is the PREVIOUS UTC day in Beijing, hence the
+  # shifted day-of-week fields below. inspection_params.py derives its weekday from
+  # Beijing time explicitly, so "Monday"/"Wednesday" keep their meaning.
   schedule:
-    - cron: "0 0 * * 1-5"
-    - cron: "30 4 * * 1-5"
-    - cron: "0 11 * * 1,3,5"
-    - cron: "0 11 * * 2,4"
+    - cron: "0 15 * * 1-5"    # 23:00 Beijing Mon-Fri        - main
+    - cron: "0 18 * * 0,2,4"  # 02:00 Beijing Mon/Wed/Fri    - latest release branch
+    - cron: "0 18 * * 1,3"    # 02:00 Beijing Tue/Thu        - previous release branch
+    - cron: "0 21 * * 0-4"    # 05:00 Beijing Mon-Fri        - main (ARM on Wednesday)
   workflow_dispatch:
     inputs:
       BRANCH:
