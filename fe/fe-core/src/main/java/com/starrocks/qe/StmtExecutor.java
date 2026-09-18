@@ -432,6 +432,7 @@ public class StmtExecutor {
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
+        summaryProfile.addInfoString(ProfileManager.CUSTOM_QUERY_ID, context.getCustomQueryId());
         summaryProfile.addInfoString(ProfileManager.START_TIME,
                 TimeUtils.longToTimeStringWithTimeZone(context.getStartTime(), profileZone));
 
