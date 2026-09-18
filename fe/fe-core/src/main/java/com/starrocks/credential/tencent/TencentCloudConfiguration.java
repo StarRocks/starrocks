@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -31,6 +32,11 @@ public class TencentCloudConfiguration extends CloudConfiguration {
     public TencentCloudConfiguration(TencentCloudCredential tencentCloudCredential) {
         Preconditions.checkNotNull(tencentCloudCredential);
         this.tencentCloudCredential = tencentCloudCredential;
+    }
+
+    @Override
+    public CloudCredential getCloudCredential() {
+        return tencentCloudCredential;
     }
 
     // reuse aws client logic of BE

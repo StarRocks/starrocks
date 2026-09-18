@@ -68,6 +68,11 @@ public class CloudConfiguration {
         return CloudType.DEFAULT;
     }
 
+    // The credential this configuration was built from; null for the DEFAULT configuration.
+    public CloudCredential getCloudCredential() {
+        return null;
+    }
+
     // Convert to the protobuf used by staros.
     public FileStoreInfo toFileStoreInfo() {
         return null;

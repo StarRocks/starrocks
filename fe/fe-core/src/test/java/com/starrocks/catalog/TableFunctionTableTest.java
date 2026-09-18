@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -581,6 +582,46 @@ public class TableFunctionTableTest {
                     "Illegal value of auto_detect_types: notaboolean, only true/false allowed",
                     () -> new TableFunctionTable(properties)
             );
+        }
+    }
+
+    @Test
+    public void testRequireExplicitCredentials() {
+        boolean saved = Config.files_require_explicit_credentials;
+        Config.files_require_explicit_credentials = true;
+        try {
+            // query / load: rejected before any listing when no credential is supplied
+            Map<String, String> noCredentials = newProperties();
+            noCredentials.put("path", "s3://bucket/dir/*");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "files_require_explicit_credentials", () -> new TableFunctionTable(noCredentials));
+
+            Map<String, String> instanceProfile = newProperties();
+            instanceProfile.put("path", "s3://bucket/dir/*");
+            instanceProfile.put("aws.s3.use_instance_profile", "true");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "instance profile", () -> new TableFunctionTable(instanceProfile));
+
+            // unload
+            Map<String, String> unload = new HashMap<>();
+            unload.put("path", "s3://bucket/dir/");
+            unload.put("format", "parquet");
+            unload.put("aws.s3.use_instance_profile", "true");
+            unload.put("aws.s3.iam_role_arn", "arn:aws:iam::123456789012:role/r");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "instance profile",
+                    () -> new TableFunctionTable(new ArrayList<>(), unload, new SessionVariable()));
+
+            unload.remove("aws.s3.use_instance_profile");
+            unload.put("aws.s3.access_key", "ak");
+            unload.put("aws.s3.secret_key", "sk");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "iam_role_arn",
+                    () -> new TableFunctionTable(new ArrayList<>(), unload, new SessionVariable()));
+
+            unload.remove("aws.s3.iam_role_arn");
+            ExceptionChecker.expectThrowsNoException(
+                    () -> new TableFunctionTable(new ArrayList<>(), unload, new SessionVariable()));
+        } finally {
+            Config.files_require_explicit_credentials = saved;
         }
     }
 }

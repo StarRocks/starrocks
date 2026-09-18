@@ -1156,6 +1156,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 - Introduced in: -
 
+### `files_require_explicit_credentials`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether the FILES() table function accepts only storage credentials written in its own properties, for example `aws.s3.access_key` and `aws.s3.secret_key`, `azure.blob.shared_key`, or `gcp.gcs.service_account_private_key`. When set to `true`, a statement is rejected before StarRocks accesses storage if it relies on the identity of the FE or CN/BE node (`aws.s3.use_instance_profile`, `aws.s3.use_aws_sdk_default_behavior`, `aws.s3.use_web_identity_token_file`, `azure.blob.oauth2_use_managed_identity`, `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_token_file`, `azure.adls1.use_managed_service_identity`, `gcp.gcs.use_compute_engine_service_account`, or no credential at all), or if it chains through another principal (`aws.s3.iam_role_arn`, `gcp.gcs.impersonation_service_account`). The credentials must also match the cloud the path scheme resolves to. Path schemes must be written in lowercase, and properties in the Hadoop namespaces (`fs.*`, `hadoop.*`, `dfs.*`, `ipc.*`, `io.*`, `viewfs.*`, `yarn.*`, `mapreduce.*`, `mapred.*`) are refused, because they are resolved against the node's own configuration. Supported path schemes are `s3://`, `s3a://`, `oss://`, `cosn://`, `gs://`, `wasb://`, and `wasbs://`. Anything opened through a Hadoop client is out of scope, because such a client resolves whatever the properties do not supply from the node's `core-site.xml` and `hdfs-site.xml`: `hdfs://` is always rejected, and so are the Azure schemes `abfs://`, `abfss://`, `adl://`, `azblob://`, and `adls2://`. A `wasb://` or `wasbs://` path is accepted only while [`azure_use_native_sdk`](./shared_lake_other.md#azure_use_native_sdk) is enabled, since only then is the path served by the native Azure SDK, which takes the account from the path and the credential from the `azure.blob.*` properties alone. Applies to SELECT, INSERT, CTAS, and DESC over FILES() and to INSERT INTO FILES().
+- Introduced in: -
+
 ### `finish_transaction_default_lock_timeout_ms`
 
 - Default: 1000

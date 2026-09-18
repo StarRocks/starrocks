@@ -17,6 +17,7 @@ package com.starrocks.credential.aws;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -65,6 +66,11 @@ public class AwsCloudConfiguration extends CloudConfiguration {
 
     public AwsCloudCredential getAwsCloudCredential() {
         return this.awsCloudCredential;
+    }
+
+    @Override
+    public CloudCredential getCloudCredential() {
+        return awsCloudCredential;
     }
 
     @Override

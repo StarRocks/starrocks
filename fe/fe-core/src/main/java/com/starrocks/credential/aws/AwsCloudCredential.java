@@ -53,6 +53,7 @@ import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.DEFAULT_AWS_REGION;
@@ -302,6 +303,23 @@ public class AwsCloudCredential implements CloudCredential {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        if (useAWSSDKDefaultBehavior) {
+            return Optional.of("AWS SDK default credential chain (use_aws_sdk_default_behavior)");
+        }
+        if (useInstanceProfile) {
+            return Optional.of("instance profile (use_instance_profile)");
+        }
+        if (useWebIdentityProfile) {
+            return Optional.of("web identity token file (use_web_identity_token_file)");
+        }
+        if (!iamRoleArn.isEmpty()) {
+            return Optional.of("IAM role assumption (iam_role_arn)");
+        }
+        return Optional.empty();
     }
 
     @Override

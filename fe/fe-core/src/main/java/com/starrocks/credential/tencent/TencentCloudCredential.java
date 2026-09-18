@@ -20,6 +20,7 @@ import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -50,6 +51,11 @@ public class TencentCloudCredential implements CloudCredential {
     @Override
     public boolean validate() {
         return !this.accessKey.isEmpty() && !this.secretKey.isEmpty() && !this.endpoint.isEmpty();
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        return Optional.empty();
     }
 
     // reuse aws client logic of BE

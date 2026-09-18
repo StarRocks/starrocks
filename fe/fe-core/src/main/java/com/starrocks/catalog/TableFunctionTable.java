@@ -19,6 +19,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -26,11 +27,13 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.credential.ExplicitCredentialPolicy;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
@@ -233,6 +236,10 @@ public class TableFunctionTable extends Table {
         this.properties = properties;
 
         parseProperties();
+        Optional<String> credentialViolation = checkExplicitCredentials();
+        if (credentialViolation.isPresent()) {
+            throw new DdlException(credentialViolation.get());
+        }
 
         if (listFilesOnly) {
             this.filesTableType = FilesTableType.LIST;
@@ -255,6 +262,9 @@ public class TableFunctionTable extends Table {
         this.properties = properties;
         this.filesTableType = FilesTableType.UNLOAD;
         parsePropertiesForUnload(columns, sessionVariable);
+        checkExplicitCredentials().ifPresent(violation -> {
+            throw new SemanticException(violation);
+        });
         setNewFullSchema(columns);
     }
 
@@ -461,6 +471,25 @@ public class TableFunctionTable extends Table {
         } else {
             parsePropertiesForLoad(properties);
         }
+    }
+
+    // Runs before the FE lists the path or asks a BE to sample the schema, so a rejected statement never
+    // reaches remote storage with the node's own identity.
+    private Optional<String> checkExplicitCredentials() {
+        if (!Config.files_require_explicit_credentials) {
+            return Optional.empty();
+        }
+        Optional<String> violation = ExplicitCredentialPolicy.check(path, properties);
+        violation.ifPresent(reason -> {
+            ConnectContext ctx = ConnectContext.get();
+            // The path is user-controlled and can carry a SAS token or confidential object names, so
+            // only its scheme and authority are logged. The user and the reason are kept intact.
+            LOG.warn("reject FILES() without explicit credentials, user: {}, path: {}, reason: {}",
+                    ctx == null ? null : ctx.getCurrentUserIdentity(),
+                    ExplicitCredentialPolicy.redactPathList(path), reason);
+        });
+        return violation.map(reason -> "FILES() requires explicit storage credentials because " +
+                "files_require_explicit_credentials is enabled: " + reason);
     }
 
     private void parsePropertiesForListFiles(Map<String, String> properties) {

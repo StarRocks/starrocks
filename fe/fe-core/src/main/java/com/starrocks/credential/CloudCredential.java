@@ -18,6 +18,7 @@ import com.staros.proto.FileStoreInfo;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
+import java.util.Optional;
 
 public interface CloudCredential {
 
@@ -43,4 +44,13 @@ public interface CloudCredential {
 
     // Convert to the protobuf used by staros.
     FileStoreInfo toFileStoreInfo();
+
+    /**
+     * Describe the identity this credential borrows from the FE/BE process or resolves through an
+     * intermediary: an instance profile, the SDK default credential chain, a web identity or managed
+     * identity, a compute engine service account, IAM role assumption, service account impersonation,
+     * or a keytab file that lives on the node. Return empty when the credential consists only of
+     * secrets supplied inline in the properties.
+     */
+    Optional<String> delegatedIdentity();
 }

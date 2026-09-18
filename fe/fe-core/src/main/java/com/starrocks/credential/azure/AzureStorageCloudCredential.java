@@ -35,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 // For Azure Blob Storage (wasb:// & wasbs://)
 // We support Shared Key & SAS Token
@@ -80,6 +81,14 @@ abstract class AzureStorageCloudCredential implements CloudCredential {
     }
 
     abstract void tryGenerateConfigurationMap();
+
+    /**
+     * True when this credential authenticates to the Azure storage service that {@code scheme} resolves
+     * to. The Hadoop driver and the native Blob SDK bound to a scheme read only the properties of their
+     * own service, so a credential built for a different service leaves them with nothing to use and
+     * they fall back to a node-owned default identity.
+     */
+    abstract boolean matchesScheme(String scheme);
 }
 
 class AzureBlobCloudCredential extends AzureStorageCloudCredential {
@@ -175,6 +184,20 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     }
 
     @Override
+    boolean matchesScheme(String scheme) {
+        // wasb/wasbs reach Blob through Hadoop or the native SDK; azblob is translated to wasb/wasbs.
+        return "wasb".equals(scheme) || "wasbs".equals(scheme) || "azblob".equals(scheme);
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        if (useManagedIdentity) {
+            return Optional.of("Azure managed identity (azure.blob.oauth2_use_managed_identity)");
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public FileStoreInfo toFileStoreInfo() {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.AZBLOB);
@@ -219,6 +242,19 @@ class AzureADLS1CloudCredential extends AzureStorageCloudCredential {
             generatedConfigurationMap.put(AdlConfKeys.AZURE_AD_CLIENT_SECRET_KEY, oauth2Credential);
             generatedConfigurationMap.put(AdlConfKeys.AZURE_AD_REFRESH_URL_KEY, oauth2Endpoint);
         }
+    }
+
+    @Override
+    boolean matchesScheme(String scheme) {
+        return "adl".equals(scheme);
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        if (useManagedServiceIdentity) {
+            return Optional.of("Azure managed service identity (azure.adls1.use_managed_service_identity)");
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -349,6 +385,23 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_MSI_TENANT),
                     oauth2TenantId);
         }
+    }
+
+    @Override
+    boolean matchesScheme(String scheme) {
+        // adls2 is translated to abfs/abfss.
+        return "abfs".equals(scheme) || "abfss".equals(scheme) || "adls2".equals(scheme);
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        if (oauth2ManagedIdentity) {
+            return Optional.of("Azure managed identity (azure.adls2.oauth2_use_managed_identity)");
+        }
+        if (!oauth2TokenFile.isEmpty()) {
+            return Optional.of("Azure workload identity token file (azure.adls2.oauth2_token_file)");
+        }
+        return Optional.empty();
     }
 
     @Override

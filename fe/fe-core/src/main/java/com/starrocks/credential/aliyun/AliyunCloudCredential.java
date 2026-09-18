@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.s3a.Constants;
 import org.apache.hadoop.fs.s3a.S3AFileSystem;
 
 import java.util.Map;
+import java.util.Optional;
 
 public class AliyunCloudCredential implements CloudCredential {
 
@@ -62,6 +63,11 @@ public class AliyunCloudCredential implements CloudCredential {
     @Override
     public boolean validate() {
         return !this.accessKey.isEmpty() && !this.secretKey.isEmpty() && !this.endpoint.isEmpty();
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        return Optional.empty();
     }
 
     // reuse aws client logic of BE

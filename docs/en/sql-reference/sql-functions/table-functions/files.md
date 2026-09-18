@@ -299,7 +299,15 @@ The authentication information used by StarRocks to access your storage system.
 
 StarRocks currently supports accessing HDFS with the simple authentication, accessing AWS S3 and GCS with the IAM user-based authentication, and accessing Azure Blob Storage with Shared Key, SAS Token, Managed Identity, and Service Principal.
 
+:::note
+If the FE configuration item `files_require_explicit_credentials` is set to `true`, FILES() accepts only credentials written in `StorageCredentialParams`. It rejects authentication based on instance profile, assumed role, the AWS SDK default credential chain, web identity, managed identity, compute engine service account, or service account impersonation, as well as statements that provide no credentials. The credentials must match the cloud that the path scheme resolves to, and path schemes must be lowercase. Only `s3://`, `s3a://`, `oss://`, `cosn://`, `gs://`, `wasb://`, and `wasbs://` are supported: `hdfs://` and the Azure `abfs://`, `abfss://`, `adl://`, `azblob://`, and `adls2://` schemes are rejected because they are opened through a Hadoop client, which resolves what the properties do not supply from the node's configuration. `wasb://` and `wasbs://` are accepted only while `azure_use_native_sdk` is enabled. For details, see [FE configuration](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials).
+:::
+
 ##### HDFS
+
+:::note
+HDFS is out of scope for [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) for now: when that FE configuration item is set to `true`, every `hdfs://` path is rejected. HDFS has no authentication mechanism equivalent to the key-based credentials the object stores use, and which of the properties below carry a self-contained secret cannot be told apart reliably, so refusing all of them is the safe choice.
+:::
 
 - Use the simple authentication to access HDFS:
 
@@ -472,6 +480,10 @@ If you choose Google GCS as your storage system, take one of the following actio
 
 ##### Azure Blob Storage
 
+:::note
+When [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) is `true`, a Blob path is accepted only as `wasb://` or `wasbs://`, and only while `azure_use_native_sdk` is enabled, since only then is the credential taken from the properties below rather than from the node's Hadoop configuration. Managed identity is rejected.
+:::
+
 - Use Shared Key to access Azure Blob Storage:
 
   ```SQL
@@ -529,6 +541,10 @@ If you choose Google GCS as your storage system, take one of the following actio
   | `azure.blob.oauth2_tenant_id`            | Yes          | The Tenant ID of the Service Principal that you can use to access the Azure Blob Storage account.                |
 
 ##### Azure Data Lake Storage Gen2
+
+:::note
+Data Lake Storage is out of scope for [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials): when it is `true`, `abfs://`, `abfss://`, `adl://`, and `adls2://` paths are rejected. They are opened through a Hadoop client, which resolves whatever the properties below do not supply from the node's configuration.
+:::
 
 If you choose Data Lake Storage Gen2 as your storage system, take one of the following actions:
 

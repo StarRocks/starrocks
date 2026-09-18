@@ -17,6 +17,7 @@ package com.starrocks.credential.hdfs;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -34,6 +35,11 @@ public class HDFSCloudConfiguration extends CloudConfiguration {
     }
 
     public HDFSCloudCredential getHdfsCloudCredential() {
+        return hdfsCloudCredential;
+    }
+
+    @Override
+    public CloudCredential getCloudCredential() {
         return hdfsCloudCredential;
     }
 

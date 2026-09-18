@@ -24,6 +24,7 @@ import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
+import java.util.Optional;
 
 public class HDFSCloudCredential implements CloudCredential {
     public static final String SIMPLE_AUTH = "simple";
@@ -86,6 +87,20 @@ public class HDFSCloudCredential implements CloudCredential {
         }
 
         return false;
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        if (KERBEROS_AUTH.equals(authentication)) {
+            if (!krbKeyTabFile.isEmpty()) {
+                return Optional.of("Kerberos keytab file on the node (hadoop.kerberos.keytab)");
+            }
+            return Optional.empty();
+        }
+        if (SIMPLE_AUTH.equals(authentication) && !userName.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of("FE/BE process user (simple authentication without hadoop.username)");
     }
 
     @Override

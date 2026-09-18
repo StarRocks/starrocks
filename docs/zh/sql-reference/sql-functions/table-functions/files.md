@@ -299,7 +299,15 @@ StarRocks 用于访问您的存储系统的身份验证信息。
 
 StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用户的身份验证访问 AWS S3 和 GCS，以及使用共享密钥、SAS 令牌、托管身份和服务主体访问 Azure Blob Storage。
 
+:::note
+如果 FE 配置项 `files_require_explicit_credentials` 设为 `true`，FILES() 只接受直接写在 `StorageCredentialParams` 中的凭证，不再支持基于实例配置文件、假设角色、AWS SDK 默认凭证链、Web Identity、托管身份、VM（Compute Engine 服务账号）以及服务账号模拟的身份验证，也不接受未提供凭证的语句。凭证必须与路径 scheme 对应的云一致，路径的 scheme 必须使用小写。仅支持 `s3://`、`s3a://`、`oss://`、`cosn://`、`gs://`、`wasb://` 和 `wasbs://`：`hdfs://` 以及 Azure 的 `abfs://`、`abfss://`、`adl://`、`azblob://`、`adls2://` 一律拒绝，因为它们通过 Hadoop 客户端访问，属性中未提供的部分会由该客户端从节点配置中解析。`wasb://` 和 `wasbs://` 仅在 `azure_use_native_sdk` 开启时才被接受。详情参见 [FE 配置项](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials)。
+:::
+
 ##### HDFS
+
+:::note
+目前 HDFS 不在 [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) 的覆盖范围内：该 FE 配置项设为 `true` 后，所有 `hdfs://` 路径一律拒绝。HDFS 没有与对象存储的密钥凭证对等的认证机制，也无法可靠地判断下列属性中哪些真正携带了自包含的密钥，因此全部拒绝是更稳妥的做法。
+:::
 
 - 使用简单身份验证访问 HDFS：
 
@@ -472,6 +480,10 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 
 ##### Azure Blob Storage
 
+:::note
+当 [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) 为 `true` 时，Blob 路径只能使用 `wasb://` 或 `wasbs://`，且必须开启 `azure_use_native_sdk`：只有此时凭证才取自下列属性，而不是节点的 Hadoop 配置。托管身份会被拒绝。
+:::
+
 - 使用共享密钥访问 Azure Blob Storage：
 
   ```SQL
@@ -529,6 +541,10 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
   | `azure.blob.oauth2_tenant_id`            | Yes          | 您可以用来访问 Azure Blob Storage 账户的服务主体的租户 ID。                |
 
 ##### Azure Data Lake Storage Gen2
+
+:::note
+Data Lake Storage 不在 [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) 的覆盖范围内：该配置项为 `true` 时，`abfs://`、`abfss://`、`adl://`、`adls2://` 路径一律拒绝。它们通过 Hadoop 客户端访问，下列属性未提供的部分会由该客户端从节点配置中解析。
+:::
 
 如果您选择 Data Lake Storage Gen2 作为您的存储系统，请采取以下操作之一：
 

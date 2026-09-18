@@ -1155,6 +1155,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 提交（发布）写入事务到 StarRocks 外部表的超时时长。默认值 `10000` 表示 10 秒超时时长。
 - 引入版本: -
 
+### `files_require_explicit_credentials`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: FILES() 表函数是否只接受直接写在自身属性中的存储凭证，例如 `aws.s3.access_key` 和 `aws.s3.secret_key`、`azure.blob.shared_key`、`gcp.gcs.service_account_private_key`。设为 `true` 后，凡是依赖 FE 或 CN/BE 节点自身身份的语句（`aws.s3.use_instance_profile`、`aws.s3.use_aws_sdk_default_behavior`、`aws.s3.use_web_identity_token_file`、`azure.blob.oauth2_use_managed_identity`、`azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_token_file`、`azure.adls1.use_managed_service_identity`、`gcp.gcs.use_compute_engine_service_account`，以及未提供任何凭证），或者需要经由其他主体获取权限的语句（`aws.s3.iam_role_arn`、`gcp.gcs.impersonation_service_account`），都会在访问存储之前被拒绝。凭证还必须与路径 scheme 对应的云一致。路径的 scheme 必须使用小写；Hadoop 命名空间下的属性（`fs.*`、`hadoop.*`、`dfs.*`、`ipc.*`、`io.*`、`viewfs.*`、`yarn.*`、`mapreduce.*`、`mapred.*`）一律拒绝，因为它们是基于节点自身的配置解析的。支持的路径 scheme 为 `s3://`、`s3a://`、`oss://`、`cosn://`、`gs://`、`wasb://` 和 `wasbs://`。凡是通过 Hadoop 客户端访问的路径都不在覆盖范围内，因为属性中未提供的部分会由该客户端从节点的 `core-site.xml` 和 `hdfs-site.xml` 中解析：`hdfs://` 一律拒绝，Azure 的 `abfs://`、`abfss://`、`adl://`、`azblob://`、`adls2://` 同样拒绝。`wasb://` 和 `wasbs://` 仅在 [`azure_use_native_sdk`](./shared_lake_other.md#azure_use_native_sdk) 开启时才被接受，因为只有此时才由 Azure 原生 SDK 访问：账户取自路径，凭证仅取自 `azure.blob.*` 属性。该参数作用于基于 FILES() 的 SELECT、INSERT、CTAS、DESC，以及 INSERT INTO FILES()。
+- 引入版本: -
+
 ### `finish_transaction_default_lock_timeout_ms`
 
 - 默认值: 1000

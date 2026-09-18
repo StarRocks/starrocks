@@ -1137,6 +1137,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：StarRocks 外部テーブルへの書き込みトランザクションをコミット (公開) するためのタイムアウト期間。デフォルト値 `10000` は 10 秒のタイムアウト期間を示します。
 - 導入時期：-
 
+### `files_require_explicit_credentials`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：FILES() テーブル関数が、自身のプロパティに直接記述されたストレージ認証情報 (例: `aws.s3.access_key` と `aws.s3.secret_key`、`azure.blob.shared_key`、`gcp.gcs.service_account_private_key`) のみを受け付けるかどうか。`true` に設定すると、FE または CN/BE ノード自身の ID に依存するステートメント (`aws.s3.use_instance_profile`、`aws.s3.use_aws_sdk_default_behavior`、`aws.s3.use_web_identity_token_file`、`azure.blob.oauth2_use_managed_identity`、`azure.adls2.oauth2_use_managed_identity`、`azure.adls2.oauth2_token_file`、`azure.adls1.use_managed_service_identity`、`gcp.gcs.use_compute_engine_service_account`、または認証情報の未指定)、あるいは別のプリンシパルを経由して権限を取得するステートメント (`aws.s3.iam_role_arn`、`gcp.gcs.impersonation_service_account`) は、ストレージにアクセスする前に拒否されます。認証情報は、パスのスキームが解決するクラウドとも一致している必要があります。パスのスキームは小文字で記述してください。Hadoop 名前空間のプロパティ (`fs.*`、`hadoop.*`、`dfs.*`、`ipc.*`、`io.*`、`viewfs.*`、`yarn.*`、`mapreduce.*`、`mapred.*`) は、ノード自身の設定に基づいて解決されるため拒否されます。サポートされるパスのスキームは `s3://`、`s3a://`、`oss://`、`cosn://`、`gs://`、`wasb://`、`wasbs://` です。Hadoop クライアント経由で開かれるパスは対象外です。プロパティで指定されなかった部分は、そのクライアントがノードの `core-site.xml` と `hdfs-site.xml` から解決するためです。したがって `hdfs://` は常に拒否され、Azure の `abfs://`、`abfss://`、`adl://`、`azblob://`、`adls2://` も拒否されます。`wasb://` と `wasbs://` は、[`azure_use_native_sdk`](./shared_lake_other.md#azure_use_native_sdk) が有効な場合にのみ受け付けられます。その場合にのみ Azure ネイティブ SDK が使用され、アカウントはパスから、認証情報は `azure.blob.*` プロパティのみから取得されるためです。FILES() を使用する SELECT、INSERT、CTAS、DESC、および INSERT INTO FILES() に適用されます。
+- 導入時期：-
+
 ### `finish_transaction_default_lock_timeout_ms`
 
 - デフォルト：1000

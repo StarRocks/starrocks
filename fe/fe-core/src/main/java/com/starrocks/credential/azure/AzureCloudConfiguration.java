@@ -16,6 +16,7 @@ package com.starrocks.credential.azure;
 
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -29,6 +30,20 @@ public class AzureCloudConfiguration extends CloudConfiguration {
 
     public AzureCloudConfiguration(AzureStorageCloudCredential azureStorageCloudCredential) {
         this.azureStorageCloudCredential = azureStorageCloudCredential;
+    }
+
+    @Override
+    public CloudCredential getCloudCredential() {
+        return azureStorageCloudCredential;
+    }
+
+    /**
+     * True when the credential authenticates to the Azure storage service that {@code scheme} resolves
+     * to. Every Azure credential reports {@link CloudType#AZURE}, so the cloud type alone does not tell
+     * Blob, Data Lake Gen1, and Data Lake Gen2 credentials apart.
+     */
+    public boolean matchesScheme(String scheme) {
+        return azureStorageCloudCredential.matchesScheme(scheme);
     }
 
     @Override

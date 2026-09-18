@@ -1691,6 +1691,27 @@ public class Config extends ConfigBase {
     public static boolean files_enable_insert_push_down_column_type = true;
 
     /**
+     * Require FILES() to authenticate to remote storage only with secrets written in its own properties,
+     * such as aws.s3.access_key/aws.s3.secret_key, azure.blob.shared_key, or
+     * gcp.gcs.service_account_private_key. A statement is rejected before any storage access when it
+     * would borrow the node's identity (instance profile, AWS SDK default chain, web identity token,
+     * managed identity, compute engine service account, or no credential at all) or chain through
+     * another principal (aws.s3.iam_role_arn, gcp.gcs.impersonation_service_account). The credential
+     * must match the cloud the path scheme resolves to, schemes are matched in lowercase, and
+     * properties in the Hadoop namespaces (fs.*, hadoop.*, dfs.*, ipc.*, io.*, viewfs.*, yarn.*,
+     * mapreduce.*, mapred.*) are refused because they are resolved against the node's own
+     * configuration. Only s3, s3a, oss, cosn, gs, wasb and wasbs paths are accepted: anything opened
+     * through a Hadoop client is out of scope, since that client resolves whatever the properties do
+     * not supply from the node's core-site.xml and hdfs-site.xml. That covers hdfs:// and the Azure
+     * abfs, abfss, adl, azblob and adls2 schemes, and leaves wasb/wasbs accepted only while
+     * azure_use_native_sdk is on, which is when they are served by the native Azure SDK from the
+     * azure.blob.* properties alone. Applies to SELECT/INSERT/CTAS/DESC over FILES() and to
+     * INSERT INTO FILES(). Static: changing it requires an FE restart.
+     */
+    @ConfField
+    public static boolean files_require_explicit_credentials = false;
+
+    /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
      */
     @ConfField(mutable = true)

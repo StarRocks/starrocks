@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL;
 
@@ -122,6 +123,17 @@ public class GCPCloudCredential implements CloudCredential {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public Optional<String> delegatedIdentity() {
+        if (useComputeEngineServiceAccount) {
+            return Optional.of("compute engine service account (gcp.gcs.use_compute_engine_service_account)");
+        }
+        if (!impersonationServiceAccount.isEmpty()) {
+            return Optional.of("service account impersonation (gcp.gcs.impersonation_service_account)");
+        }
+        return Optional.empty();
     }
 
     @Override

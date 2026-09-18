@@ -299,7 +299,15 @@ StarRocks がストレージシステムにアクセスするために使用す�
 
 StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS への IAM ユーザー認証、Azure Blob Storage への共有キー、SAS トークン、マネージド ID、およびサービスプリンシパルを使用したアクセスをサポートしています。
 
+:::note
+FE 設定項目 `files_require_explicit_credentials` が `true` の場合、FILES() は `StorageCredentialParams` に直接記述された認証情報のみを受け付けます。インスタンスプロファイル、仮想ロール、AWS SDK デフォルト認証情報チェーン、Web Identity、マネージド ID、VM (Compute Engine サービスアカウント)、インパーソネーションに基づく認証、および認証情報を指定しないステートメントは拒否されます。認証情報はパスのスキームが解決するクラウドと一致している必要があり、スキームは小文字で記述してください。サポートされるのは `s3://`、`s3a://`、`oss://`、`cosn://`、`gs://`、`wasb://`、`wasbs://` のみです。`hdfs://` と Azure の `abfs://`、`abfss://`、`adl://`、`azblob://`、`adls2://` は拒否されます。これらは Hadoop クライアント経由で開かれ、プロパティで指定されなかった部分をノードの設定から解決するためです。`wasb://` と `wasbs://` は `azure_use_native_sdk` が有効な場合にのみ受け付けられます。詳細は [FE 設定](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) を参照してください。
+:::
+
 ##### HDFS
+
+:::note
+現時点では HDFS は [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) の対象外です。この FE 設定項目を `true` に設定すると、すべての `hdfs://` パスが拒否されます。HDFS にはオブジェクトストレージのキーベースの認証情報に相当する認証方式がなく、以下のプロパティのどれが自己完結した秘密情報を保持しているかを確実に判別できないため、すべて拒否する方が安全です。
+:::
 
 - シンプル認証を使用して HDFS にアクセスする:
 
@@ -472,6 +480,10 @@ Google GCS をストレージシステムとして選択する場合、次のい
 
 ##### Azure Blob Storage
 
+:::note
+[`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) が `true` の場合、Blob のパスは `wasb://` または `wasbs://` のみ、かつ `azure_use_native_sdk` が有効な場合にのみ受け付けられます。その場合にのみ、認証情報がノードの Hadoop 設定ではなく以下のプロパティから取得されるためです。マネージド ID は拒否されます。
+:::
+
 - 共有キーを使用して Azure Blob Storage にアクセスする:
 
   ```SQL
@@ -529,6 +541,10 @@ Google GCS をストレージシステムとして選択する場合、次のい
   | `azure.blob.oauth2_tenant_id`            | はい          | Azure Blob Storage アカウントにアクセスするために使用できるサービスプリンシパルのテナント ID。                |
 
 ##### Azure Data Lake Storage Gen2
+
+:::note
+Data Lake Storage は [`files_require_explicit_credentials`](../../../administration/configuration/FE_parameters/user_query_loading.md#files_require_explicit_credentials) の対象外です。この設定項目が `true` の場合、`abfs://`、`abfss://`、`adl://`、`adls2://` のパスは拒否されます。これらは Hadoop クライアント経由で開かれ、以下のプロパティで指定されなかった部分をノードの設定から解決するためです。
+:::
 
 Data Lake Storage Gen2 をストレージシステムとして選択する場合、次のいずれかのアクションを実行します。
 
