@@ -132,6 +132,17 @@ public class StatementPlanner {
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
 
+            // Whether planning will run off private snapshots is decided here, before the authorization
+            // check, and when it will the snapshots are taken and the lock dropped first. The check is not
+            // free for an external catalog that has an ExternalAccessController (Ranger et al.): to get the
+            // pruned column list, ColumnPrivilege.check runs a whole rule-based optimization, and that asks
+            // the connector for partitions, statistics and file lists. This lock protects none of that, so
+            // there is no reason for it to be held across those round trips.
+            PlanningSnapshot snapshot = takePlanningSnapshotAndUnlock(stmt, session, plannerMetaLocker);
+            if (snapshot != null && stmt instanceof QueryStatement) {
+                needWholePhaseLock = false;
+            }
+
             // Authorization check
             if (!session.isBypassAuthorizerCheck()) {
                 Authorizer.check(stmt, session);
@@ -144,15 +155,12 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
-                boolean areTablesCopySafe = AnalyzerUtils.areTablesCopySafe(queryStmt);
-                needWholePhaseLock = isLockFree(areTablesCopySafe, session) ? false : true;
                 ExecPlan plan;
                 if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
                 } else {
-                    long planStartTime = OptimisticVersion.generate();
-                    unLock(plannerMetaLocker);
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker,
+                            snapshot.planStartTime(), snapshot.originalOlapTables());
                 }
                 if (spmPlanner.getBaseline() != null) {
                     plan.setUseBaseline(spmPlanner.getBaseline().getId());
@@ -161,7 +169,7 @@ public class StatementPlanner {
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.SELECT);
                 return plan;
             } else if (stmt instanceof InsertStmt) {
-                ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
+                ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session, snapshot);
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
                 return plan;
             } else if (stmt instanceof UpdateStmt) {
@@ -300,12 +308,73 @@ public class StatementPlanner {
         }
     }
 
+    /**
+     * The private copies planning will work off, plus the instant they were taken.
+     *
+     * @param originalOlapTables   the live tables the copies were made from, to revalidate against at the end
+     * @param planStartTime        generated before the lock was dropped, so any schema update that races with
+     *                             planning sorts after it
+     * @param originalInsertTarget the target table the statement carried in, so planning can put it back --
+     *                             see {@code InsertPlanner#plan}. Null for anything that is not an INSERT.
+     */
+    public record PlanningSnapshot(Set<OlapTable> originalOlapTables, long planStartTime,
+                                   Table originalInsertTarget) {
+    }
+
+    /**
+     * Snapshot the statement's olap tables and drop the meta lock, but only when planning is going to run
+     * off snapshots anyway. Returns null when it is not, leaving the lock held.
+     *
+     * <p>Two things move earlier because of this. The snapshot itself used to be taken by
+     * {@link #collectOriginalOlapTables}, i.e. after the lock had been dropped and by taking it again; taking
+     * it here, while the lock is still held, is the same snapshot without the second acquisition. And the
+     * unlock now happens before the authorization check rather than after it, which is the point: see the
+     * caller.
+     */
+    private static PlanningSnapshot takePlanningSnapshotAndUnlock(StatementBase stmt, ConnectContext session,
+                                                                  PlannerMetaLocker plannerMetaLocker) {
+        boolean lockFree;
+        if (stmt instanceof QueryStatement) {
+            lockFree = isLockFree(AnalyzerUtils.areTablesCopySafe(stmt), session);
+        } else if (stmt instanceof InsertStmt insertStmt) {
+            lockFree = isLockFreeInsertStmt(insertStmt, session);
+        } else {
+            return null;
+        }
+        if (!lockFree) {
+            return null;
+        }
+
+        long planStartTime = OptimisticVersion.generate();
+        // Captured before the copy, because copying replaces it on the statement.
+        Table originalInsertTarget = stmt instanceof InsertStmt insert ? insert.getTargetTable() : null;
+        Set<OlapTable> originalOlapTables = Sets.newHashSet();
+        // The lock is still held, which is what makes the copy safe against a concurrent modification.
+        AnalyzerUtils.copyOlapTable(stmt, originalOlapTables);
+        unLock(plannerMetaLocker);
+        return new PlanningSnapshot(originalOlapTables, planStartTime, originalInsertTarget);
+    }
+
+    /** For callers that still hold the lock and have not decided anything about it. */
     public static ExecPlan planInsertStmt(PlannerMetaLocker plannerMetaLocker,
                                           InsertStmt insertStmt,
                                           ConnectContext connectContext) {
-        // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetrye
+        // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetry
         boolean useOptimisticLock = isLockFreeInsertStmt(insertStmt, connectContext);
-        return new InsertPlanner(plannerMetaLocker, useOptimisticLock).plan(insertStmt, connectContext);
+        return new InsertPlanner(plannerMetaLocker, useOptimisticLock, null).plan(insertStmt, connectContext);
+    }
+
+    /**
+     * @param snapshot the copies taken by {@link #takePlanningSnapshotAndUnlock}. Non-null exactly when that
+     *                 decided this INSERT plans off copies, which also means the lock is already released;
+     *                 {@code InsertPlanner} re-acquires it before it returns, so the caller's unlock stays
+     *                 balanced either way.
+     */
+    private static ExecPlan planInsertStmt(PlannerMetaLocker plannerMetaLocker,
+                                           InsertStmt insertStmt,
+                                           ConnectContext connectContext,
+                                           PlanningSnapshot snapshot) {
+        return new InsertPlanner(plannerMetaLocker, snapshot != null, snapshot).plan(insertStmt, connectContext);
     }
 
     private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
@@ -378,6 +447,19 @@ public class StatementPlanner {
                                                     TResultSinkType resultSinkType,
                                                     PlannerMetaLocker plannerMetaLocker,
                                                     long planStartTime) {
+        return createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime, null);
+    }
+
+    /**
+     * @param originalOlapTables the snapshot the caller already took while it held the lock, or null to take
+     *                           it here (which costs one more lock acquisition)
+     */
+    public static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt,
+                                                    ConnectContext session,
+                                                    TResultSinkType resultSinkType,
+                                                    PlannerMetaLocker plannerMetaLocker,
+                                                    long planStartTime,
+                                                    Set<OlapTable> originalOlapTables) {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
@@ -390,7 +472,9 @@ public class StatementPlanner {
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
         // the original olapTable in queryStmt had been replaced with the copied olapTable
-        Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
+        Set<OlapTable> olapTables = originalOlapTables != null
+                ? originalOlapTables
+                : collectOriginalOlapTables(session, queryStmt);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             if (!isSchemaValid) {
                 planStartTime = OptimisticVersion.generate();
