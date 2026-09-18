@@ -31,15 +31,29 @@ public class Histogram {
     private final List<Bucket> buckets;
     private final Map<String, Long> mcv;
 
+    /**
+     * Buckets carry the rows outside the MCVs. Passing none warns: row count estimation degrades to
+     * the MCV rows alone.
+     */
     public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
         this.mcv = mcv == null ? Map.of() : mcv;
         if (buckets != null && !buckets.isEmpty()) {
             this.buckets = buckets;
         } else {
-            LOG.warn("Histogram built without buckets, so its total row count covers the rows in its {} "
-                    + "MCV entries only.", this.mcv.size());
+            LOG.warn("Histogram built without buckets, so its total row count covers the rows in its {} MCV "
+                    + "entries only. Buckets are needed for accurate row count estimation. If the MCV row counts "
+                    + "already cover every row, use Histogram(Map) instead.", this.mcv.size());
             this.buckets = List.of();
         }
+    }
+
+    /**
+     * For a histogram with no buckets, where the caller has established that the MCVs cover every
+     * row, or has reported that buckets could not be estimated.
+     */
+    public Histogram(Map<String, Long> mcv) {
+        this.mcv = mcv == null ? Map.of() : mcv;
+        this.buckets = List.of();
     }
 
     public static Histogram ofSingleBucket(double minValue, double maxValue, double nonNullRowCount,
@@ -47,7 +61,7 @@ public class Histogram {
         long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
         long nonMcvRows = Math.max(0L, Math.round(nonNullRowCount) - mcvRows);
         if (nonMcvRows == 0) {
-            return new Histogram(List.of(), mcv);
+            return new Histogram(mcv);
         }
         if (!Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
             return new Histogram(List.of(

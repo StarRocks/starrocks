@@ -14,12 +14,17 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class HistogramTest {
 
@@ -204,5 +209,97 @@ public class HistogramTest {
 
         Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
         Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
+    }
+
+    @Test
+    public void testMcvOnlyConstructor() {
+        // Given MCVs holding 100 and 50 rows, which the caller has established are every row
+        // CASE WHEN the MCV-only constructor is used THEN the histogram has no buckets and its total
+        // row count is the MCV rows END
+
+        final Map<String, Long> mcv = Map.of("1", 100L, "2", 50L);
+        final long expectedTotalRows = 150L;
+
+        final Histogram actualHistogram = new Histogram(mcv);
+
+        Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
+        Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
+    }
+
+    @Test
+    public void testEmptyBucketListWarns() {
+        // Given a histogram constructed with an empty bucket list
+        // CASE WHEN buckets are missing THEN the constructor warns, so whoever wrote the call site
+        // learns that the rows outside the MCVs have been lost END
+
+        final Map<String, Long> mcv = Map.of("1", 100L);
+        final int expectedWarnCount = 1;
+
+        final int actualWarnCount = warnCountWhile(() -> new Histogram(List.of(), mcv));
+
+        Assertions.assertEquals(expectedWarnCount, actualWarnCount);
+    }
+
+    @Test
+    public void testMcvOnlyConstructorDoesNotWarn() {
+        // Given a histogram constructed through the MCV-only constructor
+        // CASE WHEN the caller has accounted for the absent buckets THEN nothing is warned, because
+        // there is no missing bucket left to report END
+
+        final Map<String, Long> mcv = Map.of("1", 100L);
+        final int expectedWarnCount = 0;
+
+        final int actualWarnCount = warnCountWhile(() -> new Histogram(mcv));
+
+        Assertions.assertEquals(expectedWarnCount, actualWarnCount);
+    }
+
+    @Test
+    public void testSingleBucketWithNoRowsDoesNotWarn() {
+        // Given a total that the MCVs already account for in full
+        // CASE WHEN ofSingleBucket finds no rows left to carry THEN it reaches the quiet door,
+        // because it has just proved the very thing the warning would ask the caller to check END
+
+        final Map<String, Long> mcv = Map.of("a", 1000L);
+        final double totalRows = 1000;
+        final int expectedWarnCount = 0;
+
+        final int actualWarnCount = warnCountWhile(() -> Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv));
+
+        Assertions.assertEquals(expectedWarnCount, actualWarnCount);
+    }
+
+    private static int warnCountWhile(Runnable action) {
+        WarnCounterAppender appender = new WarnCounterAppender();
+        org.apache.logging.log4j.core.Logger logger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(Histogram.class);
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            action.run();
+        } finally {
+            logger.removeAppender(appender);
+            appender.stop();
+        }
+        return appender.getWarnCount();
+    }
+
+    private static class WarnCounterAppender extends AbstractAppender {
+        private final AtomicInteger warnCount = new AtomicInteger();
+
+        WarnCounterAppender() {
+            super("histogram-warn-counter", null, null);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            if (event.getLevel() == Level.WARN) {
+                warnCount.incrementAndGet();
+            }
+        }
+
+        int getWarnCount() {
+            return warnCount.get();
+        }
     }
 }
