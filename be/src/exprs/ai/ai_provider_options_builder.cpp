@@ -432,8 +432,9 @@ StatusOr<std::pair<std::string, AIProviderOptionKind>> serialize_value(const Col
 
 } // namespace
 
-StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, const TypeDescriptor& type, size_t row) {
-    if (type.type != TYPE_MAP) {
+StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, const TypeDescriptor& type, size_t row,
+                                                      AICapability capability) {
+    if (type.type != TYPE_MAP || (capability != AICapability::CHAT && capability != AICapability::TEXT_EMBEDDING)) {
         return invalid_options();
     }
     auto unwrapped = unwrap_value(column, row);
@@ -468,8 +469,9 @@ StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, cons
     members.reserve(count);
     for (size_t index = offset; index < offset + count; ++index) {
         auto key = read_map_key(map->keys(), index);
-        if (!key.ok() || key->empty() || !keys.emplace(*key).second || *key == "model" || *key == "messages" ||
-            *key == "stream") {
+        if (!key.ok() || key->empty() || !keys.emplace(*key).second || *key == "model" ||
+            (capability == AICapability::CHAT && (*key == "messages" || *key == "stream")) ||
+            (capability == AICapability::TEXT_EMBEDDING && (*key == "input" || *key == "encoding_format"))) {
             return invalid_options();
         }
         auto value = serialize_value(map->values(), type.children[1], index);

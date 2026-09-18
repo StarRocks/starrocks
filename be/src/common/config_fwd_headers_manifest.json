@@ -300,6 +300,7 @@
         "ai_function_max_retries_on_throttle",
         "ai_function_on_error",
         "ai_function_rate_limit_qps_chat",
+        "ai_function_rate_limit_qps_embedding",
         "ai_function_max_inflight",
         "llm_cache_size",
         "llm_max_concurrent_queries",
