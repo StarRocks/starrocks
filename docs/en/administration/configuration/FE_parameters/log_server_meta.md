@@ -476,11 +476,11 @@ This topic introduces the following types of FE configurations:
 
 ### `log_cleaner_check_interval_second`
 
-- Default: 300
+- Default: 60
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Interval in seconds to check disk usage and clean logs. The cleaner periodically checks each log directory's disk usage and triggers cleaning when necessary. Default is 300 seconds (5 minutes).
+- Description: Interval in seconds to check disk usage and clean logs. The cleaner periodically checks each log directory's disk usage and triggers cleaning when necessary. Default is 60 seconds (1 minute).
 - Introduced in: -
 
 ### `log_cleaner_disk_usage_target`

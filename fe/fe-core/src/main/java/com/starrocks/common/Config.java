@@ -497,8 +497,8 @@ public class Config extends ConfigBase {
     public static int log_cleaner_audit_log_min_retention_days = 3;
 
     @ConfField(mutable = true, comment = "Interval in seconds to check disk usage and clean logs. " +
-            "Default is 300 seconds (5 minutes).")
-    public static int log_cleaner_check_interval_second = 300;
+            "Default is 60 seconds (1 minute).")
+    public static int log_cleaner_check_interval_second = 60;
 
     /**
      * @deprecated Use {@code log_plan_on_query_failure} instead.
