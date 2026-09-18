@@ -59,14 +59,6 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 continue;
             }
 
-<<<<<<< HEAD
-            // The version of a replication transaction may not continuously
-=======
-            // A shadow-rewrite txn does not allocate or advance any partition version.
-            if (txnState.isShadowRewrite()) {
-                continue;
-            }
-
             // Derive the new nextVersion from the version this transaction was allocated, which
             // unprotectedCommitPreparedTransaction took from partition.getNextVersion() under the
             // database lock and journaled with this entry. Deriving it is equivalent to the running
@@ -132,7 +124,6 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                         commitVersion, txnState.getSourceType());
             }
 
->>>>>>> 9159316 ([BugFix] Derive lake partition versions from the journal and only ever advance them (#79296))
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
                 // A replication transaction's versions are not contiguous, so they are taken as given
                 // rather than derived from the counter. Unchanged.

@@ -281,100 +281,6 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assertions.assertEquals(4, partition.getVisibleVersion());
         Assertions.assertEquals(baseVersionTime + 4, partition.getVisibleVersionTime());
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testApplyVisibleLogBatchCutsOverUnshareLayoutAfterPublishingTheVersion() {
-        LakeTable table = buildLakeTable();
-        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
-        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
-        // Pin the parent layout, the way an in-flight UNSHARE does.
-        partition.pinQueryableIndex(indexId, indexId);
-        Assertions.assertTrue(partition.isUnsharing());
-
-        // Visible version the partition carried at the moment the query-layout cutover ran.
-        List<Long> versionAtCutover = Lists.newArrayList();
-        new MockUp<PhysicalPartition>() {
-            @Mock
-            public boolean finishUnshare(Invocation invocation) {
-                PhysicalPartition self = invocation.getInvokedInstance();
-                versionAtCutover.add(self.getVisibleVersion());
-                return invocation.proceed();
-            }
-        };
-
-        // Batch of three: a load at version 2, an UNSHARE compaction at version 3, a load at version 4.
-        long baseVersionTime = System.currentTimeMillis();
-        List<TransactionState> states = Lists.newArrayList();
-        for (long version = 2; version <= 4; version++) {
-            TransactionState state;
-            if (version == 3) {
-                state = newCompactionTransactionState();
-                state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(false, true));
-            } else {
-                state = newTransactionState();
-            }
-            state.setTransactionStatus(TransactionStatus.VISIBLE);
-            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, version, 0);
-            partitionCommitInfo.setVersionTime(baseVersionTime + version);
-            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
-            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
-            state.putIdToTableCommitInfo(tableId, tableCommitInfo);
-            states.add(state);
-        }
-
-        applier.applyVisibleLogBatch(new TransactionStateBatch(states), /*unused*/null);
-
-        // The planner resolves the queryable layout BEFORE it reads the visible version, so a cutover
-        // that ran while the partition still carried a pre-batch version would let a lock-free plan pair
-        // the child layout with a version whose child tablets have no metadata object. The cutover must
-        // therefore run once, and only after the batch's final version is already published.
-        Assertions.assertEquals(1, versionAtCutover.size(), "unshare cutover should run exactly once");
-        Assertions.assertEquals(4L, versionAtCutover.get(0),
-                "unshare cutover must not run before the batch's final version is visible");
-        Assertions.assertEquals(4, partition.getVisibleVersion());
-        Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared by the batch");
-    }
-
-    @Test
-    public void testApplyVisibleLogCutsOverUnshareLayoutInTheSameTransaction() {
-        LakeTable table = buildLakeTable();
-        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
-        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
-        partition.pinQueryableIndex(indexId, indexId);
-
-        List<Long> versionAtCutover = Lists.newArrayList();
-        new MockUp<PhysicalPartition>() {
-            @Mock
-            public boolean finishUnshare(Invocation invocation) {
-                PhysicalPartition self = invocation.getInvokedInstance();
-                versionAtCutover.add(self.getVisibleVersion());
-                return invocation.proceed();
-            }
-        };
-
-        TransactionState state = newCompactionTransactionState();
-        state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(false, true));
-        state.setTransactionStatus(TransactionStatus.VISIBLE);
-        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
-        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
-        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
-        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
-
-        long schemaUpdateBefore = table.lastSchemaUpdateTime.get();
-        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
-
-        // Unbatched, the cutover runs inline - and already after the version it belongs to. This is the
-        // ordering applyVisibleLogBatch has to reproduce for a batched UNSHARE.
-        Assertions.assertEquals(1, versionAtCutover.size(), "unshare cutover should run exactly once");
-        Assertions.assertEquals(2L, versionAtCutover.get(0),
-                "unshare cutover must run after its own version is visible");
-        Assertions.assertEquals(2, partition.getVisibleVersion());
-        Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared");
-        Assertions.assertTrue(table.lastSchemaUpdateTime.get() > schemaUpdateBefore,
-                "the layout cutover must invalidate optimistic plans that captured the parent layout");
-    }
 
     // ---------- nextVersion is derived from the journal, not counted ----------
 
@@ -594,5 +500,4 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         applier.applyCommitLog(state, tableCommitInfo);
         Assertions.assertEquals(21, physicalPartition.getNextVersion());
     }
->>>>>>> 9159316 ([BugFix] Derive lake partition versions from the journal and only ever advance them (#79296))
 }
