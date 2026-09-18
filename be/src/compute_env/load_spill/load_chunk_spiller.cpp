@@ -15,6 +15,7 @@
 #include "compute_env/load_spill/load_chunk_spiller.h"
 
 #include "column/chunk_factory.h"
+#include "column/serde/encode_level.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "compute_env/load_spill/load_spill_block_manager.h"
@@ -160,7 +161,11 @@ Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
         // which let a racing thread observe a non-null spiller whose serde encode context was
         // still null and crash in ColumnarSerde::serialize().
         spill::SpilledOptions options;
-        options.encode_level = 7;
+        // 7 = adaptive + integer + string encoding. ENCODE_ALL_NULL additionally drops the
+        // payload of columns that are entirely NULL, which is what makes wide mostly-empty
+        // schemas spill a bounded amount. Safe here because the blocks are written and read back
+        // by this same process within one transaction.
+        options.encode_level = 7 | serde::ENCODE_ALL_NULL;
         // Leave options.wg unset (nullptr): the spill framework resolves it to the reserved
         // default workgroup in Spiller::prepare(), so this load path no longer needs ExecEnv.
         auto spiller = _spiller_factory->create(options);

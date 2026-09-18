@@ -42,6 +42,7 @@
 #include "common/config_serde_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/serde/chunk_encode_context.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "types/hll.h"
 #include "types/json_value.h"
@@ -747,6 +748,89 @@ PARALLEL_TEST(ColumnArraySerdeTest, nullable_int32_column) {
     }
 }
 
+PARALLEL_TEST(ColumnArraySerdeTest, nullable_column_all_null_encoding) {
+    constexpr size_t kRows = 100;
+    constexpr int kLevel = 7 | ENCODE_ALL_NULL;
+
+    auto all_null = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    all_null->append_nulls(kRows);
+
+    // Without the bit the layout is untouched: no tag, both sub-columns serialized in full.
+    ASSERT_EQ(ColumnArraySerde::max_serialized_size(*all_null->null_column(), 7) +
+                      ColumnArraySerde::max_serialized_size(*all_null->data_column(), 7),
+              ColumnArraySerde::max_serialized_size(*all_null, 7));
+
+    // With the bit an all-NULL column costs a tag plus the row count, whatever its length.
+    const auto all_null_size = ColumnArraySerde::max_serialized_size(*all_null, kLevel);
+    ASSERT_EQ(static_cast<int64_t>(sizeof(uint8_t) + sizeof(uint32_t)), all_null_size);
+    ASSERT_LT(all_null_size, ColumnArraySerde::max_serialized_size(*all_null, 7));
+
+    std::vector<uint8_t> buffer(all_null_size);
+    ASSIGN_OR_ABORT(auto* write_end, ColumnArraySerde::serialize(*all_null, buffer.data(), false, kLevel));
+    ASSERT_EQ(buffer.data() + buffer.size(), write_end);
+
+    auto restored = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSIGN_OR_ABORT(auto* read_end,
+                    ColumnArraySerde::deserialize(buffer.data(), write_end, restored.get(), false, kLevel));
+    ASSERT_EQ(write_end, read_end);
+    ASSERT_EQ(kRows, restored->size());
+    ASSERT_EQ(kRows, restored->data_column()->size());
+    ASSERT_TRUE(restored->has_null());
+    for (size_t i = 0; i < kRows; i++) {
+        ASSERT_TRUE(restored->is_null(i));
+    }
+}
+
+PARALLEL_TEST(ColumnArraySerdeTest, nullable_column_all_null_encoding_keeps_mixed_values) {
+    constexpr int kLevel = 7 | ENCODE_ALL_NULL;
+
+    std::vector<Slice> strings{{"aaa"}, {"bbbb"}};
+    auto mixed = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(mixed->append_strings(strings.data(), strings.size()));
+    mixed->append_nulls(1);
+
+    std::vector<uint8_t> buffer(ColumnArraySerde::max_serialized_size(*mixed, kLevel));
+    ASSIGN_OR_ABORT(auto* write_end, ColumnArraySerde::serialize(*mixed, buffer.data(), false, kLevel));
+
+    auto restored = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSIGN_OR_ABORT(auto* read_end,
+                    ColumnArraySerde::deserialize(buffer.data(), write_end, restored.get(), false, kLevel));
+    ASSERT_EQ(write_end, read_end);
+    ASSERT_EQ(mixed->size(), restored->size());
+    for (size_t i = 0; i < mixed->size(); i++) {
+        ASSERT_EQ(mixed->is_null(i), restored->is_null(i));
+        if (!mixed->is_null(i)) {
+            ASSERT_EQ(mixed->get(i).get_slice(), restored->get(i).get_slice());
+        }
+    }
+
+    // An unknown tag is rejected instead of being read as column data.
+    buffer[0] = 0x7f;
+    auto corrupted = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_FALSE(ColumnArraySerde::deserialize(buffer.data(), write_end, corrupted.get(), false, kLevel).status().ok());
+}
+
+PARALLEL_TEST(EncodeContextTest, all_null_bit_survives_the_compression_ratio_check) {
+    constexpr int kLevel = 7 | ENCODE_ALL_NULL;
+
+    // A column whose payload does not shrink loses its compression bits, but must keep
+    // ENCODE_ALL_NULL: that bit selects a layout, and the writer and reader agree on it through
+    // the per-column level recorded in the payload header.
+    auto incompressible = EncodeContext::get_encode_context_shared_ptr(1, kLevel);
+    for (int i = 0; i < 5; i++) {
+        incompressible->update(0, 1000, 1000);
+        incompressible->adjust_encode_levels();
+    }
+    ASSERT_EQ(ENCODE_ALL_NULL, incompressible->get_encode_level(0));
+
+    auto compressible = EncodeContext::get_encode_context_shared_ptr(1, kLevel);
+    for (int i = 0; i < 5; i++) {
+        compressible->update(0, 1000, 100);
+        compressible->adjust_encode_levels();
+    }
+    ASSERT_EQ(kLevel, compressible->get_encode_level(0));
+}
+
 namespace {
 
 constexpr uint32_t kBinarySerdeExtendedFormatVersion = 1;
@@ -1237,6 +1321,53 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ProtobufChunkSerde, exchange_ignores_the_spill_only_all_null_bit) {
+    constexpr size_t kRows = 64;
+    constexpr int kLegacyLevel = 7;
+    constexpr int kLevelWithBit = 7 | ENCODE_ALL_NULL;
+
+    // An all-NULL nullable column is where the two layouts differ, so it is the only shape that
+    // can detect the bit leaking onto the wire.
+    auto nullable = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    nullable->append_nulls(kRows);
+    Columns columns;
+    columns.emplace_back(std::move(nullable));
+    auto chunk = std::make_unique<Chunk>(std::move(columns), protobuf_serde_test::make_schema(1));
+
+    // A sender whose transmission_encode_level carries the bit must still emit the legacy layout,
+    // or a BE of an older version could not parse it.
+    auto legacy_context = EncodeContext::get_encode_context_shared_ptr(1, kLegacyLevel);
+    auto with_bit_context = EncodeContext::get_encode_context_shared_ptr(1, kLevelWithBit);
+    ASSIGN_OR_ABORT(auto legacy_pb, ProtobufChunkSerde::serialize(*chunk, legacy_context));
+    ASSIGN_OR_ABORT(auto with_bit_pb, ProtobufChunkSerde::serialize(*chunk, with_bit_context));
+    // Compare only the content. serialize_without_meta() sizes the buffer with
+    // resize_uninitialized() and keeps STREAMVBYTE_PADDING bytes past serialized_size that no
+    // writer ever fills, so the tail of data() is whatever the allocator handed out.
+    ASSERT_EQ(legacy_pb.serialized_size(), with_bit_pb.serialized_size());
+    ASSERT_EQ(legacy_pb.data().substr(0, legacy_pb.serialized_size()),
+              with_bit_pb.data().substr(0, with_bit_pb.serialized_size()));
+
+    // The reverse direction: a sender predating the bit treats it as unused, so it advertises the
+    // level unchanged in ChunkPB while sending the legacy layout. A receiver applies the SENDER's
+    // level, so it has to ignore the bit rather than read the first payload byte as the tag.
+    with_bit_pb.clear_encode_level();
+    with_bit_pb.add_encode_level(kLevelWithBit);
+
+    ProtobufChunkMeta meta;
+    meta.slot_id_to_index[0] = 0;
+    meta.is_nulls.resize(1, true);
+    meta.is_consts.resize(1, false);
+    meta.types.resize(1);
+    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
+
+    ProtobufChunkDeserializer deserializer(meta, &with_bit_pb, kLevelWithBit);
+    ASSIGN_OR_ABORT(auto restored, deserializer.deserialize(with_bit_pb.data()));
+    ASSERT_EQ(kRows, restored.num_rows());
+    for (size_t i = 0; i < kRows; i++) {
+        ASSERT_TRUE(restored.columns()[0]->is_null(i));
+    }
+}
+
 PARALLEL_TEST(ProtobufChunkSerde, deserialize_with_schema) {
     auto chunk = std::make_unique<Chunk>(protobuf_serde_test::make_columns(2), protobuf_serde_test::make_schema(2));
 

@@ -32,6 +32,15 @@ class Schema;
 
 namespace starrocks::serde {
 
+// ENCODE_ALL_NULL changes the NullableColumn layout, and it is spill-only: there the writer and the
+// reader are the same process. An exchange payload crosses BE versions in both directions, so strip
+// the bit from every level that reaches this serde. A peer that predates the bit treats it as
+// unused, so with transmission_encode_level set to 15 or -1 it advertises the bit in ChunkPB while
+// emitting the legacy layout -- and the level a receiver applies is the sender's, not its own.
+inline int exchange_encode_level(int encode_level) {
+    return encode_level & ~ENCODE_ALL_NULL;
+}
+
 class ProtobufChunkDeserializer;
 
 class ProtobufChunkSerde {
@@ -79,7 +88,7 @@ public:
         // and older version sends chunks without encode_level fields.
         if (pb != nullptr && encode_level) {
             for (auto i = 0; i < pb->encode_level_size(); ++i) {
-                _encode_level.emplace_back(pb->encode_level(i));
+                _encode_level.emplace_back(exchange_encode_level(pb->encode_level(i)));
             }
         }
     }
