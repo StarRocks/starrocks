@@ -1103,8 +1103,13 @@ struct ColumnRangeBuilder {
     template <LogicalType ltype, typename E, CompoundNodeType Type>
     Status operator()(ChunkPredicateBuilder<E, Type>* parent, const SlotDescriptor* slot,
                       std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
+<<<<<<< HEAD
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
                       ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY || lt_is_float<ltype> || lt_is_binary<ltype>) {
+=======
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || lt_is_semi_structured<ltype> || lt_is_float<ltype> ||
+                      lt_is_binary<ltype>) {
+>>>>>>> 8e3ee463784... [Refactor] Name the two axes of BE type predicates in logical_type.h (#63053)
             return Status::OK();
         } else {
             // Treat tinyint and boolean as int

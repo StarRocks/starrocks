@@ -41,9 +41,13 @@ struct MysqlColumnViewerBuilder {
         // JSON/VARIANT need the virtual Column::put_mysql_row_buffer path: it materializes
         // shredded variant rows via try_get_row_ref/get_row_value and uses push_null(false)
         // on serialization failure (so binary-protocol _field_pos is not double-incremented).
+<<<<<<< HEAD
         // GEO also owns its output representation; generic scalar access remains unsupported.
         if constexpr (ltype == TYPE_JSON || ltype == TYPE_VARIANT || ltype == TYPE_GEOGRAPHY ||
                       ltype == TYPE_GEOMETRY) {
+=======
+        if constexpr (lt_is_semi_structured<ltype>) {
+>>>>>>> 8e3ee463784... [Refactor] Name the two axes of BE type predicates in logical_type.h (#63053)
             return std::nullopt;
         } else {
             return MysqlColumnViewer(std::in_place_type<ColumnViewer<ltype>>, column);

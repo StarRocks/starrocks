@@ -71,9 +71,8 @@ public:
             : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr) {}
 
     // Result types built row by row through the generic Column::append() instead of
-    // ColumnBuilder/ColumnViewer + the SIMD multi-selector. VARIANT is not a collection but shares that
-    // path because it has no ColumnBuilder specialization.
-    static constexpr bool kRowWiseAppendResult = lt_is_collection<ResultType> || ResultType == TYPE_VARIANT;
+    // ColumnBuilder/ColumnViewer + the SIMD multi-selector. See lt_is_row_wise_append.
+    static constexpr bool kRowWiseAppendResult = lt_is_row_wise_append<ResultType>;
 
     ~VectorizedCaseExpr() override = default;
 
@@ -359,7 +358,7 @@ private:
         }
         then_columns.emplace_back(else_column);
         size_t size = when_columns[0]->size();
-        if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType> || ResultType == TYPE_VARIANT) {
+        if constexpr (kRowWiseAppendResult || lt_is_row_wise_append<WhenType>) {
             // construct result column
             bool res_nullable = false;
             for (const auto& col : then_columns) {
