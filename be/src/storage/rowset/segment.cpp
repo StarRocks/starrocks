@@ -430,8 +430,9 @@ Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
 
         Status st = _load_index(lake_io_opts);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(),
-                                     _short_key_index_mem_usage());
+            const auto index_mem_usage = _short_key_index_mem_usage();
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), index_mem_usage);
+            _loaded_key_index_mem_usage.store(index_mem_usage, std::memory_order_relaxed);
             update_cache_size();
         } else {
             _reset();
@@ -816,7 +817,8 @@ size_t Segment::mem_usage() const {
         // just report the basic info memory usage if not opened yet
         return _basic_info_mem_usage();
     }
-    return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
+    return _basic_info_mem_usage() + _loaded_key_index_mem_usage.load(std::memory_order_relaxed) +
+           _column_index_mem_usage();
 }
 
 StatusOr<int64_t> Segment::get_data_size() const {

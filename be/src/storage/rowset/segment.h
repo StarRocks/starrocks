@@ -350,6 +350,10 @@ private:
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
+    // Published size of the loaded short key index. Memory samplers must not inspect
+    // its handle or decoder while another reader is still loading it.
+    std::atomic<size_t> _loaded_key_index_mem_usage{0};
+
     std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
     std::atomic_int _batch_on_flags_counter{0};
