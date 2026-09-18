@@ -43,6 +43,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.AIQueryAdmission;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.DmlType;
@@ -185,6 +186,8 @@ public class TransactionStmtExecutor {
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         try {
+            // A rejected statement must not register or activate tables in the caller's transaction.
+            AIQueryAdmission.check(execPlan);
             TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
                     context.getTxnId(), database.getId());
 

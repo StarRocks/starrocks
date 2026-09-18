@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.reshard.presplit.LoadKind;
 import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -33,6 +34,7 @@ import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
+import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
@@ -58,6 +60,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
@@ -73,6 +76,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.AIInputTokenEstimate;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
@@ -81,6 +85,8 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -944,6 +950,231 @@ public class StmtExecutorTest {
         Assertions.assertEquals("1265", warning.getCode());
         Assertions.assertEquals("3 row(s) filtered or substituted to NULL during load; "
                 + "tracking_url=http://be:8040/api/_load_error_log", warning.getMessage());
+    }
+
+    @Test
+    public void testAIAdmissionBeforeExplainAnalyzeCannotBeMaskedByProfile() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        ctx.getSessionVariable().setEnableProfile(true);
+        ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+        StatementBase stmt = SqlParser.parseSingleStatement("EXPLAIN ANALYZE SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public boolean isForwardToLeader() {
+                return false;
+            }
+        };
+        new MockUp<WarehouseMetricMgr>() {
+            @Mock
+            public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+            }
+        };
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase statement, ConnectContext context) {
+                return buildMinimalExecPlan(1);
+            }
+        };
+        new MockUp<ExecPlan>() {
+            @Mock
+            public AIInputTokenEstimate getAIInputTokenEstimate() {
+                return AIInputTokenEstimate.unknown("missing statistics");
+            }
+
+            @Mock
+            public long getAIInputTokenLimit() {
+                return 1;
+            }
+        };
+        AtomicInteger coordinatorCreations = new AtomicInteger();
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                           List<ScanNode> scanNodes,
+                                                           TDescriptorTable descTable, ExecPlan plan) {
+                coordinatorCreations.incrementAndGet();
+                throw new AssertionError("must reject before creating a coordinator");
+            }
+        };
+        AtomicInteger explainResults = new AtomicInteger();
+        new MockUp<ExplainAnalyzer>() {
+            @Mock
+            public String analyze(ProfilingExecPlan plan, RuntimeProfile profile,
+                                         List<Integer> planNodeIds, boolean colorExplainOutput) {
+                explainResults.incrementAndGet();
+                return "unexpected profile";
+            }
+        };
+        executor.execute();
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("unknown"), ctx.getState().getErrorMessage());
+        Assertions.assertEquals(0, coordinatorCreations.get());
+        Assertions.assertEquals(0, explainResults.get());
+    }
+
+    @Test
+    public void testFailedDmlExplainAnalyzeDoesNotSendExplainResult() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        ctx.setExecutionId(new TUniqueId(96, 97));
+        ctx.getSessionVariable().setEnableProfile(true);
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "EXPLAIN ANALYZE INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan plan, DmlStmt dmlStmt) throws StarRocksException {
+                ctx.getState().setError("pre-deployment rejection");
+                throw new StarRocksException("pre-deployment rejection");
+            }
+        };
+        new MockUp<ProfilingExecPlan>() {
+            @Mock
+            public static ProfilingExecPlan buildFrom(ExecPlan plan) {
+                return null;
+            }
+        };
+        AtomicInteger explainResults = new AtomicInteger();
+        new MockUp<ExplainAnalyzer>() {
+            @Mock
+            public String analyze(ProfilingExecPlan plan, RuntimeProfile profile,
+                                         List<Integer> planNodeIds, boolean colorExplainOutput) {
+                explainResults.incrementAndGet();
+                return "unexpected profile";
+            }
+        };
+        Assertions.assertThrows(StarRocksException.class,
+                () -> executor.handleDMLStmtWithProfile(buildMinimalExecPlan(1), stmt));
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(0, explainResults.get());
+    }
+
+    @Test
+    public void testExplicitTransactionSchedulerExplainDoesNotLoad(@Mocked DefaultCoordinator coordinator,
+                                                                 @Mocked OlapTable targetTable)
+            throws Exception {
+        MetricRepo.init();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        ctx.setExecutionId(new TUniqueId(91, 92));
+        ctx.setTxnId(93);
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "EXPLAIN SCHEDULER INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        AtomicInteger dryRuns = new AtomicInteger();
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database(10002, "dry_run_db");
+            }
+        };
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void execWithoutDeploy() {
+                dryRuns.incrementAndGet();
+            }
+
+            @Mock
+            public void exec() {
+                Assertions.fail("scheduler explain must not deploy");
+            }
+
+            @Mock
+            public String getSchedulerExplain() {
+                return "dry-run schedule";
+            }
+        };
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public static void loadData(Database database, Table targetTable, ExecPlan plan, DmlStmt dmlStmt,
+                                        OriginStatement originStmt, ConnectContext context) {
+                Assertions.fail("scheduler explain must not activate the explicit transaction");
+            }
+        };
+        executor.handleDMLStmt(buildMinimalExecPlan(1), stmt);
+        Assertions.assertEquals(1, dryRuns.get());
+        Assertions.assertEquals(93, ctx.getTxnId());
+        Assertions.assertEquals(MysqlStateType.EOF, ctx.getState().getStateType());
+    }
+
+    @Test
+    public void testPreDeploymentDmlFailureAbortsWithoutSuccessNotification(@Mocked OlapTable targetTable,
+                                                                          @Mocked TransactionState txnState)
+            throws Exception {
+        MetricRepo.init();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        ctx.setExecutionId(new TUniqueId(94, 95));
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement("INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        Database database = new Database(10001, "predeploy_db");
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return database;
+            }
+        };
+        AtomicInteger aborts = new AtomicInteger();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return txnState;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason,
+                                         List<TabletCommitInfo> finishedTablets, List<TabletFailInfo> failedTablets,
+                                         TxnCommitAttachment attachment) {
+                aborts.incrementAndGet();
+            }
+        };
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                throw new IllegalStateException("pre-deployment failure");
+            }
+        };
+        AtomicInteger successes = new AtomicInteger();
+        new MockUp<GlobalLoadJobListenerBus>() {
+            @Mock
+            public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                                      DmlType dmlType) {
+                successes.incrementAndGet();
+            }
+        };
+        Exception failure = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.handleDMLStmt(buildMinimalExecPlan(1), stmt));
+        Assertions.assertTrue(failure.getMessage().contains("pre-deployment failure"));
+        Assertions.assertEquals(1, aborts.get());
+        Assertions.assertEquals(0, successes.get());
+        Assertions.assertTrue(ctx.getState().isError());
     }
 
     @Test

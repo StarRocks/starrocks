@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.AIInputTokenEstimate;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TUniqueId;
@@ -1100,6 +1101,59 @@ public class ExplicitTxnTest {
             Assertions.assertFalse(state.getTableIdList().contains(secondTableId));
             Assertions.assertFalse(mgr.isPreviousTransactionsFinishedForReshard(
                     txnId, db1.getId(), List.of(secondTableId), Set.of()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testAIAdmissionRejectsBeforeExplicitTransactionRegistration() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "ai-admission-rejected", 60_000L);
+        ConnectContext context = new ConnectContext();
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(txnId);
+        context.setExecutionId(new TUniqueId(txnId, txnId));
+        AtomicInteger registrations = new AtomicInteger();
+        try {
+            new MockUp<ExecPlan>() {
+                @Mock
+                public AIInputTokenEstimate getAIInputTokenEstimate() {
+                    return AIInputTokenEstimate.unknown("missing statistics");
+                }
+
+                @Mock
+                public long getAIInputTokenLimit() {
+                    return 1;
+                }
+            };
+            new MockUp<DatabaseTransactionMgr>() {
+                @Mock
+                public void upsertTransactionState(TransactionState transactionState) throws AnalysisException {
+                    registrations.incrementAndGet();
+                    throw new AnalysisException("registered before admission");
+                }
+            };
+
+            TransactionStmtExecutor.loadData(db, table, new ExecPlan(), mock(DmlStmt.class),
+                    new OriginStatement("insert"), context);
+            Assertions.assertTrue(context.getState().isError());
+            Assertions.assertTrue(context.getState().getErrorMessage().contains("unknown"),
+                    context.getState().getErrorMessage());
+            Assertions.assertEquals(0, registrations.get());
+            Assertions.assertEquals(txnId, context.getTxnId());
+            Assertions.assertEquals(0, state.getDbId());
+            ExplicitTxnState explicit = mgr.getExplicitTxnState(txnId);
+            Assertions.assertSame(state, explicit.getTransactionState());
+            Assertions.assertTrue(explicit.getModifiedTableIds().isEmpty());
+            Assertions.assertTrue(explicit.getTransactionStateItems().isEmpty());
+            Assertions.assertFalse(explicit.getTableHasExplicitStmt("tbl1"));
         } finally {
             cleanupExplicitState(mgr, state);
         }

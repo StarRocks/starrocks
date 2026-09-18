@@ -616,6 +616,9 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void startScheduling(ScheduleOption option) throws StarRocksException, InterruptedException, RpcException {
+        if (option.doDeploy) {
+            AIQueryAdmission.check(jobSpec.getExecPlan());
+        }
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
