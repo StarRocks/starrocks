@@ -963,14 +963,20 @@ public class AnalyzerUtils {
     }
 
     /**
-     * CopySafe:
-     * 1. OlapTable & MaterializedView, that support the copyOnlyForQuery interface
-     * 2. External tables with immutable memory-structure
+     * CopySafe, i.e. the statement does not need the whole planning phase to run under the meta lock. A table
+     * qualifies when either:
+     * 1. planning can work off a private snapshot of it: OlapTable and MaterializedView are shadow copied by
+     * copyOnlyForQuery, unless one carries more related MVs than skip_whole_phase_lock_mv_limit and the
+     * statement gives that limit a reason to apply -- see {@link CopyUnsafeTablesCollector}; or
+     * 2. it has an immutable in-memory structure, so there is nothing for the lock to protect.
+     * <p>
+     * Everything else -- ENGINE=MYSQL / ELASTICSEARCH, ExternalOlapTable, and resource-mapping external
+     * tables -- is copy-unsafe and does hold the lock for the whole phase.
      */
     public static boolean areTablesCopySafe(StatementBase statementBase) {
-        Map<TableName, Table> nonOlapTables = Maps.newHashMap();
-        new CopyUnsafeTablesCollector(nonOlapTables).visit(statementBase);
-        return nonOlapTables.isEmpty();
+        CopyUnsafeTablesCollector collector = new CopyUnsafeTablesCollector();
+        collector.visit(statementBase);
+        return collector.isCopySafe();
     }
 
     public static boolean hasTemporaryTables(StatementBase statementBase) {
@@ -1099,34 +1105,124 @@ public class AnalyzerUtils {
         }
     }
 
+    /**
+     * Decides whether the planner may work off private snapshots of this statement's tables, or has to hold the
+     * meta lock for the whole planning phase.
+     *
+     * <p>The verdict is only taken once the whole statement has been walked, because one table's verdict depends
+     * on what else the statement touches -- see the MV-limit note in {@link #visitTable}. That is also why this
+     * collector does not stop at the first copy-unsafe table it finds.
+     */
     private static class CopyUnsafeTablesCollector extends TableCollector {
-
         private static final ImmutableSet<Table.TableType> IMMUTABLE_EXTERNAL_TABLES =
                 ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG);
 
-        public CopyUnsafeTablesCollector(Map<TableName, Table> tables) {
-            super(tables);
+        /**
+         * Native tables carrying more related MVs than {@code skip_whole_phase_lock_mv_limit}. Held aside rather
+         * than counted as copy-unsafe straight away: whether that limit gets to decide depends on the rest of
+         * the statement.
+         */
+        private final Map<TableName, Table> overTheMvLimit = Maps.newHashMap();
+
+        /**
+         * The INSERT target, when it is a table planning could work off a snapshot of. Held aside for the same
+         * reason {@link #overTheMvLimit} is -- see {@link #isCopySafe()} for what lets it through.
+         */
+        private final Map<TableName, Table> snapshotableInsertTarget = Maps.newHashMap();
+
+        /** Whether the statement reads a table through a connector, i.e. one whose metadata is remote. */
+        private boolean readsThroughAConnector;
+
+        /**
+         * Copy-safe when nothing in the statement forces the lock to be held for the whole planning phase.
+         *
+         * <p><b>Why a connector table lets a table over the MV limit through.</b> That limit is a cost
+         * heuristic, not a correctness gate: correctness on the lock-free path comes from copying each
+         * candidate MV ({@code MvRewritePreprocessor.copyOnlyMaterializedView}) and from OptimisticVersion
+         * revalidating every table at the end. What the limit weighs is snapshot cost against lock-held time,
+         * and it was calibrated for a statement whose planning is local, where both sides are CPU.
+         *
+         * <p>Add a table in an external catalog and the right-hand side stops being CPU. Planning will ask that
+         * catalog for partitions, statistics and file lists, and every one of those is a round trip to a system
+         * the FE does not control -- so the lock's hold time becomes that system's latency while it protects
+         * nothing on that side, since an external table is never in the lock set to begin with. Meanwhile the
+         * left-hand side has not grown: the number of MVs actually copied is capped by
+         * {@code cbo_materialized_view_rewrite_related_mvs_limit} (16 by default), not by how many the table
+         * carries. A bounded local copy is the better trade against an unbounded remote wait, so the limit does
+         * not get to decide here.
+         *
+         * <p><b>Why the INSERT target is held to the same rule.</b> Same trade, same answer: an INSERT whose
+         * SELECT reads through a connector runs the whole optimization -- external statistics, partition lists,
+         * file lists -- and today it does all of it under the lock, because the target lands in the copy-unsafe
+         * set unconditionally (see {@link #visitInsertStatement}). The target itself is snapshot-able exactly
+         * like any other native table, so what is gated here is not its safety but whether the trade is worth
+         * making. Requiring a connector read keeps every purely local INSERT on the path it has always taken.
+         */
+        public boolean isCopySafe() {
+            return tables.isEmpty()
+                    && (readsThroughAConnector || (overTheMvLimit.isEmpty() && snapshotableInsertTarget.isEmpty()));
+        }
+
+        /**
+         * The INSERT target does not reach {@link #visitTable}: {@link TableCollector} puts it straight into
+         * {@code tables}. That was added for the privilege collector (#18808) -- collecting every table a
+         * statement names -- long before this subclass reused the same map as a verdict, so ever since, no
+         * INSERT has been copy-safe and {@code StatementPlanner.isLockFreeInsertStmt} has always answered
+         * false. Put the target through the same verdict the other tables get instead.
+         */
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            Table target = node.getTargetTable();
+            TableName targetName = TableName.fromTableRef(node.getTableRef());
+            if (target == null) {
+                // Not analyzed yet, so there is nothing to judge: stay on the locked path.
+                tables.put(targetName, target);
+            } else if (target.isNativeTableOrMaterializedView()) {
+                snapshotableInsertTarget.put(targetName, target);
+            } else if (IMMUTABLE_EXTERNAL_TABLES.contains(target.getType())) {
+                // INSERT INTO an immutable external table. Its structure gives the lock nothing to protect
+                // and its metadata is remote, so it abstains for the same reason visitTable lets such a
+                // table abstain when the statement reads one.
+                readsThroughAConnector = true;
+            } else {
+                // No snapshot to plan against: ENGINE=MYSQL, ExternalOlapTable, and resource-mapping
+                // external tables. Unchanged -- the lock has to stay for the whole phase.
+                tables.put(targetName, target);
+            }
+            // Deliberately not super.visitInsertStatement: that is the blanket put this override replaces.
+            // AstTraverser only walks the query statement from here, so do exactly that.
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
         }
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (!tables.isEmpty()) {
-                return null;
-            }
-
             Table table = node.getTable();
             // system table is immutable
             if (table instanceof SystemTable) {
                 return null;
             }
+            // A table planning can see through a private snapshot does not need the real lock held: OlapTable
+            // and MV are shadow copied by copyOnlyForQuery, and OptimisticVersion revalidates them on the
+            // lock-free path. The MV-count limit is the existing guard on that copy being cheap.
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
-            if ((table.isNativeTableOrMaterializedView() && useNonLockOptimization)) {
-                // OlapTable can be copied via copyOnlyForQuery
+            if (table.isNativeTableOrMaterializedView()) {
+                if (useNonLockOptimization) {
+                    return null;
+                }
+                // Over the limit, so planning this table under the lock is the cheaper of the two on its own.
+                // Whether it stays cheaper depends on what else the statement reads -- decided in isCopySafe().
+                overTheMvLimit.put(node.getName(), node.getTable());
                 return null;
             } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
-                // Immutable table
+                // Immutable structure, so the lock has nothing to protect here -- but the metadata behind it
+                // is still remote, which is what makes holding the lock across this statement's planning
+                // expensive. That is the trade isCopySafe() weighs the MV limit against.
+                readsThroughAConnector = true;
                 return null;
             } else {
                 tables.put(node.getName(), node.getTable());

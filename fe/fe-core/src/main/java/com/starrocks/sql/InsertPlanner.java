@@ -158,6 +158,23 @@ public class InsertPlanner {
     private boolean forceReplicatedStorage = false;
     private boolean useOptimisticLock;
     private PlannerMetaLocker plannerMetaLocker;
+    /**
+     * Non-null on the optimistic path: the live tables the statement's copies were made from, revalidated
+     * after planning. Handed in by {@link StatementPlanner} when it took the snapshot under the lock it was
+     * already holding; otherwise taken at the top of {@link #plan}.
+     */
+    private Set<OlapTable> originalOlapTables;
+    /**
+     * The target table as the statement carried it in, so planning can hand the statement back unchanged.
+     * See {@link #plan} for why that matters.
+     */
+    private Table originalInsertTarget;
+    /**
+     * The version every attempt's copies are validated against. Taken from the snapshot when
+     * {@link StatementPlanner} made one, because it has to predate those copies -- between the snapshot and
+     * here the lock is already released and the authorization check has run.
+     */
+    private Long planStartTime;
 
     private List<Column> outputBaseSchema;
     private List<Column> outputFullSchema;
@@ -169,8 +186,16 @@ public class InsertPlanner {
     }
 
     public InsertPlanner(PlannerMetaLocker plannerMetaLocker, boolean optimisticLock) {
+        this(plannerMetaLocker, optimisticLock, null);
+    }
+
+    public InsertPlanner(PlannerMetaLocker plannerMetaLocker, boolean optimisticLock,
+                         StatementPlanner.PlanningSnapshot snapshot) {
         this.useOptimisticLock = optimisticLock;
         this.plannerMetaLocker = plannerMetaLocker;
+        this.originalOlapTables = snapshot == null ? null : snapshot.originalOlapTables();
+        this.originalInsertTarget = snapshot == null ? null : snapshot.originalInsertTarget();
+        this.planStartTime = snapshot == null ? null : snapshot.planStartTime();
     }
 
     private enum GenColumnDependency {
@@ -287,7 +312,86 @@ public class InsertPlanner {
         }
     }
 
+    /**
+     * On the optimistic path the statement is planned off private copies, and taking them replaces the
+     * target table on the statement itself ({@code OlapTableCollector.visitInsertStatement}). That copy must
+     * not outlive this call: a statement can be planned more than once -- {@code InsertOverwriteJobRunner}
+     * re-plans after creating the temporary partitions it will swap in -- and re-analysis does not resolve
+     * the target again, it reuses whatever the statement carries ({@code InsertAnalyzer}). Leaving a copy
+     * behind makes the second analysis look for those partitions in a table object that predates them.
+     */
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
+        if (!useOptimisticLock) {
+            return doPlan(insertStmt, session);
+        }
+        if (originalInsertTarget == null) {
+            originalInsertTarget = insertStmt.getTargetTable();
+        }
+        if (planStartTime == null) {
+            // Only when no snapshot was handed in; the lock is still held here, so this is the same
+            // "generated before the copy" ordering StatementPlanner uses.
+            planStartTime = OptimisticVersion.generate();
+        }
+        if (originalOlapTables == null) {
+            // Snapshot before anything below reads the target's schema or transforms the query: on this path
+            // the optimizer runs with the meta lock released, so every table the plan reaches has to be a
+            // private copy. Collecting it inside buildExecPlanWithRetry -- where it used to live -- was too
+            // late, because the logical plan built here would still point at the live objects.
+            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
+        }
+        try {
+            return planWithRetry(insertStmt, session);
+        } finally {
+            insertStmt.setTargetTable(originalInsertTarget);
+        }
+    }
+
+    /**
+     * Plan with the meta lock released, then re-acquire it and check that nothing the plan was built on has
+     * changed underneath. An attempt is one whole pass of {@link #doPlan}: the output schema, the logical
+     * plan and the sink are all derived from the table objects of that attempt, so a retry that reused them
+     * would re-validate fresh copies while returning a plan built for the schema that was just rejected.
+     *
+     * <p>{@code planStartTime} is always generated <em>before</em> the copies it will be compared against,
+     * never after: a version that is too early only costs a spurious retry, while one that is too late makes
+     * a racing schema change sort before it and be accepted.
+     */
+    private ExecPlan planWithRetry(InsertStmt insertStmt, ConnectContext session) {
+        Set<OlapTable> olapTables = originalOlapTables;
+        Stopwatch watch = Stopwatch.createStarted();
+
+        for (int i = 0; i < Config.max_query_retry_time; i++) {
+            if (i > 0) {
+                planStartTime = OptimisticVersion.generate();
+                // Re-analysis reuses the target the statement carries instead of resolving it again, so put
+                // the live table back first: the copy from the previous attempt is the stale schema that
+                // sent us here.
+                insertStmt.setTargetTable(originalInsertTarget);
+                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, session, plannerMetaLocker);
+            }
+
+            // Release the lock during planning, and reacquire it before validating. A no-op when the caller
+            // already released it (StatementPlanner does, so that the authorization check runs off the lock
+            // too); either way the finally below leaves it held, as the caller expects.
+            plannerMetaLocker.unlock();
+            ExecPlan plan;
+            try {
+                plan = doPlan(insertStmt, session);
+            } finally {
+                try (Timer ignore = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                }
+            }
+            long validateAgainst = planStartTime;
+            if (olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, validateAgainst))) {
+                return plan;
+            }
+        }
+        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
+                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+    }
+
+    private ExecPlan doPlan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
@@ -370,13 +474,8 @@ public class InsertPlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
-            ExecPlan execPlan =
-                    useOptimisticLock ?
-                            buildExecPlanWithRetry(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
-                                    queryRelation, targetTable) :
-                            buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
-                                    queryRelation,
-                                    targetTable);
+            ExecPlan execPlan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
+                    queryRelation, targetTable);
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
@@ -547,44 +646,6 @@ public class InsertPlanner {
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
         }
-    }
-
-    /**
-     * The workhorse of InsertPlanner, which may takes a lot of time, so we would release the lock during planning
-     */
-    private ExecPlan buildExecPlanWithRetry(InsertStmt insertStmt, ConnectContext session,
-                                            List<ColumnRefOperator> outputColumns,
-                                            LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                            QueryRelation queryRelation, Table targetTable) {
-        boolean isSchemaValid = true;
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
-        Stopwatch watch = Stopwatch.createStarted();
-
-        for (int i = 0; i < Config.max_query_retry_time; i++) {
-            long planStartTime = OptimisticVersion.generate();
-            if (!isSchemaValid) {
-                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, session, plannerMetaLocker);
-            }
-
-            // Release the lock during planning, and reacquire the lock before validating
-            plannerMetaLocker.unlock();
-            ExecPlan plan;
-            try {
-                plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
-                        targetTable);
-            } finally {
-                try (Timer ignore2 = Tracers.watchScope("Lock")) {
-                    StatementPlanner.lock(plannerMetaLocker);
-                }
-            }
-            isSchemaValid =
-                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
-            if (isSchemaValid) {
-                return plan;
-            }
-        }
-        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
-                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
     }
 
     private List<Column> getOptimizeOutputFullSchema(Table targetTable) {

@@ -75,6 +75,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.PreResolvedViewBodies;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -256,6 +257,10 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+
+    // View bodies the unlocked pre-pass resolved for the statement being planned, handed to the locked
+    // analyzer when it expands those views. Scoped to one statement: StatementPlanner clears it.
+    private final PreResolvedViewBodies preResolvedViewBodies = new PreResolvedViewBodies();
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -1315,6 +1320,10 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public PreResolvedViewBodies getPreResolvedViewBodies() {
+        return preResolvedViewBodies;
     }
 
     public QuerySource getQuerySource() {
