@@ -398,6 +398,40 @@ public class ConfigTest {
     }
 
     @Test
+    public void testAIInputTokenLimitValidation() throws Exception {
+        long original = Config.ai_query_admission_max_estimated_input_tokens;
+        String key = "ai_query_admission_max_estimated_input_tokens";
+        try {
+            for (long valid : new long[] {0, 1, Long.MAX_VALUE}) {
+                Config.setMutableConfig(key, Long.toString(valid), false, "");
+                Assertions.assertEquals(valid, Config.ai_query_admission_max_estimated_input_tokens);
+            }
+            for (long invalid : new long[] {-1, Long.MIN_VALUE}) {
+                Assertions.assertThrows(InvalidConfException.class,
+                        () -> Config.setMutableConfig(key, Long.toString(invalid), false, ""));
+                Assertions.assertEquals(Long.MAX_VALUE, Config.ai_query_admission_max_estimated_input_tokens);
+            }
+        } finally {
+            Config.ai_query_admission_max_estimated_input_tokens = original;
+        }
+    }
+
+    @Test
+    public void testNegativeAIInputTokenLimitRejectedAtStartup() throws Exception {
+        long original = Config.ai_query_admission_max_estimated_input_tokens;
+        Path confFile = Files.createTempFile("fe_negative_ai_input_token_limit", ".conf");
+        try {
+            Files.writeString(confFile, "ai_query_admission_max_estimated_input_tokens = -1\n");
+            Assertions.assertThrows(InvalidConfException.class,
+                    () -> new Config().init(confFile.toFile().getAbsolutePath()));
+            Assertions.assertEquals(original, Config.ai_query_admission_max_estimated_input_tokens);
+        } finally {
+            Config.ai_query_admission_max_estimated_input_tokens = original;
+            Files.deleteIfExists(confFile);
+        }
+    }
+
+    @Test
     public void testDefaultMvRefreshModeSurvivesTurkishLocale() throws Exception {
         String original = Config.default_mv_refresh_mode;
         Locale originalLocale = Locale.getDefault();

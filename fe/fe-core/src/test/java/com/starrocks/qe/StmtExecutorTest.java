@@ -21,6 +21,7 @@ import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -61,6 +62,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
@@ -84,6 +86,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -998,6 +1001,160 @@ public class StmtExecutorTest {
         Assertions.assertEquals("1265", warning.getCode());
         Assertions.assertEquals("3 row(s) filtered or substituted to NULL during load; "
                 + "tracking_url=http://be:8040/api/_load_error_log", warning.getMessage());
+    }
+
+    @Test
+    public void testAIAdmissionBeforeExplainAnalyzeCannotBeMaskedByProfile() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        ctx.getSessionVariable().setEnableProfile(true);
+        ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+        StatementBase stmt = SqlParser.parseSingleStatement("EXPLAIN ANALYZE SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public boolean isForwardToLeader() {
+                return false;
+            }
+        };
+        new MockUp<WarehouseMetricMgr>() {
+            @Mock
+            public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+            }
+        };
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase statement, ConnectContext context) {
+                throw new StarRocksPlannerException("estimate is UNKNOWN", ErrorType.USER_ERROR);
+            }
+        };
+        AtomicInteger coordinatorCreations = new AtomicInteger();
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                           List<ScanNode> scanNodes,
+                                                           TDescriptorTable descTable, ExecPlan plan) {
+                coordinatorCreations.incrementAndGet();
+                throw new AssertionError("must reject before creating a coordinator");
+            }
+        };
+        AtomicInteger explainResults = new AtomicInteger();
+        new MockUp<ExplainAnalyzer>() {
+            @Mock
+            public String analyze(ProfilingExecPlan plan, RuntimeProfile profile,
+                                         List<Integer> planNodeIds, boolean colorExplainOutput) {
+                explainResults.incrementAndGet();
+                return "unexpected profile";
+            }
+        };
+        executor.execute();
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("UNKNOWN"), ctx.getState().getErrorMessage());
+        Assertions.assertEquals(QueryState.ErrType.ANALYSIS_ERR, ctx.getState().getErrType());
+        Assertions.assertEquals(0, coordinatorCreations.get());
+        Assertions.assertEquals(0, explainResults.get());
+    }
+
+    @Test
+    public void testFailedDmlExplainAnalyzeDoesNotSendExplainResult() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        ctx.setExecutionId(new TUniqueId(96, 97));
+        ctx.getSessionVariable().setEnableProfile(true);
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "EXPLAIN ANALYZE INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan plan, DmlStmt dmlStmt) throws StarRocksException {
+                ctx.getState().setError("pre-deployment rejection");
+                throw new StarRocksException("pre-deployment rejection");
+            }
+        };
+        new MockUp<ProfilingExecPlan>() {
+            @Mock
+            public static ProfilingExecPlan buildFrom(ExecPlan plan) {
+                return null;
+            }
+        };
+        AtomicInteger explainResults = new AtomicInteger();
+        new MockUp<ExplainAnalyzer>() {
+            @Mock
+            public String analyze(ProfilingExecPlan plan, RuntimeProfile profile,
+                                         List<Integer> planNodeIds, boolean colorExplainOutput) {
+                explainResults.incrementAndGet();
+                return "unexpected profile";
+            }
+        };
+        Assertions.assertThrows(StarRocksException.class,
+                () -> executor.handleDMLStmtWithProfile(buildMinimalExecPlan(1), stmt));
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(0, explainResults.get());
+    }
+
+    @Test
+    public void testExplicitTransactionSchedulerExplainDoesNotLoad(@Mocked DefaultCoordinator coordinator,
+                                                                 @Mocked OlapTable targetTable)
+            throws Exception {
+        MetricRepo.init();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        ctx.setExecutionId(new TUniqueId(91, 92));
+        ctx.setTxnId(93);
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "EXPLAIN SCHEDULER INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        AtomicInteger dryRuns = new AtomicInteger();
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database(10002, "dry_run_db");
+            }
+        };
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void execWithoutDeploy() {
+                dryRuns.incrementAndGet();
+            }
+
+            @Mock
+            public void exec() {
+                Assertions.fail("scheduler explain must not deploy");
+            }
+
+            @Mock
+            public String getSchedulerExplain() {
+                return "dry-run schedule";
+            }
+        };
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public static void loadData(Database database, Table targetTable, ExecPlan plan, DmlStmt dmlStmt,
+                                        OriginStatement originStmt, ConnectContext context) {
+                Assertions.fail("scheduler explain must not activate the explicit transaction");
+            }
+        };
+        executor.handleDMLStmt(buildMinimalExecPlan(1), stmt);
+        Assertions.assertEquals(1, dryRuns.get());
+        Assertions.assertEquals(93, ctx.getTxnId());
+        Assertions.assertEquals(MysqlStateType.EOF, ctx.getState().getStateType());
     }
 
     @Test
@@ -2353,6 +2510,100 @@ public class StmtExecutorTest {
         Assertions.assertEquals("existing", state.getInfoMessage());
         StmtExecutor.attachDeleteOkInfo(state, "");
         Assertions.assertEquals("existing", state.getInfoMessage());
+    }
+
+    @Test
+    public void testExplainAnalyzeRetryPlanningRejectionDoesNotSendExplainResult(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableProfile(true);
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            String sql = "EXPLAIN ANALYZE SELECT 1";
+            StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            stmt.setOrigStmt(new OriginStatement(sql, 0));
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            AtomicInteger planningCalls = new AtomicInteger();
+            String rejection = "Estimated AI input tokens exceed the limit during replanning";
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public ExecPlan plan(StatementBase statement, ConnectContext context) {
+                    if (planningCalls.incrementAndGet() == 1) {
+                        return buildMinimalExecPlan(1);
+                    }
+                    throw new StarRocksPlannerException(rejection, ErrorType.USER_ERROR);
+                }
+            };
+            new MockUp<ProfilingExecPlan>() {
+                @Mock
+                public static ProfilingExecPlan buildFrom(ExecPlan plan) {
+                    return null;
+                }
+            };
+            AtomicInteger explainResults = new AtomicInteger();
+            new MockUp<ExplainAnalyzer>() {
+                @Mock
+                public String analyze(ProfilingExecPlan plan, RuntimeProfile profile,
+                                      List<Integer> planNodeIds, boolean colorExplainOutput) {
+                    explainResults.incrementAndGet();
+                    return "unexpected explain result";
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+            AtomicInteger attempts = new AtomicInteger();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                }
+
+                @Mock
+                public RuntimeProfile getQueryProfile() {
+                    return new RuntimeProfile("Execution");
+                }
+
+                @Mock
+                public RowBatch getNext() throws Exception {
+                    attempts.incrementAndGet();
+                    throw new StarRocksException(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR,
+                            "Backend node not found. Check if any backend node is down.");
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(1, attempts.get());
+            Assertions.assertEquals(2, planningCalls.get());
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertEquals(rejection, ctx.getState().getErrorMessage());
+            Assertions.assertEquals(QueryState.ErrType.ANALYSIS_ERR, ctx.getState().getErrType());
+            Assertions.assertEquals(0, explainResults.get());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
     }
 
     /**

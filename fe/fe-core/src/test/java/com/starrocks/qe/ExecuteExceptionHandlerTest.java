@@ -26,8 +26,11 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -36,6 +39,8 @@ import com.starrocks.thrift.TAIModelConfiguration;
 import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStatusCode;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +52,35 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class ExecuteExceptionHandlerTest extends PlanTestBase {
+
+    @Test
+    public void testReplanningPropagatesUserErrorInsteadOfOriginalRpcError() throws Exception {
+        assertReplanningFailure(ErrorType.USER_ERROR);
+    }
+
+    @Test
+    public void testReplanningInternalErrorPreservesOriginalRpcError() throws Exception {
+        assertReplanningFailure(ErrorType.INTERNAL_ERROR);
+    }
+
+    private void assertReplanningFailure(ErrorType type) throws Exception {
+        String sql = "select 1";
+        ExecPlan plan = getExecPlan(sql);
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        StarRocksPlannerException planningFailure = new StarRocksPlannerException("planning rejected", type);
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public ExecPlan plan(StatementBase stmt, ConnectContext context) {
+                throw planningFailure;
+            }
+        };
+        RpcException originalFailure = new RpcException("backend unavailable");
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, plan, connectContext, statement);
+        Exception failure = Assertions.assertThrows(Exception.class,
+                () -> ExecuteExceptionHandler.handle(originalFailure, retryContext));
+        Assertions.assertSame(type == ErrorType.USER_ERROR ? planningFailure : originalFailure, failure);
+    }
 
     @Test
     public void testHandleRemoteFileNotFoundException_1() throws Exception {
@@ -170,8 +204,10 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
             manager.alterProvider(name, Map.of("protocol", "anthropic"), false);
             retry.setRetryTime(1);
             RpcException failure = new RpcException("mock protocol retry");
-            Assertions.assertSame(failure, Assertions.assertThrows(RpcException.class,
-                    () -> ExecuteExceptionHandler.handle(failure, retry)));
+            SemanticException retryError = Assertions.assertThrows(SemanticException.class,
+                    () -> ExecuteExceptionHandler.handle(failure, retry));
+            Assertions.assertEquals("AI functions require an OPENAI provider protocol, not ANTHROPIC",
+                    retryError.getDetailMsg());
             Assertions.assertSame(altered, retry.getExecPlan());
             assertProviderConfiguration(altered, "altered");
             assertProviderConfiguration(original, "original");
@@ -209,8 +245,9 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
             manager.dropProvider(name, false);
             retry.setRetryTime(1);
             StarRocksException failure = new StarRocksException("invalid field name");
-            Assertions.assertSame(failure, Assertions.assertThrows(StarRocksException.class,
-                    () -> ExecuteExceptionHandler.handle(failure, retry)));
+            SemanticException retryError = Assertions.assertThrows(SemanticException.class,
+                    () -> ExecuteExceptionHandler.handle(failure, retry));
+            Assertions.assertEquals("AI provider '" + name + "' does not exist", retryError.getDetailMsg());
             Assertions.assertSame(recreated, retry.getExecPlan());
             assertProviderConfiguration(recreated, "recreated");
             assertProviderConfiguration(original, "original");
@@ -244,8 +281,9 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
             manager.dropProvider(name, false);
             retry.setRetryTime(1);
             LakeMetaVersionNotFoundException failure = new LakeMetaVersionNotFoundException("mock lake metadata retry");
-            Assertions.assertSame(failure, Assertions.assertThrows(LakeMetaVersionNotFoundException.class,
-                    () -> ExecuteExceptionHandler.handle(failure, retry)));
+            SemanticException retryError = Assertions.assertThrows(SemanticException.class,
+                    () -> ExecuteExceptionHandler.handle(failure, retry));
+            Assertions.assertEquals("AI provider '" + name + "' does not exist", retryError.getDetailMsg());
             Assertions.assertSame(altered, retry.getExecPlan());
             assertProviderConfiguration(altered, "altered");
             assertProviderConfiguration(original, "original");
