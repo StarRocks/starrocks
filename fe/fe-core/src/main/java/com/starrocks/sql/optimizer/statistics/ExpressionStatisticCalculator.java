@@ -149,7 +149,7 @@ public class ExpressionStatisticCalculator {
                     .map(ConstantOperator::toString)
                     .ifPresent(key -> {
                         final var mcv = Collections.singletonMap(key, Math.round(rowCount));
-                        builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+                        builder.setHistogram(new Histogram(mcv));
                     });
 
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
@@ -263,7 +263,7 @@ public class ExpressionStatisticCalculator {
                     .setDistinctValuesCount(2);
 
             if (!mcvs.isEmpty()) {
-                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+                builder.setHistogram(new Histogram(mcvs));
             }
 
             return builder.build();
@@ -337,7 +337,7 @@ public class ExpressionStatisticCalculator {
             }
 
             if (!mcvs.isEmpty()) {
-                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+                builder.setHistogram(new Histogram(mcvs));
             }
 
             return builder.build();
@@ -448,7 +448,7 @@ public class ExpressionStatisticCalculator {
                 builder.setDistinctValuesCount(2);
             } else {
                 builder.setDistinctValuesCount(mcvs.size());
-                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+                builder.setHistogram(new Histogram(mcvs));
             }
 
             return builder.build();

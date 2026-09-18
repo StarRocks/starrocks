@@ -184,7 +184,7 @@ public class BinaryPredicateStatisticCalculator {
 
             estimatedMcv.put(constantOperator.toString(), rowCountInHistogram.get());
         }
-        return Optional.of(new Histogram(new ArrayList<>(), estimatedMcv));
+        return Optional.of(new Histogram(estimatedMcv));
     }
 
     private static Statistics estimateColumnNotEqualToConstant(Optional<ColumnRefOperator> columnRefOperator,
