@@ -23,6 +23,22 @@ import sys
 
 from datetime import datetime
 
+# Python 3.6 build-node compatibility shim. subprocess.run() gained the text= keyword in 3.7;
+# on a centos7 build node whose system python3 is 3.6 (some TSP/CI builders), calling it with
+# text= raises "TypeError: __init__() got an unexpected keyword argument 'text'" and fails the
+# gen_version build step. Translate text= to its pre-3.7 spelling universal_newlines= on <3.7;
+# on 3.7+ this is a pure passthrough. Placed here (a region upstream main does not modify) so it
+# merges cleanly into the CI merge-ref while patching main's get_hostname() text= call below.
+if sys.version_info < (3, 7):
+    _sp_run_orig = subprocess.run
+
+    def _sp_run_compat(*args, **kwargs):
+        if "text" in kwargs:
+            kwargs["universal_newlines"] = kwargs.pop("text")
+        return _sp_run_orig(*args, **kwargs)
+
+    subprocess.run = _sp_run_compat
+
 OS_RELEASE_PATH = "/etc/os-release"
 
 def get_version():

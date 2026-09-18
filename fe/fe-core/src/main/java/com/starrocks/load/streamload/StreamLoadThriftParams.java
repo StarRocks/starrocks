@@ -140,7 +140,23 @@ public class StreamLoadThriftParams implements StreamLoadParams {
 
     @Override
     public Optional<TPartialUpdateMode> getPartialUpdateMode() {
+        // The thrift path relays the storage MODE verbatim from the BE stream-load handler. The
+        // BE maps both the "flexible" header (-> COLUMN_UPDATE_MODE) and the "flexible_row" header
+        // (-> ROW_MODE) and sets the separate flexible bit; see be/src/http/action/stream_load.cpp.
+        // So no flexible_row token handling is needed HERE -- the mode is already resolved upstream,
+        // mirroring the StreamLoadKvParams (FE HTTP) mapping.
         return request.isSetPartial_update_mode() ? Optional.of(request.getPartial_update_mode()) : Optional.empty();
+    }
+
+    @Override
+    public Optional<Boolean> isFlexiblePartialUpdate() {
+        // SDCG flexible partial update bit, carried on the thrift request by the BE stream-load
+        // handler for BOTH partial_update_mode=flexible (COLUMN/SDCG apply) and
+        // partial_update_mode=flexible_row (ROW-mode masked rewrite). Without this override the
+        // thrift path inherits the StreamLoadParams default (Optional.empty()) and FE silently
+        // degrades a flexible load to a homogeneous union partial update.
+        return request.isSetFlexible_partial_update() ? Optional.of(request.isFlexible_partial_update())
+                                                       : Optional.empty();
     }
 
     @Override

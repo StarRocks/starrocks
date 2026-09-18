@@ -63,6 +63,14 @@ public:
     bool is_partial_update = false;
     std::vector<int32_t> referenced_column_ids;
 
+    // SDCG flexible partial update: when true, different rows of this rowset update
+    // different column subsets. The per-row set-id lives in the hidden "__cset__" column
+    // (which survives into the .upt); the set-id -> column dictionary that the scanner
+    // interned (keyed by txn_id in FlexiblePartialUpdateRegistry) is folded into
+    // RowsetTxnMetaPB.distinct_column_sets by the rowset writer. The existing
+    // referenced_column_ids / partial_update_column_ids keep meaning the UNION.
+    bool flexible_partial_update = false;
+
     RowsetId rowset_id{};
     int64_t tablet_id = 0;
     int64_t tablet_schema_hash = 0;

@@ -58,6 +58,11 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     // every segment from remote storage.
     _hold_input_segments = config::lake_compaction_hold_input_segments;
 
+    // SDCG fast path: a convergence-only deep sparse-overlay chain is collapsed by merging its `.spcols`
+    // layers (no base segment read+rewrite). If it handled the compaction it emitted an op_dcg_compaction.
+    ASSIGN_OR_RETURN(bool sdcg_merged, try_execute_dcg_overlay_merge());
+    if (sdcg_merged) return Status::OK();
+
     int64_t input_bytes = 0;
     {
         SCOPED_RAW_TIMER(&_context->stats->input_prepare_ns);

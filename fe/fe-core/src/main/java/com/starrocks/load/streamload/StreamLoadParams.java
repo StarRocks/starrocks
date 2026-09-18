@@ -48,6 +48,15 @@ public interface StreamLoadParams {
     Optional<Long> getLogRejectedRecordNum();
     Optional<Boolean> getPartialUpdate();
     Optional<TPartialUpdateMode> getPartialUpdateMode();
+
+    /**
+     * SDCG flexible partial update: true when the load requests per-row heterogeneous
+     * column sets (different rows update different column subsets). Defaults to empty so
+     * existing param sources need no change; only the KV (HTTP) param source overrides it.
+     */
+    default Optional<Boolean> isFlexiblePartialUpdate() {
+        return Optional.empty();
+    }
     Optional<String> getPayloadCompressionType();
     Optional<String> getWarehouse();
 

@@ -2338,6 +2338,56 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
 
+// A LEADING segmentless op_write (a pure-delete statement that deposited no segment) still reserves
+// its batch rssid slot: get_rowset_id_step() returns 1 for it, add_rowset() advances by that, and the
+// next statement's first segment lands one slot later. Apply parks the segmentless statement's delete
+// at that reserved slot (UpdateManager::publish_primary_key_tablet defaults max_segment_id to
+// assigned_global_segments) and reshard preserves the gap (tablet_reshard_test CORE-002). An earlier
+// revision skipped the advance for a segmentless op_write; that put the next statement's first
+// segment ON the delete's slot, so the delete replayed after the rows that statement re-inserted and
+// a cold index rebuild lost them.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_leading_zero_segment_reserves_slot) {
+    const int64_t tablet_id = 30010;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(40);
+    metadata->set_next_rowset_id(700);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Batch 1: a segmentless op_write carrying only a delete file.
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset(); // empty rowset: no segment_metas
+    op_write1.add_dels_meta()->set_name("d1.del");
+    builder.batch_apply_opwrite(op_write1, /*replace_segments*/ {}, /*orphan_files*/ {});
+    // The slot is reserved even though nothing was deposited in it.
+    EXPECT_EQ(1u, builder.assigned_segment_idx());
+
+    // Batch 2: one real segment, segment_idx omitted. Apply for this op_write reads
+    // builder.assigned_segment_idx() == 1 as its base, so persist must stamp the same value.
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("seg0.dat");
+    builder.batch_apply_opwrite(op_write2, /*replace_segments*/ {}, /*orphan_files*/ {});
+    EXPECT_EQ(2u, builder.assigned_segment_idx());
+
+    ASSERT_TRUE(builder.set_final_rowset().ok());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& final_rowset = metadata->rowsets(0);
+    EXPECT_EQ(700, final_rowset.id());
+    ASSERT_EQ(1, final_rowset.segment_metas_size());
+    EXPECT_EQ("seg0.dat", final_rowset.segment_metas(0).filename());
+    // Slot 0 belongs to the delete-only statement; the segment takes slot 1 and its effective rssid
+    // (id + segment_idx) is the one apply keyed its rows and delete vector under.
+    EXPECT_EQ(1u, final_rowset.segment_metas(0).segment_idx());
+    EXPECT_EQ(701u, get_rssid(final_rowset, 0));
+    // The delete sits at its own reserved slot, BEFORE the later statement's segment.
+    ASSERT_EQ(1, final_rowset.del_files_size());
+    EXPECT_EQ(0u, final_rowset.del_files(0).op_offset());
+    // next_rowset_id covers both slots (700 -> 702).
+    EXPECT_EQ(702, metadata->next_rowset_id());
+}
+
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {
     // Test SSTable delvec integration: test new get_del_vec(DelvecPagePB) function and
     // version reference collection from SSTable delvecs during finalization

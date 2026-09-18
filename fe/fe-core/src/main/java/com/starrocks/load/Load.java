@@ -42,8 +42,10 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -71,6 +73,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportMetadataStmt;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -94,6 +97,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TRoutineLoadMetaColumn;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
@@ -120,7 +124,13 @@ public class Load {
     public static final String VERSION = "v1";
 
     public static final String LOAD_OP_COLUMN = "__op";
-
+    // SDCG flexible partial update: hidden per-row column-set id column. Carries a
+    // SMALLINT set-id that indexes into RowsetTxnMetaPB.distinct_column_sets so that
+    // different rows of one load can update different column subsets. Injected as a
+    // tuple slot immediately BEFORE the "__op" slot (so "__op" stays the last column)
+    // and added to the index column list right before "__op". Only present in flexible
+    // mode. Reserved name on the BE side.
+    public static final String LOAD_CSET_COLUMN = "__cset__";
     // load job meta
     private LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
 
@@ -310,7 +320,32 @@ public class Load {
                                    List<String> columnsFromPath, boolean isLoadJson) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, isLoadJson, false, null, null);
+                columnsFromPath, isLoadJson, false, false, null, null);
+    }
+
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath, boolean isLoadJson,
+                                   boolean partialUpdate) throws StarRocksException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, isLoadJson, partialUpdate, false, null, null);
+    }
+
+    // SDCG flexible partial update adds a `flexible` flag (per-row heterogeneous column sets).
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath, boolean isLoadJson,
+                                   boolean partialUpdate, boolean flexible) throws StarRocksException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, isLoadJson, partialUpdate, flexible, null, null);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
@@ -322,7 +357,7 @@ public class Load {
                                    boolean partialUpdate, String routineLoadSourceType) throws StarRocksException {
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
-                columnsFromPath, isLoadJson, partialUpdate, routineLoadSourceType, null);
+                columnsFromPath, isLoadJson, partialUpdate, false, routineLoadSourceType, null);
     }
 
     // `metadata` carries the routine-load INCLUDE METADATA clause; each alias is appended as a hidden
@@ -334,6 +369,19 @@ public class Load {
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isLoadJson,
                                    boolean partialUpdate, String routineLoadSourceType,
+                                   ImportMetadataStmt metadata) throws StarRocksException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, isLoadJson, partialUpdate, false, routineLoadSourceType, metadata);
+    }
+
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath, boolean isLoadJson,
+                                   boolean partialUpdate, boolean flexible, String routineLoadSourceType,
                                    ImportMetadataStmt metadata) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
@@ -462,6 +510,15 @@ public class Load {
                 metaByName.put(b.hiddenName, b);
                 copiedColumnExprs.add(new ImportColumnDesc(b.hiddenName));
             }
+        }
+        // SDCG flexible partial update: declare the hidden per-row column-set id "__cset__"
+        // as a synthetic SOURCE field (mirroring "__op"). The json scanner never reads it from
+        // the JSON object -- it COMPUTES the set-id per row from the present columns and writes
+        // it into this slot. Declaring it here gives the scanner a source slot to fill AND lets
+        // the dest "__cset__" slot map to it in finalizeParams (otherwise the dest slot has no
+        // source field and analysis throws "column has no source field, column=__cset__").
+        if (flexible) {
+            copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_CSET_COLUMN, null));
         }
 
         // generate a map for checking easily
@@ -619,6 +676,12 @@ public class Load {
                         slotDesc.setType(metaType);
                         slotDesc.setColumn(new Column(columnName, metaType));
                         slotDesc.setIsMaterialized(true);
+                    } else if (columnName.equals(Load.LOAD_CSET_COLUMN)) {
+                        // SDCG flexible partial update: the hidden set-id source slot is a
+                        // materialized SMALLINT, filled per-row by the json scanner.
+                        slotDesc.setType(IntegerType.SMALLINT);
+                        slotDesc.setColumn(new Column(columnName, IntegerType.SMALLINT));
+                        slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(VarcharType.VARCHAR);
                         slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
@@ -734,9 +797,189 @@ public class Load {
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                                       List<Boolean> missAutoIncrementColumn) throws StarRocksException {
+        return getPartialUpateColumns(tbl, columnExprs, missAutoIncrementColumn, false, null);
+    }
+
+    /**
+     * Keep a GIN (inverted) indexed column off the column-mode partial-update overlay by forcing ROW
+     * mode, which rewrites the full row into a new segment whose indexes are all rebuilt at write time.
+     *
+     * <p>Only ONE of the overlay shapes actually carries a usable inverted index, and three separate
+     * failure modes remain, so the column path is not safe for a GIN column:
+     * <ul>
+     *   <li>DENSE {@code .cols} + BUILTIN GIN: the overlay DOES carry a freshly built, positionally
+     *       aligned builtin index (segment_writer.cpp keeps footer-inlined implementations for the
+     *       markless {@code .cols} writer) and the reader binds to the DCG segment, so MATCH is correct
+     *       on its own. But any OTHER index on the same column -- an NGRAMBF/BLOOM_FILTER or BITMAP
+     *       published into an IDG {@code .idx} sidecar -- is still probed with the BASE segment id
+     *       (segment_iterator.cpp threads {@code idg_loader} + base {@code segment_id} into the
+     *       iterator bound to the {@code .cols} file) and takes precedence over the overlay's own
+     *       footer bloom, so a stale bloom silently prunes the pages holding the updated rows.</li>
+     *   <li>Standalone (CLucene) GIN: the overlay writer produces no index at all, so MATCH fails
+     *       loudly until compaction rewrites the base. CLucene is the DEFAULT implementation; BUILTIN
+     *       is forced only for shared-data tables, so this is the ordinary shared-nothing case.</li>
+     *   <li>SPARSE {@code .spcols}: the read path suppresses the inverted iterator for any column with a
+     *       sparse layer (its index would live in K-row ordinal space, not base ordinal space), so MATCH
+     *       fails there too whenever {@code enable_sparse_dcg} is on.</li>
+     * </ul>
+     *
+     * <p>A flexible load thereby becomes flexible-on-row: the flexible bit is unchanged, only the
+     * storage mode. Called from the load planners (StreamLoadPlanner, LoadPlanner) and from
+     * UpdatePlanner, so no entry path leaves a GIN column on the column path.</p>
+     */
+    public static TPartialUpdateMode forceRowModeForInvertedIndexedColumn(
+            Table tbl, List<Column> updateColumns, TPartialUpdateMode mode) {
+        if (mode == TPartialUpdateMode.ROW_MODE || updateColumns == null || updateColumns.isEmpty()
+                || !(tbl instanceof OlapTable)) {
+            return mode;
+        }
+        List<Index> indexes = ((OlapTable) tbl).getIndexes();
+        if (indexes == null || indexes.isEmpty()) {
+            return mode;
+        }
+        Set<ColumnId> ginColumns = Sets.newHashSet();
+        for (Index index : indexes) {
+            if (index.getIndexType() == IndexDef.IndexType.GIN && index.getColumns() != null) {
+                ginColumns.addAll(index.getColumns());
+            }
+        }
+        if (ginColumns.isEmpty()) {
+            return mode;
+        }
+        for (Column col : updateColumns) {
+            if (ginColumns.contains(col.getColumnId())) {
+                return TPartialUpdateMode.ROW_MODE;
+            }
+        }
+        return mode;
+    }
+
+    /**
+     * Reject a flexible (per-row heterogeneous column set) partial update that cannot be applied
+     * correctly. MUST be called from EVERY planner that can build a flexible load plan
+     * ({@link com.starrocks.planner.StreamLoadPlanner} for the thrift streamLoadPut / routine-load path
+     * AND {@link com.starrocks.sql.LoadPlanner} for the transactional stream-load / batch-write path) --
+     * a guard on only one planner leaves the other silently corrupting data. Rejects: (1) a
+     * non-cloud-native (shared-nothing / local) table -- the local apply path does not understand the
+     * hidden "__cset__" set-id slot and would NULL a row's undeclared columns; (2) merge_condition --
+     * neither the packed-sparse nor the masked-dense flexible emit can carry it, so there is no
+     * flexible-aware apply path.
+     */
+    public static void checkFlexiblePartialUpdate(Table tbl, String mergeCondition) throws DdlException {
+        checkFlexiblePartialUpdate(tbl, mergeCondition, null);
+    }
+
+    /**
+     * Same as {@link #checkFlexiblePartialUpdate(Table, String)}, and additionally rejects a `columns`
+     * mapping that carries an expression. The BE json scanner derives a row's column set from the SOURCE
+     * slots physically present in that row's JSON object; a column produced by an expression
+     * ({@code columns: pk,tmp,v=tmp+1}, {@code columns: pk,c1,c2=c1*2}) has no source slot, so no row's set
+     * ever covers it and the masked apply keeps the base value -- the load reports Success and the derived
+     * column is silently never updated. The hidden {@code __op} expression is fine: its target is the op
+     * slot, not a value column.
+     */
+    public static void checkFlexiblePartialUpdate(Table tbl, String mergeCondition,
+                                                  List<ImportColumnDesc> columnExprDescs) throws DdlException {
+        if (columnExprDescs != null) {
+            for (ImportColumnDesc desc : columnExprDescs) {
+                if (desc.isColumn() || LOAD_OP_COLUMN.equalsIgnoreCase(desc.getColumnName())) {
+                    continue;
+                }
+                throw new DdlException("Flexible partial update does not support column mappings or expressions"
+                        + " (column '" + desc.getColumnName() + "'): a row's column set is derived from the columns"
+                        + " present in that row, so a derived column would never be applied");
+            }
+        }
+        if (!tbl.isCloudNativeTableOrMaterializedView()) {
+            throw new DdlException("Flexible partial update (per-row column sets) is only supported on "
+                    + "shared-data (cloud-native) primary key tables");
+        }
+        if (mergeCondition != null && !mergeCondition.isEmpty()) {
+            throw new DdlException("Flexible partial update combined with merge_condition is not supported");
+        }
+        // Auto-increment is a v1 flexible limitation and it must be rejected CONSISTENTLY here (fail-fast,
+        // at plan time). Without this, the outcome depends on the write width: a wide flexible update
+        // auto-routes to ROW and is rejected LATE at BE apply (rowset_update_state: "FLEXIBLE-on-ROW ...
+        // does not support auto-increment"), while a narrow one auto-routes to COLUMN and slips through --
+        // same load shape, different (late) result. Reject up front on any table carrying an
+        // auto-increment column (matches the BE ROW-path has_auto_increment_col gate).
+        if (tbl instanceof OlapTable) {
+            for (Column col : ((OlapTable) tbl).getBaseSchema()) {
+                if (col.isAutoIncrement()) {
+                    throw new DdlException(
+                            "Flexible partial update is not supported on a table with an auto-increment column");
+                }
+            }
+            // A generated column is the same problem as a column expression, injected by the planner rather
+            // than the user: getPartialUpateColumns puts every generated column in the union and initColumns
+            // adds its defining expression, so its value is written to the .upt -- but it is in no row's
+            // column set, and the masked apply would leave it stale while the load reports Success.
+            if (((OlapTable) tbl).hasGeneratedColumn()) {
+                throw new DdlException("Flexible partial update is not supported on a table with a generated column");
+            }
+        }
+    }
+
+    /**
+     * Decide whether a load whose request carries the flexible bit is actually planned as flexible.
+     *
+     * <p>{@code partial_update_mode=flexible} / {@code flexible_row} name the feature explicitly, so a shape
+     * {@link #checkFlexiblePartialUpdate} cannot apply is an error the caller asked for and is thrown as such.
+     * {@code partial_update_mode=auto} is different: the BE sets the flexible bit for EVERY JSON partial-update
+     * load in auto mode so that a shared-data table gets per-row column sets, but {@code auto} predates flexible
+     * and is accepted on every primary-key table. Rejecting the load would break every existing
+     * {@code auto} user on a shared-nothing table, on a table with an AUTO_INCREMENT column, or with a
+     * {@code merge_condition} -- loads that worked before flexible existed. For {@code auto} the unsupported
+     * shape therefore degrades to the plan {@code auto} always produced (one homogeneous union partial update),
+     * and this returns false. The caller must then also clear {@code StreamLoadInfo.flexiblePartialUpdate},
+     * because the scan node reads that flag to inject the hidden {@code __cset__} source slot -- the planner
+     * and the scan node must agree, or the writer receives a dictionary for a payload without set-ids.
+     *
+     * @return true when the plan must carry the hidden {@code __cset__} slot and the per-row dictionary
+     */
+    public static boolean resolveFlexiblePartialUpdate(Table tbl, TPartialUpdateMode requestedMode,
+                                                       boolean flexibleRequested, String mergeCondition,
+                                                       List<ImportColumnDesc> columnExprDescs) throws DdlException {
+        if (!flexibleRequested) {
+            return false;
+        }
+        try {
+            checkFlexiblePartialUpdate(tbl, mergeCondition, columnExprDescs);
+            return true;
+        } catch (DdlException e) {
+            if (requestedMode == TPartialUpdateMode.AUTO_MODE) {
+                LOG.info("partial_update_mode=auto on table {}: per-row column sets are not applicable ({}); "
+                        + "planning the homogeneous partial update instead", tbl.getName(), e.getMessage());
+                return false;
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Compute the union of partial-update columns for a load.
+     *
+     * <p>In SDCG flexible mode the per-row column sets are heterogeneous, but a few columns
+     * must be present in EVERY row's set so the storage layer can always arbitrate: the
+     * merge-condition column (so condition evaluation never reads a missing column) and the
+     * auto-increment column (existing force-include). This overload force-includes the
+     * merge-condition column into the returned union when {@code flexible} is true and a
+     * non-empty {@code mergeCondition} column name is given. The auto-increment column is
+     * already force-included by the loop below.
+     */
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                                      List<Boolean> missAutoIncrementColumn,
+                                                      boolean flexible, String mergeCondition)
+            throws StarRocksException {
         Set<String> specified = columnExprs.stream()
                 .map(desc -> desc.getColumnName())
                 .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+        if (flexible && mergeCondition != null && !mergeCondition.isEmpty()) {
+            // Currently unreachable: checkFlexiblePartialUpdate() rejects flexible+merge_condition on every
+            // planner before this runs. Kept as forward-defense so that, if that combination is ever
+            // supported, the merge-condition column is force-included into the union (present in every set).
+            specified.add(mergeCondition);
+        }
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
             if (specified.contains(col.getName())) {
