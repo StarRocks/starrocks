@@ -1704,6 +1704,15 @@ This topic introduces the following types of FE configurations:
 - Description: Interval, in seconds, between executions of the LockChecker frontend daemon (named "deadlock-checker"). The daemon performs deadlock detection and slow-lock scanning; the configured value is multiplied by 1000 to set the timer in milliseconds. Decreasing this value reduces detection latency but increases scheduling and CPU overhead; increasing it reduces overhead but delays detection and slow-lock reporting. Changes take effect at runtime because the daemon resets its interval each run. This setting interacts with `lock_checker_enable_deadlock_check` (enables deadlock checks) and `slow_lock_threshold_ms` (defines what constitutes a slow lock).
 - Introduced in: v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- Default: 256
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of hash buckets, that is, lock tables, across which Lock Manager shards metadata locks. Each resource is mapped to one bucket by its resource ID, and each bucket is guarded by its own mutex, so a larger value reduces contention between lockers that work on unrelated resources, at the cost of slightly more memory. The value is read once when Lock Manager is created, so a change takes effect only after the FE restarts. The default value is changed from `32` to `256` from v4.1.0, v4.0.1, and v3.5.8 onwards.
+- Introduced in: v3.3.0
+
 ### `master_sync_policy`
 
 - Default: SYNC
