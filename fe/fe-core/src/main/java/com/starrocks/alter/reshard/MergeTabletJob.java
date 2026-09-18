@@ -569,7 +569,16 @@ public class MergeTabletJob extends TabletReshardJob {
                     reshardingPhysicalPartition.setCommitVersion(commitVersion);
                 }
 
-                physicalPartition.setNextVersion(commitVersion + 1);
+                // Never move nextVersion backwards. The commit version is reserved here, in
+                // runPendingJob, but the job does not journal anything until it reaches PREPARING a
+                // few steps later -- so a load transaction that commits in between journals its own
+                // entry first, and a replaying FE applies that entry before this one. By then the
+                // transaction has already carried nextVersion past the version reserved here, and
+                // assigning commitVersion + 1 unconditionally would drag it back, handing the same
+                // version out twice.
+                if (physicalPartition.getNextVersion() < commitVersion + 1) {
+                    physicalPartition.setNextVersion(commitVersion + 1);
+                }
             }
         }
     }

@@ -22,6 +22,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
@@ -280,4 +281,318 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assertions.assertEquals(4, partition.getVisibleVersion());
         Assertions.assertEquals(baseVersionTime + 4, partition.getVisibleVersionTime());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testApplyVisibleLogBatchCutsOverUnshareLayoutAfterPublishingTheVersion() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        // Pin the parent layout, the way an in-flight UNSHARE does.
+        partition.pinQueryableIndex(indexId, indexId);
+        Assertions.assertTrue(partition.isUnsharing());
+
+        // Visible version the partition carried at the moment the query-layout cutover ran.
+        List<Long> versionAtCutover = Lists.newArrayList();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean finishUnshare(Invocation invocation) {
+                PhysicalPartition self = invocation.getInvokedInstance();
+                versionAtCutover.add(self.getVisibleVersion());
+                return invocation.proceed();
+            }
+        };
+
+        // Batch of three: a load at version 2, an UNSHARE compaction at version 3, a load at version 4.
+        long baseVersionTime = System.currentTimeMillis();
+        List<TransactionState> states = Lists.newArrayList();
+        for (long version = 2; version <= 4; version++) {
+            TransactionState state;
+            if (version == 3) {
+                state = newCompactionTransactionState();
+                state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(false, true));
+            } else {
+                state = newTransactionState();
+            }
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, version, 0);
+            partitionCommitInfo.setVersionTime(baseVersionTime + version);
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+            state.putIdToTableCommitInfo(tableId, tableCommitInfo);
+            states.add(state);
+        }
+
+        applier.applyVisibleLogBatch(new TransactionStateBatch(states), /*unused*/null);
+
+        // The planner resolves the queryable layout BEFORE it reads the visible version, so a cutover
+        // that ran while the partition still carried a pre-batch version would let a lock-free plan pair
+        // the child layout with a version whose child tablets have no metadata object. The cutover must
+        // therefore run once, and only after the batch's final version is already published.
+        Assertions.assertEquals(1, versionAtCutover.size(), "unshare cutover should run exactly once");
+        Assertions.assertEquals(4L, versionAtCutover.get(0),
+                "unshare cutover must not run before the batch's final version is visible");
+        Assertions.assertEquals(4, partition.getVisibleVersion());
+        Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared by the batch");
+    }
+
+    @Test
+    public void testApplyVisibleLogCutsOverUnshareLayoutInTheSameTransaction() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        partition.pinQueryableIndex(indexId, indexId);
+
+        List<Long> versionAtCutover = Lists.newArrayList();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean finishUnshare(Invocation invocation) {
+                PhysicalPartition self = invocation.getInvokedInstance();
+                versionAtCutover.add(self.getVisibleVersion());
+                return invocation.proceed();
+            }
+        };
+
+        TransactionState state = newCompactionTransactionState();
+        state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(false, true));
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        long schemaUpdateBefore = table.lastSchemaUpdateTime.get();
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        // Unbatched, the cutover runs inline - and already after the version it belongs to. This is the
+        // ordering applyVisibleLogBatch has to reproduce for a batched UNSHARE.
+        Assertions.assertEquals(1, versionAtCutover.size(), "unshare cutover should run exactly once");
+        Assertions.assertEquals(2L, versionAtCutover.get(0),
+                "unshare cutover must run after its own version is visible");
+        Assertions.assertEquals(2, partition.getVisibleVersion());
+        Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared");
+        Assertions.assertTrue(table.lastSchemaUpdateTime.get() > schemaUpdateBefore,
+                "the layout cutover must invalidate optimistic plans that captured the parent layout");
+    }
+
+    // ---------- nextVersion is derived from the journal, not counted ----------
+
+    @Test
+    public void testApplyCommitLogIsIdempotent() {
+        // Regression for StarRocksTest#12225. nextVersion used to be a running counter that the
+        // leader and every replaying FE maintained independently, so applying one entry twice
+        // drifted them apart by one -- permanently, and silently, until a lake alter job asserted
+        // nextVersion == its reserved commitVersion and aborted journal replay on every FE.
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(3,
+                table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+
+        // Re-applying the same entry must land on the same version, not one past it.
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(3,
+                table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+    }
+
+    @Test
+    public void testApplyCommitLogHealsAnExistingDrift() {
+        // A partition that has fallen behind catches up to the version the journal records, instead of
+        // carrying the drift forward forever. The catch-up is one-way: see the second half.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        // One version behind what the journal says this transaction took.
+        physicalPartition.setNextVersion(1);
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(3, physicalPartition.getNextVersion());
+
+        // ... but a counter that is already ahead is left alone. Overshooting only skips versions;
+        // pulling it back would hand version 4 out a second time.
+        physicalPartition.setNextVersion(5);
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(5, physicalPartition.getNextVersion());
+    }
+
+    @Test
+    public void testApplyCommitLogFallsBackWhenNoVersionWasAllocated() {
+        // A PartitionCommitInfo still carrying the sentinel version must not derive nextVersion from
+        // it (that would corrupt the chain); it keeps the historical increment.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, -1, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        long before = physicalPartition.getNextVersion();
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(before + 1, physicalPartition.getNextVersion());
+    }
+
+    @Test
+    public void testApplyCommitLogDerivesDataVersionToo() {
+        // Leaving nextDataVersion on the increment while nextVersion is derived would make a
+        // re-applied entry advance one counter and not the other, breaking the committed-vs-visible
+        // data version equality ReplicationJob.commitTransaction() preconditions on.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        partitionCommitInfo.setDataVersion(2);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(3, physicalPartition.getNextVersion());
+        Assertions.assertEquals(3, physicalPartition.getNextDataVersion());
+
+        // Both counters must stay put when the same entry is applied again.
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(3, physicalPartition.getNextVersion());
+        Assertions.assertEquals(3, physicalPartition.getNextDataVersion());
+    }
+
+    @Test
+    public void testApplyCommitLogKeepsIncrementWhenDataVersionAbsent() {
+        // A record predating the dataVersion field (or otherwise carrying none) keeps the increment.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        long dataBefore = physicalPartition.getNextDataVersion();
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(3, physicalPartition.getNextVersion());
+        Assertions.assertEquals(dataBefore + 1, physicalPartition.getNextDataVersion());
+    }
+
+    @Test
+    public void testApplyCommitLogCompactionStillLeavesDataVersionAlone() {
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newCompactionTransactionState();
+        state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(true));
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        partitionCommitInfo.setDataVersion(2);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        long dataBefore = physicalPartition.getNextDataVersion();
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(3, physicalPartition.getNextVersion());
+        Assertions.assertEquals(dataBefore, physicalPartition.getNextDataVersion(),
+                "a compaction allocates no data version and must not advance one");
+    }
+
+    @Test
+    public void testApplyCommitLogReplicationDerivesWithoutComparing() {
+        // A replication transaction's versions are intentionally noncontiguous, so its commitVersion
+        // bears no relation to the current counter: it must be derived outright, and must not be
+        // mistaken for drift.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        Deencapsulation.setField(state, "sourceType", TransactionState.LoadJobSourceType.REPLICATION);
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 40, 0);
+        partitionCommitInfo.setDataVersion(40);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(41, physicalPartition.getNextVersion());
+        Assertions.assertEquals(41, physicalPartition.getNextDataVersion());
+    }
+
+    @Test
+    public void testApplyCommitLogVersionOverwriteDoesNotLowerNextVersion() {
+        // INSERT OVERWRITE names an explicit version, which for a non-empty partition can be below the
+        // current counter. OlapTableTxnLogApplier documents that nextVersion must not move then
+        // ("otherwise, it's next version will not change"); lake must behave the same.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        // the two-arg constructor is what marks a transaction as a version overwrite
+        state.setTxnCommitAttachment(new InsertTxnCommitAttachment(0, 2));
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        partitionCommitInfo.setDataVersion(2);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        physicalPartition.setNextVersion(9);
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(9, physicalPartition.getNextVersion(),
+                "an overwrite below the counter must not pull it back");
+    }
+
+    @Test
+    public void testApplyCommitLogEmptyPartitionOverwriteAdvancesWithoutDriftClaim() {
+        // The mirror of testApplyCommitLogVersionOverwriteDoesNotLowerNextVersion: overwriting an
+        // EMPTY partition deliberately names a version ABOVE the counter, so the counter is legally
+        // "behind". It must still advance, and must not be reported as drift -- the diagnostic
+        // exempts overwrite for exactly this case.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        state.setTxnCommitAttachment(new InsertTxnCommitAttachment(0, 30));
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 30, 0);
+        partitionCommitInfo.setDataVersion(30);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        physicalPartition.setNextVersion(2);
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(31, physicalPartition.getNextVersion(),
+                "an overwrite above the counter must still advance it");
+    }
+
+    @Test
+    public void testApplyCommitLogDoubleWriteAdvancesToTheOriginalPartitionVersion() {
+        // A double-write target's commit info carries the ORIGINAL partition's version, which can sit
+        // above this partition's own counter. That is not drift either.
+        LakeTable table = buildLakeTable();
+        PhysicalPartition physicalPartition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 20, 0);
+        partitionCommitInfo.setDataVersion(20);
+        partitionCommitInfo.setIsDoubleWrite(true);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        physicalPartition.setNextVersion(2);
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(21, physicalPartition.getNextVersion());
+    }
+>>>>>>> 9159316 ([BugFix] Derive lake partition versions from the journal and only ever advance them (#79296))
 }
