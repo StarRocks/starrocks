@@ -101,35 +101,74 @@ public class Authorizer {
     public static void checkTableAction(ConnectContext context, String db, String table,
                                         PrivilegeType privilegeType) throws AccessDeniedException {
         TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table);
-        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
-        if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+        if (isInsertIntoSomethingThatIsNotATable(context, tableName, privilegeType, null)) {
             return;
         }
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                .checkTableAction(context,
-                        new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db, table), privilegeType);
+                .checkTableAction(context, tableName, privilegeType);
     }
 
     public static void checkTableAction(ConnectContext context, String catalog, String db,
                                         String table, PrivilegeType privilegeType) throws AccessDeniedException {
         TableName tableName = new TableName(catalog, db, table);
-        Optional<Table> tableObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
-        if (tableObj.isPresent() && !tableObj.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+        if (isInsertIntoSomethingThatIsNotATable(context, tableName, privilegeType, null)) {
             return;
         }
-        getInstance().getAccessControlOrDefault(catalog).checkTableAction(context,
-                new TableName(catalog, db, table), privilegeType);
+        // Selected with the caller's catalog name rather than the normalized one on tableName: under
+        // enable_table_name_case_insensitive the constructor lowercases it, and this lookup is by
+        // exact name, so normalizing here would quietly fall back to the internal access controller
+        // for a catalog registered under a mixed-case name.
+        getInstance().getAccessControlOrDefault(catalog).checkTableAction(context, tableName, privilegeType);
     }
 
     public static void checkTableAction(ConnectContext context, TableName tableName,
                                         PrivilegeType privilegeType) throws AccessDeniedException {
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
-        if (table.isPresent() && !table.get().isTable() && privilegeType.equals(PrivilegeType.INSERT)) {
+        checkResolvedTableAction(context, tableName, null, privilegeType);
+    }
+
+    /**
+     * Same check as {@link #checkTableAction(ConnectContext, TableName, PrivilegeType)}, for a caller
+     * that already holds the table object -- the analyzer resolves every table in the statement before
+     * the privilege check runs, so handing it over saves resolving it again.
+     *
+     * <p>A separate name rather than a fourth overload of {@code checkTableAction}: with
+     * {@code (context, String db, String table, PrivilegeType)} already taking four arguments, an
+     * overload would be ambiguous wherever the argument types are not written out, which is how the
+     * existing {@code Mockito.any()} call sites are written.
+     *
+     * @param resolvedTable what {@code tableName} refers to, or null to resolve it here if needed.
+     */
+    public static void checkResolvedTableAction(ConnectContext context, TableName tableName, Table resolvedTable,
+                                                PrivilegeType privilegeType) throws AccessDeniedException {
+        if (isInsertIntoSomethingThatIsNotATable(context, tableName, privilegeType, resolvedTable)) {
             return;
         }
-        String catalog = tableName.getCatalog();
-        getInstance().getAccessControlOrDefault(catalog)
+        getInstance().getAccessControlOrDefault(tableName.getCatalog())
                 .checkTableAction(context, tableName, privilegeType);
+    }
+
+    /**
+     * An INSERT into a view or a materialized view is authorized as that object rather than as a
+     * table, so the table check is skipped for it. That is the only question the table object answers
+     * here -- for every other privilege type the resolution result is never read.
+     *
+     * <p>Which is why it must not happen unconditionally. For a table in an external catalog,
+     * {@code MetadataMgr#getTable} is a connector round trip (HMS, JDBC, Iceberg REST, ...), and this
+     * check runs inside the planner's metadata lock: {@code StatementPlanner#plan} calls
+     * {@link #check} after analysis and before it drops {@code PlannerMetaLocker}. Resolving a table
+     * whose identity cannot change the outcome therefore put a request to a system the FE does not
+     * control on the lock critical path, where it stalls every DDL waiting on the database intention
+     * lock. So resolve only when the answer matters, and prefer the object the caller already has
+     * over asking the connector again.
+     */
+    private static boolean isInsertIntoSomethingThatIsNotATable(ConnectContext context, TableName tableName,
+                                                                PrivilegeType privilegeType, Table resolvedTable) {
+        if (!PrivilegeType.INSERT.equals(privilegeType)) {
+            return false;
+        }
+        Table table = resolvedTable != null ? resolvedTable
+                : GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName).orElse(null);
+        return table != null && !table.isTable();
     }
 
     public static void checkAnyActionOnTable(ConnectContext context, TableName tableName)
@@ -240,18 +279,21 @@ public class Authorizer {
     }
 
     public static void checkActionForAnalyzeStatement(ConnectContext context, TableName tableName) {
+        // Resolve once and hand the same object to both checks. This used to resolve three times --
+        // once inside each checkActionOnTableLikeObject call plus once here -- and on an external
+        // catalog every one of those is a connector round trip.
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
         try {
-            Authorizer.checkActionOnTableLikeObject(context, tableName, PrivilegeType.SELECT);
+            doCheckTableLikeObject(context, tableName.getDb(), table.orElse(null), PrivilegeType.SELECT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     tableName.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
-        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName);
         if (table.isPresent() && table.get().isTable()) {
             try {
-                Authorizer.checkActionOnTableLikeObject(context, tableName, PrivilegeType.INSERT);
+                doCheckTableLikeObject(context, tableName.getDb(), table.get(), PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         tableName.getCatalog(),
