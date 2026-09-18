@@ -693,7 +693,7 @@ public:
             return _min = TimestampValue::MIN_TIMESTAMP_VALUE && _max == TimestampValue::MAX_TIMESTAMP_VALUE;
         } else if constexpr (IsDecimal<CppType>) {
             return _min == DecimalV2Value::get_min_decimal() && _max == DecimalV2Value::get_max_decimal();
-        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
+        } else if constexpr (!lt_is_semi_structured<Type>) {
             return _min == RunTimeTypeLimits<Type>::min_value() && _max == RunTimeTypeLimits<Type>::max_value();
         } else {
             return false;
@@ -1096,10 +1096,9 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _min = DecimalV2Value::get_max_decimal();
             _max = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
-            // for json vaue, cpp type is JsonValue*
-            // but min/max value type is JsonValue
-            // and JsonValue needs special serialization handling.
+        } else if constexpr (!lt_is_semi_structured<Type>) {
+            // For JSON/VARIANT the cpp type is a pointer (JsonValue* / VariantRowValue*) while
+            // RunTimeTypeLimits exposes the value type, so min/max cannot be stored here.
             _min = RunTimeTypeLimits<Type>::min_value();
             _max = RunTimeTypeLimits<Type>::max_value();
         }
@@ -1123,10 +1122,9 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _max = DecimalV2Value::get_max_decimal();
             _min = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
-            // for json vaue, cpp type is JsonValue*
-            // but min/max value type is JsonValue
-            // and JsonValue needs special serialization handling.
+        } else if constexpr (!lt_is_semi_structured<Type>) {
+            // For JSON/VARIANT the cpp type is a pointer (JsonValue* / VariantRowValue*) while
+            // RunTimeTypeLimits exposes the value type, so min/max cannot be stored here.
             _max = RunTimeTypeLimits<Type>::min_value();
             _min = RunTimeTypeLimits<Type>::max_value();
         }

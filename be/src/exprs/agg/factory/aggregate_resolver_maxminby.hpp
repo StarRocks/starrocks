@@ -33,6 +33,8 @@ struct MaxMinByDispatcherInner {
     template <LogicalType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr ((lt_is_aggregate<arg_type> || lt_is_json<arg_type>)&&(
+                              // NOTE: unlike the other lt_is_collection call sites, this is an
+                              // allow-list of supported result types, not a list of types to skip.
                               lt_is_aggregate<ret_type> || lt_is_json<ret_type> || lt_is_collection<ret_type>)) {
             if constexpr (is_max_by) {
                 resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(

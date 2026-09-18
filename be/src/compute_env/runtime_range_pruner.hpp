@@ -89,8 +89,8 @@ struct RuntimeColumnPredicateBuilder {
                                                              const SlotDescriptor* slot, int32_t driver_sequence,
                                                              ObjectPool* pool) {
         // Unsupported probe expression types fall back to the original runtime filter.
-        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
-                      lt_is_float<ltype> || lt_is_binary<ltype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || lt_is_semi_structured<ltype> || lt_is_float<ltype> ||
+                      lt_is_binary<ltype>) {
             return std::vector<const ColumnPredicate*>{};
         } else {
             std::vector<const ColumnPredicate*> preds;

@@ -33,6 +33,7 @@ struct ColumnBuilder {
         if constexpr (lt_is_decimal<Type>) {
             return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
         } else if constexpr (lt_is_collection<Type>) {
+            // Built recursively from type_desc.children by the caller; unreachable here.
             throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
             return nullptr;
         } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {

@@ -339,9 +339,10 @@ struct TypeDescriptor {
 
     // For some types with potential huge length, whose memory consumption is far more than normal types,
     // they need a different chunk_size setting
-    bool is_huge_type() const {
-        return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL || type == TYPE_VARIANT;
-    }
+    // Exactly the ObjectColumn-backed types: a single row can hold an arbitrarily large blob.
+    // TYPE_PERCENTILE used to be missing here, which was inconsistent with get_type_avg_size(),
+    // where it is budgeted at 1MB alongside TYPE_OBJECT.
+    bool is_huge_type() const { return is_object_type(type); }
 
     /// Returns the size of a slot for this type.
     int get_slot_size() const;

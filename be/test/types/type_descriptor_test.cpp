@@ -850,4 +850,36 @@ TEST_F(TypeDescriptorTest, test_create_variant_type) {
     ASSERT_EQ(variant_desc.len, variant_desc2.len);
 }
 
+// The ObjectColumn-backed types are exactly the ones whose single row can hold an arbitrarily large
+// blob, and exactly the ones that cannot take part in a join, an order by or a group by. Asserting
+// the whole set keeps these four predicates from drifting apart the way they had before.
+TEST_F(TypeDescriptorTest, ObjectTypesAreHugeAndUnusableAsKeys) {
+    for (auto type : {TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE, TYPE_JSON, TYPE_VARIANT}) {
+        auto desc = TypeDescriptor::from_logical_type(type);
+        EXPECT_TRUE(desc.is_huge_type()) << type;
+        EXPECT_FALSE(desc.support_join()) << type;
+        EXPECT_FALSE(desc.support_orderby()) << type;
+        EXPECT_FALSE(desc.support_groupby()) << type;
+    }
+
+    for (auto type : {TYPE_INT, TYPE_VARCHAR, TYPE_DATETIME}) {
+        auto desc = TypeDescriptor::from_logical_type(type);
+        EXPECT_FALSE(desc.is_huge_type()) << type;
+        EXPECT_TRUE(desc.support_join()) << type;
+        EXPECT_TRUE(desc.support_orderby()) << type;
+        EXPECT_TRUE(desc.support_groupby()) << type;
+    }
+
+    // MAP is joinable and groupable but has no ordering; the nested types otherwise delegate to
+    // their children, so an ARRAY<JSON> is no more usable as a key than a bare JSON.
+    auto map_of_int = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT));
+    EXPECT_TRUE(map_of_int.support_groupby());
+    EXPECT_FALSE(map_of_int.support_orderby());
+
+    auto array_of_json = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_JSON));
+    EXPECT_FALSE(array_of_json.support_join());
+    EXPECT_FALSE(array_of_json.support_orderby());
+    EXPECT_FALSE(array_of_json.support_groupby());
+}
+
 } // namespace starrocks

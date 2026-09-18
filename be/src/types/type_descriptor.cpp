@@ -267,8 +267,7 @@ bool TypeDescriptor::support_join() const {
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
         return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT;
+    return !is_object_type(type);
 }
 
 bool TypeDescriptor::support_orderby() const {
@@ -281,8 +280,7 @@ bool TypeDescriptor::support_orderby() const {
                                        [](const TypeDescriptor& t) { return t.support_orderby(); });
         return all_support;
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_VARIANT;
+    return !is_object_type(type) && type != TYPE_MAP;
 }
 
 bool TypeDescriptor::support_groupby() const {
@@ -291,8 +289,7 @@ bool TypeDescriptor::support_groupby() const {
         return std::all_of(children.begin(), children.end(),
                            [](const TypeDescriptor& t) { return t.support_groupby(); });
     }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT;
+    return !is_object_type(type);
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {

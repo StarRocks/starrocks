@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <ostream>
+#include <utility>
 
 #include "base/utility/guard.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -82,18 +83,23 @@ enum LogicalType {
 };
 
 // TODO(lism): support varbinary for zone map.
+// VARIANT is excluded for the same reason as JSON: its on-disk bytes depend on how the value was
+// shredded, so a min/max over them orders nothing meaningful and only bloats the segment footer.
 inline bool is_zone_map_key_type(LogicalType type) {
-    return type != TYPE_CHAR && type != TYPE_VARCHAR && type != TYPE_JSON && type != TYPE_VARBINARY &&
-           type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE && type != TYPE_GEOGRAPHY &&
-           type != TYPE_GEOMETRY;
+    return type != TYPE_CHAR && type != TYPE_VARCHAR && type != TYPE_JSON && type != TYPE_VARIANT &&
+           type != TYPE_VARBINARY && type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE &&
+           type != TYPE_GEOGRAPHY && type != TYPE_GEOMETRY;
 }
 
 // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
 // a fixed value, so these two types are ignored in calculating checksum.
 // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
+// And VARIANT, like JSON, has a per-replica physical encoding (shredding), so equal values can
+// serialize to different bytes and a checksum mismatch would not mean the replicas diverged.
 inline bool is_support_checksum_type(LogicalType type) {
     return type != TYPE_FLOAT && type != TYPE_DOUBLE && type != TYPE_HLL && type != TYPE_OBJECT &&
-           type != TYPE_PERCENTILE && type != TYPE_JSON && type != TYPE_GEOGRAPHY && type != TYPE_GEOMETRY;
+           type != TYPE_PERCENTILE && type != TYPE_JSON && type != TYPE_VARIANT && type != TYPE_GEOGRAPHY &&
+           type != TYPE_GEOMETRY;
 }
 
 template <LogicalType TYPE>
@@ -135,6 +141,8 @@ constexpr bool is_string_type(LogicalType type) {
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
 
+// Types backed by ObjectColumn<T>. Compile-time counterpart: lt_is_object_family below; a
+// static_assert there pins the two definitions to the same set.
 constexpr bool is_object_type(LogicalType type) {
     return type == LogicalType::TYPE_HLL || type == LogicalType::TYPE_OBJECT || type == LogicalType::TYPE_JSON ||
            type == LogicalType::TYPE_PERCENTILE || type == TYPE_VARIANT;
@@ -306,6 +314,46 @@ constexpr size_t type_estimated_overhead_bytes(LogicalType ltype) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type predicate taxonomy
+//
+// The guards below answer two INDEPENDENT questions about a logical type. Most of the confusion in
+// this file's history came from answering one with a predicate that belongs to the other -- e.g.
+// using lt_is_collection, a physical-shape predicate, to mean "has no usable ColumnBuilder".
+// When adding a logical type, place it on BOTH axes.
+//
+// Axis 1 -- physical shape: how values are laid out in a Column, i.e. what a typed code path
+//           (ColumnViewer / ColumnBuilder / RunTimeCppType / memcpy) is allowed to assume.
+//
+//   (flat scalar)          everything not listed below  value stored inline in the column buffer
+//   lt_is_string           CHAR, VARCHAR                Slice into a shared byte buffer
+//   lt_is_binary           BINARY, VARBINARY            ditto
+//   lt_is_object_family    HLL, OBJECT (= BITMAP),      value lives in ObjectColumn<T>::_pool;
+//                          PERCENTILE, JSON, VARIANT    RunTimeCppType is `T*`, never memcpy-able
+//   lt_is_collection       ARRAY, MAP, STRUCT           values live in child columns, so building a
+//                                                       column requires TypeDescriptor::children
+//   lt_is_row_wise_append  ARRAY, MAP, STRUCT, VARIANT  no usable flat value container at all, so a
+//                                                       result must be built via Column::append()
+//
+// Axis 2 -- semantics: what the type means to the user, i.e. which operations are meaningful.
+//
+//   lt_is_semi_structured  JSON, VARIANT                user-visible documents with no fixed
+//                                                       sub-schema and no meaningful total order:
+//                                                       min/max, zone maps, range predicates and the
+//                                                       typed IN predicate do not apply
+//   lt_is_opaque_sketch    HLL, OBJECT (= BITMAP),      aggregate intermediates; the user never sees
+//                          PERCENTILE                   the underlying value, only what a dedicated
+//                                                       function returns
+//
+// The axes cross, which is exactly why one predicate cannot serve both:
+//   - JSON and VARIANT share Axis 1 with HLL/BITMAP/PERCENTILE (all ObjectColumn) but share nothing
+//     with them on Axis 2;
+//   - VARIANT shares Axis 2 with JSON, yet sits with the nested types on lt_is_row_wise_append,
+//     because a shredded VariantColumn keeps its rows outside ObjectColumn::_pool.
+// Pick the predicate that names the property the code actually depends on, and do not widen an
+// existing one to make a new type fit.
+// ---------------------------------------------------------------------------------------------
+
 VALUE_GUARD(LogicalType, BigIntLTGuard, lt_is_bigint, TYPE_BIGINT)
 VALUE_GUARD(LogicalType, BooleanLTGuard, lt_is_boolean, TYPE_BOOLEAN)
 VALUE_GUARD(LogicalType, LargeIntLTGuard, lt_is_largeint, TYPE_LARGEINT)
@@ -330,8 +378,38 @@ VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINAR
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, VariantGuard, lt_is_variant, TYPE_VARIANT)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
+// Axis 1. Runtime counterpart: is_object_type().
 VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE,
             TYPE_VARIANT)
+// Axis 2. Together these two partition lt_is_object_family, which the static_assert below enforces:
+// every ObjectColumn-backed type is either a user-visible document or an opaque aggregate sketch.
+VALUE_GUARD(LogicalType, SemiStructuredLTGuard, lt_is_semi_structured, TYPE_JSON, TYPE_VARIANT)
+VALUE_GUARD(LogicalType, OpaqueSketchLTGuard, lt_is_opaque_sketch, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+
+namespace detail {
+template <size_t... Is>
+constexpr bool object_family_matches_runtime(std::index_sequence<Is...>) {
+    return ((lt_is_object_family<static_cast<LogicalType>(Is)> == is_object_type(static_cast<LogicalType>(Is))) && ...);
+}
+template <size_t... Is>
+constexpr bool object_family_is_partitioned(std::index_sequence<Is...>) {
+    return ((lt_is_object_family<static_cast<LogicalType>(Is)> ==
+             (lt_is_semi_structured<static_cast<LogicalType>(Is)> ||
+              lt_is_opaque_sketch<static_cast<LogicalType>(Is)>)) &&
+            ...) &&
+           !((lt_is_semi_structured<static_cast<LogicalType>(Is)> &&
+              lt_is_opaque_sketch<static_cast<LogicalType>(Is)>) ||
+             ...);
+}
+} // namespace detail
+// lt_is_object_family and is_object_type() are two hand-written spellings of the same set; adding a
+// type to only one of them is the kind of drift this catches.
+static_assert(detail::object_family_matches_runtime(std::make_index_sequence<TYPE_MAX_VALUE>{}),
+              "is_object_type() and lt_is_object_family must describe the same set of types");
+// A new ObjectColumn-backed type must be classified on Axis 2 as well, and cannot be both.
+static_assert(detail::object_family_is_partitioned(std::make_index_sequence<TYPE_MAX_VALUE>{}),
+              "lt_is_semi_structured and lt_is_opaque_sketch must partition lt_is_object_family");
+
 VALUE_GUARD(LogicalType, ArrayGuard, lt_is_array, TYPE_ARRAY)
 VALUE_GUARD(LogicalType, MapGuard, lt_is_map, TYPE_MAP)
 VALUE_GUARD(LogicalType, StructGurad, lt_is_struct, TYPE_STRUCT)
@@ -343,7 +421,23 @@ VALUE_GUARD(LogicalType, DecimalV2LTGuard, lt_is_decimalv2, TYPE_DECIMALV2)
 VALUE_GUARD(LogicalType, DecimalOfAnyVersionLTGuard, lt_is_decimal_of_any_version, TYPE_DECIMALV2, TYPE_DECIMAL32,
             TYPE_DECIMAL64, TYPE_DECIMAL128)
 VALUE_GUARD(LogicalType, DateOrDateTimeLTGuard, lt_is_date_or_datetime, TYPE_DATE, TYPE_DATETIME)
+// Nested types: the values live in child columns, so a column of this type can only be built
+// recursively from TypeDescriptor::children.
+// Do NOT widen this to JSON/VARIANT: ColumnHelper::create_column() and FunctionHelper::create_column()
+// rely on it meaning exactly "has children" and treat a collection reaching their type dispatch as a
+// bug (LOG(FATAL) / throw), because the nested types are handled by an explicit branch above it.
 VALUE_GUARD(LogicalType, CollectionLTGuard, lt_is_collection, TYPE_ARRAY, TYPE_MAP, TYPE_STRUCT)
+
+// Types whose result column must be produced row by row through the virtual Column::append(),
+// because ColumnViewer/ColumnBuilder have no usable flat value container for them:
+//  - ARRAY/MAP/STRUCT keep their values in child columns;
+//  - VARIANT rows may live in the shredded columns (VariantColumn::_typed_columns / _metadata_column
+//    / _remain_value_column) instead of ObjectColumn::_pool, which is what ColumnViewer<TYPE_VARIANT>
+//    would read.
+// JSON deliberately does not belong here: JsonColumn always keeps its rows in _pool, so the
+// viewer/builder path stays valid and faster for it.
+UNION_VALUE_GUARD(LogicalType, RowWiseAppendLTGuard, lt_is_row_wise_append, lt_is_collection_struct,
+                  lt_is_variant_struct)
 
 UNION_VALUE_GUARD(LogicalType, IntegralLTGuard, lt_is_integral, lt_is_boolean_struct, lt_is_integer_struct)
 
