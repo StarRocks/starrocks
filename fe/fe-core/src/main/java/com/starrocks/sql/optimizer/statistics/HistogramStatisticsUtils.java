@@ -285,7 +285,6 @@ public class HistogramStatisticsUtils {
     private static Histogram createInHistogram(Histogram originalHistogram, MatchedConstantsInfo matchedInfo) {
         Map<String, Long> prunedMcv = new HashMap<>(matchedInfo.matchedMcv);
 
-        List<Bucket> prunedBuckets = new ArrayList<>();
 
         if (matchedInfo.matchedBucketValues.isEmpty()) {
             if (!originalHistogram.getBuckets().isEmpty()) {
@@ -299,6 +298,7 @@ public class HistogramStatisticsUtils {
 
         long cumulativeCount = 0;
 
+        List<Bucket> prunedBuckets = new ArrayList<>();
         for (int i = 0; i < originalBuckets.size(); i++) {
             if (!matchedInfo.matchedBucketValues.containsKey(i)) {
                 continue;

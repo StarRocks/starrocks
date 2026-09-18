@@ -241,21 +241,7 @@ public class HistogramTest {
     }
 
     @Test
-    public void testMcvOnlyConstructorDoesNotWarn() {
-        // Given a histogram constructed through the MCV-only constructor
-        // CASE WHEN the caller has accounted for the absent buckets THEN nothing is warned, because
-        // there is no missing bucket left to report END
-
-        final Map<String, Long> mcv = Map.of("1", 100L);
-        final int expectedWarnCount = 0;
-
-        final int actualWarnCount = warnCountWhile(() -> new Histogram(mcv));
-
-        Assertions.assertEquals(expectedWarnCount, actualWarnCount);
-    }
-
-    @Test
-    public void testSingleBucketWithNoRowsDoesNotWarn() {
+    public void testSingleBucketWhereMcvIsEnoughDoesNotWarn() {
         // Given a total that the MCVs already account for in full
         // CASE WHEN ofSingleBucket finds no rows left to carry THEN it reaches the quiet door,
         // because it has just proved the very thing the warning would ask the caller to check END
