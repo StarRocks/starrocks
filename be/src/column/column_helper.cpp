@@ -22,6 +22,7 @@
 #include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/file_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -302,6 +303,13 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(FileColumn* column) {
+        for (Column* field : column->field_columns()) {
+            RETURN_IF_ERROR(field->accept_mutable(this));
+        }
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* column) {
         return Status::OK();
@@ -473,6 +481,9 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
             columns.emplace_back(std::move(field_column));
         }
         p = StructColumn::create(std::move(columns), type_desc.field_names);
+    } else if (type_desc.type == LogicalType::TYPE_FILE) {
+        // FileColumn owns its fixed column layout; the TypeDescriptor carries no children.
+        p = FileColumn::create(size);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }

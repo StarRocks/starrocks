@@ -28,6 +28,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config_paimon_fwd.h"
+#include "connector/hive/paimon/paimon_blob_converter.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
@@ -167,6 +168,15 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     _read_chunk_template = std::make_shared<Chunk>();
     for (size_t i = 0; i < materialized_columns.size(); ++i) {
         SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
+        if (slot_desc->type().type == TYPE_FILE) {
+            // Paimon BLOB -> FILE. paimon-cpp yields a large_binary column holding either the
+            // payload bytes or a serialized BlobDescriptor; paimon_blob_converter decodes it row
+            // by row straight into the FileColumn, so no arrow convert plan or cast applies.
+            _read_chunk_template->append_column(ColumnHelper::create_column(slot_desc->type(), /*nullable=*/true),
+                                                slot_desc->id());
+            _cast_exprs[i] = nullptr;
+            continue;
+        }
         std::shared_ptr<arrow::DataType> arrow_type;
         if (slot_desc->type().type == TYPE_DATE) {
             arrow_type = arrow::date32();
@@ -335,6 +345,11 @@ Status PaimonScanner::_append_arrow_record_batch_to_chunk(ChunkPtr& chunk) {
         _convert_context.set_current_column(slot_desc->col_name(), slot_desc->type());
         Column* column = chunk->get_column_raw_ptr_by_slot_id(slot_desc->id());
         const auto arrow_column = _arrow_record_batch->GetColumnByName(std::string(materialized_columns[i].name()));
+        if (slot_desc->type().type == TYPE_FILE) {
+            RETURN_IF_ERROR(append_paimon_blob_to_file_column(arrow_column.get(), _arrow_record_batch_start_idx,
+                                                              num_rows, column));
+            continue;
+        }
         RETURN_IF_ERROR(convert_arrow_array_to_column(_convert_functions[i].get(), num_rows, arrow_column.get(), column,
                                                       _arrow_record_batch_start_idx, /*chunk_start_idx=*/0,
                                                       &_chunk_filter, &_convert_context));
@@ -351,6 +366,10 @@ Status PaimonScanner::_fill_dst_chunk(ChunkPtr& chunk) {
         SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
         for (size_t i = 0; i < materialized_columns.size(); ++i) {
             SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
+            if (_cast_exprs[i] == nullptr) {
+                // FILE columns are materialized directly by paimon_blob_converter.
+                continue;
+            }
             // Each cast only reads its own slot's raw column, so replacing the slot's
             // column right after evaluating it keeps the conversion in place.
             ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, chunk.get()));
