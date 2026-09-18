@@ -67,34 +67,31 @@ jobs:
           comment-author: 'github-actions[bot]'
           body-includes: "### 🌎 Translation Required?"
 
-      - name: Checkout PR Code
-        if: steps.check_lint.outputs.result == 'true'
-        uses: actions/checkout@v6
-        with:
-          ref: refs/pull/${{ steps.pr_number.outputs.pr_number }}/merge
-          fetch-depth: 0
-
-      - name: Get PR Details
-        if: steps.check_lint.outputs.result == 'true'
-        id: pr_details
-        run: |
-          # Use HEAD^1 (first parent of the synthetic merge commit) as the base SHA.
-          # pr.base.sha from the GitHub API can be stale when the PR branch hasn't
-          # recently merged from main, causing changed-files to detect all main
-          # commits since the branch point as "PR changes".
-          echo "base_sha=$(git rev-parse HEAD^1)" >> $GITHUB_OUTPUT
-
+      # Do NOT check out the PR head here: this workflow runs on 'workflow_run'
+      # with the base repo's token and secrets, and actions/checkout refuses to
+      # place fork code in that trusted context ("pwn request"). The checklist
+      # only needs file names, so read them from the API instead. listFiles
+      # diffs against the merge base, so no base_sha workaround is needed.
       - name: Get Changed Files
         if: steps.check_lint.outputs.result == 'true'
         id: changed-files
-        uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
+        uses: actions/github-script@v7
         with:
-          base_sha: ${{ steps.pr_details.outputs.base_sha }}
-          json: true
-          files: |
-            docs/en/**/*.md*
-            docs/zh/**/*.md*
-            docs/ja/**/*.md*
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number('${{ steps.pr_number.outputs.pr_number }}'),
+              per_page: 100,
+            });
+
+            const DOC_FILE = /^docs\/(en|zh|ja)\/.+\.md[^\/]*$/;
+            const changed = files
+              .filter(f => f.status !== 'removed')
+              .map(f => f.filename)
+              .filter(f => DOC_FILE.test(f));
+
+            core.setOutput('all_changed_files', JSON.stringify(changed));
 
       - name: Generate Checklist Body
         if: steps.check_lint.outputs.result == 'true'
@@ -102,12 +99,12 @@ jobs:
         uses: actions/github-script@v7
         env:
           HAS_COMMENT: ${{ steps.findcomment.outputs.comment-id != '' }}
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         with:
           script: |
-            const fs = require('fs');
             let files = [];
             try {
-              files = JSON.parse('${{ steps.changed-files.outputs.all_changed_files }}');
+              files = JSON.parse(process.env.CHANGED_FILES || '[]');
             } catch (e) { console.log("No files detected"); }
 
             const hasComment = process.env.HAS_COMMENT === 'true';
@@ -144,7 +141,6 @@ jobs:
 
             const filesByBase = {};
             files.forEach(file => {
-              if (!fs.existsSync(file)) return;
               const parts = file.split('/');
               if (parts.length < 3) return;
               const lang = parts[1];
