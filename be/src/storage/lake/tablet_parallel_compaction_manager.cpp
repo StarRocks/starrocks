@@ -1030,30 +1030,37 @@ void TabletParallelCompactionManager::finalize_tablet_completion(
     try {
         callback->finish_task(std::move(merged_context));
     } catch (const std::exception& e) {
-        retry_failed_acceptance(tablet_id, txn_id, state, callback, std::move(merged_context), e.what());
+        retry_failed_acceptance(tablet_id, txn_id, callback, std::move(merged_context), e.what());
     } catch (...) {
-        retry_failed_acceptance(tablet_id, txn_id, state, callback, std::move(merged_context), "unknown exception");
+        retry_failed_acceptance(tablet_id, txn_id, callback, std::move(merged_context), "unknown exception");
     }
     // Note: Do NOT call cleanup_tablet here. The cleanup will be done by
     // CompactionScheduler::remove_states when RPC response is sent.
 }
 
-void TabletParallelCompactionManager::retry_failed_acceptance(
-        int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
-        const std::shared_ptr<CompactionTaskCallback>& callback, std::unique_ptr<CompactionTaskContext> merged_context,
-        const char* what) {
+void TabletParallelCompactionManager::retry_failed_acceptance(int64_t tablet_id, int64_t txn_id,
+                                                              const std::shared_ptr<CompactionTaskCallback>& callback,
+                                                              std::unique_ptr<CompactionTaskContext> merged_context,
+                                                              const char* what) {
+    if (merged_context == nullptr) {
+        // finish_task() had already taken the context, so this tablet is accepted and only the work
+        // that follows an acceptance failed. Completing it again would be worse than the failure:
+        // the accepted count would pass tablet_ids_size(), and the block that answers the RPC only
+        // runs on equality, so it would never run. finish_task() does not let anything escape once
+        // it has accepted, which makes this a guard rather than an expected path.
+        LOG(ERROR) << "Parallel compaction result was already accepted when completing the RPC failed; not "
+                      "completing the tablet again. tablet_id="
+                   << tablet_id << ", txn_id=" << txn_id << ": " << what;
+        return;
+    }
     // finish_task() allocates before it accepts a context and leaves the callback untouched when that
     // fails, with the context still ours, so completing the tablet as failed is safe to try once more.
     // A second failure escapes as before: there is no memory left to complete the RPC with.
     LOG(WARNING) << "Parallel compaction result was not accepted, completing the tablet as failed. tablet_id="
                  << tablet_id << ", txn_id=" << txn_id << ": " << what;
-    auto failure = Status::InternalError(strings::Substitute("parallel compaction result was not accepted: $0", what));
-    if (merged_context == nullptr) {
-        merged_context = fail_merged_context(tablet_id, txn_id, state, callback, failure);
-    } else {
-        merged_context->status = failure;
-        merged_context->txn_log.reset();
-    }
+    merged_context->status =
+            Status::InternalError(strings::Substitute("parallel compaction result was not accepted: $0", what));
+    merged_context->txn_log.reset();
     callback->finish_task(std::move(merged_context));
 }
 

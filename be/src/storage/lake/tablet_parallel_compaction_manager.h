@@ -291,7 +291,6 @@ public:
     // Completes the tablet as failed after finish_task() refused |merged_context| (an allocation failure
     // before acceptance, which leaves the callback untouched and the context with us).
     void retry_failed_acceptance(int64_t tablet_id, int64_t txn_id,
-                                 const std::shared_ptr<TabletParallelCompactionState>& state,
                                  const std::shared_ptr<CompactionTaskCallback>& callback,
                                  std::unique_ptr<CompactionTaskContext> merged_context, const char* what);
 

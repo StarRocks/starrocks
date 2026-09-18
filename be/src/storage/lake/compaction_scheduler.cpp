@@ -192,6 +192,18 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         _status.update(normalize_st);
     }
     _status.update(context->status);
+    // Accepting the last tablet also completes the RPC, and installing the final status allocates:
+    // the StatusPB submessage itself, and its error message when the txn failed. Build it here, on
+    // an object of our own, so the completion below only has to hand the pointer over. A throw at
+    // this point still leaves the callback untouched and the context with the caller, whereas one
+    // after the acceptance could not be retried at all: a second accepted context would push the
+    // count past tablet_ids_size(), and the completion only runs on equality, so it would never run.
+    std::unique_ptr<StatusPB> final_status;
+    if (_contexts.size() + 1 == _request->tablet_ids_size()) {
+        TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:before_final_status");
+        final_status = std::make_unique<StatusPB>();
+        _status.to_protobuf(final_status.get());
+    }
     // Lets a test fail the acceptance the way an allocation failure would: after everything above,
     // before anything below.
     TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:before_accept");
@@ -246,24 +258,38 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     }
 
     if (_contexts.size() == _request->tablet_ids_size()) { // All tasks finished, send RPC response to FE
-        _status.to_protobuf(_response->mutable_status());
+        DCHECK(final_status != nullptr);
+        // Handing the prepared message over does not allocate.
+        _response->set_allocated_status(final_status.release());
         _response->set_success_compaction_input_file_size(_success_compaction_input_file_size);
-        if (_done != nullptr) {
-            _done->Run();
-            _done = nullptr;
-        }
-        _request = nullptr;
-        _response = nullptr;
+        // Nothing below may escape. The tablet has been accepted, so the caller cannot complete it a
+        // second time to recover -- that would push the accepted count past tablet_ids_size() and
+        // this block, which only runs on equality, would never run again, leaving the RPC
+        // unanswered. Report and carry on instead.
+        try {
+            if (_done != nullptr) {
+                _done->Run();
+                _done = nullptr;
+            }
+            _request = nullptr;
+            _response = nullptr;
 
-        std::vector<std::unique_ptr<CompactionTaskContext>> tmp;
-        tmp.swap(_contexts);
+            std::vector<std::unique_ptr<CompactionTaskContext>> tmp;
+            tmp.swap(_contexts);
 
-        l.unlock();
-        if (_scheduler != nullptr) {
-            _scheduler->remove_states(tmp);
+            l.unlock();
+            // Lets a test throw from the far side of the acceptance.
+            TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:after_complete");
+            if (_scheduler != nullptr) {
+                _scheduler->remove_states(tmp);
+            }
+            tmp.clear();
+            TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:finish_task");
+        } catch (const std::exception& e) {
+            LOG(WARNING) << "Exception after the compact RPC was completed: " << e.what();
+        } catch (...) {
+            LOG(WARNING) << "Unknown exception after the compact RPC was completed";
         }
-        tmp.clear();
-        TEST_SYNC_POINT("lake::CompactionTaskCallback::finish_task:finish_task");
     }
 }
 
