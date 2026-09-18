@@ -333,24 +333,24 @@ public class EsRestClient {
     /**
      * response
      [
-     {
-     "index": ".kibana_1"
-     },
-     {
-     "index": ".opendistro_security"
-     },
-     {
-     "index": "kibana_sample_data_ecommerce"
-     },
-     {
-     "index": "kibana_sample_data_ecommerce_2"
-     },
-     {
-     "index": "kibana_sample_data_flights"
-     },
-     {
-     "index": "kibana_sample_data_logs"
-     }
+        {
+        "index": ".kibana_1"
+        },
+        {
+        "index": ".opendistro_security"
+        },
+        {
+        "index": "kibana_sample_data_ecommerce"
+        },
+        {
+        "index": "kibana_sample_data_ecommerce_2"
+        },
+        {
+        "index": "kibana_sample_data_flights"
+        },
+        {
+        "index": "kibana_sample_data_logs"
+        }
      ]
      * indices are same as table
      * @return
@@ -369,9 +369,9 @@ public class EsRestClient {
     }
     /**
      {
-     "kibana_sample_data_ecommerce": {
-     "aliases": {}
-     }
+        "kibana_sample_data_ecommerce": {
+            "aliases": {}
+        }
      }
      * Get all alias.
      **/
