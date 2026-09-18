@@ -28,6 +28,11 @@ namespace starrocks {
 // | b . | 2 .   |
 class JsonEach final : public TableFunction {
 public:
+    // Expansion is unbounded (one row per JSON key/element) and every local is a COW MutablePtr or a
+    // non-owning vpack view, so a std::bad_alloc can unwind out of process() without leaking. Wrapping
+    // it turns an oversized expansion into a failed query instead of a terminated BE.
+    bool is_exception_safe() const override { return true; }
+
     std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                   TableFunctionState* state) const override;
 
