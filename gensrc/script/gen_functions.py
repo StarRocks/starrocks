@@ -18,12 +18,17 @@
 """
 
 import argparse
+import json
 import os
 import sys
 
 from string import Template
 
 import functions
+from ai_function_prompts import (
+    AI_PROMPT_INPUT_TYPES, AI_PROMPT_TEMPLATES, AI_TRANSLATE_AUTO_DETECT_TEMPLATE,
+    prompt_fixed_bytes, validate_ai_prompt_templates,
+)
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
@@ -128,7 +133,34 @@ public class VectorizedBuiltinFunctions {
         CHAT, TEXT_EMBEDDING
     }
 
-    public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument) {
+    public enum AIPromptKind {
+        ${ai_prompt_kinds};
+
+        private final int fixedBytes;
+        private final int autoDetectFixedBytes;
+
+        AIPromptKind(int fixedBytes, int autoDetectFixedBytes) {
+            this.fixedBytes = fixedBytes;
+            this.autoDetectFixedBytes = autoDetectFixedBytes;
+        }
+
+        public int fixedBytes() {
+            return fixedBytes;
+        }
+
+        public int autoDetectFixedBytes() {
+            return autoDetectFixedBytes;
+        }
+    }
+
+    public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument,
+                                       AIPromptKind promptKind, List<Integer> inputArguments,
+                                       List<Integer> nullAsEmptyArguments, List<Integer> blankAsNullArguments) {
+        public AIFunctionDescriptor {
+            inputArguments = List.copyOf(inputArguments);
+            nullAsEmptyArguments = List.copyOf(nullAsEmptyArguments);
+            blankAsNullArguments = List.copyOf(blankAsNullArguments);
+        }
     }
 
     private static final Map<Long, AIFunctionDescriptor> AI_FUNCTION_DESCRIPTORS =
@@ -218,20 +250,7 @@ def add_function(fn_data):
     return entry
 
 
-# These are the input/output contracts of the BE prompt builders and result decoders,
-# not lists of SQL function names or FIDs. Overloads bind argument positions in functions.py.
-AI_PROMPT_INPUT_TYPES = {
-    'PASSTHROUGH': ['VARCHAR'],
-    'SENTIMENT': ['VARCHAR'],
-    'CLASSIFY': ['VARCHAR', 'ARRAY_VARCHAR'],
-    'EXTRACT': ['VARCHAR', 'ARRAY_VARCHAR'],
-    'FIX_GRAMMAR': ['VARCHAR'],
-    'REDACT': ['VARCHAR', 'ARRAY_VARCHAR'],
-    'TRANSLATE': ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-    'SIMILARITY': ['VARCHAR', 'VARCHAR'],
-    'SUMMARIZE': ['VARCHAR'],
-    'FILTER': ['VARCHAR', 'VARCHAR'],
-}
+# BE result decoder contracts; overload argument roles are in functions.py.
 AI_RESULT_TYPES = {
     'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
     'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
@@ -343,6 +362,7 @@ def generate_default_value(param, fn_id):
 
 
 def generate_fe(path):
+    validate_ai_prompt_templates()
     fn_template = Template(
         'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, ${ret}${args_types});'
     )
@@ -396,9 +416,19 @@ ${default_values}
     value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS])
     ai_function_names = sorted({fn["name"] for fn in function_list if fn.get("binary_type") == "AI"})
     value["ai_function_names"] = ", ".join('"%s"' % name for name in ai_function_names)
+    prompt_kinds = []
+    for kind, template in AI_PROMPT_TEMPLATES.items():
+        fixed = prompt_fixed_bytes(template, len(AI_PROMPT_INPUT_TYPES[kind]))
+        auto_detect = prompt_fixed_bytes(AI_TRANSLATE_AUTO_DETECT_TEMPLATE, 2) if kind == 'TRANSLATE' else fixed
+        prompt_kinds.append(f'{kind}({fixed}, {auto_detect})')
+    value["ai_prompt_kinds"] = ',\n        '.join(prompt_kinds)
     value['ai_descriptors'] = '\n'.join(
-        '                    .put(%dL, new AIFunctionDescriptor(AICapability.%s, %d, %d))' % (
-            fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'])
+        '                    .put(%dL, new AIFunctionDescriptor(AICapability.%s, %d, %d,\n'
+        '                            AIPromptKind.%s, List.of(%s), List.of(%s), List.of(%s)))' % (
+            fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'],
+            fn['ai']['prompt_kind'],
+            *(', '.join(str(index) for index in fn['ai'][policy]) for policy in (
+                'input_arguments', 'null_as_empty_arguments', 'blank_as_null_arguments')))
         for fn in function_list if fn.get('binary_type') == 'AI')
 
     content = java_template.substitute(value)
@@ -408,6 +438,7 @@ ${default_values}
 
 
 def generate_ai_cpp(path):
+    validate_ai_prompt_templates()
     ai_functions = [fn for fn in function_list if fn.get('binary_type') == 'AI']
     max_arguments = max((len(fn['args']) for fn in ai_functions), default=0)
     max_inputs = max((len(fn['ai']['input_arguments']) for fn in ai_functions), default=0)
@@ -454,7 +485,13 @@ static constexpr std::array<AIFunctionDescriptor, %d> kAIFunctionDescriptors = {
             flags = (str(i in metadata[policy]).lower() for i in range(max_arguments))
             fields.append((policy, '{' + ', '.join(flags) + '}'))
         content += '    {\n' + ''.join('        .%s = %s,\n' % field for field in fields) + '    },\n'
-    content += '}};\n'
+    content += '}};\n\n'
+    for kind, template in AI_PROMPT_TEMPLATES.items():
+        if kind != 'PASSTHROUGH':
+            name = 'kAI' + kind.title().replace('_', '') + 'Prompt'
+            content += f'static constexpr char {name}[] = {json.dumps(template, ensure_ascii=False)};\n'
+    content += ('static constexpr char kAITranslateAutoDetectPrompt[] = '
+                + json.dumps(AI_TRANSLATE_AUTO_DETECT_TEMPLATE, ensure_ascii=False) + ';\n')
     with open(path, mode='w+') as output:
         output.write(content)
 

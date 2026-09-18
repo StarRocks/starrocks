@@ -37,6 +37,8 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -68,6 +70,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -213,15 +216,53 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
 
     @Test
     public void testOrdinaryPointQueryStillUsesPreparedPlanCache() throws Exception {
-        PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+        long oldLimit = Config.ai_query_admission_max_estimated_input_tokens;
+        Config.ai_query_admission_max_estimated_input_tokens = 1;
+        try {
+            PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
 
-        ExecPlan first = execute(prepared, bigint(1));
-        ExecPlan second = execute(prepared, bigint(2));
+            ExecPlan first = execute(prepared, bigint(1));
+            ExecPlan second = execute(prepared, bigint(2));
 
-        Assertions.assertAll(
-                () -> Assertions.assertTrue(prepared.context().isCached()),
-                () -> Assertions.assertSame(first.getPhysicalPlan(), second.getPhysicalPlan()),
-                () -> Assertions.assertEquals(2, scanPredicateValue(second)));
+            Assertions.assertAll(
+                    () -> Assertions.assertTrue(prepared.context().isCached()),
+                    () -> Assertions.assertSame(first.getPhysicalPlan(), second.getPhysicalPlan()),
+                    () -> Assertions.assertEquals(2, scanPredicateValue(second)));
+        } finally {
+            Config.ai_query_admission_max_estimated_input_tokens = oldLimit;
+        }
+    }
+
+    @Test
+    public void testAIPreparedStatementChecksCurrentBudgetAndParametersOnEveryExecute() throws Exception {
+        long oldLimit = Config.ai_query_admission_max_estimated_input_tokens;
+        PreparedQuery prepared = prepare("select ai_complete(?)");
+        try {
+            Config.ai_query_admission_max_estimated_input_tokens = 21;
+            ExecPlan first = execute(prepared, new StringLiteral("hello"));
+            Assertions.assertEquals(BigInteger.valueOf(21), first.getAIInputTokenEstimate().getTokens());
+
+            Config.ai_query_admission_max_estimated_input_tokens = 20;
+            StarRocksPlannerException budgetError = Assertions.assertThrows(StarRocksPlannerException.class,
+                    () -> execute(prepared, new StringLiteral("hello")));
+            Assertions.assertEquals(ErrorType.USER_ERROR, budgetError.getType());
+            Assertions.assertTrue(budgetError.getMessage().contains("Tokens allowed: 20"), budgetError.getMessage());
+
+            Config.ai_query_admission_max_estimated_input_tokens = 21;
+            StarRocksPlannerException parameterError = Assertions.assertThrows(StarRocksPlannerException.class,
+                    () -> execute(prepared, new StringLiteral("world!")));
+            Assertions.assertEquals(ErrorType.USER_ERROR, parameterError.getType());
+            Assertions.assertTrue(parameterError.getMessage().contains("estimated tokens: 22"), parameterError.getMessage());
+
+            Config.ai_query_admission_max_estimated_input_tokens = 22;
+            ExecPlan second = execute(prepared, new StringLiteral("world!"));
+            Assertions.assertEquals(BigInteger.valueOf(22), second.getAIInputTokenEstimate().getTokens());
+            Assertions.assertFalse(prepared.context().isCached());
+            Assertions.assertNotSame(first.getPhysicalPlan(), second.getPhysicalPlan());
+        } finally {
+            Config.ai_query_admission_max_estimated_input_tokens = oldLimit;
+            connectContext.removePreparedStmt(prepared.name());
+        }
     }
 
     @Test

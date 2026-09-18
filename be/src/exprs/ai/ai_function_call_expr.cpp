@@ -302,68 +302,26 @@ std::string build_prompt(AIPromptKind kind, std::string text, const std::string&
     case AIPromptKind::PASSTHROUGH:
         return text;
     case AIPromptKind::SENTIMENT:
-        return strings::Substitute(
-                "Analyze the overall sentiment of the following text. "
-                "Output exactly one lowercase word from this list: positive, negative, neutral, mixed, unknown. "
-                "No punctuation, no explanation.\n\nText: $0",
-                text);
+        return strings::Substitute(kAISentimentPrompt, text);
     case AIPromptKind::CLASSIFY:
-        return strings::Substitute(
-                "Classify the following text into exactly one of these categories: $0.\n"
-                "Return a JSON object in this exact format: {\"labels\": [\"<chosen_category>\"]}\n"
-                "The array must contain exactly one string that matches one of the given categories.\n"
-                "Output only valid JSON, no markdown, no explanation.\n\nText: $1",
-                second, text);
+        return strings::Substitute(kAIClassifyPrompt, second, text);
     case AIPromptKind::EXTRACT:
-        return strings::Substitute(
-                "Extract a value for each of the following keys from the text below.\n"
-                "Keys: $0\nFor each key, extract exactly one value. If a key's value is not found, use null.\n"
-                "Return a JSON object in this exact format: {\"response\": {\"key1\": \"value1\", \"key2\": null}}\n"
-                "Output only valid JSON, no markdown, no explanation.\n\nText: $1",
-                second, text);
+        return strings::Substitute(kAIExtractPrompt, second, text);
     case AIPromptKind::FIX_GRAMMAR:
-        return strings::Substitute(
-                "Fix the grammar and spelling of the following text. "
-                "Preserve the original meaning and tone. Output only the corrected text, nothing else.\n\nText: $0",
-                text);
+        return strings::Substitute(kAIFixGrammarPrompt, text);
     case AIPromptKind::REDACT:
-        return strings::Substitute(
-                "Redact personally identifiable information (PII) in the text below.\n"
-                "Categories to redact: $0\n"
-                "Replace each detected PII value with its uppercase category name in square brackets, "
-                "e.g. [NAME], [ADDRESS], [EMAIL], [PHONE], [SSN].\n"
-                "If no PII is found, return the original text unchanged. "
-                "Output only the redacted text, nothing else.\n\nText: $1",
-                second, text);
+        return strings::Substitute(kAIRedactPrompt, second, text);
     case AIPromptKind::TRANSLATE:
         if (second.empty()) {
-            return strings::Substitute(
-                    "Translate the following text into $0. Auto-detect the source language. "
-                    "Preserve the original meaning and tone. Output only the translated text, nothing else.\n\nText: "
-                    "$1",
-                    third, text);
+            return strings::Substitute(kAITranslateAutoDetectPrompt, third, text);
         }
-        return strings::Substitute(
-                "Translate the following text from $0 into $1. "
-                "Preserve the original meaning and tone. Output only the translated text, nothing else.\n\nText: $2",
-                second, third, text);
+        return strings::Substitute(kAITranslatePrompt, second, third, text);
     case AIPromptKind::SIMILARITY:
-        return strings::Substitute(
-                "Calculate the semantic similarity between the following two texts.\n"
-                "Output only a single decimal number between 0.00 and 1.00 (0 = completely different, "
-                "1 = identical meaning). No explanation, no extra text.\n\nText 1: $0\nText 2: $1",
-                text, second);
+        return strings::Substitute(kAISimilarityPrompt, text, second);
     case AIPromptKind::SUMMARIZE:
-        return strings::Substitute(
-                "Summarize the following text concisely, capturing the key points. "
-                "Output only the summary, nothing else.\n\nText: $0",
-                text);
+        return strings::Substitute(kAISummarizePrompt, text);
     case AIPromptKind::FILTER:
-        return strings::Substitute(
-                "Given the following text, determine if this condition is true. "
-                "You MUST respond with exactly true or false and nothing else.\n"
-                "Text: $0\nCondition: $1",
-                text, second);
+        return strings::Substitute(kAIFilterPrompt, text, second);
     }
     return {};
 }
