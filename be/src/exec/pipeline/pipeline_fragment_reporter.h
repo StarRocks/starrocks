@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "compute_env/profile_report_task.h"
