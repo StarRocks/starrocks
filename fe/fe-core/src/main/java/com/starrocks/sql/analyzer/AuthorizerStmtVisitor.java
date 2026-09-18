@@ -305,8 +305,12 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
             try {
-                Authorizer.checkTableAction(context,
-                        statement.getTableName(), PrivilegeType.INSERT);
+                // The analyzer has already resolved the target; hand it over so the INSERT check does
+                // not resolve it a second time. For a target in an external catalog that second
+                // resolution is a connector round trip, and this check runs while the planner still
+                // holds the metadata lock over the statement's internal tables.
+                Authorizer.checkResolvedTableAction(context, statement.getTableName(), statement.getTargetTable(),
+                        PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
