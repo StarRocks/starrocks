@@ -82,7 +82,9 @@ public:
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close(RuntimeState* state) override { return _tablet_sink_sender->try_close(state); }
+    Status try_close(RuntimeState* state) override {
+        return _is_initialized && _tablet_sink_sender != nullptr ? _tablet_sink_sender->try_close(state) : Status::OK();
+    }
 
     Status close_wait(RuntimeState* state, Status close_status) override;
 
@@ -170,6 +172,7 @@ private:
     int64_t _sink_id = 0;
     std::string _txn_trace_parent;
     Span _span;
+    bool _is_initialized = false;
     bool _close_wait_done = false;
     Status _close_wait_status;
     int _num_repicas = -1;
