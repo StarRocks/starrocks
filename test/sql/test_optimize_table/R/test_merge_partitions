@@ -42,10 +42,10 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
-show partitions from t order by partitionName;
+function: print_query_columns("show partitions from t order by partitionName", "PartitionName")
 -- result:
-[REGEX].*p20010113.*
-.*p20010114.*
+p20010113
+p20010114
 -- !result
 select * from t;
 -- result:
@@ -63,11 +63,11 @@ create table t(k date) partition by date_trunc('day', k) distributed by hash(k) 
 insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
 -- result:
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p20200101.*
-.*p20200201.*
-.*p20200202.*
+p20200101
+p20200201
+p20200202
 -- !result
 alter table t partition by date_trunc('month',k) between '2020-02-01' and '2020-02-28';
 -- result:
@@ -89,11 +89,11 @@ create table t(k date) partition by date_trunc('day', k) distributed by hash(k) 
 insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
 -- result:
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p20200101.*
-.*p20200201.*
-.*p20200202.*
+p20200101
+p20200201
+p20200202
 -- !result
 alter table t partition by date_trunc('month',k) distributed by hash(k) buckets 4 between '2020-02-01' and '2020-02-28';
 -- result:
