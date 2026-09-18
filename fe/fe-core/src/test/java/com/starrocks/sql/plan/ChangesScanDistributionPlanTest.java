@@ -225,6 +225,50 @@ public class ChangesScanDistributionPlanTest extends BookmarkTestBase {
     }
 
     /**
+     * Both join sides are CHANGES scans, over two DIFFERENT co-bucketed tables in one colocate
+     * group. The case above joins a CHANGES scan to a plain OlapScan and
+     * {@code testSelfJoinPartitionSubsetGating} stays on a single table, so neither exercises two
+     * CHANGES scans meeting through the colocate-group branch of
+     * {@code HashDistributionSpec#canColocate}. Proves both scans advertise the same LOCAL hash
+     * property and join with no shuffle.
+     */
+    @Test
+    public void testChangesJoinAnotherChangesScanColocatesHash() throws Exception {
+        String group = "ch_bgrp_" + COUNTER.getAndIncrement();
+        String left = "ch_bc_a_" + COUNTER.getAndIncrement();
+        String right = "ch_bc_b_" + COUNTER.getAndIncrement();
+        long leftId = createTable("CREATE TABLE " + left + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 3 "
+                + "PROPERTIES ('replication_num' = '1', 'colocate_with' = '" + group + "');");
+        long rightId = createTable("CREATE TABLE " + right + " (k int, w int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 3 "
+                + "PROPERTIES ('replication_num' = '1', 'colocate_with' = '" + group + "');");
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hLeftBase = BookmarkHolder.forEmptyInfo("bc_a_base");
+        BookmarkHolder hLeftHead = BookmarkHolder.forEmptyInfo("bc_a_head");
+        BookmarkHolder hRightBase = BookmarkHolder.forEmptyInfo("bc_b_base");
+        BookmarkHolder hRightHead = BookmarkHolder.forEmptyInfo("bc_b_head");
+        Bookmark leftBase = bm.create(dbId, leftId, hLeftBase);
+        Bookmark rightBase = bm.create(dbId, rightId, hRightBase);
+        bumpVisibleVersion(getTable(leftId), 5L);
+        bumpVisibleVersion(getTable(rightId), 5L);
+        Bookmark leftHead = bm.create(dbId, leftId, hLeftHead);
+        Bookmark rightHead = bm.create(dbId, rightId, hRightHead);
+
+        try {
+            String sql = String.format(
+                    "SELECT count(*) FROM %s a [_CHANGES_%d_%d_] JOIN %s b [_CHANGES_%d_%d_] ON a.k = b.k",
+                    left, leftBase.getBookmarkId(), leftHead.getBookmarkId(),
+                    right, rightBase.getBookmarkId(), rightHead.getBookmarkId());
+            assertContains(getFragmentPlan(sql), "colocate: true");
+        } finally {
+            release(bm, leftId, leftBase, hLeftBase, leftHead, hLeftHead);
+            release(bm, rightId, rightBase, hRightBase, rightHead, hRightHead);
+        }
+    }
+
+    /**
      * Group-execution payoff on top of the HASH colocate join: with group
      * execution enabled, the colocate join over a CHANGES scan and a
      * co-bucketed base table runs bucket-parallel, so EXPLAIN prints the

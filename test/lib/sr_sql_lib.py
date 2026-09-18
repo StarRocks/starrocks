@@ -1970,16 +1970,37 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
 
+    @staticmethod
+    def _alter_job_msg(row, msg_index):
+        """
+        Render the Msg column of a SHOW ALTER ... row for an assertion message.
+
+        AlterJobV2 stores the AlterCancelException text there, so Msg is the only
+        record of why a job reached CANCELLED. The waiters below compare the State
+        column alone; without folding Msg in, a cancelled job is reported as
+        "FINISHED != CANCELLED" and the reason is unrecoverable -- the job is gone
+        from SHOW ALTER by the time anyone reads the CI log, and the cluster the
+        case ran on is torn down with it.
+        """
+        try:
+            msg = row[msg_index]
+        except (IndexError, TypeError):
+            return ""
+        return "" if msg in (None, "") else ", msg: %s" % msg
+
     def wait_table_rollup_finish(self, check_count=60):
         """
         wait materialized view job finish and return status
         """
         status = ""
+        msg = ""
         show_sql = "SHOW ALTER TABLE ROLLUP "
         count = 0
         while count < check_count:
             res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
+            row = res["result"][-1]
+            status = row[8]
+            msg = self._alter_job_msg(row, 9)
             if status != "FINISHED":
                 time.sleep(1)
             else:
@@ -1987,18 +2008,21 @@ class StarrocksSQLApiLib(object):
                 time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        tools.assert_equal("FINISHED", status, "wait alter table finish error%s" % msg)
 
     def wait_materialized_view_finish(self, check_count=60):
         """
         wait materialized view job finish and return status
         """
         status = ""
+        msg = ""
         show_sql = "SHOW ALTER MATERIALIZED VIEW"
         count = 0
         while count < check_count:
             res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
+            row = res["result"][-1]
+            status = row[8]
+            msg = self._alter_job_msg(row, 9)
             if status != "FINISHED":
                 time.sleep(1)
             else:
@@ -2006,7 +2030,7 @@ class StarrocksSQLApiLib(object):
                 time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        tools.assert_equal("FINISHED", status, "wait alter table finish error%s" % msg)
 
     """
         Return True or error message if refresh mv failed
@@ -2483,6 +2507,7 @@ class StarrocksSQLApiLib(object):
         seen = getattr(self, "_last_alter_job_id", None)
         deadline = time.monotonic() + timeout
         status = ""
+        msg = ""
         job_id = None
         while True:
             res = self.execute_sql(
@@ -2493,6 +2518,7 @@ class StarrocksSQLApiLib(object):
                 return ""
 
             job_id, status = res["result"][0][0], res["result"][0][off]
+            msg = self._alter_job_msg(res["result"][0], off + 1)
             if seen is not None and int(job_id) <= int(seen):
                 # No job of our own: either the alter was applied inline, or it created a job of
                 # a different type than the one being listed (a caller that leaves alter_type at
@@ -2515,7 +2541,7 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.1)
 
         self._last_alter_job_id = int(job_id)
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        tools.assert_equal("FINISHED", status, "wait alter table finish error%s" % msg)
 
     @staticmethod
     def _canonical_json(value):
@@ -2703,6 +2729,7 @@ class StarrocksSQLApiLib(object):
         wait alter table job finish and return status
         """
         status = ""
+        msg = ""
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
@@ -2712,10 +2739,11 @@ class StarrocksSQLApiLib(object):
                 return ""
 
             status = res["result"][0][6]
+            msg = self._alter_job_msg(res["result"][0], 7)
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
             time.sleep(0.5)
-        tools.assert_equal(expect_status, status, "wait alter table finish error")
+        tools.assert_equal(expect_status, status, "wait alter table finish error%s" % msg)
         time.sleep(0.5)
 
     def wait_global_dict_ready(self, column_name, table_name, timeout=60, interval=0.1):

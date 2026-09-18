@@ -6,6 +6,10 @@
 -- the colocate join result must be byte-identical to the same join forced
 -- through shuffle (disable_colocate_join), proving the CHANGES scan's bucket
 -- assignment lines up with the base table's, not merely that a join happens.
+-- Plan shape is NOT asserted here: whether the planner picks a colocate join also
+-- depends on the colocate group being reported stable, which is live cluster state
+-- this case does not control. That assertion lives in the FE optimizer plan test
+-- (ChangesScanDistributionPlanTest#testChangesJoinCoBucketedTableColocatesHash).
 
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
@@ -35,9 +39,6 @@ CLEANUP {
     DROP TABLE dim_t FORCE;
 } END CLEANUP
 
--- Plan-shape assertion: the CHANGES scan participates in a COLOCATE join.
-function: assert_explain_contains("SELECT c.k, c.v, d.d FROM delta_t c [_CHANGES_${base}_${head}_] JOIN dim_t d ON c.k = d.k", "colocate: true")
-
 -- Correctness assertion: colocate join (default) result.
 SELECT c.k, c.v, d.d FROM delta_t c [_CHANGES_${base}_${head}_] JOIN dim_t d ON c.k = d.k ORDER BY c.k, c.v, d.d;
 
@@ -56,6 +57,9 @@ SET disable_colocate_join = false;
 -- each other with no shuffle. Correctness is cross-checked against the same join
 -- forced through shuffle (disable_colocate_join), so a byte-identical result proves
 -- the two CHANGES scans' bucket assignments line up, not merely that a join happens.
+-- Plan shape is asserted in the FE optimizer plan test instead
+-- (ChangesScanDistributionPlanTest#testChangesJoinAnotherChangesScanColocatesHash), for the
+-- same reason as the case above.
 
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
@@ -90,9 +94,6 @@ CLEANUP {
     DROP TABLE delta_a FORCE;
     DROP TABLE delta_b FORCE;
 } END CLEANUP
-
--- Plan-shape assertion: the two CHANGES scans participate in a COLOCATE join.
-function: assert_explain_contains("SELECT a.k, a.v, b.w FROM delta_a a [_CHANGES_${base_a}_${head_a}_] JOIN delta_b b [_CHANGES_${base_b}_${head_b}_] ON a.k = b.k", "colocate: true")
 
 -- Correctness assertion: colocate join (default) result.
 SELECT a.k, a.v, b.w FROM delta_a a [_CHANGES_${base_a}_${head_a}_] JOIN delta_b b [_CHANGES_${base_b}_${head_b}_] ON a.k = b.k ORDER BY a.k, a.v, b.w;

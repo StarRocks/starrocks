@@ -29,10 +29,6 @@ CLEANUP {
     DROP TABLE dim_t FORCE;
 } END CLEANUP
 
-function: assert_explain_contains("SELECT c.k, c.v, d.d FROM delta_t c [_CHANGES_${base}_${head}_] JOIN dim_t d ON c.k = d.k", "colocate: true")
--- result:
-None
--- !result
 SELECT c.k, c.v, d.d FROM delta_t c [_CHANGES_${base}_${head}_] JOIN dim_t d ON c.k = d.k ORDER BY c.k, c.v, d.d;
 -- result:
 2	201	22
@@ -89,10 +85,6 @@ CLEANUP {
     DROP TABLE delta_b FORCE;
 } END CLEANUP
 
-function: assert_explain_contains("SELECT a.k, a.v, b.w FROM delta_a a [_CHANGES_${base_a}_${head_a}_] JOIN delta_b b [_CHANGES_${base_b}_${head_b}_] ON a.k = b.k", "colocate: true")
--- result:
-None
--- !result
 SELECT a.k, a.v, b.w FROM delta_a a [_CHANGES_${base_a}_${head_a}_] JOIN delta_b b [_CHANGES_${base_b}_${head_b}_] ON a.k = b.k ORDER BY a.k, a.v, b.w;
 -- result:
 2	201	22
