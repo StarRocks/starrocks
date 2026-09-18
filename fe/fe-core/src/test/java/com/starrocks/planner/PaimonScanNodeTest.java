@@ -55,6 +55,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.OptionalLong;
 
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
@@ -461,6 +462,11 @@ public class PaimonScanNodeTest {
         @Override
         public long rowCount() {
             return 1;
+        }
+
+        @Override
+        public OptionalLong mergedRowCount() {
+            return OptionalLong.empty();
         }
     }
 
