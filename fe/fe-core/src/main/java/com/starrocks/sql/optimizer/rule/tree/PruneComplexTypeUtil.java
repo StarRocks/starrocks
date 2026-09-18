@@ -240,6 +240,11 @@ public class PruneComplexTypeUtil {
 
         private final ComplexTypeAccessGroup visitedAccessGroup;
 
+        // True while we are inside an expression we cannot reason about. The paths recorded downstream
+        // for the column this expression defines describe the expression's *result*, so they must not
+        // be attributed to the columns it reads - see visit() and visitVariableReference().
+        private boolean inUnknownExpr = false;
+
         public MarkSubfieldsVisitor(ComplexTypeAccessGroup visitedAccessGroup) {
             this.visitedAccessGroup = visitedAccessGroup;
         }
@@ -250,11 +255,42 @@ public class PruneComplexTypeUtil {
                 return null;
             }
 
-            if (scalarOperator.getType().isMapType() || scalarOperator.getType().isStructType() ||
-                    scalarOperator.getType().isFunctionType()) {
-                // New expression maybe added, and it's not be handled when go here, so we need disable prune subfields
-                // to prevent error prune.
-                context.setEnablePruneComplexTypes(false);
+            if (scalarOperator.getType().isComplexType() || scalarOperator.getType().isFunctionType()) {
+                // An expression we cannot reason about that yields a complex type - a CASE WHEN whose
+                // branches return MAP, array_map/array_filter, or the LambdaFunctionOperator inside
+                // map_filter/map_apply, for example. We do not know which subfields of its inputs it
+                // needs, so the columns it reads must not be pruned.
+                //
+                // ARRAY counts here just like MAP and STRUCT: a lambda reads its argument's subfields
+                // through its own ColumnRefOperators, which never reach a scan column, so those reads
+                // are invisible to this visitor. select array_filter(x -> x.user = 'official', name)[1].family
+                // would otherwise narrow name to struct<family> and the BE would fail evaluating x.user.
+                //
+                // Clearing the access path stack for this subtree is what enforces that: a column that
+                // registers with an empty ComplexTypeAccessPaths means "select all subfields" (see
+                // markComplexTypeSelectedFields above). Clearing is required rather than merely skipping
+                // the paths - leaving an outer path in place would misattribute it to this subtree's
+                // columns, e.g. map_values(unknown_expr(col)) would prune col down to its map values and
+                // drop the keys unknown_expr may need.
+                //
+                // This is exactly as conservative as disabling pruning outright for the columns this
+                // expression touches, but it is scoped to them. Disabling the flag instead turns one such
+                // expression anywhere in the query into a query-wide opt-out, so an unrelated wide struct
+                // elsewhere in the same statement gets read in full.
+                Deque<ComplexTypeAccessPath> savedAccessPaths = new LinkedList<>(complexTypeAccessPaths);
+                boolean savedInUnknownExpr = inUnknownExpr;
+                complexTypeAccessPaths.clear();
+                inUnknownExpr = true;
+                try {
+                    for (ScalarOperator child : scalarOperator.getChildren()) {
+                        child.accept(this, context);
+                    }
+                } finally {
+                    inUnknownExpr = savedInUnknownExpr;
+                    complexTypeAccessPaths.clear();
+                    complexTypeAccessPaths.addAll(savedAccessPaths);
+                }
+                return null;
             }
 
             for (ScalarOperator child : scalarOperator.getChildren()) {
@@ -287,7 +323,17 @@ public class PruneComplexTypeUtil {
         public Void visitVariableReference(ColumnRefOperator variable, Context context) {
             if (variable.getType().isComplexType()) {
                 ComplexTypeAccessPaths accessPaths = new ComplexTypeAccessPaths(ImmutableList.copyOf(complexTypeAccessPaths));
-                if (visitedAccessGroup == null) {
+                if (visitedAccessGroup == null || inUnknownExpr) {
+                    /*
+                     * Clearing the local stack is not enough inside an unknown expression: visitedAccessGroup
+                     * carries the paths that downstream operators recorded for the column this expression
+                     * defines, and they describe its result, not what it reads. Appending them here would
+                     * narrow the read columns by a path the expression never took - e.g. an upper
+                     * `map_values(m)` over a lower `m = map_filter(lambda, col_map)` would drop col_map's
+                     * keys, which the lambda evaluates. Dropping the suffix only ever widens what is read,
+                     * so it stays on the conservative side. Paths pushed below the boundary (a SubfieldOperator
+                     * between the expression and the column) are still in the stack and still apply.
+                     */
                     context.addAccessPaths(variable, accessPaths);
                 } else {
                     /*
@@ -317,21 +363,40 @@ public class PruneComplexTypeUtil {
 
         @Override
         public Void visitCall(CallOperator call, Context context) {
-            if (call.getFnName().equals(FunctionSet.MAP_KEYS) || call.getFnName().equals(FunctionSet.MAP_SIZE)) {
-                complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
-            } else if (call.getFnName().equals(FunctionSet.MAP_VALUES)) {
-                complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_VALUE));
+            ComplexTypeAccessPathType pathType = accessPathTypeOf(call);
+            if (pathType == null) {
+                // A function whose effect on its arguments' subfields we cannot describe - map_filter and
+                // map_apply, for example. Route it through visit() so that, when it yields a complex type,
+                // the subtree is walked with a cleared access path stack. This has to happen before we
+                // descend: a path pushed by an enclosing map_keys/map_values describes this call's result,
+                // not the columns it reads, and attributing it to them would prune away subfields the call
+                // needs.
+                return visit(call, context);
             }
 
-            for (ScalarOperator child : call.getChildren()) {
-                child.accept(this, context);
-            }
-
-            if (call.getFnName().equals(FunctionSet.MAP_KEYS) || call.getFnName().equals(FunctionSet.MAP_SIZE) ||
-                    call.getFnName().equals(FunctionSet.MAP_VALUES)) {
+            complexTypeAccessPaths.push(new ComplexTypeAccessPath(pathType));
+            try {
+                for (ScalarOperator child : call.getChildren()) {
+                    child.accept(this, context);
+                }
+            } finally {
                 complexTypeAccessPaths.pop();
             }
 
+            return null;
+        }
+
+        // The access path a function takes into its map argument, or null when we cannot describe it.
+        private static ComplexTypeAccessPathType accessPathTypeOf(CallOperator call) {
+            String name = call.getFnName();
+            if (FunctionSet.MAP_KEYS.equals(name) || FunctionSet.MAP_SIZE.equals(name)) {
+                return ComplexTypeAccessPathType.MAP_KEY;
+            }
+            if (FunctionSet.MAP_VALUES.equals(name)) {
+                return ComplexTypeAccessPathType.MAP_VALUE;
+            }
+            // map_entries, which main handles here as ALL_SUBFIELDS, does not exist on this branch
+            // (added by #65328); an unknown name falls through to the conservative route below.
             return null;
         }
     }
