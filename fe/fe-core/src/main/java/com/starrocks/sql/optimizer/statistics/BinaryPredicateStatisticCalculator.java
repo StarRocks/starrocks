@@ -25,6 +25,8 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,6 +43,8 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 public class BinaryPredicateStatisticCalculator {
+    private static final Logger LOG = LogManager.getLogger(BinaryPredicateStatisticCalculator.class);
+
     public static Statistics estimateColumnToConstantComparison(Optional<ColumnRefOperator> columnRefOperator,
                                                                 ColumnStatistic columnStatistic,
                                                                 BinaryPredicateOperator predicate,
@@ -473,6 +477,14 @@ public class BinaryPredicateStatisticCalculator {
             return Optional.empty();
         }
 
+        if (CollectionUtils.isEmpty(estimatedBuckets)) {
+            if (!leftHistogram.getBuckets().isEmpty() && !rightHistogram.getBuckets().isEmpty()) {
+                LOG.warn("No histogram bucket could be estimated for the join, so the estimated histogram "
+                        + "covers its MCV rows only.");
+            }
+            return Optional.of(new Histogram(estimatedMcv));
+        }
+
         return Optional.of(new Histogram(estimatedBuckets, estimatedMcv));
     }
 
@@ -738,6 +750,14 @@ public class BinaryPredicateStatisticCalculator {
             return Optional.empty();
         }
 
+        if (bucketList.isEmpty()) {
+            if (!histogram.getBuckets().isEmpty()) {
+                LOG.warn("No histogram bucket survived the range predicate, so the estimated histogram "
+                        + "covers its MCV rows only.");
+            }
+            return Optional.of(new Histogram(estimatedMCV));
+        }
+
         return Optional.of(new Histogram(bucketList, estimatedMCV));
     }
 
@@ -814,6 +834,14 @@ public class BinaryPredicateStatisticCalculator {
 
         if (bucketList.isEmpty() && estimatedMCV.isEmpty()) {
             return Optional.empty();
+        }
+
+        if (bucketList.isEmpty()) {
+            if (!histogram.getBuckets().isEmpty()) {
+                LOG.warn("No histogram bucket survived the range predicate, so the estimated histogram "
+                        + "covers its MCV rows only.");
+            }
+            return Optional.of(new Histogram(estimatedMCV));
         }
 
         return Optional.of(new Histogram(bucketList, estimatedMCV));
