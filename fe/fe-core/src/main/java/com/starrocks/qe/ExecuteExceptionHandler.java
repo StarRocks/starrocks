@@ -45,6 +45,8 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumper;
@@ -378,6 +380,9 @@ public class ExecuteExceptionHandler {
         try {
             context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
         } catch (Exception e1) {
+            if (e1 instanceof StarRocksPlannerException plannerException && plannerException.getType() == ErrorType.USER_ERROR) {
+                throw plannerException;
+            }
             // encounter exception when re-plan, just log the new error but throw the original cause.
             if (LOG.isDebugEnabled()) {
                 ConnectContext connectContext = context.connectContext;

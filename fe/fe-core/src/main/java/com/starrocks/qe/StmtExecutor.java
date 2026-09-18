@@ -1135,6 +1135,7 @@ public class StmtExecutor {
                         new ExecuteExceptionHandler.RetryContext(0, execPlan, context, parsedStmt);
                 for (int i = 0; i < retryTime; i++) {
                     boolean needRetry = false;
+                    boolean attemptSucceeded = false;
                     retryContext.setRetryTime(i);
                     // The plan this attempt actually runs. A previous iteration's
                     // ExecuteExceptionHandler.handle() may have replaced it via rebuildExecPlan(), so the
@@ -1164,6 +1165,7 @@ public class StmtExecutor {
                         }
 
                         handleQueryStmt(attemptPlan);
+                        attemptSucceeded = !context.getState().isError();
                         break;
                     } catch (Exception e) {
                         // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE.
@@ -1209,7 +1211,7 @@ public class StmtExecutor {
 
                                 if (context.isProfileEnabled()) {
                                     isAsync = tryProcessProfileAsync(attemptPlan, i);
-                                    if (parsedStmt.isExplainAnalyze()) {
+                                    if (attemptSucceeded && parsedStmt.isExplainAnalyze()) {
                                         if (coord != null && coord.isShortCircuit()) {
                                             throw new StarRocksException(
                                                     "short circuit point query doesn't suppot explain analyze stmt, " +
@@ -1377,9 +1379,14 @@ public class StmtExecutor {
             }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
-            LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
+            if (e instanceof StarRocksPlannerException plannerException && plannerException.getType() == ErrorType.USER_ERROR) {
+                LOG.info("execute Exception, sql: {}, error: {}", SqlCredentialRedactor.redact(sql), e.getMessage());
+                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            } else {
+                LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
+                context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            }
             context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
-            context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError()) {
@@ -3402,7 +3409,7 @@ public class StmtExecutor {
             try {
                 if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
                     isAsync = tryProcessProfileAsync(execPlan, 0);
-                    if (parsedStmt.isExplain() &&
+                    if (!context.getState().isError() && parsedStmt.isExplain() &&
                             StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                         handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
                                 profile, null, context.getSessionVariable().getColorExplainOutput()));
@@ -3499,6 +3506,21 @@ public class StmtExecutor {
         } else if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.INSERT,
                     parsedStmt.getExplainLevel()));
+            return;
+        }
+        // Scheduler explains must not register or activate tables in an explicit transaction.
+        if (isSchedulerExplain && context.getTxnId() != 0) {
+            coord = getCoordinatorFactory().createInsertScheduler(
+                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                        new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
+                coord.execWithoutDeploy();
+                handleExplainStmt(coord.getSchedulerExplain());
+            } finally {
+                coord.onReleaseSlots();
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
             return;
         }
         // special handling for delete of non-primary key table, using old handler

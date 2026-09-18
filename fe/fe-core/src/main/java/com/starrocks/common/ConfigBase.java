@@ -269,6 +269,12 @@ public class ConfigBase {
                             "must be at least 30 seconds, current value: " + confVal);
                 }
                 break;
+            case "ai_query_admission_max_estimated_input_tokens":
+                if (Long.parseLong(confVal) < 0) {
+                    throw new InvalidConfException("'ai_query_admission_max_estimated_input_tokens' must be non-negative, "
+                            + "current value: " + confVal);
+                }
+                break;
             case "label_clean_interval_second":
                 // The value drives Daemon.run()'s Thread.sleep(): 0 spins the label cleaner and a
                 // negative value throws IllegalArgumentException, which escapes the daemon loop and

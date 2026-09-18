@@ -128,7 +128,15 @@ public class VectorizedBuiltinFunctions {
         CHAT, TEXT_EMBEDDING
     }
 
-    public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument) {
+    public enum AIPromptKind {
+        ${ai_prompt_kinds}
+    }
+
+    public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument,
+                                       AIPromptKind promptKind, List<Integer> inputArguments) {
+        public AIFunctionDescriptor {
+            inputArguments = List.copyOf(inputArguments);
+        }
     }
 
     private static final Map<Long, AIFunctionDescriptor> AI_FUNCTION_DESCRIPTORS =
@@ -396,9 +404,12 @@ ${default_values}
     value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS])
     ai_function_names = sorted({fn["name"] for fn in function_list if fn.get("binary_type") == "AI"})
     value["ai_function_names"] = ", ".join('"%s"' % name for name in ai_function_names)
+    value["ai_prompt_kinds"] = ', '.join(AI_PROMPT_INPUT_TYPES)
     value['ai_descriptors'] = '\n'.join(
-        '                    .put(%dL, new AIFunctionDescriptor(AICapability.%s, %d, %d))' % (
-            fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'])
+        '                    .put(%dL, new AIFunctionDescriptor(AICapability.%s, %d, %d,\n'
+        '                            AIPromptKind.%s, List.of(%s)))' % (
+            fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'],
+            fn['ai']['prompt_kind'], ', '.join(str(index) for index in fn['ai']['input_arguments']))
         for fn in function_list if fn.get('binary_type') == 'AI')
 
     content = java_template.substitute(value)
