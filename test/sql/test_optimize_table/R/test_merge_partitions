@@ -1,12 +1,12 @@
 -- name: test_time_slice
-create table t1(a int,b datetime)                partition by time_slice(b, interval 100 microsecond);
+create table t1(a int,b datetime) partition by time_slice(b, interval 100 microsecond);
 -- result:
 -- !result
 alter table t1 partition by time_slice(b, interval 100 millisecond);
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Unsupported partition type for merge partitions.')
 -- !result
-create table t2(a int,b datetime)                partition by time_slice(b, interval 1 second);
+create table t2(a int,b datetime) partition by time_slice(b, interval 1 second);
 -- result:
 -- !result
 alter table t2 partition by time_slice(b, interval 1 minute);
