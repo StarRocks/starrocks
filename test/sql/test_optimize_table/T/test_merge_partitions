@@ -21,7 +21,7 @@ insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
 function: print_query_columns("show partitions from t", "PartitionName")
 alter table t partition by date_trunc('month',k) between '2020-02-01' and '2020-02-28';
 function: wait_optimize_table_finish()
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName", "Buckets")
 
 
 -- name: test_merge_partitions_specify_distributition @native
@@ -30,4 +30,4 @@ insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
 function: print_query_columns("show partitions from t", "PartitionName")
 alter table t partition by date_trunc('month',k) distributed by hash(k) buckets 4 between '2020-02-01' and '2020-02-28';
 function: wait_optimize_table_finish()
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName", "Buckets")
