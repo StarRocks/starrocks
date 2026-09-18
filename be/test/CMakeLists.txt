@@ -154,6 +154,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/core_dump_resource_releaser_test.cpp
+        ./service/daemon_test.cpp
         ./service/mem_hook_test.cpp
         ./service/mem_purge_policy_test.cpp
         ./service/service_metrics_test.cpp
