@@ -208,6 +208,9 @@ else
         fi
 
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} verify -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
+        # -Dfe.ut.coverage enables the jacoco offline instrumentation that produces
+        # fe-core/target/jacoco.exec; it is off by default so that a plain `mvn test` stays
+        # incremental (see the fe-ut-coverage profile in fe/fe-core/pom.xml).
+        ${MVN_CMD} verify -Dfe.ut.coverage -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
     fi
 fi

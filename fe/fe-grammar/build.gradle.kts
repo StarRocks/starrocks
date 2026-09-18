@@ -30,19 +30,24 @@ dependencies {
     implementation("org.antlr:antlr4-runtime")
 }
 
-// The .g4 files sit under src/main/antlr/com/starrocks/grammar, and ANTLR must be pointed at
-// that directory as its source root instead of the plugin's default src/main/antlr. This is the
-// same root antlr4-maven-plugin uses via <sourceDirectory> in pom.xml, and the two builds must
-// agree.
+// The .g4 files sit under src/main/antlr/com/starrocks/sql/parser. Gradle's ANTLR plugin is
+// pointed straight at that directory as its source root, so it keeps generating flat output and
+// the package is supplied by -package below.
 //
-// Why the deeper root is required, not just tidier: ANTLR mirrors each grammar's path *relative
-// to the source root* into the output directory, but resolves a `tokenVocab` reference only in
-// -lib or in the *base* output directory (TokenVocabParser#getImportedVocabFile). Rooted at
-// src/main/antlr, SearchDslLexer.tokens is written to <out>/com/starrocks/grammar/ while
-// SearchDslParser.g4's `options { tokenVocab=SearchDslLexer; }` is looked up in <out>/, so
-// generation fails with "cannot find tokens file". A flat root puts both in the same place.
-// It also keeps `import StarRocksLex;` in StarRocks.g4 resolvable via Tool.inputDirectory.
-val grammarDir = file("src/main/antlr/com/starrocks/grammar")
+// Why the deeper root is required here, not just tidier: ANTLR mirrors each grammar's path
+// *relative to the source root* into the output directory, but Gradle's plugin resolves a
+// `tokenVocab` reference only in -lib or in the *base* output directory
+// (TokenVocabParser#getImportedVocabFile). Rooted at src/main/antlr, SearchDslLexer.tokens is
+// written to <out>/com/starrocks/sql/parser/ while SearchDslParser.g4's
+// `options { tokenVocab=SearchDslLexer; }` is looked up in <out>/, so generation fails with
+// "cannot find tokens file". A flat root puts both in the same place. It also keeps
+// `import StarRocksLex;` in StarRocks.g4 resolvable via Tool.inputDirectory.
+//
+// Maven deliberately differs: antlr4-maven-plugin sets the per-grammar output directory, so it
+// can use src/main/antlr as the root and emit into <out>/com/starrocks/sql/parser/ (see the
+// <sourceDirectory>/<libDirectory> comment in pom.xml for why that layout is required there).
+// Both builds produce the same package; only the on-disk output layout differs.
+val grammarDir = file("src/main/antlr/com/starrocks/sql/parser")
 
 sourceSets {
     main {

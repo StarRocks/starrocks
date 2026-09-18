@@ -101,6 +101,92 @@ under the License.
             </properties>
         </profile>
         <profile>
+            <!-- Offline coverage instrumentation, off by default.
+
+                 jacoco:instrument rewrites target/classes in place and stashes the originals in
+                 target/generated-classes/jacoco; only restore-instrumented-classes (prepare-package)
+                 puts them back. A plain `mvn test` stops before that phase, so leaving this on by
+                 default means the next `mvn test` re-instruments already instrumented classes.
+                 run-fe-ut.sh enables it for the `mvn verify` run that CI uses to collect coverage. -->
+            <id>fe-ut-coverage</id>
+            <activation>
+                <property>
+                    <name>fe.ut.coverage</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>${jacoco.version}</version>
+                        <configuration>
+                            <dataFile>${project.build.directory}/jacoco.exec</dataFile>
+                            <outputDirectory>${project.build.directory}/jacoco-report</outputDirectory>
+                        </configuration>
+                        <executions>
+
+                            <execution>
+                                <id>instrument</id>
+                                <phase>process-classes</phase>
+                                <goals>
+                                    <goal>instrument</goal>
+                                </goals>
+                                <configuration>
+                                    <includes>
+                                        <include>com/starrocks/**</include>
+                                    </includes>
+                                    <excludes>
+                                        <exclude>com/starrocks/proto/**</exclude>
+                                        <exclude>**/*$$JProtoBufClass</exclude>
+                                        <exclude>**/*$$JProtoBuf*</exclude>
+                                    </excludes>
+                                    <append>true</append>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>default-report</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                            </execution>
+
+                            <execution>
+                                <id>restore</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>restore-instrumented-classes</goal>
+                                </goals>
+                            </execution>
+
+                            <execution>
+                                <id>default-check</id>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <rule>
+                                            <element>BUNDLE</element>
+                                            <limits>
+                                                <!-- <limit>
+                                                    <counter>COMPLEXITY</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.60</minimum>
+                                                </limit> -->
+                                            </limits>
+                                        </rule>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
             <id>async-profiler-enabled</id>
             <activation>
                 <property>
@@ -1118,78 +1204,16 @@ under the License.
                 </configuration>
                 <executions>
                     <execution>
-                        <phase>compile</phase>
+                        <!-- prepare-package, not compile: precompiling the proto classes only
+                             matters for the jar we ship (it lets the runtime use a plain JVM
+                             instead of compiling them on the fly through the JDK). It has no
+                             effect on a test run, and at ~7s per build it was the single largest
+                             cost of an otherwise fully incremental `mvn test`. `mvn package` and
+                             `mvn verify` still run it. -->
+                        <phase>prepare-package</phase>
                         <goals>
                             <goal>precompile</goal>
                         </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- fe ut coverage-->
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>${jacoco.version}</version>
-                <configuration>
-                    <dataFile>${project.build.directory}/jacoco.exec</dataFile>
-                    <outputDirectory>${project.build.directory}/jacoco-report</outputDirectory>
-                </configuration>
-                <executions>
-
-                    <execution>
-                        <id>instrument</id>
-                        <phase>process-classes</phase>
-                        <goals>
-                            <goal>instrument</goal>
-                        </goals>
-                        <configuration>
-                            <includes>
-                                <include>com/starrocks/**</include>
-                            </includes>
-                            <excludes>
-                                <exclude>com/starrocks/proto/**</exclude>
-                                <exclude>**/*$$JProtoBufClass</exclude>
-                                <exclude>**/*$$JProtoBuf*</exclude>
-                            </excludes>
-                            <append>true</append>
-                        </configuration>
-                    </execution>
-
-                    <execution>
-                        <id>default-report</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-
-                    <execution>
-                        <id>restore</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>restore-instrumented-classes</goal>
-                        </goals>
-                    </execution>
-
-                    <execution>
-                        <id>default-check</id>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <!-- <limit>
-                                            <counter>COMPLEXITY</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.60</minimum>
-                                        </limit> -->
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -1203,6 +1227,10 @@ under the License.
                     <thriftExecutable>${starrocks.thrift}</thriftExecutable>
                     <thriftSourceRoot>${starrocks.home}/gensrc/thrift</thriftSourceRoot>
                     <generator>java</generator>
+                    <!-- Only regenerate when a .thrift file is newer than its generated .java.
+                         Without this the plugin rewrites ~850 sources on every build, which makes
+                         maven-compiler-plugin recompile the whole module. -->
+                    <checkStaleness>true</checkStaleness>
                     <excludes>
                         <exclude>**/parquet.thrift</exclude>
                     </excludes>
@@ -1260,45 +1288,56 @@ under the License.
                         <id>generate-sources</id>
                         <phase>generate-sources</phase>
                         <configuration>
-                            <target>
+                            <target xmlns:unless="ant:unless">
                                 <property name="ant.python" value="${python}"/>
                                 <mkdir dir="${basedir}/target/generated-sources/proto"/>
-                                <exec executable="${java.home}/bin/java">
+                                <!-- The generator below rewrites ~310 java files unconditionally.
+                                     Their fresh timestamps make maven-compiler-plugin recompile the
+                                     whole module on every build, so only run it when a .proto is
+                                     newer than the stamp written after the last generation.
+                                     The python generators below keep their own fingerprint guards. -->
+                                <uptodate property="fe.proto.uptodate"
+                                          targetfile="${basedir}/target/generated-sources/proto/.proto-stamp">
+                                    <srcfiles dir="${starrocks.home}/gensrc/proto" includes="*.proto"/>
+                                </uptodate>
+                                <exec executable="${java.home}/bin/java" unless:set="fe.proto.uptodate">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/lake_types.proto"/>
                                 </exec>
-                                <exec executable="${java.home}/bin/java">
+                                <exec executable="${java.home}/bin/java" unless:set="fe.proto.uptodate">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/internal_service.proto"/>
                                 </exec>
-                                <exec executable="${java.home}/bin/java">
+                                <exec executable="${java.home}/bin/java" unless:set="fe.proto.uptodate">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/types.proto"/>
                                 </exec>
-                                <exec executable="${java.home}/bin/java">
+                                <exec executable="${java.home}/bin/java" unless:set="fe.proto.uptodate">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/tablet_schema.proto"/>
                                 </exec>
-                                <exec executable="${java.home}/bin/java">
+                                <exec executable="${java.home}/bin/java" unless:set="fe.proto.uptodate">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
                                 </exec>
-                                <exec executable="${java.home}/bin/java">
+                                <exec executable="${java.home}/bin/java" unless:set="fe.proto.uptodate">
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/encryption.proto"/>
                                 </exec>
+                                <touch unless:set="fe.proto.uptodate"
+                                       file="${basedir}/target/generated-sources/proto/.proto-stamp"/>
                                 <exec executable="${ant.python}">
                                     <env key="JAVA_HOME" value="${java.home}"/>
                                     <arg value="${starrocks.home}/build-support/gen_build_version.py"/>
@@ -1432,20 +1471,6 @@ under the License.
             </plugin>
 
 
-            <!-- clean fe/target dir before building -->
-            <plugin>
-                <artifactId>maven-clean-plugin</artifactId>
-                <version>3.1.0</version>
-                <executions>
-                    <execution>
-                        <id>auto-clean</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>clean</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 </project>

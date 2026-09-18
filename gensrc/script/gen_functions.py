@@ -234,6 +234,25 @@ def generate_default_value(param, fn_id):
         return None
 
 
+
+def write_if_changed(path, content):
+    """Write content to path only when it differs from what is already there.
+
+    Rewriting an unchanged generated file gives it a fresh mtime, which makes
+    maven-compiler-plugin treat it as stale and recompile all of fe-core (and makes
+    ninja rebuild the BE side). gen_build_version.py and gen_license_toggle.py guard
+    their output the same way.
+    """
+    try:
+        with open(path, mode="r") as f:
+            if f.read() == content:
+                return
+    except (IOError, OSError):
+        pass
+    with open(path, mode="w+") as f:
+        f.write(content)
+
+
 def generate_fe(path):
     fn_template = Template(
         'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, ${ret}${args_types});'
@@ -292,8 +311,7 @@ ${default_values}
 
     content = java_template.substitute(value)
 
-    with open(path, mode="w+") as f:
-        f.write(content)
+    write_if_changed(path, content)
 
 
 def generate_cpp(path):
@@ -406,11 +424,10 @@ def generate_cpp(path):
             )
 
     for module in modules:
-        with open(path + module + ".inc", mode="w+") as f:
-            content = cpp_template.format(
-                module=module, content=modules_contents[module]
-            )
-            f.write(content)
+        content = cpp_template.format(
+            module=module, content=modules_contents[module]
+        )
+        write_if_changed(path + module + ".inc", content)
 
 
 if __name__ == "__main__":

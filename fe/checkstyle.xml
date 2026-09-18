@@ -63,6 +63,23 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
 
     <module name="TreeWalker">
         <module name="OuterTypeFilename"/>
+        <!-- Guards the build's incremental compilation. maven-compiler-plugin decides whether a
+             source is stale by looking for <outputDirectory>/<source path>.class. A file whose
+             package statement is commented out produces no class at all, and one whose package
+             does not match its directory produces a class somewhere else; either way the source is
+             stale on every single build and the whole module is recompiled every time. Dead test
+             suites therefore have to keep a live package and class declaration (comment out the
+             bodies) or be deleted outright. -->
+        <module name="PackageDeclaration"/>
+        <!-- PackageDeclaration above does not fire when a file has no live code at all, which is
+             the worse half of the same problem: a source whose every statement sits inside a
+             comment. Require a package statement that is not itself commented out. -->
+        <module name="Regexp">
+            <property name="format" value="^\s*package\s+[\w.]+\s*;"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="File has no package statement outside of comments. A fully commented-out source produces no .class, so maven-compiler-plugin marks it stale on every build and recompiles the whole module. Keep the package and class declarations live and comment out only the bodies, or delete the file."/>
+        </module>
         <module name="AvoidEscapedUnicodeCharacters">
             <property name="allowEscapesForControlCharacters" value="true"/>
             <property name="allowByTailComment" value="true"/>

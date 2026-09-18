@@ -42,12 +42,19 @@
                             <goal>antlr4</goal>
                         </goals>
                         <configuration>
-                            <sourceDirectory>src/main/antlr/com/starrocks/grammar</sourceDirectory>
+                            <!-- The .g4 files live at com/starrocks/sql/parser/ under this root, so
+                                 ANTLR derives the package from the relative path and writes the
+                                 generated sources into target/generated-sources/antlr4/com/starrocks/sql/parser/.
+                                 That layout matters beyond tidiness: maven-compiler-plugin decides
+                                 staleness by mapping <source root>/<rel path>.java to
+                                 target/classes/<rel path>.class. With a flat output the mapping never
+                                 matches, so fe-grammar recompiled on every build and every downstream
+                                 module then saw a "changed dependency" and recompiled in full. -->
+                            <sourceDirectory>src/main/antlr</sourceDirectory>
+                            <!-- Resolves `import StarRocksLex;` in StarRocks.g4 and
+                                 `tokenVocab=SearchDslLexer` in SearchDslParser.g4. -->
+                            <libDirectory>src/main/antlr/com/starrocks/sql/parser</libDirectory>
                             <visitor>true</visitor>
-                            <arguments>
-                                <argument>-package</argument>
-                                <argument>com.starrocks.sql.parser</argument>
-                            </arguments>
                         </configuration>
                     </execution>
                 </executions>
