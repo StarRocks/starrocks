@@ -108,6 +108,13 @@ public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessC
     private void hasPermission(RangerStarRocksResourceEPack resource, UserIdentity user, Set<String> groups,
                                PrivilegeType privilegeType)
             throws AccessDeniedException {
+        // root user bypasses Ranger authorization entirely, mirroring RangerAccessController.hasPermission.
+        // This overload handles the EE-only resources (warehouse, failover group, masking/row-access policy),
+        // which never reach the base-class check.
+        if (UserIdentity.ROOT.equals(user)) {
+            return;
+        }
+
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
             accessType = RangerPolicyEngine.ANY_ACCESS;
