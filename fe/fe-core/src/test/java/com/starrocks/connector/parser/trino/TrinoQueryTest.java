@@ -1204,6 +1204,34 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "cross join unnest(plat.pid) as t(plat_id);";
         assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]", "returnTypes: [TINYINT, ARRAY<TINYINT>]",
                 "returnTypes: [TINYINT]");
+
+        sql = "select language, first_appeared_year from (values 1) as x(dummy) " +
+                "cross join unnest(map(array['SQL', 'Java'], array[1974, 1995])) " +
+                "as t(language, first_appeared_year)";
+        assertPlanContains(sql, "tableFunctionName: unnest", "map_keys(map_from_arrays",
+                "map_values(map_from_arrays", "returnTypes: [VARCHAR, SMALLINT]");
+
+        sql = "select map_key, map_value from test_map " +
+                "cross join unnest(c1) as t(map_key, map_value)";
+        assertPlanContains(sql, "map_keys(2: c1)", "map_values(2: c1)", "returnTypes: [INT, INT]");
+
+        sql = "select map_key, map_value, array_value from (values 1) as x(dummy) " +
+                "cross join unnest(map(array[1, 2], array['a', 'b']), " +
+                "array[10000000000, 20000000000, 30000000000]) " +
+                "as t(map_key, map_value, array_value)";
+        assertPlanContains(sql, "tableFunctionName: unnest", "map_keys(map_from_arrays",
+                "map_values(map_from_arrays", "[10000000000,20000000000,30000000000]",
+                "returnTypes: [TINYINT, VARCHAR, BIGINT]");
+
+        assertPlanContains("select map_key, map_value from (values 1) as x(dummy) " +
+                        "cross join unnest(map()) as t(map_key, map_value)",
+                "tableFunctionName: unnest", "map_keys", "map_values");
+        assertPlanContains("select map_key, map_value from test_map " +
+                        "cross join unnest(if(c0 > 0, c1, null)) as t(map_key, map_value)",
+                "tableFunctionName: unnest", "map_keys(", "map_values(", "returnTypes: [INT, INT]");
+        analyzeFail("select * from (values 1) as x(dummy) " +
+                        "cross join unnest(map(array[1], array['a'])) as t(map_key)",
+                "table t has 2 columns available but 1 columns specified");
     }
 
     @Test
