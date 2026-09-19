@@ -152,7 +152,7 @@ Status CSVReader::readMore(bool expandBuffer) {
     }
 
 Status CSVReader::more_rows() {
-    if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
+    if (UNLIKELY(_reached_limit())) {
         return Status::EndOfFile("Reached limit");
     }
     Status status = Status::OK();
@@ -318,6 +318,13 @@ Status CSVReader::more_rows() {
                 curState = preState;
                 break;
             }
+            // Any other escaped character is taken literally as well, and like the cases above it
+            // does not change which field we are in. This used to fall through to ORDINARY, which
+            // discarded the ENCLOSE recorded in preState, so an escape anywhere inside an enclosed
+            // field left the field and every delimiter after it was read as structure. See #43613.
+            curState = preState;
+            _buff.skip(1);
+            break;
 
         case ORDINARY:
             if (UNLIKELY(_parse_options.trim_space && preState == ENCLOSE)) {
@@ -351,9 +358,14 @@ Status CSVReader::more_rows() {
             // enclose
             if (UNLIKELY(*(_buff.position()) == _parse_options.enclose)) {
                 preState = curState;
-                curState = ENCLOSE_ESCAPE;
                 _escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
+                READ_MORE()
+                // A doubled enclose character stands for a literal one, and ENCLOSE_ESCAPE consumes
+                // the second of the pair. A lone one is dropped, but must not consume the character
+                // after it: doing so swallowed column and row delimiters, merging columns and
+                // running records together.
+                curState = (*(_buff.position()) == _parse_options.enclose) ? ENCLOSE_ESCAPE : ORDINARY;
                 break;
             }
 
@@ -478,7 +490,7 @@ Status CSVReader::more_rows() {
             enclose_trailing_cr_consumed = false;
             white_space_start = std::string::npos;
             parsed_start = _buff.position_offset();
-            if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
+            if (UNLIKELY(_reached_limit())) {
                 return Status::EndOfFile("Reached limit");
             }
             break;
@@ -510,7 +522,7 @@ Status CSVReader::next_record(CSVRow& row) {
 }
 
 Status CSVReader::next_record(Record* record) {
-    if (_limit > 0 && _parsed_bytes > _limit) {
+    if (_reached_limit()) {
         return Status::EndOfFile("Reached limit");
     }
     char* d;

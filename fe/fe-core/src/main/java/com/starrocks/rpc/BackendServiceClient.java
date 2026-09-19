@@ -46,6 +46,7 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetCsvSplitsResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PPlanFragmentCancelReason;
@@ -294,6 +295,17 @@ public class BackendServiceClient {
             return service.getFileSchema(request);
         } catch (Throwable e) {
             LOG.warn("failed to get file schema, address={}:{}", address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PGetCsvSplitsResult> getCsvSplits(
+            TNetworkAddress address, PGetCsvSplitsRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.getCsvSplits(request);
+        } catch (Throwable e) {
+            LOG.warn("failed to get csv splits, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
     }
