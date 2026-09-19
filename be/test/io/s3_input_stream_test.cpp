@@ -21,6 +21,8 @@
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/GetObjectRequest.h>
+#include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
@@ -226,5 +228,36 @@ TEST_F(S3InputStreamTest, test_prefetch) {
 
     ASSIGN_OR_ABORT(auto r, f->read(buf, sizeof(buf)));
     ASSERT_EQ("012345", std::string_view(buf, r));
+}
+
+// Network-free: verifies that apply_sse_customer_key stamps the SSE-C headers onto GetObject/HeadObject
+// requests when (and only when) a customer key is configured. Runs without an S3 bucket.
+TEST(S3InputStreamSseCTest, apply_sse_customer_key) {
+    Aws::SDKOptions options;
+    Aws::InitAPI(options);
+    {
+        S3InputStream stream(nullptr, "bucket", "object");
+
+        // Not configured: request stays untouched.
+        Aws::S3::Model::GetObjectRequest disabled;
+        stream.apply_sse_customer_key(disabled);
+        EXPECT_FALSE(disabled.SSECustomerKeyHasBeenSet());
+
+        // Configured: GetObject carries algorithm/key/md5.
+        stream.set_sse_customer_key("base64-key", "base64-md5");
+        Aws::S3::Model::GetObjectRequest get_request;
+        stream.apply_sse_customer_key(get_request);
+        EXPECT_TRUE(get_request.SSECustomerKeyHasBeenSet());
+        EXPECT_EQ("AES256", get_request.GetSSECustomerAlgorithm());
+        EXPECT_EQ("base64-key", get_request.GetSSECustomerKey());
+        EXPECT_EQ("base64-md5", get_request.GetSSECustomerKeyMD5());
+
+        // HeadObject carries the same headers (required for get_size()).
+        Aws::S3::Model::HeadObjectRequest head_request;
+        stream.apply_sse_customer_key(head_request);
+        EXPECT_TRUE(head_request.SSECustomerKeyHasBeenSet());
+        EXPECT_EQ("base64-key", head_request.GetSSECustomerKey());
+    }
+    Aws::ShutdownAPI(options);
 }
 } // namespace starrocks::io

@@ -123,7 +123,7 @@ public class IcebergRowDeltaSink extends DataSink {
 
     public void init() {
         String catalogName = icebergTable.getCatalogName();
-        this.cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
+        this.cloudConfiguration = IcebergUtil.getVendedCloudConfigurationForWrite(catalogName, icebergTable);
         // Validate tuple descriptor contains required columns
         validateTuple(desc);
     }

@@ -76,7 +76,7 @@ public class IcebergDeleteSink extends DataSink {
 
     public void init() {
         String catalogName = icebergTable.getCatalogName();
-        this.cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
+        this.cloudConfiguration = IcebergUtil.getVendedCloudConfigurationForWrite(catalogName, icebergTable);
         // Validate tuple descriptor contains required columns
         validateDeleteTuple(desc);
     }
