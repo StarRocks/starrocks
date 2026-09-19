@@ -1006,6 +1006,65 @@ PROPERTIES (
 DROP DATABASE test_schema_change_for_after;
 -- result:
 -- !result
+-- name: test_add_normal_and_generated_column_with_data @native
+CREATE DATABASE test_add_normal_and_generated_column_with_data;
+-- result:
+-- !result
+USE test_add_normal_and_generated_column_with_data;
+-- result:
+-- !result
+CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+INSERT INTO t0 VALUES (1, 1), (2, 2), (3, 3);
+-- result:
+-- !result
+alter table t0 add column testcol1 BIGINT, add column testcol2 BIGINT as v1 * 10;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t0;
+-- result:
+t0	CREATE TABLE `t0` (
+  `v1` bigint(20) NOT NULL COMMENT "",
+  `v2` bigint(20) NOT NULL COMMENT "",
+  `testcol1` bigint(20) NULL COMMENT "",
+  `testcol2` bigint(20) NULL AS `v1` * 10 COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+SELECT * FROM t0 ORDER BY v1;
+-- result:
+1	1	None	10
+2	2	None	20
+3	3	None	30
+-- !result
+alter table t0 add column testcol3 BIGINT, add column testcol4 BIGINT as v1 * 100, add column testcol5 BIGINT as v1 * 1000;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t0 ORDER BY v1;
+-- result:
+1	1	None	None	10	100	1000
+2	2	None	None	20	200	2000
+3	3	None	None	30	300	3000
+-- !result
+DROP DATABASE test_add_normal_and_generated_column_with_data;
+-- result:
+-- !result
 -- name: test_compaction_after_adding_generated_column @native
 CREATE DATABASE test_compaction_after_adding_generated_column;
 -- result:
