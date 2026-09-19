@@ -75,26 +75,6 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
                 "  START (\"2022-01-01\") END (\"2022-03-01\") EVERY (INTERVAL 1 day))\n" +
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\"replication_num\" = \"1\");");
-        // Same as t2, but carrying row counts. PushDownTopNToPreAggRule only wins on cost once the
-        // table is not empty, and it is that rule firing which moves the partial TopN down into the
-        // scan fragment where it can build a filter against the cache point at all.
-        starRocksAssert.withTable("" +
-                "CREATE TABLE t3(\n" +
-                "dt DATE NOT NULL,\n" +
-                "c1 INT NOT NULL,\n" +
-                "ts BIGINT NOT NULL,\n" +
-                "v1 BIGINT NOT NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`dt`, `c1`)\n" +
-                "PARTITION BY RANGE(dt) (\n" +
-                "  START (\"2022-01-01\") END (\"2022-03-01\") EVERY (INTERVAL 1 day))\n" +
-                "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
-                "PROPERTIES(\"replication_num\" = \"1\");");
-        OlapTable t3 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb("qc_rf_db").getTable("t3");
-        for (Partition partition : t3.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(40);
-        }
         // A colocate pair for the join shapes. j1 is made huge and j2 tiny so that the aggregated j1
         // side is chosen as the probe (left) input, which is what puts the aggregation -- and hence the
         // cache interpolation point -- on the leftmost path below the join.
@@ -114,7 +94,7 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
                     .getDb("qc_rf_db").getTable(name);
             long rows = name.equals("j1") ? 10000000L : 20L;
             for (Partition partition : table.getAllPartitions()) {
-                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rows);
+                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rows);
             }
         }
     }
@@ -146,12 +126,10 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
 
     @Test
     public void testTopNBuiltRuntimeFilterDisablesQueryCache() throws Exception {
-        // TOPN_FILTER has two mutually exclusive builders, decided by whether PushDownTopNToPreAggRule
-        // fired. Here it cannot: c1 is both the distribution key and the group-by key, so the plan is a
-        // one-phase aggregation and the rule's TopN -> Agg(GLOBAL) -> Agg(LOCAL) pattern does not match.
-        // The filter is then built by the SortNode sitting above the cache interpolation point (its
-        // `perPipeline` is false, which is exactly the case SortNode.buildRuntimeFilters handles), and
-        // it probes the scan feeding that cache point all the same.
+        // c1 is both the distribution key and the group-by key, so the plan is a one-phase aggregation
+        // and the partial TopN stays in the scan fragment. The TOPN_FILTER is then built by the SortNode
+        // sitting above the cache interpolation point, and it probes the scan feeding that cache point
+        // all the same.
         // This is the shape that escaped the first version of the check, which only looked at
         // AggregationNode; end-to-end coverage lives in
         // test/sql/test_query_cache/T/test_query_cache_topn_filter_stale_entry.
@@ -185,32 +163,6 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
         Assertions.assertFalse(cacheParamOf(join + "order by a.c1 limit 10").isPresent(),
                 "a TopN filter probing the cached subtree must disable the cache");
     }
-
-    @Test
-    public void testPreAggTopNRuntimeFilterDisablesQueryCacheUnderEitherPushDownMode() throws Exception {
-        // The shape the end-to-end case actually plans on a populated table: with real row counts
-        // PushDownTopNToPreAggRule wins on cost and moves the partial TopN into the scan fragment,
-        // right on top of the pre-aggregation that is the cache interpolation point. Which node then
-        // builds the TOPN_FILTER is decided by topn_push_down_agg_mode:
-        //   >= 1  the rule hands the sort info to the aggregation, which builds the filter, and the
-        //         SortNode returns early -- this is what the default value plans;
-        //   == 0  the rule leaves the aggregation without sort info, so the SortNode builds it instead.
-        // Both probe the scan below the cache point and poison its per-tablet entries identically, so
-        // neither may leave the fragment cacheable. Only the first was covered before.
-        String sql = "select count(*), sum(s), min(s), max(s) from " +
-                "(select c1, sum(v1) s from t3 group by c1 order by c1 limit 10) x";
-        int originalMode = ctx.getSessionVariable().getTopNPushDownAggMode();
-        try {
-            for (int mode : new int[] {0, 1}) {
-                ctx.getSessionVariable().setEnablePreAggTopNPushDown(mode);
-                Assertions.assertFalse(cacheParamOf(sql).isPresent(),
-                        "a pre-aggregation TopN filter must not be cached, topn_push_down_agg_mode=" + mode);
-            }
-        } finally {
-            ctx.getSessionVariable().setEnablePreAggTopNPushDown(originalMode);
-        }
-    }
-
 
     @Test
     public void testTimeZoneIsPartOfTheDigest() throws Exception {

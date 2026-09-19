@@ -824,14 +824,12 @@ public class FragmentNormalizer {
         // here that could be packed into the cache key. A populated entry would therefore not be a
         // function of the cache key, and would produce wrong results as soon as it is read back by a
         // query that needs the rows the filter dropped.
-        // Both of the nodes that can build such a filter have to be checked, because the two are
-        // mutually exclusive and depend on whether PushDownTopNToPreAggRule fired:
-        //   - AggregationNode builds an AGG_IN_FILTER when it carries a LIMIT of its own, and a
-        //     TOPN_FILTER when the rule attached the TopN to it (SortNode.perPipeline is then true and
-        //     the SortNode builds nothing);
-        //   - SortNode builds the TOPN_FILTER in every other shape, e.g. `group by k order by k limit n`
-        //     over a table distributed by k, which is planned as a one-phase aggregation that the rule's
-        //     TopN->Agg(GLOBAL)->Agg(LOCAL) pattern cannot match.
+        // Every non-join builder of the leftmost path has to be checked, not just the AggregationNode:
+        //   - AggregationNode builds an AGG_IN_FILTER when it carries a LIMIT of its own -- this is the
+        //     half the first version of this check covered;
+        //   - SortNode builds the TOPN_FILTER, e.g. for `group by k order by k limit n` over a table
+        //     distributed by k, which is planned as a one-phase aggregation, so the partial TopN stays
+        //     in the scan fragment and its filter probes the very scan that feeds the cache point.
         // Neither is visible to the alien-GRF check below: both are onlyLocal/non-remote filters.
         // Only a filter that actually probes inside the cached subtree matters, though. When a JoinNode
         // sits between the builder and the cache point, the filter may land entirely on the other input
