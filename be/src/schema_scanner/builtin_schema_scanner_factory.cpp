@@ -48,6 +48,7 @@
 #include "schema_scanner/schema_pipes.h"
 #include "schema_scanner/schema_recyclebin_catalogs.h"
 #include "schema_scanner/schema_routine_load_jobs_scanner.h"
+#include "schema_scanner/schema_running_transactions_scanner.h"
 #include "schema_scanner/schema_schema_privileges_scanner.h"
 #include "schema_scanner/schema_schemata_scanner.h"
 #include "schema_scanner/schema_stream_loads_scanner.h"
@@ -115,6 +116,8 @@ std::unique_ptr<SchemaScanner> BuiltinSchemaScannerFactory::create(TSchemaTableT
         return std::make_unique<SchemaMaterializedViewRefreshJobsScanner>();
     case TSchemaTableType::SCH_LOADS:
         return std::make_unique<SchemaLoadsScanner>();
+    case TSchemaTableType::SCH_RUNNING_TRANSACTIONS:
+        return std::make_unique<SchemaRunningTransactionsScanner>();
     case TSchemaTableType::SCH_LOAD_TRACKING_LOGS:
         return std::make_unique<SchemaLoadTrackingLogsScanner>();
     case TSchemaTableType::SCH_TABLES_CONFIG:
