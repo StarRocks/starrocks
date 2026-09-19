@@ -42,6 +42,8 @@ import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.plan.AIInputTokenEstimate;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TAIExecutionStatistics;
 import com.starrocks.thrift.TAuditStatistics;
@@ -56,6 +58,8 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,6 +100,56 @@ public class CoordinatorTest extends PlanTestBase {
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
         return fragment;
+    }
+
+    @Test
+    public void testAIAdmissionRejectsBeforeQueueAndPreparation() {
+        mockUnknownAIPlan();
+        AtomicInteger queueCalls = new AtomicInteger();
+        new MockUp<QueryQueueManager>() {
+            @Mock
+            public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws StarRocksException {
+                queueCalls.incrementAndGet();
+                throw new StarRocksException("reached queue");
+            }
+        };
+        StarRocksException failure = Assertions.assertThrows(StarRocksException.class, coordinator::exec);
+        Assertions.assertTrue(failure.getMessage().contains("unknown"), failure.getMessage());
+        Assertions.assertEquals(0, queueCalls.get());
+        Assertions.assertTrue(coordinator.getExecutionDAG().getExecutions().isEmpty());
+    }
+
+    @Test
+    public void testSchedulerExplainSkipsAIAdmission() {
+        mockUnknownAIPlan();
+        new MockUp<QueryQueueManager>() {
+            @Mock
+            public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws StarRocksException {
+                throw new StarRocksException("reached dry-run scheduling");
+            }
+        };
+        Exception failure = Assertions.assertThrows(StarRocksException.class, coordinator::execWithoutDeploy);
+        Assertions.assertEquals("reached dry-run scheduling", failure.getMessage());
+    }
+
+    private void mockUnknownAIPlan() {
+        new MockUp<JobSpec>() {
+            @Mock
+            public ExecPlan getExecPlan() {
+                return new ExecPlan();
+            }
+        };
+        new MockUp<ExecPlan>() {
+            @Mock
+            public AIInputTokenEstimate getAIInputTokenEstimate() {
+                return AIInputTokenEstimate.unknown("missing statistics");
+            }
+
+            @Mock
+            public long getAIInputTokenLimit() {
+                return 1;
+            }
+        };
     }
 
     @Test

@@ -781,6 +781,7 @@ public class PlanFragmentBuilder {
 
             ProjectNode projectNode;
             if (aiProject) {
+                context.estimateAIInputTokens(optExpr, !inputFragment.isPartitioned());
                 projectNode = new AIProjectNode(context.getNextNodeId(), tupleDescriptor,
                         inputFragment.getPlanRoot(), projectMap, commonExprMap,
                         context.bindAIModelConfigs(projectMap));

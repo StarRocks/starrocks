@@ -1144,6 +1144,10 @@ public class StmtExecutor {
                     // a per-attempt snapshot of it, distinct from lastExecPlan, which tracks the latest
                     // generated plan for the failure dump in fe.plan.log.
                     final ExecPlan attemptPlan = retryContext.getExecPlan();
+                    // Reject before the execution/profile finally block, which can emit EXPLAIN ANALYZE results.
+                    if (!parsedStmt.isExplain() || parsedStmt.isExplainAnalyze()) {
+                        AIQueryAdmission.check(attemptPlan);
+                    }
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -3398,7 +3402,7 @@ public class StmtExecutor {
             try {
                 if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
                     isAsync = tryProcessProfileAsync(execPlan, 0);
-                    if (parsedStmt.isExplain() &&
+                    if (!context.getState().isError() && parsedStmt.isExplain() &&
                             StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                         handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
                                 profile, null, context.getSessionVariable().getColorExplainOutput()));
@@ -3495,6 +3499,21 @@ public class StmtExecutor {
         } else if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.INSERT,
                     parsedStmt.getExplainLevel()));
+            return;
+        }
+        // Scheduler explains must not register or activate tables in an explicit transaction.
+        if (isSchedulerExplain && context.getTxnId() != 0) {
+            coord = getCoordinatorFactory().createInsertScheduler(
+                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                        new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
+                coord.execWithoutDeploy();
+                handleExplainStmt(coord.getSchedulerExplain());
+            } finally {
+                coord.onReleaseSlots();
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
             return;
         }
         // special handling for delete of non-primary key table, using old handler
@@ -3934,6 +3953,7 @@ public class StmtExecutor {
             }
         } catch (Throwable t) {
             // if any throwable being thrown during insert operation, first we should abort this txn
+            insertError = true;
             String failedSql = getRedactedOriginStmtInString();
             LOG.warn("failed to handle stmt [{}] label: {}", failedSql, label, t);
             String errMsg = t.getMessage();

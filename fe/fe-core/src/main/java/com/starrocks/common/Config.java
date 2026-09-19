@@ -5272,6 +5272,10 @@ public class Config extends ConfigBase {
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
 
+    @ConfField(mutable = true, comment = "Statistical input token budget per AI execution plan. "
+            + "0 disables admission; positive values reject unknown or over-budget estimates.")
+    public static long ai_query_admission_max_estimated_input_tokens = 0;
+
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
     public static String ai_default_chat_endpoint = "";
 

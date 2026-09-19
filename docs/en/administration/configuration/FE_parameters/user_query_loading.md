@@ -139,6 +139,22 @@ This topic introduces the following types of FE configurations:
 - Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible`; the empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
 - Introduced in: -
 
+### `ai_query_admission_max_estimated_input_tokens`
+
+- Default: 0
+- Type: Long
+- Unit: Estimated input tokens
+- Valid range: [0, 9223372036854775807]
+- Is mutable: Yes
+- Description: Limits statistically estimated input tokens for asynchronous AI functions executed by AIProject. `0` disables admission. A positive value rejects execution if the estimate is `UNKNOWN` or exceeds the limit; an estimate equal to the limit is allowed. The budget is captured once when the AI plan is built. Changes require no FE restart and do not change an existing plan's budget. The legacy `ai_query` function is not covered.
+- Introduced in: -
+
+Estimation supports the pass-through text inputs of `ai_complete`, `ai_custom_query`, `ai_embed`, and `ai_custom_embedding` without options. Per evaluation, string literals use their UTF-8 byte length, and direct native-table `VARCHAR` column references with supported analyzed statistics use four times their average character length. Each non-NULL chat evaluation adds a reserve of 16. These estimates are multiplied by the planned evaluation counts and summed across AI calls.
+
+Complex expressions, AI functions with built-in prompt templates, options, joins, CTEs, unsupported or missing statistics, and local TopN plans can produce `UNKNOWN`. Use `EXPLAIN VERBOSE` or `EXPLAIN COSTS` to inspect `AI INPUT TOKENS`. Plain `EXPLAIN`, `EXPLAIN VERBOSE`, and `EXPLAIN COSTS` do not execute the statement or apply admission.
+
+Use this setting to control estimated input work for one planned execution. It is not an exact tokenizer, billing quota, or output-token limit, and does not account for additional HTTP retry attempts.
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - Default: 60000
