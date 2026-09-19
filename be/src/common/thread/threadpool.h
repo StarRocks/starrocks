@@ -280,6 +280,10 @@ public:
         return _total_queued_tasks;
     }
 
+    // Maximum number of tasks that can be queued before submit() starts returning
+    // ServiceUnavailable. Immutable after the pool is built, so no lock is needed.
+    int max_queue_size() const { return _max_queue_size; }
+
     MonoTime last_active_timestamp() const {
         std::lock_guard l(_lock);
         return _last_active_timestamp;
