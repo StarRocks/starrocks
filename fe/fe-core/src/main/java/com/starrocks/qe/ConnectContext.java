@@ -45,6 +45,7 @@ import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.TaskExecutionIdentity;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -176,6 +177,8 @@ public class ConnectContext {
 
     // Unified access control context holding authentication and authorization information
     protected AccessControlContext accessControlContext = new AccessControlContext();
+    // Set only after successful authentication, validated FE forwarding, or task identity restoration.
+    private TaskExecutionIdentity authenticatedTaskIdentity;
 
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -643,6 +646,14 @@ public class ConnectContext {
      */
     public AccessControlContext getAccessControlContext() {
         return accessControlContext;
+    }
+
+    public TaskExecutionIdentity getAuthenticatedTaskIdentity() {
+        return authenticatedTaskIdentity;
+    }
+
+    public void setAuthenticatedTaskIdentity(TaskExecutionIdentity identity) {
+        authenticatedTaskIdentity = identity;
     }
 
     public boolean modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {

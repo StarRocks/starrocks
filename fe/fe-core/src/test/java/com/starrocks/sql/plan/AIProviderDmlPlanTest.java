@@ -14,9 +14,13 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -27,6 +31,7 @@ import com.starrocks.thrift.TAIModelConfiguration;
 import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TAIProjectNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -81,6 +86,44 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testMergeSourceRequiresCallerFunctionAndProviderUsage() throws Exception {
+        String user = "ai_merge_caller";
+        executeAsRoot("CREATE USER '" + user + "' IDENTIFIED BY ''");
+        ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(user, "%"));
+        caller.setCurrentRoleIds(Set.of());
+        caller.setDatabase(connectContext.getDatabase());
+        try {
+            executeAsRoot("GRANT SELECT ON TABLE " + connectContext.getDatabase() + ".tprimary1 TO '" + user + "'");
+            executeAsRoot("GRANT USAGE ON CATALOG iceberg0 TO '" + user + "'");
+            String originalCatalog = connectContext.getCurrentCatalog();
+            try {
+                connectContext.setCurrentCatalog("iceberg0");
+                executeAsRoot("GRANT SELECT, UPDATE ON TABLE unpartitioned_db.t0_v2 TO '" + user + "'");
+            } finally {
+                connectContext.setCurrentCatalog(originalCatalog);
+            }
+            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
+                    + "USING (SELECT pk1 AS id, ai_custom_query('" + PROVIDER_NAME
+                    + "', v3) AS data FROM tprimary1) AS s "
+                    + "ON t.id = s.id WHEN MATCHED THEN UPDATE SET data = s.data";
+            ErrorReportException functionDenied = Assertions.assertThrows(ErrorReportException.class,
+                    () -> plan(sql, caller));
+            Assertions.assertTrue(functionDenied.getMessage().contains("AI FUNCTION"), functionDenied.getMessage());
+            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_custom_query TO '" + user + "'");
+            ErrorReportException providerDenied = Assertions.assertThrows(ErrorReportException.class,
+                    () -> plan(sql, caller));
+            Assertions.assertTrue(providerDenied.getMessage().contains("AI PROVIDER"), providerDenied.getMessage());
+            executeAsRoot("GRANT USAGE ON AI PROVIDER " + PROVIDER_NAME + " TO '" + user + "'");
+            assertProviderPlan(plan(sql, caller));
+            executeAsRoot("REVOKE USAGE ON AI PROVIDER " + PROVIDER_NAME + " FROM '" + user + "'");
+            Assertions.assertThrows(ErrorReportException.class, () -> plan(sql, caller));
+        } finally {
+            executeAsRoot("DROP USER '" + user + "'");
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
     public void testConditionalUpdateRemainsUnsupported() {
         assertRejected("UPDATE tprimary SET v1 = CASE WHEN pk = 1 THEN ai_custom_query('"
                 + PROVIDER_NAME + "', v1) ELSE v1 END WHERE pk > 0", "conditional expression");
@@ -109,15 +152,25 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
     }
 
     private static ExecPlan plan(String sql) {
+        return plan(sql, connectContext);
+    }
+
+    private static ExecPlan plan(String sql, ConnectContext context) {
         // EXPLAIN exercises the normal analyzer/authorizer/planner without leaving an unexecuted write transaction.
         String explain = "EXPLAIN " + sql;
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-        connectContext.getDumpInfo().setOriginStmt(explain);
+        context.setQueryId(UUIDUtil.genUUID());
+        context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
+        context.setDumpInfo(new QueryDumpInfo(context));
+        context.getDumpInfo().setOriginStmt(explain);
         StatementBase statement = SqlParser.parseSingleStatement(
-                explain, connectContext.getSessionVariable().getSqlMode());
-        return StatementPlanner.plan(statement, connectContext);
+                explain, context.getSessionVariable().getSqlMode());
+        return StatementPlanner.plan(statement, context);
+    }
+
+    private static void executeAsRoot(String sql) throws Exception {
+        try (var ignored = connectContext.bindScope()) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
+        }
     }
 
     private static void assertProviderPlan(ExecPlan plan) {

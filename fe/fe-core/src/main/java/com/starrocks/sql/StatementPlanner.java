@@ -599,6 +599,8 @@ public class StatementPlanner {
             lock(locker);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
+            // Recheck the caller's current AI privileges after reanalysis.
+            Authorizer.checkAIFunctionPrivileges(queryStmt, session);
             // only copy the latest olap table
             Set<OlapTable> copiedTables = Sets.newHashSet();
             AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
@@ -767,7 +769,11 @@ public class StatementPlanner {
         stmt.setTxnId(txnId);
     }
 
-    private static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
+    /**
+     * Clean up an already-started implicit DML transaction after planning or early executor validation fails.
+     * Callers must retain the caller's ownership of explicit transactions instead of aborting them automatically.
+     */
+    public static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
         long txnId = stmt.getTxnId();
         if (txnId == DmlStmt.INVALID_TXN_ID) {
             return;

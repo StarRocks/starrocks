@@ -38,6 +38,18 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 
 <GrantCreateWarehouse />
 
+#### AI 関数と Provider
+
+```sql
+GRANT USE AI FUNCTIONS ON SYSTEM TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI FUNCTION <function_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+```
+
+AI FUNCTION には、データベース修飾や引数シグネチャのない公開組み込み関数ファミリー名を指定します。`USE AI FUNCTIONS` は Provider 使用権限や AI FUNCTION オブジェクトの再付与権限を含みません。Provider 名は完全一致します。
+
+
 #### リソースグループ
 
 ```SQL

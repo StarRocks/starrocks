@@ -5,6 +5,8 @@ description: "调用已配置的 SYSTEM OpenAI 兼容聊天端点，并返回生
 
 # ai_complete
 
+函数和 Provider 的授权要求见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
+
 调用管理员配置的 SYSTEM 聊天模型，并返回模型生成的文本。StarRocks 从 BE 发出非流式的 OpenAI 兼容聊天补全请求。
 
 :::warning

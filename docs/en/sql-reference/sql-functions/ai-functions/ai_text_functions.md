@@ -6,6 +6,8 @@ sidebar_position: 21
 
 # AI text functions
 
+For function and provider privilege requirements, see [AI function privileges](ai_functions.mdx#ai-function-privileges).
+
 These functions use the SYSTEM chat endpoint and credentials configured for [ai_complete](ai_complete.md#configuration). They build task-specific prompts and return typed results. Upgrade all FE and BE nodes before using these new functions.
 
 :::warning

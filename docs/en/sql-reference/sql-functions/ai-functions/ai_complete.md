@@ -5,6 +5,8 @@ description: "Calls a configured SYSTEM OpenAI-compatible chat endpoint and retu
 
 # ai_complete
 
+For function and provider privilege requirements, see [AI function privileges](ai_functions.mdx#ai-function-privileges).
+
 Calls the administrator-configured SYSTEM chat model and returns its generated text. StarRocks sends a non-streaming
 OpenAI-compatible chat-completions request from a BE.
 

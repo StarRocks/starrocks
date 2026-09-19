@@ -14,9 +14,13 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.authentication.TaskExecutionIdentity;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.Relation;
@@ -30,13 +34,26 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
 
     private static final Logger LOG = LogManager.getLogger(SqlTaskRunProcessor.class);
 
+    /** Validate the resolved statement at execution boundaries, including internal replans and retries. */
+    public static void checkAIExecution(ConnectContext context, StatementBase statement) {
+        if (context.getQuerySource() != QueryDetail.QuerySource.TASK || statement == null
+                || !ResolvedAIFunctionDetector.contains(statement)) {
+            return;
+        }
+        if (context.getAuthenticatedTaskIdentity() == null) {
+            throw new SemanticException("AI functions require a trusted task creator identity; "
+                    + "recreate the task from an authenticated session. Legacy and system tasks do not support AI functions");
+        }
+        TaskExecutionIdentity.capture(context);
+    }
+
     @Override
     public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         StmtExecutor executor = null;
         try {
             ConnectContext ctx = context.getCtx();
             // Set query source to TASK for task-submitted queries
-            ctx.setQuerySource(com.starrocks.qe.QueryDetail.QuerySource.TASK);
+            ctx.setQuerySource(QueryDetail.QuerySource.TASK);
             ctx.getAuditEventBuilder().reset();
             ctx.getAuditEventBuilder()
                     .setTimestamp(System.currentTimeMillis())

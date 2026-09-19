@@ -16,6 +16,8 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
@@ -34,6 +36,7 @@ import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
@@ -165,6 +168,12 @@ public class ExecPlan {
                     AIProvider provider = GlobalStateMgr.getCurrentState().getAIProviderMgr().getProvider(name);
                     if (provider == null) {
                         throw new SemanticException("AI provider '" + name + "' does not exist", call.getPos());
+                    }
+                    try {
+                        Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", name);
                     }
                     config = AIModelConfigs.fromProvider(provider);
                 } else {

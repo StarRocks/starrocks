@@ -31,6 +31,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Pair;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,6 +59,23 @@ public class Authorizer {
 
     public static void check(StatementBase statement, ConnectContext context) {
         getInstance().getPrivilegeCheckerVisitor().check(statement, context);
+        checkAIFunctionPrivileges(statement, context);
+    }
+
+    public static void checkAIFunctionPrivileges(StatementBase statement, ConnectContext context) {
+        AIFunctionPrivilegeChecker.check(statement, context);
+    }
+
+    public static void checkAIFunctionAction(ConnectContext context, String family, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAIFunctionAction(context, family, privilegeType);
+    }
+
+    public static void checkAIProviderAction(ConnectContext context, AIProvider provider, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAIProviderAction(context, provider, privilegeType);
     }
 
     public static void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
