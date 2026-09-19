@@ -49,6 +49,36 @@ TEST(JsonValueTest, Parse) {
     ASSERT_FALSE(oversized_json.ok());
 }
 
+// A deeply nested value used to overflow the recursive velocypack parser's stack and take the whole
+// BE down with an unreportable signal. parse_json_or_string now rejects anything nested past the cap
+// before it reaches the parser, so the same input fails cleanly instead of crashing.
+TEST(JsonValueTest, ParseRejectsExcessiveNestingDepth) {
+    // 100k levels is far past the cap and, before the fix, past the point the stack blows.
+    const int deep = 100000;
+    std::string deep_json = std::string(deep, '[') + std::string(deep, ']');
+    auto res = JsonValue::parse_json_or_string(Slice(deep_json));
+    ASSERT_FALSE(res.ok());
+    ASSERT_EQ(TStatusCode::DATA_QUALITY_ERROR, res.status().code()) << res.status();
+
+    // Comfortably over the cap is rejected too. The exact boundary depends on how velocypack counts
+    // top-level nesting, so this stays a few levels past 1000 rather than testing off-by-one.
+    std::string over = std::string(1100, '[') + std::string(1100, ']');
+    ASSERT_FALSE(JsonValue::parse_json_or_string(Slice(over)).ok());
+}
+
+// The cap must not reject legitimately nested JSON, and brackets inside string literals must not
+// count toward depth.
+TEST(JsonValueTest, ParseAcceptsNestingWithinLimit) {
+    // Nesting just under the cap parses fine.
+    const int ok_depth = 999;
+    std::string ok_json = std::string(ok_depth, '[') + std::string(ok_depth, ']');
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(ok_json)).ok()) << "depth " << ok_depth;
+
+    // A shallow value whose string content is full of brackets is not nesting.
+    std::string bracket_string = R"(["]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"])";
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(bracket_string)).ok());
+}
+
 TEST(JsonValueTest, ParseInvalidJsonReportsVelocypackError) {
     // Invalid JSON must come back as a status (never an exception escaping parse()) and keep the
     // velocypack error message, whichever parser API is in use.
