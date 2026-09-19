@@ -265,6 +265,66 @@ PROPERTIES(
 
 这种方式特别适合 Microsoft AD 环境，因为 AD 中的组成员可能缺少简单的用户名属性。
 
+## 修改 Group Provider
+
+你可以在不删除并重建的情况下修改一个已有 Group Provider 的属性。新配置会在生效前先被同步校验并预热：旧实例会持续提供服务，直到新实例就绪，因此在修改过程中用户组查询不会返回空结果。
+
+### 语法
+
+```SQL
+ALTER GROUP PROVIDER <group_provider_name> SET
+(
+    "<property_key>" = "<property_value>"
+    [, "<property_key>" = "<property_value>" ...]
+)
+```
+
+### 注意事项
+
+- 只有列出的属性会被修改；未列出的属性保持原值。
+- `type` 属性不允许修改。如需切换类型，请删除后重建该 Group Provider。
+- `SET` 只能新增或覆盖属性，不能删除属性。因此互斥的两个属性无法通过 `ALTER` 互换：LDAP Group Provider 只允许配置 `ldap_group_dn` 和 `ldap_group_filter` 中的一个，从一个切换到另一个需要删除后重建该 Group Provider。
+- 如果某个属性既不属于该类型定义的属性，该 Group Provider 当前也没有它，则该语句会报错。属性名按不区分大小写匹配，因此 `SET ("LDAP_BIND_ROOT_PWD" = ...)` 会更新 `ldap_bind_root_pwd`；拼错的属性名会直接报错，而不会被存成一个新属性、让语句看起来执行成功却没有生效。
+- 新配置会被同步校验。如果新配置不可用（例如 LDAP bind 凭据错误或服务器不可达），该语句会失败，且 Group Provider 保持原有配置不变。
+- 凭据不会被回显。`SHOW CREATE GROUP PROVIDER` 对 `ldap_bind_root_pwd` 和 `ldap_ssl_conn_trust_store_pwd` 只输出 `***`，审计日志中记录的语句也会对它们做脱敏。
+
+### 示例
+
+```SQL
+-- 轮换 LDAP bind 密码
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_bind_root_pwd" = "<new_password>");
+
+-- 调整缓存刷新周期
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_cache_refresh_interval" = "10");
+
+-- 一次修改多个属性
+ALTER GROUP PROVIDER ldap_group_provider SET (
+    "ldap_conn_url" = "ldaps://new-host:636",
+    "ldap_ssl_conn_trust_store_path" = "/etc/ssl/new-truststore.jks"
+);
+```
+
+## 查看 Group Provider
+
+```SQL
+-- 列出所有 Group Provider 及其类型。Comment 列始终为 NULL：目前没有任何语句可以设置注释。
+SHOW GROUP PROVIDERS;
+
+-- 查看重建某个 Group Provider 的语句。`ldap_bind_root_pwd`、`ldap_ssl_conn_trust_store_pwd`
+-- 等凭据会显示为 `***`，因此输出不能直接拿来重建，需要自行补回口令。
+SHOW CREATE GROUP PROVIDER <group_provider_name>;
+```
+
+两条语句都需要 SYSTEM 级别的 `SECURITY` 权限。
+
+## 删除 Group Provider
+
+```SQL
+DROP GROUP PROVIDER [IF EXISTS] <group_provider_name>;
+```
+
+删除立即生效：之后登录的用户不再带有该 Group Provider 解析出的用户组，因此通过 `GRANT ... TO EXTERNAL GROUP` 授予这些组的角色也随之失效。引用它的安全集成的 `group_provider` 属性中仍保留该名字，只是通过它解析不到任何组。如果只是想修改属性，请使用 [ALTER GROUP PROVIDER](#修改-group-provider)，不要删除后重建。
+
 ## 将 Group Provider 与安全集成结合
 
 创建 Group Provider 后，您可以将其与安全集成结合，以允许 Group Provider 指定的用户登录到 StarRocks。有关创建安全集成的更多信息，请参见[通过安全集成进行认证](./authentication/security_integration.md)。
