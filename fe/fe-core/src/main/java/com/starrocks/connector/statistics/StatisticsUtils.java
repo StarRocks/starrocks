@@ -40,22 +40,30 @@ public class StatisticsUtils {
     public static Table getTableByUUID(ConnectContext context, String tableUUID) {
         String[] splits = tableUUID.split("\\.");
 
-        Preconditions.checkState(splits.length == 4);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, splits[0], splits[1], splits[2]);
+        Preconditions.checkState(splits.length >= 3);
+
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(context, splits[0], splits[1], splits[2]);
+
         if (table == null) {
-            throw new SemanticException("Table [%s.%s.%s] does not exist", splits[0], splits[1], splits[2]);
+            throw new SemanticException(
+                    "Table [%s.%s.%s] does not exist",
+                    splits[0], splits[1], splits[2]);
         }
+
         if (table.getUUID().equals(tableUUID)) {
             return table;
         } else {
-            throw new SemanticException("Table [%s.%s.%s] does not exist", splits[0], splits[1], splits[2]);
+            throw new SemanticException(
+                    "Table [%s.%s.%s] does not exist",
+                    splits[0], splits[1], splits[2]);
         }
     }
 
     public static Triple<String, Database, Table> getTableTripleByUUID(ConnectContext context, String tableUUID) {
         String[] splits = tableUUID.split("\\.");
 
-        Preconditions.checkState(splits.length == 4);
+        PPreconditions.checkState(splits.length >= 3);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, splits[0], splits[1]);
         if (db == null) {
             throw new SemanticException("Database [%s.%s] does not exist", splits[0], splits[1]);
