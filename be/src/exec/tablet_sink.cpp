@@ -49,9 +49,11 @@
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "config.h"
+#include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
@@ -153,6 +155,13 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     // init _colocate_mv_index: Only use colocate mv when both FE/BE's config are set true.
     if (table_sink.__isset.enable_colocate_mv_index) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
+    }
+
+    // CK-compatible logical sink MVs (`CREATE MATERIALIZED VIEW ... TO <table>`): stash the base sink
+    // here; the child sinks are built in prepare() where the runtime context is fully ready.
+    if (table_sink.__isset.logical_sinks && !table_sink.logical_sinks.empty()) {
+        _base_table_sink = table_sink;
+        _has_logical_sinks = true;
     }
 
     if (state->query_ctx()) {
@@ -323,6 +332,11 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
                 _write_quorum_type, _num_repicas);
     }
+    // CK-compatible TO-table MVs: build the child sinks now (runtime context is ready), then prepare.
+    if (_has_logical_sinks) {
+        RETURN_IF_ERROR(_init_logical_sinks(_base_table_sink, state));
+        RETURN_IF_ERROR(_prepare_logical_sinks(state));
+    }
     return Status::OK();
 }
 
@@ -401,22 +415,37 @@ Status OlapTableSink::open(RuntimeState* state) {
     auto open_span = Tracer::Instance().add_span("open", _span);
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_ts_profile->open_timer);
+    // try_open()/open_wait() already drive the logical-sink child opens (see below), so the
+    // synchronous path needs no extra step here.
     RETURN_IF_ERROR(try_open(state));
     RETURN_IF_ERROR(open_wait());
-
     return Status::OK();
 }
 
 Status OlapTableSink::try_open(RuntimeState* state) {
-    return _tablet_sink_sender->try_open(state);
+    RETURN_IF_ERROR(_tablet_sink_sender->try_open(state));
+    // Issue the child (TO-table MV) open RPCs alongside the base sink's. The pipeline operator drives
+    // opening through try_open()/is_open_done()/open_wait() and never calls the synchronous open(), so
+    // the child opens must be wired into this async protocol or their tablets channels are never created.
+    if (!_logical_sinks.empty()) {
+        RETURN_IF_ERROR(_try_open_logical_sinks(state));
+    }
+    return Status::OK();
 }
 
 bool OlapTableSink::is_open_done() {
-    return _tablet_sink_sender->is_open_done();
+    if (!_tablet_sink_sender->is_open_done()) {
+        return false;
+    }
+    return _is_logical_sinks_open_done();
 }
 
 Status OlapTableSink::open_wait() {
-    return _tablet_sink_sender->open_wait();
+    RETURN_IF_ERROR(_tablet_sink_sender->open_wait());
+    if (!_logical_sinks.empty()) {
+        RETURN_IF_ERROR(_open_wait_logical_sinks());
+    }
+    return Status::OK();
 }
 
 bool OlapTableSink::is_full() {
@@ -651,6 +680,15 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
             DCHECK_EQ(chunk->get_slot_id_to_index_map().size(), _output_tuple_desc->slots().size());
         }
 
+        // CK-compatible logical sink MV fan-out: forward transformed rows into each target table within
+        // the same load transaction. The MV transform exprs are SlotRefs into this (base) sink's output
+        // tuple, so the fan-out must run AFTER the projection/slot-id remap above — at this point `chunk`
+        // is keyed by the base output-tuple slot ids the transform exprs reference (before the remap the
+        // chunk still carries the upstream query slot ids and the exprs hit "slot_id not found").
+        if (!_logical_sinks.empty()) {
+            RETURN_IF_ERROR(_fanout_logical_sinks(state, chunk));
+        }
+
         {
             SCOPED_TIMER(_ts_profile->alloc_auto_increment_timer);
             RETURN_IF_ERROR(_fill_auto_increment_id(chunk));
@@ -857,6 +895,179 @@ bool OlapTableSink::is_close_done() {
     return _tablet_sink_sender->is_close_done();
 }
 
+Status OlapTableSink::_init_logical_sinks(const TOlapTableSink& table_sink, RuntimeState* state) {
+    int logical_idx = 0;
+    for (const auto& t_logical : table_sink.logical_sinks) {
+        auto channel = std::make_unique<LogicalSinkChannel>();
+        channel->mv_id = t_logical.__isset.mv_id ? t_logical.mv_id : 0;
+        channel->mv_name = t_logical.__isset.mv_name ? t_logical.mv_name : "";
+
+        // Build a TOlapTableSink for the target table: target descriptors come from the logical sink,
+        // while txn_id/db_id/num_replicas/nodes_info are shared with this (base) sink so both writes
+        // belong to the same load transaction.
+        // NOTE: load_id/txn_id/db_id/table_id/tuple_id/num_replicas/need_gen_rollup/schema/partition/
+        // location/nodes_info are `required` in TOlapTableSink, so they have no __isset member and are
+        // assigned directly; only optional fields below set __isset.
+        TOlapTableSink child;
+        // Give the child its OWN load_id (derived from the base load_id) so it gets a dedicated BE
+        // LoadChannel with the target table's schema/row_desc/chunk-meta. The base and target tables
+        // have different schemas, but a LoadChannel is single-schema: sharing the base load_id makes
+        // the child's open hit "Unknown index_id" and its chunk be deserialized with the base meta.
+        // txn_id stays shared, so both still commit in the same transaction; commit infos flow back to
+        // the FE through the shared RuntimeState. The mixing constant spreads bits to avoid collisions.
+        child.load_id = table_sink.load_id;
+        child.load_id.lo = static_cast<int64_t>(static_cast<uint64_t>(table_sink.load_id.lo) ^
+                                                (0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(logical_idx + 1)));
+        child.txn_id = table_sink.txn_id;
+        child.db_id = table_sink.db_id;
+        child.table_id = t_logical.__isset.target_table_id ? t_logical.target_table_id : 0;
+        child.tuple_id = t_logical.__isset.tuple_id ? t_logical.tuple_id : 0;
+        child.num_replicas = table_sink.num_replicas;
+        child.need_gen_rollup = false;
+        if (t_logical.__isset.schema) {
+            child.schema = t_logical.schema;
+        }
+        if (t_logical.__isset.partition) {
+            child.partition = t_logical.partition;
+        }
+        if (t_logical.__isset.location) {
+            child.location = t_logical.location;
+        }
+        child.nodes_info = table_sink.nodes_info;
+        if (t_logical.__isset.keys_type) {
+            child.keys_type = t_logical.keys_type;
+            child.__isset.keys_type = true;
+        }
+        if (table_sink.__isset.enable_replicated_storage) {
+            child.enable_replicated_storage = table_sink.enable_replicated_storage;
+            child.__isset.enable_replicated_storage = true;
+        }
+        if (table_sink.__isset.write_quorum_type) {
+            child.write_quorum_type = table_sink.write_quorum_type;
+            child.__isset.write_quorum_type = true;
+        }
+        if (table_sink.__isset.db_name) {
+            child.db_name = table_sink.db_name;
+            child.__isset.db_name = true;
+        }
+
+        TDataSink child_data_sink;
+        child_data_sink.type = TDataSinkType::OLAP_TABLE_SINK;
+        child_data_sink.olap_table_sink = child;
+        child_data_sink.__isset.olap_table_sink = true;
+
+        // The child carries the MV's per-target-column transform exprs as its own output exprs; feeding
+        // it the base chunk yields rows shaped like the target schema.
+        std::vector<TExpr> output_exprs;
+        if (t_logical.__isset.transform_exprs) {
+            output_exprs = t_logical.transform_exprs;
+        }
+        Status st = Status::OK();
+        auto sink = std::make_unique<OlapTableSink>(_pool, output_exprs, &st, state);
+        RETURN_IF_ERROR(st);
+        RETURN_IF_ERROR(sink->init(child_data_sink, state));
+        channel->sink = std::move(sink);
+
+        // The MV's optional WHERE predicate is evaluated by THIS (base) sink over the base chunk before
+        // fan-out (CK applies the MV's SELECT, including WHERE, per inserted block). Its SlotRefs point at
+        // the same base output-tuple slots the transform exprs reference, so it is evaluated on the same
+        // post-projection chunk fed to the child below.
+        if (t_logical.__isset.where_predicate) {
+            ExprContext* where_ctx = nullptr;
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, t_logical.where_predicate, &where_ctx, state));
+            channel->where_ctxs.push_back(where_ctx);
+        }
+        LOG(INFO) << "init logical sink MV " << channel->mv_name << " -> target table " << child.table_id
+                  << ", txn_id=" << child.txn_id << ", child_load_id=" << print_id(child.load_id)
+                  << ", has_where=" << (!channel->where_ctxs.empty());
+        _logical_sinks.emplace_back(std::move(channel));
+        ++logical_idx;
+    }
+    return Status::OK();
+}
+
+Status OlapTableSink::_prepare_logical_sinks(RuntimeState* state) {
+    for (auto& ch : _logical_sinks) {
+        if (ch->sink != nullptr) {
+            RETURN_IF_ERROR(ch->sink->prepare(state));
+        }
+        RETURN_IF_ERROR(Expr::prepare(ch->where_ctxs, state));
+    }
+    return Status::OK();
+}
+
+Status OlapTableSink::_try_open_logical_sinks(RuntimeState* state) {
+    for (auto& ch : _logical_sinks) {
+        if (ch->sink != nullptr) {
+            RETURN_IF_ERROR(ch->sink->try_open(state));
+        }
+        // Open the WHERE predicate contexts here (prepared in _prepare_logical_sinks); _open_wait has no
+        // RuntimeState and the predicates must be open before the first fan-out in send_chunk.
+        RETURN_IF_ERROR(Expr::open(ch->where_ctxs, state));
+    }
+    return Status::OK();
+}
+
+bool OlapTableSink::_is_logical_sinks_open_done() {
+    for (auto& ch : _logical_sinks) {
+        if (ch->sink != nullptr && !ch->sink->is_open_done()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Status OlapTableSink::_open_wait_logical_sinks() {
+    for (auto& ch : _logical_sinks) {
+        if (ch->sink != nullptr) {
+            RETURN_IF_ERROR(ch->sink->open_wait());
+        }
+    }
+    return Status::OK();
+}
+
+Status OlapTableSink::_fanout_logical_sinks(RuntimeState* state, Chunk* chunk) {
+    for (auto& ch : _logical_sinks) {
+        if (ch->sink == nullptr) {
+            continue;
+        }
+        // No WHERE: forward the whole base chunk. The child applies its transform (output) exprs and
+        // writes the resulting rows into the target table within the same load transaction.
+        if (ch->where_ctxs.empty()) {
+            RETURN_IF_ERROR(ch->sink->send_chunk(state, chunk));
+            continue;
+        }
+        // WHERE present: evaluate the predicate over the base chunk WITHOUT mutating it (the same chunk
+        // is fanned out to other MVs and then written to the base table), then forward only the rows that
+        // pass. apply_filter=false makes eval_conjuncts compute the filter into `filter` and leave `chunk`
+        // untouched; a null filter means "all rows pass".
+        FilterPtr filter;
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ch->where_ctxs, chunk, &filter, /*apply_filter=*/false));
+        size_t num_rows = chunk->num_rows();
+        size_t selected = filter == nullptr ? num_rows : SIMD::count_nonzero(*filter);
+        if (selected == 0) {
+            continue; // no row qualifies for this MV
+        }
+        if (selected == num_rows) {
+            RETURN_IF_ERROR(ch->sink->send_chunk(state, chunk));
+            continue;
+        }
+        // Materialize an independent, filtered copy (preserves the base output-tuple slot mapping so the
+        // child's transform exprs still resolve), then forward it.
+        std::vector<uint32_t> selected_idx;
+        selected_idx.reserve(selected);
+        for (uint32_t i = 0; i < filter->size(); ++i) {
+            if ((*filter)[i]) {
+                selected_idx.push_back(i);
+            }
+        }
+        ChunkUniquePtr filtered = chunk->clone_empty_with_slot(selected);
+        filtered->append_selective(*chunk, selected_idx.data(), 0, selected_idx.size());
+        RETURN_IF_ERROR(ch->sink->send_chunk(state, filtered.get()));
+    }
+    return Status::OK();
+}
+
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     if (close_status.ok()) {
         SCOPED_TIMER(_profile->total_time_counter());
@@ -881,6 +1092,19 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     COUNTER_SET(_ts_profile->filtered_rows_counter, _number_filtered_rows);
     COUNTER_SET(_ts_profile->convert_chunk_timer, _convert_batch_ns);
     COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
+
+    // Close logical sink MV child sinks within the same load transaction; surface the first error.
+    for (auto& ch : _logical_sinks) {
+        if (ch && ch->sink) {
+            Status st = ch->sink->close(state, close_status);
+            if (!st.ok() && close_status.ok()) {
+                close_status = st;
+            }
+        }
+        if (ch) {
+            Expr::close(ch->where_ctxs, state);
+        }
+    }
 
     if (_tablet_sink_sender == nullptr) {
         return close_status;
