@@ -21,8 +21,10 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
 import sqlalchemy.dialects.mysql.types as mysql_types
+from sqlalchemy import cast, func
 from sqlalchemy.engine import Dialect
 from sqlalchemy.sql import sqltypes
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import UserDefinedType
 
 
@@ -166,6 +168,25 @@ class StructuredType(UserDefinedType):
         """
         raise NotImplementedError("get_sub_item_types is not implemented for this pure Structuredtype")
 
+    def bind_processor(self, dialect: Dialect) -> Callable[[Optional[Any]], Optional[str]]:
+        """
+        Encode Python values (list, dict, ...) as JSON text for binding.
+
+        The DBAPI driver has no native encoding for structured types, so
+        values are sent as a JSON string and cast to the target structured
+        type at bind time; see ``bind_expression``.
+        """
+        def process(value: Optional[Any]) -> Optional[str]:
+            if value is None:
+                return None
+            return json.dumps(value, default=str)
+
+        return process
+
+    def bind_expression(self, bindvalue: ColumnElement) -> ColumnElement:
+        """Cast the JSON-encoded bind parameter to this structured type."""
+        return cast(bindvalue, self)
+
 
 class ARRAY(StructuredType):
     """
@@ -258,6 +279,14 @@ class MAP(StructuredType):
             types.update(self.value_type.get_sub_item_types())
         return types
 
+    def bind_expression(self, bindvalue: ColumnElement) -> ColumnElement:
+        """Cast the JSON-encoded bind parameter to this MAP type.
+
+        Unlike ``ARRAY``, StarRocks does not support casting a VARCHAR
+        directly to ``MAP``; the value must be parsed to ``JSON`` first.
+        """
+        return cast(func.parse_json(bindvalue), self)
+
     def result_processor(self, dialect: Dialect, coltype: object):
         key_processor = self.key_type.result_processor(dialect, coltype)
         value_processor = self.value_type.result_processor(dialect, coltype)
@@ -313,6 +342,24 @@ class STRUCT(StructuredType):
         }
         super().__init__()
 
+    def adapt(self, cls, **kw):
+        """Return a shallow copy rather than reconstructing via the default adapter.
+
+        ``TypeEngine.adapt`` reconstructs an instance via
+        ``util.constructor_copy``, which matches ``obj.__dict__`` entries to
+        ``__init__`` parameter names. Since ``STRUCT.__init__`` takes
+        ``*fields``/``**kwfields`` rather than named parameters matching
+        ``field_tuples``, that reconstruction silently drops all fields,
+        producing an empty ``STRUCT<>``. There is only one implementation of
+        this type, so adaptation copies ``__dict__`` directly instead.
+        """
+        if cls is not type(self):
+            return super().adapt(cls, **kw)
+        new = cls.__new__(cls)
+        new.__dict__.update(self.__dict__)
+        new.__dict__.update(kw)
+        return new
+
     @property
     def python_type(self) -> Optional[Type[Any]]:
         return None
@@ -337,6 +384,14 @@ class STRUCT(StructuredType):
             if hasattr(type_, 'get_sub_item_types'):
                 types.update(type_.get_sub_item_types())
         return types
+
+    def bind_expression(self, bindvalue: ColumnElement) -> ColumnElement:
+        """Cast the JSON-encoded bind parameter to this STRUCT type.
+
+        Unlike ``ARRAY``, StarRocks does not support casting a VARCHAR
+        directly to ``STRUCT``; the value must be parsed to ``JSON`` first.
+        """
+        return cast(func.parse_json(bindvalue), self)
 
     def result_processor(self, dialect: Dialect, coltype: object):
         processors = {
