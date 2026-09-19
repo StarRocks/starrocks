@@ -392,7 +392,7 @@ public class LDAPGroupProvider extends GroupProvider {
     }
 
     public Long getLdapCacheRefreshInterval() {
-        return Long.parseLong(properties.getOrDefault(LDAP_CACHE_REFRESH_INTERVAL, "300"));
+        return Long.parseLong(properties.getOrDefault(LDAP_CACHE_REFRESH_INTERVAL, "900"));
     }
 
     private void validateIntegerProp(Map<String, String> propertyMap, String key, int min, int max)
