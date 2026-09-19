@@ -346,6 +346,11 @@ jobs:
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
+      # Distro pair to build thirdparty images for, decided from the BASE branch.
+      # This file is the single always-current source for every branch PR (the
+      # per-branch copies are neutralized), so it must not hardcode one distro.
+      alt_distro: ${{ steps.distro.outputs.alt_distro }}
+      distros: ${{ steps.distro.outputs.distros }}
     steps:
       - uses: dorny/paths-filter@v3
         id: changes
@@ -371,6 +376,32 @@ jobs:
             dev_env:
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
+      # rocky9 replaces centos7 from 4.2 onward (CentOS 7 EOL):
+      #   < 4.2        -> ubuntu + centos7
+      #   >= 4.2, main -> ubuntu + rocky9
+      # Same rule as ci-merged.yml's "Decide distros by version". They MUST agree:
+      # ci-merged promotes <branch>-<pr> to <branch>-latest, so a distro built here
+      # but not promoted there (or promoted there but never built here) fails the
+      # merge with `... not found` -- which is exactly what happened on branch-4.0
+      # while this job hardcoded rocky9 (see CelerData/celerdata-enterprise#63147).
+      - name: Decide distros by version
+        id: distro
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          alt=rocky9
+          if [[ "${BASE_REF}" != "main" ]]; then
+            ver=${BASE_REF#branch-}; major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
+            if ! [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]]; then
+              echo "::warning::unparsable base ref '${BASE_REF}', defaulting to rocky9"
+            elif (( major < 4 || (major == 4 && minor < 2) )); then
+              alt=centos7
+            fi
+          fi
+          echo "base=${BASE_REF} alt_distro=${alt}"
+          echo "alt_distro=${alt}" >> $GITHUB_OUTPUT
+          echo "distros=[\"${alt}\", \"ubuntu\"]" >> $GITHUB_OUTPUT
+
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
@@ -393,7 +424,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        linux: [rocky9, ubuntu]
+        # ubuntu + the version-appropriate second distro (see be-checker's
+        # "Decide distros by version"), NOT a hardcoded pair.
+        linux: ${{ fromJson(needs.be-checker.outputs.distros) }}
     steps:
       - name: clean
         run: |
@@ -434,7 +467,9 @@ jobs:
     if: "!cancelled() && needs.be-checker.outputs.output1 == 'true'"
     name: Thirdparty Info
     outputs:
-      rocky9_image_cache_id: ${{ steps.info.outputs.rocky9_image_cache_id }}
+      # Named for its role, not for a distro: it carries centos7's id on <4.2
+      # branches and rocky9's elsewhere.
+      alt_image_cache_id: ${{ steps.info.outputs.alt_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
     steps:
       - name: Download Thirdparty Artifact
@@ -461,7 +496,7 @@ jobs:
           # `continue-on-error: true`, silent upload-artifact failures, and
           # empty image_cache.info files.
           missing=()
-          for platform in rocky9 ubuntu; do
+          for platform in "${{ needs.be-checker.outputs.alt_distro }}" ubuntu; do
             f="./outputs/THIRDPARTY-RESULT-${platform}/image_cache.info"
             if [[ ! -s "$f" ]]; then
               missing+=("${platform}")
@@ -476,12 +511,12 @@ jobs:
         id: info
         run: |
           if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-rocky9/image_cache.info")
-            echo "rocky9_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-${{ needs.be-checker.outputs.alt_distro }}/image_cache.info")
+            echo "alt_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
             image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
             echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
           else
-            echo "rocky9_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "alt_image_cache_id=" >> $GITHUB_OUTPUT
             echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
           fi
 
