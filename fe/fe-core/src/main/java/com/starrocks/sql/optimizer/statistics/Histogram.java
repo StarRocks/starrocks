@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
 import java.util.List;
@@ -24,13 +26,48 @@ import java.util.Optional;
 import javax.annotation.Nonnull;
 
 public class Histogram {
+    private static final Logger LOG = LogManager.getLogger(Histogram.class);
 
     private final List<Bucket> buckets;
     private final Map<String, Long> mcv;
 
+    /**
+     * Buckets carry the rows outside the MCVs. Passing none warns: row count estimation degrades to
+     * the MCV rows alone.
+     */
     public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
-        this.buckets = buckets == null ? List.of() : buckets;
         this.mcv = mcv == null ? Map.of() : mcv;
+        if (buckets != null && !buckets.isEmpty()) {
+            this.buckets = buckets;
+        } else {
+            LOG.warn("Histogram built without buckets, so its total row count covers the rows in its {} MCV "
+                    + "entries only. Buckets are needed for accurate row count estimation. If the MCV row counts "
+                    + "already cover every row, use Histogram(Map) instead.", this.mcv.size());
+            this.buckets = List.of();
+        }
+    }
+
+    /**
+     * For a histogram with no buckets, where the caller has established that the MCVs cover every
+     * row, or has reported that buckets could not be estimated.
+     */
+    public Histogram(Map<String, Long> mcv) {
+        this.mcv = mcv == null ? Map.of() : mcv;
+        this.buckets = List.of();
+    }
+
+    public static Histogram ofSingleBucket(double minValue, double maxValue, double nonNullRowCount,
+                                          Map<String, Long> mcv) {
+        long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
+        long nonMcvRows = Math.max(0L, Math.round(nonNullRowCount) - mcvRows);
+        if (nonMcvRows == 0) {
+            return new Histogram(mcv);
+        }
+        if (!Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
+            return new Histogram(List.of(
+                    new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, nonMcvRows, 0L)), mcv);
+        }
+        return new Histogram(List.of(new Bucket(minValue, maxValue, nonMcvRows, 0L)), mcv);
     }
 
     public long getTotalRows() {

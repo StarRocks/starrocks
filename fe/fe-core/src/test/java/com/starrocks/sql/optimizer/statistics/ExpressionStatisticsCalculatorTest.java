@@ -917,6 +917,53 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCoalesceCarriesNonMcvRowsInABucket() {
+        // Given COALESCE(input1, input2) on 1000 rows, where input1 is 20% null with 300 rows in
+        // MCV and input2 is 50% null with no MCV, so the result is 10% null and 900 rows survive
+        // CASE WHEN the coalesce propagates MCVs THEN it also carries the 600 non-MCV rows in a
+        // bucket over the merged range, instead of reporting only its MCV rows END
+
+        final long rowCount = 1000;
+        final double input1NullFraction = 0.2;
+        final double input2NullFraction = 0.5;
+        final Map<String, Long> input1Mcv = Map.of("1", 300L);
+        final double expectedLowerBound = 0.0;
+        final double expectedUpperBound = 200.0;
+        final long expectedNonMcvRows = 600L;
+        final long expectedUpperRepeats = 0L;
+        final long expectedTotalRows = 900L;
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(100)
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(10)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setMinValue(50).setMaxValue(200)
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(20)
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        final List<Bucket> actualBuckets = actualStatistic.getHistogram().getBuckets();
+        Assertions.assertEquals(1, actualBuckets.size());
+        Assertions.assertEquals(expectedLowerBound, actualBuckets.get(0).getLower(), 0.001);
+        Assertions.assertEquals(expectedUpperBound, actualBuckets.get(0).getUpper(), 0.001);
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertEquals(expectedUpperRepeats, actualBuckets.get(0).getUpperRepeats());
+        Assertions.assertEquals(expectedTotalRows, actualStatistic.getHistogram().getTotalRows());
+    }
+
+    @Test
     public void testCoalesceMcvScalingWhenMaxRowCountIsReached() {
         // Given COALESCE(colA, colB)
         // CASE WHEN accumulated MCV rows reach the row count THEN scale the remaining input's MCVs to fit END
@@ -2306,6 +2353,53 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testDateTruncCarriesNonMcvRowsInABucket() {
+        // Given date_trunc('day', dt) over a histogram holding 700 rows outside its MCVs and 300
+        // rows in them
+        // CASE WHEN the MCV keys are truncated THEN the rows outside the MCVs are carried across
+        // unchanged, because date_trunc maps every row to exactly one truncated value END
+
+        final var minDateTime = LocalDateTime.of(2024, 1, 1, 0, 0, 0);
+        final var maxDateTime = LocalDateTime.of(2024, 2, 28, 0, 0, 0);
+        final long sourceNonMcvRows = 700L;
+        final Map<String, Long> sourceMcv = Map.of(
+                "2024-01-15 10:20:30", 100L,
+                "2024-02-20 08:00:00", 200L);
+        final long expectedNonMcvRows = 700L;
+        final long expectedUpperRepeats = 0L;
+        final long expectedTotalRows = 1000L;
+
+        final var col = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final var sourceHistogram = new Histogram(
+                List.of(new Bucket(getLongFromDateTime(minDateTime), getLongFromDateTime(maxDateTime),
+                        sourceNonMcvRows, 0L)),
+                sourceMcv);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(minDateTime))
+                        .setMaxValue(getLongFromDateTime(maxDateTime))
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(1000)
+                        .setHistogram(sourceHistogram)
+                        .build())
+                .build();
+        final var dateTruncDay = new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("day"), col));
+
+        final var actualStatistic = ExpressionStatisticCalculator.calculate(dateTruncDay, statistics);
+
+        final var actualBuckets = actualStatistic.getHistogram().getBuckets();
+        Assertions.assertEquals(1, actualBuckets.size());
+        Assertions.assertEquals(getLongFromDateTime(minDateTime), actualBuckets.get(0).getLower(), 0.001);
+        Assertions.assertEquals(getLongFromDateTime(maxDateTime), actualBuckets.get(0).getUpper(), 0.001);
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertEquals(expectedUpperRepeats, actualBuckets.get(0).getUpperRepeats());
+        Assertions.assertEquals(expectedTotalRows, actualStatistic.getHistogram().getTotalRows());
+    }
+
+    @Test
     public void testDateTruncMcvPropagation() {
         // GIVEN
         final var col = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
@@ -3477,4 +3571,55 @@ public class ExpressionStatisticsCalculatorTest {
         assertBooleanDistribution(stat, 175L, 825L, 0.0);
     }
 
+    @Test
+    public void testIfCarriesNonMcvRowsInABucket() {
+        // Given IF(col IS NULL, thenCol, elseCol) over 1000 rows where col is 40% null, so 400 rows
+        // take the THEN branch and 600 the ELSE branch, and each branch MCV scales to 500 rows in total
+        // CASE WHEN both branches are reachable THEN the merged histogram carries the remaining 500
+        // rows in a bucket spanning both branches END
+
+        final long rowCount = 1000;
+        final double conditionNullFraction = 0.4;
+        final double expectedLowerBound = 0.0;
+        final double expectedUpperBound = 20.0;
+        final long expectedNonMcvRows = 500L;
+        final long expectedTotalRows = 1000L;
+
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "col", true);
+        final var thenCol = new ColumnRefOperator(1, IntegerType.BIGINT, "thenCol", true);
+        final var elseCol = new ColumnRefOperator(2, IntegerType.BIGINT, "elseCol", true);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setNullsFraction(conditionNullFraction)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(500)
+                        .build())
+                .addColumnStatistic(thenCol, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(10)
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(5)
+                        .setHistogram(new Histogram(Collections.emptyList(), Map.of("1", 500L)))
+                        .build())
+                .addColumnStatistic(elseCol, ColumnStatistic.builder()
+                        .setMinValue(5).setMaxValue(20)
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(5)
+                        .setHistogram(new Histogram(Collections.emptyList(), Map.of("2", 500L)))
+                        .build())
+                .build();
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.BIGINT,
+                Lists.newArrayList(new IsNullPredicateOperator(false, col), thenCol, elseCol));
+
+        final var actualStatistic = ExpressionStatisticCalculator.calculate(ifOp, statistics);
+
+        final var actualBuckets = actualStatistic.getHistogram().getBuckets();
+        Assertions.assertEquals(1, actualBuckets.size());
+        Assertions.assertEquals(expectedLowerBound, actualBuckets.get(0).getLower(), 0.001);
+        Assertions.assertEquals(expectedUpperBound, actualBuckets.get(0).getUpper(), 0.001);
+        Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        Assertions.assertEquals(expectedTotalRows, actualStatistic.getHistogram().getTotalRows());
+    }
 }
