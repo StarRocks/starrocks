@@ -44,7 +44,8 @@ public class DataSkew {
     public enum SkewType {
         NOT_SKEWED,
         SKEWED_NULL,
-        SKEWED_MCV
+        SKEWED_MCV,
+        SKEWED_MCV_AND_NULL
     }
 
     public enum AdditionalInfo {
@@ -66,6 +67,14 @@ public class DataSkew {
 
         public boolean isSkewed() {
             return type != SkewType.NOT_SKEWED;
+        }
+
+        public boolean hasNullSkew() {
+            return type == SkewType.SKEWED_NULL || type == SkewType.SKEWED_MCV_AND_NULL;
+        }
+
+        public boolean hasMcvSkew() {
+            return type == SkewType.SKEWED_MCV || type == SkewType.SKEWED_MCV_AND_NULL;
         }
 
         public Optional<Map<String, Long>> getMcvs() {
@@ -185,12 +194,7 @@ public class DataSkew {
         final var mcvSkewInfo = getMcvSkewInfo(statistics, columnStatistic, thresholds);
 
         if (nullSkewInfo.skewed && mcvSkewInfo.skewed) {
-            // If there is skew in the MCVs as well as NULLs, we decide for the one that is more skewed.
-            if (nullSkewInfo.nullSkewFactor.get() >= mcvSkewInfo.mcvSkewFactor.get()) {
-                return new SkewInfo(SkewType.SKEWED_NULL);
-            } else {
-                return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
-            }
+            return new SkewInfo(SkewType.SKEWED_MCV_AND_NULL, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
         } else if (nullSkewInfo.skewed) {
             return new SkewInfo(SkewType.SKEWED_NULL);
         } else if (mcvSkewInfo.skewed) {
