@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.summary.AuditLoaderMgr;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
@@ -93,8 +94,14 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class StatisticUtils {
     private static final Logger LOG = LogManager.getLogger(StatisticUtils.class);
 
+    // Databases whose tables are never auto-analyzed. The audit database belongs here for the same
+    // reason query_history, task_run_history, loads_history and rejected_records all live in
+    // _statistics_: every FE stream loads into it on a fixed interval, so its health never settles
+    // and the collector would re-analyze it without end, scanning a megabyte-wide stmt column
+    // across up to thirty daily partitions.
     private static final List<String> COLLECT_DATABASES_BLACKLIST = ImmutableList.<String>builder()
             .add(StatsConstants.STATISTICS_DB_NAME)
+            .add(AuditLoaderMgr.AUDIT_DB_NAME)
             .add("starrocks_monitor")
             .add("information_schema").build();
 

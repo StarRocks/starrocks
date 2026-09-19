@@ -198,6 +198,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.summary.AuditLoaderMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -1328,16 +1329,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return expected != null && !expected.isEmpty() && expected.equals(token);
     }
 
-    private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
-                                        String clientIp) {
+    // Package-private for testability: FrontendServiceImplTest exercises the
+    // internal-load table whitelist directly (same pattern as
+    // isAuthorizedByInternalToken above).
+    boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
+                                String clientIp) {
+        if (!isInternalLoadTarget(db, tbl)) {
+            return false;
+        }
         for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends()) {
             if (fe.getHost().equals(clientIp) && fe.isAlive() && fe.getHost().equals(user) &&
-                    fe.getNodeName().equals(passwd) && StatsConstants.STATISTICS_DB_NAME.equals(db) &&
-                    StatsConstants.QUERY_HISTORY_TABLE_NAME.equals(tbl)) {
+                    fe.getNodeName().equals(passwd)) {
                 return true;
             }
         }
         return false;
+    }
+
+    // Whitelist of the (database, table) pairs that may be loaded with FE identity instead of real
+    // credentials. Keep it to system tables owned by an FE-side writer.
+    private static boolean isInternalLoadTarget(String db, String tbl) {
+        return (StatsConstants.STATISTICS_DB_NAME.equals(db) && StatsConstants.QUERY_HISTORY_TABLE_NAME.equals(tbl))
+                || (AuditLoaderMgr.AUDIT_DB_NAME.equals(db) && AuditLoaderMgr.AUDIT_TABLE_NAME.equals(tbl));
     }
 
     @Override
