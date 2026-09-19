@@ -581,7 +581,7 @@ TEST_F(BinaryDictPageTest, TestNextBatchWithFilterAllDictRejectedAdvancesCursor)
     std::unique_ptr<ColumnPredicate> predicate(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 0, "zzz"));
     std::vector<const ColumnPredicate*> predicates{predicate.get()};
 
-    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
+    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     std::vector<uint8_t> selection(8, 1);
     std::vector<uint16_t> selected_idx(8);
 
