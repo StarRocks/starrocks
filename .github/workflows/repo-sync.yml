@@ -275,12 +275,22 @@ jobs:
           gh workflow run sync-scan-pending.yml \
             -R ${{ github.repository }} || true
 
-      - name: clean
-        if: always()
+      # BODY_FILE is the hand-off between the pr-info job (which writes it) and this
+      # job (which reads it). Deleting it on failure made every retry hopeless:
+      # "Re-run failed jobs" does not re-run the successful pr-info job, so the file
+      # was never recreated and create_sync_repo.sh died with a misleading
+      # "File ... not found" that also buried the original failure. Only drop it once
+      # the sync actually succeeded; a leftover file is harmless (the next run for the
+      # same PR overwrites it).
+      - name: clean body file
+        if: success()
         env:
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
+        run: rm -f ${BODY_FILE}
+
+      - name: clean
+        if: always()
         run: |
-          rm -f ${BODY_FILE}
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
   repo-sync-branch:
@@ -493,10 +503,20 @@ jobs:
           gh workflow run sync-scan-pending.yml \
             -R ${{ github.repository }} || true
 
-      - name: clean
-        if: always()
+      # BODY_FILE is the hand-off between the pr-info job (which writes it) and this
+      # job (which reads it). Deleting it on failure made every retry hopeless:
+      # "Re-run failed jobs" does not re-run the successful pr-info job, so the file
+      # was never recreated and create_sync_repo.sh died with a misleading
+      # "File ... not found" that also buried the original failure. Only drop it once
+      # the sync actually succeeded; a leftover file is harmless (the next run for the
+      # same PR overwrites it).
+      - name: clean body file
+        if: success()
         env:
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
+        run: rm -f ${BODY_FILE}
+
+      - name: clean
+        if: always()
         run: |
-          rm -f ${BODY_FILE}
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
