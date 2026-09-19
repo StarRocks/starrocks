@@ -31,6 +31,10 @@ Shared-data Dashboard 包括以下监控指标类别：
 
 - 描述 Public Version 队列中的任务数量。
 
+#### Memory Gate Rejections
+
+- Description: 被存算分离 Publish 内存闸门拒绝的 Publish 任务数量（`lake_publish_mem_rejected`），以及被同一后备保护拒绝的 Tablet Reshard 元数据构建数量（`tablet_reshard_mem_rejected`）。此类拒绝是可重试的 `ResourceBusy` 限流，而非失败，因此计数上升表示为保护节点免于 OOM 而推迟了 Publish，并不表示 Publish 失败。可通过 `lake_publish_memory_limit_percent` 与 `lake_publish_process_memory_urgent_pct` 调整。
+
 ### Metadata
 
 #### Get Tablet Metadata

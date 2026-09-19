@@ -31,6 +31,10 @@ Shared-data Dashboard には、次のカテゴリの監視メトリクスが含�
 
 - 説明: キュー内の Public Version タスクの数。
 
+#### Memory Gate Rejections
+
+- Description: 共有データの Publish メモリゲートによって拒否された Publish タスク数（`lake_publish_mem_rejected`）と、同じバックストップによって拒否された Tablet Reshard メタデータ構築数（`tablet_reshard_mem_rejected`）。この拒否は失敗ではなく再試行可能な `ResourceBusy` のスロットリングであるため、カウントの増加は Publish が失敗しているのではなく、ノードを OOM から保護するために延期されていることを示します。`lake_publish_memory_limit_percent` と `lake_publish_process_memory_urgent_pct` で調整できます。
+
 ### Metadata
 
 #### Get Tablet Metadata

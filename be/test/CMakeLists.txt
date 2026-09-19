@@ -294,6 +294,7 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/publish_mem_reservation_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
