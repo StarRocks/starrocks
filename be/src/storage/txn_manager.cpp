@@ -383,6 +383,12 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
                                bool is_double_write) {
+    if (is_double_write) {
+        // Enter the double-write phase before the rowset becomes visible to compaction pickers,
+        // so a concurrent pick that sees this rowset also sees the suspension (see
+        // Tablet::note_double_write_publish()).
+        tablet->note_double_write_publish();
+    }
     if (tablet->updates() != nullptr) {
         StorageMetrics::instance()->update_rowset_commit_request_total.increment(1);
         auto st = tablet->rowset_commit(version, rowset, wait_time, false, is_double_write);
