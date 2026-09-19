@@ -126,6 +126,14 @@ public class IcebergConnector implements Connector {
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
+<<<<<<< HEAD
+=======
+            // Inside the null check, not at the entry: this method is called on every getMetadata,
+            // and once the catalog exists it returns a field. Only the build contacts anything --
+            // REST does GET /v1/config, hive connects to HMS, glue builds an AWS client -- and it
+            // is deliberately lazy so an unreachable metastore cannot stop the FE from starting.
+            BlockingCallValidator.validateNotUnderLock("iceberg-catalog", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
 
             if (icebergCatalogProperties.isEnableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {

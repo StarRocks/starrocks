@@ -136,6 +136,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         authRecoveryEnabled = restCatalogProperties.containsKey(OAuth2Properties.CREDENTIAL)
                 && securityConfig.getSecurity() != Security.JWT;
 
+<<<<<<< HEAD
+=======
+        // initialize() below performs a GET /v1/config against the REST service, and an OAuth
+        // exchange when configured, so construction is itself a remote call -- reached before any
+        // of the guarded catalog actions, on the first resolve of a replayed connector.
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         try {
             RESTSessionCatalog restCatalog = new RESTSessionCatalog();
             configureHadoopConf(restCatalog, conf);
@@ -470,6 +477,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     private <T> T withAuthRecovery(Supplier<T> action) {
+<<<<<<< HEAD
+=======
+        // Wraps the REST calls; runWithAuthRecovery delegates here too. Reached only on a cache
+        // miss, because CachingIcebergCatalog sits in front of this delegate.
+        BlockingCallValidator.validateNotUnderLock("iceberg-rest", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         try {
             return action.get();
         } catch (RuntimeException e) {

@@ -184,6 +184,12 @@ public class PaimonConnector implements Connector {
 
     public Catalog getPaimonNativeCatalog() {
         if (paimonNativeCatalog == null) {
+<<<<<<< HEAD
+=======
+            // Inside the null check for the same reason as iceberg: a hit returns a field, only
+            // the build contacts the metastore or the warehouse path's file system.
+            BlockingCallValidator.validateNotUnderLock("paimon", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
             CatalogContext context = CatalogContext.create(getPaimonOptions(), configuration);

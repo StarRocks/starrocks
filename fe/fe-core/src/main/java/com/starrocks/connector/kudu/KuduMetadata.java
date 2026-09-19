@@ -95,6 +95,11 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
+<<<<<<< HEAD
+=======
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         if (metastore.isPresent()) {
             return metastore.get().getAllDatabaseNames().stream()
                     .filter(schemaName -> !HIVE_SYSTEM_SCHEMA.contains((schemaName)))
@@ -144,6 +149,11 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
+<<<<<<< HEAD
+=======
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         if (metastore.isPresent()) {
             List<String> allTableNames = metastore.get().getAllTableNames(dbName);
             return allTableNames.stream().filter(tableName -> {
@@ -174,6 +184,11 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public Database getDb(ConnectContext context, String dbName) {
+<<<<<<< HEAD
+=======
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         if (metastore.isPresent()) {
             return metastore.get().getDb(dbName);
         }
@@ -202,6 +217,11 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
+<<<<<<< HEAD
+=======
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         if (metastore.isPresent()) {
             return metastore.get().getTable(dbName, tblName);
         }
@@ -261,6 +281,11 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+<<<<<<< HEAD
+=======
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
         String kuduTableName = getKuduFullTableName(kuduTable);
@@ -311,6 +336,11 @@ public class KuduMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange versionRange) {
+<<<<<<< HEAD
+=======
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
+>>>>>>> 2e5a7e423e1 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#62774))
         Statistics.Builder builder = Statistics.builder()
                 .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 
