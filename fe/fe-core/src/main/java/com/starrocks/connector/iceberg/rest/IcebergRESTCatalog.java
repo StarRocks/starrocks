@@ -473,16 +473,34 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         try {
             return action.get();
         } catch (RuntimeException e) {
-            if (!causedByNotAuthorized(e) || !tryRecoverAuthSession(e)) {
+            if (!causedByAuthFailure(e) || !tryRecoverAuthSession(e)) {
                 throw e;
             }
             return action.get();
         }
     }
 
-    // the view DDL default methods wrap the 401 in StarRocksConnectorException, so walk the cause chain
-    private static boolean causedByNotAuthorized(RuntimeException failure) {
-        return Throwables.getCausalChain(failure).stream().anyMatch(NotAuthorizedException.class::isInstance);
+    // Recover whenever the REST catalog rejects our OAuth2 token. Walk the cause chain because
+    // the view DDL default methods wrap the auth error in StarRocksConnectorException.
+    //
+    // The Iceberg REST spec defines two token-expiry responses, and both say the client MAY
+    // refresh and retry:
+    //   * HTTP 401 (UnauthorizedResponse) -> NotAuthorizedException.
+    //   * HTTP 419 (AuthenticationTimeoutResponse) -> not mapped by the Iceberg client, so it
+    //     surfaces as a generic RESTException ("Unable to process: Authentication token is expired").
+    // Treat either as recoverable and rebuild the session.
+    private static boolean causedByAuthFailure(RuntimeException failure) {
+        List<Throwable> chain = Throwables.getCausalChain(failure);
+        if (chain.stream().anyMatch(NotAuthorizedException.class::isInstance)) {
+            return true;
+        }
+        return chain.stream()
+                .filter(t -> t instanceof RESTException)
+                .anyMatch(t -> {
+                    String message = t.getMessage() == null ? "" : t.getMessage().toLowerCase();
+                    return message.contains("code: 419")
+                            || (message.contains("token") && message.contains("expired"));
+                });
     }
 
     private void runWithAuthRecovery(Runnable action) {
