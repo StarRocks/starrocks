@@ -32,11 +32,15 @@ import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN_EXPIRES_AT_MS;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
 import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN;
 import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT;
@@ -134,17 +138,24 @@ public class CloudConfigurationFactory {
                 copiedProperties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS, enablePathStyle);
             }
         }
-        return buildCloudConfigurationForStorage(copiedProperties);
+        CloudConfiguration cloudConfiguration = buildCloudConfigurationForStorage(copiedProperties);
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            cloudConfiguration.setVendedCredentialExpiresAtMs(
+                    parseEpochMillis(properties.get(AwsCloudConfigurationProvider.S3_SESSION_TOKEN_EXPIRES_AT_MS)));
+        }
+        return cloudConfiguration;
     }
 
     public static CloudConfiguration buildCloudConfigurationForAzureVendedCredentials(Map<String, String> properties,
                                                                                       String path) {
         Map<String, String> copiedProperties = new HashMap<>();
+        Long expiresAtMs = null;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
                 String endpoint = entry.getKey().substring(ADLS_SAS_TOKEN.length());
                 copiedProperties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, endpoint);
                 copiedProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, entry.getValue());
+                expiresAtMs = sasExpiresAtMs(properties, endpoint, entry.getValue());
                 break;
             } else if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(BLOB_ENDPOINT)) {
                 try {
@@ -152,6 +163,8 @@ public class CloudConfigurationFactory {
                     copiedProperties.put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, uri.getAccount());
                     copiedProperties.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, uri.getContainer());
                     copiedProperties.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, entry.getValue());
+                    expiresAtMs = sasExpiresAtMs(properties,
+                            entry.getKey().substring(ADLS_SAS_TOKEN.length()), entry.getValue());
                     break;
                 } catch (StarRocksException e) {
                     String errorMessage = String.format("Failed to parse azure blob file for path: %s, properties: %s", path,
@@ -160,7 +173,49 @@ public class CloudConfigurationFactory {
                 }
             }
         }
-        return buildCloudConfigurationForStorage(copiedProperties);
+        CloudConfiguration cloudConfiguration = buildCloudConfigurationForStorage(copiedProperties);
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            cloudConfiguration.setVendedCredentialExpiresAtMs(expiresAtMs);
+        }
+        return cloudConfiguration;
+    }
+
+    // Catalog-sent expires-at-ms property when present, else the expiry embedded in the SAS token itself.
+    private static Long sasExpiresAtMs(Map<String, String> properties, String endpoint, String sasToken) {
+        Long expiresAtMs = parseEpochMillis(properties.get(ADLS_SAS_TOKEN_EXPIRES_AT_MS + endpoint));
+        return expiresAtMs != null ? expiresAtMs : parseSasSignedExpiry(sasToken);
+    }
+
+    private static Long parseEpochMillis(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    // A SAS token carries its own expiry in the `se` query parameter (URL-encoded ISO-8601).
+    // Match the whole parameter name: user-delegation SAS also carries `ske` (signed key expiry).
+    // ponytail: a date-only `se` (legal in SAS) parses to null -> no refresh, same as today.
+    private static Long parseSasSignedExpiry(String sasToken) {
+        if (sasToken == null) {
+            return null;
+        }
+        String token = sasToken.startsWith("?") ? sasToken.substring(1) : sasToken;
+        for (String param : token.split("&")) {
+            if (param.startsWith("se=")) {
+                try {
+                    String value = URLDecoder.decode(param.substring("se=".length()), StandardCharsets.UTF_8);
+                    return Instant.parse(value).toEpochMilli();
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+        }
+        return null;
     }
 
     public static CloudConfiguration buildCloudConfigurationForGCSVendedCredentials(Map<String, String> properties,
@@ -174,6 +229,11 @@ public class CloudConfigurationFactory {
                 break;
             }
         }
-        return buildCloudConfigurationForStorage(copiedProperties);
+        CloudConfiguration cloudConfiguration = buildCloudConfigurationForStorage(copiedProperties);
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            cloudConfiguration.setVendedCredentialExpiresAtMs(
+                    parseEpochMillis(copiedProperties.get(GCS_ACCESS_TOKEN_EXPIRES_AT)));
+        }
+        return cloudConfiguration;
     }
 }
