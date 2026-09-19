@@ -23,6 +23,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.http.rest.ConnectionAction;
@@ -45,7 +46,9 @@ import com.starrocks.http.rest.v2.ComputeNodeActionV2;
 import com.starrocks.http.rest.v2.ProfileActionV2;
 import com.starrocks.http.rest.v2.QueryDetailActionV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -96,6 +99,7 @@ public class RestBaseActionTest {
         Set<String> observedGroups;
         String observedQualifiedUser;
         String observedRemoteIp;
+        String observedAuthToken;
 
         public TestableRestBaseAction() {
             super(null);
@@ -111,6 +115,7 @@ public class RestBaseActionTest {
             observedGroups = ctx.getGroups();
             observedQualifiedUser = ctx.getQualifiedUser();
             observedRemoteIp = ctx.getRemoteIP();
+            observedAuthToken = ctx.getAuthToken();
         }
 
         // Expose the protected enable_http_auth-gated helpers so tests in this package
@@ -299,6 +304,76 @@ public class RestBaseActionTest {
         Assertions.assertEquals(groups, action.observedGroups);
         Assertions.assertEquals("ldap_user", action.observedQualifiedUser);
         Assertions.assertEquals("10.4.5.6", action.observedRemoteIp);
+    }
+
+    @Test
+    public void testExecuteWithBasicAuthCopiesVerifiedAuthToken() throws Exception {
+        TestableRestBaseAction action = new TestableRestBaseAction();
+        HttpConnectContext connectContext = new HttpConnectContext();
+        BaseRequest request = mockExecutableRequest(basicAuth("jwt_user", "id-token"), connectContext);
+        UserIdentity authenticatedUser = UserIdentity.createAnalyzedUserIdentWithIp("jwt_user", "%");
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
+                            eq("jwt_user"), eq("10.4.5.6"), any(byte[].class)))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authCtx = invocation.getArgument(0);
+                        authCtx.setCurrentUserIdentity(authenticatedUser);
+                        // What JWTAuthenticationProvider does on a successful verify. IcebergRESTCatalog reads it
+                        // back off the request context, so it has to survive the handoff.
+                        authCtx.setAuthToken("id-token");
+                        return authenticatedUser;
+                    });
+
+            action.execute(request, new BaseResponse());
+        }
+
+        Assertions.assertTrue(action.executed);
+        Assertions.assertEquals("id-token", action.observedAuthToken);
+    }
+
+    @Test
+    public void testRejectedUserChangeRestoresPreviousAuthToken() throws Exception {
+        TestableRestBaseAction action = new TestableRestBaseAction();
+        UserIdentity previousUser = UserIdentity.createAnalyzedUserIdentWithIp("previous_user", "%");
+        HttpConnectContext connectContext = new HttpConnectContext();
+        connectContext.setQualifiedUser("previous_user");
+        connectContext.setCurrentUserIdentity(previousUser);
+        connectContext.setAuthToken("previous-token");
+        // The rollback only runs for a registered connection whose user actually changes.
+        connectContext.setRegistered(true);
+        BaseRequest request = mockExecutableRequest(basicAuth("jwt_user", "id-token"), connectContext);
+        UserIdentity authenticatedUser = UserIdentity.createAnalyzedUserIdentWithIp("jwt_user", "%");
+
+        ConnectScheduler scheduler = mock(ConnectScheduler.class);
+        when(scheduler.onUserChanged(any(ConnectContext.class), eq("previous_user"), eq("jwt_user")))
+                .thenReturn(Pair.create(false, "too many connections for jwt_user"));
+        ExecuteEnv executeEnv = mock(ExecuteEnv.class);
+        when(executeEnv.getScheduler()).thenReturn(scheduler);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class);
+                MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class)) {
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(executeEnv);
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
+                            eq("jwt_user"), eq("10.4.5.6"), any(byte[].class)))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authCtx = invocation.getArgument(0);
+                        authCtx.setCurrentUserIdentity(authenticatedUser);
+                        authCtx.setAuthToken("id-token");
+                        return authenticatedUser;
+                    });
+
+            Assertions.assertThrows(StarRocksHttpException.class,
+                    () -> action.execute(request, new BaseResponse()));
+        }
+
+        // Identity and token must roll back together. Restoring one without the other would leave the previous
+        // user's identity beside the rejected user's token, and a REST catalog call would carry the wrong
+        // credential.
+        Assertions.assertFalse(action.executed);
+        Assertions.assertEquals(previousUser, connectContext.getCurrentUserIdentity());
+        Assertions.assertEquals("previous_user", connectContext.getQualifiedUser());
+        Assertions.assertEquals("previous-token", connectContext.getAuthToken());
     }
 
     @Test

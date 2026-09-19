@@ -34,6 +34,7 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -2508,6 +2509,46 @@ public class FrontendServiceImplTest {
         } finally {
             Config.enable_collect_partition_access_time = saved;
         }
+    }
+
+
+    @Test
+    public void testCheckPasswordAndLoadPrivilegeAuthorizesOnTheAuthenticatedContext() throws Exception {
+        boolean origin = Config.enable_starrocks_external_table_auth_check;
+        Config.enable_starrocks_external_table_auth_check = true;
+        try {
+            TAuthenticateParams auth = new TAuthenticateParams();
+            auth.setUser("root");
+            auth.setPasswd("");
+            auth.setHost("127.0.0.1");
+            auth.setDb_name("test");
+            auth.setTable_names(Lists.newArrayList("site_access_auto"));
+
+            TStatus ok = FrontendServiceImpl.checkPasswordAndLoadPrivilege(auth);
+            Assertions.assertEquals(TStatusCode.OK, ok.getStatus_code());
+
+            // An unknown user never authenticates, so it never reaches the privilege check.
+            auth.setUser("no_such_external_user");
+            auth.setPasswd("whatever");
+            TStatus denied = FrontendServiceImpl.checkPasswordAndLoadPrivilege(auth);
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, denied.getStatus_code());
+        } finally {
+            Config.enable_starrocks_external_table_auth_check = origin;
+        }
+    }
+
+    @Test
+    public void testCheckPasswordAndLoadPrivReusesTheAuthenticatedContext() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        // Authorizes on the context authenticate() populated. Rebuilding one from the identity alone would drop
+        // the group derived roles an ephemeral security integration user depends on.
+        UserIdentity authenticated = Deencapsulation.invoke(impl, "checkPasswordAndLoadPriv",
+                "root", "", "test", "site_access_auto", "127.0.0.1");
+        Assertions.assertEquals(UserIdentity.ROOT, authenticated);
+
+        Assertions.assertThrows(Exception.class, () -> Deencapsulation.invoke(impl, "checkPasswordAndLoadPriv",
+                "no_such_load_user", "whatever", "test", "site_access_auto", "127.0.0.1"));
     }
 
 }
