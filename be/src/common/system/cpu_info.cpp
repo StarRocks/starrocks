@@ -44,6 +44,10 @@
 #ifdef __linux__
 #include <linux/magic.h>
 #endif
+#if defined(__linux__) && defined(__aarch64__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#endif
 #include <sched.h>
 #ifdef __linux__
 #include <sys/sysinfo.h>
@@ -114,7 +118,8 @@ const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
     static const std::vector<FlagMapping> mappings = {
             {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
             {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
-            {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
+            {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW}, {"asimd", CpuInfo::ARM_NEON},
+            {"crc32", CpuInfo::ARM_CRC32}, {"pmull", CpuInfo::ARM_PMULL},
     };
     return mappings;
 }
@@ -148,7 +153,7 @@ void CpuInfo::init() {
             value = line.substr(colon + 1, string::npos);
             trim(name);
             trim(value);
-            if (name.compare("flags") == 0) {
+            if (name.compare("flags") == 0 || name.compare("Features") == 0) {
                 hardware_flags_ |= _parse_cpu_flags(value);
             } else if (name.compare("cpu MHz") == 0) {
                 // Every core will report a different speed.  We'll take the max, assuming
@@ -164,6 +169,20 @@ void CpuInfo::init() {
             }
         }
     }
+
+#if defined(__linux__) && defined(__aarch64__)
+#if defined(HWCAP_ASIMD)
+    if (getauxval(AT_HWCAP) & HWCAP_ASIMD) hardware_flags_ |= ARM_NEON;
+#endif
+#if defined(HWCAP_CRC32)
+    if (getauxval(AT_HWCAP) & HWCAP_CRC32) hardware_flags_ |= ARM_CRC32;
+#endif
+#if defined(HWCAP_PMULL)
+    if (getauxval(AT_HWCAP) & HWCAP_PMULL) hardware_flags_ |= ARM_PMULL;
+#endif
+#elif defined(__APPLE__) && defined(__aarch64__)
+    hardware_flags_ |= (ARM_NEON | ARM_CRC32 | ARM_PMULL);
+#endif
 
     if (max_mhz != 0) {
         cycles_per_ms_ = max_mhz * 1000;
@@ -488,6 +507,21 @@ std::vector<std::string> CpuInfo::unsupported_cpu_flags_from_current_env() {
 #endif
 #if defined(__x86_64__) && defined(__AVX512BW__)
             case CpuInfo::AVX512BW:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_NEON)
+            case CpuInfo::ARM_NEON:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+            case CpuInfo::ARM_CRC32:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRYPTO)
+            case CpuInfo::ARM_PMULL:
                 unsupported = true;
                 break;
 #endif
