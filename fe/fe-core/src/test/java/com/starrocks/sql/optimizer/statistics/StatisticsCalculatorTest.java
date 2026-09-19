@@ -1413,7 +1413,7 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testPartitionedRowNumberKeepsLegacyStatistics() {
+    public void testPartitionedRowNumberStatistics() {
         ColumnRefOperator pk = columnRefFactory.create("pk", IntegerType.BIGINT, false);
         ColumnRefOperator rn = columnRefFactory.create("rn", IntegerType.BIGINT, false);
         CallOperator rowNumber = new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
@@ -1435,6 +1435,10 @@ public class StatisticsCalculatorTest {
         new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
 
         ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
-        Assertions.assertTrue(rowNumberStatistic.isUnknown());
+        Assertions.assertFalse(rowNumberStatistic.isUnknown());
+        Assertions.assertEquals(1, rowNumberStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1000, rowNumberStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
     }
 }
