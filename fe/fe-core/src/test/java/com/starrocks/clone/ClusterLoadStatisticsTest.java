@@ -327,7 +327,7 @@ public class ClusterLoadStatisticsTest {
         TabletInvertedIndex localIndex = new TabletInvertedIndex();
         long tabletId = 83000;
         for (int i = 0; i < 3; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, 0, TStorageMedium.HDD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, unreportedBe.getId(), 0, ReplicaState.NORMAL));
         }
 
@@ -359,11 +359,11 @@ public class ClusterLoadStatisticsTest {
         TabletInvertedIndex localIndex = new TabletInvertedIndex();
         long tabletId = 84000;
         for (int i = 0; i < 5; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 4, 0, TStorageMedium.HDD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, partialBe.getId(), 0, ReplicaState.NORMAL));
         }
         for (int i = 0; i < 2; i++, tabletId++) {
-            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, TStorageMedium.SSD));
+            localIndex.addTablet(tabletId, new TabletMeta(1, 2, 3, 5, 0, TStorageMedium.SSD));
             localIndex.addReplica(tabletId, new Replica(tabletId + 100, partialBe.getId(), 0, ReplicaState.NORMAL));
         }
 
