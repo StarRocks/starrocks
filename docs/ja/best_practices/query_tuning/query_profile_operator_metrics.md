@@ -300,7 +300,9 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | OverallThroughput | スループット率。 |
 | NetworkTime | データパケット転送にかかった時間（受信後の処理時間を除く）。 |
 | NetworkBandwidth | 推定ネットワーク帯域幅。 |
-| WaitTime | 送信キューが満杯による待機時間。 |
+| WaitTime | `BufferFullTime` と `PendingFinishTime` の合計。 |
+| BufferFullTime | 送信側バッファが満杯だった時間の記録済み累計。`WaitTime` の子メトリック。 |
+| PendingFinishTime | シンクバッファが終了処理を開始してからプロファイル更新時点までの経過時間。終了処理の開始前はゼロ。`WaitTime` の子メトリックであり、Pipeline レベルの同名メトリックとは別に計測されます。 |
 | OverallTime | 転送プロセス全体の合計時間。つまり、最初のデータパケットの送信から最後のデータパケットの正常受信確認までの時間。 |
 | RpcAvgTime | RPCの平均時間。 |
 | RpcCount | RPCの総数。 |
