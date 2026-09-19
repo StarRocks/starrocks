@@ -4947,10 +4947,25 @@ public class Config extends ConfigBase {
     public static long min_graceful_exit_time_second = 15;
 
     /**
-     * timeout for graceful exit
+     * Hard timeout for the whole graceful exit, measured from the signal (SIGUSR1). Must be greater
+     * than max(graceful_exit_http_accept_window_ms + min_graceful_exit_time_second), or the thread is
+     * force-killed before the drain completes. Set window, min, and max together.
      */
     @ConfField(mutable = true)
-    public static long max_graceful_exit_time_second = 60;
+    public static long max_graceful_exit_time_second = 120;
+
+    /**
+     * HTTP accept window after SIGUSR1, in milliseconds. Controls new-request admission on the
+     * three HTTP entries: ExecuteSqlAction (HTTP SQL), LoadAction (stream load), and
+     * TransactionLoadAction (transaction stream load). HealthCheck returns 500 at T0 so the HTTP
+     * load balancer can detach. During this window the three HTTP
+     * entries still admit requests and idle HTTP keep-alives are kept. After it elapses, new
+     * requests on those entries get 503 + Connection: close, then idle HTTP keep-alives are closed.
+     * Must cover HTTP Load Balancer probe interval, unhealthy threshold, detach latency and margin. Must be
+     * smaller than the drain covered by max_graceful_exit_time_second.
+     */
+    @ConfField(mutable = true)
+    public static long graceful_exit_http_accept_window_ms = 60000;
 
     @ConfField(mutable = true)
     public static long default_statistics_output_row_count = 1L;
