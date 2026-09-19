@@ -1012,7 +1012,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 // a raw IndexOutOfBoundsException from paramsExpr.get(0) below.
                 if (paramsExpr.isEmpty()) {
                     throw new ParsingException(
-                            PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
+                            PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
                 }
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
