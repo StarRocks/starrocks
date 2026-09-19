@@ -27,6 +27,7 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 
 import java.text.DecimalFormat;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -211,6 +212,34 @@ public class ResourceGroup {
     private List<String> warehouses;
 
     public ResourceGroup() {
+    }
+
+    public ResourceGroup copy() {
+        ResourceGroup rg = new ResourceGroup();
+        rg.name = this.name;
+        rg.id = this.id;
+        rg.cpuWeight = this.cpuWeight;
+        rg.cpuWeightPercent = this.cpuWeightPercent;
+        rg.exclusiveCpuCores = this.exclusiveCpuCores;
+        rg.exclusiveCpuPercent = this.exclusiveCpuPercent;
+        rg.maxCpuCores = this.maxCpuCores;
+        rg.memLimit = this.memLimit;
+        rg.memPool = this.memPool;
+        rg.bigQueryMemLimit = this.bigQueryMemLimit;
+        rg.bigQueryScanRowsLimit = this.bigQueryScanRowsLimit;
+        rg.bigQueryCpuSecondLimit = this.bigQueryCpuSecondLimit;
+        rg.concurrencyLimit = this.concurrencyLimit;
+        rg.spillMemLimitThreshold = this.spillMemLimitThreshold;
+        rg.memUsedPctLimit = this.memUsedPctLimit;
+        rg.resourceGroupType = this.resourceGroupType;
+        rg.version = this.version;
+        rg.warehouses = this.warehouses != null ? new ArrayList<>(this.warehouses) : null;
+        if (this.classifiers != null) {
+            rg.classifiers = this.classifiers.stream()
+                    .map(ResourceGroupClassifier::copy)
+                    .toList();
+        }
+        return rg;
     }
 
     private List<String> showClassifier(ResourceGroupClassifier classifier, boolean verbose) {
