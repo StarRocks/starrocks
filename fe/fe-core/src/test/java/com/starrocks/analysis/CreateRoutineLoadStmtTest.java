@@ -562,13 +562,24 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
-    public void testAnalyzeCSVConfig() throws Exception {
+    public void testAnalyzeArrowConfig() {
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_arrow ON t1 " +
+                "PROPERTIES(\"format\" = \"arrow\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:9092\",\"kafka_topic\" = \"topic_0\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, ctx);
+        Assertions.assertEquals("arrow", createRoutineLoadStmt.getFormat());
+    }
+
+    @Test
+    public void testAnalyzeCSVConfig() {
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_1 ON t1 " +
                 "PROPERTIES(\"format\" = \"csv\", \"trim_space\"=\"true\", \"enclose\"=\"'\", \"escape\"=\"|\") " +
                 "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:9092\",\"kafka_topic\" = \"topic_0\");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
-        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, ctx);
         Assertions.assertEquals(createRoutineLoadStmt.isTrimspace(), true);
         Assertions.assertEquals(createRoutineLoadStmt.getEnclose(), '\'');
         Assertions.assertEquals(createRoutineLoadStmt.getEscape(), '|');
@@ -790,6 +801,79 @@ public class CreateRoutineLoadStmtTest {
         CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Assertions.assertEquals("CREATE ROUTINE LOAD routine_name ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
                 "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
+    }
+
+    @Test
+    public void testAnalyzeArrowFormat() {
+        String sql = """
+                CREATE ROUTINE LOAD routine_name ON table1
+                PROPERTIES (
+                "desired_concurrent_number" = "3",
+                "format" = "arrow"
+                )
+                FROM KAFKA
+                (
+                "kafka_broker_list" = "kafkahost1:9092",
+                "kafka_topic" = "topictest"
+                );""";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(stmt, ctx);
+        Assertions.assertEquals("arrow", stmt.getFormat());
+
+        String uppercaseSql = """
+                CREATE ROUTINE LOAD routine_name ON table1
+                PROPERTIES (
+                "desired_concurrent_number" = "3",
+                "format" = "ARROW"
+                )
+                FROM KAFKA
+                (
+                "kafka_broker_list" = "kafkahost1:9092",
+                "kafka_topic" = "topictest"
+                );""";
+        CreateRoutineLoadStmt uppercaseStmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(uppercaseSql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(uppercaseStmt, ctx);
+        Assertions.assertEquals("arrow", uppercaseStmt.getFormat());
+    }
+
+    @Test
+    public void testAnalyzeArrowFormatPulsar() {
+        String sql = """
+                CREATE ROUTINE LOAD routine_name ON table1
+                PROPERTIES (
+                "desired_concurrent_number" = "3",
+                "format" = "arrow"
+                )
+                FROM PULSAR
+                (
+                "pulsar_service_url" = "http://pulsar:6650",
+                "pulsar_topic" = "topictest",
+                "pulsar_subscription" = "subtest"
+                );""";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(stmt, ctx);
+        Assertions.assertEquals("arrow", stmt.getFormat());
+    }
+
+    @Test
+    public void testAnalyzeAvroFormatPulsar() {
+        String sql = """
+                CREATE ROUTINE LOAD routine_name ON table1
+                PROPERTIES (
+                "desired_concurrent_number" = "3",
+                "format" = "avro"
+                )
+                FROM PULSAR
+                (
+                "pulsar_service_url" = "http://pulsar:6650",
+                "pulsar_topic" = "topictest",
+                "pulsar_subscription" = "subtest"
+                );""";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assertions.assertThrows(SemanticException.class, () -> CreateRoutineLoadAnalyzer.analyze(stmt, ctx));
     }
 
     private Map<String, String> getCustomProperties() {
