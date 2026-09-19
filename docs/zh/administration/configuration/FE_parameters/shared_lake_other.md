@@ -148,6 +148,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Azure Data Lake Storage Gen2 账户的 endpoint，例如 `https://test.dfs.core.windows.net`。
 - 引入版本: v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 用于授权 Azure Data Lake Storage Gen2 请求的托管标识的 OAuth 2.0 令牌 endpoint。在 v3.5.19、v4.0.12 和 v4.1.2 之前，该配置项名为 `azure_adls2_oauth2_oauth2_client_endpoint`。旧名称仍作为别名保留。
+- 引入版本: v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - 默认值: 空字符串
