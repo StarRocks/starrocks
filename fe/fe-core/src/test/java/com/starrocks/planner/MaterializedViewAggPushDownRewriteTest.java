@@ -1373,4 +1373,95 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "mv_hourly_events");
     }
+
+    @Test
+    public void testAggPushDown_ValidMv_GroupByNotCovered() {
+        // MV only groups by LO_ORDERDATE; query needs (LO_ORDERDATE, LO_LINENUMBER).
+        // MV group-by is too coarse → must be pruned.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, l.LO_LINENUMBER, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "group by l.LO_ORDERDATE, l.LO_LINENUMBER";
+            sql(query).nonMatch("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_GroupByCovered() {
+        // MV groups by (LO_ORDERDATE, LO_LINENUMBER); query only needs LO_ORDERDATE (rollup).
+        // MV group-by is a superset → should be used.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, LO_LINENUMBER, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE, LO_LINENUMBER";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "group by l.LO_ORDERDATE";
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_WhereColNotInGroupBy() {
+        // MV groups by LO_ORDERDATE only; query has WHERE LO_LINENUMBER > 3.
+        // LO_LINENUMBER is aggregated away in MV → cannot apply the filter → must be pruned.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "where l.LO_LINENUMBER > 3 " +
+                    "group by l.LO_ORDERDATE";
+            sql(query).nonMatch("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_WhereColInGroupBy() {
+        // MV groups by (LO_ORDERDATE, LO_LINENUMBER); query has WHERE LO_LINENUMBER > 3.
+        // LO_LINENUMBER is in MV group-by → filter can be applied → should be used.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, LO_LINENUMBER, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE, LO_LINENUMBER";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "where l.LO_LINENUMBER > 3 " +
+                    "group by l.LO_ORDERDATE,concat(d.d_datekey,'a')";
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_QueryJoinOnPredicateCovered() {
+        // MV has WHERE lo_linenumber = 1 (predicate columns: {lo_linenumber}).
+        // Query has JOIN ON ... AND l.lo_linenumber = 1 (predicate columns: {lo_linenumber}).
+        // Query predicate columns ⊇ MV predicate columns → MV is valid and should be used.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select lo_orderdate, lo_linenumber, lo_custkey, sum(lo_revenue) as revenue_sum " +
+                "from lineorder where lo_linenumber = 1 " +
+                "group by lo_orderdate, lo_linenumber, lo_custkey";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on l.lo_orderdate = d.d_datekey " +
+                    "and l.lo_linenumber = 1 " +
+                    "group by l.lo_orderdate";
+            // FixMe: expect a MATCH, but currently, the materialized view rewrite system can't match join predicate
+            // to mv predicate even when there is no mv prune happens
+             sql(query).nonMatch("mv0");
+        });
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on concat(l.lo_orderdate,'a') = concat(d.d_datekey,'b') " +
+                    "and concat(l.lo_linenumber,'1') = concat(1,'2',3) " +
+                    "group by l.lo_orderdate";
+            // FixMe: expect a MATCH, but currently, the materialized view rewrite system can't match join predicate
+            // to mv predicate even when there is no mv prune happens
+            sql(query).nonMatch("mv0");
+        });
+    }
 }
