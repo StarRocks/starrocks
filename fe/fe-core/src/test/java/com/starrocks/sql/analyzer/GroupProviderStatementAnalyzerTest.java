@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.ExtensionGroupProviderFactory;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
@@ -32,6 +33,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.mockito.Mockito.when;
 
@@ -262,6 +264,38 @@ public class GroupProviderStatementAnalyzerTest {
     }
 
     /**
+     * Test case: Analyze Create Group Provider with valid extension type
+     * Test point: Should pass analysis when the factory named by the definition is deployed
+     */
+    @Test
+    public void testAnalyzeCreateGroupProviderValidExtensionType() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "extension");
+        properties.put("provider_factory_class", AnalyzableFactory.class.getName());
+        CreateGroupProviderStmt stmt = new CreateGroupProviderStmt(TEST_PROVIDER_NAME, properties, false, NodePosition.ZERO);
+
+        // Should not throw exception
+        GroupProviderStatementAnalyzer.analyze(stmt, ctx);
+    }
+
+    /**
+     * Test case: Analyze Create Group Provider of extension type without the factory class
+     * Test point: Should throw SemanticException naming the missing property
+     */
+    @Test
+    public void testAnalyzeCreateGroupProviderExtensionWithoutFactoryClass() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "extension");
+        CreateGroupProviderStmt stmt = new CreateGroupProviderStmt(TEST_PROVIDER_NAME, properties, false, NodePosition.ZERO);
+
+        SemanticException exception = Assertions.assertThrows(SemanticException.class,
+                () -> GroupProviderStatementAnalyzer.analyze(stmt, ctx));
+
+        Assertions.assertTrue(exception.getMessage().contains("provider_factory_class"),
+                exception.getMessage());
+    }
+
+    /**
      * Test case: Test analysis with null context
      * Test point: Should handle null context gracefully
      */
@@ -313,6 +347,28 @@ public class GroupProviderStatementAnalyzerTest {
             authenticationMgr.dropGroupProviderStatement(dropStmt, ctx);
         } catch (Exception e) {
             // Ignore cleanup errors
+        }
+    }
+
+    /**
+     * Minimal factory standing in for a deployed extension, so that analysis of a valid
+     * {@code extension} definition can reach the delegate's own property validation. The returned
+     * provider is an anonymous subclass and must not be serialised, so subtypes of
+     * {@link GroupProvider} have to be registered in the gson runtime type adapter.
+     */
+    public static class AnalyzableFactory implements ExtensionGroupProviderFactory {
+        @Override
+        public GroupProvider create(String name, Map<String, String> properties) {
+            return new GroupProvider(name, properties) {
+                @Override
+                public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
+                    return Set.of("analyzable_group");
+                }
+
+                @Override
+                public void checkProperty() {
+                }
+            };
         }
     }
 }
