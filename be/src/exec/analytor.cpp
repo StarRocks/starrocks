@@ -199,6 +199,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
+    _window_result_ready_function_index.clear();
 
     // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
     // index, so _fns must be filled before any error return below can leave prepare half-done.
@@ -306,11 +307,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
-                // `lag ... IGNORE NULLS` only looks backward, so it can run in streaming mode instead of
-                // materializing the whole partition.
-                // `lead ... IGNORE NULLS` and `first_value`/`last_value` IGNORE NULLS still require the full materialized data.
-                const bool is_lag_ignore_nulls = (fname == "lag");
-                if (!(is_lag_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
+                // `lag`/`lead ... IGNORE NULLS` can stream: lag only looks backward; lead waits for
+                // enough future non-nulls (see `is_window_result_ready`) then evicts finished prefixes.
+                // `first_value`/`last_value` IGNORE NULLS still materialize the whole partition.
+                const bool is_streamable_ignore_nulls = (fname == "lag" || fname == "lead");
+                if (!(is_streamable_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
                     _need_partition_materializing = true;
                 }
             }
@@ -346,6 +347,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
         DCHECK(_agg_functions[i] != nullptr);
         _is_lead_lag_functions[i] = (_agg_functions[i]->get_name() == "lead-lag");
+        // Ask once which functions can defer a row, so the per-row streaming loop does not
+        // virtual-dispatch into every other window function.
+        if (_agg_functions[i]->needs_window_result_ready_check()) {
+            _window_result_ready_function_index.emplace_back(i);
+        }
     }
 
     // Compute agg state total size and offsets.
@@ -1101,6 +1107,15 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
                 return Status::OK();
             }
 
+            // Data-dependent wait (e.g. `lead ... IGNORE NULLS`): the physical N FOLLOWING frame may
+            // already be buffered, but a function can still need more non-nulls ahead. Check every
+            // function before mutating any state; if one is not ready, leave `_current_row_position`
+            // unchanged so the next chunk resumes this row.
+            if (_has_window_result_ready_check() &&
+                !_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end)) {
+                return Status::OK();
+            }
+
             // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
             // extra update is needed for the first row.
             if (is_n_following_frame && _current_row_position == _partition.start) {
@@ -1394,6 +1409,20 @@ void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* stat
         _get_window_function_result(start, end);
         _update_current_row_position(end - start);
     }
+}
+
+bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                         int64_t frame_end) const {
+    for (size_t i : _window_result_ready_function_index) {
+        // These functions are always lead/lag, so the frame is not clipped to the partition.
+        if (!_agg_functions[i]->is_window_result_ready(_agg_fn_ctxs[i],
+                                                       _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i],
+                                                       _agg_intput_columns[i], partition_start, available_end,
+                                                       frame_start, frame_end, _partition.is_real)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
