@@ -946,8 +946,9 @@ public class ColumnTypeConverter {
         return TypeFactory.createType(primitiveType);
     }
 
-    private static ArrayType convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(fromIcebergType(icebergType.asNestedType().asListType().elementType()));
+    private static Type convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        Type elementType = fromIcebergType(icebergType.asNestedType().asListType().elementType());
+        return elementType.isUnknown() ? UnknownType.UNKNOWN_TYPE : new ArrayType(elementType);
     }
 
     private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {

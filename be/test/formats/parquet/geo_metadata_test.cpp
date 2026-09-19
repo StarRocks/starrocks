@@ -20,6 +20,12 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/geo_column.h"
+#include "column/mysql_row_buffer.h"
+#include "column/sorting/sort_permute.h"
+#include "common/object_pool.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
+#include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/meta_helper.h"
@@ -27,6 +33,7 @@
 #include "fs/fs.h"
 #include "io/string_input_stream.h"
 #include "runtime/current_thread.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
 
@@ -859,6 +866,194 @@ TEST(GeoMetadataTest, AnnotatedAndUnannotatedWkbKeepExistingBinaryReads) {
         EXPECT_EQ(expected, chunk->get_column_by_index(0)->get(0).get_slice().to_string());
         EXPECT_EQ(0, stats.statistics_tried_counter);
         EXPECT_EQ(0, stats.bloom_filter_tried_counter);
+    }
+}
+TEST(GeoMetadataTest, NativeGeographyPermutationPreservesPayloadAndDescriptor) {
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    auto input = ColumnHelper::create_column(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic), true);
+    auto* nullable = down_cast<NullableColumn*>(input.get());
+    auto* geo = down_cast<GeoColumn*>(nullable->data_column_raw_ptr());
+    geo->append_wkb(Slice("first"));
+    geo->append_default();
+    geo->append_wkb(Slice("last"));
+    nullable->null_column_data() = {0, 1, 0};
+    nullable->set_has_null(true);
+    auto output = input->clone_empty();
+    SmallPermutation single{{2}, {1}, {0}};
+    materialize_column_by_permutation_single(output.get(), input.get(), single);
+    ASSERT_EQ(3, output->size());
+    EXPECT_TRUE(output->is_null(1));
+    const auto* result =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(output.get())->data_column_raw_ptr());
+    EXPECT_EQ(geo->descriptor(), result->descriptor());
+    EXPECT_EQ("last", result->get_wkb(0).to_string());
+    EXPECT_EQ("first", result->get_wkb(2).to_string());
+    auto second = input->clone();
+    output->reset_column();
+    Permutation multiple{{0, 2}, {1, 0}, {0, 1}};
+    materialize_column_by_permutation(output.get(), {input.get(), second.get()}, multiple);
+    ASSERT_EQ(3, output->size());
+    EXPECT_TRUE(output->is_null(2));
+    result = down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(output.get())->data_column_raw_ptr());
+    EXPECT_EQ(geo->descriptor(), result->descriptor());
+    EXPECT_EQ("last", result->get_wkb(0).to_string());
+    EXPECT_EQ("first", result->get_wkb(1).to_string());
+}
+
+TEST(GeoMetadataTest, NativeGeographyScanDoesNotBuildValueRanges) {
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    TSlotDescriptor slot;
+    slot.__set_id(1);
+    slot.__set_parent(0);
+    slot.__set_colName("shape");
+    slot.__set_slotType(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic).to_thrift());
+    slot.__set_isMaterialized(true);
+    slot.__set_isNullable(true);
+    TTupleDescriptor tuple;
+    tuple.__set_id(0);
+    TDescriptorTable thrift;
+    thrift.__set_tupleDescriptors({tuple});
+    thrift.__set_slotDescriptors({slot});
+    ObjectPool pool;
+    DescriptorTbl* descriptors = nullptr;
+    ASSERT_TRUE(DescriptorTbl::create(nullptr, &pool, thrift, &descriptors, 1024).ok());
+    std::vector<ExprContext*> conjuncts;
+    ScanConjunctsManagerOptions options;
+    options.conjunct_ctxs_ptr = &conjuncts;
+    options.tuple_desc = descriptors->get_tuple_descriptor(0);
+    options.obj_pool = &pool;
+    options.is_olap_scan = false;
+    ScanConjunctsManager manager(options);
+    EXPECT_TRUE(manager.parse_conjuncts().ok());
+}
+
+TEST(GeoMetadataTest, NativeGeographyRequiresCompatibleIcebergMetadata) {
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
+    TIcebergSchema lake;
+    lake.__set_fields({lake_geo()});
+    const auto elements = schema_of(geo_element());
+    EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).ok());
+    EXPECT_TRUE(validate_scan(elements, nullptr, {{0, &slot, true}}, true).is_not_supported());
+    lake.fields[0].__isset.geo_metadata = false;
+    EXPECT_TRUE(validate_scan(elements, &lake, {{0, &slot, true}}, true).is_not_supported());
+    lake.fields[0] = lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR");
+    EXPECT_FALSE(validate_scan(elements, &lake, {{0, &slot, true}}, true).ok());
+    lake.fields[0] = lake_geo();
+    lake.fields[0].geo_metadata.crs = "EPSG:3857";
+    EXPECT_FALSE(validate_scan(elements, &lake, {{0, &slot, true}}, true).ok());
+}
+
+TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic);
+    ParquetField field;
+    field.physical_type = tparquet::Type::BYTE_ARRAY;
+    field.schema_element = geo_element();
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_TRUE(ColumnConverterFactory::create_converter(field, type, "UTC", &converter).ok());
+    auto source = converter->create_src_column();
+    auto target = ColumnHelper::create_column(type, true);
+    for (size_t null_count : {size_t{0}, size_t{1}, size_t{5}, size_t{0}}) {
+        source->reset_column();
+        source->append_nulls(null_count);
+        source->append_datum(Datum(Slice("opaque source WKB")));
+        ASSERT_TRUE(converter->convert(source.get(), target.get()).ok());
+        source->reset_column();
+        ASSERT_EQ(null_count + 1, target->size());
+        for (size_t row = 0; row < null_count; ++row) EXPECT_TRUE(target->is_null(row));
+        EXPECT_FALSE(target->is_null(null_count));
+        const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(target.get()));
+        EXPECT_EQ(semantic, geo->descriptor().type);
+        EXPECT_EQ("opaque source WKB", geo->get_wkb(null_count).to_string());
+        EXPECT_FALSE(geo->has_wkb_cache());
+    }
+    source->append_nulls(3);
+    ASSERT_TRUE(converter->convert(source.get(), target.get()).ok());
+    ASSERT_EQ(3, target->size());
+    for (size_t row = 0; row < target->size(); ++row) EXPECT_TRUE(target->is_null(row));
+    source->reset_column();
+    ASSERT_TRUE(converter->convert(source.get(), target.get()).ok());
+    EXPECT_EQ(0, target->size());
+
+    auto required_target = ColumnHelper::create_column(type, false);
+    source->append_datum(Datum(Slice("required WKB")));
+    ASSERT_TRUE(converter->convert(source.get(), required_target.get()).ok());
+    ASSERT_EQ(1, required_target->size());
+    EXPECT_EQ("required WKB", down_cast<const GeoColumn*>(required_target.get())->get_wkb(0).to_string());
+    source->append_nulls(1);
+    EXPECT_TRUE(converter->convert(source.get(), required_target.get()).is_invalid_argument());
+}
+
+TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {
+    MemTracker tracker{-1, "native_geography_scan"};
+    CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
+    DeferOp reset_tracker_source([] { CurrentThread::set_mem_tracker_source(nullptr, nullptr); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic);
+    for (bool dictionary : {false, true}) {
+        for (bool annotated : {false, true}) {
+            auto bytes = geo_file(true, dictionary, annotated);
+            const auto size = bytes.size();
+            RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(bytes)), "native-geo.parquet");
+            FormatScannerStats stats;
+            FormatScanContext context;
+            context.stats = &stats;
+            context.timezone = "UTC";
+            std::atomic<int32_t> lazy_coalesce_counter{0};
+            context.lazy_column_coalesce_counter = &lazy_coalesce_counter;
+            PredicateTree predicates;
+            context.predicate_tree = &predicates;
+            TIcebergSchema lake;
+            lake.__set_fields({lake_geo()});
+            context.lake_schema = &lake;
+            TSlotDescriptor output_slot;
+            output_slot.__set_id(1);
+            output_slot.__set_colName("shape");
+            output_slot.__set_slotType(type.to_thrift());
+            output_slot.__set_col_unique_id(-1);
+            output_slot.__set_isMaterialized(true);
+            output_slot.__set_isOutputColumn(true);
+            output_slot.__set_isNullable(true);
+            SlotDescriptor shape(output_slot);
+            context.materialized_columns = {{0, &shape, true}};
+            FileReader reader(1024, &file, size);
+            ASSERT_TRUE(reader.init(&context).ok());
+            auto chunk = std::make_shared<Chunk>();
+            chunk->append_column(ColumnHelper::create_column(type, true), 1);
+            ASSERT_TRUE(reader.get_next(&chunk).ok());
+            ASSERT_EQ(1, chunk->num_rows());
+            const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(chunk->columns()[0].get()));
+            EXPECT_EQ(semantic, geo->descriptor().type);
+            EXPECT_FALSE(geo->has_wkb_cache());
+            std::string expected(1, '\x01');
+            put_fixed32_le(&expected, 1);
+            expected.append(16, '\0');
+            EXPECT_EQ(expected, geo->get_wkb(0).to_string());
+            auto wire = serde::ProtobufChunkSerde::serialize(*chunk);
+            ASSERT_TRUE(wire.ok()) << wire.status();
+            serde::ProtobufChunkMeta meta;
+            meta.types = {type};
+            meta.is_nulls = {true};
+            meta.is_consts = {false};
+            meta.slot_id_to_index[1] = 0;
+            serde::ProtobufChunkDeserializer decoder(meta);
+            auto restored = decoder.deserialize(wire->data());
+            ASSERT_TRUE(restored.ok()) << restored.status();
+            MysqlRowBuffer row;
+            restored->columns()[0]->put_mysql_row_buffer(&row, 0);
+            std::string output;
+            row.move_content(&output);
+            EXPECT_EQ(std::string(1, static_cast<char>(expected.size())) + expected, output);
+            EXPECT_EQ(0, stats.statistics_tried_counter);
+            EXPECT_EQ(0, stats.bloom_filter_tried_counter);
+        }
     }
 }
 } // namespace starrocks::parquet
