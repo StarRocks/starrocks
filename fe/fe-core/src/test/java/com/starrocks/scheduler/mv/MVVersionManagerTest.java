@@ -20,8 +20,10 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
@@ -193,4 +195,129 @@ public class MVVersionManagerTest {
         Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
         Assertions.assertEquals(0, editLogCount.get());
     }
+<<<<<<< HEAD
+=======
+
+    // A base table can be processed by a run without any of its partitions being refreshed: the run is not
+    // skipped (isOlapTableRefreshed is set unconditionally), but the derived max is 0.
+    @Test
+    public void updateMVVersionInfoKeepsLastRefreshTimeWhenNoPartitionWasRefreshed() {
+        long absorbedRefreshTime = 1767225600000L;
+        MaterializedView mv = buildMv(1000L);
+        mv.getRefreshScheme().setLastRefreshTime(absorbedRefreshTime);
+
+        OlapTable baseTable = mock(OlapTable.class);
+        when(baseTable.isNativeTableOrMaterializedView()).thenReturn(true);
+        when(baseTable.isOlapOrCloudNativeTable()).thenReturn(true);
+        when(baseTable.getId()).thenReturn(2000L);
+        when(baseTable.getVisiblePartitionNames()).thenReturn(Set.of());
+        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), baseTable);
+        Assertions.assertTrue(snapshot.getRefreshedPartitionInfos().isEmpty());
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
+        manager.updateMVVersionInfo(Map.of(2000L, snapshot), PCellSortedSet.of(), Set.of(2000L),
+                Map.of(), null, Map.of(), true);
+
+        Assertions.assertEquals(absorbedRefreshTime, mv.getRefreshScheme().getLastRefreshTime(),
+                "a run that refreshed no partition must not report the MV as never refreshed");
+    }
+
+    @Test
+    public void confirmFreshnessRecordsTheModeTheRunExecuted() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv,
+                buildContext(null, statusWithProcessStartTime(2000L)), MaterializedView.RefreshMode.PCT);
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT,
+                mv.getRefreshScheme().getLastExecutedRefreshMode());
+    }
+
+    @Test
+    public void confirmFreshnessLeavesTheExecutedModeWhenTheRunExecutedNothing() {
+        MaterializedView mv = buildMv(1000L);
+        mv.getRefreshScheme().setLastExecutedRefreshMode(MaterializedView.RefreshMode.PCT);
+        MVVersionManager manager = new MVVersionManager(mv,
+                buildContext(null, statusWithProcessStartTime(2000L)), null);
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT,
+                mv.getRefreshScheme().getLastExecutedRefreshMode());
+    }
+
+    // PartitionUtil.getPartitionNames reaches a connector table's remote metadata, so it must not run under the
+    // mv write lock: that lock is contended by other refresh runs and DDLs, which tryLock with a bounded timeout.
+    @Test
+    public void collectExternalTablePartitionNamesResolvesOnlyExternalBaseTables() {
+        AtomicInteger resolveCount = new AtomicInteger();
+        mockGetPartitionNames(resolveCount);
+
+        MaterializedView mv = buildMv(1000L);
+        OlapTable olapBaseTable = mock(OlapTable.class);
+        when(olapBaseTable.isNativeTableOrMaterializedView()).thenReturn(true);
+        when(olapBaseTable.getId()).thenReturn(2000L);
+        Table externalBaseTable = mock(Table.class);
+        when(externalBaseTable.isNativeTableOrMaterializedView()).thenReturn(false);
+        when(externalBaseTable.getId()).thenReturn(3000L);
+
+        PCTTableSnapshotInfo olapSnapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), olapBaseTable);
+        PCTTableSnapshotInfo externalSnapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), externalBaseTable);
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
+        Map<PCTTableSnapshotInfo, List<String>> partitionNames = manager.collectExternalTablePartitionNames(
+                Map.of(2000L, olapSnapshot, 3000L, externalSnapshot), Set.of(2000L, 3000L));
+
+        Assertions.assertEquals(Set.of(externalSnapshot), partitionNames.keySet(),
+                "only external base tables need their partition names resolved from the connector");
+        Assertions.assertEquals(List.of("p1", "p2"), partitionNames.get(externalSnapshot));
+        Assertions.assertEquals(1, resolveCount.get());
+    }
+
+    @Test
+    public void updateMVVersionInfoPrunesExternalPartitionsWithoutCallingTheConnector() {
+        AtomicInteger resolveCount = new AtomicInteger();
+        mockGetPartitionNames(resolveCount);
+
+        MaterializedView mv = buildMv(1000L);
+        Table externalBaseTable = mock(Table.class);
+        when(externalBaseTable.isNativeTableOrMaterializedView()).thenReturn(false);
+        when(externalBaseTable.getId()).thenReturn(3000L);
+        BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(baseTableInfo, externalBaseTable);
+        snapshot.getRefreshedPartitionInfos().put("p1", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+
+        // p3 no longer exists in the base table, so the version map entry must be pruned.
+        Map<String, MaterializedView.BasePartitionInfo> versionMap = new HashMap<>();
+        versionMap.put("p3", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap()
+                .put(baseTableInfo, versionMap);
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
+        manager.updateMVVersionInfo(Map.of(3000L, snapshot), PCellSortedSet.of(), Set.of(3000L),
+                Map.of(), null, Map.of(snapshot, List.of("p1", "p2")), true);
+
+        Assertions.assertEquals(Set.of("p1"), mv.getRefreshScheme().getAsyncRefreshContext()
+                        .getBaseTableInfoVisibleVersionMap().get(baseTableInfo).keySet(),
+                "the refreshed partition must be kept and the dropped one pruned");
+        Assertions.assertEquals(0, resolveCount.get(),
+                "the partition names were resolved before the lock, so the critical section must not call the "
+                        + "connector again");
+    }
+
+    private static void mockGetPartitionNames(AtomicInteger resolveCount) {
+        new MockUp<PartitionUtil>() {
+            @Mock
+            public List<String> getPartitionNames(Table table) {
+                resolveCount.incrementAndGet();
+                return List.of("p1", "p2");
+            }
+        };
+    }
+>>>>>>> 30c74b31ce0 ([BugFix] Resolve external base table partition names before taking the MV lock (#61528))
 }
