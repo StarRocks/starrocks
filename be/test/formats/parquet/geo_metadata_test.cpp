@@ -895,6 +895,7 @@ TEST(GeoMetadataTest, NativeGeographyPermutationPreservesPayloadAndDescriptor) {
     materialize_column_by_permutation(output.get(), {input.get(), second.get()}, multiple);
     ASSERT_EQ(3, output->size());
     EXPECT_TRUE(output->is_null(2));
+    result = down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(output.get())->data_column_raw_ptr());
     EXPECT_EQ(geo->descriptor(), result->descriptor());
     EXPECT_EQ("last", result->get_wkb(0).to_string());
     EXPECT_EQ("first", result->get_wkb(1).to_string());
@@ -978,6 +979,14 @@ TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {
     source->reset_column();
     ASSERT_TRUE(converter->convert(source.get(), target.get()).ok());
     EXPECT_EQ(0, target->size());
+
+    auto required_target = ColumnHelper::create_column(type, false);
+    source->append_datum(Datum(Slice("required WKB")));
+    ASSERT_TRUE(converter->convert(source.get(), required_target.get()).ok());
+    ASSERT_EQ(1, required_target->size());
+    EXPECT_EQ("required WKB", down_cast<const GeoColumn*>(required_target.get())->get_wkb(0).to_string());
+    source->append_nulls(1);
+    EXPECT_TRUE(converter->convert(source.get(), required_target.get()).is_invalid_argument());
 }
 
 TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {

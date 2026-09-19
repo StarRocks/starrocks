@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
@@ -859,6 +860,10 @@ public class ColumnTypeConverter {
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
+        return fromIcebergType(icebergType, false);
+    }
+
+    public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType, boolean allowNativeGeography) {
         if (icebergType == null) {
             return NullType.NULL;
         }
@@ -934,8 +939,19 @@ public class ColumnTypeConverter {
                 return com.starrocks.type.DateType.TIME;
             case VARIANT:
                 return VariantType.VARIANT;
-            case FIXED:
             case GEOGRAPHY:
+                if (allowNativeGeography) {
+                    Types.GeographyType geography = (Types.GeographyType) icebergType;
+                    if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
+                            && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
+                        return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                                new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                                        GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                                        GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
+                    }
+                }
+                return UnknownType.UNKNOWN_TYPE;
+            case FIXED:
             case GEOMETRY:
                 // External geo metadata is transported separately by IcebergApiConverter.
                 // Recognition must not expose WKB as ordinary SQL binary values.
@@ -946,8 +962,9 @@ public class ColumnTypeConverter {
         return TypeFactory.createType(primitiveType);
     }
 
-    private static ArrayType convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(fromIcebergType(icebergType.asNestedType().asListType().elementType()));
+    private static Type convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        Type elementType = fromIcebergType(icebergType.asNestedType().asListType().elementType());
+        return elementType.isUnknown() ? UnknownType.UNKNOWN_TYPE : new ArrayType(elementType);
     }
 
     private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {

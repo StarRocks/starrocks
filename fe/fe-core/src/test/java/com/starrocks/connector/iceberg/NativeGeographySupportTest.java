@@ -14,13 +14,14 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
@@ -53,7 +54,7 @@ public class NativeGeographySupportTest {
 
     @Test
     public void testExecutionRestrictions() throws Exception {
-        var type = NativeGeographySupport.geographyType(Types.GeographyType.crs84());
+        var type = ColumnTypeConverter.fromIcebergType(Types.GeographyType.crs84(), true);
         var slot = new TSlotDescriptor().setIsMaterialized(true).setSlotType(TypeSerializer.toThrift(type));
         var descriptors = new TDescriptorTable().setSlotDescriptors(List.of(slot));
         var fragment = new PlanFragment(new PlanFragmentId(0), null, DataPartition.UNPARTITIONED);
@@ -61,14 +62,14 @@ public class NativeGeographySupportTest {
         JobSpec job = new JobSpec.Builder().descTable(descriptors).fragments(List.of(fragment))
                 .queryOptions(new TQueryOptions().setQuery_type(TQueryType.SELECT)).build();
         NativeGeographySupport.validateExecution(job, false);
-        Assertions.assertThrows(StarRocksException.class,
+        Assertions.assertThrows(SemanticException.class,
                 () -> NativeGeographySupport.validateExecution(job, true));
         for (TResultSinkType sink : TResultSinkType.values()) {
             if (sink == TResultSinkType.MYSQL_PROTOCAL) {
                 continue;
             }
             fragment.setSink(new ResultSink(new PlanNodeId(0), sink));
-            Assertions.assertThrows(StarRocksException.class,
+            Assertions.assertThrows(SemanticException.class,
                     () -> NativeGeographySupport.validateExecution(job, false));
         }
         // Unmaterialized GEO metadata must not block a query of ordinary columns.
@@ -80,9 +81,24 @@ public class NativeGeographySupportTest {
     public void testOnlyCanonicalGeographyIsExposed() {
         for (EdgeAlgorithm edge : EdgeAlgorithm.values()) {
             for (String crs : new String[] {"OGC:CRS84", "EPSG:4326", "srid:4326", "EPSG:3857"}) {
-                var type = NativeGeographySupport.geographyType(Types.GeographyType.of(crs, edge));
+                var type = ColumnTypeConverter.fromIcebergType(Types.GeographyType.of(crs, edge), true);
                 Assertions.assertEquals(!crs.equals("OGC:CRS84") || edge != EdgeAlgorithm.SPHERICAL, type.isUnknown());
             }
         }
+    }
+
+    @Test
+    public void testNestedGeographyRemainsUnsupported() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "array_geo",
+                        Types.ListType.ofOptional(2, Types.GeographyType.crs84())),
+                Types.NestedField.optional(3, "struct_geo", Types.StructType.of(
+                        Types.NestedField.optional(4, "shape", Types.GeographyType.crs84()))),
+                Types.NestedField.optional(5, "map_geo", Types.MapType.ofOptional(
+                        6, 7, Types.IntegerType.get(), Types.GeographyType.crs84())));
+        var columns = IcebergApiConverter.toFullSchemas(schema);
+        Assertions.assertTrue(columns.get(0).getType().isUnknown());
+        Assertions.assertTrue(columns.get(1).getType().isUnknown());
+        Assertions.assertTrue(columns.get(2).getType().isUnknown());
     }
 }

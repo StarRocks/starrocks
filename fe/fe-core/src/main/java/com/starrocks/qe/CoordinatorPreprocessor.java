@@ -23,7 +23,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.iceberg.NativeGeographySupport;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -226,8 +225,6 @@ public class CoordinatorPreprocessor {
     public void prepareExec() throws StarRocksException {
         resetExec();
         computeFragmentInstances();
-        NativeGeographySupport.validateExecution(jobSpec,
-                connectContext.getSessionVariable().isEnableSpill());
         traceInstance();
     }
 

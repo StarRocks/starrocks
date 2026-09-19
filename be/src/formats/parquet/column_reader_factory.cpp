@@ -528,10 +528,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         if (col_type.type == TYPE_GEOGRAPHY) {
             const GeoTypeDescriptor expected{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
                                              GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+            if (!lake_schema_field->__isset.geo_metadata) {
+                return Status::NotSupported("Native Iceberg GEOGRAPHY requires CRS84 spherical semantics: " +
+                                            field->name);
+            }
             const auto& geo = lake_schema_field->geo_metadata;
-            if (!lake_schema_field->__isset.geo_metadata || geo.kind != TIcebergGeoKind::GEOGRAPHY ||
-                geo.crs != expected.crs || geo.edge_algorithm != "SPHERICAL" || !col_type.geo_type ||
-                *col_type.geo_type != expected) {
+            if (geo.kind != TIcebergGeoKind::GEOGRAPHY || geo.crs != expected.crs ||
+                geo.edge_algorithm != "SPHERICAL" || !col_type.geo_type || *col_type.geo_type != expected) {
                 return Status::NotSupported("Native Iceberg GEOGRAPHY requires CRS84 spherical semantics: " +
                                             field->name);
             }
