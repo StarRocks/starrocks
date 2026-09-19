@@ -40,6 +40,8 @@ import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import org.slf4j.Logger;
@@ -123,6 +125,10 @@ public class Subquery extends Expr {
 
     @Override
     protected void toThrift(TExprNode msg) {
+        // A subquery has to be rewritten into a join/apply by the optimizer. Serializing it would produce a
+        // TExprNode without a node_type, which the BE rejects with an unhelpful thrift error.
+        throw new StarRocksPlannerException(
+                "Subquery needs to be rewritten before it can be sent to the backend.", ErrorType.INTERNAL_ERROR);
     }
 
     @Override
