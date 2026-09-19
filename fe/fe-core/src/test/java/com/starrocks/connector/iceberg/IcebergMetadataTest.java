@@ -177,6 +177,7 @@ import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
@@ -188,9 +189,13 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -1392,6 +1397,120 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(fileSize, dataFile.fileSizeInBytes());
         Assertions.assertEquals(4, dataFile.splitOffsets().get(0).longValue());
         Assertions.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
+    }
+
+    // End-to-end regression for the decimal manifest bound encoding bug: BE reports raw, fixed-width
+    // Parquet statistics (little-endian INT32/INT64 for decimal32/64, sign-extended 16-byte
+    // FIXED_LEN_BYTE_ARRAY for decimal128) exactly as it does in production; this drives them through the
+    // real commit path (IcebergMetadata.finishSink -> IcebergApiConverter.buildDataFileMetrics -> a real
+    // Iceberg append/commit) and reads the committed DataFile back from a real manifest via
+    // TableScan#includeColumnStats, so it fails the same way a strict REST catalog (e.g. Unity Catalog)
+    // would if the bounds were not minimally encoded per spec Appendix D.
+    @Test
+    public void testFinishSinkDecimalManifestBoundsAreSpecCompliant() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableDecimal, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // decimal(9,2) -> decimal32, physical type INT32
+        long d32Lower = -12345L;
+        long d32Upper = 123456L;
+        // decimal(18,5) -> decimal64, physical type INT64
+        long d64Lower = 150000L;
+        long d64Upper = 999999999999L;
+        // decimal(38,5) -> decimal128, physical type FIXED_LEN_BYTE_ARRAY(16); values match the
+        // 1.50000 / 2.50000 case from the reported Unity Catalog commit failure.
+        long d128Lower = 150000L;
+        long d128Upper = 250000L;
+
+        Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
+        Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+        lowerBounds.put(2, rawLittleEndianStat(d32Lower, 4));
+        upperBounds.put(2, rawLittleEndianStat(d32Upper, 4));
+        lowerBounds.put(3, rawLittleEndianStat(d64Lower, 8));
+        upperBounds.put(3, rawLittleEndianStat(d64Upper, 8));
+        lowerBounds.put(4, rawPaddedBigEndianStat(d128Lower, 16));
+        upperBounds.put(4, rawPaddedBigEndianStat(d128Upper, 16));
+
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setColumn_sizes(new HashMap<>());
+        columnStats.setValue_counts(new HashMap<>());
+        columnStats.setNull_value_counts(new HashMap<>());
+        columnStats.setLower_bounds(lowerBounds);
+        columnStats.setUpper_bounds(upperBounds);
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableDecimal.location() + "/data/decimal-bounds.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(2);
+        tIcebergDataFile.setFile_size_in_bytes(1000);
+        tIcebergDataFile.setColumn_stats(columnStats);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        mockedNativeTableDecimal.refresh();
+
+        TableScan scan = mockedNativeTableDecimal.newScan().includeColumnStats();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(scan.planFiles());
+        Assertions.assertEquals(1, fileScanTasks.size());
+        DataFile committed = fileScanTasks.get(0).file();
+
+        assertMinimalDecimalBound(committed.lowerBounds().get(2), 9, 2, d32Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(2), 9, 2, d32Upper);
+        assertMinimalDecimalBound(committed.lowerBounds().get(3), 18, 5, d64Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(3), 18, 5, d64Upper);
+        assertMinimalDecimalBound(committed.lowerBounds().get(4), 38, 5, d128Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(4), 38, 5, d128Upper);
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal32/decimal64: the raw
+    // native-endian (little-endian) fixed-width Parquet INT32/INT64 physical statistic.
+    private static ByteBuffer rawLittleEndianStat(long unscaledValue, int width) {
+        ByteBuffer buf = ByteBuffer.allocate(width).order(ByteOrder.LITTLE_ENDIAN);
+        if (width == 4) {
+            buf.putInt((int) unscaledValue);
+        } else {
+            buf.putLong(unscaledValue);
+        }
+        buf.flip();
+        return buf;
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal128: the raw, sign-extended,
+    // fixed-width big-endian Parquet FIXED_LEN_BYTE_ARRAY physical statistic.
+    private static ByteBuffer rawPaddedBigEndianStat(long unscaledValue, int width) {
+        byte[] minimal = BigInteger.valueOf(unscaledValue).toByteArray();
+        byte[] padded = new byte[width];
+        Arrays.fill(padded, (byte) (unscaledValue < 0 ? 0xFF : 0x00));
+        System.arraycopy(minimal, 0, padded, width - minimal.length, minimal.length);
+        return ByteBuffer.wrap(padded);
+    }
+
+    // Asserts a committed Iceberg manifest decimal bound follows spec Appendix D: the unscaled value as
+    // two's-complement big-endian binary using the minimum number of bytes, and decodes to the right value.
+    private static void assertMinimalDecimalBound(ByteBuffer bound, int precision, int scale, long expectedUnscaled) {
+        Assertions.assertNotNull(bound);
+        byte[] expectedMinimal = BigInteger.valueOf(expectedUnscaled).toByteArray();
+        byte[] actual = new byte[bound.remaining()];
+        bound.duplicate().get(actual);
+        Assertions.assertArrayEquals(expectedMinimal, actual,
+                "decimal(" + precision + "," + scale + ") bound must use the minimum number of bytes");
+        BigDecimal decoded = (BigDecimal) Conversions.fromByteBuffer(Types.DecimalType.of(precision, scale), bound);
+        Assertions.assertEquals(new BigDecimal(BigInteger.valueOf(expectedUnscaled), scale), decoded);
     }
 
     @Test
