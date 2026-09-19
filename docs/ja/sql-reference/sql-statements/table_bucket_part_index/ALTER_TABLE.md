@@ -460,7 +460,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意：
 
 1. 集計テーブルに値列を追加する場合、agg_type を指定する必要があります。
-2. 重複キーテーブルなどの非集計テーブルにキー列を追加する場合、KEY キーワードを指定する必要があります。
+2. 重複キーテーブルなどの非集計テーブルにキー列を追加する場合、KEY キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列はキー列として作成され、テーブルの集計キーが変わり、既存データが書き換えられます。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `false` に設定すると、このような文は拒否され、いずれかを指定するよう求められます。
 3. 基本インデックスに既に存在する列をロールアップインデックスに追加することはできません。（必要に応じてロールアップインデックスを再作成できます。）
 
 #### 指定されたインデックスに複数の列を追加する
@@ -491,7 +491,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
 
-2. 非集計テーブルにキー列を追加する場合、KEY キーワードを指定する必要があります。
+2. 非集計テーブルにキー列を追加する場合、KEY キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列はキー列として作成されます。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `false` に設定すると、このような文は拒否されます。
 
 3. 基本インデックスに既に存在する列をロールアップインデックスに追加することはできません。（必要に応じて別のロールアップインデックスを作成できます。）
 
@@ -1030,7 +1030,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 
