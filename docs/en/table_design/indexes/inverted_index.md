@@ -105,6 +105,9 @@ When a full-text inverted index column is enabled with tokenization (`parser` = 
 - `<col_name> (NOT) MATCH_ALL 'keyword1, keyword2'`
 
 Here, keyword must be a string literal; expressions are not supported.
+
+For a nullable indexed column, rows whose value is `NULL` are not returned by `NOT MATCH`, `NOT MATCH_ANY`, or `NOT MATCH_ALL`.
+
 1. Create a table and insert a few rows of test data.
 
       ```SQL
