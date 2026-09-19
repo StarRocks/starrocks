@@ -64,8 +64,12 @@
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
+<<<<<<< HEAD
         <zookeeper.version>3.8.6</zookeeper.version>
         <bouncycastle.version>1.84</bouncycastle.version>
+=======
+        <bouncycastle.version>1.85</bouncycastle.version>
+>>>>>>> 4a90c22 ([BugFix] Bump Apache Ranger to 2.9.0 and BouncyCastle to 1.85 (#79331))
         <thrift.version>0.24.0</thrift.version>
     </properties>
 
