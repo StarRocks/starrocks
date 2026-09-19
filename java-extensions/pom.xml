@@ -37,7 +37,7 @@
         <hadoop.version>3.4.3</hadoop.version>
         <zookeeper.version>3.8.6</zookeeper.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <log4j2.version>2.23.1</log4j2.version>
+        <log4j2.version>2.26.1</log4j2.version>
         <junit.version>5.10.3</junit.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
         <jni-connector.version>1.0.0</jni-connector.version>
