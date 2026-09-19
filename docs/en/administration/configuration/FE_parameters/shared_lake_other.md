@@ -856,6 +856,24 @@ This topic introduces the following types of FE configurations:
 - Description: The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
 - Introduced in: -
 
+### `authentication_failure_cache_capacity`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many rejected credentials `authentication_failure_cache_ttl_second` remembers at most. It bounds the memory a client - or an attacker cycling usernames - can occupy; the oldest entries are evicted first.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a credential rejected by the security integration chain is remembered, so that a client retrying the same wrong password does not produce one LDAP bind per attempt - which is what drives Active Directory's `badPwdCount` toward locking the account out. The cache key includes a hash of the credential, so correcting the password takes effect immediately instead of after the TTL, and a failure caused by the directory being unreachable is never cached. Set to `0` to disable.
+- Introduced in: v4.2, v4.1.6
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - Default: Empty string
@@ -891,6 +909,45 @@ This topic introduces the following types of FE configurations:
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Socket read timeout for the LDAP bind performed by `authentication_ldap_simple`. See `authentication_ldap_simple_conn_timeout_ms`.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: TCP connect timeout for the LDAP bind performed by `authentication_ldap_simple`. Without it the bind falls back to the operating system's TCP timeout, which can hold the thread serving the request - an HTTP worker or a Thrift handler, now that a security integration also authenticates those channels - for minutes when the directory is unreachable. Lower it if authentication has to fail fast.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_simple_group_source`
+
+- Default: group_provider
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for where the groups of an LDAP-authenticated user come from. Valid values: `group_provider` (only the configured group providers, the behavior of earlier versions), `memberof` (only the group membership attribute of the user's own LDAP entry), `both` (the union of the two). A security integration property of the same name overrides this value. An illegal value is treated as `group_provider` and logged at ERROR level, so that a typo cannot lock every LDAP user out.
+- Introduced in: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- Default: memberOf
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for the name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. `memberOf` fits Active Directory and OpenLDAP with the `memberof` overlay installed; Oracle Directory Server and 389 Directory Server use `isMemberOf`. A security integration property of the same name overrides this value.
+- Introduced in: v4.2
+
+>>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
 ### `authentication_ldap_simple_server_host`
 
 - Default: Empty string
