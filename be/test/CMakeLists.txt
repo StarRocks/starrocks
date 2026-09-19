@@ -346,6 +346,7 @@ SET(DW_TEST_FILES
     ./storage/publish_version_task_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
+    ./storage/rowset/alp_page_test.cpp
     ./storage/rowset/binary_dict_page_test.cpp
     ./storage/rowset/binary_plain_page_test.cpp
     ./storage/rowset/binary_prefix_page_test.cpp

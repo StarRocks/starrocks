@@ -858,6 +858,7 @@
         "max_row_source_mask_memory_bytes",
         "dictionary_encoding_ratio",
         "enable_binary_plain_delta_offset",
+        "enable_alp_float_encoding",
         "dictionary_page_size",
         "small_dictionary_page_size",
         "dictionary_encoding_ratio_for_non_string_column",

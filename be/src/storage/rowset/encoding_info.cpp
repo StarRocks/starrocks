@@ -40,6 +40,7 @@
 #include "common/config_rowset_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/alp_page.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/binary_prefix_page.h"
@@ -176,6 +177,19 @@ struct TypeEncodingTraits<type, FOR_ENCODING, CppType,
     }
 };
 
+template <LogicalType type, typename CppType>
+struct TypeEncodingTraits<type, ALP_ENCODING, CppType,
+                          typename std::enable_if<std::is_floating_point<CppType>::value>::type> {
+    static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
+        *builder = new AlpPageBuilder<type>(opts);
+        return Status::OK();
+    }
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new AlpPageDecoder<type>(data);
+        return Status::OK();
+    }
+};
+
 template <LogicalType type>
 struct TypeEncodingTraits<type, PREFIX_ENCODING, Slice> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
@@ -209,6 +223,14 @@ public:
         if (enable_non_string_column_dict_encoding() && numeric_types_support_dict_encoding(delegate_type(type)) &&
             !optimize_value_seek) {
             return DICT_ENCODING;
+        }
+        // Write-side gate for the ALP float encoding: only newly written
+        // FLOAT/DOUBLE columns are affected, read side is always registered.
+        if (config::enable_alp_float_encoding && !optimize_value_seek) {
+            LogicalType dt = delegate_type(type);
+            if (dt == TYPE_FLOAT || dt == TYPE_DOUBLE) {
+                return ALP_ENCODING;
+            }
         }
         auto& encoding_map = optimize_value_seek ? _value_seek_encoding_map : _default_encoding_type_map;
         auto it = encoding_map.find(delegate_type(type));
@@ -274,9 +296,11 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     _add_map<TYPE_FLOAT, BIT_SHUFFLE>();
     _add_map<TYPE_FLOAT, PLAIN_ENCODING>();
+    _add_map<TYPE_FLOAT, ALP_ENCODING>();
 
     _add_map<TYPE_DOUBLE, BIT_SHUFFLE>();
     _add_map<TYPE_DOUBLE, PLAIN_ENCODING>();
+    _add_map<TYPE_DOUBLE, ALP_ENCODING>();
 
     _add_map<TYPE_CHAR, DICT_ENCODING>();
     _add_map<TYPE_CHAR, PLAIN_ENCODING>();
