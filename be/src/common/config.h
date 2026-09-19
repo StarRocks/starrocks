@@ -643,6 +643,17 @@ CONF_mInt32(periodic_counter_update_period_ms, "500");
 
 CONF_Int32(arrow_flight_port, "-1");
 
+// Enable TLS for Arrow Flight SQL server on BE.
+CONF_Bool(arrow_flight_ssl_enable, "false");
+// Server certificate (PEM) used by Arrow Flight SQL TLS.
+CONF_String(arrow_flight_ssl_cert_file, "");
+// Server private key (PEM) used by Arrow Flight SQL TLS.
+CONF_String(arrow_flight_ssl_key_file, "");
+// CA certificate bundle (PEM) used to verify client certs in mTLS mode.
+CONF_String(arrow_flight_ssl_ca_cert_file, "");
+// Require client certificates (mTLS) for Arrow Flight SQL server.
+CONF_Bool(arrow_flight_ssl_require_client_auth, "false");
+
 // Used for mini Load. mini load data file will be removed after this time.
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
