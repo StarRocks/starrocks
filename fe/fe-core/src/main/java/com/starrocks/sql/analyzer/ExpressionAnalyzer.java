@@ -780,7 +780,8 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitArithmeticExpr(ArithmeticExpr node, Scope scope) {
-            Function arithmeticFunction = getArithmeticFunction(node);
+            Function arithmeticFunction =
+                    getArithmeticFunction(node, session == null ? null : session.getSessionVariable());
             node.setType(arithmeticFunction.getReturnType());
             return null;
         }
@@ -2079,6 +2080,33 @@ public class ExpressionAnalyzer {
     }
 
     public static Function getArithmeticFunction(ArithmeticExpr node) {
+        // Some translation paths do not carry the session. In those paths, preserve the integer-division
+        // decision already recorded by the analyzer in the expression's result type. Native DIV is represented
+        // by INT_DIVIDE, so a DIVIDE node with integer operands and an integer result is an analyzed dialect `/`.
+        return getArithmeticFunction(node, isAnalyzedIntegerDivision(node));
+    }
+
+    private static Function getArithmeticFunction(ArithmeticExpr node, SessionVariable sessionVariable) {
+        boolean useTrinoIntegerDivision = sessionVariable != null &&
+                sessionVariable.getSqlDialect().equalsIgnoreCase("trino") &&
+                node.getOp() == ArithmeticExpr.Operator.DIVIDE &&
+                isIntegerOrNull(node.getChild(0).getType()) &&
+                isIntegerOrNull(node.getChild(1).getType());
+        return getArithmeticFunction(node, useTrinoIntegerDivision);
+    }
+
+    private static boolean isAnalyzedIntegerDivision(ArithmeticExpr node) {
+        return node.getOp() == ArithmeticExpr.Operator.DIVIDE &&
+                node.getType().isIntegerType() &&
+                isIntegerOrNull(node.getChild(0).getType()) &&
+                isIntegerOrNull(node.getChild(1).getType());
+    }
+
+    private static boolean isIntegerOrNull(Type type) {
+        return type.isIntegerType() || type.isNull();
+    }
+
+    private static Function getArithmeticFunction(ArithmeticExpr node, boolean useIntegerDivision) {
         if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.BINARY_INFIX) {
             ArithmeticExpr.Operator op = node.getOp();
             Type t1 = getNumResultType(node.getChild(0).getType());
@@ -2113,7 +2141,9 @@ public class ExpressionAnalyzer {
                     break;
                 case DIVIDE:
                     lhsType = getArithmeticExprCommonType(t1, t2);
-                    if (lhsType.isFixedPointType()) {
+                    if (useIntegerDivision && lhsType.isIntegerType()) {
+                        op = ArithmeticExpr.Operator.INT_DIVIDE;
+                    } else if (lhsType.isFixedPointType()) {
                         lhsType = FloatType.DOUBLE;
                     }
                     rhsType = lhsType;
