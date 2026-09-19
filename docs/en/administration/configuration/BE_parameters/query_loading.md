@@ -415,6 +415,15 @@ This topic introduces the following types of BE configurations:
 - Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
 
+### json_max_parse_nesting_depth
+
+- Default: 1000
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The maximum object/array nesting depth accepted when parsing JSON (for example `parse_json`, `CAST AS JSON`, and JSON column ingestion). The parser recurses once per nesting level, so an unbounded depth allows a deeply nested document to overflow the thread stack and crash the BE. Input nested deeper than this value fails with a data quality error instead. A positive value sets the cap; a value of `0` or below keeps the built-in default (1000) rather than disabling the check.
+- Introduced in: v4.2.0
+
 ### lake_tablet_ignore_invalid_delete_predicate
 
 - Default: false
