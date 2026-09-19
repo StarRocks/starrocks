@@ -1,0 +1,127 @@
+-- name: test_ngram_bloom_filter_not_like_absent
+CREATE TABLE indexed_strings (
+    id INT NOT NULL,
+    content VARCHAR(100),
+    INDEX idx_content(content) USING NGRAMBF ("gram_num"="4", "case_sensitive"="true", "bloom_filter_fpp"="0.01")
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+CREATE TABLE plain_strings (id INT NOT NULL, content VARCHAR(100))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+INSERT INTO indexed_strings VALUES
+    (1, 'alpha'), (2, 'bravo'), (3, 'charlie'), (4, 'delta'), (5, 'echo'),
+    (6, 'foxtrot'), (7, 'golf'), (8, 'hotel'), (9, ''), (10, NULL);
+INSERT INTO plain_strings SELECT * FROM indexed_strings;
+
+-- A page without either target gram must be retained for NOT LIKE.
+SELECT count(*) FROM indexed_strings WHERE content NOT LIKE '%30:30%';
+SELECT count(*) FROM plain_strings WHERE content NOT LIKE '%30:30%';
+SELECT id FROM indexed_strings WHERE content NOT LIKE '%30:30%' ORDER BY id;
+SELECT count(*) FROM indexed_strings WHERE content LIKE '%30:30%';
+SELECT sum(content NOT LIKE '%30:30%') FROM indexed_strings;
+
+-- Short patterns and wildcard-only patterns do not provide usable grams.
+SELECT count(*) FROM indexed_strings WHERE content NOT LIKE '%a%';
+SELECT count(*) FROM indexed_strings WHERE content NOT LIKE '%';
+SELECT count(*) FROM indexed_strings WHERE content NOT LIKE '';
+SELECT count(*) FROM indexed_strings WHERE content NOT LIKE NULL;
+SELECT count(*) FROM indexed_strings WHERE NOT (NOT (content NOT LIKE '%30:30%'));
+
+CREATE TABLE null_strings LIKE indexed_strings;
+INSERT INTO null_strings VALUES (1, NULL), (2, NULL);
+SELECT count(*) FROM null_strings WHERE content NOT LIKE '%30:30%';
+SELECT count(*) FROM null_strings WHERE content LIKE '%30:30%';
+SELECT count(*) FROM null_strings WHERE content IS NULL;
+
+-- name: test_ngram_bloom_filter_not_like_mixed
+CREATE TABLE mixed_strings (
+    id INT NOT NULL,
+    content VARCHAR(100),
+    INDEX idx_content(content) USING NGRAMBF ("gram_num"="4", "case_sensitive"="true", "bloom_filter_fpp"="0.01")
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+CREATE TABLE plain_strings (id INT NOT NULL, content VARCHAR(100))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+INSERT INTO mixed_strings VALUES
+    (1, 'alpha'), (2, 'prefix30:30suffix'), (3, '30:30'), (4, ''), (5, NULL),
+    (6, 'a_b'), (7, 'a%b'), (8, 'ABCD'), (9, 'abcd'), (10, '中文测试'),
+    (11, '其他内容'), (12, 'tag_30:30'), (13, 'tagX30:30'), (14, 'tag%30:30');
+INSERT INTO plain_strings SELECT * FROM mixed_strings;
+
+-- A bloom-filter hit cannot prove that every row matches LIKE.
+SELECT id FROM mixed_strings WHERE content NOT LIKE '%30:30%' ORDER BY id;
+SELECT id FROM plain_strings WHERE content NOT LIKE '%30:30%' ORDER BY id;
+SELECT count(*) FROM mixed_strings WHERE content LIKE '%30:30%';
+SELECT count(*) FROM mixed_strings WHERE content NOT LIKE '%tag\\_30:30%';
+SELECT count(*) FROM plain_strings WHERE content NOT LIKE '%tag\\_30:30%';
+SELECT count(*) FROM mixed_strings WHERE content NOT LIKE '%tag\\%30:30%';
+SELECT count(*) FROM plain_strings WHERE content NOT LIKE '%tag\\%30:30%';
+
+-- Exercise conjunctions, disjunctions, De Morgan rewrites and double negation.
+SELECT id FROM mixed_strings WHERE content NOT LIKE '%30:30%' AND content LIKE '%alpha%' ORDER BY id;
+SELECT count(*) FROM mixed_strings WHERE content NOT LIKE '%missing%' AND content LIKE '%30:30%';
+SELECT count(*) FROM mixed_strings WHERE content NOT LIKE '%30:30%' OR content LIKE '%30:30%';
+SELECT count(*) FROM mixed_strings WHERE content NOT LIKE '%missing%' OR content LIKE '%absent%';
+SELECT count(*) FROM mixed_strings WHERE NOT (content LIKE '%30:30%' OR content LIKE '%alpha%');
+SELECT count(*) FROM mixed_strings WHERE NOT (content LIKE '%30:30%' AND content LIKE '%prefix%');
+SELECT count(*) FROM mixed_strings WHERE NOT (content NOT LIKE '%30:30%');
+SELECT id FROM mixed_strings WHERE content NOT LIKE '%30:30%' OR content IS NULL ORDER BY id;
+
+CREATE TABLE matching_strings LIKE mixed_strings;
+INSERT INTO matching_strings VALUES (1, '30:30'), (2, 'prefix30:30suffix');
+SELECT count(*) FROM matching_strings WHERE content NOT LIKE '%30:30%';
+SELECT count(*) FROM matching_strings WHERE content LIKE '%30:30%';
+
+-- name: test_ngram_bloom_filter_not_like_case_insensitive
+CREATE TABLE insensitive_strings (
+    id INT NOT NULL,
+    content VARCHAR(100),
+    INDEX idx_content(content) USING NGRAMBF ("gram_num"="4", "case_sensitive"="false", "bloom_filter_fpp"="0.01")
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+CREATE TABLE plain_strings (id INT NOT NULL, content VARCHAR(100))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+INSERT INTO insensitive_strings VALUES
+    (1, 'ABCD'), (2, 'abcd'), (3, 'xABCDy'), (4, 'other'), (5, NULL),
+    (6, '中文测试'), (7, '前缀中文测试后缀'), (8, '其他内容'), (9, '');
+INSERT INTO plain_strings SELECT * FROM insensitive_strings;
+
+-- Index case folding must not change the case-sensitive LIKE semantics.
+SELECT id FROM insensitive_strings WHERE content NOT LIKE '%ABCD%' ORDER BY id;
+SELECT id FROM plain_strings WHERE content NOT LIKE '%ABCD%' ORDER BY id;
+SELECT count(*) FROM insensitive_strings WHERE content LIKE '%ABCD%';
+SELECT count(*) FROM insensitive_strings WHERE content NOT LIKE '%abcd%';
+SELECT count(*) FROM insensitive_strings WHERE content NOT LIKE '%MISSING%';
+SELECT count(*) FROM plain_strings WHERE content NOT LIKE '%MISSING%';
+SELECT id FROM insensitive_strings WHERE content NOT LIKE '%中文测试%' ORDER BY id;
+SELECT id FROM plain_strings WHERE content NOT LIKE '%中文测试%' ORDER BY id;
+SELECT count(*) FROM insensitive_strings WHERE content NOT LIKE '%完全不存在%';
+SELECT count(*) FROM plain_strings WHERE content NOT LIKE '%完全不存在%';
+
+-- name: test_ngram_bloom_filter_not_like_multiple_pages
+CREATE TABLE indexed_pages (
+    id INT NOT NULL,
+    content VARCHAR(512),
+    INDEX idx_content(content) USING NGRAMBF ("gram_num"="4", "case_sensitive"="true", "bloom_filter_fpp"="0.01")
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+CREATE TABLE plain_pages (id INT NOT NULL, content VARCHAR(512))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+
+-- 32K distinct values span data pages. The first half
+-- contains no matching gram; the second half contains the target substring.
+INSERT INTO indexed_pages
+SELECT generate_series,
+       concat(lpad(cast(generate_series AS VARCHAR), 10, '0'), repeat('x', 240),
+              if(generate_series < 16384, 'alpha', '30:30'))
+FROM TABLE(generate_series(0, 32767));
+INSERT INTO plain_pages SELECT * FROM indexed_pages;
+SELECT count(*), sum(id) FROM indexed_pages WHERE content NOT LIKE '%30:30%';
+SELECT count(*), sum(id) FROM plain_pages WHERE content NOT LIKE '%30:30%';
+SELECT count(*), sum(id) FROM indexed_pages WHERE content LIKE '%30:30%';
+SELECT count(*), sum(id) FROM plain_pages WHERE content LIKE '%30:30%';
+SELECT count(*) FROM indexed_pages WHERE content NOT LIKE '%missing%';
+SELECT count(*) FROM plain_pages WHERE content NOT LIKE '%missing%';
+
+-- A later load adds a separate rowset with no matching gram.
+INSERT INTO indexed_pages VALUES (32768, 'tail-no-match');
+INSERT INTO plain_pages VALUES (32768, 'tail-no-match');
+SELECT count(*), sum(id) FROM indexed_pages WHERE content NOT LIKE '%30:30%';
+SELECT count(*), sum(id) FROM plain_pages WHERE content NOT LIKE '%30:30%';
+SELECT count(*) FROM indexed_pages WHERE id >= 16384 AND content NOT LIKE '%30:30%';
+SELECT count(*) FROM plain_pages WHERE id >= 16384 AND content NOT LIKE '%30:30%';
