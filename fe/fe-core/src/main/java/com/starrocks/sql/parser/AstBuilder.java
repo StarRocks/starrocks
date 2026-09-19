@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -5352,6 +5353,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         return new AddColumnsClause(columnDefs, rollupName, getCaseSensitiveProperties(context.properties()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterTableDictColumnsClause(
+            com.starrocks.sql.parser.StarRocksParser.AlterTableDictColumnsClauseContext context) {
+        boolean enable = context.ENABLE() != null;
+        java.util.List<String> columns = new java.util.ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext id : context.identifier()) {
+            columns.add(getIdentifierName(id));
+        }
+        return new AlterTableDictColumnsClause(enable, columns, createPos(context));
     }
 
     @Override
