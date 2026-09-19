@@ -354,10 +354,10 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
                 }
             }
             status = chunk_changer->append_generated_columns(read_chunk, new_chunk, all_ref_columns_ids,
-                                                             base_tablet_schema->num_columns());
+                                                             new_columns_ids);
             if (!status.ok()) {
-                LOG(WARNING) << "failed to append generated columns";
-                return Status::InternalError("failed to append generated columns");
+                LOG(WARNING) << "failed to append generated columns: " << status.to_string();
+                return Status::InternalError("failed to append generated columns: " + std::string(status.message()));
             }
         }
 
