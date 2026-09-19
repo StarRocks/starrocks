@@ -33,6 +33,7 @@ class LocationProvider;
 class ReplicationTxnManager;
 class TabletManager;
 class UpdateManager;
+class CompactionResultManager;
 } // namespace lake
 
 namespace spill {
@@ -80,6 +81,9 @@ public:
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager.get(); }
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager.get(); }
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager.get(); }
+    lake::CompactionResultManager* lake_compaction_result_manager() const {
+        return _lake_compaction_result_manager.get();
+    }
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() const { return _parallel_compact_mgr.get(); }
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr; }
     void set_spill_dir_mgr(spill::DirManager* spill_dir_mgr) { _spill_dir_mgr = spill_dir_mgr; }
@@ -93,6 +97,8 @@ private:
     std::unique_ptr<lake::UpdateManager> _lake_update_manager;
     std::unique_ptr<lake::TabletManager> _lake_tablet_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _lake_replication_txn_manager;
+    // Local store of autonomous-compaction results, drained by COLLECT_AND_PUBLISH.
+    std::unique_ptr<lake::CompactionResultManager> _lake_compaction_result_manager;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
     spill::DirManager* _spill_dir_mgr = nullptr;
     LoadSpillBlockMergeExecutor* _load_spill_block_merge_executor = nullptr;
