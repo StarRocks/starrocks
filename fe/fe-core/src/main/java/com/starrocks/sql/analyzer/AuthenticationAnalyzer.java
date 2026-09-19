@@ -32,6 +32,14 @@ import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
+
+>>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
         new AuthenticationAnalyzerVisitor().analyze(statement, session);
@@ -56,6 +64,29 @@ public class AuthenticationAnalyzer {
         UserIdentity userIdent = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
         if (checkExist && !authenticationManager.doesUserExist(userIdent)) {
             throw new SemanticException("cannot find user " + userIdent + "!");
+        }
+    }
+
+    /**
+     * Refuse to create a second LDAP user whose name differs from an existing one only in case.
+     * Once {@code authentication_ldap_case_insensitive} is on, a login matches both of them and can
+     * only be refused, so the pair is worth stopping at the source. Checked regardless of host: two
+     * spellings of one directory account are not meant to be two StarRocks users, and their host
+     * patterns can overlap in ways that are not worth trying to decide here.
+     */
+    public static void checkNoLdapUserCaseCollision(UserRef user, UserAuthOption authOption) {
+        if (!Config.authentication_ldap_case_insensitive || authOption == null
+                || !AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.toString().equalsIgnoreCase(authOption.getAuthPlugin())) {
+            return;
+        }
+        List<UserIdentity> colliding = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                .getLdapUsersCollidingByCase(user.getUser());
+        if (!colliding.isEmpty()) {
+            throw new SemanticException("cannot create user '" + user.getUser()
+                    + "': it differs only in case from the existing LDAP user(s) "
+                    + colliding.stream().map(UserIdentity::toString).collect(Collectors.joining(", "))
+                    + ", and authentication_ldap_case_insensitive is enabled, so a login could not tell "
+                    + "them apart. Reuse the existing user, or drop it first.");
         }
     }
 
@@ -97,6 +128,7 @@ public class AuthenticationAnalyzer {
         public Void visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             analyzeUser(stmt.getUser());
             checkUserNotExist(stmt.getUser(), stmt.isIfNotExists());
+            checkNoLdapUserCaseCollision(stmt.getUser(), stmt.getAuthOption());
             if (!stmt.getDefaultRoles().isEmpty()) {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
@@ -109,6 +141,14 @@ public class AuthenticationAnalyzer {
         public Void visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             analyzeUser(stmt.getUser());
             checkUserExist(stmt.getUser(), !stmt.isIfExists());
+<<<<<<< HEAD
+=======
+            // ALTER can turn a native user into an LDAP one, which creates the same colliding pair
+            // that CREATE refuses, so it has to pass the same guard.
+            checkNoLdapUserCaseCollision(stmt.getUser(), stmt.getAuthOption());
+            UserIdentity userIdentity = new UserIdentity(stmt.getUser().getUser(), stmt.getUser().getHost(),
+                    stmt.getUser().isDomain());
+>>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
 
             UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
             return null;

@@ -142,7 +142,10 @@ public class LDAPGroupProvider extends GroupProvider {
             lookupKey = LDAPAuthProvider.normalizeUsername(userIdentity.getUser());
         } else {
             // When using distinguished name, normalize it for case-insensitive matching
-            lookupKey = LDAPAuthProvider.normalizeUsername(distinguishedName);
+            // Without a search attribute the cache is keyed by the member DN, so canonicalize it: two
+            // spellings of one DN differing only in separator whitespace or case must not land in two
+            // different cache entries.
+            lookupKey = LDAPAuthProvider.canonicalDn(distinguishedName);
         }
         return userToGroupCache.getOrDefault(lookupKey, Set.of());
     }
@@ -218,7 +221,11 @@ public class LDAPGroupProvider extends GroupProvider {
 
             // Normalize extracted username for case-insensitive matching
             // LDAP is case-insensitive by default, so we normalize to ensure consistent mapping
-            String normalizedUserName = LDAPAuthProvider.normalizeUsername(extractUserName);
+            // Same function the lookup side uses in getGroup(): a user name when a search attribute is
+            // configured, the whole member DN otherwise.
+            String normalizedUserName = getLdapUserSearchAttr() != null
+                    ? LDAPAuthProvider.normalizeUsername(extractUserName)
+                    : LDAPAuthProvider.canonicalDn(extractUserName);
 
             groups.putIfAbsent(normalizedUserName, new HashSet<>());
             groups.get(normalizedUserName).add(groupName);

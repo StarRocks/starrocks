@@ -2547,6 +2547,47 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_dn_pattern = "";
 
     /**
+<<<<<<< HEAD
+=======
+     * Cluster-wide default for where the groups of an LDAP-authenticated user come from.
+     * Legal values: "group_provider" (default, behavior unchanged), "memberof", "both".
+     * A security integration property of the same name overrides this value.
+     * This is a policy switch rather than a per-server setting, so a cluster-wide default is useful:
+     * turning memberOf on everywhere is a single ADMIN SET FRONTEND CONFIG.
+     */
+    @ConfField(mutable = true, comment = "where the groups of an LDAP authenticated user come from: " +
+            "group_provider (default) | memberof | both")
+    public static String authentication_ldap_simple_group_source = "group_provider";
+
+    /**
+     * Name of the attribute on the user entry that carries its group membership.
+     * "memberOf" fits Active Directory and OpenLDAP with the memberof overlay;
+     * Sun/Oracle Directory Server and 389-DS use "isMemberOf".
+     */
+    @ConfField(mutable = true, comment = "name of the user entry attribute carrying group membership, " +
+            "e.g. memberOf (AD, OpenLDAP with memberof overlay) or isMemberOf (389-DS)")
+    public static String authentication_ldap_simple_memberof_attr = "memberOf";
+
+    /**
+     * Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case.
+     * <p>
+     * When true, a login whose name differs only in case from a user created with
+     * AUTHENTICATION_LDAP_SIMPLE still resolves to that user, so its per-user DN and the roles
+     * granted to it apply; and a login authenticated by an LDAP security integration takes its
+     * session identity from the name the directory holds rather than the one the client typed.
+     * <p>
+     * This both widens which stored user a login may resolve to and changes the value reported by
+     * current_user() and SHOW PROCESSLIST, so it is opt-in. Native-password, JWT and OAuth2 users
+     * are never affected. Group names are matched without regard to case independently of this.
+     */
+    @ConfField(mutable = true, comment = "Whether to relax LDAP/AD user name matching to be " +
+            "case-insensitive on the StarRocks side. Affects native users whose auth plugin is " +
+            "AUTHENTICATION_LDAP_SIMPLE and ephemeral users from an LDAP security integration. " +
+            "Does not affect native-password, JWT or OAuth2 users.")
+    public static boolean authentication_ldap_case_insensitive = false;
+
+    /**
+>>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
