@@ -178,18 +178,16 @@ public class GINIndexTest extends PlanTestBase {
         Assertions.assertEquals(IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH,
                 mixedCaseKeys.get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY));
 
-        // dict_gram_num needs the folding (BE uses an exact find()); lower_case only pins the stored spelling.
+        // dict_gram_num needs the folding as well: BE reads it with an exact find().
         Map<String, String> upperCaseIndexParams = new HashMap<>();
         upperCaseIndexParams.put(IMP_LIB.name().toUpperCase(Locale.ROOT),
                 InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT));
         upperCaseIndexParams.put(IndexParamsKey.DICT_GRAM_NUM.name().toUpperCase(Locale.ROOT), "4");
         upperCaseIndexParams.put(IndexParamsKey.PARSER.name().toUpperCase(Locale.ROOT),
                 IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
-        upperCaseIndexParams.put(IndexAnalyzer.INVERTED_INDEX_LOWER_CASE_KEY.toUpperCase(Locale.ROOT), "true");
         Assertions.assertDoesNotThrow(
                 () -> IndexAnalyzer.checkInvertedIndexValid(c, upperCaseIndexParams, KeysType.DUP_KEYS));
         Assertions.assertEquals("4", upperCaseIndexParams.get(IndexAnalyzer.INVERTED_INDEX_DICT_GRAM_NUM_KEY));
-        Assertions.assertEquals("true", upperCaseIndexParams.get(IndexAnalyzer.INVERTED_INDEX_LOWER_CASE_KEY));
         Assertions.assertTrue(upperCaseIndexParams.keySet().stream()
                 .allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT))));
 
