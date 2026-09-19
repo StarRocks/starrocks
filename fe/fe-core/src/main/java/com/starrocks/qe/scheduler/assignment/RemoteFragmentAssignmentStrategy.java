@@ -274,6 +274,18 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         }
     }
 
+    /**
+     * How many nodes this fragment should run on, given the cardinalities of its children.
+     * <p>
+     * ★Never returns less than one★: a fragment that runs on zero nodes gets zero instances, and
+     * deployment asserts on that ({@code Preconditions.checkState(!fragment.getInstances().isEmpty())}),
+     * so the query dies with a bare {@code IllegalStateException} instead of running. Zero is
+     * reachable whenever the right child's cardinality is not positive - notably when it is the
+     * {@code -1} that {@link com.starrocks.planner.PlanNode} carries for "unknown", which is what
+     * scans over {@code information_schema} report, since they never estimate a row count. A
+     * negative cardinality divided down lands in (-1, 0), and {@code Math.ceil} of that is
+     * {@code -0.0}, which narrows to {@code 0}.
+     */
     public static long getOptimalNodeNums(long outputOfMostLeftChild, long maxOutputOfRightChild, int dop, int candidateSize) {
         long baseNodeNums = (long) Math.ceil((double) maxOutputOfRightChild / TINY_SCALE_ROWS_LIMIT / dop);
         double base = Math.max(Math.E, baseNodeNums);
@@ -281,7 +293,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         long amplifyFactor = Math.round(Math.max(1,
                 Math.log(outputOfMostLeftChild / TINY_SCALE_ROWS_LIMIT / dop) / Math.log(base)));
 
-        return Math.min(amplifyFactor * baseNodeNums, candidateSize);
+        return Math.max(1, Math.min(amplifyFactor * baseNodeNums, candidateSize));
     }
 
 }
