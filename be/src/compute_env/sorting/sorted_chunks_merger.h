@@ -55,6 +55,10 @@ private:
         inline bool operator()(const ChunkCursor* a, const ChunkCursor* b) { return b->operator<(*a); }
     };
 
+    // Order-by columns are built by evaluating expressions, which can fail on a path that cannot
+    // return a Status; the cursor latches it and this collects it.
+    Status _cursors_status() const;
+
     void init_for_min_heap();
     void collect_merged_chunks(ChunkPtr* chunk);
     void move_cursor_and_adjust_min_heap(std::atomic<bool>* eos);

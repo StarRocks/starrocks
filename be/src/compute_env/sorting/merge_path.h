@@ -399,6 +399,14 @@ public:
     // All the merge process are triggered by this method
     ChunkPtr try_get_next(const int32_t parallel_idx);
 
+    // Building the order-by columns evaluates expressions, which can fail. That happens on the
+    // parallel worker threads inside try_get_next(), which cannot report it, so it is latched here
+    // and must be checked by the caller after every try_get_next().
+    Status status();
+    void set_eval_status(const Status& status);
+    // Lock-free probe of the above, for has_output() and other driver-polled predicates.
+    bool has_eval_error() const { return _has_eval_error.load(std::memory_order_acquire); }
+
     void bind_profile(const int32_t parallel_idx, RuntimeProfile* profile);
 
     size_t add_original_chunk(ChunkPtr&& chunk);
@@ -408,6 +416,9 @@ public:
     }
 
 private:
+    Status _eval_status;
+    std::atomic<bool> _has_eval_error{false};
+
     bool _is_current_stage_done();
     void _forward_stage(const detail::Stage& stage, int32_t worker_num, std::vector<size_t>* process_cnts = nullptr);
 
