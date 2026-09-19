@@ -14,138 +14,123 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <string>
 #include <type_traits>
+
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
 #endif
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
-#include <cstddef>
-#include <cstdint>
+#if defined(__GNUC__) || defined(__clang__)
+#define STARROCKS_PREFETCH(addr) __builtin_prefetch(static_cast<const void*>(addr), 0, 3)
+#elif defined(__x86_64__) || defined(_M_X64)
+#define STARROCKS_PREFETCH(addr) _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0)
+#else
+#define STARROCKS_PREFETCH(addr) ((void)0)
+#endif
 
 namespace starrocks {
 
+namespace detail {
+
+void gather_int16_buckets(uint32_t* b, const int16_t* a, const uint32_t* c, size_t buckets, int num_rows);
+void gather_int16_buckets(uint32_t* b, const int16_t* a, const int32_t* c, size_t buckets, int num_rows);
+void gather_int16_buckets(int32_t* b, const int16_t* a, const uint32_t* c, size_t buckets, int num_rows);
+void gather_int16_buckets(int32_t* b, const int16_t* a, const int32_t* c, size_t buckets, int num_rows);
+
+void gather_bytes(void* dest, const void* src, size_t elem_size, const uint32_t* indexes, size_t num_rows);
+void gather_bytes(void* dest, const void* src, size_t elem_size, const int32_t* indexes, size_t num_rows);
+
+void gather_bytes_filtered(void* dest, const void* src, size_t elem_size, const void* zero_val, const uint32_t* indexes,
+                           const uint8_t* is_filtered, size_t num_rows);
+void gather_bytes_filtered(void* dest, const void* src, size_t elem_size, const void* zero_val, const int32_t* indexes,
+                           const uint8_t* is_filtered, size_t num_rows);
+
+void gather_generic_string(std::string* dest, const std::string* src, const uint32_t* indexes, size_t num_rows);
+void gather_generic_string_filtered(std::string* dest, const std::string* src, const uint32_t* indexes,
+                                    const uint8_t* is_filtered, size_t num_rows);
+
+} // namespace detail
+
 struct SIMDGather {
-    // https://johnysswlab.com/when-vectorization-hits-the-memory-wall-investigating-the-avx2-memory-gather-instruction
-    // 512K
     static constexpr const int max_process_size = 512 * 1024;
-    // b[i] = a[c[i]];
-    // T was int32_t or uint32_t
+
     template <class TB, class TC>
     static void gather(TB* b, const int16_t* a, const TC* c, size_t buckets, int num_rows) {
         static_assert(sizeof(TB) == 4);
         static_assert(std::is_integral_v<TB>);
         static_assert(sizeof(TC) == 4);
         static_assert(std::is_integral_v<TC>);
-        int i = 0;
-#ifdef __AVX2__
-        if (buckets < max_process_size) {
-            // gather will collect data of size sizeof(int32)
-            // we only need the lower 16 bits
-            // eg:
-            // a = [0x12 0x34 0x56 0x78 0x9a 0x...]
-            // gather (a, [0,1,2,3], 2) will be:
-            // [0x12 0x32 0x56 0x78] [0x56 0x78 0x9a..0.] [....]
-            // use will use mask to get lower 16 bits
-            // [0x12 0x32 0x00 0x00] [0x56 0x78 0x00 0x00] [....]
-            __m256i mask = _mm256_set1_epi32(0xFFFF);
-            for (; i + 8 <= num_rows; i += 8) {
-                __m256i loaded = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(c));
-                __m256i gathered = _mm256_i32gather_epi32((int32_t*)a, loaded, 2);
-                gathered = _mm256_and_si256(gathered, mask);
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(b), gathered);
-                c += 8;
-                b += 8;
-            }
-            _mm256_zeroupper();
-        }
-#endif
-        for (; i < num_rows; i++) {
-            *b = a[*c];
-            b++;
-            c++;
-        }
-    }
 
-    static constexpr uint32_t simd_register_bitwidth() {
-#ifdef __AVX2__
-        return 256;
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-        return 128;
-#else
-        return 128;
-#endif
+        if constexpr (std::is_same_v<TB, uint32_t> && std::is_same_v<TC, uint32_t>) {
+            detail::gather_int16_buckets(b, a, c, buckets, num_rows);
+        } else if constexpr (std::is_same_v<TB, uint32_t> && std::is_same_v<TC, int32_t>) {
+            detail::gather_int16_buckets(b, a, c, buckets, num_rows);
+        } else if constexpr (std::is_same_v<TB, int32_t> && std::is_same_v<TC, uint32_t>) {
+            detail::gather_int16_buckets(b, a, c, buckets, num_rows);
+        } else if constexpr (std::is_same_v<TB, int32_t> && std::is_same_v<TC, int32_t>) {
+            detail::gather_int16_buckets(b, a, c, buckets, num_rows);
+        } else {
+            int i = 0;
+            for (; i < num_rows; i++) {
+                *b = a[*c];
+                b++;
+                c++;
+            }
+        }
     }
 
     /// dest[i] = src[indexes[i]]
     template <typename DataType, typename IndexType>
     static void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
         static_assert(std::is_integral_v<IndexType>);
-
-        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
-        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-
-        size_t i = 0;
-
-        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
-        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
-        if constexpr (NUM_BATCH_VALUES > 0) {
-            DataType buffer[NUM_BATCH_VALUES];
-
-            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    buffer[j] = src[indexes[i + j]];
-                }
-
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    dest[i + j] = buffer[j];
-                }
+        if constexpr (std::is_trivially_copyable_v<DataType> && sizeof(IndexType) == 4) {
+            if constexpr (std::is_signed_v<IndexType>) {
+                detail::gather_bytes(dest, src, sizeof(DataType), reinterpret_cast<const int32_t*>(indexes), num_rows);
+            } else {
+                detail::gather_bytes(dest, src, sizeof(DataType), reinterpret_cast<const uint32_t*>(indexes), num_rows);
             }
-        }
-
-        for (; i < num_rows; i++) {
-            dest[i] = src[indexes[i]];
+        } else if constexpr (std::is_same_v<DataType, std::string> && sizeof(IndexType) == 4) {
+            detail::gather_generic_string(dest, src, reinterpret_cast<const uint32_t*>(indexes), num_rows);
+        } else {
+            for (size_t i = 0; i < num_rows; ++i) {
+                dest[i] = src[indexes[i]];
+            }
         }
     }
 
-    /// dest[i] = is_filtered[i] == 0 ? src[indexes[i]] : 0
+    /// dest[i] = is_filtered[i] == 0 ? src[indexes[i]] : DataType{}
     template <typename DataType, typename IndexType, typename CondType>
     static void gather(DataType* dest, const DataType* src, const IndexType* indexes, const CondType* is_filtered,
                        size_t num_rows) {
         static_assert(std::is_integral_v<IndexType>);
-
-        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
-        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-
-        size_t i = 0;
-
-        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
-        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
-        if constexpr (NUM_BATCH_VALUES > 0) {
-            DataType buffer[NUM_BATCH_VALUES];
-
-            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    if (is_filtered[i + j] == 0) {
-                        buffer[j] = src[indexes[i + j]];
-                    } else {
-                        buffer[j] = 0;
-                    }
-                }
-
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    dest[i + j] = buffer[j];
-                }
-            }
-        }
-
-        for (; i < num_rows; i++) {
-            if (is_filtered[i] == 0) {
-                dest[i] = src[indexes[i]];
+        if constexpr (std::is_trivially_copyable_v<DataType> && sizeof(IndexType) == 4 && sizeof(CondType) == 1) {
+            const DataType zero{};
+            if constexpr (std::is_signed_v<IndexType>) {
+                detail::gather_bytes_filtered(dest, src, sizeof(DataType), &zero,
+                                              reinterpret_cast<const int32_t*>(indexes),
+                                              reinterpret_cast<const uint8_t*>(is_filtered), num_rows);
             } else {
-                dest[i] = 0;
+                detail::gather_bytes_filtered(dest, src, sizeof(DataType), &zero,
+                                              reinterpret_cast<const uint32_t*>(indexes),
+                                              reinterpret_cast<const uint8_t*>(is_filtered), num_rows);
+            }
+        } else if constexpr (std::is_same_v<DataType, std::string> && sizeof(IndexType) == 4 && sizeof(CondType) == 1) {
+            detail::gather_generic_string_filtered(dest, src, reinterpret_cast<const uint32_t*>(indexes),
+                                                   reinterpret_cast<const uint8_t*>(is_filtered), num_rows);
+        } else {
+            for (size_t i = 0; i < num_rows; ++i) {
+                dest[i] = (is_filtered[i] == 0) ? src[indexes[i]] : DataType{};
             }
         }
     }
 };
+
 } // namespace starrocks
