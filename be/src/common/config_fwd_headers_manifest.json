@@ -593,6 +593,7 @@
         "brpc_max_body_size",
         "brpc_socket_max_unwritten_bytes",
         "brpc_max_connection_pool_size",
+        "brpc_max_inflight_rpc_per_stub",
         "brpc_socket_keepalive"
       ]
     },
