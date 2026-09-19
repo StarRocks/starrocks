@@ -712,6 +712,7 @@ public class AnalyzeMgr implements Writable {
 
         if (tables.isEmpty()) {
             lastCleanTime = workTime;
+            return;
         }
 
         List<Long> tableIds = Lists.newArrayList();
