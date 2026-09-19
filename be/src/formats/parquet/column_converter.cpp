@@ -1018,11 +1018,17 @@ Status Int64ToTimeConverter::convert(const Column* src, Column* dst) {
 
 Status BinaryToGeographyConverter::convert(const Column* src, Column* dst) {
     const auto* input = down_cast<const NullableColumn*>(src);
-    auto* output = down_cast<NullableColumn*>(dst);
     const auto* binary = down_cast<const BinaryColumn*>(input->data_column().get());
-    auto* geo = down_cast<GeoColumn*>(output->data_column_raw_ptr());
+    auto* geo = down_cast<GeoColumn*>(ColumnHelper::get_data_column(dst));
+    if (!dst->is_nullable() && input->has_null()) {
+        return Status::InvalidArgument("Cannot write NULL Parquet GEOGRAPHY values to a non-nullable column");
+    }
     geo->reset_column();
     geo->append_wkb_column(*binary);
+    if (!dst->is_nullable()) {
+        return Status::OK();
+    }
+    auto* output = down_cast<NullableColumn*>(dst);
     auto* nulls = output->null_column_raw_ptr();
     nulls->reset_column();
     nulls->append(*input->null_column(), 0, input->size());

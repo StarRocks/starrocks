@@ -365,10 +365,7 @@ public class IcebergApiConverter {
         for (Types.NestedField field : columns) {
             Type srType;
             try {
-                srType = fromIcebergType(field.type());
-                if (field.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
-                    srType = NativeGeographySupport.geographyType((Types.GeographyType) field.type());
-                }
+                srType = fromIcebergType(field.type(), true);
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
                 srType = UnknownType.UNKNOWN_TYPE;

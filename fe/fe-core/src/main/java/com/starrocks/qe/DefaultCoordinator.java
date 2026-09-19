@@ -62,6 +62,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.connector.iceberg.NativeGeographySupport;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.metric.MetricRepo;
@@ -211,6 +212,7 @@ public class DefaultCoordinator extends Coordinator {
                                                        TDescriptorTable descTable, ExecPlan execPlan) {
             JobSpec jobSpec =
                     JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT, execPlan);
+            NativeGeographySupport.validateExecution(jobSpec, context.getSessionVariable().isEnableSpill());
             return new DefaultCoordinator(context, jobSpec);
         }
 
@@ -219,6 +221,7 @@ public class DefaultCoordinator extends Coordinator {
                                                         List<ScanNode> scanNodes,
                                                         TDescriptorTable descTable, ExecPlan execPlan) {
             JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD, execPlan);
+            NativeGeographySupport.validateExecution(jobSpec, context.getSessionVariable().isEnableSpill());
             return new DefaultCoordinator(context, jobSpec);
         }
 
