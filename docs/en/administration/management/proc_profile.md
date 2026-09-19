@@ -77,9 +77,17 @@ FE profiling is managed by an internal daemon and uses **AsyncProfiler** for dat
 | `proc_profile_cpu_enable` | `true` | Whether to enable automatic CPU profiling for FE. |
 | `proc_profile_mem_enable` | `true` | Whether to enable automatic memory allocation profiling for FE. |
 | `proc_profile_collect_time_s` | `120` | Duration (seconds) for each profile collection. |
+| `proc_profile_cleanup_interval_s` | `300` | Interval (seconds) between profile file cleanup runs. |
 | `proc_profile_jstack_depth` | `128` | Maximum Java stack depth to collect. |
 | `proc_profile_file_retained_days` | `1` | How many days to retain profile files. |
 | `proc_profile_file_retained_size_bytes` | `2147483648` (2GB) | Maximum total size of retained profile files. |
+
+CPU and memory profiles are collected independently, so one of them failing does not stop the other. When a
+collection attempt fails, the FE retries with an exponential backoff that starts at two minutes and is capped
+at fifteen minutes, rather than retrying every second, and logs the failure once on entering the backoff and
+once on recovery. If a failed teardown leaves the profiler running, the next attempt stops that session
+first, so profiling recovers without an FE restart. Retention is enforced by a separate
+`proc-profile-cleaner` daemon, so profile files are still cleaned up while collection is failing.
 
 ### Backend (BE) Configuration
 
