@@ -110,6 +110,34 @@ public class AuthenticationHandlerTest {
     }
 
     @Test
+    public void testFailedReauthenticationPreservesAuthenticatedTaskCreator() throws Exception {
+        AuthenticationMgr previousManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        String[] previousProviders = Config.group_provider;
+        String[] previousChain = Config.authentication_chain;
+        boolean previousAuthCheck = Config.enable_auth_check;
+        try {
+            GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+            Config.group_provider = new String[0];
+            Config.authentication_chain = new String[0];
+            Config.enable_auth_check = true;
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context, "root", "127.0.0.1", new byte[0]);
+            TaskExecutionIdentity identity = TaskExecutionIdentity.capture(context);
+
+            Assertions.assertThrows(AuthenticationException.class,
+                    () -> AuthenticationHandler.authenticate(context, "missing_task_creator",
+                            "127.0.0.1", new byte[0]));
+
+            Assertions.assertSame(identity, TaskExecutionIdentity.capture(context));
+        } finally {
+            Config.enable_auth_check = previousAuthCheck;
+            Config.group_provider = previousProviders;
+            Config.authentication_chain = previousChain;
+            GlobalStateMgr.getCurrentState().setAuthenticationMgr(previousManager);
+        }
+    }
+
+    @Test
     public void testFailedIntegrationCannotSupplyDNForTheNextIntegration() throws Exception {
         String[] previousChain = Config.authentication_chain;
         try {

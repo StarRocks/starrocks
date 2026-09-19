@@ -52,12 +52,14 @@ public class AuthenticationHandler {
             throws AuthenticationException {
         // A reused connection (COM_CHANGE_USER) must not resolve the new principal's groups with the old DN.
         String previousDN = context.getDistinguishedName();
+        TaskExecutionIdentity previousTaskIdentity = context.getAuthenticatedTaskIdentity();
         context.setAuthenticatedTaskIdentity(null);
         context.setDistinguishedName("");
         try {
             return authenticateInternal(context, user, remoteHost, authResponse);
         } catch (AuthenticationException | RuntimeException e) {
             context.setDistinguishedName(previousDN);
+            context.setAuthenticatedTaskIdentity(previousTaskIdentity);
             throw e;
         }
     }
