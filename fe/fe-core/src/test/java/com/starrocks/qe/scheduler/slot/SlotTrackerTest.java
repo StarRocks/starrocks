@@ -110,6 +110,12 @@ public class SlotTrackerTest {
                 0, 0);
     }
 
+    private static LogicalSlot generateSlot(int numSlots, long expiredPendingTimeMs, long expiredAllocatedTimeMs) {
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, numSlots, expiredPendingTimeMs, expiredAllocatedTimeMs, 0,
+                0, 0);
+    }
+
     @Test
     public void testSlotTrackerMetrics() {
         SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
@@ -200,5 +206,63 @@ public class SlotTrackerTest {
         slotTracker.allocateSlot(slot1);
         waitTime = slotTracker.getEarliestQueryWaitTimeSecond();
         assertThat(waitTime).isEqualTo(0.0);
+    }
+
+    @Test
+    public void testPeakExpiredSlotsWithDivergentDeadlines() {
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
+
+        long nowMs = System.currentTimeMillis();
+        // Pending deadline long past but allocated deadline far in the future, like a DML whose
+        // query timeout is much longer than its pending timeout. Its pending deadline is the
+        // earliest of the two slots, so ordering by that field puts it first and its unexpired
+        // allocated deadline ends the scan before the expired slot is reached.
+        LogicalSlot longDeadlineSlot = generateSlot(1, nowMs - 3_600_000, nowMs + 3_600_000);
+        // Both deadlines already past.
+        LogicalSlot expiredSlot = generateSlot(1, nowMs - 700_000, nowMs - 400_000);
+
+        assertThat(slotTracker.requireSlot(longDeadlineSlot)).isTrue();
+        assertThat(slotTracker.requireSlot(expiredSlot)).isTrue();
+        slotTracker.allocateSlot(longDeadlineSlot);
+        slotTracker.allocateSlot(expiredSlot);
+
+        // The expired slot must be reclaimable even though the long-deadline slot
+        // precedes it in pending-deadline order.
+        assertThat(slotTracker.peakExpiredSlots()).containsExactly(expiredSlot);
+
+        assertThat(slotTracker.releaseSlot(expiredSlot.getSlotId())).isSameAs(expiredSlot);
+        assertThat(slotTracker.peakExpiredSlots()).isEmpty();
+        assertThat(slotTracker.getMinExpiredTimeMs()).isEqualTo(longDeadlineSlot.getExpiredAllocatedTimeMs());
+    }
+
+    @Test
+    public void testGetMinExpiredTimeMs() {
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
+        assertThat(slotTracker.getMinExpiredTimeMs()).isZero();
+
+        long nowMs = System.currentTimeMillis();
+        LogicalSlot longDeadlineSlot = generateSlot(1, nowMs - 3_600_000, nowMs + 3_600_000);
+        LogicalSlot expiredSlot = generateSlot(1, nowMs - 700_000, nowMs - 400_000);
+        assertThat(slotTracker.requireSlot(longDeadlineSlot)).isTrue();
+        assertThat(slotTracker.requireSlot(expiredSlot)).isTrue();
+
+        // The wake-up deadline must be the earliest allocated deadline, not the earliest
+        // pending deadline, so the worker never wakes with nothing to reclaim.
+        assertThat(slotTracker.getMinExpiredTimeMs()).isEqualTo(expiredSlot.getExpiredAllocatedTimeMs());
+    }
+
+    @Test
+    public void testMinExpiredTimeMsAfterPendingDeadlinePassed() {
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
+
+        long nowMs = System.currentTimeMillis();
+        LogicalSlot slot = generateSlot(1, nowMs - 60_000, nowMs + 3_600_000);
+        assertThat(slotTracker.requireSlot(slot)).isTrue();
+        slotTracker.allocateSlot(slot);
+
+        // Nothing is reclaimable, so the worker's only blocking deadline must be in
+        // the future; a past value here makes RequestWorker spin without waiting.
+        assertThat(slotTracker.peakExpiredSlots()).isEmpty();
+        assertThat(slotTracker.getMinExpiredTimeMs()).isGreaterThan(nowMs);
     }
 }
