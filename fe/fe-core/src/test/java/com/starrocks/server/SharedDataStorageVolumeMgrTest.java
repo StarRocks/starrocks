@@ -17,9 +17,11 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
 import com.staros.client.StarClientException;
+import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -1898,5 +1900,141 @@ public class SharedDataStorageVolumeMgrTest {
         // Instance profile without a role is stored as a profile credential, which carries no
         // role fields at all.
         Assertions.assertFalse(params.containsKey(AWS_S3_IAM_ROLE_ARN));
+    }
+
+    @Test
+    public void testGetOrCreateVirtualTabletIdRejectsVolumeWithUnusableCredential() {
+        // A volume stored with a credential that can no longer be used is tolerated on read-back so
+        // it can still be shown and dropped. Lake replication names such a volume as its source, and
+        // everything after this point has side effects - allocating a path, creating a shard and a
+        // shard group, writing the volume back - so it has to be refused up front.
+        String storageVolumeName = "unusable_sv";
+        String srcServiceId = "test_service_id";
+        FileStoreInfo unusable = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName(storageVolumeName)
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                return storageVolumeName.equals(fsName) ? unusable : null;
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String svKey, String serviceId) {
+                throw new IllegalStateException("allocateFilePath must not run for an unusable volume");
+            }
+        };
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        Assertions.assertFalse(svm.getStorageVolumeByName(storageVolumeName).isCredentialUsable());
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Storage volume " + storageVolumeName + " has a credential that cannot be used",
+                () -> svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
+    }
+
+    @Test
+    public void testMetadataOnlyAlterOnUnusableVolumeFailsCleanly() {
+        // Writing such a volume back cannot produce a file store, so a comment-only ALTER used to
+        // die with a NullPointerException. It must fail with something an operator can act on, and
+        // the message has to name the ways out: drop it, or repair it in the same ALTER.
+        String storageVolumeName = "unusable_sv";
+        FileStoreInfo unusable = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName(storageVolumeName)
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                return storageVolumeName.equals(fsName) ? unusable : null;
+            }
+
+            @Mock
+            public void updateFileStore(FileStoreInfo fsInfo) {
+                throw new IllegalStateException("an unusable volume must never be written back");
+            }
+        };
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Storage volume " + storageVolumeName + " has a credential that cannot be used",
+                () -> svm.updateStorageVolume(storageVolumeName, null, null, new HashMap<>(), "new comment"));
+    }
+
+    @Test
+    public void testVolumeWithUnusableCredentialCanStillBeListedAndDropped() throws DdlException, MetaNotFoundException {
+        // The point of the whole change: a volume stored with a credential that can no longer be
+        // rebuilt used to make every DDL path fail, including DROP, so it was stuck in the cluster
+        // for good and SHOW STORAGE VOLUMES stayed broken for every other volume too. Listing it and
+        // dropping it have to work; using it is what the guards refuse.
+        String storageVolumeName = "unusable_sv";
+        FileStoreInfo unusable = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName(storageVolumeName)
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        List<FileStoreInfo> fileStores = new ArrayList<>();
+        fileStores.add(unusable);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                return fileStores.stream().filter(fs -> fs.getFsName().equals(fsName)).findFirst().orElse(null);
+            }
+
+            @Mock
+            public List<FileStoreInfo> listFileStore() {
+                return fileStores;
+            }
+
+            @Mock
+            public void removeFileStoreByName(String fsName) {
+                fileStores.removeIf(fs -> fs.getFsName().equals(fsName));
+            }
+        };
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+
+        // SHOW STORAGE VOLUMES lists it instead of failing on it.
+        Assertions.assertTrue(svm.listStorageVolumeNames().contains(storageVolumeName));
+        // DESC reaches it, and it reports itself as unusable rather than throwing.
+        Assertions.assertFalse(svm.getStorageVolumeByName(storageVolumeName).isCredentialUsable());
+        // DROP removes it.
+        svm.removeStorageVolume(storageVolumeName);
+        Assertions.assertFalse(svm.exists(storageVolumeName));
     }
 }

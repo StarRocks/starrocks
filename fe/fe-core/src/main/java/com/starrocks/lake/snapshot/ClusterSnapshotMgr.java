@@ -66,6 +66,14 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     protected ClusterSnapshotJobScheduler clusterSnapshotJobScheduler;
 
+    // Floor for the unusable-credential skip cooldown below, so it still rate-limits when the configured
+    // snapshot interval is non-positive (0 means "as often as possible", which would otherwise warn ~100x/s).
+    private static final long UNUSABLE_CREDENTIAL_SKIP_COOLDOWN_MIN_MS = 60_000L;
+
+    // In-memory rate limiter for the unusable-credential skip in canScheduleNextJob (not @SerializedName, so
+    // not persisted); it keeps that skip's volume lookup and warning to at most once per cooldown.
+    protected volatile long lastUnusableCredentialSkipMs = 0;
+
     public ClusterSnapshotMgr() {
     }
 
@@ -158,10 +166,14 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 lastStartTimeMs = lastFinishedJob.getCreatedTimeMs();
             }
         }
-        if (lastStartTimeMs <= 0L) {
+        // A round skipped for an unusable credential pushes the next attempt to lastUnusableCredentialSkipMs +
+        // interval (see canScheduleNextJob), so fold that timestamp in; otherwise SHOW would report a next-run
+        // time already in the past for the whole cooldown even though no attempt happens until then.
+        long baselineMs = Math.max(lastStartTimeMs, lastUnusableCredentialSkipMs);
+        if (baselineMs <= 0L) {
             return -1L;
         }
-        return lastStartTimeMs + intervalSeconds * 1000L;
+        return baselineMs + intervalSeconds * 1000L;
     }
 
     public List<List<String>> getAutomatedSnapshotShowResult() {
@@ -213,8 +225,45 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public boolean canScheduleNextJob(long lastAutomatedJobStartTimeMs) {
-        return isAutomatedSnapshotOn() && (System.currentTimeMillis()
-                - lastAutomatedJobStartTimeMs >= getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L);
+        if (!isAutomatedSnapshotOn() || System.currentTimeMillis()
+                - lastAutomatedJobStartTimeMs < getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L) {
+            return false;
+        }
+        // The scheduler ticks every 10ms and does not advance lastAutomatedJobStartTimeMs when the check below
+        // skips a round, so the interval guard above stops throttling once a stuck volume's interval has
+        // elapsed - and does not throttle at all when the interval is non-positive. Gate the lookup and its
+        // warning behind their own cooldown, floored to a positive minimum, so an unusable credential warns
+        // (and re-reads the file store) at most once per cooldown, not ~100x/s.
+        long skipCooldownMs = Math.max(getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L,
+                UNUSABLE_CREDENTIAL_SKIP_COOLDOWN_MIN_MS);
+        if (System.currentTimeMillis() - lastUnusableCredentialSkipMs < skipCooldownMs) {
+            return false;
+        }
+        // ADMIN SET AUTOMATED SNAPSHOT ON refuses a volume whose credential cannot be used, but a
+        // cluster that was already snapshotting when it upgraded restores the configured name
+        // straight from the image or the replayed log and never passes through that check. Without
+        // this, every round would finish its local checkpoint work and then fail in HdfsUtil.
+        try {
+            StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                    .getStorageVolumeByName(storageVolumeName);
+            if (sv != null && !sv.isCredentialUsable()) {
+                lastUnusableCredentialSkipMs = System.currentTimeMillis();
+                LOG.warn("Skipping the automated cluster snapshot: storage volume {} has a credential " +
+                        "that cannot be used, so no new restore point is being produced.", storageVolumeName);
+                return false;
+            }
+        } catch (Exception e) {
+            // Looking the volume up can fail for reasons that have nothing to do with its credential
+            // - starmgr being unreachable, say. Scheduling the round anyway leaves such a failure on
+            // the job's own error path, which counts consecutive failures and warns, rather than
+            // turning it into an aborted scheduler cycle here.
+            LOG.warn("Could not check the automated snapshot storage volume {} before scheduling",
+                    storageVolumeName, e);
+        }
+        // Reached when the volume is usable (or the lookup failed and we defer to the job's own error
+        // path); clear the cooldown so a later breakage warns immediately instead of after an interval.
+        lastUnusableCredentialSkipMs = 0;
+        return true;
     }
 
     public ClusterSnapshotJob getNextCluterSnapshotJob() {
