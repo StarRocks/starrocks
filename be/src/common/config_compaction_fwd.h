@@ -257,4 +257,38 @@ CONF_mInt32(lake_compaction_chunk_size, "4096");
 // running task, bounded by the task's input size.
 CONF_mBool(lake_compaction_hold_input_segments, "true");
 
+// Merge iterator prefills every child once before the merge can start. That prefill is
+// serial, so a task with S inputs pays S round trips before producing a single row. When
+// enabled, the prefill reads all children in parallel and then commits them in the original
+// order, which keeps the merge order and the error semantics identical to the serial path.
+// Only the reads are parallel; heap/state updates stay serial.
+CONF_mBool(enable_compaction_parallel_merge_init, "false");
+
+// Per-merge-iterator in-flight prefill read limit. The shared pool initializes each input and
+// either prefetches its ranges or reads and decodes its first chunk. Only takes effect when
+// enable_compaction_parallel_merge_init is enabled.
+CONF_Int32(compaction_parallel_merge_init_threads, "64");
+
+// Maximum total bytes in shared buffers for ranges prefetched by one compaction merge. The pool
+// initializes inputs and prefetches registered ranges within this budget; inputs whose ranges
+// are fully prefetched subsequently decode on the compaction thread. Other inputs read and
+// decode on the pool, without demand-loading unbudgeted ranges into shared buffers. This limit
+// excludes underlying file buffers, decompressed pages and dictionaries, chunks and segment
+// metadata. Zero disables range prefetch; parallel reads and decoding may still run when
+// enable_compaction_parallel_merge_init is enabled.
+CONF_mInt64(compaction_parallel_merge_prefetch_bytes, "268435456");
+
+// Maximum threads shared by concurrent compaction prefill and read-ahead tasks. Idle threads
+// are reclaimed after 10s. Uncovered inputs also decode on this pool, so increasing the count
+// can increase CPU and memory contention as well as IO concurrency.
+CONF_Int32(compaction_parallel_merge_init_pool_threads, "256");
+
+// Number of chunk slots kept per merge input. With one slot the merge holds the only chunk and
+// refilling it is a blocking read, so the merge stalls for a full round trip every time an input
+// runs dry. With more slots a background reader keeps the free ones filled while the merge
+// consumes the held one, and that round trip overlaps the merge instead of stopping it. Costs one
+// extra chunk per input per added slot. Only takes effect when the merge prefill pool is
+// available; 1 keeps the original behavior.
+CONF_mInt32(compaction_merge_child_buffers, "1");
+
 } // namespace starrocks::config

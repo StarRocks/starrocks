@@ -232,6 +232,25 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     return Status::OK();
 }
 
+StatusOr<bool> SharedBufferedInputStream::prefetch_registered(std::atomic<int64_t>* budget) {
+    set_prefetch_only();
+    for (auto& [_, sb] : _map) {
+        if (sb->buffer.capacity() != 0) {
+            continue;
+        }
+        // Reserve before loading: concurrent streams draw from the same budget, and reserving
+        // first keeps their combined residency hard-capped instead of overshooting by one buffer
+        // each.
+        if (budget->fetch_sub(sb->size) < sb->size) {
+            budget->fetch_add(sb->size);
+            return false;
+        }
+        const uint8_t* unused = nullptr;
+        RETURN_IF_ERROR(get_bytes(&unused, sb->offset, 0, sb));
+    }
+    return true;
+}
+
 void SharedBufferedInputStream::release() {
     _map.clear();
 }
@@ -243,7 +262,7 @@ void SharedBufferedInputStream::release_to_offset(int64_t offset) {
 
 Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
     auto st = find_shared_buffer(offset, count);
-    if (!st.ok()) {
+    if (!st.ok() || (_prefetch_only && st.value()->buffer.capacity() == 0)) {
         SCOPED_RAW_TIMER(&_direct_io_timer);
         _direct_io_count += 1;
         _direct_io_bytes += count;
