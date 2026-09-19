@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -234,7 +235,16 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
     private boolean isDateVariableAndNumericCastConstantExpression(ScalarOperator variable, ScalarOperator constant) {
         return variable.isVariable() && variable.getType().isDateType() &&
-                constant instanceof CastOperator && constant.isConstant() && constant.getType().isNumericType();
+                constant instanceof CastOperator && constant.isConstant() && constant.getType().isNumericType() &&
+                isValidDateIntegerCast(constant.getChild(0));
+    }
+
+    private boolean isValidDateIntegerCast(ScalarOperator operator) {
+        if (!(operator instanceof ConstantOperator)) {
+            return true;
+        }
+        return !((ConstantOperator) operator).isNull() &&
+                Utils.tryCastConstant(operator, DateType.DATE).isPresent();
     }
 
     private Optional<BinaryPredicateOperator> optimizeConstantAndVariable(BinaryPredicateOperator predicate,

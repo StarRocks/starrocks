@@ -608,6 +608,38 @@ public class ImplicitCastRuleTest {
         assertEquals(PrimitiveType.DATETIME, result.getChild(1).getType().getPrimitiveType());
     }
 
+    // Fractional / invalid YYYYMMDD numeric constants must keep DOUBLE
+    // comparison. Casting them to DATE would change predicate results.
+    @Test
+    public void testDateColumnVsInvalidNumericConstantKeepsDoubleCompare() {
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ColumnRefOperator pt = new ColumnRefOperator(1, DateType.DATE, "pt", true);
+
+        BinaryPredicateOperator fractional = new BinaryPredicateOperator(BinaryType.GE, pt,
+                new CastOperator(FloatType.DOUBLE, ConstantOperator.createVarchar("20260601.5")));
+        ScalarOperator fractionalResult = rule.apply(fractional, null);
+        assertEquals(FloatType.DOUBLE, fractionalResult.getChild(0).getType());
+        assertEquals(FloatType.DOUBLE, fractionalResult.getChild(1).getType());
+
+        BinaryPredicateOperator invalidMonth = new BinaryPredicateOperator(BinaryType.GE, pt,
+                new CastOperator(IntegerType.INT, ConstantOperator.createInt(20261301)));
+        ScalarOperator invalidMonthResult = rule.apply(invalidMonth, null);
+        assertEquals(FloatType.DOUBLE, invalidMonthResult.getChild(0).getType());
+        assertEquals(FloatType.DOUBLE, invalidMonthResult.getChild(1).getType());
+
+        BinaryPredicateOperator tooShort = new BinaryPredicateOperator(BinaryType.GE, pt,
+                new CastOperator(IntegerType.INT, ConstantOperator.createInt(123)));
+        ScalarOperator tooShortResult = rule.apply(tooShort, null);
+        assertEquals(FloatType.DOUBLE, tooShortResult.getChild(0).getType());
+        assertEquals(FloatType.DOUBLE, tooShortResult.getChild(1).getType());
+
+        BinaryPredicateOperator validDouble = new BinaryPredicateOperator(BinaryType.GE, pt,
+                new CastOperator(FloatType.DOUBLE, ConstantOperator.createVarchar("20260601")));
+        ScalarOperator validDoubleResult = rule.apply(validDouble, null);
+        assertEquals(PrimitiveType.DATE, validDoubleResult.getChild(0).getType().getPrimitiveType());
+        assertEquals(PrimitiveType.DATE, validDoubleResult.getChild(1).getType().getPrimitiveType());
+    }
+
     // The existing DATE + STRING behaviour must be preserved: pt (DATE)
     // >= date_format(...) (VARCHAR) still goes through Type.DATETIME.
     @Test
