@@ -256,6 +256,14 @@ public class HiveMetaClient {
         }
     }
 
+    public List<Partition> getPartitionsByFilter(String dbName, String tableName, String filter) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.listPartitionsByFilter")) {
+            return callRPC("listPartitionsByFilter",
+                    String.format("Failed to get partitions by filter on [%s.%s]", dbName, tableName),
+                    dbName, tableName, filter, (short) -1);
+        }
+    }
+
     public Database getDb(String dbName) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getDatabase")) {
             return callRPC("getDatabase", String.format("Failed to get database %s", dbName), dbName);
