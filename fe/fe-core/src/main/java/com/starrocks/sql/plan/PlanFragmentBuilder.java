@@ -4467,13 +4467,14 @@ public class PlanFragmentBuilder {
             List<ScalarOperator> candidates = new ArrayList<>();
 
             for (ScalarOperator predicate : otherJoin) {
-                if (isValidAsofTemporalPredicate(predicate, leftColumns, rightColumns)) {
+                if (JoinHelper.isValidAsofTemporalPredicate(predicate, leftColumns, rightColumns)) {
                     candidates.add(predicate);
                 }
             }
 
             if (candidates.isEmpty()) {
-                throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition. found: 0");
+                throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition comparing "
+                        + "a column of the left side with a column of the right side. found: 0");
             }
 
             if (candidates.size() > 1) {
@@ -4498,31 +4499,6 @@ public class PlanFragmentBuilder {
             }
 
             return candidates.get(0);
-        }
-
-        private boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
-                                                     ColumnRefSet leftColumns,
-                                                     ColumnRefSet rightColumns) {
-            if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
-                return false;
-            }
-
-            if (!binaryPredicate.getBinaryType().isRange()) {
-                return false;
-            }
-
-            ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
-            ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
-
-            if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
-                return false;
-            }
-
-            if (rightOperandColumns.isIntersect(leftColumns) && rightOperandColumns.isIntersect(rightColumns)) {
-                return false;
-            }
-
-            return true;
         }
 
     }
