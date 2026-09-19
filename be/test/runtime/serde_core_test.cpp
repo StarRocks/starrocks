@@ -15,6 +15,9 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
 
 #include "base/coding.h"
 #include "base/failpoint/fail_point.h"
@@ -785,6 +788,146 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serialize_rejects_unrepresenta
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.status().is_capacity_limit_exceeded()) << st.status();
     ASSERT_NE(std::string::npos, std::string(st.status().message()).find("byte payload size")) << st.status();
+}
+
+// The serializer writes the offsets verbatim, so a malformed offset array can be pushed through it and
+// presented to the deserializer. The bytes are backed by a ContainerResource: the column is deliberately
+// inconsistent, and a resource-backed column skips the bytes/offsets consistency DCHECK on destruction.
+template <typename ColumnType>
+static typename ColumnType::MutablePtr make_malformed_binary_column(const std::shared_ptr<std::string>& bytes,
+                                                                    const std::vector<uint64_t>& offsets) {
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    ContainerResource resource(bytes, bytes->data(), bytes->size());
+    typename ColumnType::Offsets column_offsets;
+    if constexpr (std::is_same_v<ColumnType, BinaryColumn>) {
+        Buffer<uint32_t> buf;
+        for (auto offset : offsets) {
+            buf.push_back(static_cast<uint32_t>(offset));
+        }
+        column_offsets.set_small_buffer(std::move(buf));
+    } else {
+        Buffer<uint64_t> buf(offsets.begin(), offsets.end());
+        column_offsets.set_large_buffer(std::move(buf));
+    }
+    return ColumnType::create(std::move(resource), std::move(column_offsets));
+}
+
+template <typename ColumnType>
+static void assert_deserialize_rejects_offsets(const std::string& bytes, const std::vector<uint64_t>& offsets,
+                                               const std::string& expected_message) {
+    auto owner = std::make_shared<std::string>(bytes);
+    auto malformed = make_malformed_binary_column<ColumnType>(owner, offsets);
+    for (auto level = -1; level < 8; ++level) {
+        std::vector<uint8_t> buffer(ColumnArraySerde::max_serialized_size(*malformed, level));
+        const auto* end = buffer.data() + buffer.size();
+        ASSERT_OK(ColumnArraySerde::serialize(*malformed, buffer.data(), false, level));
+
+        auto column = ColumnType::create();
+        auto st = ColumnArraySerde::deserialize(buffer.data(), end, column.get(), false, level);
+        ASSERT_FALSE(st.ok()) << "encode level " << level << " accepted offsets " << ::testing::PrintToString(offsets);
+        ASSERT_TRUE(st.status().is_corruption()) << "encode level " << level << ": " << st.status();
+        ASSERT_NE(std::string::npos, std::string(st.status().message()).find(expected_message))
+                << "encode level " << level << ": " << st.status();
+        // A rejected buffer must not leave a half-built column behind.
+        ASSERT_EQ(0u, column->size());
+        ASSERT_EQ(0u, column->get_immutable_bytes().size());
+    }
+}
+
+// A well-formed column with enough rows to reach the integer-encoded offset path must still round-trip.
+template <typename ColumnType>
+static void assert_well_formed_offsets_round_trip() {
+    auto c1 = ColumnType::create();
+    for (int i = 0; i < 300; ++i) {
+        std::string value = (i % 3 == 0) ? "" : std::string(1 + i % 7, 'a' + i % 26);
+        c1->append(Slice(value));
+    }
+    for (auto level = -1; level < 8; ++level) {
+        std::vector<uint8_t> buffer(ColumnArraySerde::max_serialized_size(*c1, level));
+        const auto* end = buffer.data() + buffer.size();
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        auto c2 = ColumnType::create();
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+        ASSERT_EQ(c1->size(), c2->size());
+        for (size_t i = 0; i < c1->size(); i++) {
+            ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_deserialize_rejects_malformed_offsets) {
+    // Consumers index the byte buffer straight from the offsets, so every one of these would let a later
+    // append_selective or get_slice read outside the payload if the deserializer accepted it.
+    assert_deserialize_rejects_offsets<BinaryColumn>("bbbbbcccc", {0, 6, 3, 9}, "not non-decreasing");
+    assert_deserialize_rejects_offsets<BinaryColumn>("bbbbbcccc", {0, 3, 6, 12}, "does not match byte payload size");
+    assert_deserialize_rejects_offsets<BinaryColumn>("bbbbbcccc", {0, 3, 6, 8}, "does not match byte payload size");
+    assert_deserialize_rejects_offsets<BinaryColumn>("bbbbbcccc", {1, 3, 6, 9}, "first offset is 1");
+    // The last offset is right, but an inner one points past the payload and wraps the row length.
+    assert_deserialize_rejects_offsets<BinaryColumn>("bbbbbcccc", {0, 3, 4294967295ull, 9}, "not non-decreasing");
+
+    assert_deserialize_rejects_offsets<LargeBinaryColumn>("bbbbbcccc", {0, 6, 3, 9}, "not non-decreasing");
+    assert_deserialize_rejects_offsets<LargeBinaryColumn>("bbbbbcccc", {0, 3, 6, 12},
+                                                          "does not match byte payload size");
+    assert_deserialize_rejects_offsets<LargeBinaryColumn>("bbbbbcccc", {1, 3, 6, 9}, "first offset is 1");
+
+    // Enough offsets to take the integer-encoded path: 101 offsets are above ENCODE_SIZE_LIMIT bytes.
+    {
+        std::string bytes(200, 'x');
+        std::vector<uint64_t> offsets;
+        for (int i = 0; i <= 100; ++i) {
+            offsets.push_back(i * 2);
+        }
+        std::swap(offsets[40], offsets[41]);
+        assert_deserialize_rejects_offsets<BinaryColumn>(bytes, offsets, "not non-decreasing");
+        assert_deserialize_rejects_offsets<LargeBinaryColumn>(bytes, offsets, "not non-decreasing");
+    }
+
+    assert_well_formed_offsets_round_trip<BinaryColumn>();
+    assert_well_formed_offsets_round_trip<LargeBinaryColumn>();
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_deserialize_rejects_empty_or_misaligned_offsets) {
+    std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
+    auto c1 = BinaryColumn::create();
+    c1->append_strings(strings.data(), strings.size());
+
+    std::vector<uint8_t> buffer(ColumnArraySerde::max_serialized_size(*c1));
+    const auto* end = buffer.data() + buffer.size();
+    ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data()));
+
+    // Layout: u32 bytes_size, bytes, u32 offset_bytes_size, offsets.
+    const size_t offset_bytes_size_pos = sizeof(uint32_t) + c1->get_immutable_bytes().size();
+
+    auto expect_rejected = [&](uint32_t offset_bytes_size, const std::string& expected_message) {
+        auto corrupted = buffer;
+        encode_fixed32_le(corrupted.data() + offset_bytes_size_pos, offset_bytes_size);
+        const auto* corrupted_end = corrupted.data() + corrupted.size();
+        auto c2 = BinaryColumn::create();
+        auto st = ColumnArraySerde::deserialize(corrupted.data(), corrupted_end, c2.get());
+        ASSERT_FALSE(st.ok()) << "offset_bytes_size " << offset_bytes_size;
+        ASSERT_TRUE(st.status().is_corruption()) << st.status();
+        ASSERT_NE(std::string::npos, std::string(st.status().message()).find(expected_message)) << st.status();
+        ASSERT_EQ(0u, c2->size());
+        ASSERT_EQ(0u, c2->get_immutable_bytes().size());
+    };
+
+    // No offsets at all: not even the leading zero.
+    expect_rejected(0, "has no offsets");
+    // Not a whole number of u32 offsets.
+    expect_rejected(15, "not a multiple of");
+
+    // The untouched buffer still round-trips.
+    auto c3 = BinaryColumn::create();
+    ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c3.get()));
+    ASSERT_EQ(c1->size(), c3->size());
+    for (size_t i = 0; i < c1->size(); i++) {
+        ASSERT_EQ(c1->get_slice(i), c3->get_slice(i));
+    }
 }
 
 // NOLINTNEXTLINE
