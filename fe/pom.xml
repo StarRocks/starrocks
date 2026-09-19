@@ -47,6 +47,7 @@ under the License.
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.8.2</junit.version>
+        <unboundid.ldapsdk.version>7.0.5</unboundid.ldapsdk.version>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.21.4</jackson.version>
@@ -424,6 +425,16 @@ under the License.
                 <groupId>com.github.hazendaz.jmockit</groupId>
                 <artifactId>jmockit</artifactId>
                 <version>1.49.4</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk -->
+            <!-- In-process LDAP directory server for tests. Used under the Apache License 2.0,
+                 which this SDK offers as of version 5.0.0. -->
+            <dependency>
+                <groupId>com.unboundid</groupId>
+                <artifactId>unboundid-ldapsdk</artifactId>
+                <version>${unboundid.ldapsdk.version}</version>
                 <scope>test</scope>
             </dependency>
 
