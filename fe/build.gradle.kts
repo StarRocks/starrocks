@@ -40,6 +40,7 @@ subprojects {
         set("starrocks.home", "${rootDir}/../")
         // var sync start
         set("antlr.version", "4.9.3")
+        set("adbc.version", "0.24.0")
         set("arrow.version", "18.0.0")
         set("async-profiler.version", "4.0")
         set("avro.version", "1.12.0")
@@ -174,7 +175,13 @@ subprojects {
             implementation("javax.xml.ws:jaxws-api:2.3.0")
             implementation("net.sourceforge.czt.dev:java-cup:0.11-a-czt02-cdh")
             implementation("org.antlr:antlr4-runtime:${project.ext["antlr.version"]}")
+            implementation("org.apache.arrow.adbc:adbc-core:${project.ext["adbc.version"]}")
+            implementation("org.apache.arrow.adbc:adbc-driver-jni:${project.ext["adbc.version"]}")
+            implementation("org.apache.arrow.adbc:adbc-driver-manager:${project.ext["adbc.version"]}")
+            implementation("org.apache.arrow:arrow-c-data:${project.ext["arrow.version"]}")
+            implementation("org.apache.arrow:arrow-compression:${project.ext["arrow.version"]}")
             implementation("org.apache.arrow:arrow-jdbc:${project.ext["arrow.version"]}")
+            implementation("org.apache.arrow:arrow-memory-core:${project.ext["arrow.version"]}")
             implementation("org.apache.arrow:arrow-memory-netty:${project.ext["arrow.version"]}")
             implementation("org.apache.arrow:arrow-vector:${project.ext["arrow.version"]}")
             implementation("org.apache.arrow:flight-core:${project.ext["arrow.version"]}")
@@ -299,6 +306,12 @@ subprojects {
 
     // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
     configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.apache.arrow") {
+                useVersion(project.ext["arrow.version"].toString())
+                because("Keep every Arrow Java artifact on StarRocks' centralized Arrow version")
+            }
+        }
         resolutionStrategy.capabilitiesResolution {
             withCapability("org.lz4:lz4-java") {
                 select("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")

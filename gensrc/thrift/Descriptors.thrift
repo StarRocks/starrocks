@@ -767,6 +767,13 @@ struct TLanceTable {
   1: optional string lance_dataset_uri
 }
 
+struct TADBCTable {
+    1: optional string catalog_name
+    // Logical driver name resolved by the ADBC Driver Manager.
+    2: optional string driver
+    3: optional map<string, string> adbc_options
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -812,6 +819,9 @@ struct TTableDescriptor {
 
   // Fluss Table schema
   38: optional TFlussTable flussTable
+
+  // ADBC Table
+  39: optional TADBCTable adbcTable
 }
 
 struct TDescriptorTable {

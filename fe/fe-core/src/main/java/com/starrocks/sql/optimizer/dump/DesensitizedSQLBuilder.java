@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
@@ -121,6 +122,7 @@ public class DesensitizedSQLBuilder {
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.JDBC
+                || table.getType() == Table.TableType.ADBC
                 || table.getType() == Table.TableType.FILE
                 || table.getType() == Table.TableType.BENCHMARK) {
             tableDef = visitor.desensitizeExternalTableDef(pair.first, table);
@@ -519,6 +521,13 @@ public class DesensitizedSQLBuilder {
                 sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
                 sb.append("\"table\" = \"").append(desensitizedTblName).append("\"");
                 sb.append("\n)");
+            } else if (table.getType() == Table.TableType.ADBC) {
+                ADBCTable adbcTable = (ADBCTable) table;
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append(new PrintableMap<>(adbcTable.getDisplayProperties(true), "=", true, true));
+                sb.append("\n");
+                sb.append(")");
             }
             sb.append(";");
             return sb.toString();
