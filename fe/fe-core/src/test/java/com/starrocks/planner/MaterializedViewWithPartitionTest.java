@@ -295,8 +295,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=2/5")
                 .contains("     TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 19: c1 IS NOT NULL, 21: c3 IS NOT NULL\n" +
-                        "     partitions=5/5");
+                        "     PREDICATES: (21: c3 >= 2000) OR (21: c3 IS NULL), 19: c1 IS NOT NULL, 21: c3 IS NOT NULL\n" +
+                        "     partitions=2/5");
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
@@ -382,8 +382,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=2/5")
                 .contains("     TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 19: c1 IS NOT NULL, 21: c3 IS NOT NULL\n" +
-                        "     partitions=5/5");
+                        "     PREDICATES: (21: c3 >= 2000) OR (21: c3 IS NULL), 19: c1 IS NOT NULL, 21: c3 IS NOT NULL\n" +
+                        "     partitions=2/5");
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
