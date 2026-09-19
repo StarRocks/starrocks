@@ -276,7 +276,7 @@ select v7 from t2 group by rollup(v7,v7)
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v7, 4: GROUPING_ID]] having [null]
     EXCHANGE SHUFFLE[1, 4]
         AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v7, 4: GROUPING_ID]] having [null]
-            REPEAT [[], [1: v7], [1: v7, 1: v7]]
+            REPEAT [[], [1: v7], [1: v7]]
                 SCAN (columns[1: v7] predicate[null])
 [end]
 
@@ -286,6 +286,6 @@ select v7,v8 from t2 group by cube(v7,v7,v8)
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v7, 2: v8, 4: GROUPING_ID]] having [null]
     EXCHANGE SHUFFLE[1, 2, 4]
         AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v7, 2: v8, 4: GROUPING_ID]] having [null]
-            REPEAT [[], [1: v7], [1: v7], [1: v7, 1: v7], [2: v8], [1: v7, 2: v8], [1: v7, 2: v8], [1: v7, 1: v7, 2: v8]]
+            REPEAT [[], [1: v7], [1: v7], [1: v7], [2: v8], [1: v7, 2: v8], [1: v7, 2: v8], [1: v7, 2: v8]]
                 SCAN (columns[1: v7, 2: v8] predicate[null])
 [end]
