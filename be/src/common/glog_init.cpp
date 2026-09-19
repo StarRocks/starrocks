@@ -296,10 +296,14 @@ void report_config_fallbacks() {
     }
 }
 
-void update_logging() {
-    if (!apply_log_level(config::sys_log_level)) {
-        LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
+Status update_logging() {
+    std::string loglevel = config::sys_log_level;
+    if (!apply_log_level(loglevel)) {
+        return Status::InvalidArgument(
+                fmt::format("sys_log_level needs to be INFO, WARNING, ERROR, FATAL, got '{}'", loglevel));
     }
+    LOG(INFO) << "sys_log_level is now " << loglevel;
+    return Status::OK();
 }
 
 } // namespace starrocks
