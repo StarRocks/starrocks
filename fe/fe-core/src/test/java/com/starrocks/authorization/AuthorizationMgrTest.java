@@ -303,6 +303,33 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void checkTableActionResolvesNullDbToCurrentDatabase() throws Exception {
+        // Regression: an unqualified table reference can reach NativeAccessController.checkTableAction with a
+        // null TableName db (for example a table over an external catalog whose database was not resolved onto
+        // the TableName). It must fall back to the session's current database instead of throwing an NPE.
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "grant select on table db.tbl1 to test_user", ctx);
+        manager.grant(grantStmt);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        ctx.setDatabase(DB_NAME);
+        NativeAccessController controller = new NativeAccessController();
+
+        // Null db resolves to the current database ("db"), where SELECT on tbl1 is granted -> no exception.
+        controller.checkTableAction(ctx, new TableName(null, TABLE_NAME_1), PrivilegeType.SELECT);
+
+        // A null-db table the user has no privilege on still denies (fail-closed) rather than NPE-ing.
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                controller.checkTableAction(ctx, new TableName(null, "tbl_no_priv"), PrivilegeType.SELECT));
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "revoke select on table db.tbl1 from test_user", ctx);
+        manager.revoke(revokeStmt);
+    }
+
+    @Test
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
 
