@@ -241,6 +241,8 @@ dependencies {
         exclude(group = "org.elasticsearch.client", module = "*")
         exclude(group = "com.nimbusds", module = "nimbus-jose-jwt")
         exclude(group = "com.sun.jersey", module = "jersey-bundle")
+        // Ranger 2.9.0 declares jsr311-api (JAX-RS 1.1) directly; it shadows jakarta.ws.rs-api 2.1.6
+        exclude(group = "javax.ws.rs", module = "jsr311-api")
     }
     compileOnly("org.apache.spark:spark-catalyst_2.12")
     implementation("org.apache.spark:spark-core_2.12") {

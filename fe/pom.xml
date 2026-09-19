@@ -48,6 +48,7 @@ under the License.
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
         <parquet.version>1.15.2</parquet.version>
+        <ranger.version>2.9.0</ranger.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
@@ -85,7 +86,7 @@ under the License.
         <hbase.version>2.6.2</hbase.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
-        <bouncycastle.version>1.84</bouncycastle.version>
+        <bouncycastle.version>1.85</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
         <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
@@ -1321,7 +1322,7 @@ under the License.
                         <artifactId>lz4-pure-java</artifactId>
                     </exclusion>
                     <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
-                         bcprov-jdk18on 1.84 on the classpath provides the same packages -->
+                         bcprov-jdk18on 1.85 on the classpath provides the same packages -->
                     <exclusion>
                         <groupId>org.bouncycastle</groupId>
                         <artifactId>bcprov-jdk15on</artifactId>
@@ -1570,7 +1571,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.ranger</groupId>
                 <artifactId>ranger-plugins-common</artifactId>
-                <version>2.8.0</version>
+                <version>${ranger.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.elasticsearch</groupId>
@@ -1587,6 +1588,12 @@ under the License.
                     <exclusion>
                         <groupId>com.sun.jersey</groupId>
                         <artifactId>jersey-bundle</artifactId>
+                    </exclusion>
+                    <!-- Ranger 2.9.0 declares jsr311-api (JAX-RS 1.1) directly; it shadows
+                         jakarta.ws.rs-api 2.1.6, the same clash hadoop-common excludes it for -->
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
