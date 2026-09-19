@@ -33,9 +33,13 @@ import java.util.Optional;
 public final class AggStateIf extends AggregateFunction {
     private static final Logger LOG = LogManager.getLogger(AggStateIf.class);
 
+    // Cache the base aggregate function (without _if suffix) to preserve order by information
+    private AggregateFunction baseFunction;
+
     public AggStateIf(FunctionName fnName, List<Type> argTypes,
-                      Type retType, Type intermediateType) {
+                      Type retType, Type intermediateType, AggregateFunction baseFunction) {
         super(fnName, argTypes, retType, intermediateType, false);
+        this.baseFunction = baseFunction;
     }
 
     public AggStateIf(AggStateIf other) {
@@ -43,6 +47,7 @@ public final class AggStateIf extends AggregateFunction {
         this.setBinaryType(TFunctionBinaryType.BUILTIN);
         this.setPolymorphic(other.isPolymorphic());
         this.setAggStateDesc(other.aggStateDesc.clone());
+        this.setBaseFunction((AggregateFunction) other.getBaseFunction().copy());
     }
 
     public static Optional<AggStateIf> of(AggregateFunction aggFunc) {
@@ -51,8 +56,12 @@ public final class AggStateIf extends AggregateFunction {
             List<Type> argTypes = new ArrayList<>();
             argTypes.addAll(Arrays.asList(aggFunc.getArgs()));
             argTypes.add(BooleanType.BOOLEAN);
+
+            // Copy base function for safety (even though it appears immutable)
+            AggregateFunction baseFunction = (AggregateFunction) aggFunc.copy();
+
             AggStateIf aggStateIf = new AggStateIf(functionName, argTypes, aggFunc.getReturnType(),
-                    aggFunc.getIntermediateTypeOrReturnType());
+                    aggFunc.getIntermediateTypeOrReturnType(), baseFunction);
             aggStateIf.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateIf.setPolymorphic(aggFunc.isPolymorphic());
 
@@ -79,7 +88,13 @@ public final class AggStateIf extends AggregateFunction {
     public AggregateFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
         // NOTE: It's fine that only changes agg state function's arg types and return type but inner agg state desc's,
         // since FunctionAnalyzer will adjust it later.
-        AggStateIf newFn = new AggStateIf(this.getFunctionName(), newArgTypes, newRetType, this.getIntermediateType());
+        // Extract base function's argument types (remove the last BOOLEAN condition parameter)
+        List<Type> baseArgTypes = newArgTypes.subList(0, newArgTypes.size() - 1);
+        // Create new base function with updated types
+        AggregateFunction newBaseFunction = this.getBaseFunction().withNewTypes(baseArgTypes, newRetType);
+
+        AggStateIf newFn = new AggStateIf(this.getFunctionName(), newArgTypes,
+                newRetType, this.getIntermediateType(), newBaseFunction);
         newFn.setFunctionId(this.getFunctionId());
         newFn.setChecksum(this.getChecksum());
         newFn.setBinaryType(this.getBinaryType());
@@ -104,5 +119,18 @@ public final class AggStateIf extends AggregateFunction {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    /**
+     * Get the cached base aggregate function (without _if suffix).
+     * This preserves order by information and other properties from the original function.
+     * @return the cached base function, or null if not available
+     */
+    public AggregateFunction getBaseFunction() {
+        return baseFunction;
+    }
+
+    public void setBaseFunction(AggregateFunction baseFunction) {
+        this.baseFunction = baseFunction;
     }
 }
