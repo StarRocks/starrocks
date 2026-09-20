@@ -924,10 +924,13 @@ public class Load {
             // The hidden per-row column-set slot is addressed by NAME in the load plan (tuple slot and index
             // column list), so a user column with the same name would be indistinguishable from it. The name
             // is not reserved at CREATE TABLE time (that would change DDL behavior for every table), so a
-            // flexible load on such a table is rejected here instead. Table.getColumn is case-insensitive.
-            if (((OlapTable) tbl).getColumn(LOAD_CSET_COLUMN) != null) {
-                throw new DdlException("Flexible partial update is not supported on a table with a column named "
-                        + LOAD_CSET_COLUMN + " (the name is used for the hidden per-row column-set slot)");
+            // flexible load on such a table is rejected here instead. Column names are case-insensitive in
+            // the system (Table.nameToColumn), so the name is matched ignoring case.
+            for (Column col : ((OlapTable) tbl).getBaseSchema()) {
+                if (LOAD_CSET_COLUMN.equalsIgnoreCase(col.getName())) {
+                    throw new DdlException("Flexible partial update is not supported on a table with a column named "
+                            + LOAD_CSET_COLUMN + " (the name is used for the hidden per-row column-set slot)");
+                }
             }
         }
     }

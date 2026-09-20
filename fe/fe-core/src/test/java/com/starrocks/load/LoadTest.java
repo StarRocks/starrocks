@@ -1045,9 +1045,6 @@ public class LoadTest {
                 cnCset.getBaseSchema();
                 result = Lists.newArrayList(v, cset);
                 minTimes = 0;
-                cnCset.getColumn(Load.LOAD_CSET_COLUMN);
-                result = cset;
-                minTimes = 0;
             }
         };
 
