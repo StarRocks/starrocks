@@ -172,6 +172,13 @@ CONF_Int64(max_load_dop, "16");
 
 CONF_Bool(enable_load_colocate_mv, "true");
 
+// Whether this BE takes part in the ENCODE_ALL_NULL layout on the tablet sink RPC: as a receiver it
+// advertises the bit in the tablet-writer open result, and as a sender it asks for it. Turning it off on
+// either end of a load falls back to the unencoded layout for that load. Deliberately immutable: the
+// receiver decides from this flag both what to advertise and whether to honor the levels a sender sends,
+// and a mid-process flip would desynchronize those two decisions.
+CONF_Bool(enable_load_chunk_all_null_encoding, "true");
+
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
 // A comma-separated list of debug contexts to enable.

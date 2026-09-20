@@ -22,6 +22,8 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/serde/column_array_serde.h"
+#include "column/serde/encode_level.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
@@ -106,7 +108,11 @@ protected:
         TDescriptorTableBuilder dtb;
         TTupleDescriptorBuilder tuple_builder;
         tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).column_name("c1").column_pos(1).build());
-        tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("c2").column_pos(2).build());
+        // c2 is nullable: TSlotDescriptorBuilder leaves isNullable unset, which thrift defaults to
+        // false, and append_nulls() on a non-nullable column yields no NULL at all. The all-NULL
+        // chunk below needs a column that can actually hold one.
+        tuple_builder.add_slot(
+                TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("c2").column_pos(2).nullable(true).build());
         tuple_builder.build(&dtb);
         return dtb.desc_tbl();
     }
@@ -186,6 +192,20 @@ protected:
         ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
         chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
+        return chunk;
+    }
+
+    // Same shape, but column 1 is entirely NULL. The sink only turns the bit on for a chunk that
+    // actually contains an all-NULL column, so this is what exercises the negotiated path.
+    ChunkUniquePtr _build_all_null_test_chunk(RuntimeState* runtime_state) {
+        auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+        ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
+        chunk->get_column_raw_ptr_by_index(1)->append_nulls(1);
+        // Assert the shape really has the property it is built for. A chunk that merely looks
+        // all-NULL silently turns these tests into a test of the legacy path.
+        CHECK(serde::is_all_null_column(*chunk->get_column_by_index(1)))
+                << "column 1 is not all-NULL; the slot is probably not nullable";
         return chunk;
     }
 
@@ -479,6 +499,224 @@ TEST_F(TabletSinkIndexChannelTest, serialize_chunk_non_pool_codec_compresses) {
     ASSERT_OK(channel._serialize_chunk(chunk.get(), &chunk_pb));
     EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::SNAPPY);
     EXPECT_EQ(chunk_pb.data(), "x");
+}
+
+// End-to-end check of the chunk encode level negotiation: what the receiving BE advertises in
+// PTabletWriterOpenResult decides whether the sender records per-column encode levels in ChunkPB.
+// A BE predating the field leaves it unset, which must come out as "no encoding" -- that peer
+// parses the payload at level 0 unconditionally, so an optimistic default would corrupt it.
+TEST_F(TabletSinkIndexChannelTest, chunk_encode_level_follows_the_peer_advertisement) {
+    struct Case {
+        const char* name;
+        bool advertise;
+        int advertised_level;
+        bool config_enabled;
+        int expected_level; // -1 means: no encode_level recorded at all
+    };
+    const std::vector<Case> cases = {
+            {"peer advertises the bit", true, serde::ENCODE_ALL_NULL, true, serde::ENCODE_ALL_NULL},
+            {"peer predates the field", false, 0, true, -1},
+            {"peer advertises nothing", true, 0, true, -1},
+            // A peer that only understands other bits must not get ENCODE_ALL_NULL.
+            {"peer advertises another bit", true, serde::ENCODE_STRING, true, -1},
+            {"disabled locally", true, serde::ENCODE_ALL_NULL, false, -1},
+    };
+
+    const bool prev_enabled = config::enable_load_chunk_all_null_encoding;
+    DeferOp restore_config([&] { config::enable_load_chunk_all_null_encoding = prev_enabled; });
+
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.name);
+        config::enable_load_chunk_all_null_encoding = c.config_enabled;
+
+        TQueryOptions query_options;
+        query_options.__set_batch_size(4096);
+        query_options.__set_query_timeout(3600);
+        auto runtime_state = _build_runtime_state(query_options);
+        auto sink = _build_prepared_sink(runtime_state.get());
+
+        std::vector<int> observed_levels;
+        bool chunk_seen = false;
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+            RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+            RefCountClosure<PTabletWriterOpenResult>* closure = rpc_pair->second;
+            closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+            if (c.advertise) {
+                closure->result.set_supported_chunk_encode_level(c.advertised_level);
+            }
+            closure->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [](void* arg) {});
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+            RpcAddChunkTuple* rpc_tuple = (RpcAddChunkTuple*)arg;
+            PTabletWriterAddChunksRequest* request = std::get<1>(*rpc_tuple);
+            for (int i = 0; i < request->requests_size(); i++) {
+                const auto& chunk_pb = request->requests(i).chunk();
+                if (chunk_pb.data().empty()) {
+                    continue;
+                }
+                chunk_seen = true;
+                for (int j = 0; j < chunk_pb.encode_level_size(); j++) {
+                    observed_levels.emplace_back(chunk_pb.encode_level(j));
+                }
+            }
+            ReusableClosure<PTabletWriterAddBatchResult>* closure = std::get<2>(*rpc_tuple);
+            closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+            closure->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
+            auto* rpc_pair = (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+            *rpc_pair->second = true;
+        });
+
+        ASSERT_OK(sink->open(runtime_state.get()));
+        auto chunk = _build_all_null_test_chunk(runtime_state.get());
+        ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+        // close() flushes the buffered chunk, which is what serializes it.
+        (void)sink->close(runtime_state.get(), Status::OK());
+
+        ASSERT_TRUE(chunk_seen) << "no serialized chunk reached the rpc";
+        if (c.expected_level < 0) {
+            // Byte-for-byte the legacy payload: no level recorded, so the receiver parses at 0.
+            EXPECT_TRUE(observed_levels.empty());
+        } else {
+            ASSERT_FALSE(observed_levels.empty());
+            for (int level : observed_levels) {
+                EXPECT_EQ(c.expected_level, level);
+            }
+        }
+    }
+}
+
+// The no-regression guarantee, proven by construction rather than by a cluster stopwatch: a chunk
+// with NO all-NULL column must go out byte-for-byte as it did before this change -- no tag byte on
+// any nullable column, and no encode_level in ChunkPB at all -- even when the peer has advertised
+// the capability. Cluster wall clock cannot resolve the few-percent cost this avoids (its
+// cold-start noise floor is ~25%), so the guarantee is asserted on the wire format instead.
+TEST_F(TabletSinkIndexChannelTest, no_all_null_column_means_the_payload_is_untouched) {
+    const bool prev_enabled = config::enable_load_chunk_all_null_encoding;
+    DeferOp restore_config([&] { config::enable_load_chunk_all_null_encoding = prev_enabled; });
+    config::enable_load_chunk_all_null_encoding = true;
+
+    std::string payload_all_null, payload_dense;
+    int levels_all_null = -1, levels_dense = -1;
+
+    // Same peer, same negotiation, two chunk shapes: one with an all-NULL column, one without.
+    for (int with_all_null = 1; with_all_null >= 0; with_all_null--) {
+        TQueryOptions query_options;
+        query_options.__set_batch_size(4096);
+        query_options.__set_query_timeout(3600);
+        auto runtime_state = _build_runtime_state(query_options);
+        auto sink = _build_prepared_sink(runtime_state.get());
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+            RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+            auto* closure = rpc_pair->second;
+            closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+            closure->result.set_supported_chunk_encode_level(serde::ENCODE_ALL_NULL);
+            closure->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [](void* arg) {});
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+            RpcAddChunkTuple* rpc_tuple = (RpcAddChunkTuple*)arg;
+            auto* request = std::get<1>(*rpc_tuple);
+            for (int i = 0; i < request->requests_size(); i++) {
+                const auto& chunk_pb = request->requests(i).chunk();
+                if (chunk_pb.data().empty()) continue;
+                if (with_all_null) {
+                    payload_all_null = chunk_pb.data().substr(0, chunk_pb.serialized_size());
+                    levels_all_null = chunk_pb.encode_level_size();
+                } else {
+                    payload_dense = chunk_pb.data().substr(0, chunk_pb.serialized_size());
+                    levels_dense = chunk_pb.encode_level_size();
+                }
+            }
+            auto* closure = std::get<2>(*rpc_tuple);
+            closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+            closure->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
+            auto* rpc_pair = (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+            *rpc_pair->second = true;
+        });
+
+        ASSERT_OK(sink->open(runtime_state.get()));
+        auto chunk = with_all_null ? _build_all_null_test_chunk(runtime_state.get())
+                                   : _build_test_chunk(runtime_state.get());
+        ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+        (void)sink->close(runtime_state.get(), Status::OK());
+    }
+
+    // With an all-NULL column the bit is used: per-column levels are recorded.
+    EXPECT_GT(levels_all_null, 0);
+    // Without one it is not used at all, so the receiver parses at level 0 exactly as before.
+    EXPECT_EQ(0, levels_dense);
+    ASSERT_FALSE(payload_dense.empty());
+    // And the dense payload carries no tag byte, so it is shorter than the encoded shape would be.
+    EXPECT_NE(payload_all_null, payload_dense);
+}
+
+// The per-chunk gate flips state that OUTLIVES the chunk: _encode_context is built for a chunk
+// with an all-NULL column and reset for one without. Driving several chunks through ONE channel
+// is what a fresh-channel-per-shape test cannot reach, and it is where a stale context or a
+// leftover encode_level would surface -- the review's concern about repeated chunks on a single
+// high-frequency channel.
+TEST_F(TabletSinkIndexChannelTest, alternating_chunk_shapes_on_one_channel_keep_their_own_encoding) {
+    const bool prev_enabled = config::enable_load_chunk_all_null_encoding;
+    DeferOp restore_config([&] { config::enable_load_chunk_all_null_encoding = prev_enabled; });
+    config::enable_load_chunk_all_null_encoding = true;
+
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    auto sink = _build_prepared_sink(runtime_state.get());
+    NodeChannel channel(sink.get(), 0, false);
+    // Stand in for a peer that advertised the bit during open().
+    channel._chunk_encode_level = serde::ENCODE_ALL_NULL;
+
+    auto all_null_chunk = _build_all_null_test_chunk(runtime_state.get());
+    auto dense_chunk = _build_test_chunk(runtime_state.get());
+
+    // A dense chunk serialized on a channel that has never encoded anything: the baseline the
+    // legacy path produces. Everything below is compared against it.
+    ChunkPB baseline;
+    NodeChannel fresh(sink.get(), 0, false);
+    ASSERT_OK(fresh._serialize_chunk(dense_chunk.get(), &baseline));
+    ASSERT_EQ(0, baseline.encode_level_size());
+
+    // all-NULL, dense, all-NULL again, all on the SAME channel.
+    for (int round = 0; round < 2; round++) {
+        ChunkPB encoded;
+        ASSERT_OK(channel._serialize_chunk(all_null_chunk.get(), &encoded));
+        EXPECT_EQ(2, encoded.encode_level_size()) << "round " << round << ": all-NULL chunk lost its levels";
+        for (int i = 0; i < encoded.encode_level_size(); i++) {
+            EXPECT_EQ(serde::ENCODE_ALL_NULL, encoded.encode_level(i)) << "round " << round;
+        }
+
+        ChunkPB dense;
+        ASSERT_OK(channel._serialize_chunk(dense_chunk.get(), &dense));
+        // No level may survive from the chunk before it...
+        EXPECT_EQ(0, dense.encode_level_size()) << "round " << round << ": dense chunk inherited encode levels";
+        // ...and the bytes must match what a channel that never encoded anything produces.
+        EXPECT_EQ(baseline.data(), dense.data()) << "round " << round << ": dense payload is not the legacy one";
+    }
 }
 
 TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {

@@ -456,6 +456,7 @@
         "max_tablet_write_chunk_bytes",
         "max_load_dop",
         "enable_load_colocate_mv",
+        "enable_load_chunk_all_null_encoding",
         "send_channel_buffer_limit",
         "enable_http_stream_load_limit",
         "enable_stream_load_verbose_log",

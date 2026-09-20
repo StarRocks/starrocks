@@ -21,6 +21,7 @@
 #include "base/container/lru_cache.h"
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
+#include "column/serde/encode_level.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
@@ -49,6 +50,18 @@
     } while (false)
 
 namespace starrocks {
+
+namespace {
+// Encode-level bits this BE can decode in the ChunkPB of an incoming tablet sink chunk.
+//
+// This is both what open() advertises to the sender and what _deserialize_chunk() is willing to
+// apply, which is what keeps the two from ever disagreeing: a sender only sets a bit we advertised,
+// and we only honor a bit we would have advertised. enable_load_chunk_all_null_encoding is
+// immutable for the life of the process precisely so that this stays true mid-load.
+int supported_chunk_encode_level() {
+    return config::enable_load_chunk_all_null_encoding ? serde::ENCODE_ALL_NULL : 0;
+}
+} // namespace
 
 LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, DiagnoseDaemon* diagnose_daemon,
                          BrpcStubCache* brpc_stub_cache, const UniqueId& load_id, int64_t txn_id,
@@ -177,6 +190,9 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
     }
+    // Tell the sender which encode-level bits it may use. Always set, including 0: an unset field
+    // is how the sender recognizes a BE that predates the negotiation and can only read level 0.
+    response->set_supported_chunk_encode_level(supported_chunk_encode_level());
     int64_t cost_ms = (MonotonicNanos() - start_time_ns) / 1000000;
     _check_and_log_timeout_rpc("tablet writer open", cost_ms, request.timeout_ms());
 }
@@ -374,7 +390,8 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
     SCOPED_TIMER(_deserialize_chunk_timer);
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         TRY_CATCH_BAD_ALLOC({
-            serde::ProtobufChunkDeserializer des(_chunk_meta);
+            serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, supported_chunk_encode_level(),
+                                                 /*all_null_negotiated=*/true);
             StatusOr<Chunk> res = des.deserialize(pchunk.data());
             if (!res.ok()) return res.status();
             chunk = std::move(res).value();
@@ -392,7 +409,8 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
         {
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
-                serde::ProtobufChunkDeserializer des(_chunk_meta);
+                serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, supported_chunk_encode_level(),
+                                                     /*all_null_negotiated=*/true);
                 StatusOr<Chunk> res = Status::OK();
                 TRY_CATCH_BAD_ALLOC(res = des.deserialize(buff));
                 if (!res.ok()) return res.status();
