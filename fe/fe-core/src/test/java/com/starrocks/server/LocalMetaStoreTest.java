@@ -38,6 +38,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -65,6 +67,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
@@ -96,6 +99,21 @@ public class LocalMetaStoreTest {
         FeConstants.runningUnitTest = true;
 
         UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
+
+        // StatisticsMetaManager waits Config.statistic_manager_sleep_time_sec (60s) after the cluster comes
+        // up and then creates the _statistics_ database and its nine tables, each through
+        // LocalMetastore.createTable -> onCreate. Cases here observe process-wide side effects of table
+        // creation - testCreateTableIfNotExists counts onCreate through a JVM-wide MockUp,
+        // testTruncateInTheMiddleOfDatabaseDropped compares global tablet counts - so whenever this class
+        // outlives that delay, as it does on a loaded runner, the burst lands inside a case and breaks it
+        // (the onCreate count reads 9 instead of 0). Quiesce the daemon once here.
+        StatisticsMetaManager statisticsMetaManager = (StatisticsMetaManager) Deencapsulation.getField(
+                GlobalStateMgr.getCurrentState(), "statisticsMetaManager");
+        Assertions.assertTrue(statisticsMetaManager.isRunning(),
+                "the statistics daemon must be up before it is stopped; otherwise a later start() would "
+                        + "clear the stop request and resurrect the racing table creation");
+        statisticsMetaManager.setStop();
+        LeaderDaemon.awaitQuiesced(List.of(statisticsMetaManager), 30_000L);
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
