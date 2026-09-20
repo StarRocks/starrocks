@@ -126,6 +126,7 @@ DeltaWriterOptions LocalTabletsChannel::_build_delta_writer_options(const PTable
     options.column_to_expr_value = &(_column_to_expr_value);
     options.merge_condition = params.merge_condition();
     options.partial_update_mode = params.partial_update_mode();
+    options.flexible_partial_update = params.flexible_partial_update();
     options.immutable_tablet_size = params.immutable_tablet_size();
 
     if (params.is_replicated_storage()) {
@@ -421,7 +422,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // SDCG flexible partial update (cross-node): the local path also supports flexible partial
     // update -- the FE enables it for any JSON partial-update PK load (not lake-only), the local
-    // DeltaWriter self-detects the "__cset__" slot, and RowsetWriter::_populate_flexible_column_sets
+    // DeltaWriter learns it from the explicit PTabletWriterOpenRequest.flexible_partial_update flag
+    // (DeltaWriterOptions::flexible_partial_update), and RowsetWriter::_populate_flexible_column_sets
     // folds the dict from FlexiblePartialUpdateRegistry::get(txn_id) at commit. So a multi-bucket
     // local PK load spread over >1 BE hits the SAME cross-node gap as lake. Materialize the dict the
     // coordinator shipped on the eos request into THIS BE's registry (keyed by _txn_id) BEFORE

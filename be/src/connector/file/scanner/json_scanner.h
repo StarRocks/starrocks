@@ -182,8 +182,11 @@ private:
     // === SDCG flexible partial update (set-id spine) ===
     // True when this load is a flexible partial update: different rows update different
     // column subsets, and a per-row set-id is emitted into the hidden "__cset__" column.
+    // Taken from the explicit TBrokerScanRangeParams.flexible_partial_update flag set by the
+    // FE scan node; never inferred from the slot names.
     bool _flexible_partial_update{false};
-    // Chunk column index of the hidden "__cset__" set-id column (-1 if absent).
+    // Chunk column index of the hidden "__cset__" set-id column (-1 if absent). Only looked
+    // up when _flexible_partial_update is set.
     int _cset_col_index{-1};
     // Per-load dictionary (set-id <-> present value-column name-set). Interned by the
     // scanner; read by the co-located tablet writer when building RowsetTxnMetaPB.

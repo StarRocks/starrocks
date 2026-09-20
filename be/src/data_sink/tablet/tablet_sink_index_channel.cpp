@@ -264,6 +264,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_UPDATE_MODE) {
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
     }
+    // SDCG flexible partial update: forward TOlapTableSink.flexible_partial_update to the tablet writer as
+    // the explicit PTabletWriterOpenRequest.flexible_partial_update flag; the writer never infers it from the
+    // slot names. Left unset for non-flexible loads so the request is byte-identical to before.
+    if (_parent->_flexible_partial_update) {
+        request.set_flexible_partial_update(true);
+    }
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
     request.set_txn_id(_parent->_txn_id);

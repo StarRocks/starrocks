@@ -124,8 +124,9 @@ public:
                              bool miss_auto_increment_column, int64_t db_id, int64_t table_id,
                              int64_t immutable_tablet_size, MemTracker* mem_tracker, int64_t max_buffer_size,
                              int64_t schema_id, const PartialUpdateMode& partial_update_mode,
-                             const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
-                             RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
+                             bool flexible_partial_update, const std::map<string, string>* column_to_expr_value,
+                             PUniqueId load_id, RuntimeProfile* profile,
+                             BundleWritableFileContext* bundle_writable_file_context,
                              GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
                              std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline)
             : _tablet_manager(tablet_manager),
@@ -143,6 +144,7 @@ public:
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
               _partial_update_mode(partial_update_mode),
+              _flexible_partial_update(flexible_partial_update),
               _column_to_expr_value(column_to_expr_value),
               _load_id(std::move(load_id)),
               _profile(profile),
@@ -326,8 +328,10 @@ private:
     // write-mode cost model instead of the static heuristic.
     bool _auto_resolved = false;
     bool _partial_schema_with_sort_key_conflict = false;
-    // SDCG flexible partial update: true when "__cset__" was injected by FE (detected from
-    // the slot order in init_write_schema). Drives the synthetic "__cset__" column append.
+    // SDCG flexible partial update: the explicit PTabletWriterOpenRequest.flexible_partial_update flag
+    // threaded in through DeltaWriterBuilder::set_flexible_partial_update (never inferred from the slot
+    // names). When true FE has injected the hidden "__cset__" slot; drives the synthetic "__cset__"
+    // column append.
     bool _flexible_partial_update = false;
 
     int64_t _last_write_ts = 0;
@@ -796,14 +800,10 @@ Status DeltaWriterImpl::init_write_schema() {
     const auto has_op_column = (this->_slots->size() > 0 && this->_slots->back()->col_name() == "__op");
     const auto write_columns = has_op_column ? _slots->size() - 1 : _slots->size();
 
-    // SDCG flexible partial update: FE injects the hidden "__cset__" SMALLINT slot directly
-    // before "__op". Detect it from the slot order -- this is self-contained and matches the
-    // FE-only injection (the flag is also mirrored on PTabletWriterOpenRequest, but is not
-    // threaded into this lake writer's ctor in the POC; slot presence is equivalent).
-    const size_t cset_slot_pos = has_op_column ? (_slots->size() >= 2 ? _slots->size() - 2 : _slots->size())
-                                               : (_slots->empty() ? 0 : _slots->size() - 1);
-    _flexible_partial_update =
-            cset_slot_pos < _slots->size() && (*_slots)[cset_slot_pos]->col_name() == LOAD_CSET_COLUMN;
+    // SDCG flexible partial update: _flexible_partial_update is the explicit flag from
+    // PTabletWriterOpenRequest.flexible_partial_update (threaded through the builder); when it is set
+    // FE has injected the hidden "__cset__" SMALLINT slot directly before "__op". The slot names are
+    // never inspected to infer the flag.
 
     // Reject flexible + merge_condition up front (fail before any data is written): there is no
     // flexible-aware apply path for it -- a merge_condition disables both the packed `.spcols` and the
@@ -1570,8 +1570,8 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     auto impl = new DeltaWriterImpl(
             _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
             _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
-            _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
-            _is_multi_statements_txn, _tablet_schema, _force_build_vector_index_inline);
+            _flexible_partial_update, _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
+            _global_dicts, _is_multi_statements_txn, _tablet_schema, _force_build_vector_index_inline);
     return std::make_unique<DeltaWriter>(impl);
 }
 

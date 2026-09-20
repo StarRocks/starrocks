@@ -67,10 +67,11 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
-    // SDCG flexible partial update: mirrors PTabletWriterOpenRequest.flexible_partial_update
-    // (and TOlapTableSink.flexible_partial_update). When true, "__cset__" is among `slots`
-    // (immediately before "__op") and the per-load set-id dictionary is in
-    // FlexiblePartialUpdateRegistry keyed by `txn_id`.
+    // SDCG flexible partial update: copied from PTabletWriterOpenRequest.flexible_partial_update,
+    // which the OlapTableSink sets from TOlapTableSink.flexible_partial_update. This explicit flag
+    // is the ONLY source of truth for the writer (it is never inferred from slot names). When true,
+    // "__cset__" is among `slots` (immediately before "__op") and the per-load set-id dictionary is
+    // in FlexiblePartialUpdateRegistry keyed by `txn_id`.
     bool flexible_partial_update = false;
     // `ptable_schema_param` is valid during initialization.
     // And it will be set to nullptr because we only need to access it during intialization.

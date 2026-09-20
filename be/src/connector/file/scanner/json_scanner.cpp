@@ -75,17 +75,30 @@ Status JsonScanner::open() {
 
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
 
+    // SDCG flexible partial update is signalled ONLY by the explicit
+    // TBrokerScanRangeParams.flexible_partial_update flag the FE scan node sets; the slot names are
+    // never inspected to infer it. When the flag is set the FE has also injected the hidden "__cset__"
+    // set-id slot, which the readers fill per row (see JsonReader).
+    const bool is_flexible =
+            _scan_range.params.__isset.flexible_partial_update && _scan_range.params.flexible_partial_update;
+    if (is_flexible) {
+        const bool has_cset_slot =
+                std::any_of(_src_slot_descriptors.begin(), _src_slot_descriptors.end(),
+                            [](const SlotDescriptor* s) { return s != nullptr && s->col_name() == LOAD_CSET_COLUMN; });
+        if (!has_cset_slot) {
+            return Status::InternalError(strings::Substitute(
+                    "flexible partial update is set on the scan range but the plan carries no hidden '$0' slot",
+                    LOAD_CSET_COLUMN));
+        }
+    }
+
     if (range.__isset.jsonpaths) {
         // SDCG flexible partial update relies on the object-order construction path
         // (_construct_row_without_jsonpath), where _parsed_columns is the per-row presence
         // bitmap that yields the set-id. With explicit jsonpaths every slot is filled by
         // path extraction (missing path => null), so presence-vs-explicit-null cannot be
         // distinguished. Reject the combination with a clear error rather than silently
-        // mis-classifying omitted columns as NULL writes. Flexible is signalled by the
-        // presence of the injected "__cset__" slot.
-        const bool is_flexible =
-                std::any_of(_src_slot_descriptors.begin(), _src_slot_descriptors.end(),
-                            [](const SlotDescriptor* s) { return s != nullptr && s->col_name() == LOAD_CSET_COLUMN; });
+        // mis-classifying omitted columns as NULL writes.
         if (is_flexible) {
             return Status::NotSupported(
                     "flexible partial update (heterogeneous per-row columns) is not supported together with "
@@ -312,10 +325,13 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _range_desc(range_desc),
           _envelope_type(range_desc.__isset.envelope ? range_desc.envelope : TEnvelopeType::NONE) {
     _meta_col_by_slot_id = build_stream_source_meta_columns(_scanner->_scan_range.params.stream_source_meta_columns);
-    // SDCG: the load is flexible iff FE injected the hidden "__cset__" set-id slot. We detect
-    // it from the slots themselves (the presence of a "__cset__" slot is exactly equivalent
-    // to the flexible flag, and avoids overloading the pre-existing, unrelated
-    // TBrokerScanRangeParams.flexible_column_mapping used by the parquet/avro/csv scanners).
+    // SDCG: the load is flexible iff the FE scan node set the explicit
+    // TBrokerScanRangeParams.flexible_partial_update flag (distinct from the pre-existing, unrelated
+    // flexible_column_mapping used by the parquet/avro/csv scanners). Only then is the hidden "__cset__"
+    // set-id slot looked up; a non-flexible load never inspects slot names for it. JsonScanner::open()
+    // has already verified that the flag comes with a "__cset__" slot.
+    _flexible_partial_update = _scanner->_scan_range.params.__isset.flexible_partial_update &&
+                               _scanner->_scan_range.params.flexible_partial_update;
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
         const auto& desc = _slot_descs[i];
@@ -326,14 +342,16 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
             _op_col_index = index;
         } else if (auto m = _meta_col_by_slot_id.find(desc->id()); m != _meta_col_by_slot_id.end()) {
             _meta_col_by_index.emplace(index, m->second);
-        } else if (UNLIKELY(desc->col_name() == LOAD_CSET_COLUMN)) {
+        } else if (_flexible_partial_update && UNLIKELY(desc->col_name() == LOAD_CSET_COLUMN)) {
             _cset_col_index = index;
         }
         index++;
         _slot_desc_dict.emplace(desc->col_name(), desc);
         _type_desc_dict.emplace(desc->col_name(), _type_descs[i]);
     }
-    _flexible_partial_update = (_cset_col_index >= 0);
+    // The flag was validated against the slots in JsonScanner::open(); a flexible reader without the
+    // "__cset__" slot is a programming error, never a data error.
+    DCHECK(!_flexible_partial_update || _cset_col_index >= 0);
 
     // Build the chunk-column-index -> mask-column-name table (every real column except the
     // synthetic "__op" and "__cset__"), and look up the per-load set-id dictionary by

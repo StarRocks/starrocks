@@ -1014,6 +1014,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_mem_tracker(_mem_tracker)
                                               .set_schema_id(schema_id)
                                               .set_partial_update_mode(params.partial_update_mode())
+                                              .set_flexible_partial_update(params.flexible_partial_update())
                                               .set_column_to_expr_value(&_column_to_expr_value)
                                               .set_load_id(params.id())
                                               .set_profile(_profile)

@@ -2019,7 +2019,8 @@ public:
         }
 
         // Flexible partial-update slots: c0 (key) + c1 + c2 + "__cset__" set-id column LAST (no
-        // "__op" in this UT, so the writer detects flexible from the trailing "__cset__" slot).
+        // "__op" in this UT). The writer is told the load is flexible explicitly
+        // (set_flexible_partial_update); it never infers that from the slot names.
         _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
         _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
         _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
@@ -2147,6 +2148,7 @@ public:
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_flexible_partial_update(true)
                                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
                                                    .build());
         CHECK_OK(delta_writer->open());
@@ -2503,8 +2505,9 @@ public:
             c->set_default_value("0");
         }
 
-        // Flexible slots: c0 (key) + c1..c4 + trailing "__cset__" set-id slot (no "__op" in this UT,
-        // so the writer detects flexible from the trailing "__cset__" slot).
+        // Flexible slots: c0 (key) + c1..c4 + trailing "__cset__" set-id slot (no "__op" in this UT).
+        // The writer is told the load is flexible explicitly (set_flexible_partial_update); it never
+        // infers that from the slot names.
         _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
         for (int ci = 1; ci <= 4; ++ci) {
             _slots.emplace_back(ci, "c" + std::to_string(ci), TypeDescriptor{LogicalType::TYPE_INT});
@@ -2642,6 +2645,7 @@ public:
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_flexible_partial_update(true)
                                                    // The whole point: ROW_MODE, not COLUMN_UPDATE_MODE.
                                                    .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
                                                    .build());

@@ -264,16 +264,11 @@ Status DeltaWriter::_init() {
         }
     }();
 
-    // SDCG flexible partial update: flexible iff FE injected the hidden "__cset__" slot
-    // (directly before "__op"). Detect from the slots so the local path is self-contained
-    // and consistent with the scanner and the lake writer; _opt.flexible_partial_update
-    // (mirrored from PTabletWriterOpenRequest) is OR-ed in for completeness.
-    const bool flexible_partial_update = _opt.flexible_partial_update || [this]() {
-        const bool has_op = _opt.slots->size() > 0 && _opt.slots->back()->col_name() == "__op";
-        const size_t cset_pos = has_op ? (_opt.slots->size() >= 2 ? _opt.slots->size() - 2 : _opt.slots->size())
-                                       : (_opt.slots->empty() ? 0 : _opt.slots->size() - 1);
-        return cset_pos < _opt.slots->size() && (*_opt.slots)[cset_pos]->col_name() == LOAD_CSET_COLUMN;
-    }();
+    // SDCG flexible partial update: driven solely by the explicit flag the sink forwarded in
+    // PTabletWriterOpenRequest.flexible_partial_update (from TOlapTableSink.flexible_partial_update).
+    // The slot names are never inspected to infer it; when the flag is set FE has injected the hidden
+    // "__cset__" slot directly before "__op".
+    const bool flexible_partial_update = _opt.flexible_partial_update;
 
     // Flexible partial update is SHARED-DATA (lake) only. The local (shared-nothing) apply path does not
     // understand the "__cset__" set-id / distinct_column_sets, so it would overwrite every union column
