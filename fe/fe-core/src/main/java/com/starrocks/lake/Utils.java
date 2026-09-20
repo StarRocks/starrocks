@@ -14,6 +14,11 @@
 
 package com.starrocks.lake;
 
+<<<<<<< HEAD
+=======
+import com.baidu.jprotobuf.pbrpc.utils.TalkTimeoutController;
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
@@ -23,6 +28,11 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.common.Config;
+>>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -135,6 +145,9 @@ public class Utils {
         
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
         List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
+        // Read once so every per-node request of one batch carries the same deadline even if the
+        // config is changed while the batch is being built.
+        long timeoutMs = Config.lake_publish_version_timeout_ms;
         for (Map.Entry<ComputeNode, PublishTabletsInfo> entry : nodeToPublishTabletsInfo.entrySet()) {
             ComputeNode node = entry.getKey();
             PublishTabletsInfo publishTabletInfo = entry.getValue();
@@ -142,13 +155,17 @@ public class Utils {
             request.baseVersion = baseVersion;
             request.newVersion = newVersion;
             request.tabletIds = publishTabletInfo.getTabletIds(); // todo: limit the number of Tablets sent to a single node
-            request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
+            request.timeoutMs = timeoutMs;
             request.txnInfos = txnInfos;
             if (!rebuildPindexTabletIds.isEmpty()) {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
             }
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            // @ProtobufRPC can only carry a compile-time constant, so the configured timeout is applied
+            // per call. It has to match the deadline the request carries: a shorter brpc wait would make
+            // FE give up while the node is still publishing. The override is consumed by this one call.
+            TalkTimeoutController.setTalkTimeout(timeoutMs);
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
             nodeList.add(node);
@@ -261,13 +278,15 @@ public class Utils {
 
         List<ComputeNodePB> computeNodes = new ArrayList<>();
         List<PublishVersionRequest> publishReqs = new ArrayList<>();
+        // Read once, as in publishVersionBatch: the aggregator applies each sub-request's own deadline.
+        long timeoutMs = Config.lake_publish_version_timeout_ms;
         for (Map.Entry<ComputeNode, PublishTabletsInfo> entry : nodeToPublishTabletsInfo.entrySet()) {
             PublishTabletsInfo publishTabletInfo = entry.getValue();
             PublishVersionRequest singleReq = new PublishVersionRequest();
             singleReq.setBaseVersion(baseVersion);
             singleReq.setNewVersion(newVersion);
             singleReq.setTabletIds(publishTabletInfo.getTabletIds());
-            singleReq.setTimeoutMs(LakeService.TIMEOUT_PUBLISH_VERSION);
+            singleReq.setTimeoutMs(timeoutMs);
             singleReq.setTxnInfos(txnInfos);
             singleReq.setEnableAggregatePublish(true);
 
@@ -338,6 +357,9 @@ public class Utils {
         }
 
         LakeService lakeService = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
+        // Same per-call override as the non-aggregate path, see publishVersionBatch. The aggregator waits
+        // for every sub-request, each of which carries this same timeout, so FE must not wait for less.
+        TalkTimeoutController.setTalkTimeout(Config.lake_publish_version_timeout_ms);
         Future<PublishVersionResponse> future = lakeService.aggregatePublishVersion(request);
 
         try {

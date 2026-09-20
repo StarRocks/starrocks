@@ -496,6 +496,27 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
+<<<<<<< HEAD
+=======
+### `lake_publish_version_timeout_ms`
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
+- Introduced in: v4.2.0
+
+### `slow_publish_partition_log_threshold_ms`
+
+- Default: 3000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The threshold above which `PublishVersionDaemon` logs a per-phase breakdown (`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`) of a slow partition publish at the WARN level. Lower this value to capture sub-second jitter when investigating publish latency on a live cluster; raise it to silence routine slow-but-acceptable publishes. There is no behavior change at the default value.
+- Introduced in: v4.2
+
+>>>>>>> 68752e6 ([Enhancement] Make the shared-data publish version timeout configurable (#79332))
 ### `meta_sync_force_delete_shard_meta`
 
 - Default: false
