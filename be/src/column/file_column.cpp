@@ -54,6 +54,10 @@ FileColumn::FileColumn(const size_t size) : FileColumn() {
     }
 }
 
+std::array<ColumnPtr, FileColumn::NUM_FIELDS> FileColumn::fields() const {
+    return {_fields[URI], _fields[OFFSET], _fields[SIZE], _fields[CONTENT_TYPE], _fields[CHECKSUM], _fields[INLINE]};
+}
+
 size_t FileColumn::size() const {
     return _fields[0]->size();
 }

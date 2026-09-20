@@ -58,6 +58,7 @@ public:
 
     bool is_file() const override { return true; }
 
+    std::array<ColumnPtr, FileColumn::NUM_FIELDS> fields() const;
     size_t size() const override;
     size_t capacity() const override;
     size_t type_size() const override;
