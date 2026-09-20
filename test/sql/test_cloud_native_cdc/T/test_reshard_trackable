@@ -209,10 +209,16 @@ function: wait_reshard_job_finish("dup_m", "SPLIT_TABLET", 1)
 
 INSERT INTO dup_m VALUES (5, 50);
 
+-- The split does not rewrite data, so each child still references the parent's files with the
+-- shared flag, and merge planning refuses a tablet that is not proven free of them. A manual
+-- compaction is what clears them: it runs at MANUAL_COMPACT priority, which is sent to the BE as
+-- force_base_compaction, so every rowset is rewritten into files this tablet alone owns.
+ALTER TABLE dup_m COMPACT;
+
 -- Merge the split tablets back into one with an explicit tablet group. Size-based auto-merge is
 -- unusable here: it needs tablet size stats that refresh asynchronously after the split, and its
 -- parallelism floor scales with the node count, so on a large enough cluster a three-tablet index
--- can never auto-merge at all.
+-- can never auto-merge at all. The helper retries while the shared-file proof is still pending.
 function: merge_tablets_added_since_snapshot("dup_m")
 function: wait_reshard_job_finish("dup_m", "MERGE_TABLET", 1)
 
@@ -287,8 +293,16 @@ function: assert_query_contains("SELECT count(*) >= 1 FROM information_schema.ma
 DROP MATERIALIZED VIEW ivm_split_mv;
 
 -- name: test_ivm_mv_reshard_merge @cloud
--- The same for a merge. A merge dedups rows shared by the source tablets, so an MV that maintained
--- across it incorrectly would show duplicates -- which the two-way diff catches.
+-- This used to drive an incremental MV across a merge. It cannot today: merge planning refuses a
+-- tablet that still holds the shared data files a split leaves behind, and this base table has to
+-- be a primary-key table (an incremental MV over a native table needs enable_change_data_capture,
+-- which only primary-key tables accept). A non-primary-key table clears those files on demand with
+-- ALTER TABLE ... COMPACT, but here that request reaches the BE as force_base_compaction and
+-- PrimaryCompactionPolicy only acts on it for a tablet carrying outstanding deletes, which a
+-- freshly split child is not -- and a range-distributed primary-key table has no way to reach two
+-- tablets except by splitting. So the case now covers
+-- the split half end to end and pins the refusal itself; restore the merge half once a
+-- primary-key tablet can be made to drop its inherited shared files.
 
 [UC]ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "true");
 
@@ -317,8 +331,9 @@ function: set_max_tablet_id("ivm_merge_base")
 ALTER TABLE ivm_merge_base SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-3');
 function: wait_reshard_job_finish("ivm_merge_base", "SPLIT_TABLET", 1)
 INSERT INTO ivm_merge_base VALUES (5, 50);
-function: merge_tablets_added_since_snapshot("ivm_merge_base")
-function: wait_reshard_job_finish("ivm_merge_base", "MERGE_TABLET", 1)
+
+function: assert_merge_refused_while_shared_files_remain("ivm_merge_base")
+
 INSERT INTO ivm_merge_base VALUES (6, 60);
 
 REFRESH MATERIALIZED VIEW ivm_merge_mv WITH SYNC MODE;

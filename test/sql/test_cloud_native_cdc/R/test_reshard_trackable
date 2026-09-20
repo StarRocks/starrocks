@@ -55,6 +55,7 @@ SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_t [_CHANGES_${bk1}_${b
 
 
 
+
 -- name: test_cdc_reshard_pk_split @cloud
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 SET enable_range_distribution = true;
@@ -132,6 +133,7 @@ SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk1}_${bk2}_] ORDER BY k, __C
 
 
 
+
 -- name: test_pitq_reshard_split @cloud
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 SET enable_range_distribution = true;
@@ -175,6 +177,7 @@ SELECT k, v FROM pitq_t bk [_BOOKMARK_${bk_id}_] ORDER BY k;
 1	10
 2	20
 -- !result
+
 
 
 
@@ -246,6 +249,7 @@ SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_t2 [_CHANGES_${bk1}_${
 
 
 
+
 -- name: test_cdc_reshard_merge @cloud
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 [UC]ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "true");
@@ -288,6 +292,9 @@ None
 INSERT INTO dup_m VALUES (5, 50);
 -- result:
 -- !result
+ALTER TABLE dup_m COMPACT;
+-- result:
+-- !result
 function: merge_tablets_added_since_snapshot("dup_m")
 -- result:
 None
@@ -318,9 +325,6 @@ SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_m [_CHANGES_${bk1}_${b
 -- result:
 5	5
 -- !result
-
-
-
 -- name: test_ivm_mv_reshard_split @cloud
 SET enable_range_distribution = true;
 -- result:
@@ -398,6 +402,7 @@ None
 DROP MATERIALIZED VIEW ivm_split_mv;
 -- result:
 -- !result
+
 -- name: test_ivm_mv_reshard_merge @cloud
 [UC]ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "true");
 SET enable_range_distribution = true;
@@ -447,11 +452,7 @@ None
 INSERT INTO ivm_merge_base VALUES (5, 50);
 -- result:
 -- !result
-function: merge_tablets_added_since_snapshot("ivm_merge_base")
--- result:
-None
--- !result
-function: wait_reshard_job_finish("ivm_merge_base", "MERGE_TABLET", 1)
+function: assert_merge_refused_while_shared_files_remain("ivm_merge_base")
 -- result:
 None
 -- !result

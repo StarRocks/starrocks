@@ -406,6 +406,43 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
     set_non_segment_files_shared(tablet_metadata, skip_delvecs);
 }
 
+bool has_shared_files(const TabletMetadataPB& metadata) {
+    // Field order below follows TabletMetadataPB / RowsetMetadataPB declaration order; see the
+    // header for the full walk and for why each remaining field is skipped.
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& del : rowset.del_files()) {
+            if (del.shared()) {
+                return true;
+            }
+        }
+        for (const auto& segment : rowset.segment_metas()) {
+            if (segment.shared()) {
+                return true;
+            }
+        }
+    }
+    for (const auto& sstable : metadata.sstable_meta().sstables()) {
+        if (sstable.shared()) {
+            return true;
+        }
+    }
+    for (const auto& dcg_entry : metadata.dcg_meta().dcgs()) {
+        for (bool shared : dcg_entry.second.shared_files()) {
+            if (shared) {
+                return true;
+            }
+        }
+    }
+    for (const auto& idg_entry : metadata.idg_meta().idgs()) {
+        for (const auto& entry : idg_entry.second.entries()) {
+            if (entry.shared_file()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void reset_cdc_carryover_for_old_tablet(TabletMetadataPB* metadata, int64_t base_version,
                                         const TabletMetadataPB* old_metadata) {
     build_metadata_ancestors(metadata, base_version, old_metadata);

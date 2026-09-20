@@ -466,8 +466,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         const bool emit_stats = metadata->has_range() || request->base_version() == 1;
                         int64_t stats_num_rows = 0;
                         int64_t stats_data_size = 0;
+                        bool stats_has_shared_files = false;
                         if (emit_stats) {
                             compute_tablet_stats(*metadata, &stats_num_rows, &stats_data_size);
+                            // Metadata-only scan; kept out of response_mtx for the same reason the
+                            // row/size computation is.
+                            stats_has_shared_files = lake::tablet_reshard_helper::has_shared_files(*metadata);
                         }
                         // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
                         TabletMetadataPB local_metadata;
@@ -496,6 +500,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 auto* stat = &(*response->mutable_tablet_stats())[metadata->id()];
                                 stat->set_num_rows(stats_num_rows);
                                 stat->set_data_size(stats_data_size);
+                                stat->set_has_shared_files(stats_has_shared_files);
                                 // Compat shim: also mirror the first-load row count into the legacy
                                 // field so an old FE (BE-before-FE rolling upgrade) still collects
                                 // first-load statistics from ordinal 4; a new FE reads tablet_stats.
@@ -1554,6 +1559,8 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         data_size += file.size();
                     }
 
+                    bool has_shared_files = lake::tablet_reshard_helper::has_shared_files(**tablet_metadata);
+
                     auto elapsed_ms = (butil::gettimeofday_us() - task_start_us) / 1000;
                     if (elapsed_ms >= config::lake_tablet_stat_slow_log_ms) {
                         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:slow_log", nullptr);
@@ -1569,6 +1576,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     tablet_stat->set_tablet_id(tablet_id);
                     tablet_stat->set_num_rows(num_rows);
                     tablet_stat->set_data_size(data_size);
+                    tablet_stat->set_has_shared_files(has_shared_files);
                 },
                 [&] {
                     LOG(WARNING) << "get tablet stats task has been cancelled ";

@@ -4438,6 +4438,48 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         requires. An explicit group also bypasses merge auto-selection, which depends on
         asynchronously refreshed tablet size stats and on a node-count-dependent parallelism floor
         that can leave a small index unmergeable.
+
+        A split leaves its children referencing the parent's data files with the shared flag, and a
+        tablet holding one is refused by merge planning until a compaction has rewritten those files
+        into private ones AND the FE has collected a tablet-stat round proving it. Callers trigger
+        the compaction; this retries the merge until that proof lands, because the refusal is
+        transient by construction. Only that one refusal is retried -- any other failure is raised
+        immediately, so a real regression surfaces as itself rather than as a timeout.
+        """
+        added = sorted(self.show_tablet_ids(table_name) - self.tablet_id_snapshot)
+        tools.assert_true(
+            len(added) >= 2,
+            f"merge tablets of {table_name} error, expect at least 2 new tablets since the"
+            f" snapshot, got {added}",
+        )
+        group = ", ".join(str(tablet_id) for tablet_id in added)
+        sql = f"ALTER TABLE {table_name} MERGE TABLETS ({group})"
+        not_proven = "has not been proven free of merge-blocking shared data files"
+        begin_time = time.time()
+        while True:
+            result = self.execute_sql(sql, True)
+            if result["status"]:
+                return
+            if not_proven not in str(result.get("msg", "")):
+                break
+            if time.time() - begin_time >= 180:
+                break
+            time.sleep(5)
+        tools.assert_true(result["status"], f"merge tablets ({group}) of {table_name} error: {result}")
+
+    def assert_merge_refused_while_shared_files_remain(self, table_name):
+        """
+        Assert that merging the generation a split installed is refused while the children still
+        reference the parent's data files with the shared flag.
+
+        A split does not rewrite data, so its children inherit the parent's files and merge planning
+        refuses them until a compaction has rewritten those files and a tablet-stat round has proven
+        it. On a non-primary-key table `ALTER TABLE ... COMPACT` forces that rewrite on demand, so a
+        merge is reachable -- test_cdc_reshard_merge does exactly that. On a primary-key table the
+        same statement reaches the BE as force_base_compaction and PrimaryCompactionPolicy does read
+        it, but only for a tablet carrying outstanding deletes; a delete-free split child skips that
+        branch, so it stays unmergeable until ordinary compaction rewrites those rowsets. This asserts the contract that holds
+        today instead of waiting for something that will not arrive.
         """
         added = sorted(self.show_tablet_ids(table_name) - self.tablet_id_snapshot)
         tools.assert_true(
@@ -4447,4 +4489,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         )
         group = ", ".join(str(tablet_id) for tablet_id in added)
         result = self.execute_sql(f"ALTER TABLE {table_name} MERGE TABLETS ({group})", True)
-        tools.assert_true(result["status"], f"merge tablets ({group}) of {table_name} error: {result}")
+        tools.assert_false(
+            result["status"],
+            f"merge tablets ({group}) of {table_name} was expected to be refused while the split's"
+            f" children still hold shared data files, but it was accepted",
+        )
+        tools.assert_true(
+            "has not been proven free of merge-blocking shared data files" in str(result.get("msg", "")),
+            f"merge tablets ({group}) of {table_name} was refused for an unexpected reason: {result}",
+        )

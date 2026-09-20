@@ -392,6 +392,7 @@ public final class MetricRepo {
     // no rollback path), which means a deterministic failure never shows up as an aborted job. This
     // counter is the only signal that a reshard job is stuck retrying, so alert on its rate.
     public static LongCounterMetric COUNTER_TABLET_RESHARD_PUBLISH_FAILED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED;
 
     // Sample-Based Tablet Pre-Split metrics. The coordinator wires the eligibility-skip,
     // post-submit hard-cap, load-abort counters and the two wait-time histograms. The
@@ -1235,6 +1236,13 @@ public final class MetricRepo {
         COUNTER_TABLET_RESHARD_PUBLISH_FAILED = new LongCounterMetric("tablet_reshard_publish_failed",
                 MetricUnit.REQUESTS, "total tablet reshard publish attempts that failed and will be retried");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_PUBLISH_FAILED);
+
+        COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED = new LongCounterMetric(
+                "tablet_reshard_merge_candidate_blocked", MetricUnit.NOUNIT,
+                "cumulative count of tablet-exclusion events from merge planning (monitor the rate of "
+                        + "increase, not the raw value); a tablet is excluded because it still holds "
+                        + "merge-blocking shared data files, or has not yet been proven free of them");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED);
 
         COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = new LongCounterMetric(
                 "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS,
