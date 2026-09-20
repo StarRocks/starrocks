@@ -3317,6 +3317,41 @@ TEST_F(MetaFileTest, test_append_dcg_carries_forward_shared_flag) {
     }
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_incomplete_dcg_entry_skipped) {
+    // A DcgEntry that is missing any of segment_id / column_file /
+    // col_unique_ids cannot describe a layer. Publish must skip it rather than
+    // install a half-built overlay: readers bind an overlaid column to the
+    // newest layer that claims it, so a bogus entry would hide the real values.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20033);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20033);
+    metadata->set_version(9);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(10);
+    // No column_file.
+    auto* no_file = op.add_dcg_entries();
+    no_file->set_segment_id(4);
+    no_file->add_col_unique_ids(100);
+    // No segment_id.
+    auto* no_segment = op.add_dcg_entries();
+    no_segment->set_column_file("no_segment.cols");
+    no_segment->add_col_unique_ids(101);
+    // No columns.
+    auto* no_columns = op.add_dcg_entries();
+    no_columns->set_segment_id(5);
+    no_columns->set_column_file("no_columns.cols");
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    EXPECT_TRUE(metadata->dcg_meta().dcgs().empty()) << "an incomplete entry must not install a layer";
+    for (const auto& f : metadata->orphan_files()) {
+        EXPECT_NE("no_segment.cols", f.name());
+        EXPECT_NE("no_columns.cols", f.name());
+    }
+}
+
 TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first) {
     // Second apply prepends the newer entry; the per-segment entries list
     // becomes [new, old]. Mirrors DCG reverse-by-version ordering.
