@@ -43,9 +43,12 @@ import java.util.Set;
  * Fold a projection sitting on a single JDBC scan into the scan's pushed-down SQL, so derived
  * expressions (e.g. {@code a + b}) are evaluated by the external database instead of locally.
  *
- * <p>Each projection value is gated by {@link CanPushDownPredicateVisitor} for the table dialect --
- * the same gate used by predicate and aggregate pushdown -- and predicate-valued SELECT items are
- * only pushed to dialects that support boolean results in the SELECT list. An expression the
+ * <p>Each derived projection value is gated by {@link CanPushDownPredicateVisitor} for the table
+ * dialect -- the same gate used by predicate and aggregate pushdown -- and predicate-valued SELECT
+ * items are only pushed to dialects that support boolean results in the SELECT list. An identity
+ * passthrough of a scan column is exempt: it is emitted as that column's remote name rather than as
+ * a rendered expression, so it is admitted on the same terms as ordinary column pruning. An
+ * expression the
  * {@link com.starrocks.sql.optimizer.rewrite.ScalarOperatorToJDBCSQLVisitor} cannot render (or that
  * the dialect evaluates with diverging semantics) leaves the scan untouched and the projection is
  * computed locally. A projection of bare column refs is left to ordinary column pruning.
@@ -107,10 +110,11 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
 
     /**
      * The projection's colRef->expression map when it can be folded into the scan's pushed SQL, or
-     * null otherwise. Foldable requires: no common sub-expressions, every value convertible to the
-     * dialect (gated by {@link CanPushDownPredicateVisitor}), predicate-valued projections only for
-     * dialects with boolean SELECT-list support, and at least one non-trivial expression -- a
-     * projection of bare column refs is left to ordinary column pruning.
+     * null otherwise. Foldable requires: no common sub-expressions, every derived value convertible
+     * to the dialect (gated by {@link CanPushDownPredicateVisitor} -- identity passthroughs are not
+     * rendered as expressions and are exempt), predicate-valued projections only for dialects with
+     * boolean SELECT-list support, and at least one non-trivial expression -- a projection of bare
+     * column refs is left to ordinary column pruning.
      */
     private Map<ColumnRefOperator, ScalarOperator> buildProjectPushDown(LogicalJDBCScanOperator scan) {
         if (JDBCPushDownRuleUtils.requiresStrictNumericRead(scan)) {
@@ -128,6 +132,22 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
             ColumnRefOperator outputRef = entry.getKey();
             ScalarOperator outputExpr = entry.getValue();
+            // An identity passthrough -- the output ref IS a scan column -- is settled before anything
+            // else. It is not rendered as an expression at all: buildPushDownColumns reuses the scan's
+            // own Column and emits its remote name, exactly what ordinary column pruning would emit,
+            // so its read semantics are the schema resolver's and the bridge's, not the renderer's.
+            // Asking the dialect gate "could this be rendered as a remote expression?" about it would
+            // reject shapes that are already read this way today: a PostgreSQL array column is kept
+            // out of remote expressions on purpose (whole-array comparison does not survive the
+            // rebase to lower bound 1), yet `SELECT arr FROM t` reads it fine. Gating the passthrough
+            // on that made `SELECT arr[1], arr FROM t` fall back entirely -- losing the subscript
+            // push-down too -- while `SELECT arr FROM t` alone went remote, which is a side effect of
+            // sharing the gate rather than anything intended.
+            ColumnRefOperator passthrough = JDBCPushDownRuleUtils.passthroughScanColumn(outputExpr, scan);
+            if (passthrough != null && passthrough.equals(outputRef)) {
+                outputColumnRefToExpr.put(outputRef, outputExpr);
+                continue;
+            }
             if (!CanPushDownPredicateVisitor.canPushDown(outputExpr, dialect, collatableColumns)) {
                 return null;
             }
@@ -152,7 +172,6 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
             if (outputExpr instanceof CastOperator && ((CastOperator) outputExpr).isImplicit()) {
                 return null;
             }
-            ColumnRefOperator passthrough = JDBCPushDownRuleUtils.passthroughScanColumn(outputExpr, scan);
             if (passthrough == null) {
                 // A derived (remotely-evaluated) SELECT item. Oracle evaluates numeric literals/arithmetic
                 // as NUMBER, returned as java.math.BigDecimal, which the BE JDBC type checker accepts only

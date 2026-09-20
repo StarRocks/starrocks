@@ -2658,6 +2658,38 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        /**
+         * The scan columns whose values actually have to travel back from the remote database.
+         *
+         * <p>A JDBC scan's predicate is evaluated entirely on the remote side — it is rendered into the
+         * SQL text by {@link JDBCPushDownSQLBuilder#renderScanFilters} and the node carries no Expr
+         * conjuncts — so a column named only by that predicate has already done its job by the time the
+         * rows come back. {@code colRefToColumnMetaMap} still holds it (predicate rendering, identifier
+         * quoting, PostgreSQL collation and the cost model all read that map, and none of them may lose a
+         * column), but there is no reason to ask the database for its values. That is what
+         * {@link PhysicalScanOperator#getOutputColumns()} already distinguishes: it keeps only the columns
+         * the projection above the scan consumes, and conservatively degrades to every column when there is
+         * no projection (the user selected the column, or a reserved predicate sits between scan and
+         * project).
+         *
+         * <p>The pruning is expressed as {@code isMaterialized}, not as a filter over
+         * {@link JDBCScanNode#createJDBCTableColumns()}'s string list, because the BE fills its chunk by
+         * position: {@code jdbc_scanner.cpp} walks {@code tuple_desc->slots()} and assigns remote result
+         * column {@code i} to slot {@code i}. Column list, thrift slot list ({@code DescriptorTable} only
+         * serializes materialized slots) and BE slots must shrink together or every column lands in the
+         * wrong slot, silently. Flipping the flag keeps all three in lockstep.
+         */
+        private Set<ColumnRefOperator> jdbcScanMaterializedColumns(PhysicalJDBCScanOperator node) {
+            Set<ColumnRefOperator> materialized = Sets.newHashSet(node.getOutputColumns());
+            if (materialized.isEmpty() && !node.getColRefToColumnMetaMap().isEmpty()) {
+                // count(*) and friends read no column at all. Leaving the tuple empty would make
+                // createJDBCTableColumns() fall back to "SELECT *" and drag the whole row back, so keep
+                // one column — the same one the column pruner already picked as the cheapest.
+                materialized.add(node.getColRefToColumnMetaMap().keySet().iterator().next());
+            }
+            return materialized;
+        }
+
         @Override
         public PlanFragment visitPhysicalJDBCScan(OptExpression optExpression, ExecPlan context) {
             PhysicalJDBCScanOperator node = (PhysicalJDBCScanOperator) optExpression.getOp();
@@ -2666,12 +2698,13 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
+            Set<ColumnRefOperator> materialized = jdbcScanMaterializedColumns(node);
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setIsMaterialized(materialized.contains(entry.getKey()));
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
             }
             tupleDescriptor.computeMemLayout();

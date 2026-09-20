@@ -38,6 +38,22 @@ def identifier(value, quote):
     return quote + value.replace(quote, quote + quote) + quote
 
 
+SESSION_VARIABLE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
+
+def setting(name, value):
+    """Renders one per-case ``SET`` statement, refusing anything but a plain variable name."""
+    if not SESSION_VARIABLE.fullmatch(name):
+        raise RuntimeError("Not a session variable name: {!r}".format(name))
+    if isinstance(value, bool):
+        literal = str(value).lower()
+    elif isinstance(value, int) or isinstance(value, float):
+        literal = repr(value)
+    else:
+        literal = "'" + str(value).replace("'", "''") + "'"
+    return "SET {} = {};".format(name, literal)
+
+
 def rows(output):
     return [line.split("\t") for line in output.splitlines()]
 
@@ -117,6 +133,16 @@ def assert_plan(case, plan, aggregate_enabled, topn_enabled):
         errors.append('Expected {} remote COLLATE "C", found {}'.format(collate_expected, collate_actual))
     if not topn_expected and limits:
         errors.append("Unexpected remote LIMIT during TopN fallback: {}".format(limits))
+    # Direct assertions on the remote statement itself. Rows alone cannot tell a subscript that
+    # PostgreSQL evaluated from one StarRocks evaluated locally, nor say which columns were asked
+    # for; both are visible here and nowhere else. Substrings are matched case-sensitively against
+    # the QUERY line, quoting included, so an assertion cannot pass on a differently quoted name.
+    for fragment in case.get("remote_sql_contains", []):
+        if fragment not in remote:
+            errors.append("Expected remote SQL to contain {!r}".format(fragment))
+    for fragment in case.get("remote_sql_excludes", []):
+        if fragment in remote:
+            errors.append("Expected remote SQL not to contain {!r}".format(fragment))
     return queries, errors
 
 
@@ -168,12 +194,16 @@ def main():
         return run_client(psql, "SET TIME ZONE 'UTC'; SET DateStyle = 'ISO, YMD'; "
                           "SET statement_timeout = '{}s';\n{}\n".format(args.timeout, sql), args.timeout)
 
-    def sr(sql, agg, topn):
+    def sr(sql, agg, topn, session=None):
         settings = ("SET time_zone = '+00:00'; SET query_timeout = {}; "
                     "SET enable_jdbc_project_push_down = true; "
                     "SET enable_jdbc_agg_push_down = {}; "
                     "SET enable_jdbc_topn_push_down = {};\n").format(
                         args.timeout, str(agg).lower(), str(topn).lower())
+        # A case may pin further session variables, in every mode, after the five above. A case
+        # without the field appends nothing, so what the older cases send is unchanged.
+        for name in sorted(session or ()):
+            settings += setting(name, session[name]) + "\n"
         return run_client(mysql, settings + sql + ";\n", args.timeout)
 
     evidence = {"started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -198,27 +228,45 @@ def main():
             # so a text case supplies its own reference query with an explicit COLLATE "C".
             # Without that the two disagree before any pushdown, which is precisely the
             # difference the pushed ORDER BY has to cancel out.
-            pg_sql = case.get("pg_sql", case["sql"]).format(table=pg_table)
-            entry["postgresql_sql"] = pg_sql
-            try:
-                expected = rows(pg(pg_sql + ";"))
-                entry["postgresql_rows"] = expected
-            except Exception as error:
-                entry["error"] = str(error)
-                evidence["errors"].append(case["name"] + ": PostgreSQL reference failed: " + str(error))
-                print("FAIL {}: PostgreSQL reference failed".format(case["name"]), flush=True)
-                continue
+            session = case.get("session")
+            # A case whose subject is a refusal has no reference rows to compare: reading a
+            # multidimensional PostgreSQL value raises in the JDBC bridge, and an error is not a
+            # row. Such a case states the message it requires instead, and still asserts its plan.
+            expect_error = case.get("expect_error")
+            expected = None
+            if expect_error is None:
+                pg_sql = case.get("pg_sql", case["sql"]).format(table=pg_table)
+                entry["postgresql_sql"] = pg_sql
+                try:
+                    expected = rows(pg(pg_sql + ";"))
+                    entry["postgresql_rows"] = expected
+                except Exception as error:
+                    entry["error"] = str(error)
+                    evidence["errors"].append(case["name"] + ": PostgreSQL reference failed: " + str(error))
+                    print("FAIL {}: PostgreSQL reference failed".format(case["name"]), flush=True)
+                    continue
             for mode, agg, topn in MODES:
                 sql = case["sql"].format(table=sr_table)
                 result = {"name": mode, "aggregate_enabled": agg, "topn_enabled": topn,
-                          "starrocks_sql": sql, "errors": [], "passed": False}
+                          "starrocks_sql": sql, "session": session, "errors": [], "passed": False}
                 entry["modes"].append(result)
                 try:
-                    actual = rows(sr(sql, agg, topn))
-                    result["starrocks_rows"] = actual
-                    if comparable(actual) != comparable(expected):
-                        result["errors"].append("Ordered result differs from PostgreSQL reference")
-                    plan = sr("EXPLAIN VERBOSE " + sql, agg, topn)
+                    if expect_error is None:
+                        actual = rows(sr(sql, agg, topn, session))
+                        result["starrocks_rows"] = actual
+                        if comparable(actual) != comparable(expected):
+                            result["errors"].append("Ordered result differs from PostgreSQL reference")
+                    else:
+                        try:
+                            result["starrocks_rows"] = rows(sr(sql, agg, topn, session))
+                            result["errors"].append(
+                                "Expected StarRocks to fail with {!r}".format(expect_error))
+                        except RuntimeError as error:
+                            result["starrocks_error"] = str(error)
+                            if expect_error not in str(error):
+                                result["errors"].append(
+                                    "Expected a StarRocks failure containing {!r}".format(expect_error))
+                    plan = sr("EXPLAIN VERBOSE " + sql, agg, topn, session)
                     result["plan"] = plan
                     result["jdbc_queries"], plan_errors = assert_plan(case, plan, agg, topn)
                     result["errors"].extend(plan_errors)

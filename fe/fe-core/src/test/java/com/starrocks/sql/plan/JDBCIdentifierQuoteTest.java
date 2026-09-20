@@ -53,7 +53,10 @@ public class JDBCIdentifierQuoteTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN JDBC");
         assertContains(plan, "TABLE: (select a, b from remote_table) sr_inline");
-        assertContains(plan, "QUERY: SELECT `a`, `b` FROM (select a, b from remote_table) " +
+        // Only `a` is selected. `b` is named by the predicate the remote answers, so its values
+        // never have to travel back -- the WHERE clause still reads it from the inner query, which
+        // is where it is evaluated.
+        assertContains(plan, "QUERY: SELECT `a` FROM (select a, b from remote_table) " +
                 "sr_inline WHERE ((`b` = 'x'))");
     }
 

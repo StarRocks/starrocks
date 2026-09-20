@@ -1048,6 +1048,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_JDBC_AGG_PUSH_DOWN = "enable_jdbc_agg_push_down";
     public static final String ENABLE_JDBC_TOPN_PUSH_DOWN = "enable_jdbc_topn_push_down";
     public static final String ENABLE_JDBC_PROJECT_PUSH_DOWN = "enable_jdbc_project_push_down";
+    public static final String ENABLE_JDBC_ARRAY_SUBSCRIPT_PUSH_DOWN =
+            "enable_jdbc_array_subscript_push_down";
+    public static final String ENABLE_JDBC_ARRAY_LOWER_BOUND_CORRECTION =
+            "enable_jdbc_array_lower_bound_correction";
     public static final String JDBC_PREDICATE_PUSHDOWN_MAX_IN_LIST_SIZE = "jdbc_predicate_pushdown_max_in_list_size";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
 
@@ -3291,6 +3295,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_JDBC_PROJECT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableJdbcProjectPushDown = true;
+
+    // Whether a constant subscript over a PostgreSQL array column (a[1], element_at(a, 1)) may be
+    // evaluated by PostgreSQL instead of being read back whole and indexed in StarRocks. On by
+    // default: this is the rollback switch for the push-down, not a rollout gate. Off, the subscript
+    // shape is judged unpushable, which shuts both paths that could send it -- the scan filter and
+    // the folded projection -- and the query returns to reading the array column and taking the
+    // subscript locally, exactly as every release before the push-down did. Off also makes
+    // enable_jdbc_array_lower_bound_correction moot: nothing is rendered remotely for it to choose
+    // the rendering of.
+    @VarAttr(name = ENABLE_JDBC_ARRAY_SUBSCRIPT_PUSH_DOWN)
+    private boolean enableJdbcArraySubscriptPushDown = true;
+
+    // A PostgreSQL array carries its lower bound per value, and reading one drops that bound:
+    // the driver hands over a plain Java array and StarRocks rebases it to 1. A subscript pushed
+    // down to PostgreSQL therefore addresses a different element than the same subscript evaluated
+    // locally, on any row whose lower bound is not 1. Off (the default) the subscript is pushed as
+    // the plain a[k] -- StarRocks' element k is assumed to be PostgreSQL's element k, which holds
+    // for every array PostgreSQL itself builds. On, the subscript is corrected per row against
+    // array_lower(a, 1) so that pushing it down cannot change the answer. This governs only the
+    // SQL that is emitted; which expressions are pushed down at all is the same either way.
+    @VarAttr(name = ENABLE_JDBC_ARRAY_LOWER_BOUND_CORRECTION)
+    private boolean enableJdbcArrayLowerBoundCorrection = false;
 
     // Max items in a literal IN list that predicate/HAVING pushdown will send to a JDBC source:
     // -1 = no limit; 0 = never push an IN down; N > 0 = push only lists of at most N items.
@@ -6186,6 +6212,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJdbcProjectPushDown(boolean enableJdbcProjectPushDown) {
         this.enableJdbcProjectPushDown = enableJdbcProjectPushDown;
+    }
+
+    public boolean isEnableJdbcArraySubscriptPushDown() {
+        return enableJdbcArraySubscriptPushDown;
+    }
+
+    public void setEnableJdbcArraySubscriptPushDown(boolean enableJdbcArraySubscriptPushDown) {
+        this.enableJdbcArraySubscriptPushDown = enableJdbcArraySubscriptPushDown;
+    }
+
+    public boolean isEnableJdbcArrayLowerBoundCorrection() {
+        return enableJdbcArrayLowerBoundCorrection;
+    }
+
+    public void setEnableJdbcArrayLowerBoundCorrection(boolean enableJdbcArrayLowerBoundCorrection) {
+        this.enableJdbcArrayLowerBoundCorrection = enableJdbcArrayLowerBoundCorrection;
     }
 
     public long getOneTabletOptMaxTabletRows() {

@@ -706,6 +706,18 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: Boolean
 * **導入バージョン**: v3.5.16, v4.0.9
 
+### enable_jdbc_array_lower_bound_correction
+
+* **説明**: PostgreSQL JDBC Catalog にプッシュダウンされる定数の配列添字を、各配列値が持つ下限に合わせて補正するかどうかを指定します。PostgreSQL の配列の下限は値ごとに保持される属性であり、読み取り時には保持されません。ドライバーは通常の配列を返し、StarRocks はそれを位置 1 起点に振り直します。この変数が `false`（デフォルト）の場合、添字は `a[k]` のままプッシュダウンされ、下限が 1 であると仮定します。PostgreSQL 自身が構築する配列の下限は 1 なのでこの仮定は成り立ちますが、別の下限で格納された値では、プッシュダウンされた添字は StarRocks でローカルに評価した同じ添字とは異なる要素を返します。エラーも警告もありません。`[0:2]={zero,one,two}` として格納された値では、リモートの `items[1]` は `one` を返しますが StarRocks は `zero` を返します。`[5:7]={a,b,c}` ではリモートは NULL を返しますが StarRocks は `a` を返します。PostgreSQL のテーブルに下限が 1 以外の配列が含まれており、プッシュダウンの結果を StarRocks の結果と完全に一致させる必要がある場合は、この変数を `true` に設定してください。その場合、添字は行ごとに `array_lower()` を用いて補正され、`array_length()` によるガードが付きます。この変数が制御するのは送信される SQL だけです。プッシュダウンされる式の範囲はどちらの値でも同じなので、この変数を切り替えてもクエリが配列カラム全体を読み戻すかどうかは変わりません。
+* **デフォルト**: false
+* **データ型**: Boolean
+
+### enable_jdbc_array_subscript_push_down
+
+* **説明**: PostgreSQL JDBC Catalog のカラムに対する定数の配列添字（`items[1]`、および等価な `element_at(items, 1)`）を、配列カラム全体を読み戻して StarRocks で添字を取るのではなく、PostgreSQL に評価させるかどうかを指定します。有効な値は `true`（デフォルト）と `false` です。この変数を `false` に設定すると、このプッシュダウンをロールバックできます。その場合、添字はどちらの経路でもプッシュダウンされません。`WHERE` 句の添字は述語ごと StarRocks に残り、`SELECT` リストの添字もリモートクエリに畳み込まれません。配列カラム全体が読み戻され、添字はローカルで評価されます。これはこのプッシュダウンが導入される前の動作と同じです。無効にした場合の影響が 2 つあります。1 つ目は、[`enable_jdbc_array_lower_bound_correction`](#enable_jdbc_array_lower_bound_correction) が完全に効かなくなることです。この変数はプッシュダウンされた添字の 2 つの表現を選ぶものであり、プッシュダウンされる添字が存在しないためです。したがって「ローカル評価とまったく同じ結果」を得る方法は 2 つあります。この変数を `false` にするか、`true` のままにして `enable_jdbc_array_lower_bound_correction` を `true` に設定する（プッシュダウンは維持されます）かです。2 つ目は、多次元の値を保持するカラムが再び直接読み取られるため、そのカラムに対するクエリは PostgreSQL から NULL を受け取るのではなく、未対応エラーになることです。
+* **デフォルト**: true
+* **データ型**: Boolean
+
 ### enable_jdbc_topn_push_down
 
 * **説明**: 条件を満たす `ORDER BY ... LIMIT` 操作を PostgreSQL JDBC Catalog にプッシュダウンするかどうかを指定します。`RESOURCE` を使用して作成した従来の JDBC 外部テーブルでは、TopN は StarRocks 内で実行されます。有効な値は `true` と `false` です。`TINYINT`、`SMALLINT`、`INT`、`BIGINT` のソートキー（プッシュダウンされた集計の対応する型の結果を含む）をサポートします。さらに、元の型が確認できる場合は、次の PostgreSQL カラム型もサポートします: `date` および `timestamp without time zone`、`boolean`、`text` および `varchar`、精度が 38 以下で宣言された `numeric`/`decimal`。日付・時刻の範囲は西暦 0001 年から 9999 年までです。プッシュダウンされた式や集計の日付・時刻の結果はサポートされません。`text` と `varchar` のソートキーは、StarRocks のバイト順に合わせるためリモートで `COLLATE "C"` を使用してソートされます。そのため、別の collation で作成されたインデックスを PostgreSQL が使用できなくなる場合があります。リモートの ORDER BY はローカル TopN の入力ではなくその代わりとなり、スキャンは読み取った行の順序を保持します。OFFSET、既存のスキャン行数制限、またはローカルで実行する必要があるフィルターや集計を含むクエリはプッシュダウンされません。浮動小数点数、`char`/`bpchar`、`enum`、`timestamp with time zone`、および精度が 38 を超える `numeric` のソートキーはサポートされません。FE、すべての BE/CN ノード、およびその JDBC Bridge を同時にアップグレードしてください。本機能より古い BE/CN は読み取った行を並べ替えますが、順序を復元するためのローカル TopN はもう存在しません。日付・時刻のソートにはさらに、Bridge の PostgreSQL 日付・時刻を損失なく読み取る実装が必要です。

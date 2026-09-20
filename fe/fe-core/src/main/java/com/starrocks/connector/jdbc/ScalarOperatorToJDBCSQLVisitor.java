@@ -18,12 +18,14 @@ import com.google.common.base.Joiner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -43,6 +45,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -124,7 +127,7 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
             case MARIADB:
                 return new MySQLLikeSQLRenderer(columnNames);
             case POSTGRES:
-                return new PostgresSQLRenderer(columnNames, collatableColumns);
+                return new PostgresSQLRenderer(columnNames, collatableColumns, arrayLowerBoundCorrectionEnabled());
             case ORACLE:
                 return new OracleSQLRenderer(columnNames, oracleTemporalColumns);
             case CLICKHOUSE:
@@ -133,6 +136,17 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
             default:
                 return new UnknownSQLRenderer(columnNames);
         }
+    }
+
+    /**
+     * Whether {@code enable_jdbc_array_lower_bound_correction} is on for the statement being
+     * planned. Read here, at the one point every renderer is built, so the scan-filter path and the
+     * merged join/aggregate path cannot disagree about it within a statement. Falls back to the
+     * variable's default (off) when there is no session, which is also the conservative answer: it
+     * is the rendering every release before this one emitted.
+     */
+    private static boolean arrayLowerBoundCorrectionEnabled() {
+        return ConnectContext.getSessionVariableOrDefault().isEnableJdbcArrayLowerBoundCorrection();
     }
 
     /**
@@ -448,11 +462,20 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
         // CanPushDownPredicateVisitor kept every other string comparison local, so anything
         // reaching this renderer that is not in here compares under an order both sides agree on.
         private final Set<ColumnRefOperator> collatableColumns;
+        // enable_jdbc_array_lower_bound_correction; see visitCollectionElement.
+        private final boolean correctArrayLowerBound;
 
         public PostgresSQLRenderer(Map<ColumnRefOperator, String> columnNames,
                                    Set<ColumnRefOperator> collatableColumns) {
+            this(columnNames, collatableColumns, false);
+        }
+
+        public PostgresSQLRenderer(Map<ColumnRefOperator, String> columnNames,
+                                   Set<ColumnRefOperator> collatableColumns,
+                                   boolean correctArrayLowerBound) {
             super(columnNames);
             this.collatableColumns = collatableColumns;
+            this.correctArrayLowerBound = correctArrayLowerBound;
         }
 
         @Override
@@ -494,6 +517,76 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
                 return collated(arg);
             }
             return super.renderAggregateArgument(fnName, arg);
+        }
+
+        /**
+         * An array subscript, sent to PostgreSQL. What is emitted depends on
+         * {@code enable_jdbc_array_lower_bound_correction}, which governs this rendering and nothing
+         * else -- the same expressions are pushed down under either of its values, because the gate,
+         * {@code CanPushDownPredicateVisitor.PostgresPushDownGate#visitCollectionElement}, does not
+         * read it. Whether a subscript is pushed down at all is the other variable's job:
+         * {@code enable_jdbc_array_subscript_push_down}, read by that gate. With it off no subscript
+         * reaches this method, and the correction variable has nothing left to govern.
+         *
+         * <p>A PostgreSQL array carries its lower bound per value, not per column: the same column
+         * can hold {@code '[0:2]={zero,one,two}'} on one row and {@code '{a,b}'} (lower bound 1) on
+         * the next. Reading rebases every value to 1 -- the JDBC driver hands over a plain Java array
+         * and drops the bound -- so StarRocks' element {@code k} is PostgreSQL's element
+         * {@code array_lower(a, 1) + k - 1}, not its element {@code k}.
+         *
+         * <p><b>Off (the default).</b> The plain {@code a[k]} goes out, assuming a lower bound of 1.
+         * Every array PostgreSQL builds for itself has one, so this is right for all but arrays
+         * explicitly given another bound; <b>on a row whose lower bound is not 1 the pushed-down
+         * subscript then quietly answers something other than the same subscript evaluated locally</b>
+         * -- measured on {@code '[0:2]={zero,one,two}'}, remote {@code a[1]} is 'one' where local is
+         * 'zero', and on {@code '[5:7]={a,b,c}'} remote {@code a[1]} is NULL where local is 'a'. That
+         * is the trade this default accepts, and it matches what Starburst emits. Turn the variable on
+         * to get the answer local evaluation gives, on every row.
+         *
+         * <p>No guard is needed around the plain subscript: with no arithmetic on the index there is
+         * nothing to overflow, and PostgreSQL answers NULL for an out-of-range, zero or negative
+         * subscript exactly as StarRocks does. Verified against PostgreSQL 16 and a live catalog, on
+         * lower-bound-1 rows, for k in range, k &gt; length, k = 0, k = -1, k = -2147483648,
+         * k = 2147483647, and for NULL and empty arrays: same answer on both sides, no error raised.
+         *
+         * <p><b>On.</b> The subscript is corrected per row, {@code array_lower(a, 1) + k - 1}, so the
+         * push-down cannot change the answer. The correction is wrapped in a range test because the
+         * corrected subscript is int4 arithmetic inside PostgreSQL and can overflow where StarRocks
+         * simply answers NULL: {@code a[2147483647]} over a row whose lower bound is 5 asks
+         * PostgreSQL for element 2147483651 and raises "integer out of range", while the same
+         * expression evaluated locally is NULL. Guarding on the length settles it, because StarRocks'
+         * index {@code k} addresses an element exactly when {@code 1 <= k <= array_length(a, 1)}, and
+         * in that case the corrected subscript lies between the array's own lower and upper bounds
+         * and is therefore an int4 by construction. Outside it the answer is NULL, which is what
+         * StarRocks gives for an out-of-range, zero or negative subscript. NULL and empty arrays need
+         * no special case: {@code array_length} is NULL for both, so the test fails and the result is
+         * NULL.
+         *
+         * <p>The offset is folded into a literal at render time so the emitted subscript is a single
+         * addition. The gate guarantees the collection is a bare column reference (so naming it three
+         * times re-reads a column rather than evaluating anything repeatedly) and the subscript an
+         * int4 constant.
+         */
+        @Override
+        public String visitCollectionElement(CollectionElementOperator op, Void context) {
+            String array = op.getChild(0).accept(this, null);
+            ScalarOperator subscript = op.getChild(1);
+            OptionalLong index = CanPushDownPredicateVisitor.constantSubscript(subscript);
+            String renderedIndex = index.isPresent()
+                    ? Long.toString(index.getAsLong()) : subscript.accept(this, null);
+            if (!correctArrayLowerBound) {
+                return array + "[" + renderedIndex + "]";
+            }
+            String shift;
+            if (index.isPresent()) {
+                long offset = index.getAsLong() - 1;
+                shift = offset < 0 ? " - " + Math.abs(offset) : " + " + offset;
+            } else {
+                shift = " + " + renderedIndex + " - 1";
+            }
+            return "(CASE WHEN " + renderedIndex + " BETWEEN 1 AND array_length(" + array + ", 1)"
+                    + " THEN " + array + "[array_lower(" + array + ", 1)" + shift + "]"
+                    + " ELSE NULL END)";
         }
 
         /** Renders {@code operand}, appending {@code COLLATE "C"} when it is a collatable column. */

@@ -196,5 +196,152 @@
     "name": "text_min_aggregate_order_fallback",
     "sql": "SELECT grp, MIN(label) AS first_label FROM {table} GROUP BY grp ORDER BY first_label ASC NULLS LAST, grp ASC NULLS FIRST LIMIT 4",
     "aggregate": "group"
+  },
+  {
+    "name": "array_lower_bound_one_subscript",
+    "sql": "SELECT id, tags[1] AS e1, tags[2] AS e2, tags[3] AS e3 FROM {table} WHERE tags[3] = 'tail' AND id <= 12 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"tags\"[1]",
+      "\"tags\"[2]",
+      "\"tags\"[3]",
+      "\"tags\"[3] = 'tail'"
+    ]
+  },
+  {
+    "name": "array_lower_bound_other_default_follows_postgresql",
+    "sql": "SELECT id, odd[1] AS e1, odd[2] AS e2 FROM {table} WHERE id <= 16 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"odd\"[1]",
+      "\"odd\"[2]"
+    ],
+    "remote_sql_excludes": [
+      "array_lower("
+    ]
+  },
+  {
+    "name": "array_lower_bound_other_corrected_follows_starrocks",
+    "sql": "SELECT id, odd[1] AS e1, odd[2] AS e2 FROM {table} WHERE id <= 16 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_lower_bound_correction": true
+    },
+    "pg_sql": "SELECT id, odd[array_lower(odd, 1) + 1 - 1] AS e1, odd[array_lower(odd, 1) + 2 - 1] AS e2 FROM {table} WHERE id <= 16 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "array_lower(\"odd\", 1)",
+      "array_length(\"odd\", 1)"
+    ]
+  },
+  {
+    "name": "array_subscript_push_down_off_follows_starrocks",
+    "sql": "SELECT id, odd[1] AS e1, odd[2] AS e2 FROM {table} WHERE id <= 16 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "pg_sql": "SELECT id, odd[array_lower(odd, 1) + 1 - 1] AS e1, odd[array_lower(odd, 1) + 2 - 1] AS e2 FROM {table} WHERE id <= 16 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "SELECT \"id\", \"odd\" FROM"
+    ],
+    "remote_sql_excludes": [
+      "\"odd\"[",
+      "array_lower("
+    ]
+  },
+  {
+    "name": "array_subscript_push_down_off_ignores_correction",
+    "sql": "SELECT id, odd[1] AS e1, odd[2] AS e2 FROM {table} WHERE id <= 16 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_lower_bound_correction": true,
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "pg_sql": "SELECT id, odd[array_lower(odd, 1) + 1 - 1] AS e1, odd[array_lower(odd, 1) + 2 - 1] AS e2 FROM {table} WHERE id <= 16 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "SELECT \"id\", \"odd\" FROM"
+    ],
+    "remote_sql_excludes": [
+      "\"odd\"[",
+      "array_lower("
+    ]
+  },
+  {
+    "name": "array_subscript_predicate_push_down_off_stays_local",
+    "sql": "SELECT id FROM {table} WHERE odd[1] = 'zero' AND id <= 16 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "pg_sql": "SELECT id FROM {table} WHERE odd[array_lower(odd, 1) + 1 - 1] = 'zero' AND id <= 16 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "SELECT \"id\", \"odd\" FROM"
+    ],
+    "remote_sql_excludes": [
+      "\"odd\"[",
+      "array_lower("
+    ]
+  },
+  {
+    "name": "array_variable_subscript_stays_local",
+    "sql": "SELECT id, tags[id] AS picked FROM {table} WHERE id <= 5 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "SELECT \"id\", \"tags\" FROM"
+    ],
+    "remote_sql_excludes": [
+      "\"tags\"["
+    ]
+  },
+  {
+    "name": "array_element_at_matches_subscript",
+    "sql": "SELECT id, element_at(tags, 2) AS via_function, tags[2] AS via_subscript FROM {table} WHERE id <= 12 ORDER BY id ASC",
+    "pg_sql": "SELECT id, tags[2] AS via_function, tags[2] AS via_subscript FROM {table} WHERE id <= 12 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"tags\"[2]"
+    ]
+  },
+  {
+    "name": "array_subscript_beside_whole_array_column",
+    "sql": "SELECT id, tags[1] AS e1, tags AS whole FROM {table} WHERE id <= 12 ORDER BY id ASC",
+    "pg_sql": "SELECT id, tags[1] AS e1, '[\"' || array_to_string(tags, '\",\"') || '\"]' AS whole FROM {table} WHERE id <= 12 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"tags\"[1]"
+    ]
+  },
+  {
+    "name": "array_subscript_group_by_count",
+    "sql": "SELECT tags[2] AS bucket, COUNT(*) AS n FROM {table} WHERE id <= 40 GROUP BY tags[2] ORDER BY bucket ASC NULLS FIRST",
+    "pg_sql": "SELECT tags[2] AS bucket, COUNT(*) AS n FROM {table} WHERE id <= 40 GROUP BY tags[2] ORDER BY tags[2] COLLATE \"C\" ASC NULLS FIRST",
+    "aggregate": "group",
+    "remote_sql_contains": [
+      "\"tags\"[2]"
+    ]
+  },
+  {
+    "name": "predicate_only_column_not_fetched",
+    "sql": "SELECT id FROM {table} WHERE name = 'name_1' AND id <= 40 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "SELECT \"id\" FROM",
+      "\"name\" = 'name_1'"
+    ],
+    "remote_sql_excludes": [
+      "\"id\", \"name\"",
+      "\"name\", \"id\""
+    ]
+  },
+  {
+    "name": "multidimensional_subscript_pushed_reads_null",
+    "sql": "SELECT id, md[1] AS e1 FROM {table} WHERE id <= 6 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"md\"[1]"
+    ]
+  },
+  {
+    "name": "multidimensional_column_read_raises_when_push_down_off",
+    "sql": "SELECT id, md[1] AS e1 FROM {table} WHERE id <= 6 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "expect_error": "only one-dimensional",
+    "remote_sql_contains": [
+      "SELECT \"id\", \"md\" FROM"
+    ],
+    "remote_sql_excludes": [
+      "\"md\"["
+    ]
   }
 ]

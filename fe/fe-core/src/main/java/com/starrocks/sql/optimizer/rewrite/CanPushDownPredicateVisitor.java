@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -29,10 +30,13 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 
 /**
@@ -82,6 +86,11 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
     // (< <= > >=) over a string consults it -- equality compares equal exactly when the bytes do.
     private Set<ColumnRefOperator> collatableColumns = Collections.emptySet();
 
+    // enable_jdbc_array_subscript_push_down, read once per verdict so that every path asking this
+    // gate about one statement gets the same answer. Only the PostgreSQL gate consults it, in
+    // visitCollectionElement; no other dialect calls a subscript pushable in the first place.
+    protected boolean arraySubscriptPushDown = true;
+
     public static boolean canPushDown(ScalarOperator op, JDBCTable.ProtocolType dialect,
                                       Set<ColumnRefOperator> collatableColumns) {
         return accept(op, dialect, false, sessionMaxInListSize(), collatableColumns);
@@ -111,6 +120,7 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
         gate.allowAggregateCalls = allowAggregateCalls;
         gate.maxInListSize = maxInListSize;
         gate.collatableColumns = collatableColumns == null ? Collections.emptySet() : collatableColumns;
+        gate.arraySubscriptPushDown = sessionArraySubscriptPushDown();
         return op.accept(gate, null);
     }
 
@@ -171,6 +181,16 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
         return ctx == null ? -1 : ctx.getSessionVariable().getJdbcPredicatePushdownMaxInListSize();
     }
 
+    /**
+     * Whether {@code enable_jdbc_array_subscript_push_down} is on for the statement being planned.
+     * Falls back to the variable's own default (on) when there is no session, so that a planning
+     * path without a ConnectContext behaves like an ordinary session rather than like one that
+     * rolled the feature back.
+     */
+    private static boolean sessionArraySubscriptPushDown() {
+        return ConnectContext.getSessionVariableOrDefault().isEnableJdbcArraySubscriptPushDown();
+    }
+
     public static CanPushDownPredicateVisitor forDialect(JDBCTable.ProtocolType dialect) {
         switch (dialect) {
             case MYSQL:
@@ -189,6 +209,24 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
     }
 
     protected abstract JDBCTable.ProtocolType dialect();
+
+    /**
+     * The value of an array subscript that is a plain integer literal, or empty when it is anything
+     * else (a variable, NULL, or a LARGEINT whose value would not survive the narrowing). Shared with
+     * the JDBC SQL renderer so the gate and the emitted SQL agree on which subscripts are literals
+     * and on what each one reads as.
+     */
+    public static OptionalLong constantSubscript(ScalarOperator subscript) {
+        if (!(subscript instanceof ConstantOperator)) {
+            return OptionalLong.empty();
+        }
+        ConstantOperator constant = (ConstantOperator) subscript;
+        if (constant.isNull() || !constant.getType().isIntegerType()
+                || !(constant.getValue() instanceof Number)) {
+            return OptionalLong.empty();
+        }
+        return OptionalLong.of(((Number) constant.getValue()).longValue());
+    }
 
     @Override
     public Boolean visit(ScalarOperator op, Void ctx) {
@@ -305,14 +343,89 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
     public static class PostgresPushDownGate extends CanPushDownPredicateVisitor {
         @Override
         public Boolean visitVariableReference(ColumnRefOperator op, Void ctx) {
-            // Reading rebases PostgreSQL array bounds to 1. Array comparison and indexing must
-            // therefore use SR semantics, including in predicates, joins and projections.
+            // Reading rebases PostgreSQL array bounds to 1 and keeps no dimension information, while
+            // PostgreSQL compares whole arrays taking both into account. A bare array column therefore
+            // stays local wherever it is compared, joined, grouped or ordered. Indexing is the one
+            // exception and it is opened separately, with the bound correction, in
+            // visitCollectionElement below -- not by relaxing this.
             return !op.getType().isArrayType();
         }
 
         @Override
         public Boolean visitConstant(ConstantOperator op, Void ctx) {
             return !op.getType().isArrayType();
+        }
+
+        /**
+         * A constant subscript over an array column ({@code a[1]}), the one shape that reads an array
+         * yet is safe remotely: the result is a scalar element, so none of the whole-array comparison
+         * hazards that keep {@link #visitVariableReference} shut apply to it. Deliberately does NOT
+         * call {@link #allChildrenPushable} -- that would ask the array child about itself and this
+         * gate's own override would veto it. Opening one composite shape is not the same as opening
+         * the array type: {@code a = b}, {@code a < b} and {@code ORDER BY a} stay local as before.
+         *
+         * <p>Accepted only when every part is nailed down:
+         * <ul>
+         *   <li>the collection is a bare column reference of array type -- the renderer emits it
+         *       twice (once inside {@code array_lower}), so it has to be side-effect free and cheap;
+         *   <li>its element type is scalar -- a nested array would make the subscript itself an
+         *       array, which is the whole-array comparison case again, and matches the reader, which
+         *       only maps one-dimensional {@code _text}/{@code _varchar} columns;
+         *   <li>the subscript is a non-null integer constant. A variable subscript would need the
+         *       remote query to materialise the index in an inner derived table first, which buys
+         *       nothing for the constant-subscript workload this exists for;
+         *   <li>both {@code k} and the rendered offset {@code k - 1} fit in int4. PostgreSQL raises
+         *       "integer out of range" for a wider subscript where StarRocks answers NULL. The
+         *       renderer closes the rest of that gap: with
+         *       {@code enable_jdbc_array_lower_bound_correction} on, the bound correction is int4
+         *       arithmetic inside PostgreSQL, so even an in-range {@code k} can overflow once a
+         *       row's own lower bound is added to it, and the emitted SQL guards the subscript on
+         *       the array's length.
+         * </ul>
+         *
+         * <p>Two session variables sit on this shape, and they are deliberately read in two
+         * different places, because they decide two different things:
+         * <ul>
+         *   <li>{@code enable_jdbc_array_subscript_push_down} decides <b>whether the shape is
+         *       pushable at all</b>, so it is read here, in the gate. Off, this method answers
+         *       false and the subscript is unpushable like any other shape this gate refuses --
+         *       which shuts both paths that could send it, since both ask this same gate: the scan
+         *       filter ({@code PushDownPredicateToExternalTableScanRule}) leaves the predicate
+         *       local, and {@code PushDownProjectToJDBCScanRule} declines to fold the projection.
+         *       The query then reads the array column and takes the subscript in StarRocks. Putting
+         *       it anywhere else -- in the renderer, say -- would close only the path that happens
+         *       to run through there and leave the other one pushing.
+         *   <li>{@code enable_jdbc_array_lower_bound_correction} decides <b>how an already-pushable
+         *       subscript is spelled</b> -- plain {@code a[k]} or corrected against
+         *       {@code array_lower} -- so it is read in the renderer and <b>not here</b>. The set
+         *       of shapes that reach the renderer is the same under either of its values,
+         *       including the int4 bound above, which is kept even though the uncorrected rendering
+         *       does no arithmetic, so that turning the correction on can never turn a pushed-down
+         *       expression into an error.
+         * </ul>
+         *
+         * <p>The two compose in one direction only: with the push-down off, the correction variable
+         * has nothing left to govern, because no subscript reaches the renderer.
+         */
+        @Override
+        public Boolean visitCollectionElement(CollectionElementOperator op, Void ctx) {
+            if (!arraySubscriptPushDown) {
+                return false;
+            }
+            if (op.getChildren().size() != 2) {
+                return false;
+            }
+            ScalarOperator collection = op.getChild(0);
+            if (!(collection instanceof ColumnRefOperator) || !collection.getType().isArrayType()) {
+                return false;
+            }
+            Type itemType = ((ArrayType) collection.getType()).getItemType();
+            if (itemType == null || !itemType.isScalarType()) {
+                return false;
+            }
+            OptionalLong index = constantSubscript(op.getChild(1));
+            return index.isPresent()
+                    && index.getAsLong() > Integer.MIN_VALUE && index.getAsLong() <= Integer.MAX_VALUE;
         }
 
         @Override

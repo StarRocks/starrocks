@@ -712,6 +712,18 @@ FROM test;
 * 数据类型：Boolean
 * 引入版本：v3.5.16、v4.0.9
 
+### enable_jdbc_array_lower_bound_correction
+
+* **描述**：下推到 PostgreSQL JDBC Catalog 的常量数组下标，是否按每个数组值自身的下界进行校正。PostgreSQL 的数组下界是逐值携带的属性，读取时不会保留：驱动返回的是普通数组，StarRocks 将其重新以位置 1 为起点。该变量为 `false`（默认值）时，下标按 `a[k]` 原样下推，即假定下界为 1。PostgreSQL 自行构造的数组下界都是 1，因此该假定对它们成立；但对于以其他下界存储的值，下推后的下标会返回与在 StarRocks 本地计算不同的元素，且不报错、不告警：对存储为 `[0:2]={zero,one,two}` 的值，远端 `items[1]` 返回 `one`，而 StarRocks 返回 `zero`；对 `[5:7]={a,b,c}`，远端返回 NULL，而 StarRocks 返回 `a`。如果 PostgreSQL 表中存在下界不为 1 的数组，且需要下推结果与 StarRocks 本地计算完全一致，请将该变量设置为 `true`：此时下标会按每行的 `array_lower()` 校正，并以 `array_length()` 做边界保护。该变量只影响发送到远端的 SQL。两种取值下可下推的表达式完全相同，因此开启或关闭都不会改变查询是否需要读回整列数组。
+* **默认值**：false
+* **数据类型**：Boolean
+
+### enable_jdbc_array_subscript_push_down
+
+* **描述**：PostgreSQL JDBC Catalog 列上的常量数组下标（`items[1]`，以及等价的 `element_at(items, 1)`）是否由 PostgreSQL 计算，而不是把整列数组读回 StarRocks 再取下标。有效值：`true`（默认值）和 `false`。将该变量设置为 `false` 可回退该下推：此时下标在两条路径上都不下推——`WHERE` 中的下标会连同其谓词一起留在 StarRocks 执行，`SELECT` 列表中的下标也不会折叠进远端查询——查询重新读回整列数组并在本地取下标，即该下推特性引入之前的行为。关闭后有两点需要说明。其一，[`enable_jdbc_array_lower_bound_correction`](#enable_jdbc_array_lower_bound_correction) 将完全失效，因为它是在已下推下标的两种渲染形态之间做选择，而此时没有任何下标被下推；因此「结果与本地计算完全一致」有两条路——将该变量设置为 `false`，或保持 `true` 并将 `enable_jdbc_array_lower_bound_correction` 设置为 `true`（保留下推）。其二，存有多维值的列会重新被直接读取，因此对该列的查询会返回不支持的报错，而不是从 PostgreSQL 得到 NULL。
+* **默认值**：true
+* **数据类型**：Boolean
+
 ### enable_jdbc_topn_push_down
 
 * **描述**：是否向 PostgreSQL JDBC Catalog 下推满足条件的 `ORDER BY ... LIMIT` 操作。通过 `RESOURCE` 创建的 JDBC 外表保留在 StarRocks 中执行 TopN。有效值：`true` 和 `false`。支持 `TINYINT`、`SMALLINT`、`INT`、`BIGINT` 排序键（包括已下推聚合的对应类型结果）。此外，在已知源类型的前提下，还支持以下 PostgreSQL 列类型：`date` 和 `timestamp without time zone`；`boolean`；`text` 和 `varchar`；以及声明精度不超过 38 的 `numeric`/`decimal`。支持的日期时间范围为公元 0001 至 9999 年。不支持已下推表达式或聚合的日期时间结果。`text` 和 `varchar` 排序键在远端使用 `COLLATE "C"` 排序，以匹配 StarRocks 的字节序；这可能导致 PostgreSQL 无法使用按其他 collation 建立的索引。远端 ORDER BY 取代本地 TopN，而非作为其输入；Scan 保持读取到的行序。包含 OFFSET、Scan 已有限制行数，或需要在本地执行过滤或聚合的查询不下推。不支持浮点数、`char`/`bpchar`、`enum`、`timestamp with time zone`，以及声明精度超过 38 的 `numeric` 排序键。需同时升级 FE、所有 BE/CN 节点及其 JDBC Bridge。早于本特性的 BE/CN 会重排读取到的行，而此时已不存在用于恢复顺序的本地 TopN；日期时间排序还依赖 Bridge 中无损读取 PostgreSQL 日期时间的实现。
