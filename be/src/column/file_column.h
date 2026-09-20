@@ -22,25 +22,19 @@
 #include "base/string/slice.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
+#include "types/datum.h"
 
 namespace starrocks {
-
-class NullableColumn;
 
 // FileColumn is the physical column of TYPE_FILE: an indivisible reference to a file, shaped after
 // the Parquet FILE logical type. It always carries the same fixed set of nullable sub-columns:
 //   uri VARCHAR | offset BIGINT | size BIGINT | content_type VARCHAR | checksum VARCHAR | inline VARBINARY
-// A row is either a reference (uri/offset/size set) or inline bytes (inline set); every field may
-// be NULL. Serialization simply concatenates the fields in this fixed order, so no schema is
-// written to the wire. Rows print as {uri:"...",offset:1,size:2,content_type:null,checksum:null,inline:"<hex>"}.
+// A row is either a reference (uri/offset/size set) or inline bytes (inline set); every field may be NULL.
+// Rows are appended through the generic Column::append_datum() with a DatumStruct built by
+// FileDatumBuilder::make(). Serialization simply concatenates the fields in this fixed order.
+// Rows print as {uri:"...",offset:1,size:2,content_type:null,checksum:null,inline:"<hex>"}.
 class FileColumn final : public CowFactory<ColumnFactory<Column, FileColumn>, FileColumn> {
-    friend class CowFactory<ColumnFactory<Column, FileColumn>, FileColumn>;
-    using Base = CowFactory<ColumnFactory<Column, FileColumn>, FileColumn>;
-
 public:
-    using ValueType = void;
-    using Container = Buffer<std::string>;
-
     enum FileField : size_t {
         URI = 0,
         OFFSET = 1,
@@ -58,35 +52,12 @@ public:
     // Sub-columns holding `size` NULL rows.
     explicit FileColumn(size_t size);
     DISALLOW_COPY(FileColumn);
-    FileColumn(FileColumn&& rhs) noexcept;
+    FileColumn(FileColumn&& rhs) noexcept : _fields(std::move(rhs._fields)) {}
 
     ~FileColumn() override = default;
 
     bool is_file() const override { return true; }
 
-    // ---- Business append entry points (used by the Paimon BLOB converter) ----
-    void append_null_row();
-    void append_reference(const Slice& uri, int64_t offset, std::optional<int64_t> size);
-    void append_inline(const Slice& bytes);
-
-    // ---- Typed sub-column access ----
-    NullableColumn* uri_column();
-    NullableColumn* offset_column();
-    NullableColumn* size_column();
-    NullableColumn* content_type_column();
-    NullableColumn* checksum_column();
-    NullableColumn* inline_column();
-    const NullableColumn* uri_column() const;
-    const NullableColumn* offset_column() const;
-    const NullableColumn* size_column() const;
-    const NullableColumn* content_type_column() const;
-    const NullableColumn* checksum_column() const;
-    const NullableColumn* inline_column() const;
-    // All sub-columns in FileField order, for visitors that recurse field by field.
-    std::array<Column*, NUM_FIELDS> field_columns();
-    std::array<const Column*, NUM_FIELDS> field_columns() const;
-
-    // ---- Column interface ----
     size_t size() const override;
     size_t capacity() const override;
     size_t type_size() const override;
@@ -120,11 +91,7 @@ public:
     uint32_t max_one_element_serialize_size() const override;
     uint32_t serialize_size(size_t idx) const override;
     MutableColumnPtr clone_empty() const override;
-    MutableColumnPtr clone() const override {
-        auto p = clone_empty();
-        p->append(*this, 0, size());
-        return p;
-    }
+    MutableColumnPtr clone() const override;
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
@@ -144,32 +111,15 @@ public:
     void mutate_each_subcolumn() override;
 
 private:
-    // Applies `f` to each sub-column in FileField order.
-    template <typename F>
-    void for_each_field(F&& f) {
-        f(_uri);
-        f(_offset);
-        f(_size);
-        f(_content_type);
-        f(_checksum);
-        f(_inline);
-    }
-    template <typename F>
-    void for_each_field(F&& f) const {
-        f(_uri);
-        f(_offset);
-        f(_size);
-        f(_content_type);
-        f(_checksum);
-        f(_inline);
-    }
+    std::array<Column::WrappedPtr, NUM_FIELDS> _fields;
+};
 
-    Column::WrappedPtr _uri;          // NullableColumn<BinaryColumn>
-    Column::WrappedPtr _offset;       // NullableColumn<Int64Column>
-    Column::WrappedPtr _size;         // NullableColumn<Int64Column>
-    Column::WrappedPtr _content_type; // NullableColumn<BinaryColumn>
-    Column::WrappedPtr _checksum;     // NullableColumn<BinaryColumn>
-    Column::WrappedPtr _inline;       // NullableColumn<BinaryColumn>, VARBINARY payload
+
+class FileDatumBuilder {
+public:
+    static Datum make(const std::optional<Slice>& uri, const std::optional<int64_t>& offset,
+                      const std::optional<int64_t>& size, const std::optional<Slice>& content_type,
+                      const std::optional<Slice>& checksum, const std::optional<Slice>& inline_bytes);
 };
 
 } // namespace starrocks

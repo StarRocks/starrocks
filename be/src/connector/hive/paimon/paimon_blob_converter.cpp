@@ -72,35 +72,30 @@ std::optional<BlobDescriptor> parse_blob_descriptor(std::string_view value) {
     return desc;
 }
 
-void append_value(FileColumn* file_column, std::string_view value) {
+Datum to_file_datum(std::string_view value) {
     if (auto desc = parse_blob_descriptor(value)) {
         std::optional<int64_t> size;
         if (desc->length >= 0) {
             size = desc->length;
         }
-        file_column->append_reference(Slice(desc->uri.data(), desc->uri.size()), desc->offset, size);
-        return;
+        return FileDatumBuilder::make(Slice(desc->uri.data(), desc->uri.size()), desc->offset, size, std::nullopt,
+                                      std::nullopt, std::nullopt);
     }
-    file_column->append_inline(Slice(value.data(), value.size()));
+    return FileDatumBuilder::make(std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                                  Slice(value.data(), value.size()));
 }
 
 template <typename ArrayType>
 void append_binary_array(const ArrayType* array, size_t start, size_t num_rows, NullableColumn* dst) {
-    auto* file_column = down_cast<FileColumn*>(dst->data_column_raw_ptr());
-    NullColumn* null_column = dst->null_column_raw_ptr();
-    bool has_null = false;
     for (size_t i = 0; i < num_rows; ++i) {
         const int64_t idx = static_cast<int64_t>(start + i);
         if (array->IsNull(idx)) {
-            file_column->append_null_row();
-            null_column->append(1);
-            has_null = true;
+            (void)dst->append_nulls(1);
             continue;
         }
-        append_value(file_column, array->GetView(idx));
-        null_column->append(0);
+        // The datum only references the arrow buffer; append_datum copies the bytes into the sub-columns.
+        dst->append_datum(to_file_datum(array->GetView(idx)));
     }
-    dst->set_has_null(has_null);
 }
 
 } // namespace

@@ -938,14 +938,14 @@ public:
     using Serde = serde::ColumnArraySerde;
     static int64_t max_serialized_size(const FileColumn& column, const int encode_level) {
         int64_t size = 0;
-        for (const Column* field : column.field_columns()) {
+        for (const ColumnPtr& field : column.fields()) {
             size += Serde::max_serialized_size(*field, encode_level);
         }
         return size;
     }
 
     static StatusOr<uint8_t*> serialize(const FileColumn& column, uint8_t* buff, const int encode_level) {
-        for (const Column* field : column.field_columns()) {
+        for (const ColumnPtr& field : column.fields()) {
             ASSIGN_OR_RETURN(buff, Serde::serialize(*field, buff, false, encode_level));
         }
         return buff;
@@ -953,8 +953,8 @@ public:
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, FileColumn* column,
                                                 const int encode_level) {
-        for (Column* field : column->field_columns()) {
-            ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, field, false, encode_level));
+        for (const ColumnPtr& field : column->fields()) {
+            ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, field->as_mutable_raw_ptr(), false, encode_level));
         }
         return buff;
     }

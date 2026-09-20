@@ -14,13 +14,13 @@
 
 #include "column/file_column.h"
 
+#include <optional>
 #include <sstream>
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
-#include "gutil/strings/escaping.h"
 #include "types/datum.h"
 
 namespace starrocks {
@@ -35,132 +35,31 @@ Column::MutablePtr make_nullable_bigint() {
     return NullableColumn::create(Int64Column::create(), NullColumn::create());
 }
 
-NullableColumn* as_nullable(Column* column) {
-    return down_cast<NullableColumn*>(column);
-}
-
 const NullableColumn* as_nullable(const Column* column) {
     return down_cast<const NullableColumn*>(column);
-}
-
-void append_slice(NullableColumn* column, const Slice& value) {
-    down_cast<BinaryColumn*>(column->data_column_raw_ptr())->append(value);
-    column->null_column_raw_ptr()->append(0);
-}
-
-void append_bigint(NullableColumn* column, int64_t value) {
-    down_cast<Int64Column*>(column->data_column_raw_ptr())->append(value);
-    column->null_column_raw_ptr()->append(0);
 }
 
 } // namespace
 
 FileColumn::FileColumn()
-        : _uri(make_nullable_binary()),
-          _offset(make_nullable_bigint()),
-          _size(make_nullable_bigint()),
-          _content_type(make_nullable_binary()),
-          _checksum(make_nullable_binary()),
-          _inline(make_nullable_binary()) {}
+        : _fields{make_nullable_binary(), make_nullable_bigint(), make_nullable_bigint(),
+                  make_nullable_binary(), make_nullable_binary(), make_nullable_binary()} {}
 
-FileColumn::FileColumn(size_t size) : FileColumn() {
+FileColumn::FileColumn(const size_t size) : FileColumn() {
     if (size > 0) {
         // Every sub-column is nullable, so append_default() appends NULLs.
-        for_each_field([size](auto& column) { column->append_default(size); });
+        for (auto& column : _fields) {
+            column->append_default(size);
+        }
     }
 }
-
-FileColumn::FileColumn(FileColumn&& rhs) noexcept
-        : _uri(std::move(rhs._uri)),
-          _offset(std::move(rhs._offset)),
-          _size(std::move(rhs._size)),
-          _content_type(std::move(rhs._content_type)),
-          _checksum(std::move(rhs._checksum)),
-          _inline(std::move(rhs._inline)) {}
-
-// ---- business append ----
-
-void FileColumn::append_null_row() {
-    for_each_field([](auto& column) { (void)column->append_nulls(1); });
-}
-
-void FileColumn::append_reference(const Slice& uri, int64_t offset, std::optional<int64_t> size) {
-    append_slice(uri_column(), uri);
-    append_bigint(offset_column(), offset);
-    if (size.has_value()) {
-        append_bigint(size_column(), *size);
-    } else {
-        (void)_size->append_nulls(1);
-    }
-    (void)_content_type->append_nulls(1);
-    (void)_checksum->append_nulls(1);
-    (void)_inline->append_nulls(1);
-}
-
-void FileColumn::append_inline(const Slice& bytes) {
-    (void)_uri->append_nulls(1);
-    (void)_offset->append_nulls(1);
-    (void)_size->append_nulls(1);
-    (void)_content_type->append_nulls(1);
-    (void)_checksum->append_nulls(1);
-    append_slice(inline_column(), bytes);
-}
-
-// ---- typed access ----
-
-NullableColumn* FileColumn::uri_column() {
-    return as_nullable(_uri.get());
-}
-NullableColumn* FileColumn::offset_column() {
-    return as_nullable(_offset.get());
-}
-NullableColumn* FileColumn::size_column() {
-    return as_nullable(_size.get());
-}
-NullableColumn* FileColumn::content_type_column() {
-    return as_nullable(_content_type.get());
-}
-NullableColumn* FileColumn::checksum_column() {
-    return as_nullable(_checksum.get());
-}
-NullableColumn* FileColumn::inline_column() {
-    return as_nullable(_inline.get());
-}
-const NullableColumn* FileColumn::uri_column() const {
-    return as_nullable(_uri.get());
-}
-const NullableColumn* FileColumn::offset_column() const {
-    return as_nullable(_offset.get());
-}
-const NullableColumn* FileColumn::size_column() const {
-    return as_nullable(_size.get());
-}
-const NullableColumn* FileColumn::content_type_column() const {
-    return as_nullable(_content_type.get());
-}
-const NullableColumn* FileColumn::checksum_column() const {
-    return as_nullable(_checksum.get());
-}
-const NullableColumn* FileColumn::inline_column() const {
-    return as_nullable(_inline.get());
-}
-
-std::array<Column*, FileColumn::NUM_FIELDS> FileColumn::field_columns() {
-    return {_uri.get(), _offset.get(), _size.get(), _content_type.get(), _checksum.get(), _inline.get()};
-}
-
-std::array<const Column*, FileColumn::NUM_FIELDS> FileColumn::field_columns() const {
-    return {_uri.get(), _offset.get(), _size.get(), _content_type.get(), _checksum.get(), _inline.get()};
-}
-
-// ---- Column interface ----
 
 size_t FileColumn::size() const {
-    return _uri->size();
+    return _fields[0]->size();
 }
 
 size_t FileColumn::capacity() const {
-    return _uri->capacity();
+    return _fields[0]->capacity();
 }
 
 size_t FileColumn::type_size() const {
@@ -169,74 +68,79 @@ size_t FileColumn::type_size() const {
 
 size_t FileColumn::byte_size() const {
     size_t total = 0;
-    for_each_field([&](const auto& column) { total += column->byte_size(); });
+    for (const auto& column : _fields) {
+        total += column->byte_size();
+    }
     return total;
 }
 
-size_t FileColumn::byte_size(size_t idx) const {
+size_t FileColumn::byte_size(const size_t idx) const {
     size_t total = 0;
-    for_each_field([&](const auto& column) { total += column->byte_size(idx); });
+    for (const auto& column : _fields) {
+        total += column->byte_size(idx);
+    }
     return total;
 }
 
-size_t FileColumn::byte_size(size_t from, size_t size) const {
+size_t FileColumn::byte_size(const size_t from, const size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t total = 0;
-    for_each_field([&](const auto& column) { total += column->byte_size(from, size); });
+    for (const auto& column : _fields) {
+        total += column->byte_size(from, size);
+    }
     return total;
 }
 
-void FileColumn::reserve(size_t n) {
-    for_each_field([n](auto& column) { column->reserve(n); });
+void FileColumn::reserve(const size_t n) {
+    for (auto& column : _fields) {
+        column->reserve(n);
+    }
 }
 
-void FileColumn::resize(size_t n) {
-    for_each_field([n](auto& column) { column->resize(n); });
+void FileColumn::resize(const size_t n) {
+    for (auto& column : _fields) {
+        column->resize(n);
+    }
 }
 
 StatusOr<MutableColumnPtr> FileColumn::upgrade_if_overflow() {
-    Status status;
-    for_each_field([&](auto& column) {
-        if (!status.ok()) {
-            return;
-        }
+    for (auto& column : _fields) {
         auto ret = upgrade_helper_func(column->as_mutable_raw_ptr());
         if (!ret.ok()) {
-            status = ret.status();
-        } else if (ret.value() != nullptr) {
+            return ret;
+        }
+        if (ret.value() != nullptr) {
             column = std::move(ret.value());
         }
-    });
-    RETURN_IF_ERROR(status);
+    }
     return nullptr;
 }
 
 StatusOr<MutableColumnPtr> FileColumn::downgrade() {
-    Status status;
-    for_each_field([&](auto& column) {
-        if (!status.ok()) {
-            return;
-        }
+    for (auto& column : _fields) {
         auto ret = downgrade_helper_func(column->as_mutable_raw_ptr());
         if (!ret.ok()) {
-            status = ret.status();
-        } else if (ret.value() != nullptr) {
+            return ret;
+        }
+        if (ret.value() != nullptr) {
             column = std::move(ret.value());
         }
-    });
-    RETURN_IF_ERROR(status);
+    }
     return nullptr;
 }
 
 bool FileColumn::has_large_column() const {
-    bool res = false;
-    for_each_field([&](const auto& column) { res = res || column->has_large_column(); });
-    return res;
+    for (const auto& column : _fields) {
+        if (column->has_large_column()) {
+            return true;
+        }
+    }
+    return false;
 }
 
-void FileColumn::assign(size_t n, size_t idx) {
+void FileColumn::assign(const size_t n, const size_t idx) {
     DCHECK_LE(idx, size()) << "Range error when assign FileColumn";
-    auto desc = this->clone_empty();
+    const auto desc = this->clone_empty();
     desc->append_value_multiple_times(*this, idx, n);
     swap_column(*desc);
     desc->reset_column();
@@ -245,68 +149,64 @@ void FileColumn::assign(size_t n, size_t idx) {
 void FileColumn::append_datum(const Datum& datum) {
     const auto& fields = datum.get<DatumStruct>();
     DCHECK_EQ(NUM_FIELDS, fields.size());
-    auto columns = field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        columns[i]->append_datum(fields[i]);
+        _fields[i]->append_datum(fields[i]);
     }
 }
 
 void FileColumn::remove_first_n_values(size_t count) {
-    for_each_field([count](auto& column) { column->remove_first_n_values(count); });
+    for (auto& column : _fields) {
+        column->remove_first_n_values(count);
+    }
 }
 
 void FileColumn::append(const Column& src, size_t offset, size_t count) {
     DCHECK(src.is_file());
     const auto& src_column = down_cast<const FileColumn&>(src);
-    auto dst = field_columns();
-    auto srcs = src_column.field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        dst[i]->append(*srcs[i], offset, count);
+        _fields[i]->append(*src_column._fields[i], offset, count);
     }
 }
 
 void FileColumn::fill_default(const Filter& filter) {
-    for_each_field([&filter](auto& column) { column->fill_default(filter); });
+    for (auto& column : _fields) {
+        column->fill_default(filter);
+    }
 }
 
 void FileColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK(src.is_file());
     const auto& src_column = down_cast<const FileColumn&>(src);
-    auto dst = field_columns();
-    auto srcs = src_column.field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        dst[i]->update_rows(*srcs[i], indexes);
+        _fields[i]->update_rows(*src_column._fields[i], indexes);
     }
 }
 
-void FileColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+void FileColumn::append_selective(const Column& src, const uint32_t* indexes, const uint32_t from,
+                                  const uint32_t size) {
     DCHECK(src.is_file());
     const auto& src_column = down_cast<const FileColumn&>(src);
-    auto dst = field_columns();
-    auto srcs = src_column.field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        dst[i]->append_selective(*srcs[i], indexes, from, size);
+        _fields[i]->append_selective(*src_column._fields[i], indexes, from, size);
     }
 }
 
-void FileColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void FileColumn::append_value_multiple_times(const Column& src, const uint32_t index, const uint32_t size) {
     DCHECK(src.is_file());
     const auto& src_column = down_cast<const FileColumn&>(src);
-    auto dst = field_columns();
-    auto srcs = src_column.field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        dst[i]->append_value_multiple_times(*srcs[i], index, size);
+        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size);
     }
 }
 
 bool FileColumn::append_nulls(size_t count) {
     bool ok = true;
-    for_each_field([&](auto& column) {
+    for (auto& column : _fields) {
         if (!column->append_nulls(count)) {
             DCHECK(false) << "FileColumn sub-column append_nulls failed, that should not happen";
             ok = false;
         }
-    });
+    }
     return ok;
 }
 
@@ -315,34 +215,41 @@ size_t FileColumn::append_numbers(const void* buff, size_t length) {
 }
 
 void FileColumn::append_value_multiple_times(const void* value, size_t count) {
-    const auto* datum = reinterpret_cast<const Datum*>(value);
+    const auto* datum = static_cast<const Datum*>(value);
     const auto& fields = datum->get_struct();
     DCHECK_EQ(NUM_FIELDS, fields.size());
-    auto columns = field_columns();
     for (size_t c = 0; c < count; ++c) {
         for (size_t i = 0; i < NUM_FIELDS; ++i) {
-            columns[i]->append_datum(fields[i]);
+            _fields[i]->append_datum(fields[i]);
         }
     }
 }
 
 void FileColumn::append_default() {
-    for_each_field([](auto& column) { column->append_default(); });
+    for (auto& column : _fields) {
+        column->append_default();
+    }
 }
 
 void FileColumn::append_default(size_t count) {
-    for_each_field([count](auto& column) { column->append_default(count); });
+    for (auto& column : _fields) {
+        column->append_default(count);
+    }
 }
 
 uint32_t FileColumn::serialize(size_t idx, uint8_t* pos) const {
     uint32_t ser_size = 0;
-    for_each_field([&](const auto& column) { ser_size += column->serialize(idx, pos + ser_size); });
+    for (const auto& column : _fields) {
+        ser_size += column->serialize(idx, pos + ser_size);
+    }
     return ser_size;
 }
 
 uint32_t FileColumn::serialize_default(uint8_t* pos) const {
     uint32_t ser_size = 0;
-    for_each_field([&](const auto& column) { ser_size += column->serialize_default(pos + ser_size); });
+    for (const auto& column : _fields) {
+        ser_size += column->serialize_default(pos + ser_size);
+    }
     return ser_size;
 }
 
@@ -354,26 +261,28 @@ void FileColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, si
 }
 
 const uint8_t* FileColumn::deserialize_and_append(const uint8_t* pos) {
-    for_each_field([&](auto& column) { pos = column->deserialize_and_append(pos); });
+    DCHECK(false) << "Don't support file column deserialize and append";
     return pos;
 }
 
 void FileColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    reserve(chunk_size);
-    for (size_t i = 0; i < chunk_size; ++i) {
-        srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
-    }
+    DCHECK(false) << "Don't support deserialize and append";
+    throw std::runtime_error("FileColumn::deserialize_and_append_batch() is not supported");
 }
 
 uint32_t FileColumn::max_one_element_serialize_size() const {
     uint32_t max_size = 0;
-    for_each_field([&](const auto& column) { max_size += column->max_one_element_serialize_size(); });
+    for (const auto& column : _fields) {
+        max_size += column->max_one_element_serialize_size();
+    }
     return max_size;
 }
 
-uint32_t FileColumn::serialize_size(size_t idx) const {
+uint32_t FileColumn::serialize_size(const size_t idx) const {
     uint32_t ser_size = 0;
-    for_each_field([&](const auto& column) { ser_size += column->serialize_size(idx); });
+    for (const auto& column : _fields) {
+        ser_size += column->serialize_size(idx);
+    }
     return ser_size;
 }
 
@@ -381,13 +290,16 @@ MutableColumnPtr FileColumn::clone_empty() const {
     return create();
 }
 
+MutableColumnPtr FileColumn::clone() const {
+    auto p = clone_empty();
+    p->append(*this, 0, size());
+    return p;
+}
+
 size_t FileColumn::filter_range(const Filter& filter, size_t from, size_t to) {
-    size_t result_offset = _uri->filter_range(filter, from, to);
-    for (Column* column : field_columns()) {
-        if (column == _uri.get()) {
-            continue;
-        }
-        size_t tmp_offset = column->filter_range(filter, from, to);
+    const size_t result_offset = _fields[0]->filter_range(filter, from, to);
+    for (size_t i = 1; i < NUM_FIELDS; ++i) {
+        size_t tmp_offset = _fields[i]->filter_range(filter, from, to);
         DCHECK_EQ(result_offset, tmp_offset);
     }
     return result_offset;
@@ -395,10 +307,8 @@ size_t FileColumn::filter_range(const Filter& filter, size_t from, size_t to) {
 
 int FileColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
     const auto& rhs_file = down_cast<const FileColumn&>(rhs);
-    auto lhs_fields = field_columns();
-    auto rhs_fields = rhs_file.field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        int cmp = lhs_fields[i]->compare_at(left, right, *rhs_fields[i], nan_direction_hint);
+        int cmp = _fields[i]->compare_at(left, right, *rhs_file._fields[i], nan_direction_hint);
         if (cmp != 0) {
             return cmp;
         }
@@ -406,16 +316,15 @@ int FileColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan
     return 0;
 }
 
-int FileColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+int FileColumn::equals(size_t left, const Column& rhs, const size_t right, const bool safe_eq) const {
     const auto& rhs_file = down_cast<const FileColumn&>(rhs);
-    auto lhs_fields = field_columns();
-    auto rhs_fields = rhs_file.field_columns();
     int ret = EQUALS_TRUE;
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        int tmp = lhs_fields[i]->equals(left, *rhs_fields[i], right, safe_eq);
+        const int tmp = _fields[i]->equals(left, *rhs_file._fields[i], right, safe_eq);
         if (tmp == EQUALS_FALSE) {
             return EQUALS_FALSE;
-        } else if (tmp == EQUALS_NULL) {
+        }
+        if (tmp == EQUALS_NULL) {
             ret = EQUALS_NULL;
         }
     }
@@ -424,18 +333,19 @@ int FileColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_e
 
 int64_t FileColumn::xor_checksum(uint32_t from, uint32_t to) const {
     int64_t checksum = 0;
-    for_each_field([&](const auto& column) { checksum ^= column->xor_checksum(from, to); });
+    for (const auto& column : _fields) {
+        checksum ^= column->xor_checksum(from, to);
+    }
     return checksum;
 }
 
 void FileColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     DCHECK_LT(idx, size());
-    auto columns = field_columns();
     buf->begin_push_bracket();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
         buf->push_string(kFieldNames[i], strlen(kFieldNames[i]));
         buf->separator(':');
-        const NullableColumn* nullable = as_nullable(columns[i]);
+        const NullableColumn* nullable = as_nullable(_fields[i].get());
         if (nullable->is_null(idx)) {
             buf->push_null();
         } else {
@@ -446,10 +356,10 @@ void FileColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_b
                 buf->push_bigint(down_cast<const Int64Column*>(data)->get_data()[idx]);
                 break;
             case INLINE: {
-                // Payload bytes are always rendered as hex, independent of binary_encoding_format.
+                // Payload bytes follow the regular VARBINARY rendering rules: inside the bracket they
+                // count as nested binary, so binary_encoding_format / binary_encoding_level apply.
                 Slice bytes = down_cast<const BinaryColumn*>(data)->get_slice(idx);
-                std::string hex = strings::b2a_hex(bytes.data, static_cast<int>(bytes.size));
-                buf->push_string(hex.data(), hex.size());
+                buf->push_binary(bytes.data, bytes.size);
                 break;
             }
             default:
@@ -468,9 +378,8 @@ std::string FileColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     std::stringstream ss;
     ss << '{';
-    auto columns = field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        ss << kFieldNames[i] << ':' << columns[i]->debug_item(idx);
+        ss << kFieldNames[i] << ':' << _fields[i]->debug_item(idx);
         if (i + 1 < NUM_FIELDS) {
             ss << ',';
         }
@@ -497,67 +406,96 @@ std::string FileColumn::get_name() const {
 Datum FileColumn::get(size_t idx) const {
     DCHECK_LT(idx, size());
     DatumStruct res(NUM_FIELDS);
-    auto columns = field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        res[i] = columns[i]->get(idx);
+        res[i] = _fields[i]->get(idx);
     }
     return {res};
 }
 
 size_t FileColumn::memory_usage() const {
     size_t usage = 0;
-    for_each_field([&](const auto& column) { usage += column->memory_usage(); });
+    for (const auto& column : _fields) {
+        usage += column->memory_usage();
+    }
     return usage;
 }
 
 size_t FileColumn::container_memory_usage() const {
     size_t usage = 0;
-    for_each_field([&](const auto& column) { usage += column->container_memory_usage(); });
+    for (const auto& column : _fields) {
+        usage += column->container_memory_usage();
+    }
     return usage;
 }
 
 size_t FileColumn::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t usage = 0;
-    for_each_field([&](const auto& column) { usage += column->reference_memory_usage(from, size); });
+    for (const auto& column : _fields) {
+        usage += column->reference_memory_usage(from, size);
+    }
     return usage;
 }
 
 void FileColumn::swap_column(Column& rhs) {
     auto& rhs_file = down_cast<FileColumn&>(rhs);
-    auto lhs_fields = field_columns();
-    auto rhs_fields = rhs_file.field_columns();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
-        lhs_fields[i]->swap_column(*rhs_fields[i]);
+        _fields[i]->swap_column(*rhs_file._fields[i]);
     }
 }
 
 void FileColumn::reset_column() {
     Column::reset_column();
-    for_each_field([](auto& column) { column->reset_column(); });
+    for (auto& column : _fields) {
+        column->reset_column();
+    }
 }
 
 Status FileColumn::capacity_limit_reached() const {
-    Status status;
-    for_each_field([&](const auto& column) {
-        if (status.ok()) {
-            status = column->capacity_limit_reached();
-        }
-    });
-    return status;
+    for (const auto& column : _fields) {
+        RETURN_IF_ERROR(column->capacity_limit_reached());
+    }
+    return Status::OK();
 }
 
 void FileColumn::check_or_die() const {
-    const size_t num_rows = _uri->size();
-    for_each_field([&](const auto& column) {
+    const size_t num_rows = _fields[0]->size();
+    for (const auto& column : _fields) {
         DCHECK(column->is_nullable()) << "FileColumn sub-columns must be nullable";
         DCHECK_EQ(num_rows, column->size());
         column->check_or_die();
-    });
+    }
 }
 
 void FileColumn::mutate_each_subcolumn() {
-    for_each_field([](auto& column) { column = (std::move(*column)).mutate(); });
+    for (auto& column : _fields) {
+        column = (std::move(*column)).mutate();
+    }
+}
+
+Datum FileDatumBuilder::make(const std::optional<Slice>& uri, const std::optional<int64_t>& offset,
+                             const std::optional<int64_t>& size, const std::optional<Slice>& content_type,
+                             const std::optional<Slice>& checksum, const std::optional<Slice>& inline_bytes) {
+    DatumStruct fields(FileColumn::NUM_FIELDS);
+    if (uri) {
+        fields[FileColumn::URI] = Datum(*uri);
+    }
+    if (offset) {
+        fields[FileColumn::OFFSET] = Datum(*offset);
+    }
+    if (size) {
+        fields[FileColumn::SIZE] = Datum(*size);
+    }
+    if (content_type) {
+        fields[FileColumn::CONTENT_TYPE] = Datum(*content_type);
+    }
+    if (checksum) {
+        fields[FileColumn::CHECKSUM] = Datum(*checksum);
+    }
+    if (inline_bytes) {
+        fields[FileColumn::INLINE] = Datum(*inline_bytes);
+    }
+    return Datum(fields);
 }
 
 } // namespace starrocks

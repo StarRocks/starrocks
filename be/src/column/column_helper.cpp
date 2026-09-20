@@ -304,8 +304,8 @@ public:
     }
 
     Status do_visit(FileColumn* column) {
-        for (Column* field : column->field_columns()) {
-            RETURN_IF_ERROR(field->accept_mutable(this));
+        for (const ColumnPtr& field : column->fields()) {
+            RETURN_IF_ERROR(field->as_mutable_raw_ptr()->accept_mutable(this));
         }
         return Status::OK();
     }

@@ -381,7 +381,7 @@ public:
     }
 
     Status do_visit(const FileColumn& column) {
-        for (const Column* field : column.field_columns()) {
+        for (const ColumnPtr& field : column.fields()) {
             (void)field->accept(this);
         }
         return Status::OK();
