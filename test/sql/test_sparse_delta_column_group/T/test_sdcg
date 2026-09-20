@@ -1,4 +1,4 @@
--- name: test_sdcg_column_mode_sparse @cloud
+-- name: test_sdcg_column_mode_sparse @cloud @sequential
 create database test_sdcg_col;
 use test_sdcg_col;
 update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
@@ -13,7 +13,7 @@ select * from t order by pk;
 update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 drop database test_sdcg_col force;
 
--- name: test_sdcg_auto_mode @cloud
+-- name: test_sdcg_auto_mode @cloud @sequential
 create database test_sdcg_auto;
 use test_sdcg_auto;
 update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
@@ -28,7 +28,7 @@ select * from t order by pk;
 update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 drop database test_sdcg_auto force;
 
--- name: test_sdcg_flexible @cloud
+-- name: test_sdcg_flexible @cloud @sequential
 create database test_sdcg_flex;
 use test_sdcg_flex;
 -- flexible is gated on enable_sparse_dcg on BOTH sides: the BE accepts the token, the FE builds the flexible plan
@@ -47,7 +47,7 @@ admin set frontend config ("enable_sparse_dcg" = "false");
 update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 drop database test_sdcg_flex force;
 
--- name: test_sdcg_flexible_reject_merge_condition @cloud
+-- name: test_sdcg_flexible_reject_merge_condition @cloud @sequential
 create database test_sdcg_flex_mc;
 use test_sdcg_flex_mc;
 admin set frontend config ("enable_sparse_dcg" = "true");
@@ -60,7 +60,7 @@ admin set frontend config ("enable_sparse_dcg" = "false");
 update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 drop database test_sdcg_flex_mc force;
 
--- name: test_sdcg_flexible_reject_auto_increment @cloud
+-- name: test_sdcg_flexible_reject_auto_increment @cloud @sequential
 create database test_sdcg_flex_ai;
 use test_sdcg_flex_ai;
 admin set frontend config ("enable_sparse_dcg" = "true");
@@ -73,7 +73,7 @@ admin set frontend config ("enable_sparse_dcg" = "false");
 update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 drop database test_sdcg_flex_ai force;
 
--- name: test_sdcg_reject_unknown_mode @cloud
+-- name: test_sdcg_reject_unknown_mode @cloud @sequential
 create database test_sdcg_badmode;
 use test_sdcg_badmode;
 CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
@@ -95,7 +95,7 @@ sync;
 select * from t order by pk;
 drop database test_sdcg_badmode force;
 
--- name: test_sdcg_gin_column_forces_row @cloud
+-- name: test_sdcg_gin_column_forces_row @cloud @sequential
 create database test_sdcg_gin;
 use test_sdcg_gin;
 admin set frontend config ("enable_experimental_gin" = "true");
@@ -120,7 +120,7 @@ admin set frontend config ("enable_sparse_dcg" = "false");
 update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 drop database test_sdcg_gin force;
 
--- name: test_sdcg_complex_type_forced_dense @cloud
+-- name: test_sdcg_complex_type_forced_dense @cloud @sequential
 create database test_sdcg_ctype;
 use test_sdcg_ctype;
 update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
@@ -150,7 +150,7 @@ select pk, get_json_int(j, '$.x'), c2 from t where pk <= 3 order by pk;
 update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 drop database test_sdcg_ctype force;
 
--- name: test_sdcg_shared_dense_base_two_columns @cloud
+-- name: test_sdcg_shared_dense_base_two_columns @cloud @sequential
 create database test_sdcg_share;
 use test_sdcg_share;
 update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";

@@ -1,4 +1,4 @@
--- name: test_sdcg_column_mode_sparse @cloud
+-- name: test_sdcg_column_mode_sparse @cloud @sequential
 create database test_sdcg_col;
 -- result:
 -- !result
@@ -48,7 +48,7 @@ update information_schema.be_configs set value = "false" where name = "enable_sp
 drop database test_sdcg_col force;
 -- result:
 -- !result
--- name: test_sdcg_auto_mode @cloud
+-- name: test_sdcg_auto_mode @cloud @sequential
 create database test_sdcg_auto;
 -- result:
 -- !result
@@ -98,7 +98,7 @@ update information_schema.be_configs set value = "false" where name = "enable_sp
 drop database test_sdcg_auto force;
 -- result:
 -- !result
--- name: test_sdcg_flexible @cloud
+-- name: test_sdcg_flexible @cloud @sequential
 create database test_sdcg_flex;
 -- result:
 -- !result
@@ -154,7 +154,7 @@ update information_schema.be_configs set value = "false" where name = "enable_sp
 drop database test_sdcg_flex force;
 -- result:
 -- !result
--- name: test_sdcg_flexible_reject_merge_condition @cloud
+-- name: test_sdcg_flexible_reject_merge_condition @cloud @sequential
 create database test_sdcg_flex_mc;
 -- result:
 -- !result
@@ -188,7 +188,7 @@ update information_schema.be_configs set value = "false" where name = "enable_sp
 drop database test_sdcg_flex_mc force;
 -- result:
 -- !result
--- name: test_sdcg_flexible_reject_auto_increment @cloud
+-- name: test_sdcg_flexible_reject_auto_increment @cloud @sequential
 create database test_sdcg_flex_ai;
 -- result:
 -- !result
@@ -222,7 +222,7 @@ update information_schema.be_configs set value = "false" where name = "enable_sp
 drop database test_sdcg_flex_ai force;
 -- result:
 -- !result
--- name: test_sdcg_reject_unknown_mode @cloud
+-- name: test_sdcg_reject_unknown_mode @cloud @sequential
 create database test_sdcg_badmode;
 -- result:
 -- !result
@@ -280,7 +280,7 @@ select * from t order by pk;
 drop database test_sdcg_badmode force;
 -- result:
 -- !result
--- name: test_sdcg_gin_column_forces_row @cloud
+-- name: test_sdcg_gin_column_forces_row @cloud @sequential
 create database test_sdcg_gin;
 -- result:
 -- !result
@@ -353,7 +353,7 @@ update information_schema.be_configs set value = "false" where name = "enable_sp
 drop database test_sdcg_gin force;
 -- result:
 -- !result
--- name: test_sdcg_complex_type_forced_dense @cloud
+-- name: test_sdcg_complex_type_forced_dense @cloud @sequential
 create database test_sdcg_ctype;
 -- result:
 -- !result
@@ -417,7 +417,7 @@ drop database test_sdcg_ctype force;
 -- result:
 -- !result
 
--- name: test_sdcg_shared_dense_base_two_columns @cloud
+-- name: test_sdcg_shared_dense_base_two_columns @cloud @sequential
 create database test_sdcg_share;
 -- result:
 -- !result
