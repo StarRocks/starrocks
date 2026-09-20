@@ -102,6 +102,11 @@ void GeoColumn::append_wkb_batch(const Slice* values, size_t count) {
     (void)_data->append_strings(values, count);
 }
 
+void GeoColumn::append_wkb_column(const BinaryColumn& source) {
+    clear_wkb_cache();
+    _data->append(source, 0, source.size());
+}
+
 void GeoColumn::resize(size_t count) {
     clear_wkb_cache();
     _data->resize(count);
