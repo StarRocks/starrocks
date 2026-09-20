@@ -535,6 +535,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- 默认值: 60000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离集群中事务版本发布（Publish Version）RPC 的超时时间。该值同时限定 FE 等待计算节点响应的时长和计算节点执行发布任务的截止时间，两者始终保持一致。如果单个事务发布的 tablet 数量很多，发布确实需要更长时间，并因此出现发布超时导致事务失败，可以调大该值。
+- 引入版本: v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - 默认值: 3000
