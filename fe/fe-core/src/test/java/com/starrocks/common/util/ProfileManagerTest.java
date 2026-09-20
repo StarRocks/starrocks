@@ -90,7 +90,7 @@ public class ProfileManagerTest {
         RuntimeProfile profile2 = buildRuntimeProfile("124", "Load");
         manager.pushProfile(null, profile2);
 
-        assertEquals(2, manager.getAllQueries().size());
+        assertEquals(2, manager.getAllQueries(element -> true).size());
 
         manager.clearProfiles();
     }
@@ -159,6 +159,7 @@ public class ProfileManagerTest {
         }
     }
 
+<<<<<<< HEAD
     @Test
     public void testCustomQueryIdResolution() {
         ProfileManager manager = ProfileManager.getInstance();
@@ -172,6 +173,9 @@ public class ProfileManagerTest {
 
         manager.removeProfile("my-custom-id");
         assertFalse(manager.hasProfile("223"), "Removing by custom query id should remove the underlying profile");
+=======
+        assertEquals(1, manager.getAllQueries(element -> true).size());
+>>>>>>> cb695357ca5 ([BugFix] Add RBAC check for reading query profiles (#62809))
 
         manager.clearProfiles();
     }
