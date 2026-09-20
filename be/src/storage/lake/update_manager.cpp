@@ -62,6 +62,19 @@
 
 namespace starrocks::lake {
 
+// Whether segment |segment_index| came with a pre-built sstable.
+//
+// Checked PER SEGMENT rather than by the array being non-empty. A single writer builds ssts for all
+// of its segments or none, but a multi-node write folds one log per writing node and each node
+// decides that on its own, so the folded log can legitimately carry an sst for some segments and an
+// empty slot for others. Reading "the array is non-empty" as "every segment has one" would send an
+// empty file name into ingest_sst. An empty name is the marker for "none for this segment", the same
+// convention del_ssts uses below.
+static bool has_prebuilt_sst(const TxnLogPB_OpWrite& op_write, int segment_index) {
+    return segment_index < op_write.ssts_size() && segment_index < op_write.sst_ranges_size() &&
+           !op_write.ssts(segment_index).name().empty();
+}
+
 static bool use_cloud_native_pk_index(const TabletMetadata& metadata) {
     return metadata.enable_persistent_index() &&
            metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
@@ -533,8 +546,15 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             DCHECK(state.upserts(local_id) != nullptr);
             if (!has_condition_update) {
                 RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
+<<<<<<< HEAD
                                            op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
             } else if (op_write.ssts_size() > 0) {
+=======
+                                           has_prebuilt_sst(op_write, local_id), use_cloud_native_pk_index(*metadata)));
+            } else if (has_prebuilt_sst(op_write, local_id)) {
+                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_index_condition_upsert_failed,
+                                          Status::InternalError("inject lake_pk_apply_index_condition_upsert_failed"));
+>>>>>>> 68586609af8 ([Feature] Let several compute nodes write one tablet (#62712))
                 RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
                                                                    condition_column, state.upserts(local_id), index,
                                                                    &new_deletes));
@@ -559,7 +579,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             _index_cache.update_object_size(index_entry, index.memory_usage());
             state.release_segment(local_id);
             _update_state_cache.update_object_size(state_entry, state.memory_usage());
-            if (op_write.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
+            if (has_prebuilt_sst(op_write, local_id) && use_cloud_native_pk_index(*metadata)) {
                 DelvecPagePB delvec_page_pb = builder->delvec_page(rowset_id + global_segment_id);
                 delvec_page_pb.set_version(metadata->version());
                 RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),

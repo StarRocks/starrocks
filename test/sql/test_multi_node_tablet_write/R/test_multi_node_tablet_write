@@ -1,0 +1,113 @@
+-- name: test_multi_node_tablet_write @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_local (k1 bigint, k2 int, v1 string, v2 bigint)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+-- result:
+-- !result
+set lake_multi_node_tablet_write_mode = 'force';
+-- result:
+-- !result
+set lake_multi_node_write_bytes_per_node = 1;
+-- result:
+-- !result
+set lake_multi_node_write_max_nodes = 4;
+-- result:
+-- !result
+insert into t_local select generate_series, cast(generate_series % 7 as int), concat('v', generate_series), generate_series * 3 from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), count(distinct k1), sum(k1), sum(v2) from t_local;
+-- result:
+20000	20000	200010000	600030000
+-- !result
+insert into t_local select generate_series, cast(generate_series % 7 as int), concat('w', generate_series), generate_series * 5 from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), sum(v2) from t_local;
+-- result:
+40000	1600080000
+-- !result
+select k1, k2, v1, v2 from t_local where k1 = 12345 order by v1;
+-- result:
+12345	4	v12345	37035
+12345	4	w12345	61725
+-- !result
+delete from t_local where k1 <= 10000;
+-- result:
+-- !result
+select count(*), sum(k1), sum(v2) from t_local;
+-- result:
+20000	300010000	1200040000
+-- !result
+set lake_multi_node_tablet_write_mode = 'off';
+-- result:
+-- !result
+truncate table t_local;
+-- result:
+-- !result
+insert into t_local select generate_series, cast(generate_series % 7 as int), concat('v', generate_series), generate_series * 3 from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), sum(k1), sum(v2) from t_local;
+-- result:
+20000	200010000	600030000
+-- !result
+set lake_multi_node_tablet_write_mode = 'force';
+-- result:
+-- !result
+create table t_no_bundle (k1 bigint, k2 int, v1 string)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'false');
+-- result:
+-- !result
+insert into t_no_bundle select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), sum(k1) from t_no_bundle;
+-- result:
+20000	200010000
+-- !result
+create table t_pk (k1 bigint, k2 int, v1 string)
+    primary key(k1, k2)
+    distributed by hash(k1, k2) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+-- result:
+-- !result
+insert into t_pk select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+insert into t_pk select generate_series, cast(generate_series % 7 as int), concat('w', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), sum(k1) from t_pk;
+-- result:
+20000	200010000
+-- !result
+select k1, k2, v1 from t_pk where k1 = 12345;
+-- result:
+12345	4	w12345
+-- !result
+create table t_many_buckets (k1 bigint, k2 int, v1 string)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 16
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+-- result:
+-- !result
+insert into t_many_buckets select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), sum(k1) from t_many_buckets;
+-- result:
+20000	200010000
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
