@@ -4849,7 +4849,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_unused_tokens_are_returned_not_
 
         auto st = _manager->create_parallel_tasks(
                 tablet_id, txn_id, version, config, callback, false, pool.get(), [&]() { return ++acquired <= 1; },
-                release_token, 0, 0, return_token);
+                release_token, 0, return_token);
         ASSERT_FALSE(st.ok());
         ASSERT_TRUE(st.status().is_resource_busy()) << st.status();
         EXPECT_EQ(1, returned);
@@ -4875,7 +4875,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_unused_tokens_are_returned_not_
                     acquired++;
                     return true;
                 },
-                release_token, 0, 0, return_token);
+                release_token, 0, return_token);
         sync_point->ClearCallBack("ThreadPool::do_submit:1");
         ASSERT_FALSE(st.ok());
         // Every token the planner reserved -- one per group, so more than one -- came back untouched.
@@ -4905,7 +4905,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_unused_tokens_are_returned_not_
                     acquired++;
                     return true;
                 },
-                release_token, 0, 0, return_token);
+                release_token, 0, return_token);
         sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
         ASSERT_FALSE(st.ok());
         EXPECT_GE(acquired, 2);
