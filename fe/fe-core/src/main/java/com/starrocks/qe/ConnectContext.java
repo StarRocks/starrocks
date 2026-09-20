@@ -1044,7 +1044,8 @@ public class ConnectContext {
                 // timeout and a later leader graceful exit is blocked.
                 try {
                     forwardRollbackToLeader();
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    LOG.warn("Failed to forward explicit transaction rollback to leader, txnId={}", txnId, e);
                 }
             }
             try {

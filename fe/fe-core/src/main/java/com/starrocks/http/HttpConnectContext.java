@@ -73,12 +73,12 @@ public class HttpConnectContext extends ConnectContext {
 
     private boolean isKeepAlive;
 
-    // Last HTTP write (LastHttpContent or FullHttpResponse). Awaited before
-    // finishHttpRequest/close so drain cannot observe active==0 while bytes remain.
+    // Last HTTP write for this context. SQL keep-alive requests share this single slot, so it is
+    // a context-level drain barrier rather than a strict per-request future.
     private volatile ChannelFuture lastHttpWrite;
 
     // SQL keep-alive only. Pipelined SQL requests share one HttpConnectContext;
-    // do not close the channel while this is non-zero. Non-SQL actions use a
+    // do not close the channel while this per-channel count is non-zero. Non-SQL actions use a
     // per-request context and must not touch this counter.
     private final AtomicInteger channelAdmittedRequests = new AtomicInteger();
 
@@ -155,13 +155,6 @@ public class HttpConnectContext extends ConnectContext {
 
     public void setLastHttpWrite(ChannelFuture lastHttpWrite) {
         this.lastHttpWrite = lastHttpWrite;
-    }
-
-    public void awaitLastHttpWrite() {
-        ChannelFuture f = lastHttpWrite;
-        if (f != null) {
-            f.awaitUninterruptibly();
-        }
     }
 
     // SQL keep-alive only: HTTP/1.1 pipelined requests share one channel-scoped
