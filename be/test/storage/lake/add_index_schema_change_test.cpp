@@ -2026,9 +2026,10 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlaid_column_rewrites_cols_with_ngrambf_
     version = put_metadata_at_next_version(md);
 
     auto vt = versioned_at(tablet_id, version);
-    std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0,
-                                                  R"({"gram_num":"3","bloom_filter_fpp":"0.05",)"
-                                                  R"("case_sensitive":"true"})")};
+    // index_properties JSON as produced by TabletIndex::to_schema_pb: a nested
+    // map keyed by property group, not a flat one.
+    const std::string props = R"({"properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
     AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
                             vt.get_schema());
 
