@@ -536,8 +536,10 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         return rowset_indexes;
     }
 
-    // 2b. Skip low-value sparse mid-tier picks (see skip_sparse_low_score_level).
-    if (skip_sparse_low_score_level(*pick_level_ptr, rowset_vec, tablet_metadata->id())) {
+    // 2b. Skip low-value sparse mid-tier picks (see skip_sparse_low_score_level). pick_level_ptr is
+    // null here when size-tiered found nothing but a deep chain still needs convergence; there is no
+    // level to score-gate, so skip straight to the force-include step below.
+    if (pick_level_ptr != nullptr && skip_sparse_low_score_level(*pick_level_ptr, rowset_vec, tablet_metadata->id())) {
         return rowset_indexes; // empty -> no compaction this round
     }
 

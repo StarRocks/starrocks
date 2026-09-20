@@ -1803,8 +1803,8 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
         const auto& column_file = column_file_result.value();
 
         if (ctx.dcg_segments.count(column_file) == 0) {
-            // Route through the lake metacache (footer parsed once, reused across apply) with cache
-            // filling; ctx.segment carries the tablet manager because it was loaded via load_segment.
+            // new_dcg_segment opens the dense `.cols` file with a direct Segment::open, exactly as
+            // before SDCG; it accepts and ignores the cache options (see Segment::new_dcg_segment).
             auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema, lake_io_opts,
                                                                    lake_io_opts.fill_metadata_cache);
             if (!dcg_segment_result.ok()) {
@@ -1985,7 +1985,9 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
             continue;
         }
         LayeredOverlayColumnIterator::SparseLayer layer;
-        // Route the `.spcols` open through the metacache (footer parsed once) and fill caches.
+        // Open the `.spcols` layer. When the base segment carries a tablet manager (it was loaded via
+        // load_segment) the open goes through the metacache (footer parsed once, caches filled);
+        // otherwise new_sparse_dcg_segment falls back to a direct Segment::open.
         ASSIGN_OR_RETURN(layer.spcols_segment,
                          ctx.segment->new_sparse_dcg_segment(*hit.dcg, hit.file_idx, read_tablet_schema, lake_io_opts,
                                                              lake_io_opts.fill_metadata_cache));
@@ -2122,24 +2124,18 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         LakeIOOptions dcg_lake_io_opts;
         dcg_lake_io_opts.fill_data_cache = true;
         dcg_lake_io_opts.fill_metadata_cache = true;
-        // SDCG: open the base segment through the tablet manager so it carries the metacache
-        // (`_tablet_manager`), letting its `.cols`/`.spcols` DCG opens be footer-parsed once and
-        // reused across apply. Topology-driven (lake has a tablet manager, local does not) rather
-        // than flag-driven, so reads work identically whenever sparse layers exist on disk.
+        // With enable_sparse_dcg off this is exactly the pre-SDCG path: a direct Segment::open. With
+        // it on, the base segment is opened through the tablet manager so it carries the metacache
+        // and the sparse-layer `.spcols` opens below (new_sparse_dcg_segment) can reuse cached
+        // footers across apply.
         //
-        // BUGFIX (row-mode/column partial-update duplicate PK): `segment_id` here is the GLOBAL
-        // rssid (rowset_id + segment offset), passed for DCG keying. It also becomes the Segment
-        // object's id(). If we insert that Segment into the shared segment metacache (keyed by file
-        // path), a later QUERY read of the same base segment is served the cached object whose
-        // id() == global rssid, while the query expects id() == the segment's LOCAL index
-        // (get_segment_idx, typically 0). At read, rss = _opts.rowset_id + segment_id() then doubles
-        // to ~2*rowset_id, missing the delete vectors keyed at apply (rowset_id + local) -> the
-        // superseded base rows survive -> duplicate primary keys. Do NOT cache the apply-time
-        // Segment (matches the historical Segment::open path on main); the query read loads it fresh
-        // with the correct local id. DCG/data caches above are still warmed, and the segment is
-        // still opened through the tablet manager so its `.cols`/`.spcols` opens use the metacache.
+        // fill_meta_cache must stay false: `segment_id` here is the GLOBAL rssid (rowset id + segment
+        // offset), passed for DCG keying, and it becomes the Segment's id(). Caching that object
+        // under the file path would hand a later query read a Segment whose id() is the global rssid
+        // instead of the local index, so the query would look up delete vectors under the wrong rssid
+        // and the superseded base rows would survive (duplicate primary keys).
         StatusOr<std::shared_ptr<Segment>> segment;
-        if (params.tablet->tablet_mgr() != nullptr) {
+        if (config::enable_sparse_dcg && params.tablet->tablet_mgr() != nullptr) {
             segment = params.tablet->tablet_mgr()->load_segment(file_info, segment_id, dcg_lake_io_opts,
                                                                 /*fill_meta_cache=*/false, tablet_schema);
         } else {

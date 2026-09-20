@@ -112,11 +112,10 @@ public:
                                                      const SegmentReadOptions& read_options,
                                                      ChunkIteratorPtr* reusable_slot);
 
-    // Open (or fetch from the lake metacache) the Segment backing DCG file |idx|. When this Segment
-    // belongs to a lake tablet (lake_tablet_manager() != nullptr), the open is routed through
-    // TabletManager::load_segment so the footer is parsed once and reused across scans, and the read
-    // file fills the data/page cache per |lake_io_opts|. For the local engine (no tablet manager) the
-    // open falls back to the legacy direct Segment::open -- byte-identical to prior behavior.
+    // Open the Segment backing dense DCG file |idx| with a direct Segment::open, exactly as before
+    // SDCG (no metacache involvement). |lake_io_opts| and |fill_meta_cache| are accepted for signature
+    // parity with new_sparse_dcg_segment but are currently ignored; routing the dense open through the
+    // lake metacache is deferred to a separate change.
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                        const TabletSchemaCSPtr& read_tablet_schema,
                                                        const LakeIOOptions& lake_io_opts = {},
