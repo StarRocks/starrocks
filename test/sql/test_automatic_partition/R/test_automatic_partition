@@ -448,3 +448,33 @@ select * from ss;
 2002-01-08	2
 2002-01-09	2
 -- !result
+-- name: test_truncate_automatic_partition_table
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values('2000-01-01', 2);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2000-01-01	2
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*\tp200001\t.*
+-- !result
+truncate table ss;
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*\tp200001\t.*
+-- !result
+insert into ss values('2002-01-01', 2);
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*\tp200001\t.*
+.*\tp200201\t.*
+-- !result

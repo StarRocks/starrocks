@@ -1,0 +1,62 @@
+-- name: test_ai_provider_functions
+-- Metadata and EXPLAIN only: no external requests or BE-local credentials are needed.
+
+CREATE AI PROVIDER ai_chat_${uuid0} TYPE chat COMMENT 'integration provider'
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'chat-model', 'api_key' = 'fixture-not-a-real-key', 'timeout_ms' = '2500');
+
+CREATE AI PROVIDER IF NOT EXISTS ai_chat_${uuid0} TYPE chat
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'must-not-replace');
+
+SHOW AI PROVIDERS LIKE 'ai_chat_${uuid0}';
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt', map{'temperature': 0.0});
+
+ALTER AI PROVIDER ai_chat_${uuid0} SET ('model' = 'chat-v2', 'timeout_ms' = '1000');
+
+DESC AI PROVIDER ai_chat_${uuid0};
+
+CREATE AI PROVIDER ai_embedding_${uuid0} TYPE embedding COMMENT 'integration embedding provider'
+PROPERTIES ('endpoint' = 'http://models.example.test/v1/embeddings',
+'model' = 'embedding-model', 'dimensions' = '256', 'timeout_ms' = '2500');
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', map{'dimensions': 128});
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text', CAST(NULL AS MAP<VARCHAR, JSON>));
+
+SHOW AI PROVIDERS LIKE 'ai_embedding_${uuid0}';
+
+ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'anthropic');
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+
+ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'openai');
+
+EXPLAIN SELECT ai_custom_query('ai_chat_${uuid0}', 'prompt');
+
+ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'cohere');
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+
+ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'openai');
+
+EXPLAIN SELECT ai_custom_embedding('ai_embedding_${uuid0}', 'text');
+
+DROP AI PROVIDER ai_chat_${uuid0};
+
+DROP AI PROVIDER IF EXISTS ai_chat_${uuid0};
+
+SHOW AI PROVIDERS LIKE 'ai_chat_${uuid0}';
+
+DROP AI PROVIDER ai_embedding_${uuid0};
+
+SHOW AI PROVIDERS LIKE 'ai_embedding_${uuid0}';
+CLEANUP {
+    DROP AI PROVIDER IF EXISTS ai_chat_${uuid0};
+    DROP AI PROVIDER IF EXISTS ai_embedding_${uuid0};
+} END CLEANUP

@@ -1612,10 +1612,16 @@ struct TAIEndpointConfig {
   1: optional string endpoint
   2: optional string model
   3: optional string provider
+  4: optional string api_key
+  5: optional i64 timeout_ms
+  6: optional i32 dimensions
 }
 
 struct TAIModelConfiguration {
   1: optional TAIEndpointConfig chat
+  2: optional TAIEndpointConfig embedding
+  // Missing source is accepted only for legacy SYSTEM configurations.
+  3: optional Types.TAIModelSource source
 }
 
 struct TAIProjectNode {

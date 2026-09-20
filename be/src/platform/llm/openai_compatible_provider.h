@@ -21,7 +21,8 @@ namespace starrocks {
 class OpenAICompatibleProvider final : public AIProvider {
 public:
     StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const override;
-    AIProviderParseResult parse_response(std::string_view body) const override;
+    AIProviderParseResult parse_response(std::string_view body,
+                                         AICapability capability = AICapability::CHAT) const override;
 };
 
 } // namespace starrocks

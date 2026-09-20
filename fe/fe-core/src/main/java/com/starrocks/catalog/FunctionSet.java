@@ -755,11 +755,13 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    // ai_complete treats a top-level NULL options map as an empty option set.
+    // AI functions with options treat a top-level NULL map as an empty option set.
+    // ai_translate accepts a NULL source language for automatic detection.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                     PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE);
+                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE,
+                    "ai_embed", "ai_custom_query", "ai_custom_embedding", "ai_translate");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
