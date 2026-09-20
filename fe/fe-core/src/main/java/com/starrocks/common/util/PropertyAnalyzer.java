@@ -1214,6 +1214,33 @@ public class PropertyAnalyzer {
     }
 
     /**
+     * Why {@code columnName} cannot appear in "zstd_compression_columns" at all, or null if it can. The
+     * property is a comma-separated list whose entries are trimmed before the names are resolved
+     * (see {@link #zstdCompressionColumnSpecs}), while the value is rendered from the raw names, so a
+     * name carrying either delimiter does not survive the round trip:
+     * <ul>
+     *   <li>a comma splits one nomination into two, which then name other columns or none;</li>
+     *   <li>leading or trailing whitespace is trimmed away on the way back in, which silently resolves
+     *       to a different column.</li>
+     * </ul>
+     * A colon is fine: the parser resolves a whole token as a name before it splits one, and the case
+     * where that is ambiguous is {@link #zstdCompressionRenderCollision}'s job.
+     *
+     * <p>Only reachable through RENAME COLUMN. Nominating such a column in the first place is
+     * impossible -- the value is split and trimmed before any name is looked up.
+     */
+    public static String zstdCompressionNameUnrepresentable(String columnName) {
+        if (columnName.indexOf(',') >= 0) {
+            return "the property is a comma-separated list, so a nominated column's name cannot contain a comma";
+        }
+        if (!columnName.equals(columnName.trim())) {
+            return "the property's entries are trimmed when they are read back, so a nominated column's name "
+                    + "cannot start or end with whitespace";
+        }
+        return null;
+    }
+
+    /**
      * Why {@code column} may not be nominated in "zstd_compression_columns", or null if it may.
      * Kept apart from the property text so that an ALTER changing a column's type or its keyness
      * can re-check a column the property already names: the property survives such an ALTER, and

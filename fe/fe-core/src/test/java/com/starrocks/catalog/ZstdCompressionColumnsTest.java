@@ -734,6 +734,38 @@ public class ZstdCompressionColumnsTest {
         Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 262144), b.getZstdCompressionPageSizes());
     }
 
+    @Test
+    public void testNominatedColumnCannotBeRenamedIntoAnUnwritableName() throws Exception {
+        // The property is a comma-separated list whose entries are trimmed when read back, so a
+        // nominated column's name can carry neither delimiter. Nominating such a column is impossible
+        // to begin with (the value is split and trimmed before names are resolved), but RENAME COLUMN
+        // can walk a nominated column into one -- and it used to do so silently: a comma splits the
+        // entry in two, and a trailing space resolves to a different column on the way back in.
+        starRocksAssert.withTable(createTableSql("t_cdict_unwritable",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1\""));
+        OlapTable table = getTable("t_cdict_unwritable");
+        Assertions.assertEquals(Sets.newHashSet("v1"), table.getZstdCompressionColumnNames());
+        // No explicit page size, so the page-size map is null -- the shape whose guard used to be
+        // skipped outright.
+        Assertions.assertNull(table.getZstdCompressionPageSizes());
+
+        for (String badName : new String[] {"a,b", ",", "v1 "}) {
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE " + DB_NAME + ".t_cdict_unwritable RENAME COLUMN v1 TO `" + badName + "`"));
+            Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("nominated column"),
+                    "unexpected message for '" + badName + "': " + e.getMessage());
+        }
+        Assertions.assertEquals(Sets.newHashSet("v1"), table.getZstdCompressionColumnNames());
+
+        // Not over-reaching: a column the property does not name may still take such a name, and a
+        // colon is fine on a nominated column without a page size -- the parser resolves a whole token
+        // as a name before it splits one.
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_unwritable RENAME COLUMN v3 TO `x,y`");
+        Assertions.assertNotNull(table.getColumn("x,y"));
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_unwritable RENAME COLUMN v1 TO `a:4096`");
+        Assertions.assertEquals(Sets.newHashSet("a:4096"), table.getZstdCompressionColumnNames());
+    }
+
     private static void assertCreateTableFails(String tableName, String spec, String expectedMessage) {
         Exception e = Assertions.assertThrows(Exception.class,
                 () -> starRocksAssert.withTable(createTableSql(tableName,

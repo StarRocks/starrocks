@@ -4094,7 +4094,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // rendered as "<name>:<bytes>", and the parser resolves a whole token as a column name before
         // splitting it, so a column renamed INTO that rendered form would make the table's own DDL name
         // the wrong column. The property is not restated here and nothing else revalidates it.
+        // Gate on the nomination SET, not the page-size map: the set is what getCommonProperties
+        // renders, and the map is null whenever no nomination carries an explicit size -- which used
+        // to skip these checks entirely for the plain "zstd_compression_columns = v" case.
+        Set<ColumnId> zstdCompressionColumns = olapTable.getZstdCompressionColumnIds();
         Map<ColumnId, Integer> zstdCompressionPageSizes = olapTable.getZstdCompressionPageSizes();
+        if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+            // A nominated column's name has to be writable into the property text at all. Renaming it
+            // to something carrying a delimiter does not fail here today, it fails later and silently:
+            // a comma splits the entry in two (naming other columns, or none), and leading/trailing
+            // whitespace is trimmed on the way back in, resolving to a different column.
+            if (zstdCompressionColumns.contains(column.getColumnId())) {
+                String unrepresentable = PropertyAnalyzer.zstdCompressionNameUnrepresentable(newColName);
+                if (unrepresentable != null) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": " + unrepresentable
+                                    + ". Remove the column from "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                                    + " first, or pick another name.");
+                }
+            }
+        }
         if (zstdCompressionPageSizes != null && !zstdCompressionPageSizes.isEmpty()) {
             // Both roles move, so the check is against the whole post-rename schema rather than just
             // the new name: renaming some other column INTO the rendered form breaks it, and so does
