@@ -287,6 +287,17 @@ public class AutovacuumDaemon extends LeaderDaemon {
                 minRetainVersion = Math.min(minRetainVersion, 
                                         partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
             }
+            // Apply the same takeover clamp the request path applies, so scheduling is decided on the
+            // floor that will actually be sent. Without it a partition whose lastSuccVacuumVersion has
+            // already caught up with the lower unclamped floor is rejected here and never gets a round
+            // carrying the higher one. The OrNull variant is deliberate: this runs both under the
+            // collection's table read lock and lock-free from submitPendingCandidates, and a
+            // schedulability decision does not warrant taking a lock -- the request path re-reads the
+            // takeover under the table lock and remains authoritative.
+            MaterializedIndex latestBaseIndex = partition.getLatestBaseIndexOrNull();
+            if (latestBaseIndex != null && latestBaseIndex.getTakeoverVersion() > minRetainVersion) {
+                minRetainVersion = latestBaseIndex.getTakeoverVersion();
+            }
             // the file before minRetainVersion vacuum success
             if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
                 return false;
@@ -377,6 +388,7 @@ public class AutovacuumDaemon extends LeaderDaemon {
         final long txnLogSweepWatermark = lastMinActiveTxnId;
         partition.setLastMinActiveTxnId(minActiveTxnId);
 
+        long baseGenerationTakeover = 0;
         long preExtraFileSize = 0;
         // If shared file cleanup is enabled, vacuum runs on a single aggregator node.
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
@@ -385,8 +397,12 @@ public class AutovacuumDaemon extends LeaderDaemon {
         boolean fileBundling = table.isFileBundling();
         boolean rangeDistribution = table.isRangeDistribution();
         try {
-            for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
+            }
+            MaterializedIndex latestBaseIndex = partition.getLatestBaseIndex();
+            if (latestBaseIndex != null) {
+                baseGenerationTakeover = latestBaseIndex.getTakeoverVersion();
             }
             visibleVersion = partition.getVisibleVersion();
             minRetainVersion = partition.getMinRetainVersion();
@@ -405,6 +421,24 @@ public class AutovacuumDaemon extends LeaderDaemon {
 
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+
+        // Versions below the base generation's takeover do not exist for its tablets: a tablet
+        // created by a tablet split/merge has no metadata below the reshard commit version. Asking
+        // the backend to retain them is not merely vacuous -- the vacuum walk starts at the entry
+        // version and cannot anchor, so it steps down one version at a time paying a remote
+        // NotFound per step, records no resume cursor for an un-anchored walk, and contributes an
+        // empty range that the partition-level intersection turns into no progress for the whole
+        // partition, round after round. Clamp with the BASE generation only: raising the floor to a
+        // non-base index's newer takeover would un-retain base versions that are still wanted. A
+        // partition can also be PARTIALLY resharded (a split skips indexes whose tablets are all
+        // under the target size), so a live non-base index may still hold metadata below this
+        // clamp; that is safe because in-flight readers are grace-timestamp-protected on the
+        // backend. A non-base index whose tablets start above this floor can still stall the
+        // proposal -- that generic case needs per-tablet handling in the backend propose path and
+        // is out of scope here.
+        if (baseGenerationTakeover > minRetainVersion) {
+            minRetainVersion = baseGenerationTakeover;
         }
 
         boolean enableSharedFileCleanup = fileBundling || rangeDistribution;

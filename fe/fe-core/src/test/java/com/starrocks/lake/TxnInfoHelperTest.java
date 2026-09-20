@@ -91,6 +91,20 @@ public class TxnInfoHelperTest {
         assertNull(info.loadIds);
     }
 
+    @Test
+    public void testFromUnshareCompactionTransaction() {
+        TransactionState state = Mockito.mock(TransactionState.class, Mockito.RETURNS_DEEP_STUBS);
+        Mockito.when(state.getSourceType()).thenReturn(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
+        Mockito.when(state.getTxnCommitAttachment())
+                .thenReturn(new CompactionTxnCommitAttachment(false, true));
+        Mockito.when(state.getTransactionType().toProto()).thenReturn(null);
+
+        TxnInfoPB info = TxnInfoHelper.fromTransactionState(state);
+
+        assertFalse(info.forcePublish);
+        assertTrue(info.unshareCompaction);
+    }
+
     private static TUniqueId tid(long hi, long lo) {
         TUniqueId id = new TUniqueId();
         id.setHi(hi);

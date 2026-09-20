@@ -14,6 +14,8 @@
 
 package com.starrocks.load.loadv2;
 
+import com.starrocks.alter.reshard.presplit.LoadKind;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -99,15 +101,35 @@ public class LoadLoadingTaskTest {
         Database database = new Database(10000L, "test");
         OlapTable olapTable = new OlapTable(10001L, "tbl", null, KeysType.AGG_KEYS, null, null);
         LoadStmt stmt = new LoadStmt(null, null, new BrokerDesc(null), null, null);
+        PreSplitProfile preSplitProfile = new PreSplitProfile();
+        try (PreSplitProfile.Scope ignored =
+                     PreSplitProfile.startAttempt(preSplitProfile, LoadKind.BROKER_LOAD)) {
+            // A completed attempt is enough to make the diagnostic node visible.
+        }
         LoadLoadingTask loadLoadingTask = new LoadLoadingTask.Builder().setDb(database).setLoadStmt(stmt)
-                .setTable(olapTable).setContext(connectContext).setOriginStmt(new OriginStatementInfo("")).build();
+                .setTable(olapTable).setContext(connectContext).setPreSplitProfile(preSplitProfile)
+                .setOriginStmt(new OriginStatementInfo("")).build();
         RuntimeProfile profile = loadLoadingTask.buildRunningTopLevelProfile();
         // Perform assertions to verify the behavior
         assertNotNull(profile, "Profile should not be null");
+        assertNotNull(profile.getChild(PreSplitProfile.PROFILE_NAME));
 
         profile = loadLoadingTask.buildFinishedTopLevelProfile();
         // Perform assertions to verify the behavior
         assertNotNull(profile, "Profile should not be null");
+
+        new Expectations() {
+            {
+                connectContext.getPreSplitProfile();
+                result = preSplitProfile;
+            }
+        };
+        LoadLoadingTask contextBackedTask = new LoadLoadingTask.Builder().setDb(database).setLoadStmt(stmt)
+                .setTable(olapTable).setContext(connectContext)
+                .setOriginStmt(new OriginStatementInfo("")).build();
+        RuntimeProfile contextBackedProfile = contextBackedTask.buildRunningTopLevelProfile();
+        assertNotNull(contextBackedProfile.getChild(PreSplitProfile.PROFILE_NAME),
+                "legacy/context-backed tasks must attach the same diagnostic node");
     }
 
     @Test

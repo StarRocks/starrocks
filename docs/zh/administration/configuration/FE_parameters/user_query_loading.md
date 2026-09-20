@@ -83,6 +83,62 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 查询引擎
 
+### `ai_default_chat_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_complete` 调用使用的完整 HTTPS POST URL。URL 必须包含主机，且不能包含用户信息、查询串、片段或控制字符。未显式指定端口时使用 HTTPS 默认端口；显式指定的端口必须在 1 至 65535 范围内。该值为空时，必须先配置 endpoint，SYSTEM `ai_complete` 才能通过分析。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。API key 不属于 FE 配置项；每个 BE 在本地读取 `AI_FUNCTION_MODEL_API_KEY`，FE 不会通过查询计划下发该密钥。所有执行 AI 查询的 BE 都必须将 `AI_FUNCTION_MODEL_ENDPOINT` 设置为与此处完全相同的 URL，以便 BE 将本地凭证绑定到管理员批准的 endpoint。因此，修改 FE endpoint 后，还必须更新该环境变量并重启相关 BE，之后才能在这些 BE 上运行新的 AI 查询。
+- 引入版本: -
+
+### `ai_default_chat_model`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_complete` 仅传入 prompt 的调用形式所使用的默认模型。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 引入版本: -
+
+### `ai_default_chat_provider`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 有效值: `openai_compatible`
+- 是否可变: Yes
+- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 引入版本: -
+
+### `ai_default_embedding_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 调用使用的完整 HTTPS POST URL，独立于聊天端点，必须单独配置。必须含主机，不得含用户信息、查询串、片段或控制字符；显式端口须在 1 至 65535 范围内。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。每个执行查询的 BE 必须将 `AI_FUNCTION_EMBEDDING_ENDPOINT` 绑定到完全相同的 URL，并在本地配置 `AI_FUNCTION_EMBEDDING_API_KEY`。修改任一 BE 环境变量后需重启该 BE。凭证不是 FE 配置，不会随计划下发。参见 [ai_embed](../../../sql-reference/sql-functions/ai-functions/ai_embed.md)。
+- 引入版本: -
+
+### `ai_default_embedding_model`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 未显式指定模型时使用的默认模型。此类调用要求该值非空白，且不能含 C0 控制字符或 DEL。如果所有向量调用均显式指定模型，则可为空。不会回退到聊天默认模型。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
+- 引入版本: -
+
+### `ai_default_embedding_provider`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 有效值: `openai_compatible`
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
+- 引入版本: -
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - 默认值: 60000
@@ -263,15 +319,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 在备份或恢复特定数据库时，是否启用异步物化视图的 BACKUP 和 RESTORE。如果此项设置为 `false`，StarRocks 将跳过备份异步物化视图。
 - 引入版本: v3.2.0
-
-### `enable_batch_insert_histogram_statistics`
-
-- 默认值: true
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 为多列收集直方图时，是否批量插入直方图统计信息。此参数同时适用于 StarRocks 表和外部表。如果设置为 `false`，StarRocks 将按列分别插入直方图统计信息。
-- 引入版本: -
 
 ### `enable_collect_full_statistic`
 
@@ -1141,8 +1188,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 4 * 3600
 - 类型: Int
 - 单位: 秒
-- 是否可变: No
-- 描述: 标签清理的时间间隔。单位：秒。建议您指定较短的时间间隔，以确保可以及时清理历史标签。
+- 是否可变: Yes
+- 描述: 标签清理的时间间隔。单位：秒。建议您指定较短的时间间隔，以确保可以及时清理历史标签。该值必须大于 0。小于等于 0 的值将被拒绝，`ADMIN SET FRONTEND CONFIG` 和 FE 启动时加载 `fe.conf` 均会拒绝。
 - 引入版本: -
 
 ### `label_keep_max_num`
@@ -1216,6 +1263,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: StarRocks 集群中允许的最大并发 Broker Load 作业数。此参数仅对 Broker Load 有效。此参数的值必须小于 `max_running_txn_num_per_db` 的值。从 v2.5 开始，默认值从 `10` 更改为 `5`。
+- 引入版本: -
+
+### `max_get_loads_result_count`
+
+- 默认值: 10000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: BE 或 CN 扫描 `information_schema.loads` 时，FE 单次响应返回的最大导入记录数。当匹配的记录数超过此值时，FE 返回一页数据和一个游标，BE 或 CN 继续请求下一页直至读完所有记录；查询结果不受影响，仅改变一次扫描背后的 RPC 往返次数。分页在作业边界处切分，因此同一个导入作业的多行不会被拆到两页中，单页行数可能略微超过此值。增大此值可减少往返次数，但会增大单次响应，有超出 BE 侧 RPC 客户端消息大小上限的风险；减小此值可限制单次响应大小，代价是往返次数增多。分页仅在 BE 或 CN 版本足够新、会发送游标时生效；较旧的 BE 或 CN 仍会在单次响应中收到全部结果。
 - 引入版本: -
 
 ### `max_load_initial_open_partition_number`

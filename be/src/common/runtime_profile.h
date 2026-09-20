@@ -40,6 +40,7 @@
 #include <atomic>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <unordered_set>
@@ -232,6 +233,10 @@ public:
         bool try_add(int64_t delta, int64_t max) {
             while (true) {
                 int64_t old_val = current_value_.load(std::memory_order_relaxed);
+                if (UNLIKELY((delta > 0 && old_val > std::numeric_limits<int64_t>::max() - delta) ||
+                             (delta < 0 && old_val < std::numeric_limits<int64_t>::min() - delta))) {
+                    return false;
+                }
                 int64_t new_val = old_val + delta;
                 if (UNLIKELY(new_val > max)) return false;
                 if (LIKELY(current_value_.compare_exchange_strong(old_val, new_val, std::memory_order_relaxed))) {

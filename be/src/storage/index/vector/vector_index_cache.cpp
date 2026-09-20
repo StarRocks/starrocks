@@ -260,10 +260,16 @@ void VectorIndexCache::shutdown_async_load_pool() {
     }
 }
 
+// Take the new pin BEFORE dropping the caller's old one, and clear *handle only
+// on the failure paths. tenann's BlockCacheInvertedLists keeps one long-lived
+// handle per inverted list and re-Lookups through it on every get_codes() /
+// get_ids(); that handle is the entry's only external pin, so clearing it up
+// front lets _release_entry()'s remove() delete the entry -- the get() below then
+// always misses and the buffer the previous call returned is freed under faiss.
 bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHandle* handle) {
-    *handle = tenann::IndexCacheHandle{};
     Entry* entry = _cache.get(key.to_string());
     if (entry == nullptr) {
+        *handle = tenann::IndexCacheHandle{};
         return false;
     }
 
@@ -277,6 +283,7 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
                 lock.unlock();
                 _metrics.vector_index_cache_loading_wait_timeout.increment(1);
                 _release_entry(entry);
+                *handle = tenann::IndexCacheHandle{};
                 return false;
             }
         }
@@ -284,6 +291,7 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
             !entry->value().has_ref()) {
             lock.unlock();
             _release_entry(entry);
+            *handle = tenann::IndexCacheHandle{};
             return false;
         }
         ref = entry->value().ref();

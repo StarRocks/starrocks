@@ -52,6 +52,9 @@ private:
     ChunkPtr _build_chunk(const Columns& output_columns);
     Status _process_table_function(RuntimeState* state);
     void _copy_result(Columns& columns, uint32_t max_column_size);
+    // Whether the current table-function result still owes rows. Single source of truth shared by
+    // has_output(), pull_chunk() and _copy_result() - see the definition for why that matters.
+    bool _result_has_output() const;
 
     const TPlanNode& _tnode;
     const TableFunction* _table_function = nullptr;

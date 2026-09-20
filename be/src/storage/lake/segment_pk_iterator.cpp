@@ -14,10 +14,13 @@
 
 #include "storage/lake/segment_pk_iterator.h"
 
+#include <algorithm>
+
 #include "base/debug/trace.h"
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
+#include "storage/lake/cross_publish_context.h"
 #include "storage/lake/pk_index_utils.h"
 #include "storage_primitive/primary_key_encoder.h"
 
@@ -67,7 +70,17 @@ Status SegmentPKIterator::_load() {
         ASSIGN_OR_RETURN(_standalone_pk_column, encoded_pk_column(_pk_column_chunk.get()));
     }
     if (_pk_column_chunk->num_rows() == 0) {
+        _owned.clear();
         return Status::OK();
+    }
+    // Decide ownership here rather than in current(): the chunk is complete at this point and this
+    // function already returns Status, so a selection that cannot be built fails the load instead of
+    // handing the caller a chunk it would process as "own every row". current() runs after the
+    // consumer loop has already committed the previous chunk, so an error raised there is too late --
+    // LakePersistentIndex::parallel_upsert checks the iterator status only after flush_memtable() has
+    // durably written the sstable.
+    if (_row_selector != nullptr) {
+        ASSIGN_OR_RETURN(_owned, _row_selector->select(*_pk_column_chunk));
     }
     _current_rows += _pk_column_chunk->num_rows();
     _begin_rowid_offsets.push_back(_current_rows);
@@ -118,10 +131,39 @@ void SegmentPKIterator::next() {
     }
 }
 
+Status SegmentPKIterator::collapse_to_owned_rows(const Filter& owned) {
+    // Deliberately keyed on the caller's mask, not on _owned. A narrowed emit reports an empty _owned
+    // -- it emitted only this tablet's rows, so there was nothing to mask -- while the rewrite still
+    // filtered by a synthesized mask over exactly those rows. Returning early on an empty _owned would
+    // leave _physical_rowid_base at the emit's start even though the output is numbered from zero.
+    // An empty |owned| is the zero-row narrowing: the emit is empty too, so the checks below still
+    // line up and the base correctly collapses to zero.
+    // Only the non-lazy single-chunk shape can be collapsed: the mask and the encoded column have to
+    // describe the same rows, which they do only while the whole segment is materialized. A rewrite
+    // always runs in that mode -- should_enable_lazy_load() disables lazy load whenever a partial
+    // update is involved -- so refuse rather than renumber half a segment.
+    if (_lazy_load || _standalone_pk_column == nullptr || _pk_column_chunk == nullptr) {
+        return Status::InternalError("cannot collapse a lazily loaded primary key column to its owned rows");
+    }
+    if (_pk_column_chunk->num_rows() != owned.size() || _standalone_pk_column->size() != owned.size()) {
+        return Status::InternalError("the ownership mask does not describe the loaded chunk");
+    }
+    const size_t kept = _pk_column_chunk->filter(owned);
+    (void)_standalone_pk_column->filter(owned);
+    RETURN_ERROR_IF_FALSE(_standalone_pk_column->size() == kept, "chunk and encoded column disagree after filtering");
+    _owned.clear();
+    _physical_rowid_base = 0;
+    _current_rows = kept;
+    _begin_rowid_offsets.assign({0, kept});
+    _memory_usage = _pk_column_chunk->memory_usage() + _standalone_pk_column->memory_usage();
+    return Status::OK();
+}
+
 SegmentPKChunkRef SegmentPKIterator::current() {
     SegmentPKChunkRef ref;
     const size_t logical_rowid_offset = _begin_rowid_offsets[_current_pk_column_idx];
     ref.physical_rowid_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(logical_rowid_offset);
+    ref.owned = std::move(_owned);
     ref.chunk = std::move(_pk_column_chunk);
     return ref;
 }

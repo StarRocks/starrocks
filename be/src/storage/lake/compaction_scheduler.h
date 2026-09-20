@@ -16,7 +16,9 @@
 
 #include <bthread/mutex.h>
 #include <butil/containers/linked_list.h>
+#include <gtest/gtest_prod.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "base/concurrency/blocking_queue.hpp"
@@ -153,6 +155,11 @@ class CompactionScheduler {
         // Compaction task finished with Status::MemoryLimitExceeded error.
         void memory_limit_exceeded();
 
+        // Puts a token back without recording a task outcome, for a holder that is handing its token over
+        // instead of having finished work with it. Unlike no_memory_limit_exceeded() this does not count a
+        // success towards restoring reserved concurrency: nothing completed, so there is nothing to judge.
+        void return_token();
+
         int16_t concurrency() const;
 
         void adapt_to_task_queue_size(int16_t new_val);
@@ -244,8 +251,17 @@ public:
 
     void stop();
 
+    // Lets a test play the part of a competing worker and take limiter tokens out of circulation, so that
+    // the "token claimed by someone else while we were planning" path can be driven deterministically.
+    bool acquire_token_for_test() { return _limiter.acquire(); }
+    void return_token_for_test() { _limiter.return_token(); }
+
 private:
     friend class CompactionTaskCallback;
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_with_reserved);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_preserves_inflight_tokens);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_keeps_one_token);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_grow);
 
     // abort all the compaction tasks in the task queue. Only expected to be invoked during stop()
     void abort_all();
@@ -254,7 +270,9 @@ private:
 
     void thread_task(int id);
 
-    Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
+    // |token_given_up| is set when the worker's limiter token was taken over by parallel subtasks
+    // (or could not be reclaimed), meaning the caller must not credit a token back.
+    Status do_compaction(std::unique_ptr<CompactionTaskContext> context, bool* token_given_up);
 
     void abort_compaction(std::unique_ptr<CompactionTaskContext> context);
 
@@ -272,9 +290,11 @@ private:
     // Per-tablet parallel compaction manager
     std::unique_ptr<TabletParallelCompactionManager> _parallel_mgr;
 
-    // Process compaction request with parallel mode
-    void process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
-                                     const std::shared_ptr<CompactionTaskCallback>& callback);
+    // Tries to replace one tablet's serial compaction with parallel subtasks. Called from do_compaction(),
+    // i.e. on a resident worker where the planning IO is safe. Returns true only if subtasks were
+    // submitted, in which case they own the tablet's completion and |context| has been unlinked and
+    // destroyed; returns false to have the caller compact the tablet serially with the same context.
+    bool try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context, bool* token_given_up);
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {
@@ -309,6 +329,11 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
     }
 }
 
+inline void CompactionScheduler::Limiter::return_token() {
+    std::lock_guard l(_mtx);
+    _free++;
+}
+
 inline int16_t CompactionScheduler::Limiter::concurrency() const {
     std::lock_guard l(_mtx);
     return _total - _reserved;
@@ -316,24 +341,23 @@ inline int16_t CompactionScheduler::Limiter::concurrency() const {
 
 inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {
     std::lock_guard l(_mtx);
-    if (new_val > _total) {
-        auto diff = new_val - _total;
-        _free += diff;
-        _total += diff;
-    } else if (new_val < _total) {
-        if (_reserved != 0) {
-            double percentage = static_cast<double>(_total) / new_val;
-            _reserved = static_cast<int16_t>(static_cast<double>(_reserved) * percentage);
-            _total = new_val;
-            _free = _total - _reserved;
-        } else {
-            _total = new_val;
-            _free = _total;
-        }
-    } else {
-        // nothing change
+    if (new_val <= 0 || new_val == _total) {
         return;
     }
+    // Tokens currently held by running compaction tasks. They will be returned via
+    // no_memory_limit_exceeded()/memory_limit_exceeded() when those tasks finish, so
+    // they must be carried over to the new accounting.
+    const int64_t in_use = _total - _reserved - _free;
+    if (new_val < _total) {
+        // Scale down the reserved tokens proportionally to the new total, and keep at
+        // least one grantable token so that the concurrency cannot be reduced to zero.
+        const double percentage = static_cast<double>(new_val) / _total;
+        _reserved = std::min<int16_t>(static_cast<int16_t>(static_cast<double>(_reserved) * percentage), new_val - 1);
+    }
+    _total = new_val;
+    // _free may become negative when the tasks in flight exceed the new concurrency: no
+    // new token can be acquired until enough running tasks have returned theirs.
+    _free = _total - _reserved - in_use;
     LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to " << _free
               << ", and _reserved value to " << _reserved;
 }

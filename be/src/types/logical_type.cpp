@@ -156,6 +156,10 @@ const char* logical_type_to_string(LogicalType type) {
         return "VARBINARY";
     case TYPE_VARIANT:
         return "VARIANT";
+    case TYPE_GEOGRAPHY:
+        return "GEOGRAPHY";
+    case TYPE_GEOMETRY:
+        return "GEOMETRY";
     }
     return "";
 }

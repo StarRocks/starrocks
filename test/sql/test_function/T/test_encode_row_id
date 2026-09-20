@@ -44,3 +44,12 @@ select FROM_BINARY(ENCODE_SORT_KEY(NULL, v1, v2, v3), 'hex') from t1;
 select FROM_BINARY(ENCODE_SORT_KEY(v1, NULL, v2, v3), 'hex') from t1;
 select FROM_BINARY(ENCODE_SORT_KEY(v1, v2, NULL, v3), 'hex') from t1;
 select FROM_BINARY(ENCODE_SORT_KEY(v1, v2, v3, NULL), 'hex') from t1;
+
+-- Needs one chunk wider than a row: 3 rows over several tablets encode correctly even when broken.
+create table t2 (id int not null, tag bigint not null, stag varchar(16) not null) duplicate key(id) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+insert into t2 select generate_series, 7, 'STARROCKS' from TABLE(generate_series(1, 5000));
+
+select count(*), sum(case when a = b then 0 else 1 end) from (select FROM_BINARY(ENCODE_SORT_KEY(cast(7 as bigint), id), 'hex') a, FROM_BINARY(ENCODE_SORT_KEY(tag, id), 'hex') b from t2) x;
+select count(*), sum(case when a = b then 0 else 1 end) from (select FROM_BINARY(ENCODE_SORT_KEY('STARROCKS', id), 'hex') a, FROM_BINARY(ENCODE_SORT_KEY(stag, id), 'hex') b from t2) x;
+select count(distinct length(FROM_BINARY(ENCODE_SORT_KEY(cast(7 as bigint), id), 'hex'))) from t2;
+select count(distinct length(FROM_BINARY(ENCODE_SORT_KEY(NULL, id), 'hex'))) from t2;

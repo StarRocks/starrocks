@@ -18,6 +18,7 @@
 #include <fslib/fslib_all_initializer.h>
 #include <starlet.h>
 
+#include <limits>
 #include <utility>
 
 #include "common/config_staros_worker_fwd.h"
@@ -47,6 +48,12 @@ DECLARE_int32(fslib_s3client_nonread_retry_scale_factor);
 DECLARE_int32(fslib_s3client_connect_timeout_ms);
 DECLARE_int32(fslib_s3client_request_timeout_ms);
 DECLARE_bool(fslib_s3client_use_list_objects_v1);
+// Object-store upload thresholds; see the starlet_fslib_* BE configs of the same names.
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
@@ -56,24 +63,75 @@ namespace starrocks {
 
 namespace {
 
+// Both globals are read by any thread that touches a starlet-backed filesystem and are released by
+// `shutdown_staros_worker()` while such threads may still be running, so every access goes through
+// `std::atomic_load`/`std::atomic_store`/`std::atomic_exchange`. A plain read racing with the reset
+// is undefined behaviour on its own; going through the atomic accessors makes the reader observe
+// either a strong reference that keeps the object alive for the whole operation, or a null pointer
+// it must handle. `g_starlet` is a `shared_ptr` rather than a `unique_ptr` for exactly that reason:
+// a raw pointer would dangle across the blocking starmgr RPCs its callers make.
 std::shared_ptr<StarOSWorker> g_worker;
-std::unique_ptr<staros::starlet::Starlet> g_starlet;
+std::shared_ptr<staros::starlet::Starlet> g_starlet;
+
+// starlet's validator only runs through SetCommandLineOption, so apply it explicitly here.
+// Calling starlet's own predicate avoids duplicating its rule, while the typed FLAGS_ assignment
+// keeps compile-time name checking and keeps the defining archive member linked.
+void apply_positive_int64_starlet_flag(const char* be_config, const char* flag_name, int64_t& flag, int64_t value) {
+    if (!staros::starlet::common::validate_positive_int64(flag_name, value)) {
+        LOG(WARNING) << "invalid value for BE config " << be_config << " (starlet flag " << flag_name << "): " << value
+                     << "; not applied, effective value remains " << flag;
+        return;
+    }
+    flag = value;
+}
 
 } // namespace
 
-namespace fslib = staros::starlet::fslib;
+void apply_starlet_upload_threshold_configs() {
+#define APPLY_STARLET_UPLOAD_THRESHOLD(BE_CONFIG, STARLET_FLAG) \
+    apply_positive_int64_starlet_flag(#BE_CONFIG, #STARLET_FLAG, FLAGS_##STARLET_FLAG, config::BE_CONFIG)
 
-std::shared_ptr<StarOSWorker> get_staros_worker() {
-    return g_worker;
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_gcs_max_single_part_size, fslib_gs_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_max_single_part_size,
+                                   fslib_azure_storage_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_min_upload_part_size,
+                                   fslib_azure_storage_min_upload_part_size);
+#undef APPLY_STARLET_UPLOAD_THRESHOLD
 }
 
-staros::starlet::Starlet* get_starlet() {
-    return g_starlet.get();
+namespace fslib = staros::starlet::fslib;
+
+std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client) {
+    if (configured_timeout_ms > std::numeric_limits<int32_t>::max()) {
+        return std::nullopt;
+    }
+    if (configured_timeout_ms < 0) {
+        // Curl uses zero as its SDK default. Poco needs a negative sentinel to distinguish the
+        // unset value from an explicit zero, which disables its send and receive timeouts.
+        return use_poco_client ? -1 : 0;
+    }
+    return static_cast<int32_t>(configured_timeout_ms);
+}
+
+std::shared_ptr<StarOSWorker> get_staros_worker() {
+    // May return nullptr once `shutdown_staros_worker()` has run. Callers must check it: an
+    // in-flight load can still reach a starlet filesystem after worker teardown, and dereferencing
+    // the null worker there crashes the process instead of failing the load.
+    return std::atomic_load(&g_worker);
+}
+
+std::shared_ptr<staros::starlet::Starlet> get_starlet() {
+    // May return nullptr once `shutdown_staros_worker()` has run. The returned strong reference
+    // keeps the runtime alive for the whole operation, so callers must hold it rather than cache a
+    // raw pointer across a call.
+    return std::atomic_load(&g_starlet);
 }
 
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
                         TableMetricsManager* table_metrics_mgr) {
-    if (g_starlet.get() != nullptr) {
+    if (std::atomic_load(&g_starlet) != nullptr) {
         return;
     }
 
@@ -102,10 +160,12 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
     FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
     FLAGS_fslib_s3client_use_list_objects_v1 = config::s3_use_list_objects_v1;
-    if (config::object_storage_request_timeout_ms >= 0) {
-        FLAGS_fslib_s3client_request_timeout_ms = static_cast<int32_t>(config::object_storage_request_timeout_ms);
+    if (auto timeout = starlet_request_timeout_ms(config::object_storage_request_timeout_ms,
+                                                  config::enable_poco_client_for_aws_sdk)) {
+        FLAGS_fslib_s3client_request_timeout_ms = *timeout;
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+    apply_starlet_upload_threshold_configs();
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
@@ -117,23 +177,39 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
-    g_worker = std::make_shared<StarOSWorker>(table_metrics_mgr);
-    g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
-    g_starlet->init(starlet_config);
-    g_starlet->start();
+    auto worker = std::make_shared<StarOSWorker>(table_metrics_mgr);
+    auto starlet = std::make_shared<staros::starlet::Starlet>(worker);
+    // Publish the worker only after the starlet runtime exists, so a reader that observes a
+    // non-null worker never finds a null starlet behind it.
+    std::atomic_store(&g_starlet, starlet);
+    std::atomic_store(&g_worker, std::move(worker));
+    starlet->init(starlet_config);
+    starlet->start();
 }
 
 void shutdown_staros_worker() {
-    g_starlet->stop();
-    g_starlet.reset();
-    g_worker = nullptr;
+    // Retire both globals before tearing anything down, the reverse of the publish order in
+    // `init_staros_worker()`, so an operation that has not fetched them yet sees null and fails
+    // with a status instead of entering a runtime that is going away.
+    //
+    // Neither object is necessarily destroyed here. An operation that fetched them first holds a
+    // strong reference and keeps them alive until it finishes; this function only drops the
+    // process-wide one. `Starlet::stop()` is idempotent and `~Starlet()` does nothing beyond it
+    // once stopped, so a deferred destruction on the last in-flight thread is cheap and safe.
+    LOG(INFO) << "Retiring the global StarOS worker and starlet runtime, later filesystem "
+                 "operations will fail with a status ...";
+    std::atomic_store(&g_worker, std::shared_ptr<StarOSWorker>());
+    auto starlet = std::atomic_exchange(&g_starlet, std::shared_ptr<staros::starlet::Starlet>());
+    if (starlet != nullptr) {
+        starlet->stop();
+    }
 
     LOG(INFO) << "Executing starlet shutdown hooks ...";
     staros::starlet::common::ShutdownHook::shutdown();
 }
 
 void set_starlet_in_shutdown() {
-    auto* starlet = get_starlet();
+    auto starlet = get_starlet();
     if (starlet) {
         starlet->on_shutdown();
     }
@@ -141,12 +217,11 @@ void set_starlet_in_shutdown() {
 
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker) {
-    g_worker = std::move(worker);
+    std::atomic_store(&g_worker, std::move(worker));
 }
 
-std::unique_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::unique_ptr<staros::starlet::Starlet> starlet) {
-    std::swap(g_starlet, starlet);
-    return starlet;
+std::shared_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::shared_ptr<staros::starlet::Starlet> starlet) {
+    return std::atomic_exchange(&g_starlet, std::move(starlet));
 }
 #endif
 

@@ -36,6 +36,7 @@ import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.RangeUtils;
@@ -91,6 +92,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -228,6 +230,29 @@ public class MvUtils {
                 getAllTables(child, tables);
             }
         }
+    }
+
+    /**
+     * True when any scan below root reads a table pinned to an explicit time-travel version, i.e. a
+     * {@code FOR VERSION/TIMESTAMP AS OF} clause (a snapshot id, tag or branch name).
+     * <p>
+     * A query period reaches the plan in one of two shapes, the same two that
+     * {@link com.starrocks.sql.analyzer.AnalyzerUtils#prohibitTimeTravelQuery} has to handle on the
+     * definition side: connectors that resolve the version themselves carry a delta range on the scan,
+     * while a MySQL temporal read keeps the clause verbatim on the operator and leaves its range at the
+     * default. An ordinary read carries a {@link com.starrocks.common.tvr.TvrTableSnapshot} of the
+     * table's current version, so only a query period produces a delta range on a freshly transformed plan.
+     */
+    public static boolean containsTimeTravelScan(OptExpression root) {
+        if (root.getOp() instanceof LogicalScanOperator) {
+            LogicalScanOperator scanOperator = (LogicalScanOperator) root.getOp();
+            if (scanOperator.getTvrVersionRange() instanceof TvrTableDelta) {
+                return true;
+            }
+            return scanOperator instanceof LogicalMysqlScanOperator
+                    && !Strings.isNullOrEmpty(((LogicalMysqlScanOperator) scanOperator).getTemporalClause());
+        }
+        return root.getInputs().stream().anyMatch(MvUtils::containsTimeTravelScan);
     }
 
     public static List<MaterializedView> collectMaterializedViews(OptExpression optExpression) {

@@ -42,4 +42,72 @@ TEST_F(DefaultPathHandlersTest, mem_tracker) {
     ASSERT_TRUE(output2.str().find("<tr><td>1</td><td>process</td><td>") == std::string::npos);
     ASSERT_TRUE(output2.str().find("<tr><td>3</td><td>tablet_metadata</td><td>metadata</td>") != std::string::npos);
 }
+
+TEST_F(DefaultPathHandlersTest, jemalloc_stats_opts) {
+    // Not asking is the page's default: omit the per-arena statistics.
+    EXPECT_EQ("a", parse_jemalloc_stats_opts(std::nullopt).value());
+
+    // Every character this page accepts, and the combination /memz is most useful with:
+    // per-arena without the bin/large/mutex tables.
+    EXPECT_EQ("gmdablxeh", parse_jemalloc_stats_opts("gmdablxeh").value());
+    EXPECT_EQ("blx", parse_jemalloc_stats_opts("blx").value());
+
+    // An empty string is a real request: omit nothing.
+    EXPECT_EQ("", parse_jemalloc_stats_opts("").value());
+
+    // jemalloc ignores what it does not recognise, so an unknown character has to be rejected
+    // here or a typo looks like it took effect.
+    EXPECT_FALSE(parse_jemalloc_stats_opts("z").has_value());
+    EXPECT_FALSE(parse_jemalloc_stats_opts("blz").has_value());
+    EXPECT_FALSE(parse_jemalloc_stats_opts("A").has_value()) << "the set is case sensitive";
+    EXPECT_FALSE(parse_jemalloc_stats_opts(" a").has_value());
+
+    // malloc_stats_print() understands 'J', but it switches the report to JSON and this page
+    // always wraps its output in HTML, so accepting it would advertise an interface /memz
+    // cannot honour.
+    EXPECT_FALSE(parse_jemalloc_stats_opts("J").has_value());
+    EXPECT_FALSE(parse_jemalloc_stats_opts("Jgmdablxeh").has_value());
+}
+
+TEST_F(DefaultPathHandlersTest, mem_tracker_with_non_numeric_upper_level) {
+    WebPageHandler::ArgumentMap args;
+    args["upper_level"] = "abc";
+    const auto& runtime_env = *RuntimeEnv::GetInstance();
+    auto* mem_tracker = runtime_env.process_mem_tracker();
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output);
+
+    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
+    // The page still renders, with the default two levels.
+    ASSERT_TRUE(output.str().find("<tr><td>1</td><td>process</td><td>") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<tr><td>2</td><td>update</td>") != std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, mem_tracker_with_negative_upper_level) {
+    WebPageHandler::ArgumentMap args;
+    args["upper_level"] = "-1";
+    const auto& runtime_env = *RuntimeEnv::GetInstance();
+    auto* mem_tracker = runtime_env.process_mem_tracker();
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output);
+
+    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<tr><td>1</td><td>process</td><td>") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<tr><td>2</td><td>update</td>") != std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, mem_tracker_does_not_echo_upper_level) {
+    WebPageHandler::ArgumentMap args;
+    args["upper_level"] = "<script>alert(1)</script>";
+    const auto& runtime_env = *RuntimeEnv::GetInstance();
+    auto* mem_tracker = runtime_env.process_mem_tracker();
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output);
+
+    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<script>") == std::string::npos);
+}
 } // namespace starrocks

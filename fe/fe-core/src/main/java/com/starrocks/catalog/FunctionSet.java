@@ -51,6 +51,8 @@ import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyMapType;
@@ -195,6 +197,7 @@ public class FunctionSet {
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_INNER_PRODUCT = "approx_inner_product";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Geo functions:
@@ -265,6 +268,7 @@ public class FunctionSet {
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
     public static final String HTTP_REQUEST = "http_request";
+    public static final String AI_COMPLETE = "ai_complete";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -328,6 +332,13 @@ public class FunctionSet {
     public static final String DS_HLL_ACCUMULATE = "ds_hll_accumulate";
     public static final String DS_HLL_COMBINE = "ds_hll_combine";
     public static final String DS_HLL_ESTIMATE = "ds_hll_estimate";
+    public static final String DS_THETA_ACCUMULATE = "ds_theta_accumulate";
+    public static final String DS_THETA_COMBINE = "ds_theta_combine";
+    public static final String DS_THETA_ESTIMATE = "ds_theta_estimate";
+    public static final String DS_THETA_UNION = "ds_theta_union";
+    public static final String DS_THETA_INTERSECT = "ds_theta_intersect";
+    public static final String DS_THETA_A_NOT_B = "ds_theta_a_not_b";
+    public static final String DS_THETA_INTERSECT_COND_AGG = "ds_theta_intersect_cond_agg";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -744,10 +755,13 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
+    // AI functions with options treat a top-level NULL map as an empty option set.
+    // ai_translate accepts a NULL source language for automatic detection.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                     PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY);
+                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE,
+                    "ai_embed", "ai_custom_query", "ai_custom_embedding", "ai_translate");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -806,11 +820,13 @@ public class FunctionSet {
                     .add(QUERY_ID)
                     .add(SLEEP)
                     .add(HTTP_REQUEST)
+                    .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
                     .build();
 
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_INNER_PRODUCT)
                     .add(APPROX_L2_DISTANCE)
                     .build();
 
@@ -953,6 +969,9 @@ public class FunctionSet {
                     .add(DS_HLL_ACCUMULATE)
                     .add(DS_HLL_COMBINE)
                     .add(DS_HLL_ESTIMATE)
+                    .add(DS_THETA_ACCUMULATE)
+                    .add(DS_THETA_COMBINE)
+                    .add(DS_THETA_INTERSECT_COND_AGG)
                     // Functions with constant contexts in be are not supported.
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
@@ -1230,6 +1249,17 @@ public class FunctionSet {
         addVectorizedBuiltin(ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType));
     }
 
+    public void addVectorizedAIScalarBuiltin(long fid, String fnName, boolean varArgs,
+                                             TAIModelSource modelSource, Type retType, Type... args) {
+        Preconditions.checkState(nonDeterministicFunctions.contains(fnName),
+                "AI function %s must be non-deterministic", fnName);
+        List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
+        ScalarFunction fn = ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType);
+        fn.setBinaryType(TFunctionBinaryType.AI);
+        fn.setAiModelSource(modelSource);
+        addVectorizedBuiltin(fn);
+    }
+
     private void addVectorizedBuiltin(Function fn) {
         fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
         fn.setIsNullable(!isAlwaysReturnNonNullableFunction(fn.functionName()));
@@ -1419,6 +1449,11 @@ public class FunctionSet {
                     Lists.newArrayList(t), IntegerType.BIGINT, VarbinaryType.VARBINARY,
                     true, false, true));
 
+            // ds_theta_accumulate(col) — emits serialized compact theta sketch
+            addBuiltin(AggregateFunction.createBuiltin(DS_THETA_ACCUMULATE,
+                    Lists.newArrayList(t), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
+                    true, false, true));
+
             // HLL_RAW
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
                     Lists.newArrayList(t), HLLType.HLL, VarbinaryType.VARBINARY,
@@ -1466,6 +1501,16 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ESTIMATE,
                 Lists.newArrayList(VarbinaryType.VARBINARY), IntegerType.BIGINT, VarbinaryType.VARBINARY,
                 true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_THETA_COMBINE,
+                Lists.newArrayList(VarbinaryType.VARBINARY), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
+                true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_THETA_INTERSECT_COND_AGG,
+                Lists.newArrayList(VarbinaryType.VARBINARY, IntegerType.INT), FloatType.DOUBLE, VarbinaryType.VARBINARY,
+                true, false, true));
+        // DS_THETA_ESTIMATE is registered as a scalar function via gensrc/script/functions.py.
+        // It deserializes a compact theta sketch row-by-row and returns the estimate as DOUBLE.
 
         // Sum
         registerBuiltinSumAggFunction(SUM);

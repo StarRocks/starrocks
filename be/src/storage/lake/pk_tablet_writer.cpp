@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "base/hash/crc32c.h"
 #include "column/chunk.h"
 #include "column/raw_data_visitor.h"
 #include "column/serde/column_array_serde.h"
@@ -174,6 +175,10 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
     const size_t del_size_bytes = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(del_size_bytes);
     RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
+    // Checksum the plaintext serialized bytes, i.e. exactly what a reader gets back from read_all()
+    // after the file system layer has decrypted the file. Masked to match DelvecPagePB.crc32c.
+    const uint32_t del_crc32c =
+            crc32c::Mask(crc32c::Value(reinterpret_cast<const char*>(content.data()), content.size()));
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
 
@@ -199,7 +204,9 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
         // and its tombstone sstable together so _del_ssts stays index-aligned with _dels. Always append a
         // del_ssts entry (an empty FileInfo when no sstable was built) to keep the parallel arrays aligned.
         std::lock_guard lg(_dels_mutex);
-        _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
+        FileInfo del_info{std::move(name), content.size(), encryption_meta};
+        del_info.crc32c = del_crc32c;
+        _dels.emplace_back(std::move(del_info));
         // Keep _del_op_offsets and _del_num_rows positionally aligned with _dels. The tombstone
         // count is recorded here (rather than on FileInfo) so it stays a del-specific stat, mirroring
         // how op_offset is carried; it is later accounted toward the PK index rebuild-rows threshold.

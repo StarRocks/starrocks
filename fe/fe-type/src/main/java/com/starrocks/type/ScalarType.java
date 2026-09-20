@@ -77,6 +77,8 @@ public class ScalarType extends Type implements Cloneable {
     // type identity; it only tells the BE reader to keep the naive wall clock unshifted.
     private boolean datetimeIsNtz = false;
 
+    private GeoTypeDescriptor geo;
+
     public ScalarType(PrimitiveType type) {
         this.type = type;
     }
@@ -306,7 +308,7 @@ public class ScalarType extends Type implements Cloneable {
     @Override
     public boolean isSupported() {
         // BINARY and UNKNOWN_TYPE is unsupported
-        return type != PrimitiveType.BINARY && type != PrimitiveType.UNKNOWN_TYPE;
+        return type != PrimitiveType.BINARY && type != PrimitiveType.UNKNOWN_TYPE && !isGeoType();
     }
 
     @Override
@@ -323,6 +325,9 @@ public class ScalarType extends Type implements Cloneable {
     public boolean matchesType(Type t) {
         if (t.isPseudoType()) {
             return t.matchesType(this);
+        }
+        if (isGeoType()) {
+            return equals(t);
         }
         if (isDecimalV2() && t.isDecimalV2()) {
             return true;
@@ -355,6 +360,9 @@ public class ScalarType extends Type implements Cloneable {
         if (type.isDecimalV2Type() || type.isDecimalV3Type()) {
             return precision == other.precision && scale == other.scale;
         }
+        if (isGeoType()) {
+            return Objects.equals(geo, other.geo);
+        }
         return true;
     }
 
@@ -364,6 +372,9 @@ public class ScalarType extends Type implements Cloneable {
         result = 31 * result + Objects.hashCode(type);
         result = 31 * result + precision;
         result = 31 * result + scale;
+        if (isGeoType()) {
+            result = 31 * result + Objects.hashCode(geo);
+        }
         return result;
     }
 
@@ -431,5 +442,16 @@ public class ScalarType extends Type implements Cloneable {
                 break;
         }
         return stringBuilder.toString();
+    }
+
+    public static ScalarType createGeoType(PrimitiveType primitive, GeoTypeDescriptor descriptor) {
+        Objects.requireNonNull(descriptor).validate(primitive);
+        ScalarType result = new ScalarType(primitive);
+        result.geo = descriptor;
+        return result;
+    }
+
+    public GeoTypeDescriptor getGeoDescriptor() {
+        return geo;
     }
 }

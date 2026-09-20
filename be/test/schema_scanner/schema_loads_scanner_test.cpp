@@ -281,4 +281,56 @@ TEST_F(SchemaLoadsScannerTest, sentinel_ms_renders_null) {
     EXPECT_TRUE(is_null_at(chunk, LOAD_START_TIME));
 }
 
+// getLoads answers in pages now, and the cursor for the page after the current one
+// lives in _next_job_id_offset (0 = end). The multi-page transition itself runs a
+// thrift RPC to FE and is out of reach here; what these two cases pin is the
+// terminating half of that loop, which is also the whole story for an FE too old to
+// paginate: it leaves next_job_id_offset unset, _fetch_page decodes that to 0, and
+// the single response it sent must be served in full and then end the scan.
+//
+// The row-at-a-time contract is the other half of what this pins: SchemaChunkSource
+// counts one row per get_next() call, so a scanner that drained its whole buffer in
+// one call would make the caller accumulate the entire result set into one chunk.
+TEST_F(SchemaLoadsScannerTest, single_page_response_yields_one_row_per_call_then_eos) {
+    SchemaLoadsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    scanner._result.loads = {make_min_load_info(1), make_min_load_info(2), make_min_load_info(3)};
+    scanner._cur_idx = 0;
+    scanner._next_job_id_offset = 0;
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = true;
+    for (int expected_rows = 1; expected_rows <= 3; ++expected_rows) {
+        EXPECT_OK(scanner.get_next(&chunk, &eos));
+        EXPECT_FALSE(eos) << "row " << expected_rows;
+        EXPECT_EQ(expected_rows, chunk->num_rows())
+                << "each get_next must append exactly one row, not drain the buffer";
+    }
+
+    // Page drained with no cursor to follow: end the scan instead of attempting
+    // another fetch.
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+    EXPECT_EQ(3, chunk->num_rows()) << "eos must not append anything";
+}
+
+// An empty result with no cursor ends immediately and yields no chunk rows. Guards
+// the page-pulling loop in get_next against spinning on, or handing the pipeline, an
+// empty page.
+TEST_F(SchemaLoadsScannerTest, empty_page_without_cursor_reaches_eos_immediately) {
+    SchemaLoadsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    scanner._result.loads.clear();
+    scanner._cur_idx = 0;
+    scanner._next_job_id_offset = 0;
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+    EXPECT_EQ(0, chunk->num_rows());
+}
+
 } // namespace starrocks

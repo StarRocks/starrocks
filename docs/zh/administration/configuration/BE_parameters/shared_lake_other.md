@@ -74,6 +74,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述： 确定是否在完成优雅退出前等待至少一个指示SHUTDOWN状态的FE心跳响应。启用后，优雅关闭进程将持续运行直至通过心跳RPC返回给FE SHUTDOWN状态变化，确保FE在两次常规心跳探测间隔期间有足够时间感知终止状态。
 - 引入版本：v3.4.5
 
+### lake_compaction_hold_input_segments
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_metadata_cache_limit` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
+- 引入版本：v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
@@ -82,6 +91,42 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
+
+### lake_dump_tablet_metadata_per_request_memory_limit_bytes
+
+- 默认值：268435456
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：CN 同步处理单个 `/api/cloudnative/dump_tablet_metadata` 请求时的受跟踪内存预算。该预算使用标准 MemTracker 统计粒度，并非精确到字节的硬上限。该限制覆盖元数据检查、敏感字段脱敏和 JSON 序列化，但不包含 CN 元数据缓存中已存在的元数据，也不包含异步 HTTP 输出缓冲区。每个请求使用其被接纳时读取到的配置值。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
+
+- 默认值：33554432
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：单个 `/api/cloudnative/dump_tablet_metadata` 请求完整 JSON 响应的最大字节数。响应交给 HTTP 输出缓冲区之前会检查该限制。每个请求使用其被接纳时读取到的配置值。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_dump_tablet_metadata_max_concurrency
+
+- 默认值：1
+- 类型：Int
+- 单位：请求
+- 是否动态：是
+- 描述：单个 CN 上可同时接纳的 `/api/cloudnative/dump_tablet_metadata` 请求数上限。请求在其 HTTP request 被释放之前一直占用一个并发名额。调大配置会立即影响新请求；调小配置不会取消已接纳的请求，在活跃请求数降到新上限以下之前会拒绝新请求。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_enable_del_file_crc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，在事务 Publish 或主键索引重建过程中读取主键表删除文件（`.del`）时，是否根据其元数据中记录的 CRC32C 进行校验。校验不通过时，该操作会返回文件损坏错误并失败，而不是删除错误的主键。在该校验和引入之前写入的删除文件不带校验和，会被始终接受，因此该配置项不会影响旧版本写入的数据。该配置项不控制校验和的写入，仅控制读取时是否校验。
+- 引入版本：v4.2
 
 ### lake_enable_pk_preserve_txn_delete_order
 
@@ -259,6 +304,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 范围内的客户端缓存为每个远程主机保留的最大缓存 client 实例数。提高此值可以减少重连和 stub 创建开销，但会增加内存和文件描述符使用；降低它则节省资源但可能增加连接 churn。该值在启动时读取，运行时无法更改。目前一个共享设置控制所有客户端缓存类型；将来可能会引入每种缓存的独立配置。
 - 引入版本：v3.2.0
 
+### paimon_native_parquet_cache_hole_size_limit
+
+- 默认值: 1048576
+- 类型: Long
+- 单位: Bytes
+- 是否动态配置: 是
+- 描述: Paimon native reader 将两个必需的 Parquet 读取范围合并为一次读取时允许的最大间隔。值越大，请求次数越少，但读放大越多。默认值与 StarRocks 原生 Parquet reader 使用的 `io_coalesce_read_max_distance_size` 一致；paimon-cpp 自身的默认值远小于此，会在对象存储上产生大量小请求。
+- 引入版本: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - 默认值：10000
@@ -276,6 +330,51 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：starlet filesystem 实例缓存的过期时间。
 - 引入版本：v3.3.15, 3.4.5
+
+### starlet_fslib_azure_storage_max_single_part_size
+
+- 默认值：104857600
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，写入 Azure Blob Storage 或 ADLS Gen2 的对象超过该大小时，使用分片上传（Multipart Upload）而非单次上传请求。Azure 的两种文件系统共用该参数。切换到分片上传之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。若调得过大以完全避开分片上传，一旦超过对象存储的单次请求上传上限，也可能导致上传直接失败，并返回该存储后端自身的错误。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。
+- 引入版本：v4.1.5, v4.2
+
+### starlet_fslib_azure_storage_min_upload_part_size
+
+- 默认值：5242880
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，向 Azure Blob Storage 或 ADLS Gen2 进行分片上传时使用的块（Block）大小。Azure 的两种文件系统共用该参数。每次上传块之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。取值过小会增加请求数量，并可能超出存储服务的块数量限制。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。
+- 引入版本：v4.1.5, v4.2
+
+### starlet_fslib_gcs_max_single_part_size
+
+- 默认值：104857600
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，写入 Google Cloud Storage 的对象超过该大小时，使用流式上传而非单次 Insert 请求。切换到流式上传之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。若调得过大以完全避开流式上传，一旦超过对象存储的单次请求上传上限，也可能导致上传直接失败，并返回该存储后端自身的错误。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。
+- 引入版本：v4.1.5, v4.2
+
+### starlet_fslib_s3_max_single_part_size
+
+- 默认值：104857600
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，写入 S3 或兼容 S3 的对象存储的对象超过该大小时，使用分片上传（Multipart Upload）而非单次 `PutObject` 请求。切换到分片上传之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。若调得过大以完全避开分片上传，也可能导致上传直接失败：AWS S3 拒绝单次 `PutObject` 超过 5 GiB 的对象，其他兼容 S3 的对象存储限制可能不同。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。该参数用于存算分离集群中的 starlet 上传，与 `experimental_s3_*` 系列参数无关。
+- 引入版本：v4.1.5, v4.2
+
+### starlet_fslib_s3_min_upload_part_size
+
+- 默认值：5242880
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，向 S3 或兼容 S3 的对象存储进行分片上传时使用的分片大小。每次上传分片之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。取值过小会增加请求数量，并可能超出 AWS S3 的 10000 个分片上限，或低于其 5 MB 的最小分片大小；其他兼容 S3 的对象存储限制不同。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。该参数用于存算分离集群中的 starlet 上传，与 `experimental_s3_*` 系列参数无关。
+- 引入版本：v4.1.5, v4.2
 
 ### starlet_port
 
@@ -513,13 +612,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，是否允许自动清理损坏的数据缓存。
 - 引入版本：v3.4
 
+### lake_pk_index_sst_verify_checksum
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，读取云原生主键索引 sstable（点查与 Compaction 归并）时是否校验数据块 Checksum。开启后，损坏的字节（通常来自损坏的本地缓存副本）会确定性地报 Corruption 错误并触发损坏缓存清理，而不是被错误解析或静默返回错误的索引值。注意：自动清理损坏缓存还需同时开启 `lake_clear_corrupted_cache_data`。
+- 引入版本：v4.1
+
 ### lake_clear_corrupted_cache_meta
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。
+- 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。作用范围包括 Tablet 元数据文件和事务日志（txn log）文件的本地缓存。读取此类文件时如果遇到数据损坏错误，系统会清除对应的缓存副本，并从远端存储重新读取一次。
 - 引入版本：v3.3
 
 ### lake_enable_horizontal_compaction_fill_data_cache

@@ -11,6 +11,10 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+  # get_next_release_tag.sh (version-label steps) reads /tags and /branches with
+  # GITHUB_TOKEN; with an explicit permissions block, unlisted scopes default to
+  # none, so grant contents:read or those queries are denied.
+  contents: read
 env:
   PR_NUMBER: ${{ github.event.number }}
 
@@ -66,37 +70,6 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
-
-  # Decision-10 phase B shadow: checkbox x AI-affected reconciliation, DRY-RUN.
-  # Runs on [self-hosted, ubuntu, ai] — that pool has BOTH /var/lib/ci-tool AND
-  # `claude` + the github-bugfix-versions plugin (see bugfix-version-index.yml).
-  # `claude` returns this [BugFix]'s affected release lines (branches still
-  # carrying the bug); backport_reconcile.py then prints the matrix (window /
-  # affected / checked / auto / notify) and posts NOTHING. continue-on-error so
-  # it can never affect the merge. Needs ci-tool #4934 on the runner.
-  backport-reconcile-shadow:
-    name: Backport Reconcile (dry-run shadow)
-    runs-on: [ self-hosted, ubuntu, ai ]
-    if: >
-      github.event.pull_request.merged == true &&
-      github.base_ref == 'main' &&
-      github.repository == 'StarRocks/starrocks' &&
-      startsWith(github.event.pull_request.title, '[BugFix]') &&
-      !contains(github.event.pull_request.title, '(sync #') &&
-      !contains(github.event.pull_request.labels.*.name, 'sync') &&
-      !contains(github.head_ref, '-sync-') &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
-    continue-on-error: true
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.PAT }}
-      GITHUB_TOKEN: ${{ secrets.PAT }}
-    steps:
-      - name: reconcile dry-run (checkbox x AI affected)
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
 
   thirdparty-filter:
     runs-on: ubuntu-latest
@@ -254,7 +227,9 @@ jobs:
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
           contains(github.event.pull_request.title, '(backport #')
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo `gh label create`, no cascade; the sibling "add merge label"
+          # step already uses GITHUB_TOKEN. Off the shared PAT.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LABEL="${GITHUB_BASE_REF##*-}-merged"
           gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
@@ -275,7 +250,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -306,7 +284,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -330,6 +311,10 @@ jobs:
     if: >
       always() && !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
     env:
+      # get_pr_issue.py authenticates with the runner PAT (GITHUB_ACCESS_TOKEN) and falls back
+      # to GH_TOKEN when that PAT is missing or rejected. This job's permissions block already
+      # grants issues: write + pull-requests: write, which covers the issue body/label edits.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
       MAIN_VERSION_LABEL: ${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
 

@@ -143,16 +143,6 @@ public:
     // Returns a string representation in DFS order of the plan rooted at this.
     std::string debug_string() const;
 
-    virtual void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector);
-    void push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector);
-
-    void push_down_join_runtime_filter_recursively(RuntimeState* state) {
-        push_down_join_runtime_filter(state, &_runtime_filter_collector);
-        for (auto* child : _children) {
-            child->push_down_join_runtime_filter_recursively(state);
-        }
-    }
-
     // Make the node store the slot mappings from input slot to output slot of ancestor nodes (include itself).
     // It is used for pipeline to rewrite runtime in filters.
     virtual void push_down_tuple_slot_mappings(RuntimeState* state,

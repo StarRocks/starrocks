@@ -1,4 +1,4 @@
--- name: test_push_down_local_agg_through_union_all @mac
+-- name: test_push_down_local_agg_through_union_all @mac @sequential
 DROP TABLE IF EXISTS t_push_down_local_agg_union_all_result_${uuid0};
 
 CREATE TABLE t_push_down_local_agg_union_all_result_${uuid0} (

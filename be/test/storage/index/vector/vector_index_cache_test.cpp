@@ -181,6 +181,96 @@ TEST_F(VectorIndexCacheTest, Insert_ThenLookup_ReturnsSameRef) {
     EXPECT_EQ(ref.get(), h_lkp.index_ref().get());
 }
 
+// tenann's BlockCacheInvertedLists keeps one long-lived IndexCacheHandle per
+// inverted list and re-Lookups through that same handle on every access. That
+// handle is the entry's only external pin, so releasing it before the new pin is
+// taken lets _release_entry()'s DynamicCache::remove() delete the entry -- and
+// the get() right below can then never hit.
+TEST_F(VectorIndexCacheTest, Lookup_ReusedIvfPqListHandleKeepsEntryCached) {
+    const tenann::CacheKey key("/ivfpq.vi_0");
+    auto ref = make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList);
+    tenann::IndexCacheHandle h;
+    cache_->Insert(key, ref, &h);
+    ASSERT_TRUE(h.valid());
+    ASSERT_EQ(1u, cache_->entry_count());
+
+    for (int i = 0; i < 3; ++i) {
+        ASSERT_TRUE(cache_->Lookup(key, &h)) << "iteration " << i;
+        EXPECT_EQ(ref.get(), h.index_ref().get()) << "iteration " << i;
+        EXPECT_EQ(1u, cache_->entry_count()) << "iteration " << i;
+    }
+
+    tenann::IndexCacheHandle bystander;
+    EXPECT_TRUE(cache_->Lookup(key, &bystander));
+    EXPECT_EQ(ref.get(), bystander.index_ref().get());
+}
+
+// Mirrors BlockCacheInvertedLists::get_ptr(): Lookup() through the list's own
+// handle, load and Insert() only on a miss. faiss reads each probed list twice
+// per scan (get_codes() then get_ids()), so a warm list must not reload -- and
+// the buffer the first call returned must outlive the second.
+TEST_F(VectorIndexCacheTest, IvfPqListBlock_GetPtrLoopLoadsOnce) {
+    const tenann::CacheKey key("/ivfpq.vi_7");
+    auto frees = std::make_shared<std::atomic<int>>(0);
+    auto make_tracked_ref = [frees]() -> tenann::IndexRef {
+        void* buf = std::malloc(kDummyBytes);
+        return std::make_shared<tenann::Index>(
+                buf, tenann::IndexType::kFaissIvfPqOneInvertedList,
+                [frees](void* v) {
+                    frees->fetch_add(1, std::memory_order_relaxed);
+                    std::free(v);
+                },
+                /*explicit_bytes=*/kDummyBytes);
+    };
+    tenann::IndexCacheHandle list_handle; // stands in for cache_handles[list_no]
+    int loads = 0;
+    auto get_ptr = [&]() {
+        if (cache_->Lookup(key, &list_handle)) {
+            return;
+        }
+        ++loads;
+        cache_->Insert(key, make_tracked_ref(), &list_handle);
+    };
+
+    for (int scan = 0; scan < 4; ++scan) {
+        get_ptr(); // get_codes()
+        const void* codes = list_handle.index_ref()->index_raw();
+        get_ptr(); // get_ids()
+        EXPECT_EQ(codes, list_handle.index_ref()->index_raw()) << "scan " << scan;
+        EXPECT_EQ(0, frees->load(std::memory_order_relaxed)) << "scan " << scan;
+    }
+    EXPECT_EQ(1, loads);
+    list_handle = tenann::IndexCacheHandle{};
+    EXPECT_EQ(1, frees->load(std::memory_order_relaxed));
+}
+
+// Guards the TTL PR's grouping rule: a list block leaves the cache as soon as
+// its owning reader drops the last pin, instead of lingering under its own TTL.
+TEST_F(VectorIndexCacheTest, IvfPqListBlock_RemovedWhenLastPinDrops) {
+    const tenann::CacheKey key("/ivfpq.vi_3");
+    {
+        tenann::IndexCacheHandle h;
+        cache_->Insert(key, make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList), &h);
+        ASSERT_EQ(1u, cache_->entry_count());
+        ASSERT_EQ(kDummyBytes, cache_->memory_usage());
+    }
+    EXPECT_EQ(0u, cache_->entry_count());
+    EXPECT_EQ(0u, cache_->memory_usage());
+
+    tenann::IndexCacheHandle fresh;
+    EXPECT_FALSE(cache_->Lookup(key, &fresh));
+}
+
+// A miss must not leave the caller holding a ref for some other key.
+TEST_F(VectorIndexCacheTest, Lookup_MissClearsPreviousHandle) {
+    tenann::IndexCacheHandle h;
+    cache_->Insert(tenann::CacheKey("/present.vi"), make_dummy_ref(), &h);
+    ASSERT_TRUE(h.valid());
+
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/absent.vi"), &h));
+    EXPECT_FALSE(h.valid());
+}
+
 TEST_F(VectorIndexCacheTest, GetOrCreate_FirstCallRunsLoader) {
     int calls = 0;
     auto loader = [&]() -> tenann::IndexRef {

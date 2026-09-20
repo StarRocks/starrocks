@@ -3850,7 +3850,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TUpdateFailPointResponse updateFailPointStatus(TUpdateFailPointRequest request) {
         TStatus status = new TStatus();
         if (FailPoint.isEnabled()) {
-            if (request.isIs_enable()) {
+            // Not `request.isIs_enable()`: a pause request deliberately carries is_enable = false so
+            // that an FE predating the pause field removes the policy instead of arming an ENABLE it
+            // cannot honour. isArming() is what keeps a pause from being read as a removal here.
+            if (TriggerPolicy.isArming(request)) {
                 FailPoint.setTriggerPolicy(request.getName(), TriggerPolicy.fromThrift(request));
             } else {
                 FailPoint.removeTriggerPolicy(request.getName());

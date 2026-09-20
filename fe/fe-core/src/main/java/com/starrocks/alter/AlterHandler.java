@@ -107,6 +107,15 @@ public abstract class AlterHandler extends LeaderDaemon {
         LOG.info("add {} job {}", alterJob.getType(), alterJob.getJobId());
     }
 
+    protected final void runAlterJobV2Safely(AlterJobV2 alterJob) {
+        try {
+            alterJob.run();
+        } catch (Exception e) {
+            LOG.warn("alter job {} type {} state {} failed in scheduler; will retry without blocking sibling jobs",
+                    alterJob.getJobId(), alterJob.getType(), alterJob.getJobState(), e);
+        }
+    }
+
     public List<AlterJobV2> getUnfinishedAlterJobV2ByTableId(long tblId) {
         List<AlterJobV2> unfinishedAlterJobList = new ArrayList<>();
         for (AlterJobV2 alterJob : alterJobsV2.values()) {
