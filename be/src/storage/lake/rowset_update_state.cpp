@@ -41,7 +41,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -539,59 +538,6 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
     }
 }
 
-// Append |count| copies of the value the merge produces for a row that has no old value: the column's
-// declared default, or the expression default this transaction carries for it, exactly as
-// UpdateManager::get_column_values fills its default slot -- which is what makes a narrowed publish and
-// a per-row-selected one write the same segment. |tablet_column| null means the caller has no such
-// notion (the auto-increment column, whose no-old-row values come from the FE allocation rather than a
-// default) and gets the column's plain zero value.
-static Status append_no_old_row_values(const TabletColumn* tablet_column,
-                                       const std::map<std::string, std::string>& column_to_expr_value, size_t count,
-                                       Column* column) {
-    if (count == 0) {
-        return Status::OK();
-    }
-    bool has_default_value = tablet_column != nullptr && tablet_column->has_default_value();
-    std::string default_value = has_default_value ? tablet_column->default_value() : "";
-    if (tablet_column != nullptr) {
-        auto iter = column_to_expr_value.find(std::string(tablet_column->name()));
-        if (iter != column_to_expr_value.end()) {
-            has_default_value = true;
-            default_value = iter->second;
-        }
-    }
-    if (!has_default_value) {
-        TRY_CATCH_BAD_ALLOC(column->append_default(count));
-        return Status::OK();
-    }
-    const TypeInfoPtr& type_info = get_type_info(*tablet_column);
-    auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
-            true, default_value, tablet_column->is_nullable(), type_info, tablet_column->length(), count);
-    ColumnIteratorOptions iter_opts;
-    RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-    return default_value_iter->fetch_values_by_rowid(nullptr, count, column);
-}
-
-// Widen the merged values to one per row of the SOURCE segment, defaulting the rows a sibling owns.
-//
-// On a cross publish the publish iterator is narrowed to this tablet's slice of the shared segment
-// (get_each_segment_iterator -> Rowset::set_segment_tablet_range), so the state built from it covers
-// only [base, base + k) of the segment. The rewriters are not narrowed and cannot be:
-// rewrite_partial_update copies the source segment's own columns verbatim -- every row of them -- and
-// rewrite_auto_increment_lake re-reads every row, so a short column makes the segment they emit
-// inconsistent. The first fails outright (SegmentWriter::finalize_columns, "num rows written
-// mismatch"), which fails the publish for good since publish retries; the second builds a chunk whose
-// columns disagree in length.
-//
-// The padded rows belong to a sibling, so a default is as good as anything: nothing reads them from
-// here, because the rowset carries this tablet's range and Rowset::set_segment_tablet_range clips the
-// rewrite output on it -- the output file is private (MetaFileBuilder clears `shared`) but the rows in
-// it are not all ours.
-//
-// Returns a COPY, and nullptr when the column already spans the segment. Widening the state in place
-// would break a publish retry: the state is cached per transaction, and on the next attempt
-// _resolve_conflict_partial_update patches write_columns at iterator-relative offsets, which line up
-// only with the unwidened column.
 // The publish iterator hands out an empty ownership mask when it has no row selector, which is every
 // publish but a split child's cross publish. Named so the rewrite call site can say "no mask" without
 // materializing one per segment.
