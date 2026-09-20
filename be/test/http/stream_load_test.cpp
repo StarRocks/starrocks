@@ -972,24 +972,26 @@ TEST_F(StreamLoadActionTest, numeric_headers_accepted) {
     ASSERT_NE(nullptr, ctx);
     EXPECT_EQ(6, ctx->body_bytes);
     EXPECT_EQ(2097152, ctx->put_result.params.query_options.mem_limit);
-    TEST_F(StreamLoadActionTest, on_header_rejects_when_force_reject) {
-        force_reject_exec_plan_fragment();
-        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
-                                _batch_write_mgr.get());
-        HttpRequest request(_evhttp_req);
-        request.set_handler(&action);
-        ASSERT_EQ(-1, action.on_header(&request));
-        ASSERT_EQ(HttpStatus::OK, k_response_status);
-        rapidjson::Document doc;
-        doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("Fail", doc["Status"].GetString()) << k_response_str;
-        ASSERT_EQ(-1, doc["TxnId"].GetInt());
-        ASSERT_STREQ("Service is shutting down, please retry later!", doc["Message"].GetString());
-        auto* content_type = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), "Content-Type");
-        ASSERT_NE(content_type, nullptr);
-        ASSERT_STREQ("application/json", content_type);
-        ASSERT_EQ(nullptr, request.handler_ctx());
-        ASSERT_EQ(0, shutdown_work_inflight());
-    }
+}
+
+TEST_F(StreamLoadActionTest, on_header_rejects_when_force_reject) {
+    force_reject_exec_plan_fragment();
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    ASSERT_EQ(-1, action.on_header(&request));
+    ASSERT_EQ(HttpStatus::OK, k_response_status);
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString()) << k_response_str;
+    ASSERT_EQ(-1, doc["TxnId"].GetInt());
+    ASSERT_STREQ("Service is shutting down, please retry later!", doc["Message"].GetString());
+    auto* content_type = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), "Content-Type");
+    ASSERT_NE(content_type, nullptr);
+    ASSERT_STREQ("application/json", content_type);
+    ASSERT_EQ(nullptr, request.handler_ctx());
+    ASSERT_EQ(0, shutdown_work_inflight());
+}
 
 } // namespace starrocks

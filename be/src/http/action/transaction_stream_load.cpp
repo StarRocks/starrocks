@@ -56,6 +56,7 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/action/utils.h"
+#include "http/utils.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
