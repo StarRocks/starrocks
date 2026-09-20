@@ -1162,6 +1162,14 @@ CONF_Int64(brpc_max_body_size, "2147483647");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
+// Only takes effect when brpc_connection_type is "pooled". Maps to brpc's -max_connection_pool_size.
+// Note this is the capacity of the idle-connection cache of a single remote endpoint, NOT a cap on the
+// number of connections: when no idle connection is available a new one is always created, and on return
+// the connection is closed if the pool already holds this many. A value below the peak concurrency makes
+// the excess connections be created and closed repeatedly, which behaves like short connections and burns
+// ephemeral ports. Set it no lower than the peak number of in-flight RPCs to a single peer.
+// brpc re-reads the flag on every pooled get/return, so updating this config takes effect immediately.
+CONF_mInt32(brpc_max_connection_pool_size, "100");
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.
 // This may cause process memory usage to rise.
