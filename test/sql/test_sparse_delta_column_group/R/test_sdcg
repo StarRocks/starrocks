@@ -42,6 +42,9 @@ select * from t order by pk;
 4	40	40	40
 5	50	50	50
 -- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
+-- !result
 drop database test_sdcg_col force;
 -- result:
 -- !result
@@ -89,6 +92,9 @@ select * from t order by pk;
 4	40	40	40
 5	50	50	50
 -- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
+-- !result
 drop database test_sdcg_auto force;
 -- result:
 -- !result
@@ -97,6 +103,9 @@ create database test_sdcg_flex;
 -- result:
 -- !result
 use test_sdcg_flex;
+-- result:
+-- !result
+admin set frontend config ("enable_sparse_dcg" = "true");
 -- result:
 -- !result
 update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
@@ -136,6 +145,12 @@ select * from t order by pk;
 4	40	40	40
 5	50	50	50
 -- !result
+admin set frontend config ("enable_sparse_dcg" = "false");
+-- result:
+-- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
+-- !result
 drop database test_sdcg_flex force;
 -- result:
 -- !result
@@ -144,6 +159,12 @@ create database test_sdcg_flex_mc;
 -- result:
 -- !result
 use test_sdcg_flex_mc;
+-- result:
+-- !result
+admin set frontend config ("enable_sparse_dcg" = "true");
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
 -- result:
 -- !result
 CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
@@ -158,6 +179,12 @@ shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "form
     "Message": "Flexible partial update combined with merge_condition is not supported"
 }
 -- !result
+admin set frontend config ("enable_sparse_dcg" = "false");
+-- result:
+-- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
+-- !result
 drop database test_sdcg_flex_mc force;
 -- result:
 -- !result
@@ -166,6 +193,12 @@ create database test_sdcg_flex_ai;
 -- result:
 -- !result
 use test_sdcg_flex_ai;
+-- result:
+-- !result
+admin set frontend config ("enable_sparse_dcg" = "true");
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
 -- result:
 -- !result
 CREATE TABLE t (pk BIGINT NOT NULL, ai BIGINT NOT NULL AUTO_INCREMENT, c1 BIGINT, c2 BIGINT)
@@ -179,6 +212,12 @@ shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "form
     "Status": "Fail",
     "Message": "Flexible partial update is not supported on a table with an auto-increment column"
 }
+-- !result
+admin set frontend config ("enable_sparse_dcg" = "false");
+-- result:
+-- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
 -- !result
 drop database test_sdcg_flex_ai force;
 -- result:
@@ -194,6 +233,12 @@ CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
 PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
+admin set frontend config ("enable_sparse_dcg" = "true");
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- result:
+-- !result
 shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:colunm" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
 -- result:
 0
@@ -206,9 +251,31 @@ shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "colu
 -- result:
 0
 {
+    "Status": "Fail",
+    "Message": "Unknown partial_update_mode: Column (expected one of: row, column, auto, flexible, flexible_row)"
+}
+-- !result
+admin set frontend config ("enable_sparse_dcg" = "false");
+-- result:
+-- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:Column" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
+-- result:
+0
+{
     "Status": "Success",
     "Message": "OK"
 }
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by pk;
+-- result:
+1	999	None	None
+2	999	None	None
 -- !result
 drop database test_sdcg_badmode force;
 -- result:
@@ -221,6 +288,9 @@ use test_sdcg_gin;
 -- result:
 -- !result
 admin set frontend config ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+admin set frontend config ("enable_sparse_dcg" = "true");
 -- result:
 -- !result
 update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
@@ -269,6 +339,15 @@ select pk from t where g match 'bravo' order by pk;
 3
 -- !result
 select pk from t where g match 'alpha' order by pk;
+-- result:
+-- !result
+admin set frontend config ("enable_experimental_gin" = "false");
+-- result:
+-- !result
+admin set frontend config ("enable_sparse_dcg" = "false");
+-- result:
+-- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
 -- result:
 -- !result
 drop database test_sdcg_gin force;
@@ -331,6 +410,9 @@ select pk, get_json_int(j, '$.x'), c2 from t where pk <= 3 order by pk;
 2	9	2
 3	1	3
 -- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
+-- !result
 drop database test_sdcg_ctype force;
 -- result:
 -- !result
@@ -389,6 +471,9 @@ select count(*) from t where pk between 301 and 40000 and c2 = pk*100+1;
 select count(*) from t where c3 = pk*1000;
 -- result:
 70000
+-- !result
+update information_schema.be_configs set value = "false" where name = "enable_sparse_dcg";
+-- result:
 -- !result
 drop database test_sdcg_share force;
 -- result:
