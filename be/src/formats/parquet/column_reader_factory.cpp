@@ -70,6 +70,25 @@ Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* 
 
 namespace {
 
+Status validate_native_iceberg_geography(const ParquetField& field, const TypeDescriptor& col_type,
+                                          const TIcebergSchemaField& lake_field) {
+    if (!lake_field.__isset.geo_metadata || !col_type.geo_type) {
+        return Status::NotSupported("Native Iceberg GEOGRAPHY requires GEO metadata: " + field.name);
+    }
+    RETURN_IF_ERROR(validate_geo_field(field, &lake_field));
+
+    const auto& source = lake_field.geo_metadata;
+    const auto& planned = *col_type.geo_type;
+    constexpr std::string_view edge_prefix = "GEO_EDGE_ALGORITHM_";
+    const std::string edge = GeoEdgeAlgorithmPB_Name(planned.edge_algorithm);
+    if (source.kind != TIcebergGeoKind::GEOGRAPHY || planned.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY ||
+        source.crs != planned.crs || edge.compare(0, edge_prefix.size(), edge_prefix) != 0 ||
+        source.edge_algorithm != edge.substr(edge_prefix.size())) {
+        return Status::InvalidArgument("Iceberg/plan geo schema mismatch: " + field.name);
+    }
+    return Status::OK();
+}
+
 struct VariantNodeFields {
     const ParquetField* metadata = nullptr;
     const ParquetField* value = nullptr;
@@ -522,22 +541,8 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
             return nullptr;
         }
     } else {
-        if (lake_schema_field->__isset.geo_metadata) {
-            RETURN_IF_ERROR(validate_geo_field(*field, lake_schema_field));
-        }
         if (col_type.type == TYPE_GEOGRAPHY) {
-            const GeoTypeDescriptor expected{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                             GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
-            if (!lake_schema_field->__isset.geo_metadata) {
-                return Status::NotSupported("Native Iceberg GEOGRAPHY requires CRS84 spherical semantics: " +
-                                            field->name);
-            }
-            const auto& geo = lake_schema_field->geo_metadata;
-            if (geo.kind != TIcebergGeoKind::GEOGRAPHY || geo.crs != expected.crs ||
-                geo.edge_algorithm != "SPHERICAL" || !col_type.geo_type || *col_type.geo_type != expected) {
-                return Status::NotSupported("Native Iceberg GEOGRAPHY requires CRS84 spherical semantics: " +
-                                            field->name);
-            }
+            RETURN_IF_ERROR(validate_native_iceberg_geography(*field, col_type, *lake_schema_field));
         }
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
                                                     &col_type, opts);

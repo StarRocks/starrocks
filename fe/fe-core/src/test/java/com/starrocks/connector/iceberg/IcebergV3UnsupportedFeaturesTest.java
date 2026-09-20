@@ -24,6 +24,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.type.PrimitiveType;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
@@ -183,7 +184,6 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw.
         // The query analyzer will reject queries on these columns at analysis time.
         Assertions.assertTrue(fromIcebergType(Types.GeometryType.crs84()).isUnknown());
-        Assertions.assertTrue(fromIcebergType(Types.GeographyType.crs84()).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.FixedType.ofLength(16)).isUnknown());
     }
 
@@ -202,6 +202,8 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertFalse(fromIcebergType(Types.UUIDType.get()).isUnknown());
         Assertions.assertFalse(fromIcebergType(Types.TimeType.get()).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.VariantType.get()).isVariantType());
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY,
+                fromIcebergType(Types.GeographyType.crs84()).getPrimitiveType());
     }
 
     @Test

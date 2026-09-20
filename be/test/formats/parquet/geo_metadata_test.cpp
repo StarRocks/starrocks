@@ -945,6 +945,9 @@ TEST(GeoMetadataTest, NativeGeographyRequiresCompatibleIcebergMetadata) {
     lake.fields[0] = lake_geo();
     lake.fields[0].geo_metadata.crs = "EPSG:3857";
     EXPECT_FALSE(validate_scan(elements, &lake, {{0, &slot, true}}, true).ok());
+    auto unannotated = geo_element();
+    unannotated.__isset.logicalType = false;
+    EXPECT_TRUE(validate_scan(schema_of(unannotated), &lake, {{0, &slot, true}}, true).is_invalid_argument());
 }
 
 TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {

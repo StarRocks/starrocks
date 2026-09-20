@@ -42,7 +42,6 @@ import com.starrocks.thrift.TIcebergGeoMetadata;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
@@ -367,9 +366,6 @@ public class IcebergApiConverter {
             Type srType;
             try {
                 srType = fromIcebergType(field.type());
-                if (field.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
-                    srType = fromIcebergGeographyType((Types.GeographyType) field.type());
-                }
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
                 srType = UnknownType.UNKNOWN_TYPE;
@@ -385,17 +381,6 @@ public class IcebergApiConverter {
             fullSchema.add(column);
         }
         return fullSchema;
-    }
-
-    private static Type fromIcebergGeographyType(Types.GeographyType geography) {
-        if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
-                && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
-            return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                    new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                            GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                            GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
-        }
-        return UnknownType.UNKNOWN_TYPE;
     }
 
     public static String toInitialDefaultValueString(Types.NestedField field) {
@@ -586,7 +571,7 @@ public class IcebergApiConverter {
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
         tIcebergSchemaField.setIs_optional(nestedField.isOptional());
-        // Preserve external semantics even while SQL conversion remains UNKNOWN_TYPE.
+        // Preserve external semantics independently of SQL type conversion.
         // Do not infer these parameters from WKB or map these fields to VARBINARY.
         if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
             Types.GeographyType geography = (Types.GeographyType) nestedField.type();
