@@ -273,6 +273,7 @@ subprojects {
             implementation("software.amazon.awssdk:dynamodb:${project.ext["aws-v2-sdk.version"]}")
             implementation("software.amazon.awssdk:glue:${project.ext["aws-v2-sdk.version"]}")
             implementation("software.amazon.awssdk:kms:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:lakeformation:${project.ext["aws-v2-sdk.version"]}")
             implementation("software.amazon.awssdk:s3:${project.ext["aws-v2-sdk.version"]}")
             implementation("software.amazon.awssdk:s3-transfer-manager:${project.ext["aws-v2-sdk.version"]}")
             implementation("software.amazon.awssdk:sso:${project.ext["aws-v2-sdk.version"]}")

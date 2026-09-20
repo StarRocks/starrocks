@@ -315,6 +315,7 @@ dependencies {
     implementation("software.amazon.awssdk:glue")
     implementation("software.amazon.awssdk:dynamodb")
     implementation("software.amazon.awssdk:kms")
+    implementation("software.amazon.awssdk:lakeformation")
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:s3-transfer-manager")
     implementation("software.amazon.awssdk:sts")

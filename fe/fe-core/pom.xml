@@ -1108,6 +1108,11 @@ under the License.
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
+            <artifactId>lakeformation</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
         </dependency>
 
