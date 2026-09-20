@@ -4,6 +4,7 @@
 # There're several ENV variables used in the BE entrypoint script:
 # * COREDUMP_ENABLED: when it's set to true and BE process is crashed, a coredump is generated and the BE process would be restarted;
 # * DEBUG_MODE: when it's set to true, BE process is restarted always;
+# * BE_RESTART_WAIT_SECONDS: restart delay in seconds, defaults to 5;
 
 HOST_TYPE=${HOST_TYPE:-"IP"}
 FE_QUERY_PORT=${FE_QUERY_PORT:-9030}
@@ -21,6 +22,20 @@ BE_CONFIG=$STARROCKS_HOME/conf/be.conf
 log_stderr()
 {
     echo "[`date`] $@" >&2
+}
+
+check_restart_configuration()
+{
+    # Upstream also checks here that inotifywait/pigz/rclone exist whenever COREDUMP_ENABLED=true,
+    # because it starts upload_coredump.sh. That check is dropped on purpose in the celerdata
+    # repository: the coredump uploader is disabled (rclone was removed from the image, see #34742),
+    # so COREDUMP_ENABLED only selects the restart-on-crash behavior and must not block startup.
+    if [[ ("$COREDUMP_ENABLED" == "true" || "$DEBUG_MODE" == "true") && ! "$BE_RESTART_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+        log_stderr "BE_RESTART_WAIT_SECONDS must be a positive integer, got: $BE_RESTART_WAIT_SECONDS"
+        return 1
+    fi
+
+    return 0
 }
 
 update_conf_from_configmap()
@@ -109,6 +124,9 @@ if [[ "x$svc_name" == "x" ]] ; then
     exit 1
 fi
 
+BE_RESTART_WAIT_SECONDS=${BE_RESTART_WAIT_SECONDS:-5}
+check_restart_configuration || exit $?
+
 update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
@@ -117,7 +135,7 @@ log_stderr "run start_be.sh"
 # disable it on purpose because the rclone package is removed in celerdata repository
 #if [[ "$COREDUMP_ENABLED" == "true" ]]; then
 #  # start inotifywait loop daemon to monitor core dump generation
-#  $STARROCKS_ROOT/upload_coredump.sh &
+#  "$STARROCKS_ROOT/upload_coredump.sh" &
 #fi
 
 
@@ -160,7 +178,6 @@ while true; do
   echo "Restarting starrocks_be ..."
 
   # Wait for a few seconds before restarting
-  sleep_interval=${BE_RESTART_WAIT_SECONDS:-5}
-  echo "wait for $sleep_interval seconds ..."
-  sleep $sleep_interval
+  echo "wait for $BE_RESTART_WAIT_SECONDS seconds ..."
+  sleep "$BE_RESTART_WAIT_SECONDS"
 done

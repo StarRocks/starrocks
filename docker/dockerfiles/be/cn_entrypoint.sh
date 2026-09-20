@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Notes:
+# COREDUMP_ENABLED=true restarts the CN process after a crash. Coredump upload is disabled in this
+# repository, see check_restart_configuration below.
+# DEBUG_MODE=true restarts the CN process after every exit.
+# CN_RESTART_WAIT_SECONDS sets the restart delay in seconds and defaults to 5.
+
 HOST_TYPE=${HOST_TYPE:-"IP"}
 FE_QUERY_PORT=${FE_QUERY_PORT:-9030}
 PROBE_TIMEOUT=60
@@ -9,13 +15,27 @@ MY_SELF=
 MY_IP=`hostname -i`
 MY_HOSTNAME=`hostname -f`
 STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
-STARROCKS_HOME=${STARROCKS_ROOT}/cn
+export STARROCKS_HOME=${STARROCKS_ROOT}/cn
 CN_CONFIG=$STARROCKS_HOME/conf/cn.conf
 
 
 log_stderr()
 {
     echo "[`date`] $@" >&2
+}
+
+check_restart_configuration()
+{
+    # Upstream also checks here that inotifywait/pigz/rclone exist whenever COREDUMP_ENABLED=true,
+    # because it starts upload_coredump.sh. That check is dropped on purpose in the celerdata
+    # repository: the coredump uploader is disabled (rclone was removed from the image, see #34742),
+    # so COREDUMP_ENABLED only selects the restart-on-crash behavior and must not block startup.
+    if [[ ("$COREDUMP_ENABLED" == "true" || "$DEBUG_MODE" == "true") && ! "$CN_RESTART_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+        log_stderr "CN_RESTART_WAIT_SECONDS must be a positive integer, got: $CN_RESTART_WAIT_SECONDS"
+        return 1
+    fi
+
+    return 0
 }
 
 update_conf_from_configmap()
@@ -164,6 +184,9 @@ if [[ "x$svc_name" == "x" ]] ; then
     exit 1
 fi
 
+CN_RESTART_WAIT_SECONDS=${CN_RESTART_WAIT_SECONDS:-5}
+check_restart_configuration || exit $?
+
 update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
@@ -171,19 +194,55 @@ trap exit_clean SIGTERM
 
 log_stderr "run start_cn.sh"
 
+# disable it on purpose because the rclone package is removed in celerdata repository
+#if [[ "$COREDUMP_ENABLED" == "true" ]]; then
+#    # Start an inotifywait loop daemon to monitor core dump generation.
+#    "$STARROCKS_ROOT/upload_coredump.sh" &
+#fi
+
 addition_args=
 if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     # env var `LOG_CONSOLE=1` can be added to enable logging to console
     addition_args="--logconsole"
 fi
-$STARROCKS_HOME/bin/start_cn.sh $addition_args
-ret=$?
 
-if [[ $ret -eq 0 || $ret -eq 137 ]] ; then
-    # The reason why we need to sleep here is to avoid the pod being killed by k8s before the preStop hook is exited.
-    # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
-    sleep 5
-fi
+while true; do
+    $STARROCKS_HOME/bin/start_cn.sh $addition_args
+    ret=$?
 
-# keep the same return code from start_cn.sh
-exit $ret
+    if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
+        nol=50
+        log_stderr "Last $nol lines of cn.INFO ..."
+        tail -n $nol $STARROCKS_HOME/log/cn.INFO
+        log_stderr "Last $nol lines of cn.out ..."
+        tail -n $nol $STARROCKS_HOME/log/cn.out
+    fi
+
+    # Repeat launching the CN process in the two scenarios:
+    #  a. DEBUG_MODE is true;
+    #  b. coredump is enabled, and the error code is SIGABRT(6) or SIGSEGV(11);
+    # otherwise the CN process should still exit.
+    should_exit=true
+    if [[ "$DEBUG_MODE" == "true" ]]; then
+        should_exit=false
+    fi
+
+    if [[ "$COREDUMP_ENABLED" == "true" && ($ret -eq 134 || $ret -eq 139) ]]; then
+        should_exit=false
+    fi
+
+    if [[ "$should_exit" == "true" ]]; then
+        if [[ $ret -eq 0 || $ret -eq 137 ]] ; then
+            # The reason why we need to sleep here is to avoid the pod being killed by k8s before the preStop hook is exited.
+            # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
+            sleep 5
+        fi
+
+        # Keep the same return code from start_cn.sh.
+        exit $ret
+    fi
+
+    log_stderr "starrocks CN process exited with status: $ret"
+    log_stderr "Restarting the CN process after $CN_RESTART_WAIT_SECONDS seconds ..."
+    sleep "$CN_RESTART_WAIT_SECONDS"
+done

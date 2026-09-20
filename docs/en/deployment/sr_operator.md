@@ -122,6 +122,19 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 If some pods cannot start after a long period of time, you can use `kubectl logs -n starrocks <pod_name>` to view the log information or use `kubectl -n starrocks describe pod <pod_name>` to view the event information to locate the problem.
 :::
 
+### Configure BE and CN restart behavior after a crash
+
+The BE and CN container entrypoints can restart the component after a crash, which keeps the pod alive so that the core dump left in the container can be retrieved. They also support restarting the component after every exit for debugging. Configure the following environment variables on the BE or CN container:
+
+| Variable | Accepted values and default | Description |
+| -------- | --------------------------- | ----------- |
+| `COREDUMP_ENABLED` | Set to `true` to enable. Any other value, including an unset value, disables the restart on crash. | After the component exits because of `SIGABRT` (exit status `134`) or `SIGSEGV` (exit status `139`), the entrypoint restarts it instead of letting the container exit. |
+| `DEBUG_MODE` | Set to `true` to enable. Any other value, including an unset value, disables debug restart behavior. | Restarts the component after every exit. Use this behavior for debugging only. |
+| `BE_RESTART_WAIT_SECONDS` | A positive integer. Default: `5`. | Number of seconds to wait before restarting the BE. Used when `COREDUMP_ENABLED=true` or `DEBUG_MODE=true`. |
+| `CN_RESTART_WAIT_SECONDS` | A positive integer. Default: `5`. | Number of seconds to wait before restarting the CN. Used when `COREDUMP_ENABLED=true` or `DEBUG_MODE=true`. |
+
+The entrypoints do not upload core dumps. Uploading requires `rclone`, which is not installed in the BE and CN images, so the uploader is disabled. Collect the core dump from the core dump directory in the container yourself; the directory defaults to `${STARROCKS_HOME}/storage/coredumps` and can be changed with `COREDUMP_PATH`.
+
 ## Manage StarRocks Cluster
 
 ### Access StarRocks Cluster

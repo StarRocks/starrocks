@@ -120,6 +120,19 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 >
 > 如果部分 Pod 长时间仍无法启动，您可以通过 `kubectl logs -n starrocks <pod_name>` 查看日志信息或者通过 `kubectl -n starrocks describe pod <pod_name>` 查看 Event 信息，以定位问题。
 
+### 配置 BE 和 CN 崩溃后的重启行为
+
+BE 和 CN 容器入口脚本可以在组件崩溃后将其重启，从而让 Pod 保持存活，以便取出容器内留下的 Core Dump；也支持在组件每次退出后重启，用于调试。请在 BE 或 CN 容器中配置以下环境变量：
+
+| 变量 | 可选值和默认值 | 说明 |
+| ---- | -------------- | ---- |
+| `COREDUMP_ENABLED` | 设置为 `true` 时启用。其他值（包括未设置）均表示禁用崩溃重启。 | 当组件因 `SIGABRT`（退出状态码 `134`）或 `SIGSEGV`（退出状态码 `139`）退出时，入口脚本会重启组件，而不是让容器退出。 |
+| `DEBUG_MODE` | 设置为 `true` 时启用。其他值（包括未设置）均表示禁用调试重启行为。 | 组件每次退出后都会重启。此行为仅用于调试。 |
+| `BE_RESTART_WAIT_SECONDS` | 正整数。默认值：`5`。 | BE 重启前等待的秒数。在 `COREDUMP_ENABLED=true` 或 `DEBUG_MODE=true` 时使用。 |
+| `CN_RESTART_WAIT_SECONDS` | 正整数。默认值：`5`。 | CN 重启前等待的秒数。在 `COREDUMP_ENABLED=true` 或 `DEBUG_MODE=true` 时使用。 |
+
+入口脚本不会上传 Core Dump。上传依赖 `rclone`，而 BE 和 CN 镜像中并未安装该命令，因此上传功能已禁用。请自行从容器内的 Core Dump 目录取出文件，该目录默认为 `${STARROCKS_HOME}/storage/coredumps`，可通过 `COREDUMP_PATH` 修改。
+
 ## 访问 StarRocks 集群
 
 访问 StarRocks 集群的各个组件可以通过其关联的 Service 实现，比如 FE Service。Service 的详细说明和访问地址查看，请参考 [api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) 和 [Service](https://kubernetes.io/docs/concepts/services-networking/service/)。
