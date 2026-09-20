@@ -348,7 +348,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_FILE> {
     using CppType = DatumStruct;
     using ColumnType = FileColumn;
-    using ImmContainerType = ColumnType::Container;
 };
 
 template <>

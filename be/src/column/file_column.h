@@ -35,6 +35,8 @@ namespace starrocks {
 // Rows print as {uri:"...",offset:1,size:2,content_type:null,checksum:null,inline:"<hex>"}.
 class FileColumn final : public CowFactory<ColumnFactory<Column, FileColumn>, FileColumn> {
 public:
+    using ValueType = void;
+
     enum FileField : size_t {
         URI = 0,
         OFFSET = 1,
