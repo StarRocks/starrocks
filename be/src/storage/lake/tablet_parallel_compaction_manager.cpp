@@ -1131,7 +1131,7 @@ std::unique_ptr<CompactionTaskContext> TabletParallelCompactionManager::build_me
         // Add the pre-hand-off queue wait once, not per subtask: it was spent by the single context that
         // waited for a worker, not by each subtask.
         merged_context->stats->in_queue_time_sec += state->handoff_in_queue_time_sec;
-    
+
         // Only mark as failed if ALL subtasks failed
         // If at least one subtask succeeded, the compaction is considered (partially) successful
         if (successful_count == 0 && failed_count > 0) {
