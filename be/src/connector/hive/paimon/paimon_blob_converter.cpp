@@ -24,6 +24,7 @@
 
 #include "column/file_column.h"
 #include "column/nullable_column.h"
+#include "common/statusor.h"
 
 namespace starrocks {
 
@@ -33,6 +34,10 @@ constexpr int8_t kBlobDescriptorVersion = 2;
 constexpr int64_t kBlobDescriptorMagic = 0x424C4F4244455343LL; // "BLOBDESC"
 constexpr size_t kBlobDescriptorHeaderSize = sizeof(int8_t) + sizeof(int64_t) + sizeof(int32_t);
 constexpr size_t kBlobDescriptorTrailerSize = sizeof(int64_t) + sizeof(int64_t);
+
+constexpr int8_t kBlobViewVersion = 1;
+constexpr int64_t kBlobViewMagic = 0x424C4F4256494557LL; // "BLOBVIEW"
+constexpr size_t kBlobViewHeaderSize = sizeof(int8_t) + sizeof(int64_t);
 
 template <typename T>
 T read_le(const char* p) {
@@ -72,13 +77,24 @@ std::optional<BlobDescriptor> parse_blob_descriptor(std::string_view value) {
     return desc;
 }
 
-Datum to_file_datum(std::string_view value) {
+// Mirrors paimon's BlobViewStruct::IsBlobViewStruct: a blob-view-field value that paimon-cpp did
+// not resolve into a BlobDescriptor (blob-view-resolve-enabled=false).
+bool is_blob_view_struct(std::string_view value) {
+    if (value.size() < kBlobViewHeaderSize) {
+        return false;
+    }
+    const char* p = value.data();
+    return read_le<int8_t>(p) == kBlobViewVersion && read_le<int64_t>(p + 1) == kBlobViewMagic;
+}
+
+StatusOr<Datum> to_file_datum(std::string_view value) {
+    if (is_blob_view_struct(value)) {
+        return Status::NotSupported(
+                "Paimon BLOB value is a serialized BlobViewStruct; StarRocks requires paimon-cpp to resolve "
+                "blob-view-field values into BlobDescriptors (blob-view.resolve.enabled=true)");
+    }
     if (auto desc = parse_blob_descriptor(value)) {
-        std::optional<int64_t> size;
-        if (desc->length >= 0) {
-            size = desc->length;
-        }
-        return FileDatumBuilder::make(Slice(desc->uri.data(), desc->uri.size()), desc->offset, size, std::nullopt,
+        return FileDatumBuilder::make(Slice(desc->uri.data(), desc->uri.size()), desc->offset, desc->length, std::nullopt,
                                       std::nullopt, std::nullopt);
     }
     return FileDatumBuilder::make(std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -86,16 +102,20 @@ Datum to_file_datum(std::string_view value) {
 }
 
 template <typename ArrayType>
-void append_binary_array(const ArrayType* array, size_t start, size_t num_rows, NullableColumn* dst) {
+Status append_binary_array(const ArrayType* array, size_t start, size_t num_rows, NullableColumn* dst) {
     for (size_t i = 0; i < num_rows; ++i) {
         const int64_t idx = static_cast<int64_t>(start + i);
         if (array->IsNull(idx)) {
-            (void)dst->append_nulls(1);
+            if (!dst->append_nulls(1)) {
+                return Status::InternalError("append nulls failed");
+            }
             continue;
         }
         // The datum only references the arrow buffer; append_datum copies the bytes into the sub-columns.
-        dst->append_datum(to_file_datum(array->GetView(idx)));
+        ASSIGN_OR_RETURN(Datum datum, to_file_datum(array->GetView(idx)));
+        dst->append_datum(datum);
     }
+    return Status::OK();
 }
 
 } // namespace
@@ -110,11 +130,9 @@ Status append_paimon_blob_to_file_column(const arrow::Array* array, size_t start
     auto* nullable = down_cast<NullableColumn*>(dst);
     switch (array->type_id()) {
     case arrow::Type::LARGE_BINARY:
-        append_binary_array(down_cast<const arrow::LargeBinaryArray*>(array), start, num_rows, nullable);
-        return Status::OK();
+        return append_binary_array(down_cast<const arrow::LargeBinaryArray*>(array), start, num_rows, nullable);
     case arrow::Type::BINARY:
-        append_binary_array(down_cast<const arrow::BinaryArray*>(array), start, num_rows, nullable);
-        return Status::OK();
+        return append_binary_array(down_cast<const arrow::BinaryArray*>(array), start, num_rows, nullable);
     default:
         return Status::InternalError(fmt::format(
                 "Paimon BLOB column has unexpected arrow type {}, expected large_binary", array->type()->ToString()));
