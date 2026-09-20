@@ -18,7 +18,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -162,8 +161,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         if (!automaticPartition) {
             sb.append(")\n(");
             // sort range
-            List<Map.Entry<Long, Range<PartitionKey>>> entries = new ArrayList<>(this.idToRange.entrySet());
-            entries.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
+            List<Map.Entry<Long, Range<PartitionKey>>> entries = getSortedRangeMap(false);
 
             int idx = 0;
             PartitionInfo tblPartitionInfo = table.getPartitionInfo();
