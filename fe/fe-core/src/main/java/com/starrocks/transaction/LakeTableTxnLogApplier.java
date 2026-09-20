@@ -344,6 +344,18 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             // These stats came back with the publish of exactly this version.
             lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L, version);
             lakeTablet.setDataSizeUpdateTime(versionTime);
+            // Only apply the observation while the table is NORMAL. A split's children become
+            // catalog-visible while the table is still TABLET_RESHARD, and cross-published
+            // transactions flow through this method and update those same child LakeTablet objects. A
+            // cross-publish that happens to contribute no shared file would mark the tablet clean, and
+            // a merge could be planned in that window before the next cross-publish corrects it -- and
+            // a planned merge's transaction is already committed by publish time, so it cannot be
+            // abandoned. This method already runs under the table write lock that makes the
+            // transaction visible, so the state read here is not a TOCTOU.
+            if (table.getState() == OlapTable.OlapTableState.NORMAL) {
+                // See LakeTablet#observeSharedFiles(Boolean): an absent field fails closed too.
+                lakeTablet.observeSharedFiles(tabletStat.hasSharedFiles);
+            }
             maxTabletSize = Math.max(maxTabletSize, dataSize);
         }
         if (maxTabletSize > 0 && table.isRangeDistribution()) {

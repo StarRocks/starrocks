@@ -98,6 +98,64 @@ void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
 // per-segment ownership propagation (private for an exclusive segment).
 void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
 
+<<<<<<< HEAD
+=======
+// True iff |metadata| references a live data file carrying the shared flag. This computes the value
+// the BE reports as TabletStatPB / TabletStat.has_shared_files, which merge planning uses to refuse a
+// tablet whose files a split left co-owned: a merge inherits its sources' files verbatim, so a second
+// owner would make the merged tablet unsafe.
+//
+// The fields are walked in TabletMetadataPB declaration order, so this list can be diffed against
+// lake_types.proto whenever a field is added:
+//
+//   (4)  rowsets           del_files[].shared, then segment_metas[].shared   CHECKED
+//   (7)  delvec_meta       version_to_file[].shared                          skipped: a merge rewrites
+//                          the delvec pages it keeps into a new file, so a shared source delvec never
+//                          constrains it
+//   (8)  compaction_inputs                                                   skipped: garbage records
+//   (10) orphan_files                                                        skipped: garbage records
+//   (15) sstable_meta      sstables[].shared                                 CHECKED
+//   (16) dcg_meta          dcgs[].shared_files[]                             CHECKED
+//   (24) idg_meta          idgs[].entries[].shared_file                      CHECKED
+//   (25) ext               an empty message today; revisit if it gains file fields
+//
+// Every other field carries ids, versions, schemas or ranges rather than files.
+//
+// The two sidecar kinds are checked directly rather than derived from their segment's flag: an
+// OpAddIndex cross-publish can install a shared IDG entry for a segment without touching that
+// segment's own flag, so a privately owned segment can still carry a shared .idx.
+//
+// Only segment_metas[].shared is read, never RowsetMetadataPB's deprecated parallel
+// deprecated_shared_segments: the proto normalizer back-fills the former from the latter on load
+// (lake_proto_normalizer.cpp), so legacy metadata is covered without reading a deprecated field.
+//
+// Reads metadata only; performs no I/O.
+bool has_shared_files(const TabletMetadataPB& metadata);
+
+// Reset the CDC-related carry-over on a metadata copy a reshard publish writes at the reshard
+// version S. A reshard copies the source metadata verbatim, which would otherwise inherit the
+// source's `metadata_ancestors` and its per-publish `cdc_metadata` state as if this were the
+// source's own next publish.
+//
+// An OLD tablet id (the split parent, a merge source, or the identical-old tablet) keeps its own
+// history: its chain at S continues from base_version (S-1), so a (S-1, S] CHANGES diff is empty
+// by construction rather than misattributing the base publish's rowsets. |old_metadata| is the
+// source metadata at base_version, whose own chain is copied as the bounded tail (see
+// build_metadata_ancestors). init_cdc drops the stale capture_status / pk_change_locator left by
+// the source's last publish while preserving enable_cdc, which is a table property -- and where it
+// early-returns, on a CDC-disabled primary-key table, there is nothing to drop: both fields' only
+// writers are cdc_enabled-gated, and alter_cdc clears them when the switch goes off.
+void reset_cdc_carryover_for_old_tablet(TabletMetadataPB* metadata, int64_t base_version,
+                                        const TabletMetadataPB* old_metadata);
+
+// Peer of the above for a NEW tablet id (a split child, the merged tablet, or the identical-new
+// tablet). No metadata exists under this id below S, so the chain must be empty: a CHANGES walk
+// misdispatched with base < S then fails classified (CHANGE_NOT_TRACKABLE, "chain cannot reach
+// base") instead of following an inherited ancestor into an unclassified NotFound that the
+// frontend would read as transient and retry forever.
+void reset_cdc_carryover_for_new_tablet(TabletMetadataPB* metadata);
+
+>>>>>>> 806b4f56e69 ([Enhancement] Keep tablets holding shared data files out of merge candidate groups (#62847))
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range);
