@@ -379,9 +379,9 @@ public class LoadPlanner {
         }
 
         if (partialUpdate) {
-            // A GIN-indexed column cannot be answered from a column-mode overlay -> force ROW so the
-            // rewritten segment rebuilds the index and MATCH stays correct. Mutates the field used to
-            // set the sink mode below. Shared with StreamLoadPlanner (every partial-update planner).
+            // SDCG guard (inert unless Config.enable_sparse_dcg): a column with a SPARSE overlay cannot
+            // serve its inverted index, so force ROW. Mutates the field used to set the sink mode
+            // below. Shared with StreamLoadPlanner (every partial-update planner).
             partialUpdateMode = Load.forceRowModeForInvertedIndexedColumn(destTable, destColumns, partialUpdateMode);
         }
 

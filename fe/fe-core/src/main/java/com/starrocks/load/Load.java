@@ -51,6 +51,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -676,9 +677,13 @@ public class Load {
                         slotDesc.setType(metaType);
                         slotDesc.setColumn(new Column(columnName, metaType));
                         slotDesc.setIsMaterialized(true);
-                    } else if (columnName.equals(Load.LOAD_CSET_COLUMN)) {
+                    } else if (flexible && columnName.equals(Load.LOAD_CSET_COLUMN)) {
                         // SDCG flexible partial update: the hidden set-id source slot is a
-                        // materialized SMALLINT, filled per-row by the json scanner.
+                        // materialized SMALLINT, filled per-row by the json scanner. Only the
+                        // flexible plan declares this slot; outside flexible mode a source field named
+                        // __cset__ that is not a table column is an ordinary unmapped source slot and
+                        // takes the generic branch below (a table column of that name is typed from
+                        // the table above).
                         slotDesc.setType(IntegerType.SMALLINT);
                         slotDesc.setColumn(new Column(columnName, IntegerType.SMALLINT));
                         slotDesc.setIsMaterialized(true);
@@ -801,34 +806,30 @@ public class Load {
     }
 
     /**
-     * Keep a GIN (inverted) indexed column off the column-mode partial-update overlay by forcing ROW
-     * mode, which rewrites the full row into a new segment whose indexes are all rebuilt at write time.
+     * SDCG guard: keep a GIN (inverted) indexed value column off the column-mode partial-update overlay by
+     * forcing ROW mode, which rewrites the full row into a new segment whose indexes are all rebuilt at
+     * write time.
      *
-     * <p>Only ONE of the overlay shapes actually carries a usable inverted index, and three separate
-     * failure modes remain, so the column path is not safe for a GIN column:
-     * <ul>
-     *   <li>DENSE {@code .cols} + BUILTIN GIN: the overlay DOES carry a freshly built, positionally
-     *       aligned builtin index (segment_writer.cpp keeps footer-inlined implementations for the
-     *       markless {@code .cols} writer) and the reader binds to the DCG segment, so MATCH is correct
-     *       on its own. But any OTHER index on the same column -- an NGRAMBF/BLOOM_FILTER or BITMAP
-     *       published into an IDG {@code .idx} sidecar -- is still probed with the BASE segment id
-     *       (segment_iterator.cpp threads {@code idg_loader} + base {@code segment_id} into the
-     *       iterator bound to the {@code .cols} file) and takes precedence over the overlay's own
-     *       footer bloom, so a stale bloom silently prunes the pages holding the updated rows.</li>
-     *   <li>Standalone (CLucene) GIN: the overlay writer produces no index at all, so MATCH fails
-     *       loudly until compaction rewrites the base. CLucene is the DEFAULT implementation; BUILTIN
-     *       is forced only for shared-data tables, so this is the ordinary shared-nothing case.</li>
-     *   <li>SPARSE {@code .spcols}: the read path suppresses the inverted iterator for any column with a
-     *       sparse layer (its index would live in K-row ordinal space, not base ordinal space), so MATCH
-     *       fails there too whenever {@code enable_sparse_dcg} is on.</li>
-     * </ul>
+     * <p>Only active while {@code Config.enable_sparse_dcg} is on. The guard protects the SDCG sparse read
+     * path: a SPARSE {@code .spcols} layer lives in K-row ordinal space rather than base ordinal space, so
+     * the reader suppresses the inverted iterator for any column that has a sparse layer and MATCH on that
+     * column would fail. The pre-SDCG dense {@code .cols} path does not need it: the overlay carries a freshly
+     * built, positionally aligned builtin index and the reader already binds the inverted index to the DCG
+     * segment. While the feature is off the mode is therefore returned unchanged, exactly as before SDCG.
+     *
+     * <p>Key columns are skipped when scanning {@code updateColumns}: every partial update lists the primary
+     * key, so a GIN on a key column would otherwise force every partial update of the table to ROW even
+     * though a partial update never rewrites a key value.
      *
      * <p>A flexible load thereby becomes flexible-on-row: the flexible bit is unchanged, only the
      * storage mode. Called from the load planners (StreamLoadPlanner, LoadPlanner) and from
-     * UpdatePlanner, so no entry path leaves a GIN column on the column path.</p>
+     * UpdatePlanner, so no entry path leaves a GIN column on the sparse path.</p>
      */
     public static TPartialUpdateMode forceRowModeForInvertedIndexedColumn(
             Table tbl, List<Column> updateColumns, TPartialUpdateMode mode) {
+        if (!Config.enable_sparse_dcg) {
+            return mode;
+        }
         if (mode == TPartialUpdateMode.ROW_MODE || updateColumns == null || updateColumns.isEmpty()
                 || !(tbl instanceof OlapTable)) {
             return mode;
@@ -847,6 +848,9 @@ public class Load {
             return mode;
         }
         for (Column col : updateColumns) {
+            if (col.isKey()) {
+                continue;
+            }
             if (ginColumns.contains(col.getColumnId())) {
                 return TPartialUpdateMode.ROW_MODE;
             }
@@ -917,23 +921,36 @@ public class Load {
             if (((OlapTable) tbl).hasGeneratedColumn()) {
                 throw new DdlException("Flexible partial update is not supported on a table with a generated column");
             }
+            // The hidden per-row column-set slot is addressed by NAME in the load plan (tuple slot and index
+            // column list), so a user column with the same name would be indistinguishable from it. The name
+            // is not reserved at CREATE TABLE time (that would change DDL behavior for every table), so a
+            // flexible load on such a table is rejected here instead. Table.getColumn is case-insensitive.
+            if (((OlapTable) tbl).getColumn(LOAD_CSET_COLUMN) != null) {
+                throw new DdlException("Flexible partial update is not supported on a table with a column named "
+                        + LOAD_CSET_COLUMN + " (the name is used for the hidden per-row column-set slot)");
+            }
         }
     }
 
     /**
      * Decide whether a load whose request carries the flexible bit is actually planned as flexible.
      *
-     * <p>{@code partial_update_mode=flexible} / {@code flexible_row} name the feature explicitly, so a shape
-     * {@link #checkFlexiblePartialUpdate} cannot apply is an error the caller asked for and is thrown as such.
-     * {@code partial_update_mode=auto} is different: the BE sets the flexible bit for EVERY JSON partial-update
-     * load in auto mode so that a shared-data table gets per-row column sets, but {@code auto} predates flexible
-     * and is accepted on every primary-key table. Rejecting the load would break every existing
-     * {@code auto} user on a shared-nothing table, on a table with an AUTO_INCREMENT column, or with a
-     * {@code merge_condition} -- loads that worked before flexible existed. For {@code auto} the unsupported
-     * shape therefore degrades to the plan {@code auto} always produced (one homogeneous union partial update),
-     * and this returns false. The caller must then also clear {@code StreamLoadInfo.flexiblePartialUpdate},
-     * because the scan node reads that flag to inject the hidden {@code __cset__} source slot -- the planner
-     * and the scan node must agree, or the writer receives a dictionary for a payload without set-ids.
+     * <p>The whole feature is gated on {@code Config.enable_sparse_dcg}. While it is off nothing is ever planned
+     * as flexible: an explicit {@code partial_update_mode=flexible} / {@code flexible_row} request is rejected
+     * with a message naming the config, and a request that carries the flexible bit because of
+     * {@code partial_update_mode=auto} (the BE sets it for JSON partial-update loads in auto mode when its own
+     * {@code enable_sparse_dcg} is on) plans as the homogeneous partial update {@code auto} always produced.
+     *
+     * <p>With the feature on, {@code partial_update_mode=flexible} / {@code flexible_row} name the feature
+     * explicitly, so a shape {@link #checkFlexiblePartialUpdate} cannot apply is an error the caller asked for
+     * and is thrown as such. {@code partial_update_mode=auto} is different: {@code auto} predates flexible and
+     * is accepted on every primary-key table. Rejecting the load would break every existing {@code auto} user
+     * on a shared-nothing table, on a table with an AUTO_INCREMENT column, or with a {@code merge_condition}
+     * -- loads that worked before flexible existed. For {@code auto} the unsupported shape therefore degrades
+     * to the plan {@code auto} always produced (one homogeneous union partial update), and this returns false.
+     * The caller must then also clear {@code StreamLoadInfo.flexiblePartialUpdate}, because the scan node
+     * reads that flag to inject the hidden {@code __cset__} source slot -- the planner and the scan node must
+     * agree, or the writer receives a dictionary for a payload without set-ids.
      *
      * @return true when the plan must carry the hidden {@code __cset__} slot and the per-row dictionary
      */
@@ -942,6 +959,14 @@ public class Load {
                                                        List<ImportColumnDesc> columnExprDescs) throws DdlException {
         if (!flexibleRequested) {
             return false;
+        }
+        if (!Config.enable_sparse_dcg) {
+            if (requestedMode == TPartialUpdateMode.AUTO_MODE) {
+                LOG.info("partial_update_mode=auto on table {}: enable_sparse_dcg is off; "
+                        + "planning the homogeneous partial update", tbl.getName());
+                return false;
+            }
+            throw new DdlException("Flexible partial update requires enable_sparse_dcg (experimental) on FE and BE");
         }
         try {
             checkFlexiblePartialUpdate(tbl, mergeCondition, columnExprDescs);

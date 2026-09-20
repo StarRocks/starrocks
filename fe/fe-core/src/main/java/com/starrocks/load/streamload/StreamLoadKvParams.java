@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Util;
 import com.starrocks.sql.ast.LoadStmt;
@@ -25,7 +26,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -227,15 +227,12 @@ public class StreamLoadKvParams implements StreamLoadParams {
             return Optional.empty();
         }
         TPartialUpdateMode mode = null;
-        // Case-INSENSITIVE, matching the other stream-load headers (format, compression, trim_space are
-        // all parsed with boost::iequals in be/src/http/action/stream_load.cpp) and normalized the SAME
-        // way in isFlexiblePartialUpdate() below and in the BE header parsing. Both sides must normalize
-        // identically: if one accepted "Flexible" as flexible while the other read it as non-flexible, the
-        // load would silently apply a heterogeneous update as a homogeneous union and NULL-clobber the
-        // columns a row did not declare. Locale.ROOT (not the default locale) so "AUTO" folds to "auto"
-        // even under a Turkish locale, where 'I' lowercases to a dotless 'i'. A genuinely unknown value
-        // still throws rather than silently degrading to the default (row) full-row upsert.
-        switch (partialUpdateMode.toLowerCase(Locale.ROOT)) {
+        // EXACT (case-sensitive) matching on the raw header value, as before SDCG: "column", "auto" and
+        // "row" are the pre-existing tokens and any other value leaves the mode unset so the load falls
+        // back to the default (row) mode. The SDCG tokens "flexible" / "flexible_row" and the rejection
+        // of unknown values are gated on Config.enable_sparse_dcg: while the feature is off this method
+        // must behave exactly as it did before the tokens existed.
+        switch (partialUpdateMode) {
             case "column":
                 mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
                 break;
@@ -249,6 +246,10 @@ public class StreamLoadKvParams implements StreamLoadParams {
                 // SDCG flexible partial update: per-row heterogeneous column sets. The
                 // underlying storage mode is the sparse/column mode; flexibility is
                 // surfaced separately via isFlexiblePartialUpdate().
+                if (!Config.enable_sparse_dcg) {
+                    throw new RuntimeException("partial_update_mode=" + partialUpdateMode
+                            + " requires enable_sparse_dcg (experimental) on FE and BE");
+                }
                 mode = TPartialUpdateMode.COLUMN_UPDATE_MODE;
                 break;
             case "flexible_row":
@@ -258,22 +259,29 @@ public class StreamLoadKvParams implements StreamLoadParams {
                 // it stays true so FE still injects the hidden "__cset__" slot and BE folds
                 // the per-row column-set dictionary, while the storage mode is ROW_MODE so
                 // the apply takes the masked full-row rewrite path.
+                if (!Config.enable_sparse_dcg) {
+                    throw new RuntimeException("partial_update_mode=" + partialUpdateMode
+                            + " requires enable_sparse_dcg (experimental) on FE and BE");
+                }
                 mode = TPartialUpdateMode.ROW_MODE;
                 break;
             default:
-                throw new RuntimeException("Unknown partial_update_mode: " + partialUpdateMode
-                        + " (expected one of: row, column, auto, flexible, flexible_row)");
+                if (Config.enable_sparse_dcg) {
+                    throw new RuntimeException("Unknown partial_update_mode: " + partialUpdateMode
+                            + " (expected one of: row, column, auto, flexible, flexible_row)");
+                }
+                // Feature off: an unknown value is ignored (mode stays unset), as it always was.
+                break;
         }
         return Optional.ofNullable(mode);
     }
 
     @Override
     public Optional<Boolean> isFlexiblePartialUpdate() {
-        String rawMode = params.get(HTTP_PARTIAL_UPDATE_MODE);
-        // Normalize EXACTLY as getPartialUpdateMode() does. These two must agree on every input: a value
-        // that parses as "flexible" there but reads as non-flexible here would apply a heterogeneous load
-        // as a homogeneous union and NULL-clobber the columns a row did not declare.
-        String partialUpdateMode = rawMode == null ? null : rawMode.toLowerCase(Locale.ROOT);
+        String partialUpdateMode = params.get(HTTP_PARTIAL_UPDATE_MODE);
+        // Match the raw value EXACTLY as getPartialUpdateMode() does. These two must agree on every input: a
+        // value that parses as "flexible" there but reads as non-flexible here would apply a heterogeneous
+        // load as a homogeneous union and NULL-clobber the columns a row did not declare.
         // Both "flexible" (COLUMN/SDCG apply) and "flexible_row" (ROW-mode masked rewrite)
         // are flexible loads: each row updates a different column subset. The flexible BIT
         // is intentionally decoupled from the storage MODE chosen in getPartialUpdateMode().
@@ -283,8 +291,11 @@ public class StreamLoadKvParams implements StreamLoadParams {
         // upserts, and a full write must NOT get the hidden "__cset__" column. Gate on JSON format too:
         // flexible partial update is only supported for json loads (FE rejects it for CSV), so CSV auto+
         // partial must fall through to the homogeneous path where BE still cost-picks dense/sparse.
+        // Gate on Config.enable_sparse_dcg as well: "auto" predates SDCG, and while the feature is off an
+        // auto JSON partial update must plan exactly as it did before (no hidden "__cset__" slot).
         boolean jsonFormat = getFileFormatType().map(f -> f == TFileFormatType.FORMAT_JSON).orElse(false);
-        boolean autoFlexible = "auto".equals(partialUpdateMode) && getPartialUpdate().orElse(false) && jsonFormat;
+        boolean autoFlexible = Config.enable_sparse_dcg && "auto".equals(partialUpdateMode)
+                && getPartialUpdate().orElse(false) && jsonFormat;
         return Optional.of(flexible || autoFlexible);
     }
 

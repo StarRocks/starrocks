@@ -248,8 +248,8 @@ public class StreamLoadPlanner {
                 olapTableSink.missAutoIncrementColumn());
         TPartialUpdateMode partialUpdateMode = streamLoadInfo.getPartialUpdateMode();
         if (streamLoadInfo.isPartialUpdate()) {
-            // A GIN-indexed column cannot be answered from a column-mode overlay -> force ROW so the
-            // rewritten segment rebuilds the index and MATCH stays correct. Shared with LoadPlanner.
+            // SDCG guard (inert unless Config.enable_sparse_dcg): a column with a SPARSE overlay cannot
+            // serve its inverted index, so force ROW. Shared with LoadPlanner.
             partialUpdateMode = Load.forceRowModeForInvertedIndexedColumn(destTable, destColumns, partialUpdateMode);
         }
         olapTableSink.setPartialUpdateMode(partialUpdateMode);

@@ -410,6 +410,14 @@ public class StreamLoadScanNode extends LoadScanNode {
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         paramCreateContext.params.setSrc_tuple_id(paramCreateContext.tupleDescriptor.getId().asInt());
         paramCreateContext.params.setDest_tuple_id(desc.getId().asInt());
+        if (streamLoadInfo.isFlexiblePartialUpdate()) {
+            // SDCG flexible: tell the BE json scanner explicitly that the plan carries the hidden
+            // "__cset__" slot and that it must compute per-row column-set ids into it. The scanner
+            // keys off this flag, never off the slot name. streamLoadInfo.isFlexiblePartialUpdate()
+            // is the planner's decision (StreamLoadPlanner / LoadPlanner clear it when they plan the
+            // homogeneous update), the same flag that declared the "__cset__" source slot above.
+            paramCreateContext.params.setFlexible_partial_update(true);
+        }
         if (needAssignBE) {
             paramCreateContext.params.setTxn_id(txnId);
             paramCreateContext.params.setDb_name(dbName);

@@ -157,9 +157,10 @@ public class OlapTableSink extends DataSink {
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
     private TPartialUpdateMode partialUpdateMode;
-    // SDCG flexible partial update: per-row heterogeneous column sets. When true the tuple
-    // carries a hidden "__cset__" SMALLINT slot before "__op", and the index column list
-    // gets "__cset__" added right before "__op".
+    // SDCG flexible partial update: per-row heterogeneous column sets. Set explicitly by the
+    // planner that injected the hidden "__cset__" SMALLINT slot before "__op"; createSchema
+    // then adds "__cset__" to the index column list right before "__op". This flag, not the
+    // slot names in the tuple, is the single source of truth for the flexible shape.
     private boolean flexiblePartialUpdate = false;
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
     private long automaticBucketSize = 0;
@@ -453,7 +454,8 @@ public class OlapTableSink extends DataSink {
             }
             tSink.setNum_replicas(numReplicas);
             tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
-            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true));
+            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true,
+                    flexiblePartialUpdate));
 
             TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
 
@@ -555,6 +557,14 @@ public class OlapTableSink extends DataSink {
     // passes true.
     public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
                                                      @Nullable Long targetWriteIndexId, boolean emitDistributedExprs) {
+        return createSchema(dbId, table, tupleDescriptor, targetWriteIndexId, emitDistributedExprs, false);
+    }
+
+    // flexiblePartialUpdate: SDCG flexible partial update. Only the write sink (OlapTableSink.complete())
+    // passes the planner's decision; every other caller passes false and gets the pre-SDCG column list.
+    public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
+                                                     @Nullable Long targetWriteIndexId, boolean emitDistributedExprs,
+                                                     boolean flexiblePartialUpdate) {
         TOlapTableSchemaParam schemaParam = new TOlapTableSchemaParam();
         schemaParam.setDb_id(dbId);
         schemaParam.setTable_id(table.getId());
@@ -596,14 +606,11 @@ public class OlapTableSink extends DataSink {
             }
 
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                // SDCG flexible partial update: the tuple descriptor injects a hidden
-                // "__cset__" slot immediately before "__op". Mirror that ordering here so
-                // the BE schema's column list keeps "__op" last (read positionally as the
-                // last column) with "__cset__" right before it.
-                boolean flexible = tupleDescriptor.getSlots().stream()
-                        .anyMatch(slot -> slot.getColumn() != null
-                                && Load.LOAD_CSET_COLUMN.equals(slot.getColumn().getName()));
-                if (flexible) {
+                // SDCG flexible partial update: the planner injected a hidden "__cset__" slot
+                // immediately before "__op" and told the sink so via setFlexiblePartialUpdate.
+                // Mirror that ordering here so the BE schema's column list keeps "__op" last
+                // (read positionally as the last column) with "__cset__" right before it.
+                if (flexiblePartialUpdate) {
                     columns.add(Load.LOAD_CSET_COLUMN);
                 }
                 columns.add(Load.LOAD_OP_COLUMN);

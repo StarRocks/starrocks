@@ -25,6 +25,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -918,15 +919,18 @@ public class LoadTest {
         Assertions.assertNull(slotDescByName.get(Load.LOAD_OP_COLUMN));
     }
 
-    // SDCG: a partial update touching a GIN-indexed column must be forced to ROW mode (a column-mode
-    // overlay carries no inverted index). Covers Load.forceRowModeForInvertedIndexedColumn.
+    // SDCG (Config.enable_sparse_dcg = true): a partial update touching a GIN-indexed value column must be
+    // forced to ROW mode (the sparse read path suppresses the inverted iterator over a column with a sparse
+    // layer). A GIN on a KEY column alone does not force ROW: every partial update lists the key, and a key
+    // value is never rewritten. Covers Load.forceRowModeForInvertedIndexedColumn.
     @Test
     public void testForceRowModeForInvertedIndexedColumn(@Mocked OlapTable ginTable, @Mocked OlapTable noIdxTable,
-            @Mocked OlapTable bitmapTable, @Mocked OlapTable nullIdxTable) {
+            @Mocked OlapTable bitmapTable, @Mocked OlapTable nullIdxTable, @Mocked OlapTable ginKeyTable) {
         Column c0 = new Column("c0", IntegerType.INT, true, null, false, null, "");
         Column c1 = new Column("c1", VarcharType.VARCHAR, false, null, true, null, "");
         Index gin = new Index("gin_idx", Lists.newArrayList(c1.getColumnId()), IndexDef.IndexType.GIN, "");
         Index bitmap = new Index("bm_idx", Lists.newArrayList(c1.getColumnId()), IndexDef.IndexType.BITMAP, "");
+        Index ginKey = new Index("gin_key_idx", Lists.newArrayList(c0.getColumnId()), IndexDef.IndexType.GIN, "");
 
         new Expectations() {
             {
@@ -944,51 +948,82 @@ public class LoadTest {
                 nullIdxTable.getIndexes();
                 result = null;
                 minTimes = 0;
+                // GIN on the key column only.
+                ginKeyTable.getIndexes();
+                result = Lists.newArrayList(ginKey);
+                minTimes = 0;
             }
         };
 
-        // No index at all: mode is unchanged.
-        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(noIdxTable, Lists.newArrayList(c1),
-                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
-        // Update set includes the GIN column -> forced to ROW.
-        Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
-                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
-        // AUTO is also overridden to ROW when a GIN column is touched.
-        Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
-                        TPartialUpdateMode.AUTO_MODE));
-        // Update touches only the non-GIN column -> unchanged.
-        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c0),
-                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
-        // Already ROW mode -> early return, unchanged.
-        Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
-                        TPartialUpdateMode.ROW_MODE));
-        // Empty update columns -> early return, unchanged.
-        Assertions.assertEquals(TPartialUpdateMode.AUTO_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(),
-                        TPartialUpdateMode.AUTO_MODE));
-        // Non-GIN index only -> ginColumns empty -> unchanged.
-        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(bitmapTable, Lists.newArrayList(c1),
-                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
-        // getIndexes() == null -> treated as no index, unchanged.
-        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
-                Load.forceRowModeForInvertedIndexedColumn(nullIdxTable, Lists.newArrayList(c1),
-                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = true;
+        try {
+            // No index at all: mode is unchanged.
+            Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(noIdxTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.COLUMN_UPDATE_MODE));
+            // Update set includes the GIN column -> forced to ROW.
+            Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.COLUMN_UPDATE_MODE));
+            // AUTO is also overridden to ROW when a GIN column is touched.
+            Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.AUTO_MODE));
+            // Update touches only the non-GIN column -> unchanged.
+            Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c0),
+                            TPartialUpdateMode.COLUMN_UPDATE_MODE));
+            // Already ROW mode -> early return, unchanged.
+            Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.ROW_MODE));
+            // Empty update columns -> early return, unchanged.
+            Assertions.assertEquals(TPartialUpdateMode.AUTO_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(),
+                            TPartialUpdateMode.AUTO_MODE));
+            // Non-GIN index only -> ginColumns empty -> unchanged.
+            Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(bitmapTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.COLUMN_UPDATE_MODE));
+            // getIndexes() == null -> treated as no index, unchanged.
+            Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(nullIdxTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.COLUMN_UPDATE_MODE));
+            // GIN on the key column alone: the key is in every partial update's column list but is never
+            // rewritten, so it must not force ROW.
+            Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginKeyTable, Lists.newArrayList(c0, c1),
+                            TPartialUpdateMode.COLUMN_UPDATE_MODE));
+            Assertions.assertEquals(TPartialUpdateMode.AUTO_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginKeyTable, Lists.newArrayList(c0, c1),
+                            TPartialUpdateMode.AUTO_MODE));
+
+            // Feature off (the default): the guard is inert and the mode is returned unchanged even when
+            // the update touches the GIN-indexed value column.
+            Config.enable_sparse_dcg = false;
+            Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.COLUMN_UPDATE_MODE));
+            Assertions.assertEquals(TPartialUpdateMode.AUTO_MODE,
+                    Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                            TPartialUpdateMode.AUTO_MODE));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
     }
 
     // SDCG: flexible (per-row heterogeneous) partial update is rejected on a non-cloud-native table, with
-    // a merge_condition, or on an auto-increment table. Covers Load.checkFlexiblePartialUpdate.
+    // a merge_condition, on an auto-increment table, or on a table that already has a user column named
+    // "__cset__" (the hidden per-row column-set slot is addressed by that name). Covers
+    // Load.checkFlexiblePartialUpdate.
     @Test
     public void testCheckFlexiblePartialUpdate(@Mocked OlapTable localTbl, @Mocked OlapTable cnValid,
-                                               @Mocked OlapTable cnAi) {
+                                               @Mocked OlapTable cnAi, @Mocked OlapTable cnCset) {
         Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
         Column ai = new Column("id", IntegerType.BIGINT, true, null, false, null, "");
         ai.setIsAutoIncrement(true);
+        Column cset = new Column(Load.LOAD_CSET_COLUMN, IntegerType.INT, false, null, true, null, "");
 
         new Expectations() {
             {
@@ -1003,6 +1038,15 @@ public class LoadTest {
                 minTimes = 0;
                 cnAi.getBaseSchema();
                 result = Lists.newArrayList(ai);
+                minTimes = 0;
+                cnCset.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnCset.getBaseSchema();
+                result = Lists.newArrayList(v, cset);
+                minTimes = 0;
+                cnCset.getColumn(Load.LOAD_CSET_COLUMN);
+                result = cset;
                 minTimes = 0;
             }
         };
@@ -1021,6 +1065,10 @@ public class LoadTest {
         // (3) auto-increment column present -> rejected.
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "auto-increment",
                 () -> Load.checkFlexiblePartialUpdate(cnAi, null));
+
+        // (4) a user column named "__cset__" -> rejected (the name is not reserved at CREATE TABLE time).
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, Load.LOAD_CSET_COLUMN,
+                () -> Load.checkFlexiblePartialUpdate(cnCset, null));
     }
 
     // A `columns` mapping with an expression cannot be flexible: the BE derives a row's column set from the
@@ -1073,9 +1121,17 @@ public class LoadTest {
         };
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "generated column",
                 () -> Load.checkFlexiblePartialUpdate(cnGenerated, null));
-        // auto degrades instead of rejecting, like every other unsupported shape.
-        ExceptionChecker.expectThrowsNoException(() -> Assertions.assertFalse(
-                Load.resolveFlexiblePartialUpdate(cnGenerated, TPartialUpdateMode.AUTO_MODE, true, null, null)));
+        // auto degrades instead of rejecting, like every other unsupported shape (feature on, so the
+        // degrade is decided by the table shape and not by the config gate).
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = true;
+        try {
+            ExceptionChecker.expectThrowsNoException(() -> Assertions.assertFalse(
+                    Load.resolveFlexiblePartialUpdate(cnGenerated, TPartialUpdateMode.AUTO_MODE, true, null,
+                            null)));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
     }
 
     // The flexible bit reaches the planner for two different reasons and they must not be treated alike:
@@ -1102,30 +1158,73 @@ public class LoadTest {
         List<ImportColumnDesc> derived = Lists.newArrayList(new ImportColumnDesc("pk"),
                 new ImportColumnDesc("v", new IntLiteral(1)));
 
-        // Not requested at all -> never flexible, whatever the mode.
-        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, false,
-                null, plain));
-        // Supported shape -> flexible for both the explicit and the auto request.
-        Assertions.assertTrue(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.COLUMN_UPDATE_MODE,
-                true, null, plain));
-        Assertions.assertTrue(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
-                null, plain));
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = true;
+        try {
+            // Not requested at all -> never flexible, whatever the mode.
+            Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, false,
+                    null, plain));
+            // Supported shape -> flexible for both the explicit and the auto request.
+            Assertions.assertTrue(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                    true, null, plain));
+            Assertions.assertTrue(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
+                    null, plain));
 
-        // Unsupported shapes: auto degrades (false, no exception) ...
-        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(localTbl, TPartialUpdateMode.AUTO_MODE, true,
-                null, plain));
-        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
-                "v", plain));
-        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
-                null, derived));
-        // ... while the explicit modes reject, with the same reasons checkFlexiblePartialUpdate gives.
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data",
-                () -> Load.resolveFlexiblePartialUpdate(localTbl, TPartialUpdateMode.COLUMN_UPDATE_MODE, true,
-                        null, plain));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "merge_condition",
-                () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.ROW_MODE, true, "v", plain));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "column mappings or expressions",
-                () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.COLUMN_UPDATE_MODE, true,
-                        null, derived));
+            // Unsupported shapes: auto degrades (false, no exception) ...
+            Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(localTbl, TPartialUpdateMode.AUTO_MODE, true,
+                    null, plain));
+            Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
+                    "v", plain));
+            Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
+                    null, derived));
+            // ... while the explicit modes reject, with the same reasons checkFlexiblePartialUpdate gives.
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data",
+                    () -> Load.resolveFlexiblePartialUpdate(localTbl, TPartialUpdateMode.COLUMN_UPDATE_MODE, true,
+                            null, plain));
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "merge_condition",
+                    () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.ROW_MODE, true, "v",
+                            plain));
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "column mappings or expressions",
+                    () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.COLUMN_UPDATE_MODE, true,
+                            null, derived));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
+    }
+
+    // Config.enable_sparse_dcg = false (the default) gates the whole feature: nothing is ever planned as
+    // flexible, even on a table every other check accepts. `auto` degrades to the homogeneous plan it always
+    // produced; an explicit flexible request is rejected with a message naming the config.
+    @Test
+    public void testResolveFlexiblePartialUpdateGatedOnSparseDcg(@Mocked OlapTable cnValid) throws DdlException {
+        Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
+        new Expectations() {
+            {
+                cnValid.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnValid.getBaseSchema();
+                result = Lists.newArrayList(v);
+                minTimes = 0;
+            }
+        };
+        List<ImportColumnDesc> plain = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("v"));
+
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = false;
+        try {
+            Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, false,
+                    null, plain));
+            Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
+                    null, plain));
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "enable_sparse_dcg",
+                    () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.COLUMN_UPDATE_MODE, true,
+                            null, plain));
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "enable_sparse_dcg",
+                    () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.ROW_MODE, true,
+                            null, plain));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
     }
 }

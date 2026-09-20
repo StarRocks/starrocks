@@ -3751,6 +3751,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_experimental_gin = false;
 
+    // Experimental Sparse Delta Column Group (SDCG) partial update. Mirrors the BE config of the same name;
+    // both must be enabled for the feature to be active. While false every load, plan and DDL path behaves
+    // exactly as it did before the feature existed (no auto->flexible upgrade, no GIN row-mode forcing,
+    // no rejection of unknown partial_update_mode values).
+    @ConfField(mutable = true)
+    public static boolean enable_sparse_dcg = false;
+
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
