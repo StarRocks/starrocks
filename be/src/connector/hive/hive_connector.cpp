@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "base/failpoint/fail_point.h"
 #include "cache/disk_cache/block_cache.h"
 #ifdef WITH_STARCACHE
 #include "cache/datacache.h"
@@ -46,6 +47,10 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
+
+// Fault-injection point on the external-table scan path. Shared by hive / iceberg /
+// hudi / delta scans: they all open their data files through HiveDataSource.
+DEFINE_FAIL_POINT(hive_scanner_open_file_failed);
 
 static const std::string OPENXJSON_SERDE_LIB = "org.openx.data.jsonserde.JsonSerDe";
 
@@ -812,6 +817,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
+    // The FileSystem for this data file is resolved but nothing has been read yet. This is the
+    // "data file listed by the planner is gone or unreadable by the time the scanner opens it"
+    // case -- the window an external engine's expire/rewrite lands in. There was no way to
+    // inject it before: the nearest existing point, output_stream_io_error, is on the write
+    // side only.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(hive_scanner_open_file_failed);
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.format_scan_context.column_access_paths.empty()) {
         bool failed = false;

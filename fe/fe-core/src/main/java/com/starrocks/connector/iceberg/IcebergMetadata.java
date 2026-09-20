@@ -2740,6 +2740,22 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    // Publishing the staged updates. The caller has already run <op>.commit(), so the transaction
+    // carries the new snapshot and the catalog still points at the old metadata -- the window a
+    // competing commit has to land in to produce "Base metadata location is not same".
+    //
+    // This one-line method exists so that window has a name a Byteman rule can target:
+    // iceberg_commit_before_metadata_swap arms AT ENTRY here. The rule used to sit on
+    // commitWithCleanup's entry, which is *before* commitAction.run() and therefore before
+    // anything is staged -- a different race than the one it documented. The alternatives are
+    // both un-compilable-against: a rule on iceberg's own Transaction/BaseTransaction goes
+    // silently dead when the library's signature drifts, and a rule on the synthetic
+    // lambda$...$N that holds these two statements goes silently dead on any edit to this file.
+    // Do not inline it back. See the header of conf/failpoint.btm.
+    private void publishStagedTransaction(Transaction transaction) {
+        transaction.commitTransaction();
+    }
+
     private void invalidateCacheAfterCommit(String dbName, String tableName) {
         // Invalidate cache after commit
         tables.remove(TableIdentifier.of(dbName, tableName));
@@ -2885,7 +2901,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                         rewrittenDeleteFiles);
                 IcebergDeletionVectorSupport.validateSingleDeletionVectorPerFile(dataFiles);
                 rowDelta.commit();
-                transaction.commitTransaction();
+                publishStagedTransaction(transaction);
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
             // Record metrics after successful commit
@@ -3010,7 +3026,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             commitWithCleanup(() -> {
                 rowDelta.commit();
-                transaction.commitTransaction();
+                publishStagedTransaction(transaction);
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
             if (isMerge) {
@@ -3127,7 +3143,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             commitWithCleanup(() -> {
                 batchWrite.commit();
-                transaction.commitTransaction();
+                publishStagedTransaction(transaction);
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
             // Record metrics after successful commit

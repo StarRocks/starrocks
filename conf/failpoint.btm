@@ -160,3 +160,166 @@ HELPER com.starrocks.failpoint.FailPointHelper
 IF shouldTrigger("colocate_mid_align_table")
 DO return false;
 ENDRULE
+
+
+# ============================== Iceberg ==============================
+# Nothing in this file touched the Iceberg connector before. The concurrency bugs that keep
+# showing up there -- commit conflicts, caches handing out paths an external engine already
+# expired, partition-spec evolution racing with DML -- all live in windows a few milliseconds
+# wide, so a random concurrent workload only hits them by luck. These four turn those windows
+# into something a test can stop inside.
+
+# The transaction carries the new snapshot and nothing is published yet: the window a competing
+# commit has to land in to produce "Base metadata location is not same".
+#
+# The site has to be read together with what the callers do. All three of them pass
+# commitWithCleanup a lambda shaped like
+#
+#     rowDelta.commit();              // stages the snapshot into the transaction
+#     publishStagedTransaction(tx);   // publishes it
+#
+# so the entry of commitWithCleanup -- where this rule used to sit -- is *before* the staging,
+# and stopping there exercises a different race than the one described above. The window we want
+# is between those two statements, and publishStagedTransaction exists to give it a name.
+#
+# Deliberately on StarRocks' own method rather than on iceberg's Transaction.commitTransaction,
+# which would be one frame tighter: a rule naming a class that does not resolve, or a signature
+# that drifted with the library version, is silently dead -- ADMIN ENABLE FAILPOINT reports
+# success for a rule that will never fire. Naming the synthetic lambda$...$N that holds the two
+# statements fails the same way on any edit to IcebergMetadata. Only rules over named code in
+# this repo can be kept honest by a compile, and FailPointBtmRuleTest checks this signature.
+RULE iceberg_commit_before_metadata_swap
+CLASS com.starrocks.connector.iceberg.IcebergMetadata
+METHOD publishStagedTransaction(Transaction)
+AT ENTRY
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("iceberg_commit_before_metadata_swap")
+DO sleep(5000);
+ENDRULE
+
+# The file list is resolved and about to be handed to the backends, but no backend has opened
+# anything yet. Arm this, run an expire/rewrite from another engine inside the pause, and the
+# scan is forced to read a list that no longer matches storage.
+#
+# ONLY FIRES UNDER `set enable_connector_incremental_scan_ranges = false`. That session variable
+# defaults to **true**, and IcebergScanNode.setupScanRangeLocations then calls
+# getRemoteFilesAsync, a separate implementation that does not delegate to this method. Byteman
+# installs this rule either way and ADMIN ENABLE FAILPOINT reports success, so an armed pause
+# that never happens is this variable, not a broken rule. For the default path use
+# iceberg_scan_source_built below -- it is a different window, not this one reached another way.
+RULE iceberg_scan_files_planned
+CLASS com.starrocks.connector.iceberg.IcebergMetadata
+METHOD getRemoteFiles(Table, GetRemoteFilesParams)
+AT EXIT
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("iceberg_scan_files_planned")
+DO sleep(5000);
+ENDRULE
+
+# The default scan path, because enable_connector_incremental_scan_ranges defaults to true.
+#
+# This is a **different** window from iceberg_scan_files_planned, not the same one reached by
+# another route. The async source is lazy: buildRemoteInfoSource wraps a
+# CloseableIterator<FileScanTask> and produces files one at a time as the backends consume them,
+# so "the whole list is resolved" is a state that never exists here. AT EXIT means: the source is
+# built and not one FileScanTask has been produced. That is enough to race an expire/rewrite
+# against planning, which is the family this exists for -- it is not the stronger guarantee that
+# a complete, already-resolved list is in hand.
+RULE iceberg_scan_source_built
+CLASS com.starrocks.connector.iceberg.IcebergMetadata
+METHOD getRemoteFilesAsync(Table, GetRemoteFilesParams)
+AT EXIT
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("iceberg_scan_source_built")
+DO sleep(5000);
+ENDRULE
+
+# The cached table is known to be stale (metadata file location differs) and the swap to the
+# new one has not happened yet. Holds the per-table refresh monitor, which is the point: it is
+# what a second refresh of the same table has to contend with.
+RULE iceberg_cache_refresh_before_swap
+CLASS com.starrocks.connector.iceberg.CachingIcebergCatalog
+METHOD refreshTable(BaseTable, BaseTable, String, String, ConnectContext, ExecutorService)
+AT ENTRY
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("iceberg_cache_refresh_before_swap")
+DO sleep(5000);
+ENDRULE
+
+# Every ALTER clause has been applied to the transaction and the transaction is not committed
+# yet. For Iceberg that means a new PartitionSpec is staged but not published -- the window
+# concurrent DML has to be in to observe a spec that is about to change underneath it.
+# Defined on the shared connector executor, so it fires for any connector ALTER, not only
+# Iceberg; there is no Iceberg-only method at this phase.
+RULE connector_alter_clauses_applied
+CLASS com.starrocks.connector.ConnectorAlterTableExecutor
+METHOD applyClauses()
+AT EXIT
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("connector_alter_clauses_applied")
+DO sleep(5000);
+ENDRULE
+
+# The other side of the same ALTER: transaction.commitTransaction() has returned, so the new
+# metadata -- a new PartitionSpec, for the evolution case -- is published, and the frontend
+# cache still holds the old table. IcebergMetadata.alterTable does not refresh it until this
+# method returns, so a query planned inside the pause plans against a spec that storage has
+# already moved past. connector_alter_clauses_applied stops before the commit; this one stops
+# after. Between them the spec switch is deterministic instead of a millisecond race.
+#
+# No catalog lock is held: alterTable's synchronized(this) block starts after the executor
+# returns, which is after this rule has already fired.
+#
+# AT EXIT does not fire on the throw path (Byteman triggers on return, not athrow), so an
+# ALTER that failed to commit does not pause -- which is what we want, there is nothing
+# published to be stale against.
+RULE iceberg_alter_published_before_refresh
+CLASS com.starrocks.connector.iceberg.IcebergAlterTableExecutor
+METHOD applyClauses()
+AT EXIT
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("iceberg_alter_published_before_refresh")
+DO sleep(5000);
+ENDRULE
+
+# HMS 连接池 —— 元数据服务是数据湖的单点依赖,而它"拿不到连接"和"连不上"是两回事:
+# 后者网络层能造,前者只在 FE 进程内部(池满 / 建连被 HMS 拒),外面看不见。
+#
+# 作用域: **只覆盖 Hive connector, 不覆盖 Iceberg**。getClient() 是 HiveMetaClient 内部
+# 所有到 metastore 路径的必经之处(callRPC 和 getPartitionsByNames 两类调用都走它),
+# 但它是 HiveMetaClient 的 private 方法, 调用方全在该类内部。Iceberg Hive catalog
+# 不经过这里: IcebergHiveCatalog 持有 org.apache.iceberg.hive.HiveCatalog 作为 delegate,
+# 元数据操作走 iceberg 自己的 client pool。所以这两条 armed 之后, Iceberg 的表加载与
+# 提交不会被注入 —— 原因见 README 的 "Known gap: Iceberg's own HMS connection acquisition" 一节。
+# ⚠ 危险度最高的两条: 可能持锁 5s, 后果是**导入失败**而不是查询变慢。
+# getClient() 第一句是 BlockingCallValidator.validateNotUnderLock(...), 它是**探测器而非保证**:
+# 只在持锁时上报, 从不阻止调用, Mode.OFF 下连报都不报。它装在这里恰恰说明
+# 这条路径可能在锁下被走—— LockInvariantViolations 写明 blocking-call 规则的违规集
+# "还在收集中"(still collecting), 即已知存在持锁调 HMS 的站点且未全部修复。
+# transaction publish 取表锁用的是 1000ms tryLock, 所以这里 sleep 5s 一旦落在持锁路径上,
+# 等在那把锁上的导入会成批失败(5 倍于 tryLock 预算)。
+#
+# 开之前先查: FE 日志 grep blocking_call_under_lock 且 transport=hive-metastore,
+# 你的负载下为空才说明这条路径当前没在锁下。详见 README 同名小节。
+#
+# 另: 两条都是 AT ENTRY, sleep 在 validator 之前, 所以解释卡顿的
+# LOCK_INVARIANT_VIOLATION 日志会晚 5s 才出现 —— 它是 5 秒前那次卡顿的因, 不是果。
+RULE hms_client_pool_exhausted
+CLASS com.starrocks.connector.hive.HiveMetaClient
+METHOD getClient
+AT ENTRY
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("hms_client_pool_exhausted")
+DO throw new org.apache.hadoop.hive.metastore.api.MetaException("failpoint: could not connect to meta store, connection pool exhausted");
+ENDRULE
+
+# 建连很慢(HMS 在 GC 停顿 / 排队)。和网络层的延迟注入不同:这条不需要 root,
+# 也只影响 SR 到 HMS 这一段,不碰 BE 之间的 RPC。
+RULE hms_client_acquire_slow
+CLASS com.starrocks.connector.hive.HiveMetaClient
+METHOD getClient
+AT ENTRY
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("hms_client_acquire_slow")
+DO sleep(5000);
+ENDRULE

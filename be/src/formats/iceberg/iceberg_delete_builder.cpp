@@ -15,6 +15,7 @@
 #include "formats/iceberg/iceberg_delete_builder.h"
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
@@ -34,6 +35,14 @@
 #include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks::formats {
+
+// Fault-injection points on the merge-on-read delete path. There was no way to inject here
+// before: the only Iceberg-adjacent points in the BE were on the parquet *write* side, so a
+// delete-file read that fails or stalls mid-merge could only be produced by corrupting real
+// files on object storage.
+DEFINE_FAIL_POINT(iceberg_delete_file_read_failed);
+DEFINE_FAIL_POINT(iceberg_delete_file_read_slow);
+DEFINE_FAIL_POINT(iceberg_deletion_vector_read_failed);
 
 struct IcebergColumnMeta {
     int64_t id;
@@ -263,6 +272,11 @@ Status IcebergDeleteBuilder::build_deletion_vector(const TIcebergDeleteFile& del
     MonotonicStopWatch build_watch;
     build_watch.start();
 
+    // Every descriptor check above has passed, so a failure from here on is an IO-layer
+    // failure on the Puffin blob itself -- the v3 counterpart of
+    // iceberg_delete_file_read_failed.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(iceberg_deletion_vector_read_failed);
+
     std::vector<uint8_t> buffer(size);
     {
         SCOPED_RAW_TIMER(&dv_stats.read_ns);
@@ -377,6 +391,15 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
                                                         cache_input_stream));
+
+    // The delete file is open but not a single row has been applied to the bitmap yet. Failing
+    // here is the "delete file went away / turned unreadable between planning and reading"
+    // case: the scan must surface an error, never return the data file with its deletes
+    // silently skipped.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(iceberg_delete_file_read_failed);
+    // Widens the window in which a data file is readable but its deletes are not applied yet,
+    // so a concurrent expire/rewrite can land inside it.
+    FAIL_POINT_TRIGGER_EXECUTE(iceberg_delete_file_read_slow, { sleep(2); });
 
     RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
             file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size, _ctx.scan_context->timezone,
