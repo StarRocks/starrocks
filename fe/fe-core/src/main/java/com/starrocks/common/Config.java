@@ -3907,6 +3907,12 @@ public class Config extends ConfigBase {
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
 
+    @ConfField(mutable = true, comment = "Timeout (ms) of the publish version RPC of a shared-data transaction. " +
+            "It bounds both how long FE waits for the compute node to answer and the deadline the compute node " +
+            "applies to the publish task itself. Raise it when publishing a large batch of tablets legitimately " +
+            "takes longer than the default.")
+    public static int lake_publish_version_timeout_ms = 60000;
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
