@@ -1438,7 +1438,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     // type is already rejected by ColumnDefAnalyzer. Keep this rejection ahead of the
                     // ambiguity check so the message never suggests KEY for a type that cannot be a key.
                     throw new DdlException(
-                            "column without agg function will be treated as key column for aggregate table, " + type +
+                            "column without agg function would be treated as key column for aggregate table, " + type +
                                     " type can not be key column");
                 }
                 if (!newColumn.isKey() && !Config.allow_implicit_key_column_in_agg_add_column) {
