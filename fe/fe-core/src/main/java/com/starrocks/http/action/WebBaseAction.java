@@ -237,6 +237,8 @@ public class WebBaseAction extends BaseAction {
                 ctx.setCurrentUserIdentity(sessionValue.connectContext.getCurrentUserIdentity());
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
                 ctx.setCurrentRoleIds(sessionValue.connectContext.getCurrentRoleIds());
+                // Group-mapped roles and Ranger evaluate the groups; the stored context already resolved them.
+                ctx.setGroups(sessionValue.connectContext.getGroups());
 
                 ctx.setThreadLocalInfo();
                 return true;
