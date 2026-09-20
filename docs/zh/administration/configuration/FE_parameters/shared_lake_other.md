@@ -535,8 +535,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
-<<<<<<< HEAD
-=======
 ### `lake_publish_version_timeout_ms`
 
 - 默认值: 60000
@@ -546,16 +544,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中事务版本发布（Publish Version）RPC 的超时时间。该值同时限定 FE 等待计算节点响应的时长和计算节点执行发布任务的截止时间，两者始终保持一致。如果单个事务发布的 tablet 数量很多，发布确实需要更长时间，并因此出现发布超时导致事务失败，可以调大该值。
 - 引入版本: v4.2.0
 
-### `lake_skip_colocate_group_stable_check`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 是否跳过存算分离集群中 Colocate Group 的稳定性检查。设置为 `true` 时，Colocate Group 始终被视为稳定状态，不再向元数据服务查询其实际的均衡状态。仅当稳定性检查过慢或不可用，并因此阻塞 Colocate Group 相关操作时，才将该项作为临时规避手段开启。注意：该项为 `true` 时，即使 Group 内的 tablet 实际并未均衡，查询仍可能被规划为 Colocate Join。
-- 引入版本: v4.2, v4.1.4
-
->>>>>>> 27081fcf9ac ([Enhancement] Make the shared-data publish version timeout configurable (#63105))
 ### `slow_publish_partition_log_threshold_ms`
 
 - 默认值: 3000

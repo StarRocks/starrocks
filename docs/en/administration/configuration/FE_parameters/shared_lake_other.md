@@ -534,8 +534,6 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
-<<<<<<< HEAD
-=======
 ### `lake_publish_version_timeout_ms`
 
 - Default: 60000
@@ -545,16 +543,6 @@ This topic introduces the following types of FE configurations:
 - Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
 - Introduced in: v4.2.0
 
-### `lake_skip_colocate_group_stable_check`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to skip the colocate group stability check in a shared-data cluster. When set to `true`, colocate groups are always reported as stable and their real balance status is not queried from the metadata service. Enable this item as a temporary workaround when the stability check is slow or unavailable and is blocking colocate group operations. Note that while this item is `true`, queries can still be planned as Colocate Joins even if the tablets of the group are not actually balanced.
-- Introduced in: v4.2, v4.1.4
-
->>>>>>> 27081fcf9ac ([Enhancement] Make the shared-data publish version timeout configurable (#63105))
 ### `slow_publish_partition_log_threshold_ms`
 
 - Default: 3000

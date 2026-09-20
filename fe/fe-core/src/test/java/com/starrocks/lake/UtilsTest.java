@@ -310,65 +310,6 @@ public class UtilsTest {
         Assertions.assertFalse(Utils.preferSharedInitialMetadata(null, singleIndexPartition(), 1L));
         Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(true), null, 1L));
     }
-<<<<<<< HEAD
-=======
-
-    // The aggregator turns every ComputeNodePB into a brpc stub via
-    // LakeServiceBrpcStubCache::get_stub(), which has to resolve the host before it can look up its
-    // (EndPoint-keyed) cache. Shipping a hostname there therefore costs one uncached getaddrinfo per
-    // sub-request per publish on the CN. Pin that FE sends the resolved IP instead.
-    @Test
-    public void testAggregatePublishSubRequestCarriesResolvedIp() throws Exception {
-        ComputeNode node = new ComputeNode(1001L, "cn-0.starrocks-cn-search.svc.cluster.local", 9040);
-        node.setBrpcPort(9050);
-
-        PublishTabletsInfo tabletsInfo = new PublishTabletsInfo();
-        tabletsInfo.addTabletId(101L);
-
-        new MockUp<DnsCache>() {
-            @Mock
-            public String tryLookup(String hostname) {
-                return "cn-0.starrocks-cn-search.svc.cluster.local".equals(hostname) ? "10.0.0.7" : hostname;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public WarehouseManager getWarehouseMgr() {
-                return new WarehouseManager();
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public boolean isResourceAvailable(ComputeResource computeResource) {
-                return true;
-            }
-        };
-
-        new MockUp<Utils>() {
-            @Mock
-            public Map<ComputeNode, PublishTabletsInfo> processTablets(List<Tablet> tablets,
-                                                                      ComputeResource computeResource,
-                                                                      WarehouseManager warehouseManager,
-                                                                      List<Long> rebuildPindexTabletIds,
-                                                                      long baseVersion, long newVersion)
-                    throws NoAliveBackendException {
-                return Collections.singletonMap(node, tabletsInfo);
-            }
-        };
-
-        AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
-        Utils.createSubRequestForAggregatePublish(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()),
-                1L, 2L, null, WarehouseManager.DEFAULT_RESOURCE, request);
-
-        Assertions.assertEquals(1, request.getComputeNodes().size());
-        Assertions.assertEquals("10.0.0.7", request.getComputeNodes().get(0).getHost());
-        Assertions.assertEquals(9050, (int) request.getComputeNodes().get(0).getBrpcPort());
-        // The node id must still be the real id: FE matches PBs back to ComputeNode objects by id
-        // when choosing an aggregator.
-        Assertions.assertEquals(1001L, (long) request.getComputeNodes().get(0).getId());
-    }
 
     // Both halves of the publish version timeout have to follow the config: PublishVersionRequest.timeoutMs
     // is the deadline the compute node applies to the publish task, and the brpc once-talk timeout is how
@@ -493,5 +434,4 @@ public class UtilsTest {
             }
         };
     }
->>>>>>> 27081fcf9ac ([Enhancement] Make the shared-data publish version timeout configurable (#63105))
 }

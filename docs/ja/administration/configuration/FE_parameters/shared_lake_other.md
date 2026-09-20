@@ -535,8 +535,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターでのバージョン公開タスクの最大スレッド数。
 - 導入時期：v3.2.0
 
-<<<<<<< HEAD
-=======
 ### `lake_publish_version_timeout_ms`
 
 - デフォルト：60000
@@ -546,16 +544,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターにおけるトランザクションのバージョン公開（Publish Version）RPC のタイムアウトです。この値は、FE がコンピュートノードの応答を待つ時間と、コンピュートノードが公開タスクに適用する期限の両方を制限するため、両者は常に一致します。1 つのトランザクションが大量の tablet を公開するなど、公開に本当にデフォルトより長い時間が必要で、公開タイムアウトによってトランザクションが失敗する場合は、この値を上げてください。
 - 導入時期：v4.2.0
 
-### `lake_skip_colocate_group_stable_check`
-
-- デフォルト：false
-- タイプ：Boolean
-- 単位：-
-- 変更可能：Yes
-- 説明：共有データクラスターで Colocate Group の安定性チェックをスキップするかどうか。`true` に設定すると、Colocate Group は常に安定していると報告され、実際のバランス状態はメタデータサービスに問い合わせられません。安定性チェックが遅いか利用できず、Colocate Group の操作がブロックされている場合の一時的な回避策としてのみ有効にしてください。この項目が `true` の間は、Group 内のタブレットが実際にはバランスされていなくても、クエリが Colocate Join としてプランされる可能性があることに注意してください。
-- 導入時期：v4.2, v4.1.4
-
->>>>>>> 27081fcf9ac ([Enhancement] Make the shared-data publish version timeout configurable (#63105))
 ### `slow_publish_partition_log_threshold_ms`
 
 - デフォルト：3000
