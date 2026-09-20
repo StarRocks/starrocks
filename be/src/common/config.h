@@ -2295,6 +2295,9 @@ CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
 
+// Largest gap between two needed Parquet byte ranges that the paimon-cpp reader still merges into one read.
+CONF_mInt64(paimon_native_parquet_cache_hole_size_limit, "1048576");
+
 // default not to build the empty index
 CONF_mInt32(config_tenann_default_build_threshold, "0");
 
