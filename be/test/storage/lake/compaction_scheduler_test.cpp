@@ -14,30 +14,20 @@
 
 #include "storage/lake/compaction_scheduler.h"
 
-<<<<<<< HEAD
-=======
 #include <atomic>
 #include <new>
 #include <system_error>
 #include <thread>
 
-#include "base/bthreads/util.h"
-#include "base/concurrency/countdown_latch.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/scoped_cleanup.h"
-#include "common/config_compaction_fwd.h"
-#include "common/thread/threadpool.h"
-#include "gen_cpp/lake_service.pb.h"
-#include "runtime/descriptors.h"
->>>>>>> 11976d1 ([BugFix] Do not run parallel-compaction filesystem IO on the brpc bthread (#76882) (#76925))
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/test_util.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/scoped_cleanup.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 

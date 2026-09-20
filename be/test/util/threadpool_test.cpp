@@ -37,21 +37,7 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD:be/test/util/threadpool_test.cpp
 #include "common/config.h"
-=======
-#include "base/concurrency/await.h"
-#include "base/concurrency/countdown_latch.h"
-#include "base/concurrency/spinlock.h"
-#include "base/metrics.h"
-#include "base/random/random.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/time/monotime.h"
-#include "base/utility/defer_op.h"
-#include "base/utility/scoped_cleanup.h"
-#include "common/config_thread_fwd.h"
->>>>>>> 11976d1 ([BugFix] Do not run parallel-compaction filesystem IO on the brpc bthread (#76882) (#76925)):be/test/common/thread/threadpool_test.cpp
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/atomicops.h"
@@ -64,6 +50,7 @@
 #include "testutil/sync_point.h"
 #include "util/await.h"
 #include "util/countdown_latch.h"
+#include "util/defer_op.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
 #include "util/random.h"

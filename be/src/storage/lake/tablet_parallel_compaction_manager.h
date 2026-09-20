@@ -138,11 +138,10 @@ struct TabletParallelCompactionState {
     mutable std::mutex mutex;
 
     // Time this tablet's context spent queued before a worker picked it up and planned the subtasks.
-    // That context is destroyed at the hand-off, so without carrying these the merged context would only
+    // That context is destroyed at the hand-off, so without carrying this the merged context would only
     // report each subtask's own queue wait and CompactResponse would under-report the total -- missing
     // exactly the wait that the hand-off introduces.
     int64_t handoff_in_queue_time_sec = 0;
-    int64_t handoff_queue_wait_ns = 0;
 
     // Set once submit_subtasks_from_groups() has stopped registering subtasks for this tablet.
     // Subtasks are registered and submitted one group at a time, so without this the tablet can look
@@ -199,20 +198,15 @@ public:
 
     // Create parallel compaction tasks for a tablet
     // Returns the number of subtasks created
-    // |handoff_in_queue_time_sec| / |handoff_queue_wait_ns| carry the queue wait already accumulated by
-    // the caller's context, which is destroyed once the subtasks take over; they are added once to the
-    // merged context so the reported queue time stays complete.
+    // |handoff_in_queue_time_sec| carries the queue wait already accumulated by the caller's context,
+    // which is destroyed once the subtasks take over; it is added once to the merged context so the
+    // reported queue time stays complete.
     StatusOr<int> create_parallel_tasks(int64_t tablet_id, int64_t txn_id, int64_t version,
                                         const TabletParallelConfig& config,
                                         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction,
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-<<<<<<< HEAD
-                                        const ReleaseTokenFunc& release_token);
-=======
-                                        const ReleaseTokenFunc& release_token, bool is_unshare = false,
-                                        int64_t handoff_in_queue_time_sec = 0, int64_t handoff_queue_wait_ns = 0,
+                                        const ReleaseTokenFunc& release_token, int64_t handoff_in_queue_time_sec = 0,
                                         const ReturnTokenFunc& return_token = {});
->>>>>>> 11976d1 ([BugFix] Do not run parallel-compaction filesystem IO on the brpc bthread (#76882) (#76925))
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.

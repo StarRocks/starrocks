@@ -232,14 +232,9 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         _scheduler->_contexts.Append(context.get());
     }
 
-<<<<<<< HEAD
-    // Keep the context for a while until the RPC request is finished processing so that we can see the detailed
-    // and complete progress of the RPC request by calling `CompactionScheduler::list_tasks()`.
-=======
     // Keep the context until the RPC request finishes. Regular contexts remain
     // visible through list_tasks(); a merged context anchors parallel-state cleanup.
     CompactionTaskContext* accepted = context.get();
->>>>>>> 11976d1 ([BugFix] Do not run parallel-compaction filesystem IO on the brpc bthread (#76882) (#76925))
     _contexts.emplace_back(std::move(context));
     //                     ^^^^^^^^^^^^^^^^^ Do NOT touch "context" since here, it has been `move`ed.
 
@@ -419,14 +414,9 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
-<<<<<<< HEAD
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                request->force_base_compaction(),
                                                                request->skip_write_txnlog(), cb);
-=======
-        auto context = std::make_unique<CompactionTaskContext>(
-                request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
-                request->skip_write_txnlog(), cb, 0, 0, request->unshare_segments());
         // Snapshot the parallel-compaction request here, on the bthread. The worker that later plans the
         // subtasks reads these instead of `request`, which it must not touch: `request`/`response` are only
         // guaranteed to outlive the worker while some tablet still has an unfinished context, and once the
@@ -436,7 +426,6 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
             context->parallel_max_parallel_per_tablet = request->parallel_config().max_parallel_per_tablet();
             context->parallel_max_bytes_per_subtask = request->parallel_config().max_bytes_per_subtask();
         }
->>>>>>> 11976d1 ([BugFix] Do not run parallel-compaction filesystem IO on the brpc bthread (#76882) (#76925))
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }
@@ -476,69 +465,6 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
 }
 
-<<<<<<< HEAD
-void CompactionScheduler::process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
-                                                      const std::shared_ptr<CompactionTaskCallback>& callback) {
-    VLOG(1) << "Processing parallel compaction request. txn_id: " << request->txn_id()
-            << ", tablet_ids size: " << request->tablet_ids_size()
-            << ", max_parallel: " << request->parallel_config().max_parallel_per_tablet()
-            << ", max_bytes: " << request->parallel_config().max_bytes_per_subtask();
-
-    int total_subtasks = 0;
-    int successful_tablets = 0;
-
-    // Create limiter callbacks for parallel compaction
-    AcquireTokenFunc acquire_token = [this]() { return _limiter.acquire(); };
-    ReleaseTokenFunc release_token = [this](bool mem_limit_exceeded) {
-        if (mem_limit_exceeded) {
-            _limiter.memory_limit_exceeded();
-        } else {
-            _limiter.no_memory_limit_exceeded();
-        }
-    };
-
-    for (auto tablet_id : request->tablet_ids()) {
-        auto result = _parallel_mgr->create_parallel_tasks(
-                tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
-                request->force_base_compaction(), _threads.get(), acquire_token, release_token);
-
-        if (result.ok() && result.value() > 0) {
-            // Parallel compaction tasks created successfully
-            total_subtasks += result.value();
-            successful_tablets++;
-            VLOG(1) << "Created " << result.value() << " parallel subtasks for tablet " << tablet_id;
-        } else {
-            // Fall back to non-parallel mode for this tablet if:
-            // 1. create_parallel_tasks failed (result.status() is not OK)
-            // 2. create_parallel_tasks returned 0 (indicates fallback, e.g., data size too small)
-            if (!result.ok()) {
-                VLOG(1) << "Failed to create parallel tasks for tablet " << tablet_id << ": " << result.status()
-                        << ", falling back to normal compaction";
-            } else {
-                VLOG(1) << "Parallel compaction not applicable for tablet " << tablet_id
-                        << ", falling back to normal compaction";
-            }
-            auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                                   request->force_base_compaction(),
-                                                                   request->skip_write_txnlog(), callback);
-            context->enqueue_time_sec = ::time(nullptr);
-
-            {
-                std::lock_guard l(_contexts_lock);
-                _contexts.Append(context.get());
-            }
-
-            std::unique_lock lock(_mutex);
-            _task_queues.put_by_txn_id(request->txn_id(), context);
-        }
-    }
-
-    VLOG(1) << "Parallel compaction request processed. txn_id: " << request->txn_id()
-            << ", total_subtasks: " << total_subtasks << ", successful_tablets: " << successful_tablets;
-}
-
-=======
->>>>>>> 11976d1 ([BugFix] Do not run parallel-compaction filesystem IO on the brpc bthread (#76882) (#76925))
 void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
     // List regular (non-parallel) compaction tasks
     {
@@ -758,10 +684,10 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
             // Pass on the queue wait already recorded on this context: it is destroyed at the hand-off,
             // so the merged context has to inherit it or CompactResponse under-reports the queue time by
             // exactly the wait this hand-off introduces.
-            return _parallel_mgr->create_parallel_tasks(
-                    tablet_id, txn_id, context->version, parallel_config, context->callback,
-                    context->force_base_compaction, _threads.get(), acquire_token, release_token, context->is_unshare,
-                    context->stats->in_queue_time_sec, context->stats->queue_wait_ns, return_token);
+            return _parallel_mgr->create_parallel_tasks(tablet_id, txn_id, context->version, parallel_config,
+                                                        context->callback, context->force_base_compaction,
+                                                        _threads.get(), acquire_token, release_token,
+                                                        context->stats->in_queue_time_sec, return_token);
         } catch (const std::exception& e) {
             LOG(WARNING) << "Exception while planning parallel compaction, compacting serially instead. tablet_id="
                          << tablet_id << ", txn_id=" << txn_id << ": " << e.what();
