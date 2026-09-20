@@ -21,7 +21,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -35,8 +38,10 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class PostgresSchemaResolverTest {
     @Mocked
@@ -83,6 +88,45 @@ public class PostgresSchemaResolverTest {
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
+    }
+
+    @Test
+    public void testUnboundedNumericMapping() {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        for (int jdbcType : new int[] {Types.NUMERIC, Types.DECIMAL}) {
+            Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(38, 18),
+                    resolver.convertColumnType(jdbcType, "numeric", 0, 0));
+        }
+        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(12, 2),
+                resolver.convertColumnType(Types.NUMERIC, "numeric", 12, 2));
+        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(38, 18),
+                resolver.convertColumnType(Types.NUMERIC, "numeric", 38, 18));
+    }
+
+    @Test
+    public void testUnboundedNumericAlwaysUsesDecimal128() {
+        boolean original = Config.enable_decimal_v3;
+        try {
+            Config.enable_decimal_v3 = false;
+            Assertions.assertEquals(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18),
+                    new PostgresSchemaResolver().convertColumnType(Types.NUMERIC, "numeric", 0, 0));
+        } finally {
+            Config.enable_decimal_v3 = original;
+        }
+    }
+
+    @Test
+    public void testOnlyUnboundedColumnIsMarked() throws SQLException {
+        MockResultSet resultSet = new MockResultSet("numeric");
+        resultSet.addColumn("DATA_TYPE", List.of(Types.NUMERIC, Types.NUMERIC, Types.VARCHAR));
+        resultSet.addColumn("TYPE_NAME", List.of("numeric", "numeric", "text"));
+        resultSet.addColumn("COLUMN_SIZE", List.of(0, 38, 0));
+        resultSet.addColumn("DECIMAL_DIGITS", List.of(0, 18, 0));
+        resultSet.addColumn("COLUMN_NAME", List.of("Amount", "bounded", "str"));
+        resultSet.addColumn("IS_NULLABLE", List.of("YES", "YES", "YES"));
+        Set<String> strict = new HashSet<>();
+        new PostgresSchemaResolver().convertToSRTable(resultSet, new HashMap<>(), null, strict);
+        Assertions.assertEquals(Set.of("\"Amount\""), strict);
     }
 
     @Test
@@ -218,7 +262,7 @@ public class PostgresSchemaResolverTest {
         columns.addColumn("IS_NULLABLE", List.of("YES", "YES"));
         Map<String, String> typeNames = new HashMap<>();
         List<Column> schema = new PostgresSchemaResolver().convertToSRTable(
-                columns, new HashMap<>(), typeNames);
+                columns, new HashMap<>(), typeNames, null);
         Assertions.assertEquals(Map.of("\"createdAt\"", "timestamp", "createdat", "timestamptz"), typeNames);
         Assertions.assertEquals("\"createdAt\"", schema.get(0).getName());
         Assertions.assertEquals("createdat", schema.get(1).getName());

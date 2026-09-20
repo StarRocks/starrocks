@@ -17,7 +17,8 @@ CREATE TABLE {table} (
     -- COLLATE "C" for its order to match the byte order StarRocks applies locally.
     label text,
     active boolean,
-    -- numeric without a precision: maps to VARCHAR, so its TopN stays local.
+    -- numeric without a precision: read strictly as DECIMAL(38,18), which keeps every
+    -- pushdown off a scan that selects it, so its TopN stays local.
     unbounded_amount numeric
 );
 

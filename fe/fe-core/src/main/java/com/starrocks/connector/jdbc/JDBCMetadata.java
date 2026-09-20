@@ -56,6 +56,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -390,8 +391,9 @@ public class JDBCMetadata implements ConnectorMetadata {
                             ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
                         Map<String, Integer> originalJdbcTypes = new HashMap<>();
                         Map<String, String> originalJdbcTypeNames = new HashMap<>();
+                        Set<String> unboundedNumericColumns = new HashSet<>();
                         List<Column> fullSchema = schemaResolver.convertToSRTable(
-                                columnSet, originalJdbcTypes, originalJdbcTypeNames);
+                                columnSet, originalJdbcTypes, originalJdbcTypeNames, unboundedNumericColumns);
                         List<Column> partitionColumns = Lists.newArrayList();
                         if (schemaResolver.isSupportPartitionInformation()) {
                             partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
@@ -408,6 +410,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                             if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
                                 ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
                                 ((JDBCTable) table).setOriginalJdbcColumnTypeNames(originalJdbcTypeNames);
+                                ((JDBCTable) table).setUnboundedNumericColumns(unboundedNumericColumns);
                             }
                         }
                         return table;
@@ -442,8 +445,9 @@ public class JDBCMetadata implements ConnectorMetadata {
             try (ResultSet resultSet = statement.executeQuery(metadataQuery)) {
                 Map<String, Integer> originalJdbcTypes = new HashMap<>();
                 Map<String, String> originalJdbcTypeNames = new HashMap<>();
+                Set<String> unboundedNumericColumns = new HashSet<>();
                 List<Column> fullSchema = schemaResolver.convertToSRTable(
-                        resultSet.getMetaData(), originalJdbcTypes, originalJdbcTypeNames);
+                        resultSet.getMetaData(), originalJdbcTypes, originalJdbcTypeNames, unboundedNumericColumns);
                 if (fullSchema.isEmpty()) {
                     throw new StarRocksConnectorException("pass-through query returned no columns");
                 }
@@ -455,6 +459,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 if (!originalJdbcTypes.isEmpty()) {
                     queryTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
                     queryTable.setOriginalJdbcColumnTypeNames(originalJdbcTypeNames);
+                    queryTable.setUnboundedNumericColumns(unboundedNumericColumns);
                 }
                 return queryTable;
             }

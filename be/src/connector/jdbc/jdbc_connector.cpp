@@ -145,6 +145,9 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     }
 
     JDBCScanContext scan_ctx;
+    if (jdbc_scan_node.__isset.strict_numeric_columns) {
+        scan_ctx.strict_numeric_columns = jdbc_scan_node.strict_numeric_columns;
+    }
     scan_ctx.driver_path = driver_location;
     scan_ctx.driver_class_name = driver_class;
     scan_ctx.jdbc_url = jdbc_table->jdbc_url();

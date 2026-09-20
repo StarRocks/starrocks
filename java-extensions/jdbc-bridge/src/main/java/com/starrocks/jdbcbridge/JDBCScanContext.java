@@ -21,6 +21,15 @@ public class JDBCScanContext {
     private String password;
     private String sql;
     private String queryTimeZone;
+    private int[] strictNumericColumns = new int[0];
+
+    public void setStrictNumericColumns(int[] columns) {
+        strictNumericColumns = columns.clone();
+    }
+
+    public int[] getStrictNumericColumns() {
+        return strictNumericColumns.clone();
+    }
 
     private int statementFetchSize;
     private int connectionPoolSize;

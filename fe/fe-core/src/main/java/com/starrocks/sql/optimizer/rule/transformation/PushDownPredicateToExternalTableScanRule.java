@@ -74,6 +74,11 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         extractor.extract(predicate);
         ScalarOperator pushedPredicate = extractor.getPushPredicate();
         ScalarOperator reservedPredicate = extractor.getReservePredicate();
+        if (operator instanceof LogicalJDBCScanOperator jdbcScan
+                && JDBCPushDownRuleUtils.requiresStrictNumericRead(jdbcScan)) {
+            pushedPredicate = null;
+            reservedPredicate = predicate;
+        }
 
         boolean newScanPredicateIsSame = Objects.equals(scanPredicate, pushedPredicate);
         boolean newFilterPredicateIsSame = Objects.equals(filterPredicate, reservedPredicate);

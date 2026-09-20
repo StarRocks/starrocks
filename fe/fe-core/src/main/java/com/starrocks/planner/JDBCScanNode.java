@@ -186,6 +186,18 @@ public class JDBCScanNode extends ScanNode {
         if (table.isPreserveRemoteOrder()) {
             msg.jdbc_scan_node.setPreserve_remote_order(true);
         }
+        // Same materialized-slot order createJDBCTableColumns() selects with, so the index is the
+        // position the column takes in the remote result.
+        int columnIndex = 0;
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (!slot.isMaterialized()) {
+                continue;
+            }
+            if (table.isUnboundedNumericColumn(slot.getColumn().getName())) {
+                msg.jdbc_scan_node.addToStrict_numeric_columns(columnIndex);
+            }
+            columnIndex++;
+        }
 
         setConnectorCatalogType(msg);
     }

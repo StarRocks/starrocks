@@ -116,6 +116,9 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
             LogicalAggregationOperator aggregationOperator,
             LogicalJDBCScanOperator scanOperator) {
 
+        if (JDBCPushDownRuleUtils.requiresStrictNumericRead(scanOperator)) {
+            return null;
+        }
         Map<ColumnRefOperator, ScalarOperator> outputColumnRefToExpr = Maps.newLinkedHashMap();
         List<ScalarOperator> groupByExprs = Lists.newArrayList();
         for (ColumnRefOperator groupBy : aggregationOperator.getGroupingKeys()) {

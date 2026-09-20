@@ -961,6 +961,8 @@ struct TJDBCScanNode {
   // carries a TopN to restore that order, so the scan must deliver its rows in the order it
   // received them. See JDBCDataSourceProvider::insert_local_exchange_operator.
   6: optional bool preserve_remote_order
+  // Zero-based result positions mapped from PostgreSQL unconstrained numeric to DECIMAL(38,18).
+  7: optional list<i32> strict_numeric_columns
 }
 
 // Extension point for TLakeScanNode. DO NOT MODIFY: do not add fields here,

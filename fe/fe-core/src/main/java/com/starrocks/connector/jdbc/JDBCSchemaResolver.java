@@ -33,6 +33,7 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public abstract class JDBCSchemaResolver {
 
@@ -166,11 +167,22 @@ public abstract class JDBCSchemaResolver {
     }
 
     public List<Column> convertToSRTable(ResultSet columnSet, Map<String, Integer> originalJdbcTypes) throws SQLException {
-        return convertToSRTable(columnSet, originalJdbcTypes, null);
+        return convertToSRTable(columnSet, originalJdbcTypes, null, null);
     }
 
+    /**
+     * Read the remote schema, optionally reporting two things the pushdown rules cannot recover from
+     * the mapped StarRocks type: the declared type name per column, which the JDBC type code does
+     * not distinguish (PostgreSQL timestamp vs timestamptz), and the columns whose remote numeric
+     * declares no precision and was therefore narrowed to a fixed-width decimal, so a value that
+     * does not fit has to fail the read rather than be filtered away remotely. Narrowing an
+     * undeclared numeric is not PostgreSQL-specific (OracleSchemaResolver already does it for an
+     * undefined-precision NUMBER), so any dialect may come to report the second collection. This
+     * base implementation fills neither; a dialect that knows about neither leaves both untouched.
+     */
     public List<Column> convertToSRTable(ResultSet columnSet, Map<String, Integer> originalJdbcTypes,
-                                       Map<String, String> originalJdbcTypeNames) throws SQLException {
+                                         Map<String, String> originalJdbcTypeNames,
+                                         Set<String> unboundedNumericColumns) throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         while (columnSet.next()) {
             int dataType = columnSet.getInt("DATA_TYPE");
@@ -208,11 +220,12 @@ public abstract class JDBCSchemaResolver {
 
     public List<Column> convertToSRTable(ResultSetMetaData metaData, Map<String, Integer> originalJdbcTypes)
             throws SQLException {
-        return convertToSRTable(metaData, originalJdbcTypes, null);
+        return convertToSRTable(metaData, originalJdbcTypes, null, null);
     }
 
     public List<Column> convertToSRTable(ResultSetMetaData metaData, Map<String, Integer> originalJdbcTypes,
-                                       Map<String, String> originalJdbcTypeNames) throws SQLException {
+                                         Map<String, String> originalJdbcTypeNames,
+                                         Set<String> unboundedNumericColumns) throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         for (int i = 1; i <= metaData.getColumnCount(); i++) {
             String typeName = metaData.getColumnTypeName(i);

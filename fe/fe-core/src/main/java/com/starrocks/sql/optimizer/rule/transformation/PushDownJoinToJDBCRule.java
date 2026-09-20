@@ -265,7 +265,8 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
         for (OptExpression atom : atoms) {
             if (atom.getOp() instanceof LogicalJDBCScanOperator scanOp) {
                 JDBCTable table = (JDBCTable) scanOp.getTable();
-                if (!Strings.isNullOrEmpty(table.getResourceName())) {
+                if (!Strings.isNullOrEmpty(table.getResourceName())
+                        || JDBCPushDownRuleUtils.requiresStrictNumericRead(scanOp)) {
                     // Resource-based external tables (CREATE EXTERNAL TABLE ... ENGINE=jdbc) are
                     // deprecated and lack a catalog name; keep them out of join merging.
                     continue;

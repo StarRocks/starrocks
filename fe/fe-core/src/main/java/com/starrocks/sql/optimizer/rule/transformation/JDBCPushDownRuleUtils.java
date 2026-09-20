@@ -40,6 +40,14 @@ public class JDBCPushDownRuleUtils {
     private JDBCPushDownRuleUtils() {
     }
 
+    // Read the constrained SR numeric values before evaluating expressions. In particular, a
+    // remote aggregate/project could hide an invalid source value or bypass SR decimal rounding.
+    public static boolean requiresStrictNumericRead(LogicalJDBCScanOperator scan) {
+        JDBCTable table = (JDBCTable) scan.getTable();
+        return scan.getColRefToColumnMetaMap().values().stream()
+                .anyMatch(column -> table.isUnboundedNumericColumn(column.getName()));
+    }
+
     /** Alias prefix for aggregate-pushdown derived columns; the full alias is {@code jdbc_agg_<refId>}. */
     public static final String JDBC_AGG_ALIAS_PREFIX = "jdbc_agg_";
     /** Alias prefix for projection-pushdown derived columns; the full alias is {@code jdbc_proj_<refId>}. */

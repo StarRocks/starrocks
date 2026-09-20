@@ -20,6 +20,14 @@ Also, you can directly transform and load data from JDBC data sources by using [
 
 JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, and ClickHouse (Experimental) since v3.3.0.
 
+## PostgreSQL unconstrained numeric
+
+PostgreSQL `numeric` and `decimal` columns declared without precision and scale are mapped to StarRocks `DECIMAL(38,18)` (Decimal128), instead of `VARCHAR`. This mapping supports up to 20 integer digits and 18 fractional digits. Values must be exactly representable: overflow, nonzero fractional digits beyond scale 18, `NaN`, and infinities cause a read error. Additional trailing fractional zeros are accepted. NULL remains NULL.
+
+This changes these columns from string semantics to numeric semantics, including sorting, comparisons, grouping, and function resolution. Numeric columns with explicitly declared precision and scale retain their existing mapping. When a scan reads an unconstrained numeric column, predicate, expression, aggregation, and join pushdown are conservatively disabled for that scan so the numeric conversion occurs before evaluation in StarRocks. Columns returned by PostgreSQL views and `native_query` use the same mapping when their metadata reports unconstrained numeric.
+
+Upgrade the FE, BE/CN, and JDBC bridge together before using this mapping. If a value does not fit, expose an explicitly typed PostgreSQL view with a business-appropriate precision and scale, or expose the value as text when preserving its textual representation is required.
+
 ## Prerequisites
 
 - The FEs and BEs or CNs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.

@@ -84,6 +84,12 @@ public class PushDownTopNToJDBCScanRule extends TransformationRule {
         if (topN.getLimit() <= 0 || topN.getOrderByElements().isEmpty() || scan.hasLimit()) {
             return false;
         }
+        // A pushed ORDER BY/LIMIT decides which rows are read at all, so a value the strict
+        // DECIMAL(38,18) read would have rejected can fall outside the limit and never be seen.
+        // Whether the query fails would then depend on which rows sorted to the top.
+        if (JDBCPushDownRuleUtils.requiresStrictNumericRead(scan)) {
+            return false;
+        }
         JDBCTable table = (JDBCTable) scan.getTable();
         // Legacy resource-backed schemas are user-declared and lack the catalog connection and
         // source-type metadata required by this rule. Keep their TopN local for all sort types.
@@ -155,9 +161,9 @@ public class PushDownTopNToJDBCScanRule extends TransformationRule {
                 // PostgreSQL compares text under the column's collation while StarRocks compares
                 // bytes, so buildTopNQuery sorts these keys under COLLATE "C", which is PostgreSQL's
                 // byte order. bpchar is deliberately absent: it maps to CHAR and ignores trailing
-                // spaces when comparing. The source type name is required because an unconstrained
-                // numeric also maps to VARCHAR until it is read as DECIMAL(38,18), and ordering
-                // that column as a string would push down a different order than StarRocks applies.
+                // spaces when comparing. The source type name is required because PostgreSQL only
+                // collates its string types: asking for one on any other column is an error, not a
+                // differently ordered result.
                 return isSourceType(typeName, "text", "varchar", "character varying");
             case DATE:
                 return usesPostgresTemporalReader(table) && isSourceType(typeName, "date");

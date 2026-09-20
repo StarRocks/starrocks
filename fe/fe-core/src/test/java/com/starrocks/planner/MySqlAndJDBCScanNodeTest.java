@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.DateType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
@@ -52,8 +53,31 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class MySqlAndJDBCScanNodeTest {
+
+    @Test
+    public void testStrictNumericPositionsFollowMaterializedColumns() throws Exception {
+        Column skipped = new Column("skip", VarcharType.VARCHAR);
+        Column amount = new Column("amount", TypeFactory.createUnifiedDecimalType(38, 18));
+        JDBCTable table = createOracleTable(List.of(skipped, amount), null);
+        table.setUnboundedNumericColumns(Set.of("amount"));
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(1));
+        tuple.setTable(table);
+        SlotDescriptor skippedSlot = createSlotDescriptor(1, skipped);
+        skippedSlot.setIsMaterialized(false);
+        tuple.addSlot(skippedSlot);
+        tuple.addSlot(createSlotDescriptor(2, amount));
+        JDBCScanNode node = new JDBCScanNode(new PlanNodeId(1), tuple, table);
+        TPlanNode thrift = new TPlanNode();
+        node.toThrift(thrift);
+        Assertions.assertEquals(List.of(0), thrift.jdbc_scan_node.getStrict_numeric_columns());
+        table.setUnboundedNumericColumns(Set.of());
+        TPlanNode unmarked = new TPlanNode();
+        node.toThrift(unmarked);
+        Assertions.assertFalse(unmarked.jdbc_scan_node.isSetStrict_numeric_columns());
+    }
 
     private JDBCScanNode createOracleScanNode(List<Column> columns, List<SlotDescriptor> slots) throws DdlException {
         return createOracleScanNode(columns, slots, null);

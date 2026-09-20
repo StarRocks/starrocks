@@ -77,6 +77,11 @@ public class JDBCTable extends Table {
     // deliver its rows in the order it received them.
     private transient boolean preserveRemoteOrder;
 
+    // Filled by the schema resolver, today only the PostgreSQL one, using the normalized SR
+    // column names. These values need a lossless DECIMAL(38,18) read before SR evaluates
+    // expressions, so the pushdown rules keep every operator over them local.
+    private transient Set<String> unboundedNumericColumns = Set.of();
+
     // Transient: marker for {@link com.starrocks.connector.jdbc.JDBCMetadata#getTableComment}
     // dedup. Once REMARKS has been fetched for this cached instance, further calls return the
     // already-stored comment without another remote round-trip. Reset when the cache entry is
@@ -124,6 +129,7 @@ public class JDBCTable extends Table {
         this.originalJdbcColumnTypes = other.originalJdbcColumnTypes;
         this.originalJdbcColumnTypeNames = other.originalJdbcColumnTypeNames;
         this.preserveRemoteOrder = other.preserveRemoteOrder;
+        this.unboundedNumericColumns = other.unboundedNumericColumns;
     }
 
     @Override
@@ -210,6 +216,14 @@ public class JDBCTable extends Table {
 
     public void setPreserveRemoteOrder(boolean preserveRemoteOrder) {
         this.preserveRemoteOrder = preserveRemoteOrder;
+    }
+
+    public void setUnboundedNumericColumns(Set<String> columns) {
+        unboundedNumericColumns = Set.copyOf(columns);
+    }
+
+    public boolean isUnboundedNumericColumn(String name) {
+        return unboundedNumericColumns != null && unboundedNumericColumns.contains(name);
     }
 
     public boolean isCommentFetched() {

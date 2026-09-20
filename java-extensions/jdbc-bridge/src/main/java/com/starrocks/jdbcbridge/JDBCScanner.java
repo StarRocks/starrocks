@@ -21,6 +21,7 @@ import java.io.File;
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.sql.Blob;
@@ -75,6 +76,7 @@ public class JDBCScanner {
     private final boolean isOracleDriver;
     private final boolean isPostgresDriver;
     private final ZoneId queryTimeZone;
+    private final Set<Integer> strictNumericColumns = new HashSet<>();
     private ZoneId oracleSessionTimeZone;
     ClassLoader classLoader;
 
@@ -84,6 +86,11 @@ public class JDBCScanner {
         this.isOracleDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("oracle");
         this.isPostgresDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("postgresql");
         this.queryTimeZone = resolveQueryTimeZone(scanContext.getQueryTimeZone());
+        // FE marks only PostgreSQL unconstrained numeric source columns. Do not infer this from
+        // result precision (aggregates also report zero), or from a driver class-name heuristic.
+        for (int column : scanContext.getStrictNumericColumns()) {
+            strictNumericColumns.add(column);
+        }
     }
 
     public void open() throws Exception {
@@ -356,7 +363,8 @@ public class JDBCScanner {
             for (int i = 0; i < columnCount; i++) {
                 Object[] dataColumn = resultChunk.get(i);
                 // A column carries at most one of these strict reads: the temporal one keys off a
-                // date/timestamp type name, the array one off a PostgreSQL array type.
+                // date/timestamp type name, the array one off a PostgreSQL array type, and the
+                // numeric one off an unconstrained numeric.
                 Class<?> localTemporalClass = postgresLocalTemporalColumns == null
                         ? null : postgresLocalTemporalColumns.get(i);
                 if (localTemporalClass != null) {
@@ -367,7 +375,8 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = readPostgresStringArray(i + 1);
                     continue;
                 }
-                Object resultObject = resultSet.getObject(i + 1);
+                Object resultObject = strictNumericColumns.contains(i)
+                        ? readUnboundedNumeric(i + 1) : resultSet.getObject(i + 1);
                 // in some cases, the real java class type of result is not consistent with the type from
                 // resultSetMetadata,
                 // for example,FLOAT type in oracle gives java.lang.Double type in resultSetMetaData,
@@ -425,6 +434,26 @@ public class JDBCScanner {
             resultNumRows++;
         } while (resultNumRows < chunkSize && resultSet.next());
         return resultChunk;
+    }
+
+    private BigDecimal readUnboundedNumeric(int jdbcColumn) throws SQLException {
+        try {
+            return requireDecimal128(resultSet.getBigDecimal(jdbcColumn));
+        } catch (SQLException | ArithmeticException e) {
+            throw new SQLException("PostgreSQL numeric column " + jdbcColumn
+                    + " cannot be represented exactly as DECIMAL(38,18)", "22003", e);
+        }
+    }
+
+    static BigDecimal requireDecimal128(BigDecimal value) {
+        if (value == null) {
+            return null;
+        }
+        BigDecimal scaled = value.setScale(18, RoundingMode.UNNECESSARY);
+        if (scaled.precision() > 38) {
+            throw new ArithmeticException("DECIMAL(38,18) precision overflow");
+        }
+        return scaled;
     }
 
     public int getResultNumRows() {

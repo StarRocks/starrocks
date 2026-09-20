@@ -44,6 +44,7 @@ struct JDBCScanContext {
     std::string user;
     std::string passwd;
     std::string sql;
+    std::vector<int32_t> strict_numeric_columns;
     std::map<std::string, std::string> properties;
 };
 

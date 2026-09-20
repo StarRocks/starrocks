@@ -113,6 +113,9 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
      * projection of bare column refs is left to ordinary column pruning.
      */
     private Map<ColumnRefOperator, ScalarOperator> buildProjectPushDown(LogicalJDBCScanOperator scan) {
+        if (JDBCPushDownRuleUtils.requiresStrictNumericRead(scan)) {
+            return null;
+        }
         Projection projection = scan.getProjection();
         if (projection == null || !projection.getCommonSubOperatorMap().isEmpty()) {
             return null;

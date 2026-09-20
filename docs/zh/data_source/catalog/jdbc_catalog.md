@@ -20,6 +20,14 @@ JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执�
 
 JDBC Catalog 自 3.0 版本开始支持 MySQL、PostgreSQL，自 3.2.9、3.3.1 版本开始支持 Oracle 和 SQLServer。自 3.3.0 开始支持 ClickHouse（试验性）。
 
+## PostgreSQL 无精度 numeric
+
+PostgreSQL 中未声明精度和小数位数的 `numeric`、`decimal` 列映射为 StarRocks `DECIMAL(38,18)`（Decimal128），不再映射为 `VARCHAR`。该映射最多容纳 20 位整数和 18 位小数。每个值必须能够无损表示：整数溢出、小数第 18 位之后存在非零数字、`NaN` 和无穷值均导致读取报错。多余的小数尾零可以接受，NULL 仍为 NULL。
+
+该变更使这些列的排序、比较、分组及函数解析采用数值语义。明确声明精度和小数位数的 numeric 列保持原有映射。扫描读取无精度 numeric 列时，保守地禁用该扫描的谓词、表达式、聚合和连接下推，先完成读取转换，再由 StarRocks 计算。PostgreSQL 视图和 `native_query` 返回列的元数据如果表示无精度 numeric，也采用此映射。
+
+使用此映射前，应同步升级 FE、BE/CN 和 JDBC bridge。值超出范围时，可以在 PostgreSQL 视图中显式转换成符合业务范围的精度和小数位数；如果需要保留文本表示，可以让视图返回文本。
+
 ## 前提条件
 
 - 确保 FE 和 BE（或 CN）可以通过 `driver_url` 指定的下载路径，下载所需的 JDBC 驱动程序。

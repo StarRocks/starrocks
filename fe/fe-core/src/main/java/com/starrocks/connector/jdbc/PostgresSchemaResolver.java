@@ -29,11 +29,13 @@ import com.starrocks.type.TypeFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static java.lang.Math.max;
 
@@ -60,13 +62,16 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public List<Column> convertToSRTable(ResultSet columnSet, Map<String, Integer> originalJdbcTypes,
-                                       Map<String, String> originalJdbcTypeNames)
-            throws SQLException {
+                                         Map<String, String> originalJdbcTypeNames,
+                                         Set<String> unboundedNumericColumns) throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         while (columnSet.next()) {
             int dataType = columnSet.getInt("DATA_TYPE");
             String columnName = columnSet.getString("COLUMN_NAME");
             String typeName = columnSet.getString("TYPE_NAME");
+            if (unboundedNumericColumns != null && isUnboundedNumeric(dataType, columnSet.getInt("COLUMN_SIZE"))) {
+                unboundedNumericColumns.add(normalizeColumnName(columnName));
+            }
             Type type = convertColumnType(dataType,
                     typeName,
                     columnSet.getInt("COLUMN_SIZE"),
@@ -92,6 +97,25 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                     columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
         }
         return fullSchema;
+    }
+
+    @Override
+    public List<Column> convertToSRTable(ResultSetMetaData metaData, Map<String, Integer> originalJdbcTypes,
+                                         Map<String, String> originalJdbcTypeNames,
+                                         Set<String> unboundedNumericColumns) throws SQLException {
+        List<Column> columns = super.convertToSRTable(metaData, originalJdbcTypes, originalJdbcTypeNames, null);
+        if (unboundedNumericColumns != null) {
+            for (int i = 1; i <= metaData.getColumnCount(); i++) {
+                if (isUnboundedNumeric(metaData.getColumnType(i), metaData.getPrecision(i))) {
+                    unboundedNumericColumns.add(columns.get(i - 1).getName());
+                }
+            }
+        }
+        return columns;
+    }
+
+    private static boolean isUnboundedNumeric(int dataType, int precision) {
+        return (dataType == Types.NUMERIC || dataType == Types.DECIMAL) && precision == 0;
     }
 
     @Override
@@ -148,6 +172,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case Types.NUMERIC:
+            case Types.DECIMAL:
                 primitiveType = PrimitiveType.DECIMAL32;
                 break;
             case Types.CHAR:
@@ -206,10 +231,10 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             return TypeFactory.createType(primitiveType);
         } else {
             int precision = columnSize + max(-digits, 0);
-            // if user not specify numeric precision and scale, the default value is 0,
-            // we can't defer the precision and scale, can only deal it as string.
-            if (precision == 0) {
-                return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+            // Unconstrained PostgreSQL numeric has no column-wide precision or scale.
+            // The JDBC reader checks this bounded mapping without rounding each selected value.
+            if (columnSize == 0) {
+                return TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
             }
             return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }

@@ -185,6 +185,26 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
+    if (!_scan_ctx.strict_numeric_columns.empty()) {
+        for (int32_t column : _scan_ctx.strict_numeric_columns) {
+            if (column < 0 || static_cast<size_t>(column) >= _slot_descs.size()) {
+                return Status::InternalError("Invalid strict JDBC numeric column index");
+            }
+            const auto& type = _slot_descs[column]->type();
+            if (type.type != TYPE_DECIMAL128 || type.precision != 38 || type.scale != 18) {
+                return Status::InternalError("Strict JDBC numeric reads require a DECIMAL128(38,18) slot");
+            }
+        }
+        auto set_strict_numeric_columns = env->GetMethodID(scan_context_cls, "setStrictNumericColumns", "([I)V");
+        CHECK_JAVA_EXCEPTION(env, "JDBC bridge does not support strict numeric reads")
+        auto columns = env->NewIntArray(_scan_ctx.strict_numeric_columns.size());
+        CHECK_JAVA_EXCEPTION(env, "allocate strict JDBC numeric column indices failed")
+        LOCAL_REF_GUARD_ENV(env, columns);
+        env->SetIntArrayRegion(columns, 0, _scan_ctx.strict_numeric_columns.size(),
+                               _scan_ctx.strict_numeric_columns.data());
+        env->CallVoidMethod(scan_ctx, set_strict_numeric_columns, columns);
+        CHECK_JAVA_EXCEPTION(env, "set strict JDBC numeric columns failed")
+    }
 
     return Status::OK();
 }
