@@ -74,6 +74,7 @@ set(EXEC_FILES
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
+        ./exprs/agg/distinct_two_level_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
         ./exprs/flat_json_functions_test.cpp
