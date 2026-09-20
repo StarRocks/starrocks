@@ -90,27 +90,39 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     public PartitionDiff diff(PCellSortedSet srcRangeMap,
                               PCellSortedSet dstRangeMap) {
         Map<String, PCell> adds = null;
+        PCellSortedSet retentionPruned;
         try {
-            PCellSortedSet prunedAdd = pruneAddedPartitions(srcRangeMap);
-            adds = diffRange(prunedAdd, dstRangeMap);
+            PCellSortedSet inRefreshRange = applyRefreshRange(srcRangeMap);
+            PCellSortedSet retained = applyRetention(inRefreshRange, srcRangeMap);
+            retentionPruned = PCellSortedSet.minusByName(inRefreshRange, retained);
+            adds = diffRange(retained, dstRangeMap);
         } catch (Exception e) {
             LOG.warn("failed to prune partitions when creating");
             throw new RuntimeException(e);
         }
         Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
-        return new PartitionDiff(PCellSortedSet.of(adds), PCellSortedSet.of(deletes));
+        return new PartitionDiff(PCellSortedSet.of(adds), PCellSortedSet.of(deletes), retentionPruned);
     }
 
-    /**
-     * Prune based on TTL and refresh range
-     */
-    private PCellSortedSet pruneAddedPartitions(PCellSortedSet addPartitions)
-            throws AnalysisException {
+    /** Narrow to the range this refresh was asked for; unrelated to retention. */
+    private PCellSortedSet applyRefreshRange(PCellSortedSet addPartitions) {
         PCellSortedSet res = PCellSortedSet.of(addPartitions);
         if (rangeToInclude != null) {
             res.removeIf(p -> !isRangeIncluded(((PRangeCell) p.cell()).getRange(), rangeToInclude));
         }
+        return res;
+    }
 
+    /**
+     * Drop what partition_ttl / partition_ttl_number say the mv no longer keeps.
+     *
+     * @param candidates cells to filter, already narrowed to the range this refresh asked for
+     * @param countingScope every cell the base implies: partition_ttl_number keeps the mv's newest N measured
+     *                      against all of them, not only the ones this refresh is scoped to
+     */
+    private PCellSortedSet applyRetention(PCellSortedSet candidates, PCellSortedSet countingScope)
+            throws AnalysisException {
+        PCellSortedSet res = PCellSortedSet.of(candidates);
         if (partitionTTL != null && !partitionTTL.isZero() && partitionInfo.isRangePartition()) {
             Type partitionType = partitionColumns.get(0).getType();
             LocalDateTime ttlTime = LocalDateTime.now().minus(partitionTTL);
@@ -154,7 +166,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             // and keep only partition_ttl_number of partitions
             Predicate<PCellWithName> finalIsShadowKey = isShadowKey;
             Predicate<PCellWithName> finalIsInFuture = isInFuture;
-            List<PCellWithName> ttlCandidate = addPartitions
+            List<PCellWithName> ttlCandidate = countingScope
                     .stream()
                     .filter(x -> !finalIsShadowKey.test(x) && !finalIsInFuture.test(x))
                     .collect(Collectors.toList());

@@ -23,6 +23,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -53,6 +54,7 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.PCTPredicateBuilder;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -60,12 +62,22 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -609,6 +621,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     String derivedSelectSql = IvmRefreshDefinition.derive(ctx, mv);
                     insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition(derivedSelectSql));
                     analyzeInsertStmt(insertStmt);
+                    insertStmt = boundDeltaToRetainedPartitions(insertStmt);
                     insertStmt = buildInsertPlan(insertStmt);
                     ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
                 }
@@ -661,6 +674,61 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
             ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
         }
+    }
+
+    /**
+     * Drop delta rows for partitions retention refused to create, the way pct bounds its insert. Anything the
+     * sync did not refuse -- a partition created after it ran, say -- is deliberately left alone: that still
+     * fails loudly and heals next round, where filtering it would lose the rows silently.
+     */
+    private InsertStmt boundDeltaToRetainedPartitions(InsertStmt insertStmt) throws AnalysisException {
+        // Only ever drop rows for a partition that is not there. Retention can refuse a cell whose partition an
+        // earlier round created and the ttl scheduler has not collected yet; those rows still have a home.
+        PCellSortedSet refused = PCellSortedSet.of(mvContext.getRetentionRefusedMvCells());
+        mv.getVisiblePartitionNames().forEach(refused::removeByName);
+        if (refused.isEmpty()) {
+            return insertStmt;
+        }
+        TableName mvName = new TableName(db.getFullName(), mv.getName());
+        Expr inRefused = new PCTPredicateBuilder(getMvPctRefreshPartitioner())
+                .buildMVPartitionPredicate(mvName, refused);
+        // A literal reads the same for every row, so it cannot bound a partition set -- and keeping a row
+        // unless it is refused turns a literal TRUE into a filter that drops the whole delta.
+        if (inRefused == null || inRefused instanceof LiteralExpr) {
+            logger.warn("Cannot bound the incremental delta to the retained partitions, refusing to filter: {}",
+                    refused.getPartitionNames());
+            return insertStmt;
+        }
+
+        wrapQueryWithFilter(insertStmt, mvName, keepUnlessRefused(inRefused));
+        logger.info("Incremental refresh keeps the delta out of retention-refused mv partitions: {}",
+                refused.getPartitionNames());
+        return insertStmt;
+    }
+
+    /**
+     * Keep a row unless it provably belongs to a refused partition. Membership reads UNKNOWN for a null
+     * partition key only while no refused cell claims nulls -- buildMVPartitionPredicate folds IS NULL into the
+     * ones that do -- so the escape has to test the predicate, not the column it reads.
+     */
+    @VisibleForTesting
+    static Expr keepUnlessRefused(Expr inRefused) {
+        Expr notInRefused = new CompoundPredicate(CompoundPredicate.Operator.NOT, inRefused, null);
+        Expr membershipUnknown = new IsNullPredicate(inRefused.clone(), false);
+        return new CompoundPredicate(CompoundPredicate.Operator.OR, notInRefused, membershipUnknown);
+    }
+
+    private void wrapQueryWithFilter(InsertStmt insertStmt, TableName alias, Expr keep) {
+        QueryStatement queryStatement = insertStmt.getQueryStatement();
+        SubqueryRelation inner = new SubqueryRelation(queryStatement);
+        inner.setAlias(alias);
+        List<SelectListItem> items = queryStatement.getQueryRelation().getColumnOutputNames().stream()
+                .map(name -> new SelectListItem(new SlotRef(alias, name), null))
+                .collect(Collectors.toList());
+        QueryStatement filtered =
+                new QueryStatement(new SelectRelation(new SelectList(items, false), inner, keep, null, null));
+        insertStmt.setQueryStatement(filtered);
+        new QueryAnalyzer(mvContext.getCtx()).analyze(filtered);
     }
 
     private void analyzeInsertStmt(InsertStmt insertStmt) throws AnalysisException {

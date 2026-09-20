@@ -153,7 +153,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         final DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         final PCellSortedSet adds = partitionDiff.getAdds();
         // filter by partition ttl
-        filterPartitionsByTTL(adds, true);
+        filterAddsByRetention(partitionDiff, adds);
         // add partitions for mv
         addListPartitions(db, mv, adds, partitionProperties, distributionDesc);
         logger.info("The process of synchronizing materialized view [{}] add partitions list [{}]",

@@ -53,6 +53,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PartitionDiff;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -163,6 +164,20 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public abstract boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException;
 
+
+    /**
+     * Drop from {@code adds} what the mv's retention says it no longer keeps, and publish what was refused so
+     * the incremental refresh can keep rows out of partitions that will not exist. Retention reaches the adds
+     * from two directions: the differ prunes partition_ttl / partition_ttl_number before they are formed, and
+     * partition_retention_condition matches are taken out of the adds themselves here.
+     */
+    protected final void filterAddsByRetention(PartitionDiff diff, PCellSortedSet adds) {
+        PCellSortedSet beforeFilter = PCellSortedSet.of(adds);
+        filterPartitionsByTTL(adds, true);
+        PCellSortedSet refused = PCellSortedSet.of(diff.getRetentionPruned());
+        refused.addAll(PCellSortedSet.minusByName(beforeFilter, adds));
+        mvContext.setRetentionRefusedMvCells(refused);
+    }
 
     protected final void publishTopology(PCTPartitionTopology topology) {
         mvContext.setPartitionTopology(topology);
