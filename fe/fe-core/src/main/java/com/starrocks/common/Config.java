@@ -1905,8 +1905,14 @@ public class Config extends ConfigBase {
      * to determine which strategy you choose:
      * N <0      : always use non lock optimization and no copy related materialized views which
      * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     * N = 0    : always not use non lock optimization
+     * N = 0    : use non lock optimization only for a table that carries no related materialized view
      * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * <p>
+     * This limit weighs the cost of snapshotting a table against the time the meta lock is held instead, and
+     * both sides are CPU only as long as planning stays local. It is therefore not applied to a statement that
+     * also reads a table in an external catalog: there the lock would be held across partition, statistics and
+     * file-list round trips to a system the FE does not control, while protecting nothing on that side. See
+     * AnalyzerUtils.CopyUnsafeTablesCollector#isCopySafe.
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -3901,6 +3907,12 @@ public class Config extends ConfigBase {
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
 
+    @ConfField(mutable = true, comment = "Timeout (ms) of the publish version RPC of a shared-data transaction. " +
+            "It bounds both how long FE waits for the compute node to answer and the deadline the compute node " +
+            "applies to the publish task itself. Raise it when publishing a large batch of tablets legitimately " +
+            "takes longer than the default.")
+    public static int lake_publish_version_timeout_ms = 60000;
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
@@ -5274,4 +5286,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
     public static String ai_default_chat_provider = "";
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
+    public static String ai_default_embedding_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    public static String ai_default_embedding_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    public static String ai_default_embedding_provider = "";
 }

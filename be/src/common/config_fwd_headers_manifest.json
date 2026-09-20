@@ -300,6 +300,7 @@
         "ai_function_max_retries_on_throttle",
         "ai_function_on_error",
         "ai_function_rate_limit_qps_chat",
+        "ai_function_rate_limit_qps_embedding",
         "ai_function_max_inflight",
         "llm_cache_size",
         "llm_max_concurrent_queries",
@@ -321,6 +322,7 @@
         "enable_jemalloc_memory_tracker",
         "jemalloc_conf",
         "abort_on_large_memory_allocation",
+        "large_memory_alloc_report_threshold",
         "use_mmap_allocate_chunk",
         "disable_mem_pools",
         "memory_max_alignment"
@@ -590,6 +592,7 @@
         "ssl_private_key_path",
         "brpc_max_body_size",
         "brpc_socket_max_unwritten_bytes",
+        "brpc_max_connection_pool_size",
         "brpc_socket_keepalive"
       ]
     },
@@ -1017,6 +1020,12 @@
         "lz4_acceleration",
         "lz4_expected_compression_ratio",
         "lz4_expected_compression_speed_mbps"
+      ]
+    },
+    {
+      "path": "be/src/common/config_paimon_fwd.h",
+      "configs": [
+        "paimon_native_parquet_cache_hole_size_limit"
       ]
     }
   ]

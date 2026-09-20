@@ -140,6 +140,16 @@ CONF_mString(jemalloc_conf,
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
 
+// Log a WARNING with the query id and the allocating stack whenever a single allocation
+// requests more than this many bytes. A value of 0 or below disables the report.
+// The check itself sits in the allocation hot path, but it is only a comparison against this
+// value; the expensive part is the report, which captures and symbolizes a stack trace and
+// takes the glog lock. Lowering the threshold far enough that ordinary allocations cross it
+// therefore degrades the whole process, so only lower it temporarily for diagnosis.
+// NOTE: the declared default only applies once config::init() has run. Allocations made before
+// that, during static initialization, see 0 and are never reported.
+CONF_mInt64(large_memory_alloc_report_threshold, "1073741824");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -270,8 +280,9 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 // If true, clear udf cache every time be starts
 CONF_Bool(clear_udf_cache_when_start, "false");
-// The sys log level, INFO, WARNING, ERROR, FATAL.
-CONF_mString(sys_log_level, "INFO");
+// The sys log level. Matched case-insensitively; a value that matches none of the four is reported
+// and INFO is used, so a typo cannot leave the process without working logging.
+CONF_mString_enum_or_default(sys_log_level, "INFO", "INFO,WARNING,ERROR,FATAL");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
@@ -1064,6 +1075,14 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
+// Only takes effect when brpc_connection_type is "pooled". Maps to brpc's -max_connection_pool_size.
+// Note this is the capacity of the idle-connection cache of a single remote endpoint, NOT a cap on the
+// number of connections: when no idle connection is available a new one is always created, and on return
+// the connection is closed if the pool already holds this many. A value below the peak concurrency makes
+// the excess connections be created and closed repeatedly, which behaves like short connections and burns
+// ephemeral ports. Set it no lower than the peak number of in-flight RPCs to a single peer.
+// brpc re-reads the flag on every pooled get/return, so updating this config takes effect immediately.
+CONF_mInt32(brpc_max_connection_pool_size, "100");
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.
 // This may cause process memory usage to rise.
@@ -2171,6 +2190,9 @@ CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
 
+// Largest gap between two needed Parquet byte ranges that the paimon-cpp reader still merges into one read.
+CONF_mInt64(paimon_native_parquet_cache_hole_size_limit, "1048576");
+
 // default not to build the empty index
 CONF_mInt32(config_tenann_default_build_threshold, "0");
 
@@ -2455,6 +2477,7 @@ CONF_mInt32(ai_function_max_retries, "3");
 CONF_mInt32(ai_function_max_retries_on_throttle, "5");
 CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
+CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
 
 // Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.

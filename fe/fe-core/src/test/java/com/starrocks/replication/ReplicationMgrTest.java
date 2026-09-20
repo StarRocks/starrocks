@@ -43,6 +43,7 @@ import com.starrocks.thrift.TSnapshotInfo;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletReplicationInfo;
 import com.starrocks.utframe.StarRocksAssert;
@@ -365,7 +366,7 @@ public class ReplicationMgrTest {
     }
 
     @Test
-    public void testInitializedByThrift() {
+    public void testInitializedByThrift() throws Exception {
         TTableReplicationRequest request = new TTableReplicationRequest();
         request.username = "test_usename";
         request.password = "test_password";
@@ -379,7 +380,7 @@ public class ReplicationMgrTest {
         TPartitionReplicationInfo partitionInfo = new TPartitionReplicationInfo();
         Partition partition = table.getPartitions().iterator().next();
         Partition srcPartition = srcTable.getPartitions().iterator().next();
-        partitionInfo.partition_id = partition.getId();
+        partitionInfo.partition_id = partition.getDefaultPhysicalPartition().getId();
         partitionInfo.src_version = srcPartition.getDefaultPhysicalPartition().getVisibleVersion();
         partitionInfo.src_version_epoch = srcPartition.getDefaultPhysicalPartition().getVersionEpoch();
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
@@ -411,11 +412,15 @@ public class ReplicationMgrTest {
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }
 
-        try {
-            new LeaderImpl().startTableReplication(request);
-        } catch (Exception e) {
-            Assertions.assertNull(e);
-        }
+        // startTableReplication reports a rejected request through the response status instead of
+        // throwing, so a try/catch around it can never observe one: assert on the status itself.
+        int runningJobsBefore = GlobalStateMgr.getCurrentState().getReplicationMgr().getRunningJobs().size();
+        TTableReplicationResponse response = new LeaderImpl().startTableReplication(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code(),
+                () -> String.valueOf(response.getStatus().getError_msgs()));
+        Assertions.assertEquals(runningJobsBefore + 1,
+                GlobalStateMgr.getCurrentState().getReplicationMgr().getRunningJobs().size(),
+                "the request should have created a replication job");
     }
 
     private static TSnapshotInfo newTSnapshotInfo(TBackend backend, String snapshotPath, boolean incrementalSnapshot) {
