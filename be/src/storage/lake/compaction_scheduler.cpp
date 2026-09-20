@@ -39,6 +39,7 @@
 #include "platform/key_cache.h"
 #include "platform/thrift_rpc_helper.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/lake_compaction_manager.h"
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
@@ -186,6 +187,23 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
                          << " tablet_id=" << context->tablet_id;
             _response->add_failed_tablets(context->tablet_id);
             _status.update(st);
+        }
+    }
+    // Autonomous compaction: release the running_inputs reservation and trigger the
+    // next round for this tablet. We release exactly the set that was reserved by
+    // pick_and_reserve_inputs (NOT the set parsed from txn_log, which is null on
+    // failure paths) so the reservation can never leak and over-exclude rowsets
+    // from future picks. Done outside the lock-protected fields so the notification
+    // doesn't deadlock with the dispatcher.
+    if (context->write_to_local_result) {
+        LakeCompactionManager::instance()->notify_task_finished(context->tablet_id,
+                                                                context->autonomous_reserved_inputs);
+        // Self-continuation only when this task actually compacted something: a
+        // no-op round (nothing eligible) must not re-enqueue, or we would spin
+        // until the in-flight/pending tasks that hold the rowsets complete (which
+        // re-enqueue on their own finish).
+        if (!context->autonomous_reserved_inputs.empty()) {
+            LakeCompactionManager::instance()->update_tablet_async(context->tablet_id);
         }
     }
     DCHECK(_request != nullptr);
@@ -343,6 +361,14 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         auto context = std::make_unique<CompactionTaskContext>(
                 request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
                 request->skip_write_txnlog(), cb, 0, 0, request->unshare_segments());
+        // Autonomous compaction EXECUTE-side: divert output to local result file.
+        // base_version for the result equals request->version() (== the visible
+        // version at the moment FE issued the compaction).
+        if (request->write_to_local_result()) {
+            context->write_to_local_result = true;
+            context->local_result_base_version = request->version();
+            context->result_manager = LakeCompactionManager::instance()->result_manager();
+        }
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }
@@ -426,6 +452,11 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
             auto context = std::make_unique<CompactionTaskContext>(
                     request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
                     request->skip_write_txnlog(), callback, 0, 0, request->unshare_segments());
+            if (request->write_to_local_result()) {
+                context->write_to_local_result = true;
+                context->local_result_base_version = request->version();
+                context->result_manager = LakeCompactionManager::instance()->result_manager();
+            }
             context->enqueue_time_sec = ::time(nullptr);
 
             {
@@ -618,6 +649,12 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
             context->stats->task_execute_ns += MonotonicNanos() - task_execute_start_ns;
             context->task_execute_start_ns.store(0, std::memory_order_release);
         }
+    } else if (context->write_to_local_result && context->autonomous_nothing_to_do) {
+        // Autonomous compaction found no eligible rowsets this round (all candidates
+        // are in-flight or already held by a pending result). This is expected and
+        // not an error: treat it as a clean no-op so finish_task releases the
+        // (empty) reservation and does not log a spurious failure.
+        status = Status::OK();
     } else {
         status.update(task_or.status());
     }

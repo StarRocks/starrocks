@@ -33,7 +33,9 @@
 #include "gutil/strings/join.h"
 #include "platform/store_path.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/compaction_result_manager.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/lake_compaction_manager.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet_manager.h"
@@ -125,6 +127,21 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
     _lake_tablet_manager = std::move(lake_tablet_manager);
     _lake_replication_txn_manager = std::move(lake_replication_txn_manager);
     _parallel_compact_mgr = std::move(parallel_compact_mgr);
+
+    // Autonomous compaction: results are persisted under every store path and later merged
+    // and published by a COLLECT_AND_PUBLISH request. The LakeCompactionManager dispatch loop
+    // is gated by the runtime config and is a cheap no-op (cv.wait_for) while the feature is
+    // disabled, so it is started unconditionally here.
+    {
+        std::vector<std::string> result_root_dirs(store_path_roots.begin(), store_path_roots.end());
+        _lake_compaction_result_manager = std::make_unique<lake::CompactionResultManager>(std::move(result_root_dirs));
+        auto scan_st = _lake_compaction_result_manager->scan_on_startup();
+        if (!scan_st.ok()) {
+            LOG(WARNING) << "CompactionResultManager scan_on_startup failed: " << scan_st;
+        }
+        lake::LakeCompactionManager::instance()->start(_lake_tablet_manager.get(),
+                                                       _lake_compaction_result_manager.get());
+    }
     return Status::OK();
 }
 
@@ -163,6 +180,8 @@ Status StorageEnv::init_vector_index_cache(int64_t process_mem_limit, MemTracker
 }
 
 void StorageEnv::stop() {
+    // Stop the autonomous compaction dispatcher before the managers it points at go away.
+    lake::LakeCompactionManager::instance()->stop();
     if (_parallel_compact_mgr != nullptr) {
         _parallel_compact_mgr->shutdown();
     }
@@ -192,6 +211,7 @@ void StorageEnv::destroy() {
         _lake_tablet_manager->prune_metacache();
     }
     _parallel_compact_mgr.reset();
+    _lake_compaction_result_manager.reset();
     _lake_replication_txn_manager.reset();
     _lake_tablet_manager.reset();
     _lake_update_manager.reset();

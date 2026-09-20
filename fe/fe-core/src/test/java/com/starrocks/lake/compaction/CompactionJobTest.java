@@ -193,6 +193,34 @@ public class CompactionJobTest {
     }
 
     @Test
+    public void testJobTypeDefaultIsCompactAndPublish() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, new MaterializedIndex());
+        CompactionJob job = new CompactionJob(db, table, partition, 1L, false, null, "wh", null);
+        Assertions.assertEquals(CompactionJob.JobType.COMPACT_AND_PUBLISH, job.getJobType());
+    }
+
+    @Test
+    public void testJobTypeCanBeSetToPublishOnly() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, new MaterializedIndex());
+        CompactionJob job = new CompactionJob(db, table, partition, 1L, true, null, "wh", null);
+        job.setJobType(CompactionJob.JobType.PUBLISH_ONLY);
+        Assertions.assertEquals(CompactionJob.JobType.PUBLISH_ONLY, job.getJobType());
+    }
+
+    @Test
+    public void testJobTypeSetterRejectsNull() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, new MaterializedIndex());
+        CompactionJob job = new CompactionJob(db, table, partition, 1L, true, null, "wh", null);
+        Assertions.assertThrows(NullPointerException.class, () -> job.setJobType(null));
+    }
+
+    @Test
     public void testAbortIsIdempotent() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);

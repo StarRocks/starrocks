@@ -68,4 +68,48 @@ public class PartitionStatisticsTest {
         PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
         assertEquals(0, statistics.getCompactionVersion().getVersion());
     }
+
+    @Test
+    public void testLastPublishMarkersDefaults() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
+        // Defaults: 0 means "never published" — important for the schedule predicate
+        // that skips the max-interval trigger until the first successful publish.
+        assertEquals(0L, statistics.getLastPublishVisibleVersion());
+        assertEquals(0L, statistics.getLastPublishTimeMs());
+        assertEquals(0.0, statistics.getLastPublishScore(), 0.0);
+    }
+
+    @Test
+    public void testLastPublishMarkersRoundTrip() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
+        statistics.setLastPublishVisibleVersion(42L);
+        statistics.setLastPublishTimeMs(1234567890L);
+        statistics.setLastPublishScore(15.5);
+        assertEquals(42L, statistics.getLastPublishVisibleVersion());
+        assertEquals(1234567890L, statistics.getLastPublishTimeMs());
+        assertEquals(15.5, statistics.getLastPublishScore(), 0.0);
+    }
+
+    @Test
+    public void testLastPublishMarkersSurviveJsonRoundTrip() {
+        PartitionStatistics original = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+        original.setLastPublishVisibleVersion(99L);
+        original.setLastPublishTimeMs(2024_04_28_00L);
+        original.setLastPublishScore(7.25);
+
+        String json = GsonUtils.GSON.toJson(original);
+        PartitionStatistics restored = GsonUtils.GSON.fromJson(json, PartitionStatistics.class);
+        assertEquals(99L, restored.getLastPublishVisibleVersion());
+        assertEquals(2024_04_28_00L, restored.getLastPublishTimeMs());
+        assertEquals(7.25, restored.getLastPublishScore(), 0.0);
+    }
+
+    @Test
+    public void testOldJsonWithoutLastPublishFieldsDefaultsToZero() {
+        // Pre-feature JSON without the last_publish_* fields should still deserialize.
+        PartitionStatistics statistics = GsonUtils.GSON.fromJson(OLD_JSON_WITHOUT_PRIORITY, PartitionStatistics.class);
+        assertEquals(0L, statistics.getLastPublishVisibleVersion());
+        assertEquals(0L, statistics.getLastPublishTimeMs());
+        assertEquals(0.0, statistics.getLastPublishScore(), 0.0);
+    }
 }

@@ -23,6 +23,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/lake_compaction_manager.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -675,6 +676,11 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     }
 
     delete_files_async(std::move(files_to_delete));
+
+    // Notify the autonomous-compaction manager that this tablet has a new visible
+    // version; the manager will re-evaluate score and (re-)enqueue if needed. The
+    // call is a no-op when enable_lake_autonomous_compaction is false.
+    LakeCompactionManager::instance()->update_tablet_async(tablet_info.get_tablet_id_in_metadata());
 
     return new_metadata;
 }
