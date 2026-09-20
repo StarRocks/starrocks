@@ -40,10 +40,10 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux"
 JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
 
 # tenann
-TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-rc2/tenann-v0.5.1-rc2-x86_64.tar.gz"
-TENANN_NAME="tenann-v0.5.1-rc2-x86_64.tar.gz"
-TENANN_SOURCE="tenann-v0.5.1-rc2"
-TENANN_MD5SUM="d3ee63132e0d3633fb417789feb9cb03"
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-rc3/tenann-v0.5.1-rc3-x86_64.tar.gz"
+TENANN_NAME="tenann-v0.5.1-rc3-x86_64.tar.gz"
+TENANN_SOURCE="tenann-v0.5.1-rc3"
+TENANN_MD5SUM="9ef4da05080171d695769fda5dd2924c"
 
 # starcache
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc2/starcache-centos7_amd64.tar.gz"
