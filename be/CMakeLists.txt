@@ -873,8 +873,15 @@ endif()
 
 if (APPLE)
     set(WRAP_LINKER_FLAGS "")
+    set(WRAP_FORCE_UNDEFINED_FLAGS "")
 else()
     set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+    # -wrap adds the __wrap_* reference as a WEAK undefined symbol, and a weak reference never
+    # pulls the defining member out of a static archive. Without this, a binary that links
+    # Runtime as an archive can end up with __wrap___cxa_throw resolved to address 0, and then
+    # every throw from its own objects jumps to null. Force the reference so the definition in
+    # runtime/exception_stack.cpp is always linked. Only valid where Runtime is on the link line.
+    set(WRAP_FORCE_UNDEFINED_FLAGS "-Wl,-u,__wrap___cxa_throw")
 endif()
 
 FUNCTION(ADD_BE_LIB LIB_NAME)
@@ -939,7 +946,7 @@ endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS} ${WRAP_FORCE_UNDEFINED_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on

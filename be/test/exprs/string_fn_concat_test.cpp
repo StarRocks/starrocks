@@ -199,6 +199,7 @@ TEST_F(StringFunctionConcatTest, concatPrepareNonConstantAndNullTail) {
             FunctionContext::create_test_context(std::move(arg_types), varchar_type));
     EXPECT_TRUE(StringFunctions::concat_prepare(thread_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     EXPECT_NE(nullptr, thread_context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    EXPECT_TRUE(StringFunctions::concat_close(thread_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 }
 
 TEST_F(StringFunctionConcatTest, concatNullTest) {

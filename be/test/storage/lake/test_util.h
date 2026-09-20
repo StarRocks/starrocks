@@ -24,6 +24,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
@@ -77,6 +78,13 @@ std::vector<TScanRangeParams> create_scan_ranges_cloud(std::vector<TabletMetadat
 class TestBase : public ::testing::Test {
 public:
     ~TestBase() override {
+        // The parallel compaction manager is process-wide, so the pointer installed below
+        // outlives this fixture. Put back whatever was there, otherwise every later suite in
+        // the binary runs against a dangling TabletManager.
+        if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+            parallel_compact_mgr != nullptr) {
+            parallel_compact_mgr->TEST_set_tablet_mgr(_previous_parallel_compact_tablet_mgr);
+        }
         PFailPointTriggerMode trigger_mode;
         trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
@@ -84,6 +92,13 @@ public:
         if (fp != nullptr) {
             fp->setMode(trigger_mode);
         }
+        // SyncPoint is a process-wide singleton and LoadDependency() has no scoped form, so a
+        // dependency graph loaded by one test stays live for the rest of the binary. A later
+        // test that reaches a point with an unmet predecessor then blocks in Process()
+        // forever. Reset it here so each fixture starts from a clean graph.
+        SyncPoint::GetInstance()->LoadDependency({});
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
         StorageEngine::instance()->wait_storage_cleanup_tasks();
@@ -102,6 +117,7 @@ protected:
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
             parallel_compact_mgr != nullptr) {
             _update_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
+            _previous_parallel_compact_tablet_mgr = parallel_compact_mgr->TEST_tablet_mgr();
             parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_mgr.get());
         }
         PFailPointTriggerMode trigger_mode;
@@ -112,6 +128,8 @@ protected:
             fp->setMode(trigger_mode);
         }
     }
+
+    TabletManager* _previous_parallel_compact_tablet_mgr = nullptr;
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }
 

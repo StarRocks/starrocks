@@ -55,7 +55,9 @@ TEST_F(TypeCheckerTest, RejectUnsupportedArrayElementTypes) {
 }
 
 TEST_F(TypeCheckerTest, PreserveListScalarFallback) {
-    for (auto type : {TYPE_VARCHAR, TYPE_BINARY, TYPE_VARBINARY}) {
+    // TYPE_BINARY is not a slot type: TypeDescriptor::get_slot_size() puts it in the
+    // "not a real type" group and DCHECKs, so a SlotDescriptor can never carry it.
+    for (auto type : {TYPE_VARCHAR, TYPE_VARBINARY}) {
         SlotDescriptor slot(0, "list_as_string", TypeDescriptor(type));
         auto result = type_checker_manager_.checkType("java.util.List", &slot);
         ASSERT_TRUE(result.ok()) << result.status();
