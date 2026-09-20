@@ -3962,8 +3962,9 @@ public class SchemaChangeHandler extends AlterHandler {
         // override the two-arg form, so routing every cancel through
         // `cancel(reason, force)` would skip that pre-work and a non-force
         // cancel against a PENDING job could deadlock until task timeout.
-        // Lake jobs have a two-arg override that preserves the same pre-work,
-        // so the force path stays safe.
+        // Lake jobs need no such pre-work at all: their PENDING phase dispatches
+        // the CreateReplicaTasks and polls the latch from later scheduler rounds
+        // instead of waiting on it, so run() never holds the monitor for long.
         boolean force = cancelAlterTableStmt.isForce();
         if (force && !Config.enable_admin_skip_committed_txn) {
             throw new DdlException(
