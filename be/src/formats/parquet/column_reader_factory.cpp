@@ -71,7 +71,7 @@ Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* 
 namespace {
 
 Status validate_native_iceberg_geography(const ParquetField& field, const TypeDescriptor& col_type,
-                                          const TIcebergSchemaField& lake_field) {
+                                         const TIcebergSchemaField& lake_field) {
     if (!lake_field.__isset.geo_metadata || !col_type.geo_type) {
         return Status::NotSupported("Native Iceberg GEOGRAPHY requires GEO metadata: " + field.name);
     }
