@@ -839,6 +839,10 @@ The following issues have been fixed:
 
 Release Date: December 25, 2025
 
+### Behavior Changes
+
+- Previously, the FE configuration item `max_scalar_operator_flat_children` (default `10000`) limited the node count only of expressions built by `CASE WHEN`. It now limits every scalar expression that the optimizer rewrites, and the node count is recalculated after each rewrite instead of reusing a cached value. As a result, after an upgrade a query that ran before can be rejected in the analysis phase with `Expression too complex. Current nodes: N, Limit: M.`, typically when inlining a view, a CTE, or a subquery expands its expression tree. Simplify the expression, or increase `max_scalar_operator_flat_children`, which can be modified dynamically. [#66324](https://github.com/StarRocks/starrocks/pull/66324)
+
 ### Improvements
 
 - Supports `ORDER BY` clauses for STRUCT data types [#66035](https://github.com/StarRocks/starrocks/pull/66035)

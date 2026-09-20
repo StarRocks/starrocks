@@ -97,6 +97,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryOptions;
@@ -513,7 +514,7 @@ public class DefaultCoordinator extends Coordinator {
             if (!jobSpec.getFragments().isEmpty()) {
                 LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
                         DebugUtil.printId(jobSpec.getQueryId()),
-                        jobSpec.getFragments().get(0).toThrift());
+                        jobSpec.getFragments().get(0).getExplainString(TExplainLevel.VERBOSE));
             }
             LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
                     DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
