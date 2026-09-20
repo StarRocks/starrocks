@@ -149,9 +149,16 @@ void SyncPoint::Data::Process(const std::string_view& point, void* cb_arg) {
     auto callback_pair = callbacks_.find(point_string);
     if (callback_pair != callbacks_.end()) {
         num_callbacks_running_++;
-        mutex_.unlock();
-        callback_pair->second(cb_arg);
-        mutex_.lock();
+        lock.unlock();
+        try {
+            callback_pair->second(cb_arg);
+        } catch (...) {
+            lock.lock();
+            num_callbacks_running_--;
+            cv_.notify_all();
+            throw;
+        }
+        lock.lock();
         num_callbacks_running_--;
     }
     cleared_points_.insert(point_string);
