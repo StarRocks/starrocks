@@ -529,8 +529,11 @@ TEST_F(AddIndexSchemaChangeTest, run_ngrambf_with_index_properties) {
     auto base_schema = TabletSchema::create(base_metadata->schema());
     int64_t version = write_one_rowset(base_tablet_id, 1, base_schema, /*nrows=*/6);
 
-    // index_properties JSON as produced by TabletIndex::to_schema_pb.
-    const std::string props = R"({"properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
+    // index_properties JSON as produced by TabletIndex::to_schema_pb: the group
+    // key is the literal "index_properties" (FILL_INDEX_TO_MAP stringifies the
+    // member name), and any other key parses fine but leaves the map empty.
+    const std::string props =
+            R"({"index_properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
     AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
@@ -2026,9 +2029,12 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlaid_column_rewrites_cols_with_ngrambf_
     version = put_metadata_at_next_version(md);
 
     auto vt = versioned_at(tablet_id, version);
-    // index_properties JSON as produced by TabletIndex::to_schema_pb: a nested
-    // map keyed by property group, not a flat one.
-    const std::string props = R"({"properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
+    // index_properties JSON as produced by TabletIndex::to_schema_pb: a nested map
+    // whose group key is the literal "index_properties". Unlike the base `.idx`
+    // path, the DCG rewrite hands these straight to SegmentWriter, which rejects
+    // NGRAMBF outright when gram_num does not survive the parse.
+    const std::string props =
+            R"({"index_properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
     std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
     AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
                             vt.get_schema());
