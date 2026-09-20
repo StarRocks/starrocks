@@ -3192,7 +3192,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             // A survivor with none of the query terms scores 0 (it passed a non-MATCH predicate).
             score_column->append(it != _bm25_ctx->id2score_map.end() ? it->second : 0.0);
         }
-        // append_vector_column check_or_die's every column, but a pruned/internal column (an index-served
+        // append_or_update_column check_or_die's every column, but a pruned/internal column (an index-served
         // predicate column whose read was skipped, or one not carried into the global-dict chunk) can be
         // shorter than the chunk -- pad it to the row count first or check_or_die aborts the BE.
         const size_t bm25_nrows = chunk->num_rows();
@@ -3202,7 +3202,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             }
         }
         // The synthesized score column has no storage column id; pick a small free cid for this chunk
-        // (append_vector_column keys placement on the slot id, but needs a unique field id, and a huge
+        // (append_or_update_column keys placement on the slot id, but needs a unique field id, and a huge
         // sentinel would blow up max_column_id-based vector sizing).
         ColumnId score_cid = static_cast<ColumnId>(std::max(0, _bm25_ctx->index_column_id));
         while (chunk->is_cid_exist(score_cid)) {
@@ -3210,7 +3210,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         auto field =
                 std::make_shared<Field>(score_cid, _bm25_ctx->score_column_name, get_type_info(TYPE_DOUBLE), false);
-        chunk->append_vector_column(std::move(score_column), field, _bm25_ctx->score_slot_id);
+        chunk->append_or_update_column(std::move(score_column), field, _bm25_ctx->score_slot_id);
     }
 
     if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
@@ -3231,8 +3231,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
 
         // TODO: plan vector column in FE Planner
-        chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
-                                    _vector_index_ctx->vector_slot_id);
+        // The distance column reuses vector_column_id as its column id because the FE does not yet
+        // allocate a distinct one. The scan loop `do { _do_get_next(chunk); } while (chunk->num_rows()
+        // == 0)` re-invokes _do_get_next on the same chunk whenever a batch is fully filtered (e.g. the
+        // vector_range predicate dropped every row), and Chunk::reset() keeps the appended column in
+        // _cid_to_index. append_or_update_column tolerates that by updating the distance column in place
+        // instead of appending a duplicate.
+        chunk->append_or_update_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
+                                       _vector_index_ctx->vector_slot_id);
     } else if (_vector_index_ctx && _vector_index_ctx->use_brute_force) {
         // Brute-force fallback: compute distances from the raw vector column. It lives in `chunk` when
         // FE kept it (swapped in by _build_final_chunk), or in _dict_chunk when FE pruned it and
@@ -3718,8 +3724,10 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
 }
 
 void SegmentIterator::_compute_brute_force_distances(const Column* vector_column, Chunk* chunk) {
-    chunk->append_vector_column(_brute_force_distance_column(vector_column),
-                                _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
+    // append_or_update_column tolerates the scan loop re-emitting the distance column onto a reused
+    // chunk (see the ANN path in _do_get_next).
+    chunk->append_or_update_column(_brute_force_distance_column(vector_column),
+                                   _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
 }
 
 // Exact distance rescan over a candidate bitmap. Reached only when the HNSW filtered search returned

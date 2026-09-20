@@ -137,7 +137,7 @@ TEST_F(ProjectionIteratorTest, all) {
 
 // Mirrors SegmentIterator for a vector-index read: the static output schema is [c1], but
 // at runtime do_get_next appends a synthetic "distance" column (with its own planner slot
-// id) to the output chunk -- exactly like SegmentIterator::_read calls append_vector_column
+// id) to the output chunk -- exactly like SegmentIterator::_read calls append_or_update_column
 // and then result->swap_chunk(). The ProjectionIterator must carry that runtime-appended
 // column through to the output instead of dropping it. Regression for the crash where a
 // residual scalar predicate forced a ProjectionIterator that dropped the vector distance
@@ -156,7 +156,7 @@ public:
             built->get_column_raw_ptr_by_index(0)->append_datum(Datum(_c1[_idx + i]));
             built->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<float>(_c1[_idx + i]) * 0.5f));
         }
-        // The distance column carries a planner slot id, exactly like append_vector_column.
+        // The distance column carries a planner slot id, exactly like append_or_update_column.
         built->set_slot_id_to_index(kDistSlot, 1);
         chunk->swap_chunk(*built);
         _idx += n;
