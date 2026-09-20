@@ -1053,6 +1053,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_JDBC_ARRAY_LOWER_BOUND_CORRECTION =
             "enable_jdbc_array_lower_bound_correction";
     public static final String JDBC_PREDICATE_PUSHDOWN_MAX_IN_LIST_SIZE = "jdbc_predicate_pushdown_max_in_list_size";
+    public static final String ENABLE_JDBC_COLUMN_STATISTICS = "enable_jdbc_column_statistics";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
@@ -3317,6 +3318,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // SQL that is emitted; which expressions are pushed down at all is the same either way.
     @VarAttr(name = ENABLE_JDBC_ARRAY_LOWER_BOUND_CORRECTION)
     private boolean enableJdbcArrayLowerBoundCorrection = false;
+    // Whether a JDBC catalog may feed per-column statistics read from the source's own catalog
+    // (distinct values, null fraction, average width) into the optimizer. Turning this off puts
+    // every column back on ConnectorNdvEstimator's type-ratio guess, which is where every JDBC
+    // catalog stood before the source-statistics path existed -- not on UNKNOWN, which no release
+    // ever shipped. The table row count is unaffected either way, since that is a correctness fix
+    // rather than a new estimate.
+    @VarAttr(name = ENABLE_JDBC_COLUMN_STATISTICS, flag = VariableMgr.INVISIBLE)
+    private boolean enableJdbcColumnStatistics = true;
 
     // Max items in a literal IN list that predicate/HAVING pushdown will send to a JDBC source:
     // -1 = no limit; 0 = never push an IN down; N > 0 = push only lists of at most N items.
@@ -6172,6 +6181,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public boolean isEnableJdbcColumnStatistics() {
+        return enableJdbcColumnStatistics;
+    }
+
+    public void setEnableJdbcColumnStatistics(boolean enableJdbcColumnStatistics) {
+        this.enableJdbcColumnStatistics = enableJdbcColumnStatistics;
     }
 
     public boolean isEnableJdbcJoinPushDown() {

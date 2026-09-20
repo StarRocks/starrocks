@@ -20,6 +20,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -365,4 +368,29 @@ public class JDBCTableTest {
         JDBCTable table = new JDBCTable(2000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
         Assertions.assertEquals(Set.of(TableOperation.READ, TableOperation.ALTER), table.getSupportedOperations());
     }
+
+    @Test
+    public void testPushDownStatisticsSurviveTheCopyConstructor() throws Exception {
+        // Every JDBC push-down rule derives its per-query table by copying the one it replaces.
+        // A second push-down onto an already-derived table (an aggregate folded onto a merged
+        // join, a TopN or a projection folded onto either) copies it again before deciding whether
+        // to take a snapshot of its own; dropping the field here would silently lose the estimate
+        // of everything pushed down so far.
+        Map<String, String> jdbcProperties = getMockedJDBCProperties("jdbc:postgresql://127.0.0.1:5432/db0");
+        JDBCTable original = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        Assertions.assertNull(original.getPushDownStatistics());
+
+        ColumnRefOperator ref = new ColumnRefOperator(1, IntegerType.BIGINT, "col1", true);
+        Statistics snapshot = Statistics.builder()
+                .setOutputRowCount(4242)
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA)
+                .addColumnStatistic(ref, ColumnStatistic.unknown())
+                .build();
+        original.setPushDownStatistics(snapshot);
+
+        JDBCTable copy = new JDBCTable(original);
+        Assertions.assertSame(snapshot, copy.getPushDownStatistics());
+        Assertions.assertEquals(4242, copy.getPushDownStatistics().getOutputRowCount());
+    }
+
 }

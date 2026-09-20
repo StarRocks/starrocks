@@ -18,12 +18,19 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.CharType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -34,6 +41,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -432,4 +440,63 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         lock.readLock().unlock();
     }
 
+    // ---------------------------------------------------------------------
+    // Opt-in table statistics, for tests about what a JDBC catalog feeds the optimizer.
+    //
+    // Empty unless a test fills it, so every other test keeps seeing the connector default.
+    // ---------------------------------------------------------------------
+
+    private static final Map<String, MockedTableStatistics> MOCKED_STATISTICS = new ConcurrentHashMap<>();
+    private static final AtomicLong STATISTICS_CALLS = new AtomicLong();
+
+    private record MockedTableStatistics(long rowCount, Map<String, ColumnStatistic> columnStatistics) {
+    }
+
+    public static void setTableStatistics(String tableName, long rowCount,
+                                          Map<String, ColumnStatistic> columnStatistics) {
+        MOCKED_STATISTICS.put(tableName, new MockedTableStatistics(rowCount, Map.copyOf(columnStatistics)));
+    }
+
+    public static void clearTableStatistics() {
+        MOCKED_STATISTICS.clear();
+        STATISTICS_CALLS.set(0);
+    }
+
+    /**
+     * How many times the optimizer asked the connector for statistics since the last reset. The
+     * JDBC push-down rules estimate the subtree they are about to replace, which reaches the
+     * connector: this counter is what pins that cost to the size of the plan tree rather than to
+     * the number of times an iterative rewrite re-applies a rule.
+     */
+    public static long statisticsCallCount() {
+        return STATISTICS_CALLS.get();
+    }
+
+    public static void resetStatisticsCallCount() {
+        STATISTICS_CALLS.set(0);
+    }
+
+    @Override
+    public Statistics getTableStatistics(OptimizerContext session, Table table,
+                                         Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate, long limit, TvrVersionRange tableVersionRange) {
+        STATISTICS_CALLS.incrementAndGet();
+        // Mirror JDBCMetadata: a derived table produced by a push-down still carries the name of
+        // whichever atom it was built from, and answering by that name is the bug that had one
+        // join estimated at 100 rows or at 1,000,000 depending on the order the tables appeared in
+        // the SQL text. Without this the mock would hand out an unrelated table's statistics and
+        // quietly stand in for the snapshot the push-down rules are supposed to provide.
+        MockedTableStatistics mocked = table instanceof JDBCTable jdbcTable && jdbcTable.isInlineTable()
+                ? null : MOCKED_STATISTICS.get(table.getName());
+        if (mocked == null) {
+            return ConnectorMetadata.super.getTableStatistics(session, table, columns, partitionKeys, predicate,
+                    limit, tableVersionRange);
+        }
+        Statistics.Builder builder = Statistics.builder()
+                .setOutputRowCount(mocked.rowCount())
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        columns.forEach((ref, column) -> builder.addColumnStatistic(ref,
+                mocked.columnStatistics().getOrDefault(column.getName(), ColumnStatistic.unknown())));
+        return builder.build();
+    }
 }

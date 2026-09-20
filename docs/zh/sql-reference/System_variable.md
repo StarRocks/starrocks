@@ -721,6 +721,9 @@ FROM test;
 ### enable_jdbc_array_subscript_push_down
 
 * **描述**：PostgreSQL JDBC Catalog 列上的常量数组下标（`items[1]`，以及等价的 `element_at(items, 1)`）是否由 PostgreSQL 计算，而不是把整列数组读回 StarRocks 再取下标。有效值：`true`（默认值）和 `false`。将该变量设置为 `false` 可回退该下推：此时下标在两条路径上都不下推——`WHERE` 中的下标会连同其谓词一起留在 StarRocks 执行，`SELECT` 列表中的下标也不会折叠进远端查询——查询重新读回整列数组并在本地取下标，即该下推特性引入之前的行为。关闭后有两点需要说明。其一，[`enable_jdbc_array_lower_bound_correction`](#enable_jdbc_array_lower_bound_correction) 将完全失效，因为它是在已下推下标的两种渲染形态之间做选择，而此时没有任何下标被下推；因此「结果与本地计算完全一致」有两条路——将该变量设置为 `false`，或保持 `true` 并将 `enable_jdbc_array_lower_bound_correction` 设置为 `true`（保留下推）。其二，存有多维值的列会重新被直接读取，因此对该列的查询会返回不支持的报错，而不是从 PostgreSQL 得到 NULL。
+### enable_jdbc_column_statistics
+
+* **描述**：JDBC Catalog 是否可以将从数据源自身系统表读取的列统计信息提供给优化器，包括列的不同值个数、NULL 比例和平均列宽。有效值：`true`（默认）和 `false`。仅影响数据源真正描述过的列。数据源未描述的列保持未知；完全不提供列统计信息的方言（MySQL 与 ClickHouse 只报行数）继续沿用一直以来的按类型比例估算。设为 `false` 后所有列均回到该估算，即本特性引入之前 JDBC Catalog 的状态。该变量不影响表行数。
 * **默认值**：true
 * **数据类型**：Boolean
 

@@ -17,12 +17,17 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
@@ -52,6 +57,97 @@ public class JDBCPushDownRuleUtils {
     public static final String JDBC_AGG_ALIAS_PREFIX = "jdbc_agg_";
     /** Alias prefix for projection-pushdown derived columns; the full alias is {@code jdbc_proj_<refId>}. */
     public static final String JDBC_PROJECT_ALIAS_PREFIX = "jdbc_proj_";
+
+    /**
+     * Snapshot onto {@code derivedTable} the estimate {@code replacedSubtree} carried, so the
+     * derived table the pushdown puts in its place can report that estimate instead of the
+     * per-table statistics it can no longer be looked up by.
+     *
+     * <p>This is the JDBC counterpart of Trino's {@code Rules.deriveTableStatisticsForPushdown}:
+     * a pushed-down subtree stops being describable by the source's catalog (no table in the
+     * source has the merged join's row count, or the aggregate's group count), so the estimate is
+     * computed once here, while the subtree still exists, and travels with the derived table.
+     *
+     * <p>No column renaming is involved. {@link Statistics} is keyed by {@link ColumnRefOperator},
+     * and every pushdown rule reuses the replaced subtree's own column references as the derived
+     * scan's output references -- the {@code sr_c<id>} / {@code jdbc_agg_<id>} aliasing happens in
+     * the remote SQL text and in the {@link Column} metadata alone. Keying the snapshot by name
+     * would be the bug, not the fix.
+     *
+     * <p>Cost: the caller must invoke this only on the path that actually rewrites the tree. The
+     * JDBC pushdown rules run in an iterative rewrite, before the optimizer's own statistics pass,
+     * so snapshotting from {@code check()} or from a transform that declines to rewrite would put
+     * a full subtree estimate on every visit. Predicate-column collection is suppressed the way
+     * {@code JoinReorderDP} suppresses it for its speculative estimates: these statistics exist to
+     * describe a subtree that is about to disappear, and must not be recorded as query history.
+     *
+     * @return the statistics stored, or null when the estimate could not be computed
+     */
+    public static Statistics snapshotPushDownStatistics(OptExpression replacedSubtree,
+                                                        JDBCTable derivedTable,
+                                                        OptimizerContext context) {
+        if (replacedSubtree == null || derivedTable == null || context == null) {
+            return null;
+        }
+        try (var ignore = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+            deriveMissingLogicalProperty(replacedSubtree);
+            Utils.calculateStatistics(replacedSubtree, context);
+        } catch (Exception e) {
+            // Utils.calculateStatistics already swallows estimation failures; this only guards the
+            // scope bookkeeping. A derived table without a snapshot reports no statistics, which is
+            // exactly the behaviour that existed before snapshots.
+            return null;
+        }
+        Statistics statistics = replacedSubtree.getStatistics();
+        if (statistics == null) {
+            return null;
+        }
+        statistics = Statistics.buildFrom(statistics)
+                .setStatsSource(leafStatsSource(replacedSubtree))
+                .build();
+        derivedTable.setPushDownStatistics(statistics);
+        return statistics;
+    }
+
+    /**
+     * Give every node of a throw-away subtree a logical property, bottom-up, so it can be
+     * estimated. A rule that rebuilds the subtree it is replacing (the join merge does) creates
+     * operator nodes the framework has not seen, and the join estimator reads its children's
+     * output columns off their logical property: without this, estimating anything deeper than a
+     * single join level throws, the estimate is silently dropped, and the derived table ends up
+     * with no statistics — which is exactly the failure this whole path exists to prevent. Nodes
+     * that came from the real tree already have a property and are left alone.
+     */
+    private static void deriveMissingLogicalProperty(OptExpression expr) {
+        for (OptExpression child : expr.getInputs()) {
+            deriveMissingLogicalProperty(child);
+        }
+        if (expr.getLogicalProperty() == null) {
+            expr.deriveLogicalPropertyItself();
+        }
+    }
+
+    /**
+     * The statistics source to report for a derived estimate: the weakest one among the leaves it
+     * was computed from. Intermediate operators build their statistics with a fresh builder, whose
+     * source is always NONE, so the subtree root cannot answer this. Reporting the weakest leaf is
+     * what makes {@code EXPLAIN COSTS} truthful on a merged scan -- TABLE_METADATA only when every
+     * table underneath really had statistics in the source, NONE as soon as one did not.
+     */
+    private static Statistics.StatsSource leafStatsSource(OptExpression expr) {
+        if (expr.getInputs().isEmpty()) {
+            Statistics statistics = expr.getStatistics();
+            return statistics == null ? Statistics.StatsSource.NONE : statistics.getStatsSource();
+        }
+        Statistics.StatsSource weakest = Statistics.StatsSource.ANALYZE;
+        for (OptExpression child : expr.getInputs()) {
+            Statistics.StatsSource childSource = leafStatsSource(child);
+            if (childSource.ordinal() < weakest.ordinal()) {
+                weakest = childSource;
+            }
+        }
+        return weakest;
+    }
 
     /**
      * Assemble the output columns a pushed-down JDBC scan exposes, filling the caller-provided

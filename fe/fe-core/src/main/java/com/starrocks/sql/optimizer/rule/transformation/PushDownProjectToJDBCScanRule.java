@@ -96,6 +96,14 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
         queryTable.setNewFullSchema(outputColumns);
         queryTable.setPushDownQuery(pushDownQuery);
 
+        // Folding the projection turns the scan into a derived table, which the connector will no
+        // longer answer for even though the rows are the very same rows. Without a snapshot the
+        // scan would lose the row count it had a moment ago — the projection changes what each row
+        // looks like, never how many there are. Snapshot the estimate the scan carried with its
+        // projection applied, so the pushed expressions keep the column statistics the optimizer
+        // derived for them.
+        JDBCPushDownRuleUtils.snapshotPushDownStatistics(input, queryTable, context);
+
         LogicalJDBCScanOperator newScanOperator = new LogicalJDBCScanOperator.Builder()
                 .withOperator(scan)
                 .setTable(queryTable)

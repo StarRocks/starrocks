@@ -25,6 +25,8 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -35,11 +37,17 @@ import java.sql.Types;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 
 import static java.lang.Math.max;
 
 public class PostgresSchemaResolver extends JDBCSchemaResolver {
+
+    private static final Logger LOG = LogManager.getLogger(PostgresSchemaResolver.class);
 
     public PostgresSchemaResolver() {
         this.defaultTableTypes = new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"};
@@ -242,23 +250,220 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public long getTableRowCount(Connection connection, String dbName, String tableName) throws SQLException {
-        // pg_class.reltuples is updated by ANALYZE and auto-vacuum; it is an estimate, not exact.
-        // The cast to bigint avoids returning a float to Java.
-        String sql = "SELECT c.reltuples::bigint FROM pg_class c " +
-                     "JOIN pg_namespace n ON c.relnamespace = n.oid " +
-                     "WHERE n.nspname = ? AND c.relname = ?";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, dbName);
+        return readRowCount(connection, dbName, tableName).orElse(-1L);
+    }
+
+    @Override
+    public Optional<JdbcTableStats> getTableStatistics(Connection connection, String dbName, String tableName)
+            throws SQLException {
+        OptionalLong rowCount = readRowCount(connection, dbName, tableName);
+        if (rowCount.isEmpty()) {
+            return Optional.empty();
+        }
+        long rows = rowCount.getAsLong();
+        if (rows <= 0) {
+            // Nothing to scale the per-column ratios by, and pg_stats for an empty table carries
+            // no usable numbers either. Skip the second round trip.
+            return Optional.of(JdbcTableStats.ofRowCount(rows));
+        }
+        return Optional.of(new JdbcTableStats(OptionalLong.of(rows),
+                readColumnStats(connection, dbName, tableName, rows)));
+    }
+
+    // ---------------------------------------------------------------------
+    // Row count
+    // ---------------------------------------------------------------------
+
+    /**
+     * PostgreSQL keeps no single trustworthy row count, so this walks a fallback chain. Every step
+     * is a catalog lookup measured in tenths of a millisecond and independent of table size.
+     *
+     * <ol>
+     *   <li>{@code pg_class.reltuples} — maintained by ANALYZE and autovacuum. No row at all means
+     *       the table does not exist: give up, there is nothing better to read. A positive value is
+     *       authoritative, including on a partition parent somebody ran ANALYZE on, where
+     *       PostgreSQL stores the whole inheritance tree's total.</li>
+     *   <li>Otherwise, on a declarative partition parent reltuples is meaningless: the parent holds
+     *       no rows, and autovacuum analyzes the children but never the parent, so it sits at -1
+     *       forever while the children carry perfectly good counts. Sum the children's reltuples,
+     *       and if that is unusable sum their live-tuple counters instead.</li>
+     *   <li>Otherwise reltuples says nothing usable -- 0 is ambiguous (a genuinely empty table and
+     *       a freshly created one look alike) and -1 says the table has never been analyzed -- so
+     *       ask the statistics collector's live-tuple counter instead. That counter is maintained
+     *       on every insert and delete rather than by ANALYZE, so it is populated for exactly the
+     *       tables reltuples is not. It can drift (a crash or a statistics reset loses it), which
+     *       is why it is consulted only after reltuples and only believed when positive.</li>
+     * </ol>
+     *
+     * <p>Since PostgreSQL 14 a never-analyzed table reports -1 rather than 0, so the sum over the
+     * children of an unanalyzed partitioned table is negative but <em>not</em> -1 — two unanalyzed
+     * partitions sum to -2. Hence the sum is accepted only when it is {@code >= 0}, and the final
+     * test is {@code < 0} rather than {@code == -1}. Testing for -1 alone would take -2 for a real
+     * row count and report a 200-million-row table as smaller than a dictionary.
+     *
+     * @return the row count, or empty when PostgreSQL has none to give
+     */
+    private OptionalLong readRowCount(Connection connection, String schemaName, String tableName)
+            throws SQLException {
+        // (1) pg_class.reltuples. The cast to bigint avoids handing a float back to Java.
+        OptionalLong relTuples = queryLong(connection,
+                "SELECT c.reltuples::bigint FROM pg_class c " +
+                        "JOIN pg_namespace n ON c.relnamespace = n.oid " +
+                        "WHERE n.nspname = ? AND c.relname = ?",
+                schemaName, tableName);
+        if (relTuples.isEmpty()) {
+            return OptionalLong.empty();
+        }
+        long rows = relTuples.getAsLong();
+        if (rows > 0) {
+            return OptionalLong.of(rows);
+        }
+
+        // (2) Partition parent: prefer the sum over the children.
+        if (isPartitionedTable(connection, schemaName, tableName)) {
+            OptionalLong childRelTuples = queryLong(connection,
+                    "SELECT SUM(child.reltuples)::bigint FROM pg_inherits " +
+                            "JOIN pg_class parent ON pg_inherits.inhparent = parent.oid " +
+                            "JOIN pg_class child ON pg_inherits.inhrelid = child.oid " +
+                            "JOIN pg_namespace n ON parent.relnamespace = n.oid " +
+                            "WHERE n.nspname = ? AND parent.relname = ?",
+                    schemaName, tableName);
+            if (childRelTuples.isPresent() && childRelTuples.getAsLong() >= 0) {
+                rows = childRelTuples.getAsLong();
+            } else {
+                OptionalLong childLiveTuples = queryLong(connection,
+                        "SELECT SUM(stat.n_live_tup)::bigint FROM pg_inherits " +
+                                "JOIN pg_class parent ON pg_inherits.inhparent = parent.oid " +
+                                "JOIN pg_class child ON pg_inherits.inhrelid = child.oid " +
+                                "JOIN pg_namespace n ON parent.relnamespace = n.oid " +
+                                "JOIN pg_stat_all_tables stat ON stat.relid = child.oid " +
+                                "WHERE n.nspname = ? AND parent.relname = ?",
+                        schemaName, tableName);
+                if (childLiveTuples.isPresent()) {
+                    rows = childLiveTuples.getAsLong();
+                }
+            }
+        } else {
+            // (3) reltuples is 0 or -1: neither is a row count, so ask the statistics collector.
+            // The never-analyzed case (-1) is the one this matters most for: pg_stats may already
+            // hold column statistics for such a table, since autovacuum's ANALYZE and reltuples are
+            // maintained by different machinery, and giving up on the row count throws those away
+            // too -- getTableStatistics stops before it reads pg_stats. Trino reads the same
+            // counter in the same place.
+            OptionalLong liveTuples = queryLong(connection,
+                    "SELECT n_live_tup FROM pg_stat_all_tables WHERE schemaname = ? AND relname = ?",
+                    schemaName, tableName);
+            if (liveTuples.isPresent() && liveTuples.getAsLong() > 0) {
+                rows = liveTuples.getAsLong();
+            }
+        }
+
+        // Never analyzed (-1), or a sum over never-analyzed children (-N). Not a row count.
+        return rows < 0 ? OptionalLong.empty() : OptionalLong.of(rows);
+    }
+
+    private boolean isPartitionedTable(Connection connection, String schemaName, String tableName)
+            throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(
+                "SELECT true FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid " +
+                        "WHERE n.nspname = ? AND c.relname = ? AND c.relkind = 'p'")) {
+            ps.setString(1, schemaName);
             ps.setString(2, tableName);
             ps.setQueryTimeout(getQueryTimeoutSeconds());
             try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getBoolean(1);
+            }
+        }
+    }
+
+    private OptionalLong queryLong(Connection connection, String sql, String... params) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) {
+                ps.setString(i + 1, params[i]);
+            }
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    long rows = rs.getLong(1);
-                    return rs.wasNull() ? -1L : rows;
+                    long value = rs.getLong(1);
+                    return rs.wasNull() ? OptionalLong.empty() : OptionalLong.of(value);
                 }
             }
         }
-        return -1L;
+        return OptionalLong.empty();
+    }
+
+    // ---------------------------------------------------------------------
+    // Column statistics
+    // ---------------------------------------------------------------------
+
+    /**
+     * Read per-column statistics from {@code pg_stats}.
+     *
+     * <p>Two things about this view are worth knowing. It is defined with a
+     * {@code row_security_active()} filter, so a table with row-level security returns no rows here
+     * at all even though its reltuples reads fine — the result is simply an empty map, which the
+     * caller maps to unknown column statistics. And it reports {@code n_distinct} as an absolute
+     * count when non-negative but as a negative <em>ratio</em> of the row count when PostgreSQL
+     * judged distinctness to scale with table size; the conversion to an absolute count happens
+     * here, so nothing above this class has to know the convention.
+     */
+    private Map<String, JdbcColumnStats> readColumnStats(Connection connection, String schemaName,
+                                                         String tableName, long rowCount) {
+        Map<String, JdbcColumnStats> result = new HashMap<>();
+        String sql = "SELECT attname, null_frac, n_distinct, avg_width " +
+                "FROM pg_stats WHERE schemaname = ? AND tablename = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, schemaName);
+            ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String columnName = rs.getString(1);
+                    if (columnName == null) {
+                        continue;
+                    }
+                    double nullFraction = rs.getDouble(2);
+                    OptionalDouble nulls = rs.wasNull() ? OptionalDouble.empty() : OptionalDouble.of(nullFraction);
+
+                    double nDistinct = rs.getDouble(3);
+                    OptionalDouble distinct = rs.wasNull() ? OptionalDouble.empty()
+                            : toAbsoluteDistinctCount(nDistinct, rowCount);
+
+                    int avgWidth = rs.getInt(4);
+                    OptionalInt width = rs.wasNull() || avgWidth <= 0 ? OptionalInt.empty() : OptionalInt.of(avgWidth);
+
+                    // pg_stats reports attname exactly as the column was created, but the schema
+                    // StarRocks captured ran every name through normalizeColumnName -- which, for
+                    // this dialect, wraps a name that is not already lower case in literal double
+                    // quotes so the generated SQL can address it. The lookup on the other side is
+                    // by Column#getName, i.e. the normalized form, and the difference is the quote
+                    // characters, not the case, so JdbcTableStats' case-insensitive map cannot
+                    // bridge it: every mixed-case column came back unknown. Normalize on the way
+                    // in. A name that is already lower case is returned unchanged.
+                    result.put(normalizeColumnName(columnName), new JdbcColumnStats(nulls, distinct, width));
+                }
+            }
+        } catch (Exception e) {
+            // A table whose row count we already have is still worth reporting: losing the column
+            // statistics degrades the plan, losing the row count would reintroduce the bug this
+            // whole path exists to fix.
+            LOG.warn("Failed to read pg_stats for {}.{}: {}", schemaName, tableName, e.getMessage());
+            return Map.of();
+        }
+        return result;
+    }
+
+    /**
+     * {@code n_distinct >= 0} is already an absolute count. A negative value is minus the fraction
+     * of rows that are distinct, so -1 means "unique" and -0.5 means "two rows per value".
+     */
+    private static OptionalDouble toAbsoluteDistinctCount(double nDistinct, long rowCount) {
+        if (nDistinct == 0) {
+            // PostgreSQL's "unknown" marker for this column.
+            return OptionalDouble.empty();
+        }
+        double absolute = nDistinct > 0 ? nDistinct : -nDistinct * rowCount;
+        return OptionalDouble.of(Math.max(1.0, Math.min(absolute, rowCount)));
     }
 
     public List<Partition> getPartitions(Connection connection, Table table) {

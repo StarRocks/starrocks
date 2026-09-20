@@ -100,6 +100,14 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         queryTable.setNewFullSchema(outputColumns);
         queryTable.setPushDownQuery(pushDownQuery);
 
+        // The folded scan is a derived table: the source has no table whose row count is this
+        // aggregate's group count, so the connector cannot answer for it. Snapshot what the
+        // aggregation was estimated at — the group-count estimate computed from the scan's own
+        // statistics — before the aggregation node disappears. The snapshot is keyed by the
+        // aggregation's output column refs, which the folded scan re-exposes unchanged; the
+        // jdbc_agg_<id> aliasing lives in the remote SQL only.
+        JDBCPushDownRuleUtils.snapshotPushDownStatistics(input, queryTable, context);
+
         LogicalJDBCScanOperator newScanOperator = new LogicalJDBCScanOperator.Builder()
                 .withOperator(scanOperator)
                 .setTable(queryTable)

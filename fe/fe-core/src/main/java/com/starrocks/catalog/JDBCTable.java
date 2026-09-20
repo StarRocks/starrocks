@@ -22,6 +22,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -82,6 +83,16 @@ public class JDBCTable extends Table {
     // expressions, so the pushdown rules keep every operator over them local.
     private transient Set<String> unboundedNumericColumns = Set.of();
 
+    // Set only on the query-local copy an optimizer pushdown creates: the estimate the subtree
+    // this derived table replaced carried, taken just before the replacement. A derived table
+    // cannot be looked up in the connector's per-table statistics cache (its name still refers to
+    // whichever atom it was derived from), so this snapshot is the only statistics it will ever
+    // have; see StatisticsCalculator#computeJDBCScanNode, which prefers it over the connector.
+    // Keyed by ColumnRefOperator, which the pushdown rules carry over unchanged from the replaced
+    // subtree to the derived scan -- the sr_c/jdbc_agg_ aliasing happens in the remote SQL and in
+    // the Column metadata, never in the column references the optimizer estimates by.
+    private transient Statistics pushDownStatistics;
+
     // Transient: marker for {@link com.starrocks.connector.jdbc.JDBCMetadata#getTableComment}
     // dedup. Once REMARKS has been fetched for this cached instance, further calls return the
     // already-stored comment without another remote round-trip. Reset when the cache entry is
@@ -130,6 +141,10 @@ public class JDBCTable extends Table {
         this.originalJdbcColumnTypeNames = other.originalJdbcColumnTypeNames;
         this.preserveRemoteOrder = other.preserveRemoteOrder;
         this.unboundedNumericColumns = other.unboundedNumericColumns;
+        // Carried so a second pushdown onto an already-derived table (a merged join that is then
+        // aggregated, a TopN or projection folded onto either) does not silently drop the estimate
+        // when it copies the table before deciding whether to snapshot again.
+        this.pushDownStatistics = other.pushDownStatistics;
     }
 
     @Override
@@ -232,6 +247,14 @@ public class JDBCTable extends Table {
 
     public void setCommentFetched(boolean commentFetched) {
         this.commentFetched = commentFetched;
+    }
+
+    public Statistics getPushDownStatistics() {
+        return pushDownStatistics;
+    }
+
+    public void setPushDownStatistics(Statistics pushDownStatistics) {
+        this.pushDownStatistics = pushDownStatistics;
     }
 
     public boolean isInlineTable() {

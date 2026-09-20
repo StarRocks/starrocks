@@ -82,15 +82,18 @@ import java.util.Set;
  * an operator-attached projection is the canonical output form. Applied iteratively,
  * the companion rules of the set then fold aggregations and limits onto the merged scan.
  *
- * <p><b>Known limitation — statistics:</b> the merged scan inherits the same
- * default statistics path as any single-table JDBC scan
- * ({@code Config.default_statistics_output_row_count} for rows, {@code ColumnStatistic.unknown()}
- * for columns). The join output cardinality is therefore not estimated — downstream operators
- * see the merged scan as if it were one table of default size. This is consistent with the
- * broader JDBC stats gap (JDBC tables are not auto-analyzed, and column stats go through the
- * internal OlapTable cache loader which returns empty for non-OlapTables), and is not a
- * regression introduced by the merge. Improving this requires a separate effort to collect
- * real JDBC statistics from the external DB.
+ * <p><b>Statistics:</b> the merged scan carries the name of whichever atom it was derived from, so
+ * it cannot be looked up in the connector's per-table statistics cache — doing so would return an
+ * unrelated table's row count, and did, which is how one join came out estimated at 100 rows or at
+ * 1,000,000 depending only on the order the two tables appeared in the SQL text. The connector
+ * therefore refuses to answer for a derived table at all. Instead, this rule estimates the
+ * subtree it is about to replace — the group's atoms joined on the very predicates the pushdown
+ * SQL will apply — and snapshots that estimate onto the merged scan's per-query
+ * {@link JDBCTable} ({@link JDBCPushDownRuleUtils#snapshotPushDownStatistics}), which
+ * {@code StatisticsCalculator#computeJDBCScanNode} then prefers over the connector. This is what
+ * Trino's {@code Rules.deriveTableStatisticsForPushdown} does for the same reason. The snapshot is
+ * keyed by the atoms' own {@code ColumnRefOperator}s, which the merged scan re-exposes unchanged,
+ * so the {@code sr_c<id>} aliasing in the SQL text needs no counterpart in the statistics.
  */
 public class PushDownJoinToJDBCRule extends TransformationRule {
 
@@ -175,7 +178,7 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
         Map<OptExpression, OptExpression> atomSubstitution = new HashMap<>();
         Set<OptExpression> droppedAtoms = new HashSet<>();
         for (MergeGroup group : groups) {
-            atomSubstitution.put(group.entries.get(0).atom, buildMergedScan(group, neededColumns));
+            atomSubstitution.put(group.entries.get(0).atom, buildMergedScan(group, neededColumns, context));
             for (int i = 1; i < group.entries.size(); i++) {
                 droppedAtoms.add(group.entries.get(i).atom);
             }
@@ -467,7 +470,7 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
      * When nothing is needed (e.g. a bare COUNT(*) over the join), the smallest column is
      * kept so the SELECT list is never empty.
      */
-    private OptExpression buildMergedScan(MergeGroup group, ColumnRefSet neededColumns) {
+    private OptExpression buildMergedScan(MergeGroup group, ColumnRefSet neededColumns, OptimizerContext context) {
         List<AtomEntry> entries = group.entries;
 
         // Hand the group's scans to the builder, which owns alias assignment and qualified-name
@@ -516,6 +519,9 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
         mergedTable.setPushDownQuery(pushDownSQL);
         mergedTable.setNewFullSchema(new ArrayList<>(mergedColRefToColumnMap.values()));
 
+        // Snapshot what the subtree this scan replaces was estimated at, before it stops existing.
+        JDBCPushDownRuleUtils.snapshotPushDownStatistics(buildGroupSubTree(group), mergedTable, context);
+
         LogicalJDBCScanOperator mergedOp = new LogicalJDBCScanOperator.Builder()
                 .setTable(mergedTable)
                 .setColRefToColumnMetaMap(mergedColRefToColumnMap)
@@ -526,6 +532,36 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
                 .build();
 
         return new OptExpression(mergedOp);
+    }
+
+    /**
+     * Rebuild, as a throw-away expression, exactly the subtree the merged scan replaces: the
+     * group's atoms joined on the group's cross-table predicates, with the group's single-table
+     * filters on top — the same predicates {@link JDBCPushDownSQLBuilder#buildJoinQuery} renders
+     * into the pushed SQL. Estimating this is how the merged scan learns its row count.
+     *
+     * <p>It has to be the group's subtree and not the rule's whole input: a partial merge leaves
+     * other atoms joined locally above the merged scan, and those rows are counted by the rebuilt
+     * local join, not by the scan. The atoms themselves are reused as-is — every one of them is
+     * dropped from the rewritten tree — so nothing is cloned.
+     */
+    private OptExpression buildGroupSubTree(MergeGroup group) {
+        List<ScalarOperator> pending = new ArrayList<>(group.onPredicates);
+        OptExpression subTree = group.entries.get(0).atom;
+        for (int i = 1; i < group.entries.size(); i++) {
+            subTree = appendJoin(subTree, group.entries.get(i).atom, pending);
+        }
+        // The group's single-table filters, plus any cross-table predicate appendJoin could not
+        // place as an ON condition, are applied above the join the way the pushed SQL applies its
+        // post-join WHERE.
+        List<ScalarOperator> residual = new ArrayList<>(group.filterPredicates);
+        residual.addAll(pending);
+        if (!residual.isEmpty()) {
+            OptExpression filterExpr = new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(residual)));
+            filterExpr.getInputs().add(subTree);
+            subTree = filterExpr;
+        }
+        return subTree;
     }
 
     /**

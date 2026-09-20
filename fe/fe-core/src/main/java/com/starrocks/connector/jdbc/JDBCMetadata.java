@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
@@ -79,15 +80,22 @@ public class JDBCMetadata implements ConnectorMetadata {
     private JDBCMetaCache<JDBCTableName, Long> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
-    // Async row-count cache: never blocks planning. On cold start returns the default immediately
-    // and loads in background; refreshAfterWrite keeps the value warm with async reload.
-    private AsyncLoadingCache<JDBCTableName, Long> rowCountCache;
+    // Async statistics cache: never blocks planning. On cold start it reports "unknown" for this
+    // planning round and loads in the background; refreshAfterWrite keeps the entry warm with an
+    // async reload. One entry holds the table's row count *and* its column statistics, because a
+    // dialect reads both over the same connection and acquiring that connection costs far more
+    // than the catalog queries themselves (tenths of a millisecond).
+    private AsyncLoadingCache<JDBCTableName, JdbcTableStats> tableStatsCache;
 
     private HikariDataSource dataSource;
     private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
-    private static final ExecutorService ROW_COUNT_EXECUTOR = Executors.newFixedThreadPool(
-            2, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-row-count-%d").build());
+    private static final ExecutorService TABLE_STATS_EXECUTOR = Executors.newFixedThreadPool(
+            2, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-table-stats-%d").build());
+
+    // A most-common-value list is treated as covering every non-null row when it comes this close
+    // to doing so; the source reports frequencies as single-precision floats, which do not sum back
+    // to exactly 1 even for a column whose values are all listed.
 
     // HikariCP connection lifecycle constants
     static final long MINIMUM_MAX_LIFETIME_MS = 30_000L;
@@ -201,14 +209,16 @@ public class JDBCMetadata implements ConnectorMetadata {
         tableIdCache = new JDBCMetaCache<>(properties, true);
         tableInstanceCache = new JDBCMetaCache<>(properties, false);
         partitionInfoCache = new JDBCMetaCache<>(properties, false);
-        rowCountCache = buildRowCountCache(properties);
+        tableStatsCache = buildTableStatsCache(properties);
     }
 
-    private AsyncLoadingCache<JDBCTableName, Long> buildRowCountCache(Map<String, String> properties) {
-        // Row-count cache is always enabled regardless of jdbc_meta_cache_enable.
+    private AsyncLoadingCache<JDBCTableName, JdbcTableStats> buildTableStatsCache(Map<String, String> properties) {
+        // The statistics cache is always enabled regardless of jdbc_meta_cache_enable.
         // jdbc_meta_cache_enable controls schema metadata freshness; statistics are a
         // separate concern and must never block planning — async loading is mandatory.
         // Each parameter can be overridden per-catalog via the JDBC catalog properties map.
+        // The jdbc_row_count_cache_* names predate column statistics; they now govern the whole
+        // statistics entry, which is loaded and expired as one unit.
         long refreshSec = Long.parseLong(properties.getOrDefault(
                 "jdbc_row_count_cache_refresh_sec",
                 String.valueOf(Config.jdbc_row_count_cache_refresh_sec)));
@@ -222,18 +232,25 @@ public class JDBCMetadata implements ConnectorMetadata {
                 .maximumSize(maxSize)
                 .refreshAfterWrite(refreshSec, TimeUnit.SECONDS)
                 .expireAfterWrite(expireSec, TimeUnit.SECONDS)
-                .executor(ROW_COUNT_EXECUTOR)
-                .buildAsync(key -> loadRowCount(key));
+                .executor(TABLE_STATS_EXECUTOR)
+                .buildAsync(key -> loadTableStats(key));
     }
 
-    private long loadRowCount(JDBCTableName key) {
+    /**
+     * Load one table's statistics. Anything that goes wrong — an unreachable source, a table the
+     * dialect cannot describe, a source that has never analyzed the table — yields
+     * {@link JdbcTableStats#unknown()}, never a stand-in number. Reporting a default as though it
+     * were read from the source is worse than reporting nothing: the optimizer has a sound answer
+     * for "unknown" and none for "one row, trust me".
+     */
+    private JdbcTableStats loadTableStats(JDBCTableName key) {
         try (Connection connection = getConnection()) {
-            long count = schemaResolver.getTableRowCount(connection, key.getDatabaseName(), key.getTableName());
-            return count >= 0 ? count : Config.default_statistics_output_row_count;
+            return schemaResolver.getTableStatistics(connection, key.getDatabaseName(), key.getTableName())
+                    .orElse(JdbcTableStats.unknown());
         } catch (Exception e) {
-            LOG.warn("Failed to load row count for {}.{}: {}", key.getDatabaseName(), key.getTableName(),
+            LOG.warn("Failed to load statistics for {}.{}: {}", key.getDatabaseName(), key.getTableName(),
                     e.getMessage());
-            return Config.default_statistics_output_row_count;
+            return JdbcTableStats.unknown();
         }
     }
 
@@ -543,49 +560,177 @@ public class JDBCMetadata implements ConnectorMetadata {
     public Statistics getTableStatistics(OptimizerContext session, Table table,
             Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
             ScalarOperator predicate, long limit, TvrVersionRange tableVersionRange) {
-        if (rowCountCache == null) {
-            return Statistics.builder().setOutputRowCount(Config.default_statistics_output_row_count).build();
-        }
         JDBCTable jdbcTable = (JDBCTable) table;
+        if (tableStatsCache == null || jdbcTable.isInlineTable()) {
+            // An inline table is a pushed-down join/aggregation (or a native_query pass-through):
+            // its name and database no longer identify a table in the source, they are inherited
+            // from whichever atom the merged scan was derived from. Looking that name up would
+            // return some unrelated table's statistics and stamp them TABLE_METADATA — which is
+            // how the same join came out estimated at 100 rows or at 1,000,000 depending only on
+            // the order the two tables happened to appear in the SQL text.
+            return unknownStatistics(columns);
+        }
         JDBCTableName key = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
 
-        long rowCount = Config.default_statistics_output_row_count;
-        boolean hasRealRowCount = false;
-        CompletableFuture<Long> future = rowCountCache.getIfPresent(key);
+        JdbcTableStats loaded = null;
+        CompletableFuture<JdbcTableStats> future = tableStatsCache.getIfPresent(key);
         if (future == null) {
-            // Cold start: fire async load, return default for this planning round.
-            rowCountCache.get(key);
+            // Cold start: fire the async load and report unknown for this planning round.
+            tableStatsCache.get(key);
         } else if (future.isDone() && !future.isCompletedExceptionally()) {
             try {
-                rowCount = future.getNow(Config.default_statistics_output_row_count);
-                hasRealRowCount = true;
+                loaded = future.getNow(null);
             } catch (Exception e) {
-                LOG.warn("Unexpected error reading row count for {}.{}", key.getDatabaseName(), key.getTableName(), e);
+                LOG.warn("Unexpected error reading statistics for {}.{}", key.getDatabaseName(),
+                        key.getTableName(), e);
             }
         }
-        // Future in-flight or completed exceptionally: fall through to default.
-        Statistics.Builder builder = Statistics.builder().setOutputRowCount(rowCount);
-        if (hasRealRowCount) {
-            builder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        // Future still in flight, completed exceptionally, or the source had nothing to report.
+        if (loaded == null || !loaded.hasRowCount()) {
+            return unknownStatistics(columns);
         }
-        // Populate per-column NDV estimates (Tier-3 type-fraction; no extra IO to source DB)
+
+        long rowCount = loaded.getRowCount().getAsLong();
+        Statistics.Builder builder = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         if (!columns.isEmpty()) {
+            // A dialect that describes its columns gets the honest treatment: what it reported, and
+            // ColumnStatistic.unknown() for what it did not. A dialect that describes none keeps the
+            // type-ratio estimate it has always been given -- MySQL and ClickHouse report a row
+            // count but no column statistics, and reading nothing for PostgreSQL is not a reason to
+            // change what they see. The same split covers a PostgreSQL table whose pg_stats is empty
+            // because row-level security hides it, and the session variable below, which therefore
+            // restores the pre-feature behaviour rather than blanking the columns.
+            boolean sourceDescribesColumns =
+                    isColumnStatisticsEnabled(session) && !loaded.getColumnStats().isEmpty();
             Map<ColumnRefOperator, ColumnStatistic> colStats = new HashMap<>();
             for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
-                ConnectorNdvEstimator.TypeCategory cat =
-                        ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
-                double ndv = Math.max(1.0, Math.min(
-                        ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
-                colStats.put(entry.getKey(), ColumnStatistic.builder()
-                        .setDistinctValuesCount(ndv)
-                        .setAverageRowSize(entry.getValue().getType().getTypeSize())
-                        .setNullsFraction(0)
-                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
-                        .build());
+                colStats.put(entry.getKey(), sourceDescribesColumns
+                        ? toColumnStatistic(loaded.getColumnStats(entry.getValue().getName()),
+                                entry.getValue(), rowCount)
+                        : estimatedColumnStatistic(entry.getValue(), rowCount));
             }
             builder.addColumnStatistics(colStats);
         }
         return builder.build();
+    }
+
+    /**
+     * The type-ratio guess a JDBC catalog has always produced once it had a row count: NDV derived
+     * from the StarRocks type, no nulls, stamped ESTIMATE. It is not a measurement and it is not
+     * defended here -- it is kept so that a dialect this feature does not read statistics for sees
+     * exactly what it saw before.
+     */
+    private static ColumnStatistic estimatedColumnStatistic(Column column, long rowCount) {
+        ConnectorNdvEstimator.TypeCategory category =
+                ConnectorNdvEstimator.fromStarRocksType(column.getType());
+        double ndv = Math.max(1.0, Math.min(ConnectorNdvEstimator.typeNdv(category, rowCount), rowCount));
+        return ColumnStatistic.builder()
+                .setDistinctValuesCount(ndv)
+                .setAverageRowSize(column.getType().getTypeSize())
+                .setNullsFraction(0)
+                .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                .build();
+    }
+
+    /**
+     * Every requested column gets an entry — {@code Statistics.getColumnStatistic} throws on a
+     * missing one — and every entry is honestly unknown.
+     */
+    private static Statistics unknownStatistics(Map<ColumnRefOperator, Column> columns) {
+        Statistics.Builder builder = Statistics.builder()
+                .setOutputRowCount(Config.default_statistics_output_row_count)
+                .setStatsSource(Statistics.StatsSource.NONE);
+        if (columns != null && !columns.isEmpty()) {
+            Map<ColumnRefOperator, ColumnStatistic> colStats = new HashMap<>();
+            columns.keySet().forEach(ref -> colStats.put(ref, ColumnStatistic.unknown()));
+            builder.addColumnStatistics(colStats);
+        }
+        return builder.build();
+    }
+
+    private static boolean isColumnStatisticsEnabled(OptimizerContext session) {
+        if (session != null && session.getSessionVariable() != null) {
+            return session.getSessionVariable().isEnableJdbcColumnStatistics();
+        }
+        ConnectContext context = ConnectContext.get();
+        return context == null || context.getSessionVariable() == null
+                || context.getSessionVariable().isEnableJdbcColumnStatistics();
+    }
+
+    /**
+     * Translate one column's source statistics into the optimizer's shape.
+     *
+     * <p>Only a column the dialect actually reported gets a real statistic; everything else stays
+     * {@code UNKNOWN}. That is what bounds the blast radius of this change — a dialect that
+     * reports nothing, or a column the source has not analyzed, behaves exactly as before.
+     *
+     * <p>The distinct-value count is the field the optimizer cannot do without, so a source row
+     * that lacks it is treated as no statistic at all rather than as a half-filled one that would
+     * read as trustworthy.
+     */
+    private static ColumnStatistic toColumnStatistic(JdbcColumnStats source, Column column, long rowCount) {
+        if (source == null) {
+            return ColumnStatistic.unknown();
+        }
+        double distinctValues;
+        if (source.getDistinctValues().isPresent()) {
+            distinctValues = Math.max(1.0, source.getDistinctValues().getAsDouble());
+        } else if (isEntirelyNull(source)) {
+            // A source that reports no distinct count has two very different reasons for it, and
+            // the null fraction is what tells them apart. A column that is *entirely* NULL has no
+            // distinct count to report because there are no values — but "every row is NULL" is
+            // itself strong information, and throwing the whole row away to protect against a
+            // missing NDV discards it. One distinct value is the floor the optimizer works in.
+            //
+            // The other reason — PostgreSQL's n_distinct is also 0 for a type with no equality
+            // operator (json, xml, point) — must keep producing unknown: there the column may be
+            // fully populated, and reading its zero as "all NULL" would assert something false.
+            // The null fraction separates the two cases exactly.
+            distinctValues = 1.0;
+        } else {
+            return ColumnStatistic.unknown();
+        }
+        ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                .setDistinctValuesCount(distinctValues)
+                .setNullsFraction(source.getNullsFraction().orElse(0))
+                .setAverageRowSize(averageRowSize(source, column))
+                .setType(ColumnStatistic.StatisticType.ESTIMATE);
+        // No min/max: this path reads no value bounds from the source, so range selectivity keeps
+        // falling back to the optimizer's own defaults rather than to an invented interval.
+        return builder.build();
+    }
+
+    private static boolean isEntirelyNull(JdbcColumnStats source) {
+        return source.getNullsFraction().isPresent() && source.getNullsFraction().getAsDouble() >= 1.0;
+    }
+
+    /**
+     * How many bytes one row of this column costs the engine.
+     *
+     * <p>The source reports an average width <em>per row</em>, which is exactly what
+     * {@code averageRowSize} means here — it must not be multiplied by the row count. But the
+     * source measures its own storage, and for a decimal the two engines do not agree: PostgreSQL
+     * stores {@code numeric} as a variable-length value averaging around four bytes, while
+     * StarRocks materializes the mapped type at a fixed width — eight bytes for a DECIMAL64, and
+     * sixteen for the DECIMAL128(38,18) an undeclared {@code numeric} is narrowed to. Believing the
+     * source there under-counts memory and network cost by two to four times, which is enough to
+     * pick a broadcast join where a shuffle was wanted.
+     *
+     * <p>Only decimals are overridden. The obvious generalization — every fixed-width type takes
+     * its StarRocks type size — is wrong in this engine: {@link Type#getTypeSize()} is the tuple
+     * slot size, which is 16 for DATE and DATETIME, so it would inflate a PostgreSQL date from the
+     * measured 4 bytes to 16 and a timestamp from 8 to 16. On the integer and floating-point types
+     * the two numbers already agree, so there is nothing to gain there either. A missing width
+     * still falls back to the type size, as before.
+     */
+    private static double averageRowSize(JdbcColumnStats source, Column column) {
+        Type type = column.getType();
+        if (type.isDecimalOfAnyVersion()) {
+            return type.getTypeSize();
+        }
+        return source.getAverageWidth().isPresent() ? source.getAverageWidth().getAsInt() : type.getTypeSize();
     }
 
     @Override
@@ -597,8 +742,8 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
         partitionNamesCache.invalidate(jdbcTableName);
         partitionInfoCache.invalidate(jdbcTableName);
-        if (rowCountCache != null) {
-            rowCountCache.synchronous().invalidate(jdbcTableName);
+        if (tableStatsCache != null) {
+            tableStatsCache.synchronous().invalidate(jdbcTableName);
         }
     }
 

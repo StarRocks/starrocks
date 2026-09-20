@@ -4991,13 +4991,20 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
 
-    @ConfField(mutable = true)
+    // The three jdbc_row_count_cache_* knobs govern the per-table statistics a JDBC catalog reads
+    // from its source's catalog: the row count and, where the dialect supports it, the per-column
+    // statistics, which are loaded and expired together as one entry. The names predate column
+    // statistics and are kept for compatibility. Loading is always asynchronous, so these control
+    // how stale a planning round's numbers may be, never how long planning waits.
+    @ConfField(mutable = true, comment = "How long before a cached JDBC table statistics entry is " +
+            "asynchronously reloaded, in seconds")
     public static long jdbc_row_count_cache_refresh_sec = 600L;
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "How long a cached JDBC table statistics entry is kept " +
+            "before it must be loaded again, in seconds")
     public static long jdbc_row_count_cache_expire_sec = 1200L;
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Maximum number of tables whose JDBC statistics are cached")
     public static long jdbc_row_count_cache_max_size = 10000L;
 
     // the retention time for host disconnection events

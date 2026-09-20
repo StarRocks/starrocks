@@ -124,6 +124,12 @@ public class PushDownTopNToJDBCScanRule extends TransformationRule {
         // the BE would otherwise round-robin its chunks across drivers to gain parallelism, which
         // the dropped TopN used to repair. This flag asks it not to.
         queryTable.setPreserveRemoteOrder(true);
+        // Pushing the ORDER BY ... LIMIT turns the scan into a derived table the connector will no
+        // longer answer for, and the scan's predicate moves into the remote SQL where the estimator
+        // can no longer see it. Snapshot the TopN's estimate — the scan's row count, filtered by
+        // that predicate and capped by the limit — so neither is lost. The limit is also kept on
+        // the new scan operator, which caps the same number again: re-applying a cap is idempotent.
+        JDBCPushDownRuleUtils.snapshotPushDownStatistics(input, queryTable, context);
         LogicalJDBCScanOperator newScan = new LogicalJDBCScanOperator.Builder()
                 .withOperator(scan)
                 .setTable(queryTable)

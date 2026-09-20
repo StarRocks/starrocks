@@ -26,6 +26,7 @@ import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -1112,22 +1113,59 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computeJDBCScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
+    /**
+     * A JDBC table's statistics come from the source database's own catalog, delivered whole by the
+     * connector: row count and per-column statistics together.
+     *
+     * <p>They must be used as delivered, the way the Iceberg path does. The generic external-table
+     * path is wrong here because it rebuilds the column statistics from
+     * {@code _statistics_.column_statistics}, keyed by internal table id — a table a JDBC catalog
+     * never has a row in, so every column came back UNKNOWN no matter what the source had to say.
+     *
+     * <p>A scan the optimizer pushed a join, aggregation, TopN or projection into reads a derived
+     * table instead, which no table in the source describes: the connector refuses to answer for it
+     * (answering by the inherited table name is what once had the same join estimated at 100 rows
+     * or at 1,000,000 depending on the order the tables appeared in the SQL text). Such a scan
+     * carries its own estimate instead — snapshotted from the subtree it replaced, before the
+     * replacement, the way Trino's {@code deriveTableStatisticsForPushdown} does — and that
+     * snapshot is preferred here over asking the connector at all.
+     */
     private Void computeJDBCScanNode(Operator node, ExpressionContext context, Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        long rowCount = Config.default_statistics_output_row_count;
-        Statistics.StatsSource source = Statistics.StatsSource.NONE;
-        try {
-            String catalogName = table.getCatalogName();
-            Statistics connectorStats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null, null);
-            if (connectorStats != null) {
-                rowCount = (long) connectorStats.getOutputRowCount();
-                source = connectorStats.getStatsSource();
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to get JDBC table statistics for {}: {}", table.getName(), e.getMessage());
+        if (context.getStatistics() != null) {
+            return visitOperator(node, context);
         }
-        return computeNormalExternalTableScanNode(node, context, table, colRefToColumnMetaMap, rowCount, source);
+        Statistics tableStats = table instanceof JDBCTable jdbcTable
+                ? jdbcTable.getPushDownStatistics() : null;
+        if (tableStats == null) {
+            try {
+                tableStats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                        optimizerContext, table.getCatalogName(), table, colRefToColumnMetaMap, null, null);
+            } catch (Exception e) {
+                LOG.warn("Failed to get JDBC table statistics for {}: {}", table.getName(), e.getMessage());
+            }
+        }
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(tableStats == null
+                ? Config.default_statistics_output_row_count : (long) tableStats.getOutputRowCount());
+        builder.setStatsSource(tableStats == null
+                ? Statistics.StatsSource.NONE : tableStats.getStatsSource());
+        Map<ColumnRefOperator, ColumnStatistic> fromSource =
+                tableStats == null ? Map.of() : tableStats.getColumnStatistics();
+        for (ColumnRefOperator columnRef : colRefToColumnMetaMap.keySet()) {
+            // A column neither the connector nor the snapshot described stays unknown. Filling
+            // every requested column matters beyond tidiness: Statistics.getColumnStatistic throws
+            // on a missing one. A snapshot may also describe columns this scan does not output
+            // (a merged scan prunes its SELECT list); those are simply not asked for here.
+            ColumnStatistic columnStatistic = fromSource.getOrDefault(columnRef, ColumnStatistic.unknown());
+            builder.addColumnStatistic(columnRef, columnStatistic);
+            if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
+                optimizerContext.getDumpInfo().addTableStatistics(table, columnRef.getName(), columnStatistic);
+            }
+        }
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     /**

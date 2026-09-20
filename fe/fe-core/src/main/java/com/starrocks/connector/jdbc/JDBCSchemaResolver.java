@@ -33,6 +33,7 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public abstract class JDBCSchemaResolver {
@@ -274,6 +275,31 @@ public abstract class JDBCSchemaResolver {
      */
     public long getTableRowCount(Connection connection, String dbName, String tableName) throws SQLException {
         return -1L;
+    }
+
+    /**
+     * Read whatever statistics this dialect can cheaply obtain for one table: the row count and,
+     * where the source exposes them, per-column statistics.
+     *
+     * <p>The contract is deliberately semantic rather than shaped like any one catalog. Sources
+     * differ completely in how statistics are stored and how many round trips it takes to read
+     * them — PostgreSQL reads {@code pg_class} plus {@code pg_stats}, MySQL reads a single
+     * {@code INFORMATION_SCHEMA} row, SQL Server needs {@code DBCC SHOW_STATISTICS} through a
+     * {@code CallableStatement}. All of that, including any per-dialect fallback chain, belongs in
+     * the overriding resolver; nothing above this method may assume a particular source's catalog.
+     *
+     * <p>Callers invoke this off the planning path. Implementations may issue several statements
+     * on the supplied connection, but must keep to catalog lookups — never a scan of user data.
+     *
+     * <p>Returning {@link Optional#empty()} means "this dialect established nothing", which is how
+     * every dialect that does not override this behaves; those catalogs keep their current
+     * behaviour byte for byte. The default implementation below bridges dialects that only
+     * implement the older row-count-only hook.
+     */
+    public Optional<JdbcTableStats> getTableStatistics(Connection connection, String dbName, String tableName)
+            throws SQLException {
+        long rowCount = getTableRowCount(connection, dbName, tableName);
+        return rowCount >= 0 ? Optional.of(JdbcTableStats.ofRowCount(rowCount)) : Optional.empty();
     }
 
 }
