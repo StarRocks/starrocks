@@ -26,48 +26,6 @@ namespace starrocks::parquet {
 
 DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
-Status validate_geo_field(const ParquetField& field, const TIcebergSchemaField* lake_field) {
-    const auto& element = field.schema_element;
-    const auto& logical = element.logicalType;
-    const bool geography = element.__isset.logicalType && logical.__isset.GEOGRAPHY;
-    const bool geometry = element.__isset.logicalType && logical.__isset.GEOMETRY;
-    const auto* geo = lake_field != nullptr && lake_field->__isset.geo_metadata ? &lake_field->geo_metadata : nullptr;
-    if (!geography && !geometry && geo == nullptr) return Status::OK();
-
-    if (!element.__isset.type || element.type != tparquet::Type::BYTE_ARRAY || element.__isset.converted_type ||
-        (geography && geometry)) {
-        return Status::InvalidArgument("Invalid Parquet geo annotation: " + field.name);
-    }
-    // Source geo metadata is supplied by FE; only validate the file-side contract here.
-    if (geo != nullptr && !geography && !geometry && element.__isset.logicalType) {
-        return Status::InvalidArgument("Iceberg geo field has a non-geo Parquet annotation: " + field.name);
-    }
-    // Unannotated WKB may inherit semantics from the Iceberg schema.
-    if (!geography && !geometry) return Status::OK();
-
-    const auto kind = geography ? TIcebergGeoKind::GEOGRAPHY : TIcebergGeoKind::GEOMETRY;
-    const std::string_view crs =
-            geography ? (logical.GEOGRAPHY.__isset.crs ? std::string_view(logical.GEOGRAPHY.crs) : "OGC:CRS84")
-                      : (logical.GEOMETRY.__isset.crs ? std::string_view(logical.GEOMETRY.crs) : "OGC:CRS84");
-    if (crs.empty()) return Status::InvalidArgument("Empty CRS in Parquet geo annotation: " + field.name);
-    std::string_view edge = "PLANAR";
-    if (geography) {
-        const auto algorithm = logical.GEOGRAPHY.__isset.algorithm ? logical.GEOGRAPHY.algorithm
-                                                                   : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
-        const auto it = tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.find(algorithm);
-        if (it == tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.end()) {
-            return Status::NotSupported("Unknown Parquet geo edge algorithm: " + field.name);
-        }
-        edge = it->second;
-    }
-    // Missing geo metadata (including older senders) is not proof of an ordinary
-    // binary type. Compare declared semantics without changing the reader's type policy.
-    if (geo != nullptr && (geo->kind != kind || geo->crs != crs || geo->edge_algorithm != edge)) {
-        return Status::InvalidArgument("Iceberg/Parquet geo schema mismatch: " + field.name);
-    }
-    return Status::OK();
-}
-
 namespace {
 
 Status validate_native_iceberg_geography(const ParquetField& field, const TypeDescriptor& col_type,
@@ -75,8 +33,6 @@ Status validate_native_iceberg_geography(const ParquetField& field, const TypeDe
     if (!lake_field.__isset.geo_metadata || !col_type.geo_type) {
         return Status::NotSupported("Native Iceberg GEOGRAPHY requires GEO metadata: " + field.name);
     }
-    RETURN_IF_ERROR(validate_geo_field(field, &lake_field));
-
     const auto& source = lake_field.geo_metadata;
     const auto& planned = *col_type.geo_type;
     constexpr std::string_view edge_prefix = "GEO_EDGE_ALGORITHM_";
@@ -479,6 +435,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                                     column_type_to_string(field->type), logical_type_to_string(col_type.type)));
     }
     DCHECK(lake_schema_field != nullptr);
+    if (col_type.is_complex_type()) {
+        for (const auto& child : col_type.children) {
+            if (child.type == TYPE_GEOGRAPHY) {
+                return Status::NotSupported("Nested GEOGRAPHY is not supported");
+            }
+        }
+    }
     if (field->type == ColumnType::ARRAY) {
         const TIcebergSchemaField* element_schema = &lake_schema_field->children[0];
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,

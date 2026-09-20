@@ -210,7 +210,7 @@ public class IcebergApiConverterTest {
     }
 
     @Test
-    public void testNestedGeographyRemainsUnsupported() {
+    public void testNestedGeographyUsesSharedTypeConversion() {
         Schema schema = new Schema(
                 Types.NestedField.optional(1, "array_geo",
                         Types.ListType.ofOptional(2, Types.GeographyType.crs84())),
@@ -219,9 +219,12 @@ public class IcebergApiConverterTest {
                 Types.NestedField.optional(5, "map_geo", Types.MapType.ofOptional(
                         6, 7, Types.IntegerType.get(), Types.GeographyType.crs84())));
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
-        assertTrue(columns.get(0).getType().isUnknown());
-        assertTrue(columns.get(1).getType().isUnknown());
-        assertTrue(columns.get(2).getType().isUnknown());
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((ArrayType) columns.get(0).getType()).getItemType().getPrimitiveType());
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((StructType) columns.get(1).getType()).getField("shape").getType().getPrimitiveType());
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((MapType) columns.get(2).getType()).getValueType().getPrimitiveType());
     }
 
     @Test

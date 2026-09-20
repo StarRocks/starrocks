@@ -860,10 +860,6 @@ public class ColumnTypeConverter {
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
-        return fromIcebergType(icebergType, false);
-    }
-
-    private static Type fromIcebergType(org.apache.iceberg.types.Type icebergType, boolean nested) {
         if (icebergType == null) {
             return NullType.NULL;
         }
@@ -924,7 +920,7 @@ public class ColumnTypeConverter {
                 ArrayList<StructField> structFields = new ArrayList<>(fields.size());
                 for (Types.NestedField field : fields) {
                     String fieldName = field.name();
-                    Type fieldType = fromIcebergType(field.type(), true);
+                    Type fieldType = fromIcebergType(field.type());
                     if (fieldType.isUnknown()) {
                         return UnknownType.UNKNOWN_TYPE;
                     }
@@ -940,9 +936,6 @@ public class ColumnTypeConverter {
             case VARIANT:
                 return VariantType.VARIANT;
             case GEOGRAPHY:
-                if (nested) {
-                    return UnknownType.UNKNOWN_TYPE;
-                }
                 Types.GeographyType geography = (Types.GeographyType) icebergType;
                 if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
                         && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
@@ -964,17 +957,17 @@ public class ColumnTypeConverter {
     }
 
     private static Type convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        Type elementType = fromIcebergType(icebergType.asNestedType().asListType().elementType(), true);
+        Type elementType = fromIcebergType(icebergType.asNestedType().asListType().elementType());
         return elementType.isUnknown() ? UnknownType.UNKNOWN_TYPE : new ArrayType(elementType);
     }
 
     private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        Type keyType = fromIcebergType(icebergType.asMapType().keyType(), true);
+        Type keyType = fromIcebergType(icebergType.asMapType().keyType());
         // iceberg support complex type as key type, but sr is not supported now
         if (keyType.isComplexType() || keyType.isUnknown()) {
             return UnknownType.UNKNOWN_TYPE;
         }
-        Type valueType = fromIcebergType(icebergType.asMapType().valueType(), true);
+        Type valueType = fromIcebergType(icebergType.asMapType().valueType());
         if (valueType.isUnknown()) {
             return UnknownType.UNKNOWN_TYPE;
         }
