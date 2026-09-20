@@ -53,6 +53,10 @@ import java.util.Objects;
 public class ScalarType extends Type implements Cloneable {
 
     public static final int MAX_CHAR_LENGTH = 255;
+    public static final ScalarType GEOGRAPHY = createGeoType(PrimitiveType.GEOGRAPHY,
+            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                    GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
 
     @SerializedName(value = "type")
     private final PrimitiveType type;

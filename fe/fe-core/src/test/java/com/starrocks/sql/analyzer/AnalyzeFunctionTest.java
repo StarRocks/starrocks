@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -55,6 +56,28 @@ public class AnalyzeFunctionTest {
         analyzeFail("select now(*) from t0");
 
         analyzeSuccess("SHOW FULL BUILTIN FUNCTIONS FROM `testDb1` LIKE '%year%'");
+    }
+
+    @Test
+    public void testNativeGeographySqlBoundary() {
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_GeogFromText('POINT (1 2)')")).getQueryRelation();
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY,
+                ((SelectRelation) relation).getOutputExpression().get(0).getType().getPrimitiveType());
+
+        analyzeSuccess("select ST_AsText(ST_GeogFromText('POINT EMPTY'))");
+        analyzeSuccess("select ST_AsWKT(ST_GeogFromText('LINESTRING (1 2, 3 4)', 4326))");
+        analyzeSuccess("select ST_AsBinary(ST_GeogFromWKB(ST_AsWKB(ST_GeogFromText('POINT (1 2)'))))");
+
+        analyzeFail("select ST_GeogFromText(ta) = ST_GeogFromText(ta) from tall");
+        analyzeFail("select ST_GeogFromText(ta) <=> ST_GeogFromText(ta) from tall");
+        analyzeFail("select ST_GeogFromText(ta) from tall group by ST_GeogFromText(ta)");
+        analyzeFail("select distinct ST_GeogFromText(ta) from tall");
+        analyzeFail("select ST_GeogFromText(ta) from tall order by ST_GeogFromText(ta)");
+        analyzeFail("select * from t0 join t1 on "
+                + "ST_GeogFromText(cast(t0.v1 as varchar)) = ST_GeogFromText(cast(t1.v4 as varchar))");
+        analyzeFail("select concat(ST_GeogFromText('POINT (1 2)'), '')");
+        analyzeFail("insert into t0(v1) select ST_GeogFromText('POINT (1 2)')");
     }
 
     @Test

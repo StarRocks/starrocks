@@ -115,6 +115,7 @@ import static com.starrocks.type.IntegerType.TINYINT;
 import static com.starrocks.type.JsonType.JSON;
 import static com.starrocks.type.MapType.MAP_VARCHAR_VARCHAR;
 import static com.starrocks.type.PercentileType.PERCENTILE;
+import static com.starrocks.type.ScalarType.GEOGRAPHY;
 import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static com.starrocks.type.VarcharType.VARCHAR;
 import static com.starrocks.type.VariantType.VARIANT;
