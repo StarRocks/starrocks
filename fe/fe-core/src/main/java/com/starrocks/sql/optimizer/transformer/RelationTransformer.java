@@ -1107,7 +1107,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         if (node.getJoinOp().isFullOuterJoin() &&
                 node.getUsingColNames() != null && !node.getUsingColNames().isEmpty()) {
-            return buildFullOuterJoinUsingPlan(node, joinOptExprBuilder, onPredicate);
+            return buildFullOuterJoinUsingPlan(node, joinOptExprBuilder, leftPlan, rightPlan);
         }
 
         LogicalProjectOperator projectOperator =
@@ -1238,14 +1238,47 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
      * 
      * @param node The JOIN relation with USING clause
      * @param joinBuilder The join OptExprBuilder to wrap
-     * @param onPredicate The join ON predicate containing equality conditions
+     * @param leftPlan Left side plan, for resolving each USING column on the left
+     * @param rightPlan Right side plan, for resolving each USING column on the right
      * @return LogicalPlan with COALESCE projection for USING columns
      */
     public LogicalPlan buildFullOuterJoinUsingPlan(JoinRelation node, OptExprBuilder joinBuilder,
-                                                               ScalarOperator onPredicate) {
+                                                  LogicalPlan leftPlan, LogicalPlan rightPlan) {
         List<String> usingColumns = node.getUsingColNames();
-        List<ColumnRefOperator> outputs = new ArrayList<>();
+        List<Field> leftFields = node.getLeft().getRelationFields().getAllFields();
+        List<Field> rightFields = node.getRight().getRelationFields().getAllFields();
+
+        // The join's field mappings already line up with the scope produced by the analyzer:
+        // the USING columns in usingColNames order, then each side's remaining columns. Only
+        // the USING slots are rewritten, so the projection keeps one column per scope field.
+        List<ColumnRefOperator> outputs = new ArrayList<>(joinBuilder.getExpressionMapping().getFieldMappings());
+        Map<ColumnRefOperator, ScalarOperator> coalesceExprs = new HashMap<>();
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+
+        for (int i = 0; i < usingColumns.size(); i++) {
+            String colName = usingColumns.get(i);
+            // Resolve through the relation fields, whose names are the USING names. A column
+            // ref carries its own name, which an alias makes unrelated to the USING column.
+            ColumnRefOperator leftCol = findColumnByName(leftFields, leftPlan.getOutputColumn(), colName);
+            ColumnRefOperator rightCol = findColumnByName(rightFields, rightPlan.getOutputColumn(), colName);
+            // deduplicateUsingColumns resolved the same names to build these slots, so a miss
+            // here means the slots no longer line up with usingColumns.
+            Preconditions.checkState(leftCol != null && rightCol != null,
+                    "USING column %s is not resolvable on both sides of the join", colName);
+
+            // Feed createCoalesceOperator the same rewritten pair buildJoinUsingPredicate builds for
+            // this column, so the merged column's type is resolved exactly as before.
+            ScalarOperator eq = rewriter.rewrite(
+                    new BinaryPredicateOperator(BinaryType.EQ, leftCol, rightCol),
+                    ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            ScalarOperator coalesceExpr = createCoalesceOperator(eq.getChild(0), eq.getChild(1));
+            ColumnRefOperator coalesceCol = columnRefFactory.create(colName, coalesceExpr.getType(), true);
+            outputs.set(i, coalesceCol);
+            coalesceExprs.put(coalesceCol, coalesceExpr);
+        }
+
         Map<ColumnRefOperator, ScalarOperator> projections = new HashMap<>();
+<<<<<<< HEAD
 
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
         Map<String, ScalarOperator> leftExprMap = new HashMap<>();
@@ -1313,6 +1346,10 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                 outputs.add(col);
                 projections.put(col, col);
             }
+=======
+        for (ColumnRefOperator col : outputs) {
+            projections.put(col, coalesceExprs.getOrDefault(col, col));
+>>>>>>> 7681293 ([BugFix] Merge each FULL OUTER JOIN USING column with its own counterpart (#79298))
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
@@ -1327,6 +1364,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         return new LogicalPlan(projectBuilder, outputs, List.of());
     }
 
+<<<<<<< HEAD
     private String extractBaseColumnName(ScalarOperator expr) {
         if (expr.isColumnRef()) {
             return ((ColumnRefOperator) expr).getName();
@@ -1340,6 +1378,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         return null;
     }
 
+=======
+>>>>>>> 7681293 ([BugFix] Merge each FULL OUTER JOIN USING column with its own counterpart (#79298))
     private ScalarOperator createCoalesceOperator(ScalarOperator leftOp, ScalarOperator rightOp) {
         Type leftType = leftOp.getType();
         Type rightType = rightOp.getType();
@@ -1366,10 +1406,18 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
      * Deduplicate USING columns from the output column list to match the deduplicated scope.
      * For JOIN USING, QueryAnalyzer already deduplicated fields in the scope.
      * We need to match this by selecting the appropriate column from left or right side.
+<<<<<<< HEAD
      * 
      * - For FULL OUTER JOIN: Not called here (handled by addCoalesceProjectForFullOuterJoinUsing)
      * - For LEFT OUTER/INNER JOIN: Keep left-side USING columns
+=======
+     *
+>>>>>>> 7681293 ([BugFix] Merge each FULL OUTER JOIN USING column with its own counterpart (#79298))
      * - For RIGHT OUTER JOIN: Keep right-side USING columns
+     * - Otherwise (including FULL OUTER JOIN): Keep left-side USING columns
+     *
+     * The USING columns come first, in usingColNames order.
+     * {@link #buildFullOuterJoinUsingPlan} relies on that to rewrite them by index.
      */
     private List<ColumnRefOperator> deduplicateUsingColumns(JoinRelation node,
                                                             List<ColumnRefOperator> leftColumns,
