@@ -359,6 +359,10 @@ public class BrokerLoadJob extends BulkLoadJob {
         // compute resource — ConnectContext re-acquires the resource if the two disagree.
         context.setCurrentWarehouseId(warehouseId);
         context.setCurrentComputeResource(computeResource);
+        // The multi-node tablet write knobs are NOT restored onto this context: LoadPlanner reads
+        // them straight out of the persisted sessionVariables and hands them to the sink, which
+        // pins them for the non-failover path too -- where this context is the client's live
+        // session and must not be written to.
     }
 
     /**

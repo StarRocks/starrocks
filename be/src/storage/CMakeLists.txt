@@ -224,6 +224,7 @@ set(STORAGE_FILES
     lake/tablet_reader.cpp
     lake/tablet_warmup_manager.cpp
     lake/tablet_range_helper.cpp
+    lake/multi_node_write_txn_log.cpp
     lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
