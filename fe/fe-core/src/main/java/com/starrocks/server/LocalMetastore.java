@@ -1644,8 +1644,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         long id = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
+<<<<<<< HEAD
                 id, partition.generatePhysicalPartitionName(id),
                 partition.getId(), indexMap.get(olapTable.getBaseIndexId()));
+=======
+                id, partition.getId(), indexMap.get(olapTable.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+>>>>>>> b4a68b1 ([BugFix] Generate gtid and partition version epoch only on the leader FE (#78799))
         // set ShardGroupId to partition for rollback to old version
         physicalPartition.setShardGroupId(shardGroupId);
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
@@ -1947,10 +1954,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
+<<<<<<< HEAD
                 physicalPartitionId,
                 logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
                 partitionId,
                 indexMap.get(table.getBaseIndexId()));
+=======
+                physicalPartitionId, partitionId, indexMap.get(table.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+>>>>>>> b4a68b1 ([BugFix] Generate gtid and partition version epoch only on the leader FE (#78799))
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         logicalPartition.addSubPartition(physicalPartition);
