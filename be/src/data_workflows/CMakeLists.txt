@@ -34,6 +34,7 @@ set(DATA_WORKFLOWS_FILES
     load/routine_load/data_consumer.cpp
     load/routine_load/data_consumer_group.cpp
     load/routine_load/data_consumer_pool.cpp
+    load/tablet_writer/add_chunk_probe.cpp
     load/tablet_writer/lake_tablets_channel.cpp
     load/tablet_writer/load_channel.cpp
     load/tablet_writer/load_channel_mgr.cpp

@@ -26,6 +26,7 @@
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
+#include "data_workflows/load/tablet_writer/add_chunk_probe.h"
 #include "common/compiler_util.h"
 #include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
@@ -568,6 +569,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // |_delta_writers.size()| is the max number of tasks invoking `AsyncDeltaWriter::finish()`
     auto count_down_latch = BThreadCountDownLatch(channel_size + (request.eos() ? _delta_writers.size() : 0));
 
+    // Declared after the latch so it is destroyed before it: the probe reads the latch while the
+    // call is still on this frame, and deregisters itself as the frame unwinds.
+    AddChunkProbe probe(_txn_id, _index_id, request.sender_id(), request.eos());
+    probe.watch_latch(&count_down_latch, count_down_latch.count());
+    probe.set_phase("submitting_writes");
+
     int64_t wait_memtable_flush_time_ns = 0;
     int32_t total_row_num = 0;
     // Open and write AsyncDeltaWriter
@@ -609,8 +616,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             // Do NOT return
             break;
         }
-        dw->write(chunk, row_indexes + from, size, [&](const Status& st) {
+        probe.owed_by(tablet_id);
+        dw->write(chunk, row_indexes + from, size, [&, id = tablet_id](const Status& st) {
             context->update_status(st);
+            probe.settled_by(id);
             count_down_latch.count_down();
         });
     }
@@ -640,6 +649,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     count_down_latch.count_down();
                     continue;
                 }
+                probe.owed_by(tablet_id);
                 dw->finish(_finish_mode, [&, id = tablet_id, self = dw.get()](StatusOr<TxnLogPtr> res) {
                     if (!res.ok()) {
                         context->update_status(res.status());
@@ -655,6 +665,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                             _txn_log_collector.add(std::move(res).value());
                         }
                     }
+                    probe.settled_by(id);
                     count_down_latch.count_down();
                 });
             }
@@ -666,7 +677,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     auto start_wait_writer_ts = watch.elapsed_time();
     // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
+    probe.set_phase("latch_wait");
     count_down_latch.wait();
+    probe.set_phase("after_latch");
     FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_add_chunk_wait_write_block, {
         int32_t timeout_ms = config::load_fp_tablets_channel_add_chunk_block_ms;
         if (timeout_ms > 0) {
@@ -787,7 +800,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             // and we report the timeout immediately rather than feeding a
             // negative value to ConditionVariable::wait_for.
             if (t < 0) t = 0;
+            probe.set_phase("txn_log_wait");
             auto ok = _txn_log_collector.wait(t);
+            probe.set_phase("after_txn_log_wait");
             auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
 
             // Post-wait snapshot: coordinator map is now final (every sender's

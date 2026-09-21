@@ -23,6 +23,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/thread.h"
+#include "data_workflows/load/tablet_writer/add_chunk_probe.h"
 #include "data_workflows/load/tablet_writer/load_channel.h"
 #include "data_workflows/load/tablet_writer/tablets_channel.h"
 #include "gutil/strings/substitute.h"
@@ -334,6 +335,10 @@ void* LoadChannelMgr::load_channel_clean_bg_worker(void* arg) {
     while (!bthread_stopped(bthread_self())) {
         if (bthread_usleep(interval * 1000 * 1000) == 0) {
             mgr->_start_load_channels_clean();
+            // An add_chunk that is still running after this long is not slow, it is stuck: it
+            // parks a bthread and holds the closure of its tablet_writer_add_chunks, which is
+            // what keeps the connection, and later the whole exit, from finishing.
+            AddChunkProbe::log_stuck_calls(30);
         }
     }
     return nullptr;
