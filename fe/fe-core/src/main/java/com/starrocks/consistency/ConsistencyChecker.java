@@ -398,7 +398,7 @@ public class ConsistencyChecker extends LeaderDaemon {
                 try {
                     job.clear();
                 } catch (Throwable t) {
-                    LOG.warn("clear consistency job for tablet {} failed", job.getTabletId(), t);
+                    throw new IllegalStateException("Failed to clear consistency job for tablet " + job.getTabletId(), t);
                 }
             }
             jobs.clear();

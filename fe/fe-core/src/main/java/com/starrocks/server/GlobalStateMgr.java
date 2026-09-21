@@ -1463,8 +1463,8 @@ public class GlobalStateMgr {
         journalWriter.startDaemon();
 
         // Verify the previous leader session (if any) has fully quiesced before starting a new one.
-        // Demotion stops the leader-only daemons fire-and-forget; if a straggler is still alive, restart
-        // for a clean slate rather than run two workers against the same singleton state. Done before
+        // Demotion already drains these workers before follower replay; keep this final guard against
+        // any previous-session work surviving until re-election. Done before
         // feType flips to LEADER so no new leader work (or a stale straggler's admission) can slip in.
         assertLeaderSessionQuiescedOrExit();
 
@@ -1695,6 +1695,11 @@ public class GlobalStateMgr {
                 || type == FrontendNodeType.UNKNOWN;
     }
 
+    /** Also reject work queued in a previous leader session, even if this FE has been re-elected. */
+    public boolean isAgentTaskDispatchDisallowed(LeaderLease lease) {
+        return isAgentTaskDispatchDisallowed() || !activeLeaderLease.equals(lease);
+    }
+
     @VisibleForTesting
     LeaderRoleState getLeaderRoleState() {
         return leaderRoleState;
@@ -1832,11 +1837,8 @@ public class GlobalStateMgr {
      * demotion and the FE singletons become reusable when this node is re-elected.
      */
     void stopLeaderOnlyDaemonThreads() {
-        // Fire-and-forget: request stop on every leader-only daemon/pool and return WITHOUT joining, so
-        // this single state-change thread is not blocked draining ~40 daemons (a stuck one used to force
-        // System.exit here, degrading a graceful transfer into a restart). Each daemon's worker self-cleans
-        // in onStopped() and deregisters on exit; the re-activation cleanliness gate then verifies quiescence
-        // and exits only if a straggler is still alive when this node is re-elected.
+        // Request every cooperative stop before awaiting the session in a separate stage. Each daemon
+        // drains its owned pools and cleans up on its worker; no business thread is interrupted.
         // Stop in the reverse order of startLeaderOnlyDaemonThreads().
         if (RunMode.isSharedDataMode()) {
             stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopBestEffort());
@@ -1921,13 +1923,9 @@ public class GlobalStateMgr {
     }
 
     /**
-     * Re-activation cleanliness gate. Demotion stops leader-only daemons fire-and-forget (no join, see
-     * {@link #stopLeaderOnlyDaemonThreads()}), so a straggler whose interrupt was eaten may still be
-     * alive when this node is re-elected. Before serving as leader again this verifies the previous
-     * session's workers finished: a fresh worker running concurrently with a straggler against the same
-     * singleton state is strictly worse than a restart. If any straggler remains, it logs the offenders
-     * (and how long the leader role state has lingered) and terminates the process for a clean restart.
-     * Called before feType is set to LEADER so no new leader work starts while a previous session lingers.
+     * Final activation guard, in addition to the drain performed before follower replay. A previous
+     * session must have finished its workers, callbacks and cleanup before starting another worker
+     * against the same singleton state. Log any remaining workers/pools and exit for a clean restart.
      */
     private void assertLeaderSessionQuiescedOrExit() {
         List<String> stragglers = findLeaderSessionStragglers();
@@ -1955,7 +1953,7 @@ public class GlobalStateMgr {
             stragglers.add(daemon.getName());
         }
         // Leader-session pools with no owning daemon (no isRunning to cover them): a pool is a straggler
-        // only if a previous demotion shut it down (fire-and-forget, no await) and it has not terminated.
+        // only if a previous demotion shut it down (stop requested, not yet terminated) and it has not terminated.
         if (loadingLoadTaskScheduler != null
                 && loadingLoadTaskScheduler.isShutdown() && !loadingLoadTaskScheduler.isTerminated()) {
             stragglers.add("loadingLoadTaskScheduler(pool)");
@@ -2081,11 +2079,14 @@ public class GlobalStateMgr {
     void executeLeaderDemotionStages(FrontendNodeType targetType) {
         LOG.info("leader demotion to {} starting", targetType);
         long startMs = System.currentTimeMillis();
+        long deadlineNs = System.nanoTime()
+                + TimeUnit.SECONDS.toNanos(Math.max(1L, Config.leader_demotion_drain_timeout_sec));
         runDemotionStage("beginLeaderDemotion", () -> beginLeaderDemotion(targetType));
         runDemotionStage("abandonInFlightAgentTasks", this::abandonInFlightAgentTasks);
         runDemotionStage("sealJournalWriter", this::sealJournalWriter);
         runDemotionStage("stopLeaderOnlyDaemonThreads", this::stopLeaderOnlyDaemonThreads);
-        runDemotionStage("awaitJournalVisibleStateResets", this::awaitJournalVisibleStateResets);
+        runDemotionStage("awaitLeaderSessionQuiesced", () -> awaitLeaderSessionQuiesced(
+                Math.max(1L, TimeUnit.NANOSECONDS.toMillis(deadlineNs - System.nanoTime()))));
         runDemotionStage("switchFrontendType", () -> feType = targetType);
         runDemotionStage("completeLeaderDemotion", this::completeLeaderDemotion);
         LOG.info("leader demotion to {} completed in {}ms", targetType, System.currentTimeMillis() - startMs);
@@ -2118,22 +2119,37 @@ public class GlobalStateMgr {
     }
 
     /**
-     * Wait for the leader-only daemons whose onStopped() rewrites JOURNAL-VISIBLE state (alter-job
-     * fields, routine-load job state) to fully quiesce before the follower replayer starts. Their
-     * resets restore shared objects to the last durable state, while the replayer mutates the SAME
-     * objects when it applies the new leader's journal - and replay takes no job monitor, so a reset
-     * running after (or interleaved with) replay would tear freshly replayed durable state (e.g. an
-     * optimize job left WAITING_TXN with its just-replayed tmpPartitionIds cleared) with nothing to
-     * ever repair it. Daemons whose onStopped() only drops leader-session transients (queues, pools,
-     * slot counts) stay fire-and-forget; the re-activation gate still covers those.
-     * The wait shares the leader_demotion_drain_timeout_sec budget (a fresh slice for this stage);
-     * a daemon stuck in onStopped() past it fails the stage and runDemotionStage exits the process -
-     * the pre-demotion behavior for a leader that cannot stop cleanly.
+     * Cooperatively drain the previous session before changing FE type or starting follower replay.
+     * In-flight bodies, callbacks and onStopped resets can mutate the same objects as replay. Keeping
+     * feType unchanged during this wait also prevents old internal DML from being forwarded by this
+     * FE as follower work; the closed WAL gate rejects further local writes. A Future being cancelled
+     * is not proof that its body ended: the registry and pool termination predicates track actual exit.
+     * A stuck session fails demotion within the configured budget, without interrupting business code.
      */
-    private void awaitJournalVisibleStateResets() {
-        LeaderDaemon.awaitQuiesced(
-                Lists.newArrayList(getSchemaChangeHandler(), getRollupHandler(), routineLoadScheduler),
-                Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
+    @VisibleForTesting
+    void awaitLeaderSessionQuiesced(long timeoutMs) {
+        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
+        long nextLogNs = System.nanoTime();
+        while (true) {
+            List<String> stragglers = findLeaderSessionStragglers();
+            if (stragglers.isEmpty()) {
+                return;
+            }
+            long now = System.nanoTime();
+            if (now >= deadlineNs) {
+                throw new IllegalStateException("timed out draining leader session before follower replay: " + stragglers);
+            }
+            if (now >= nextLogNs) {
+                LOG.info("waiting for leader session to drain before follower replay: {}", stragglers);
+                nextLogNs = now + TimeUnit.SECONDS.toNanos(10L);
+            }
+            try {
+                TimeUnit.NANOSECONDS.sleep(Math.min(TimeUnit.MILLISECONDS.toNanos(10L), deadlineNs - now));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("interrupted while draining leader session", e);
+            }
+        }
     }
 
     @VisibleForTesting

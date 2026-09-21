@@ -109,15 +109,13 @@ public class AlterJobMgrTest {
 
     @Test
     public void testStopBestEffortContinuesWhenOneHandlerThrows() {
-        // A misbehaving handler must not abort the demotion stop; the remaining handlers still need to
-        // be stopped. stopBestEffort() evaluates interruptOnStop(), so a throwing interruptOnStop bubbles
-        // out of that handler's stopBestEffort - AlterJobMgr's per-handler try/catch is the safety net.
+        // A failing stop-notification hook must not skip the remaining handlers.
         MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
         SystemHandler systemHandler = new SystemHandler();
 
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler() {
             @Override
-            protected boolean interruptOnStop() {
+            protected void onStopRequested() {
                 throw new RuntimeException("simulated handler stop failure");
             }
         };
@@ -131,15 +129,13 @@ public class AlterJobMgrTest {
 
     @Test
     public void testStopBestEffortContinuesWhenMaterializedViewHandlerThrows() {
-        // Mirror of the previous test, but the middle handler is the one that misbehaves. Covers the
-        // materializedViewHandler-specific try/catch arm so a failure there does not skip the
-        // SystemHandler stop.
+        // A failing notification in the middle of the fan-out must not skip SystemHandler.
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         SystemHandler systemHandler = new SystemHandler();
 
         MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler() {
             @Override
-            protected boolean interruptOnStop() {
+            protected void onStopRequested() {
                 throw new RuntimeException("simulated materializedView stop failure");
             }
         };
@@ -153,14 +149,12 @@ public class AlterJobMgrTest {
 
     @Test
     public void testStopBestEffortToleratesClusterHandlerThrowing() {
-        // The last handler in the fan-out is SystemHandler (a.k.a. clusterHandler). Its try/catch arm
-        // has no successor to verify, so we just assert the call completes without propagating the
-        // exception - the safety net must absorb it.
+        // A failing notification still leaves the stop request recorded.
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
         SystemHandler systemHandler = new SystemHandler() {
             @Override
-            protected boolean interruptOnStop() {
+            protected void onStopRequested() {
                 throw new RuntimeException("simulated cluster stop failure");
             }
         };

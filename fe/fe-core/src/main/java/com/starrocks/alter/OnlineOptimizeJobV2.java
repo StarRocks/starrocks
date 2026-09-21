@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
@@ -54,6 +55,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.StatementBase;
@@ -148,17 +150,23 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     }
 
     @Override
+    protected void awaitInFlightTasks() {
+        // The INSERT runs on a process-wide executor, outside AlterHandler's owned pool. Await its
+        // real completion before resetting routing/state; cancel(false) would only finish its Future.
+        if (future != null) {
+            try {
+                Uninterruptibles.getUninterruptibly(future);
+            } catch (ExecutionException e) {
+                LOG.info("rewrite task settled with an error during leader handoff, job: {}", jobId, e.getCause());
+            }
+            future = null;
+        }
+    }
+
+    @Override
     protected void resetTransientState() {
         if (jobState == JobState.RUNNING) {
             jobState = JobState.WAITING_TXN;
-        }
-        // The single in-flight INSERT future is attributed to "the task currently being
-        // processed" by position, not identity: a stale result from the previous leader
-        // session would be consumed by a NEW task whose INSERT never ran, and its EMPTY temp
-        // partition would be durably swapped in. Cancel hard and drop it.
-        if (future != null) {
-            future.cancel(true);
-            future = null;
         }
         // runWaitingTxnJob APPENDS to rewriteTasks; watershedTxnId is reallocated per task
         // during RUNNING and its durable WAITING_TXN value is -1.
@@ -498,7 +506,12 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                 } else {
                     LOG.info("previous transactions are all finished, begin to optimize task {}. job: {}",
                                 rewriteTask.toString(), jobId);
+                    GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+                    LeaderLease lease = state.captureLeaderLease();
                     Callable<Constants.TaskRunState> task = () -> {
+                        if (state.isLeaderDemoting() || (lease.isValid() && !state.isLeaderLeaseValid(lease))) {
+                            return Constants.TaskRunState.FAILED;
+                        }
                         try {
                             executeSql(rewriteTask.getDefinition());
                             LOG.info("finish rewrite task: {}", rewriteTask.getName());

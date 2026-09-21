@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.PriorityFutureTask;
 import com.starrocks.common.PriorityThreadPoolExecutor;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.LeaderDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -91,7 +92,18 @@ public class PriorityLeaderTaskExecutor {
             }
 
             try {
-                PriorityFutureTask<?> future = executor.submit(task);
+                PriorityThreadPoolExecutor sessionPool = executor;
+                PriorityFutureTask<Void> future = new PriorityFutureTask<>(task, null) {
+                    @Override
+                    public void run() {
+                        if (sessionPool.isShutdown()) {
+                            cancel(false);
+                        } else {
+                            super.run();
+                        }
+                    }
+                };
+                sessionPool.execute(future);
                 runningTasks.put(signature, future);
                 return true;
             } catch (RejectedExecutionException e) {
@@ -138,21 +150,13 @@ public class PriorityLeaderTaskExecutor {
     }
 
     /**
-     * Coordinated stop for leader demotion. Uses shutdownNow() on the work executor so in-flight
-     * priority tasks are interrupted and cancelled fast instead of waiting out their bounded awaits;
-     * tasks on this pool must treat the interrupt as a shutdown signal (unwind, leave healthy work
-     * for the next leader) rather than as a business timeout. If {@code awaitMillis > 0}, blocks up
-     * to that budget waiting for both internal pools to actually terminate. This is required on
-     * the leader demotion drain path so a re-elected leader does not race the old leader's
-     * still-running tasks. The scheduled TaskChecker pool is shut down gracefully (bookkeeping).
-     *
-     * @param awaitMillis maximum time to wait for both pools to drain, in milliseconds. Zero
-     *                    or negative means do not wait (legacy behaviour). The budget is
-     *                    split across the two internal pools.
+     * Close admission without interrupting active work. Queued tasks skip their bodies after shutdown.
+     * A zero timeout only requests stop; the global session drain checks actual pool termination before
+     * follower replay or re-activation. A positive timeout provides a bounded local wait.
      */
     public void close(long awaitMillis) {
-        scheduledThreadPool.shutdown();
-        executor.shutdownNow();
+        LeaderDaemon.shutdownLeaderExecutor(scheduledThreadPool);
+        LeaderDaemon.shutdownLeaderExecutor(executor);
         if (awaitMillis > 0L) {
             long deadline = System.currentTimeMillis() + awaitMillis;
             try {

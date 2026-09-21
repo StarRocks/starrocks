@@ -320,6 +320,7 @@ public abstract class AlterJobV2 implements Writable {
      * already sealed when this runs.
      */
     public synchronized void resetToLastDurableState() {
+        awaitInFlightTasks();
         if (jobState.isFinalState()) {
             return;
         }
@@ -328,6 +329,10 @@ public abstract class AlterJobV2 implements Writable {
             publishVersionFuture = null;
         }
         resetTransientState();
+    }
+
+    /** Subclasses with work outside the handler's owned pool must await its actual completion here. */
+    protected void awaitInFlightTasks() {
     }
 
     /**
@@ -427,6 +432,9 @@ public abstract class AlterJobV2 implements Writable {
      * db lock
      */
     public synchronized void run() {
+        if (GlobalStateMgr.getCurrentState().isLeaderDemoting()) {
+            return;
+        }
         if (isTimeout()) {
             if (cancelInternal("Timeout")) {
                 // If this job can't be cancelled, we should execute it.
@@ -448,6 +456,9 @@ public abstract class AlterJobV2 implements Writable {
 
         try {
             while (true) {
+                if (GlobalStateMgr.getCurrentState().isLeaderDemoting()) {
+                    return;
+                }
                 JobState prevState = jobState;
                 switch (prevState) {
                     case PENDING:

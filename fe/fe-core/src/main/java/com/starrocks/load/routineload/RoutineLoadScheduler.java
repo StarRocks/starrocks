@@ -84,6 +84,9 @@ public class RoutineLoadScheduler extends LeaderDaemon {
             LOG.info("there are {} job(s) need to be scheduled", routineLoadJobList.size());
         }
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
+            if (shouldStop()) {
+                return;
+            }
             RoutineLoadJob.JobState errorJobState = null;
             StarRocksException userException = null;
             try {
@@ -110,6 +113,9 @@ public class RoutineLoadScheduler extends LeaderDaemon {
                 LOG.warn(userException.getMessage(), userException);
             }
 
+            if (shouldStop()) {
+                return;
+            }
             if (errorJobState != null) {
                 LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId())
                         .add("current_state", routineLoadJob.getState())
@@ -132,7 +138,9 @@ public class RoutineLoadScheduler extends LeaderDaemon {
         }
 
         // check timeout tasks
-        routineLoadManager.processTimeoutTasks();
+        if (!shouldStop()) {
+            routineLoadManager.processTimeoutTasks();
+        }
     }
 
     private List<RoutineLoadJob> getNeedScheduleRoutineJobs() {
@@ -147,13 +155,16 @@ public class RoutineLoadScheduler extends LeaderDaemon {
     // starting the follower replayer - this reset never races replayed state changes.
     @Override
     protected void onStopped() {
+        // Task workers also mutate the per-job task/slot bookkeeping. Drain them before resetting it.
+        RoutineLoadTaskScheduler taskScheduler = GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler();
+        if (taskScheduler != null) {
+            taskScheduler.stopBestEffort();
+            LeaderDaemon.awaitQuiesced(List.of(taskScheduler),
+                    Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
+        }
         for (RoutineLoadJob job : routineLoadManager.getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.RUNNING))) {
-            try {
-                job.resetToLastDurableStateOnDemotion();
-            } catch (Throwable t) {
-                LOG.warn("reset routine load job {} on leader handoff failed", job.getId(), t);
-            }
+            job.resetToLastDurableStateOnDemotion();
         }
     }
 }

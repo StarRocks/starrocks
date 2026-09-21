@@ -2494,12 +2494,12 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
     /**
      * Process at most one queued report. Blocks up to one second waiting for work so that the outer
      * {@link LeaderDaemon} loop can re-check the leader lease promptly even when the queue is idle.
-     * Propagates {@link InterruptedException} so {@link #setStop()} during demotion wakes us up.
+     * Demotion uses the bounded poll and stop flag, without interrupting report processing.
      */
     private void consumeOne(BlockingQueue<Pair<Long, ReportType>> queue, String queueName)
             throws InterruptedException {
         Pair<Long, ReportType> pair = queue.poll(1, TimeUnit.SECONDS);
-        if (pair == null) {
+        if (pair == null || shouldStop()) {
             return;
         }
         try {

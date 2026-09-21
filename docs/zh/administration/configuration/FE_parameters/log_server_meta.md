@@ -1664,7 +1664,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 秒
 - 是否动态: 是
-- 描述: Leader 降级期间,用于封存并停止 journal writer、以及等待在途的 leader WAL apply 排空的超时时间。若在该时间内无法完成 journal writer 的封存,降级阶段会失败并终止 FE 进程以进行干净重启,以防旧 leader 的写绕过 WAL-apply fence。当降级时封存 journal writer 或排空在途 apply 所需时间超出默认值时,可调大该值。
+- 描述: Leader 降级时，等待在途 WAL apply 排空、封存并停止 journal writer，以及等待本轮 Leader 的工作线程、线程池和清理逻辑完成的超时时间。只有这些工作结束后才启动 Follower 回放；线程及清理阶段使用 journal 封存后剩余的时间。降级通过协作停止通知退出，不主动中断正在执行业务的线程。等待超时或清理失败时，FE 进程退出以进行干净重启。如果正常的在途工作需要更长时间才能完成，可调大该值。
 - 引入版本: v4.2.0
 
 ### `lock_checker_interval_second`

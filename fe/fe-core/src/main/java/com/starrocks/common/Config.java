@@ -980,11 +980,10 @@ public class Config extends ConfigBase {
     public static boolean start_with_incomplete_meta = false;
 
     /**
-     * Timeout, in seconds, used during leader demotion to seal and stop the journal writer and to
-     * wait for in-flight leader WAL applies to drain (see {@code GlobalStateMgr.sealJournalWriter}).
-     * If the journal writer cannot be sealed within this time the demotion stage fails and the FE
-     * process is terminated for a clean restart, rather than let a stale leader's write slip past the
-     * WAL-apply fence.
+     * Timeout, in seconds, for leader demotion to drain WAL applies, seal the journal writer and
+     * cooperatively drain leader-session workers, pools and cleanup before follower replay. The
+     * session wait uses the budget left after sealing. A drain timeout exits the FE for a clean
+     * restart; demotion never interrupts active business tasks to force them to finish.
      */
     @ConfField(mutable = true)
     public static int leader_demotion_drain_timeout_sec = 180;

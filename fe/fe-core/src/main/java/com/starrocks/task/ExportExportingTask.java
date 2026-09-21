@@ -84,7 +84,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
 
     @Override
     protected void exec() {
-        if (job.getState() != ExportJob.JobState.EXPORTING) {
+        if (isStopping() || job.getState() != ExportJob.JobState.EXPORTING) {
             return;
         }
         LOG.info("begin execute export job in exporting state. job: {}", job);
@@ -124,10 +124,8 @@ public class ExportExportingTask extends PriorityLeaderTask {
             }
             for (ExportExportingSubTask subTask : subTasks) {
                 if (!submitSubTask(subTask)) {
-                    if (Thread.currentThread().isInterrupted()) {
-                        // Interrupted by export executor shutdown on leader demotion: leave the job
-                        // in EXPORTING so the next leader reschedules it, do not cancel a healthy job.
-                        LOG.warn("interrupted while submitting export sub tasks; leaving job {} in EXPORTING", job);
+                    if (isStopping()) {
+                        LOG.info("stopped submitting export sub tasks; leaving job {} in EXPORTING", job);
                         return;
                     }
                     job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "submit exporting task failed");
@@ -139,16 +137,19 @@ public class ExportExportingTask extends PriorityLeaderTask {
 
             boolean success = false;
             try {
-                success = subTasksDoneSignal.await(getLeftTimeSecond(), TimeUnit.SECONDS);
+                while (!isStopping() && getLeftTimeSecond() > 0) {
+                    if (subTasksDoneSignal.await(1, TimeUnit.SECONDS)) {
+                        success = true;
+                        break;
+                    }
+                }
             } catch (InterruptedException e) {
-                // Interrupted by export executor shutdown on leader demotion. Do NOT cancel a
-                // healthy job as a timeout - leave it in EXPORTING so the next leader reschedules it.
-                // Re-assert the interrupt so the pool thread unwinds promptly.
-                Thread.currentThread().interrupt();
-                LOG.warn("export sub task await interrupted; leaving job {} in EXPORTING for the next leader", job, e);
-                return;
+                LOG.warn("export sub task signal await error", e);
             }
 
+            if (isStopping()) {
+                return;
+            }
             Status status = subTasksDoneSignal.getStatus();
             if (!success || !status.ok()) {
                 if (!success) {
@@ -162,6 +163,9 @@ public class ExportExportingTask extends PriorityLeaderTask {
 
             // move tmp file to final destination
             Status mvStatus = moveTmpFiles();
+            if (isStopping()) {
+                return;
+            }
             if (!mvStatus.ok()) {
                 String failMsg = "move tmp file to final destination fail, ";
                 failMsg += mvStatus.getErrorMsg();
@@ -183,22 +187,27 @@ public class ExportExportingTask extends PriorityLeaderTask {
         }
     }
 
+    private boolean isStopping() {
+        LeaderTaskExecutor executor = ExportChecker.getExportingSubTaskExecutor();
+        return GlobalStateMgr.getCurrentState().isLeaderDemoting() || (executor != null && executor.isShutdown());
+    }
+
     private boolean submitSubTask(ExportExportingSubTask subTask) {
+        if (isStopping()) {
+            return false;
+        }
         int retryNum = 0;
         while (!ExportChecker.getExportingSubTaskExecutor().submit(subTask)) {
             LOG.warn("submit export sub task failed. try to resubmit. task idx {}, task query id: {}, retry: {}",
                     subTask.getTaskIdx(), subTask.getQueryId(), retryNum);
-            if (++retryNum > RETRY_NUM) {
+            if (isStopping() || ++retryNum > RETRY_NUM) {
                 return false;
             }
 
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                // Re-assert the interrupt and stop retrying; exec() checks the interrupt flag and
-                // leaves the job in EXPORTING rather than cancelling it on demotion.
-                Thread.currentThread().interrupt();
-                return false;
+                LOG.warn("Failed to execute submitSubTask", e);
             }
         }
         return true;
@@ -248,6 +257,9 @@ public class ExportExportingTask extends PriorityLeaderTask {
         Set<String> exportedTempFiles = job.getExportedTempFiles();
         String exportPath = job.getExportPath();
         for (String exportedTempFile : exportedTempFiles) {
+            if (isStopping()) {
+                return new Status(TStatusCode.CANCELLED, "leader is stopping");
+            }
             // move exportPath/__starrocks_tmp/file to exportPath/file
             // data_f8d0f324-83b3-11eb-9e09-02425ee98b69_0_0_0.csv.1615609467311
             String exportedFile = exportedTempFile.substring(exportedTempFile.lastIndexOf("/") + 1);
@@ -259,6 +271,9 @@ public class ExportExportingTask extends PriorityLeaderTask {
             String failMsg = null;
 
             for (int i = 0; i < RETRY_NUM; ++i) {
+                if (isStopping()) {
+                    return new Status(TStatusCode.CANCELLED, "leader is stopping");
+                }
                 try {
                     // check export file exist
                     if (!job.getBrokerDesc().hasBroker()) {
@@ -346,6 +361,9 @@ public class ExportExportingTask extends PriorityLeaderTask {
             String failMsg = null;
 
             for (int i = 0; i < RETRY_NUM; ++i) {
+                if (isStopping()) {
+                    return;
+                }
                 // maybe job is cancelled by user
                 if (job.isExportDone()) {
                     break;

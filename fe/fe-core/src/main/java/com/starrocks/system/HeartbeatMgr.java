@@ -78,6 +78,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -115,7 +117,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         // Shut down the heartbeat pool and wait until it actually terminates, so this worker does not
         // clear isRunning until the in-flight heartbeat RPCs return (the re-activation gate reads
         // isRunning as the single quiescence signal). start() rebuilds the pool on re-election.
-        shutdownNowAndAwaitTermination("HeartbeatMgr.executor", executor);
+        shutdownAndAwaitTermination("HeartbeatMgr.executor", executor);
         // Null for consistency with the other pool-owning daemons; start() lazily rebuilds either way.
         executor = null;
     }
@@ -154,32 +156,41 @@ public class HeartbeatMgr extends LeaderDaemon {
         long startTime = System.currentTimeMillis();
         // send backend heartbeat
         for (Backend backend : idToBackendRef.values()) {
+            if (shouldStop()) {
+                return;
+            }
             boolean isWarehouseAvailable = aliveWarehouseIds.contains(backend.getWarehouseId());
             if (!isWarehouseAvailable) {
                 backendsForSuspendedWarehouse.add(backend.getId());
             }
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend, isWarehouseAvailable);
-            hbResponses.add(executor.submit(handler));
+            hbResponses.add(executor.submit(() -> shouldStop() ? null : handler.call()));
         }
 
         // send compute node heartbeat
         for (ComputeNode computeNode : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdComputeNode()
                 .values()) {
+            if (shouldStop()) {
+                return;
+            }
             boolean isWarehouseAvailable = aliveWarehouseIds.contains(computeNode.getWarehouseId());
             if (!isWarehouseAvailable) {
                 backendsForSuspendedWarehouse.add(computeNode.getId());
             }
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode, isWarehouseAvailable);
-            hbResponses.add(executor.submit(handler));
+            hbResponses.add(executor.submit(() -> shouldStop() ? null : handler.call()));
         }
 
         // send frontend heartbeat
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         for (Frontend frontend : frontends) {
+            if (shouldStop()) {
+                return;
+            }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
                     GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
-            hbResponses.add(executor.submit(handler));
+            hbResponses.add(executor.submit(() -> shouldStop() ? null : handler.call()));
         }
 
         // send broker heartbeat;
@@ -187,9 +198,12 @@ public class HeartbeatMgr extends LeaderDaemon {
                 GlobalStateMgr.getCurrentState().getBrokerMgr().getBrokerListMap());
         for (Map.Entry<String, List<FsBroker>> entry : brokerMap.entrySet()) {
             for (FsBroker brokerAddress : entry.getValue()) {
+                if (shouldStop()) {
+                    return;
+                }
                 BrokerHeartbeatHandler handler = new BrokerHeartbeatHandler(entry.getKey(), brokerAddress,
                         MASTER_INFO.get().getNetwork_address().getHostname());
-                hbResponses.add(executor.submit(handler));
+                hbResponses.add(executor.submit(() -> shouldStop() ? null : handler.call()));
             }
         }
 
@@ -200,8 +214,10 @@ public class HeartbeatMgr extends LeaderDaemon {
         for (Future<HeartbeatResponse> future : hbResponses) {
             boolean isChanged = false;
             try {
-                // the heartbeat rpc's timeout is 5 seconds, so we will not be blocked here too long.
-                HeartbeatResponse response = future.get();
+                HeartbeatResponse response = awaitHeartbeatResponse(future);
+                if (response == null || shouldStop()) {
+                    return;
+                }
                 if (response.getStatus() != HbStatus.OK) {
                     boolean isBackendForSuspendedWarehouse = response.getType() == HeartbeatResponse.Type.BACKEND &&
                             backendsForSuspendedWarehouse.contains(((BackendHbResponse) response).getBeId());
@@ -216,18 +232,14 @@ public class HeartbeatMgr extends LeaderDaemon {
                 if (isChanged) {
                     hbPackage.addHbResponse(response);
                 }
-            } catch (InterruptedException e) {
-                // Demotion interrupts the worker to make it stop promptly. Restore the flag so
-                // LeaderDaemon.loop observes the stop request and abandon the rest - the next
-                // leader will re-run heartbeats from scratch.
-                Thread.currentThread().interrupt();
-                LOG.warn("heartbeat drain interrupted, abandoning remaining responses");
-                return;
-            } catch (ExecutionException e) {
+            } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("got exception when doing heartbeat", e);
             }
         } // end for all results
 
+        if (shouldStop()) {
+            return;
+        }
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
 
@@ -236,6 +248,19 @@ public class HeartbeatMgr extends LeaderDaemon {
         // set sleep time to (heartbeat_timeout - timeUsed),
         // so that the frequency of calling the heartbeat rpc can be stabilized at heartbeat_timeout
         setInterval(Math.max(1L, Config.heartbeat_timeout_second * 1000L - (System.currentTimeMillis() - startTime)));
+    }
+
+    private HeartbeatResponse awaitHeartbeatResponse(Future<HeartbeatResponse> future)
+            throws InterruptedException, ExecutionException {
+        while (!shouldStop()) {
+            try {
+                return future.get(100L, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                // In particular, a self-FE heartbeat can be inside JE. Leave the call alone and let
+                // onStopped await the actual executor termination after abandoning stale responses.
+            }
+        }
+        return null;
     }
 
     private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
