@@ -876,18 +876,12 @@ bool OlapTableSink::is_close_done() {
     return _tablet_sink_sender->is_close_done();
 }
 
-<<<<<<< HEAD:be/src/exec/tablet_sink.cpp
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
-    if (close_status.ok()) {
-=======
-Status OlapTableSink::close(RuntimeState* state, const Status& close_status) {
     if (!_is_initialized) {
         return close_wait(state, close_status);
     }
 
-    Status mutable_close_status = close_status;
-    if (mutable_close_status.ok() && _profile != nullptr && _ts_profile != nullptr && _tablet_sink_sender != nullptr) {
->>>>>>> 968b8d5 ([BugFix] Guard OlapTableSink teardown after init failure (#79370)):be/src/data_sink/tablet/olap_table_sink.cpp
+    if (close_status.ok() && _profile != nullptr && _ts_profile != nullptr && _tablet_sink_sender != nullptr) {
         SCOPED_TIMER(_profile->total_time_counter());
         SCOPED_TIMER(_ts_profile->close_timer);
         do {
