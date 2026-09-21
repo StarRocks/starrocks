@@ -169,8 +169,6 @@ public class ThreadPoolManager {
                 new BlockedPolicy(poolName, 60), poolName, needRegisterMetric);
     }
 
-<<<<<<< HEAD
-=======
     public static ThreadPoolExecutor newDaemonFixedThreadPoolWithAbortPolicy(
             int numThread, int queueSize, String poolName, boolean needRegisterMetric) {
         return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
@@ -178,13 +176,6 @@ public class ThreadPoolManager {
                 new FastAbortPolicy(), poolName, needRegisterMetric);
     }
 
-    public static ThreadPoolExecutor newDaemonFixedThreadPoolWithUnboundedQueue(int numThread, String poolName,
-                                                                                boolean needRegisterMetric) {
-        return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(), new LogDiscardPolicy(poolName), poolName, needRegisterMetric);
-    }
-
->>>>>>> 3e6d798 ([BugFix] FailFast: Prevent thrift acceptor stalls on saturation (#78838))
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
                                                                               String poolName,
                                                                               boolean needRegisterMetric) {

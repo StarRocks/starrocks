@@ -60,11 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.ThriftServer;
-import com.starrocks.common.Version;
->>>>>>> 3e6d798 ([BugFix] FailFast: Prevent thrift acceptor stalls on saturation (#78838))
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
