@@ -31,12 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-<<<<<<< HEAD
-=======
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
-import com.starrocks.extension.ExtensionManager;
 import com.starrocks.ha.FrontendNodeType;
->>>>>>> 2ec94237bda ([BugFix] Generate gtid and partition version epoch only on the leader FE (#61820))
 import com.starrocks.lake.TabletRepairHelper.PhysicalPartitionInfo;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
@@ -50,11 +45,8 @@ import com.starrocks.proto.TabletMetadataRepairStatus;
 import com.starrocks.proto.TabletResult;
 import com.starrocks.rpc.LakeServiceWithMetrics;
 import com.starrocks.rpc.RpcException;
-<<<<<<< HEAD
-import com.starrocks.server.WarehouseManager;
-=======
 import com.starrocks.server.GlobalStateMgr;
->>>>>>> 2ec94237bda ([BugFix] Generate gtid and partition version epoch only on the leader FE (#61820))
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.LakeTabletStatus;
 import com.starrocks.sql.ast.PartitionRef;
