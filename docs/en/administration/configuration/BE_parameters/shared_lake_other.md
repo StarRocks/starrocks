@@ -77,6 +77,15 @@ This topic introduces the following types of BE configurations:
 - Description: Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit. When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC, ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
 - Introduced in: v3.4.5
 
+### lake_compaction_hold_input_segments
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_metadata_cache_limit`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
+- Introduced in: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -85,6 +94,33 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
+
+### lake_dump_tablet_metadata_per_request_memory_limit_bytes
+
+- Default: 268435456
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The tracked memory budget for synchronous allocations made while processing one `/api/cloudnative/dump_tablet_metadata` request on a CN. It uses the standard MemTracker accounting granularity rather than enforcing a byte-exact ceiling. It covers metadata inspection, sensitive-field redaction, and JSON serialization, but not the metadata already stored in the CN metadata cache or the asynchronous HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.2
+
+### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
+
+- Default: 33554432
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of the complete JSON response for one `/api/cloudnative/dump_tablet_metadata` request. The size is checked before the response is handed to the HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.2
+
+### lake_dump_tablet_metadata_max_concurrency
+
+- Default: 1
+- Type: Int
+- Unit: Requests
+- Is mutable: Yes
+- Description: The maximum number of `/api/cloudnative/dump_tablet_metadata` requests admitted concurrently on one CN. A request continues to occupy one slot until its HTTP request is released. Increasing the value applies immediately to new requests. Decreasing it does not cancel admitted requests, and new requests are rejected until the active count is below the new limit. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.2
 
 ### lake_enable_del_file_crc_check
 
@@ -271,6 +307,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of cached client instances retained for each remote host by BE-wide client caches. This single setting is used when creating BackendServiceClientCache, FrontendServiceClientCache, and BrokerServiceClientCache during ExecEnv initialization, so it limits the number of client stubs/connections kept per host across those caches. Raising this value reduces reconnects and stub creation overhead at the cost of increased memory and file-descriptor usage; lowering it saves resources but may increase connection churn. The value is read at startup and cannot be changed at runtime. Currently one shared setting controls all client cache types; separate per-cache configuration may be introduced later.
 - Introduced in: v3.2.0
 
+### paimon_native_parquet_cache_hole_size_limit
+
+- Default: 1048576
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The largest gap between two required Parquet ranges that the Paimon native reader still merges into one read. A larger value trades read amplification for fewer requests. The default matches `io_coalesce_read_max_distance_size` used by the StarRocks native Parquet reader; paimon-cpp's own default is far smaller and produces many small requests on object storage.
+- Introduced in: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - Default: 10000
@@ -288,6 +333,51 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The cache expiration time of starlet filesystem instances.
 - Introduced in: v3.3.15, 3.4.5
+
+### starlet_fslib_azure_storage_max_single_part_size
+
+- Default: 104857600
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the object size above which files written to Azure Blob Storage or ADLS Gen2 use a multipart upload instead of a single upload request. Both Azure filesystems share this item. BE buffers up to this many bytes in memory per output stream before switching to multipart, so raising it raises memory usage, multiplied by the number of concurrent output streams. Raising it high enough to avoid multipart entirely can also fail uploads outright if it exceeds the object store's single-request upload limit; the upload then fails with the backend's own error. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_azure_storage_min_upload_part_size
+
+- Default: 5242880
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the block size used for multipart uploads to Azure Blob Storage or ADLS Gen2. Both Azure filesystems share this item. BE buffers up to this many bytes in memory per output stream between block uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the block limits of the storage service. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_gcs_max_single_part_size
+
+- Default: 104857600
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the object size above which files written to Google Cloud Storage use a streaming upload instead of a single insert request. BE buffers up to this many bytes in memory per output stream before switching to streaming, so raising it raises memory usage, multiplied by the number of concurrent output streams. Raising it high enough to avoid streaming entirely can also fail uploads outright if it exceeds the object store's single-request upload limit; the upload then fails with the backend's own error. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_s3_max_single_part_size
+
+- Default: 104857600
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the object size above which files written to S3 or an S3-compatible object store use a multipart upload instead of a single `PutObject` request. BE buffers up to this many bytes in memory per output stream before switching to multipart, so raising it raises memory usage, multiplied by the number of concurrent output streams. Raising it too high to avoid multipart entirely can also fail uploads outright: AWS S3 rejects a single `PutObject` larger than 5 GiB, and the limits of S3-compatible object stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_s3_min_upload_part_size
+
+- Default: 5242880
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the part size used for multipart uploads to S3 or an S3-compatible object store. BE buffers up to this many bytes in memory per output stream between part uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the 10,000-part limit or fall below the 5 MB minimum part size that AWS S3 enforces; the limits of other S3-compatible stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
+- Introduced in: v4.1.5, v4.2
 
 ### starlet_port
 
@@ -525,13 +615,22 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to allow the system to clear the corrupted data cache in a shared-data cluster.
 - Introduced in: v3.4
 
+### lake_pk_index_sst_verify_checksum
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to verify sstable block checksums when reading the cloud-native Primary Key index (point lookups and compaction merges) in a shared-data cluster. When enabled, corrupted bytes (usually from a corrupted local cache copy) deterministically fail as a Corruption error and trigger the corrupted-cache cleanup, instead of being misparsed or silently returning wrong index values. Note that the automatic cleanup of the corrupted cache additionally requires `lake_clear_corrupted_cache_data` to be enabled.
+- Introduced in: v4.1
+
 ### lake_clear_corrupted_cache_meta
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster.
+- Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster. This covers the local cache of tablet metadata files and transaction log files. When a read of such a file fails with a corruption error, the system drops the cached copy and reads the file again from remote storage once.
 - Introduced in: v3.3
 
 ### lake_enable_horizontal_compaction_fill_data_cache

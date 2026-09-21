@@ -147,7 +147,7 @@ public class SplitTabletJobEarlyTest {
                 && clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
         int bound = explicitTarget ? 0 : TabletReshardUtils.adaptiveSplitBound(computeNodeCount);
         return Deencapsulation.invoke(SplitTabletJobFactory.class, "planIndexSplits",
-                baseIndex(), clause.getTabletReshardTargetSize(), bound);
+                baseIndex(), clause.getTabletReshardTargetSize(), bound, Config.tablet_reshard_max_split_count);
     }
 
     /** Base index gets one tablet of earlyOnlySize; a second visible index gets one of normalSize. */

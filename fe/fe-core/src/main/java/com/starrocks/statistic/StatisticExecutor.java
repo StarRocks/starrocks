@@ -301,10 +301,6 @@ public class StatisticExecutor {
         return executeDML(statsConnectCtx, sql);
     }
 
-    public boolean dropExternalHistogramRawColumn(ConnectContext statsConnectCtx, String rawTableUUID, String columnName) {
-        return dropExternalHistogramRawColumns(statsConnectCtx, rawTableUUID, Lists.newArrayList(columnName));
-    }
-
     public boolean dropExternalHistogramRawColumns(ConnectContext statsConnectCtx, String rawTableUUID,
                                                    List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, columnNames);
@@ -332,10 +328,6 @@ public class StatisticExecutor {
 
     public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryConnectorHistogramStatisticsSQL(tableUUID, columnNames);
-        return executeStatisticDQL(statsConnectCtx, sql);
-    }
-
-    public List<TStatisticData> queryMCV(ConnectContext statsConnectCtx, String sql) {
         return executeStatisticDQL(statsConnectCtx, sql);
     }
 

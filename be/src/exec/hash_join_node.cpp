@@ -199,6 +199,43 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
     // in some partition hash table, and other partition hash table can output chunk.
     // TODO: support nullaware left anti join with shuffle join
     DCHECK(_join_type != TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN || _distribution_mode == TJoinDistributionMode::BROADCAST);
+
+    // The two sides of a hash join share one hash table partitioned across drivers, so a key has to
+    // reach the same driver from both. Each side is partitioned by whoever touched it last: a side
+    // reporting could_local_shuffle() == false was already partitioned by its sender (or by the
+    // per-driver morsel assignment the FE handed it) and is left as it arrives, a side reporting true
+    // gets a fresh local shuffle. When the two disagree those are two unrelated numberings of the
+    // same key space, and the join silently drops (1 - 1/DOP) of its matches.
+    //
+    // Neither side can be moved onto the other's numbering: the receiving fragment is never told
+    // which bucket function and bucket count the sender used -- TExchangeNode carries only the
+    // sender's partition type -- so the only scheme both sides can produce is a fresh plain hash of
+    // their own key exprs. Deciding that needs BOTH sides, hence the probe child is decomposed here,
+    // before anything about the build side is settled.
+    //
+    // This does not disturb HashJoinerFactory's "all the builders must be created earlier than
+    // prober" rule: the probe pipeline is the OpFactories this function returns and the caller
+    // registers it, so it still lands after the build pipeline added below. Only the probe subtree's
+    // own pipelines move ahead of it, and none of them creates a builder or prober for this join.
+    auto* group_before_probe = context->current_execution_group();
+    const auto probe_child_begin = context->mark();
+    ASSIGN_OR_RETURN(auto lhs_operators, child(0)->decompose_to_pipeline(context));
+    const auto probe_child_end = context->mark();
+    auto* group_after_probe = context->current_execution_group();
+    context->set_current_execution_group(group_before_probe);
+
+    // Re-partition both sides only when they disagree. When they agree nothing below changes, so a
+    // shuffle join whose two sides were both partitioned by their senders keeps skipping the local
+    // exchange entirely. The side reporting true already pays one today, so the added cost lands
+    // only on the mismatched case -- which is exactly the case that is wrong without it.
+    // A colocate exec group is excluded: there the probe side is deliberately left untouched below,
+    // and touching only the build side is what makes the two disagree in the first place.
+    const bool join_in_colocate_group =
+            context->find_exec_group_by_plan_node_id(_id)->type() == ExecutionGroupType::COLOCATE;
+    const bool align_both_sides =
+            !join_in_colocate_group && _distribution_mode != TJoinDistributionMode::BROADCAST &&
+            context->could_local_shuffle(rhs_operators) != context->could_local_shuffle(lhs_operators);
+
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
@@ -212,8 +249,13 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
         // there is no need to perform local shuffle again at receiver side
         // 2. Otherwise, add LocalExchangeOperator
         // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-        rhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
-                context, runtime_state(), id(), rhs_operators, _build_equivalence_partition_expr_ctxs);
+        rhs_operators = align_both_sides
+                                ? ::starrocks::pipeline::builder::interpolate_local_forced_shuffle_exchange(
+                                          context, runtime_state(), id(), rhs_operators,
+                                          _build_equivalence_partition_expr_ctxs, TPartitionType::HASH_PARTITIONED, {})
+                                : ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                                          context, runtime_state(), id(), rhs_operators,
+                                          _build_equivalence_partition_expr_ctxs);
     }
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
@@ -269,10 +311,17 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
 
     rhs_operators.emplace_back(std::move(build_op));
     context->add_pipeline(rhs_operators);
-    context->push_dependent_pipeline(context->last_pipeline());
+    const Pipeline* build_pipeline = context->last_pipeline();
+    // The probe subtree was built before this pipeline existed, so give its pipelines the dependency
+    // push_dependent_pipeline would have given them. The range stops where the probe subtree ends:
+    // the build side's own local exchange was interpolated after that point, and the pipeline that
+    // feeds this one must not be made to wait for it.
+    context->bind_dependent_pipeline_between(probe_child_begin, probe_child_end, build_pipeline,
+                                             !group_before_probe->is_colocate_exec_group());
+    context->set_current_execution_group(group_after_probe);
+    context->push_dependent_pipeline(build_pipeline);
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
-    ASSIGN_OR_RETURN(auto lhs_operators, child(0)->decompose_to_pipeline(context));
     auto join_colocate_group = context->find_exec_group_by_plan_node_id(_id);
     if (join_colocate_group->type() == ExecutionGroupType::COLOCATE) {
         DCHECK(context->current_execution_group()->is_colocate_exec_group());
@@ -288,11 +337,17 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
             lhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
                     context, runtime_state(), id(), lhs_operators, context->degree_of_parallelism());
         } else {
-            auto* rhs_source_op = context->source_operator(rhs_operators);
-            auto* lhs_source_op = context->source_operator(lhs_operators);
-            DCHECK_EQ(rhs_source_op->partition_type(), lhs_source_op->partition_type());
-            lhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
-                    context, runtime_state(), id(), lhs_operators, _probe_equivalence_partition_expr_ctxs);
+            if (align_both_sides) {
+                lhs_operators = ::starrocks::pipeline::builder::interpolate_local_forced_shuffle_exchange(
+                        context, runtime_state(), id(), lhs_operators, _probe_equivalence_partition_expr_ctxs,
+                        TPartitionType::HASH_PARTITIONED, {});
+            } else {
+                auto* rhs_source_op = context->source_operator(rhs_operators);
+                auto* lhs_source_op = context->source_operator(lhs_operators);
+                DCHECK_EQ(rhs_source_op->partition_type(), lhs_source_op->partition_type());
+                lhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                        context, runtime_state(), id(), lhs_operators, _probe_equivalence_partition_expr_ctxs);
+            }
         }
     }
 

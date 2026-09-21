@@ -283,6 +283,13 @@ struct TColumn {
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
     12: optional Types.TAggStateDesc agg_state_desc
+    // column-level compression dictionary (a ZSTD dictionary) (per-column enable flag).
+    13: optional bool use_zstd_compression = false
+    // Data page size for this column, in bytes. 0 / unset keeps the BE default
+    // (config::data_page_size). The page is the unit of decompression, so the size
+    // that pays off depends on the column's row length; see the
+    // zstd_compression_columns table property.
+    14: optional i32 zstd_compression_page_size = 0
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -580,6 +587,20 @@ struct TTableFunctionTable {
     14: optional i8 csv_escape
 }
 
+// External Iceberg schema identity, not a native StarRocks SQL type.
+enum TIcebergGeoKind {
+    UNKNOWN = 0,
+    GEOGRAPHY = 1,
+    GEOMETRY = 2
+}
+
+// CRS and edge algorithm retain the source vocabulary as strings.
+struct TIcebergGeoMetadata {
+    1: optional TIcebergGeoKind kind
+    2: optional string crs
+    3: optional string edge_algorithm
+}
+
 struct TIcebergSchemaField {
     // Refer to field id in iceberg schema
     1: optional i32 field_id
@@ -593,6 +614,8 @@ struct TIcebergSchemaField {
 
     // You can fill other field properties here if you needed
     // .......
+
+    4: optional TIcebergGeoMetadata geo_metadata
 
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
@@ -699,6 +722,12 @@ struct TPaimonTable {
 
     // reuse iceberg schema here, used to support schema evolution
     4: optional TIcebergSchema paimon_schema
+
+    // Paimon table base path used by the C++ native reader
+    5: optional string paimon_table_path
+
+    // Paimon TableSchema serialized as JSON at planning time
+    6: optional string paimon_table_schema_json
 }
 
 struct TFlussTable {

@@ -271,6 +271,33 @@ This topic introduces the following types of BE configurations:
 - Description: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
 - Introduced in: -
 
+### zstd_compression_dict_min_gain
+
+- Default: 0.10
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: How much smaller the trial pages must get, as a fraction, before the per-column compression dictionary is kept. The writer compresses the first pages after the sample both with and without the dictionary and compares; below this threshold the dictionary is dropped for the whole column and the column is written as plain ZSTD. A dictionary is not free -- it costs a page of its own per column per segment, a load per segment on every read, and the choice cannot be revisited once data pages reference it -- so the default asks for a clear win rather than a measurable one. Measured across 13 datasets and 3 page sizes, `0.10` keeps the dictionary only where it earns 10% or more, and the cost is turning down gains of 5-9% that cluster at 256 KB pages, where a plain page already captures most of the repetition; lower the value to about `0.05` to take those as well. Values below `0` are treated as `0`; even at `0` the trial pages still have to come out strictly smaller with the dictionary than without it, so a dictionary that makes them larger is never kept. This parameter takes effect only when `enable_zstd_compression_dict` is `true`, and only for data written after the change.
+- Introduced in: v4.2
+
+### zstd_compression_dict_min_sample_bytes
+
+- Default: 1024
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The minimum size of the encoded values that a data page must reach before it can be used as the dictionary sample. This guards against building a garbage dictionary from a tiny or nearly empty first page and permanently marking the column as dictionary-ready. The value is compared against the encoded values of each data page until one reaches it, so a column whose first page is too small is sampled from a later one rather than giving up. Set it to `0` or a greater value. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
+- Introduced in: v4.2
+
+### zstd_compression_dict_sample_bytes
+
+- Default: 65536
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The number of bytes sampled from the first eligible data page to build the compression dictionary. The default corresponds to roughly one 64 KB data page. The actual sample is `min(size of the encoded values of the page, zstd_compression_dict_sample_bytes)`, so this parameter also bounds the dictionary size. The value is read when a column writer is created, so a change takes effect for the segments written afterwards. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
+- Introduced in: v4.2
+
 ### create_tablet_worker_count
 
 - Default: 3
@@ -309,11 +336,11 @@ This topic introduces the following types of BE configurations:
 
 ### enable_binary_plain_delta_offset
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether high-cardinality string/varchar columns that fall back to plain (non-dictionary) encoding store their page offset trailer as per-value deltas (string lengths) instead of absolute offsets. Absolute offsets increase monotonically and compress poorly under LZ4; deltas are near-constant for fixed-ish strings and compress much better, while the uncompressed trailer keeps the same size. The reduction in compressed column size is roughly the size of the offset trailer (about 4 bytes per row), which is more significant for high-cardinality string columns. When enabled, such columns are written with the distinct `PLAIN_ENCODING_DELTA_OFFSET` column encoding recorded in the segment metadata; the format is therefore self-describing per column. Only the write side is gated by this config. A BE version that does not understand the encoding fails to open the segment (a clear error) rather than misreading it, so do not enable this until the whole cluster is upgraded, and note that segments written with it are not readable after downgrading to a version without support.
+- Description: Whether string/varchar columns that fall back to plain (non-dictionary) encoding, because of high cardinality or because an actual value exceeds 1 MiB, store their page offset trailer as per-value deltas (string lengths) instead of absolute offsets. Absolute offsets increase monotonically and compress poorly under LZ4; deltas are near-constant for fixed-ish strings and compress much better, while the uncompressed trailer keeps the same size. The reduction in compressed column size is roughly the size of the offset trailer (about 4 bytes per row), which is more significant for high-cardinality string columns. When enabled, such columns are written with the distinct `PLAIN_ENCODING_DELTA_OFFSET` column encoding recorded in the segment metadata; the format is therefore self-describing per column. Only the write side is gated by this config. It is enabled by default. A BE version that does not understand the encoding fails to open the segment (a clear error) rather than misreading it, so set it to `false` while any BE without support is still serving (for example during a rolling upgrade from such a version), and before downgrading to one, because segments already written with the encoding stay unreadable there.
 - Introduced in: v4.2.0
 
 ### default_num_rows_per_column_file_block
@@ -415,6 +442,21 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to check the data length during loading to solve compaction failures caused by out-of-bound VARCHAR data.
 - Introduced in: -
 
+### enable_zstd_compression_dict
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: The cluster-wide master switch of the column-level compression dictionary, which is a ZSTD dictionary stored per column in each segment file. The switch is checked at the segment write gate. When it is `false`, the columns designated by the table property `zstd_compression_columns` are still compressed with ZSTD -- that part is the user's request and does not depend on this switch -- but no shared dictionary is built for them. The switch therefore only trades some compression ratio, never the codec, and can be flipped at runtime as an operational safety valve.
+
+  The default is `true`: every build that carries this switch also carries the reader (the `ColumnMetaPB.zstd_compression_dict_page` field, field 35, shipped ahead of the write side), and a dictionary page is only ever written for columns nominated through the table property `zstd_compression_columns` -- a cluster that never sets the property writes no dictionary pages regardless of this default.
+
+  The one window that still needs care is a rolling upgrade FROM a release that predates the reader. A compression dictionary data page is a ZSTD frame compressed against a raw-content dictionary (`dictID=0`), so its frame header carries no signal that a dictionary is required; a BE that does not know field 35 would decompress such a page WITHOUT the dictionary and hit ZSTD corruption. During such an upgrade, do not add `zstd_compression_columns` to any table (or set this parameter to `false`) until every BE has been upgraded. The same reasoning covers cross-replica clone and replication during a mixed-version window.
+
+  Warning: once a cluster has written compression dictionary segments, it can no longer be downgraded to a version earlier than the one that introduced this feature, because the older BEs can neither read nor compact those segments.
+- Introduced in: v4.2
+
 ### enable_event_based_compaction_framework
 
 - Default: true
@@ -422,24 +464,6 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: No
 - Description: Whether to enable the Event-based Compaction Framework. `true` indicates Event-based Compaction Framework is enabled, and `false` indicates it is disabled. Enabling Event-based Compaction Framework can greatly reduce the overhead of compaction in scenarios where there are many tablets or a single tablet has a large amount of data.
-- Introduced in: -
-
-### enable_full_sort_key_index
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Write-time gate for the full sort key index. When enabled, the segment writer additionally writes a full, untruncated, all-sort-column order-preserving sort key index page alongside the legacy truncated short key index page, and stops writing the separate metadata sort-key samples governed by `segment_sort_key_sample_row_interval`. The legacy truncated short key index page is always written regardless of this setting, so older BE/CN versions read segments unchanged (no downgrade impact). Only newly written segments are affected; segments already on disk are unchanged.
-- Introduced in: -
-
-### enable_full_sort_key_index_read
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Read-time gate for the full sort key index. When enabled, query read paths (segment seek and logical scan split) use a segment's full sort key index page when it has one; when disabled, they fall back to the legacy truncated short key index page for all segments, including those that already carry a full page. Because both configs default to true and the legacy page is always present, disabling this switch is an instant, data-rewrite-free way to make newly started queries stop using the full sort key index (a rollback valve). Tablet split and range-split parallel compaction are not affected by this switch.
 - Introduced in: -
 
 ### enable_lazy_delta_column_compaction
@@ -459,24 +483,6 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
 - Introduced in: v3.3.2
-
-### enable_pk_index_parallel_compaction
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel Compaction for Primary Key index in a shared-data cluster.
-- Introduced in: -
-
-### enable_pk_index_parallel_execution
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
-- Introduced in: -
 
 ### enable_pk_size_tiered_compaction_strategy
 
@@ -952,7 +958,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: percent (0-100)
 - Is mutable: Yes
-- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true`).
+- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate so the parallel path always runs.
 - Introduced in: -
 
 ### lake_partial_update_thread_pool_max_threads
@@ -961,7 +967,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores. Runtime on/off is controlled by `enable_pk_index_parallel_execution`.
+- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores.
 - Introduced in: v4.1
 
 ### lake_partial_update_thread_pool_queue_size
@@ -1153,13 +1159,13 @@ This topic introduces the following types of BE configurations:
 - Description: The expiration time of snapshot files.
 - Introduced in: -
 
-### sort_key_limit_size
+### sort_key_max_samples_per_tablet
 
 - Default: 1024
 - Type: Int
-- Unit: Bytes
+- Unit: -
 - Is mutable: Yes
-- Description: The maximum size of one row's encoded sort key. A load (including Spark Load) or a schema change that would admit a row with a wider sort key fails with a non-retryable error. This bounds the size of the full sort key index page and the memory it occupies once loaded. Compaction and post-commit segment rewrites are not checked, because a failure there happens after the transaction commits; rows admitted before this limit took effect are therefore unaffected. The check applies whenever the sort key can be encoded, regardless of `enable_full_sort_key_index`, so that row admission and segment writing cannot disagree. Set to 0 or a negative value to disable the check. Before raising it, note the memory cost: the full sort key index holds one entry per index block, so a segment's index is at most `ceil(segment_rows / num_rows_per_block) * sort_key_limit_size` bytes — about 1 MB per million-row segment at the default 1024, or 4 MB at 4096. That page is read into memory on first use and held for the segment's lifetime, so the cost multiplies across concurrently open segments. This is a worst-case bound reached only if every indexed key is at the limit; actual usage follows the real width of your sort key, so raising the limit does not by itself consume more memory — it only raises the ceiling.
+- Description: The maximum number of sort key samples taken from one tablet when computing tablet split boundaries. Samples come from a segment's short key index when that index already encodes the whole sort key, and otherwise from a bounded number of the segment's data pages, so this value also bounds that read amplification. The default matches the FE configuration `tablet_reshard_max_split_count`, because splitting a tablet into K ranges requires K-1 interior boundary points. Setting this to `0` disables sampling, and split boundaries are then derived only from each segment's minimum and maximum sort key, which is coarser but still correct.
 - Introduced in: -
 
 ### stale_memtable_flush_time_sec
@@ -1308,6 +1314,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
 - Introduced in: -
+
+### lake_enable_segment_tail_index_region
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the segment writer places the ordinal index of every column in one contiguous region immediately before the segment footer, instead of writing each column's ordinal index directly after that column's own data pages. Page zone maps and the short key index are not affected and keep their existing positions. Only the write side is gated by this config, and only in shared-data clusters: a shared-nothing BE writes the original layout whatever this is set to. Vertical compaction produces the region as well; partial-update rewrites do not, because they copy an existing segment's prefix and append only the remaining value columns, so those segments keep the original layout. Both layouts are readable by any BE or CN version in either direction and can coexist in the same table, so this can be turned on or off at any time without rewriting data.
+- Introduced in: v4.2.0
 
 ### lake_tablet_stat_slow_log_ms
 

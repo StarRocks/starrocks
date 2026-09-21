@@ -68,6 +68,19 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+        // Same columns as primary_table, duplicate keys: the baseline this change aligns primary keys with.
+        starRocksAssert.withTable("CREATE TABLE `duplicate_table` ( \n" +
+                "`tags_id` int(11) NOT NULL COMMENT \"\", \n" +
+                "`timestamp` datetime NOT NULL COMMENT \"\", \n" +
+                "`k3` varchar(65533) NOT NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`tags_id`, `timestamp`) \n" +
+                "COMMENT \"OLAP\" \n" +
+                "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
@@ -293,41 +306,64 @@ public class FilterUnusedColumnTest extends PlanTestBase {
 
     @Test
     public void testFilterPrimaryKeyTable() throws Exception {
+        // A primary key table never merges rows, so value columns are as prunable as on a duplicate table.
         {
             String sql = "select timestamp from primary_table where k3 = \"test\" limit 10;";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "unused_output_column_name:[k3]");
         }
         {
-            // tags_id is can be pushdown, and only used by the pushdownable predicate.
+            // Both predicate columns are unused: tags_id is pushdownable and k3 is the only value column.
             String sql = "select timestamp from primary_table where k3 = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
             logSysInfo(plan);
-            assertContains(plan, "unused_output_column_name:[tags_id]");
+            assertContains(plan, "unused_output_column_name:[tags_id, k3]");
         }
         {
-            // tags_id is can be pushdown and only used by the pushdownable predicate,
-            // but it also be the output column.
+            // tags_id is also the output column, so only k3 stays unused.
             String sql = "select tags_id from primary_table where k3 = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
             logSysInfo(plan);
-            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "unused_output_column_name:[k3]");
         }
         {
-            // tags_id is can be pushdown and used by the pushdownable predicate,
-            // but it also be used by the non-pushdownable predicate.
+            // The non-pushdownable predicate sits in a SELECT node above the scan, so the scan must output its columns.
             String sql = "select k3 from primary_table where timestamp + tags_id = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
             logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
         }
         {
-            // tags_id is can be pushdown and used by the pushdownable predicate,
-            // but it also be used by the non-pushdownable predicate.
             String sql = "select timestamp from primary_table where k3 + tags_id = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
             logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
+        }
+    }
+
+    // Locks the claim of this change: a primary key table prunes exactly what a duplicate key table prunes.
+    @Test
+    public void testFilterDuplicateKeyTableSameShapesAsPrimaryKey() throws Exception {
+        {
+            String sql = "select timestamp from duplicate_table where k3 = \"test\" limit 10;";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[k3]");
+        }
+        {
+            String sql = "select timestamp from duplicate_table where k3 = \"test\" and tags_id = 1;";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[tags_id, k3]");
+        }
+        {
+            String sql = "select tags_id from duplicate_table where k3 = \"test\" and tags_id = 1;";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[k3]");
+        }
+        {
+            // Empty here too, so the [] above is the predicate shape talking, not the key type.
+            String sql = "select k3 from duplicate_table where timestamp + tags_id = \"test\" and tags_id = 1;";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[]");
+        }
+        {
+            String sql = "select timestamp from duplicate_table where k3 + tags_id = \"test\" and tags_id = 1;";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[]");
         }
     }
 

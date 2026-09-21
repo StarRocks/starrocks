@@ -37,6 +37,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -55,8 +57,10 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -86,6 +90,21 @@ public class LocalMetaStoreTest {
         FeConstants.runningUnitTest = true;
 
         UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
+
+        // StatisticsMetaManager waits Config.statistic_manager_sleep_time_sec (60s) after the cluster comes
+        // up and then creates the _statistics_ database and its nine tables, each through
+        // LocalMetastore.createTable -> onCreate. Cases here observe process-wide side effects of table
+        // creation - testCreateTableIfNotExists counts onCreate through a JVM-wide MockUp,
+        // testTruncateInTheMiddleOfDatabaseDropped compares global tablet counts - so whenever this class
+        // outlives that delay, as it does on a loaded runner, the burst lands inside a case and breaks it
+        // (the onCreate count reads 9 instead of 0). Quiesce the daemon once here.
+        StatisticsMetaManager statisticsMetaManager = (StatisticsMetaManager) Deencapsulation.getField(
+                GlobalStateMgr.getCurrentState(), "statisticsMetaManager");
+        Assertions.assertTrue(statisticsMetaManager.isRunning(),
+                "the statistics daemon must be up before it is stopped; otherwise a later start() would "
+                        + "clear the stop request and resurrect the racing table creation");
+        statisticsMetaManager.setStop();
+        LeaderDaemon.awaitQuiesced(List.of(statisticsMetaManager), 30_000L);
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -656,5 +675,112 @@ public class LocalMetaStoreTest {
         }
 
         starRocksAssert.dropTable("test.add_pp_count");
+    }
+
+    @Test
+    public void testAddPartitionsRejectedWhenBatchWouldExceedPerTableLimit() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_partition_limit(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_partition_limit");
+        Assertions.assertEquals(1, table.getNumberOfPartitions());
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            // one existing partition, limit 2: a batch of 3 new partitions must be rejected up front
+            Config.max_partition_number_per_table = 2;
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE test.add_partition_limit ADD PARTITIONS "
+                            + "START (\"2021-01-02\") END (\"2021-01-05\") EVERY (INTERVAL 1 DAY)"));
+            Assertions.assertTrue(e.getMessage().contains("max_partition_number_per_table"),
+                    "unexpected message: " + e.getMessage());
+            Assertions.assertEquals(1, table.getNumberOfPartitions());
+
+            // a batch that still fits is accepted
+            starRocksAssert.alterTable("ALTER TABLE test.add_partition_limit ADD PARTITIONS "
+                    + "START (\"2021-01-02\") END (\"2021-01-03\") EVERY (INTERVAL 1 DAY)");
+            Assertions.assertEquals(2, table.getNumberOfPartitions());
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_partition_limit");
+    }
+
+    @Test
+    public void testAddTempPartitionsNotCountedAgainstPerTableLimit() throws Exception {
+        // Temp partitions live outside idToPartition, so getNumberOfPartitions() never sees them. Counting a
+        // temp batch against the limit would break INSERT OVERWRITE / partition merge on a table at the limit.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_temp_partition_limit(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_temp_partition_limit");
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            Config.max_partition_number_per_table = 1;
+            starRocksAssert.alterTable("ALTER TABLE test.add_temp_partition_limit ADD TEMPORARY PARTITION tp20210101 "
+                    + "VALUES [(\"2021-01-01\"), (\"2021-01-02\"))");
+            Assertions.assertEquals(1, table.getNumberOfPartitions());
+            Assertions.assertNotNull(table.getPartition("tp20210101", true));
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_temp_partition_limit");
+    }
+
+    @Test
+    public void testAddPartitionsRecheckesPerTableLimitUnderWriteLock() throws Exception {
+        // The first partition num check runs under the READ lock, which is dropped while the tablets are
+        // built. Another committer landing in that window makes the checked count stale, so the limit has to
+        // be re-checked under the WRITE lock that actually commits the batch.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_partition_race(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_partition_race");
+
+        AtomicBoolean injected = new AtomicBoolean(false);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Invocation invocation, Database db, OlapTable olapTable,
+                                 List<PhysicalPartition> partitions, ComputeResource computeResource)
+                    throws Exception {
+                // stand in for a concurrent committer that fills the table up while this batch holds no lock
+                if (injected.compareAndSet(false, true)) {
+                    starRocksAssert.alterTable("ALTER TABLE test.add_partition_race ADD PARTITION p20210102 "
+                            + "VALUES [(\"2021-01-02\"), (\"2021-01-03\"))");
+                }
+                invocation.proceed(db, olapTable, partitions, computeResource);
+            }
+        };
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            Config.max_partition_number_per_table = 2;
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE test.add_partition_race ADD PARTITION p20210103 "
+                            + "VALUES [(\"2021-01-03\"), (\"2021-01-04\"))"));
+            Assertions.assertTrue(e.getMessage().contains("max_partition_number_per_table"),
+                    "unexpected message: " + e.getMessage());
+            Assertions.assertTrue(injected.get(), "the concurrent committer never ran");
+            Assertions.assertEquals(2, table.getNumberOfPartitions());
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_partition_race");
     }
 }

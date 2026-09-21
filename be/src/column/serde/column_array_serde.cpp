@@ -32,6 +32,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
+#include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -903,6 +904,7 @@ public:
 
 class ColumnSerializedSizeVisitor final : public ColumnVisitorAdapter<ColumnSerializedSizeVisitor> {
 public:
+    using ColumnVisitorAdapter::visit;
     explicit ColumnSerializedSizeVisitor(int64_t init_size, const int encode_level)
             : ColumnVisitorAdapter(this), _size(init_size), _encode_level(encode_level) {}
 
@@ -964,6 +966,8 @@ public:
         return Status::NotSupported("AdaptiveNullableColumn is not supported");
     }
 
+    Status visit(const GeoColumn& column) override;
+
     int64_t size() const { return _size; }
 
 private:
@@ -973,6 +977,7 @@ private:
 
 class ColumnSerializingVisitor final : public ColumnVisitorAdapter<ColumnSerializingVisitor> {
 public:
+    using ColumnVisitorAdapter::visit;
     explicit ColumnSerializingVisitor(uint8_t* buff, bool sorted, const int encode_level)
             : ColumnVisitorAdapter(this), _buff(buff), _cur(buff), _sorted(sorted), _encode_level(encode_level) {}
 
@@ -1038,6 +1043,8 @@ public:
         return Status::NotSupported("AdaptiveNullableColumn is not supported");
     }
 
+    Status visit(const GeoColumn& column) override;
+
     uint8_t* cur() const { return _cur; }
 
     int64_t bytes() const { return _cur - _buff; }
@@ -1051,6 +1058,7 @@ private:
 
 class ColumnDeserializingVisitor final : public ColumnVisitorMutableAdapter<ColumnDeserializingVisitor> {
 public:
+    using ColumnVisitorMutableAdapter::visit;
     explicit ColumnDeserializingVisitor(const uint8_t* buff, const uint8_t* end, bool sorted, const int encode_level)
             : ColumnVisitorMutableAdapter(this),
               _buff(buff),
@@ -1123,6 +1131,8 @@ public:
         return Status::NotSupported("AdaptiveNullableColumn is not supported");
     }
 
+    Status visit(GeoColumn* column) override;
+
     const uint8_t* cur() const { return _cur; }
 
     int64_t bytes() const { return _cur - _buff; }
@@ -1134,6 +1144,21 @@ private:
     bool _sorted;
     int _encode_level;
 };
+
+Status ColumnSerializedSizeVisitor::visit(const GeoColumn& column) {
+    _size += column.serialized_column_size();
+    return Status::OK();
+}
+
+Status ColumnSerializingVisitor::visit(const GeoColumn& column) {
+    ASSIGN_OR_RETURN(_cur, column.serialize_column(_cur));
+    return Status::OK();
+}
+
+Status ColumnDeserializingVisitor::visit(GeoColumn* column) {
+    ASSIGN_OR_RETURN(_cur, column->deserialize_column(_cur, _end));
+    return Status::OK();
+}
 
 int64_t ColumnArraySerde::max_serialized_size(const Column& column, const int encode_level) {
     ColumnSerializedSizeVisitor visitor(0, encode_level);

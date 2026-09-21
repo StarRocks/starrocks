@@ -24,6 +24,7 @@
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column_base.h"
+#include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -88,6 +89,7 @@ template <typename PermRange>
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation<PermRange>> {
 public:
     using PermTraits = PermutationTraits<typename PermRange::value_type>;
+    using ColumnVisitorMutableAdapter<ColumnAppendPermutation<PermRange>>::visit;
 
     explicit ColumnAppendPermutation(const std::span<const Column* const> columns, const PermRange& perm)
             : ColumnVisitorMutableAdapter<ColumnAppendPermutation<PermRange>>(this), _columns(columns), _perm(perm) {}
@@ -225,6 +227,8 @@ public:
 
     Status do_visit(JsonColumn* dst) { return generic_visit(dst); }
 
+    Status visit(GeoColumn* dst) override;
+
     Status do_visit(AdaptiveNullableColumn* dst) {
         // TODO: supported later
         return Status::NotSupported("not support AdaptiveNullableColumn in ColumnAppendPermutation");
@@ -247,6 +251,20 @@ private:
     const std::span<const Column* const> _columns;
     const PermRange _perm;
 };
+
+template <typename PermRange>
+Status ColumnAppendPermutation<PermRange>::visit(GeoColumn* dst) {
+    if constexpr (std::is_same_v<typename PermRange::value_type, SmallPermuteItem>) {
+        if (!_columns.empty() && !_perm.empty()) {
+            std::vector<uint32_t> indexes;
+            permutate_to_selective(_perm, &indexes);
+            dst->append_selective(*_columns[0], indexes.data(), 0, indexes.size());
+        }
+        return Status::OK();
+    } else {
+        return generic_visit(dst);
+    }
+}
 
 template <typename PermRange>
 static inline void materialize_column_by_permutation_impl(Column* dst, std::span<const Column* const> columns,

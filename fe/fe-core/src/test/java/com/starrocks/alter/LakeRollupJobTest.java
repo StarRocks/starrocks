@@ -26,6 +26,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.qe.ConnectContext;
@@ -72,15 +73,10 @@ public class LakeRollupJobTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
-        new MockUp<MaterializedViewHandler>() {
-            @Mock protected void runAfterLeaseValid() {
-                System.out.println("Mocked MaterializedViewHandler.runAfterLeaseValid() called");
-            }
-        };
-
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
         UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
+        stopBackgroundRollupHandler(60000);
 
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
@@ -155,6 +151,32 @@ public class LakeRollupJobTest {
 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         table = db.getTable("base_table");
+    }
+
+    /**
+     * The rollup handler is a leader daemon with no runningUnitTest guard: it ticks every
+     * alter_scheduler_interval_millisecond and runs every non-final job in alterJobsV2 -- the very state
+     * machine these cases drive by hand. clearJobs() does not close that race, because the daemon can
+     * already have advanced the job in the window between createMaterializedView() and clearJobs() (the
+     * same race fixed in RollupJobV2Test, #74346); the test then drives a job that is no longer PENDING and
+     * hits "index meta id ... already exists". Stopping the daemon is what makes every transition here an
+     * explicit call. A MockUp of runAfterLeaseValid() is not equivalent: it is name-coupled to whichever
+     * method the daemon ticks (it already had to be renamed once, in #73043), and it leaves the daemon
+     * thread calling into JMockit-instrumented code for the whole class while the cases install and tear
+     * down other MockUps -- JMockit's shared state is not thread-safe under that, which is the flake fixed
+     * in InfoSchemaDbTest (#74312).
+     */
+    private static void stopBackgroundRollupHandler(long timeoutMs) throws Exception {
+        MaterializedViewHandler rollupHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        Assertions.assertTrue(rollupHandler.isRunning(),
+                "the rollup daemon must be up before it is stopped; otherwise a later start() would clear "
+                        + "the stop request and resurrect the racing tick");
+        rollupHandler.setStop();
+        LeaderDaemon.awaitQuiesced(List.<LeaderDaemon>of(rollupHandler), timeoutMs);
+        // setStop() drives the LeaderDaemon worker through onStopped(), which shuts the handler executor
+        // down as part of the demotion cleanup. Rebuild it so finished AlterReplicaTask reports can still
+        // be submitted while the cases drive jobs manually (mirrors stopBackgroundSchemaChangeHandler).
+        rollupHandler.rebuildExecutorForTest();
     }
 
     private static LakeRollupJob createJob(String sql) throws Exception {

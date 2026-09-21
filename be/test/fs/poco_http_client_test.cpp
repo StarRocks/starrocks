@@ -14,6 +14,14 @@
 
 #include "platform/aws/poco_http_client.h"
 
+#include <Poco/Exception.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPResponse.h>
+#include <Poco/Net/NetSSL.h>
+#include <Poco/Net/ServerSocket.h>
+#include <Poco/Net/SocketAddress.h>
+#include <Poco/Net/StreamSocket.h>
+#include <Poco/Timestamp.h>
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/client/DefaultRetryStrategy.h>
@@ -22,9 +30,12 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "common/config_object_storage_fwd.h"
@@ -233,6 +244,133 @@ TEST_F(S3PocoHttpClientTest, TestNotFoundKey) {
     EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
     // ErrorCode 16 means RESOURCE_NOT_FOUND
     EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
+}
+
+// The timeouts a caller hands to makeHTTPSession() have to reach the session. They used to be
+// dropped: getSession() consumed only connection_timeout, to bound the pool wait, and returned
+// without touching send/receive, so object_storage_request_timeout_ms had no effect on this path
+// and a read that stopped receiving waited out Poco's own default instead.
+//
+// No network is involved -- Poco connects lazily on sendRequest(), so constructing a session for
+// an address nothing listens on is enough to inspect what was applied to it.
+TEST(PocoSessionTimeoutTest, SendAndReceiveTimeoutsReachTheSession) {
+    const Poco::Timespan connect(1 * 1000000);
+    const Poco::Timespan request(5 * 1000000);
+    ConnectionTimeouts timeouts(connect, request, request);
+
+    Poco::URI uri("http://127.0.0.1:1/");
+    auto session = makeHTTPSession(uri, timeouts, false);
+
+    EXPECT_EQ(request.totalMicroseconds(), session->getSendTimeout().totalMicroseconds());
+    EXPECT_EQ(request.totalMicroseconds(), session->getReceiveTimeout().totalMicroseconds());
+}
+
+// A request with no timeout must not inherit the previous borrower's. Sessions are pooled per
+// endpoint rather than per client, and clients sharing an endpoint do not share a timeout: a
+// RENAME_FILE client carries object_storage_rename_file_request_timeout_ms while an ordinary read
+// carries the runtime-mutable object_storage_request_timeout_ms. Checking out a session must
+// therefore put it in the state this request asked for, not leave it in the state the last one did.
+TEST(PocoSessionTimeoutTest, UnsetTimeoutDoesNotInheritThePreviousRequests) {
+    Poco::Net::HTTPClientSession session("127.0.0.1", 1);
+    const Poco::Timespan pristine = session.getReceiveTimeout();
+
+    // A client with a timeout borrows it first.
+    const Poco::Timespan thirty(30 * 1000000);
+    apply_request_timeouts(session, ConnectionTimeouts(Poco::Timespan(1 * 1000000), thirty, thirty));
+    ASSERT_EQ(thirty.totalMicroseconds(), session.getReceiveTimeout().totalMicroseconds());
+
+    // A client without one borrows it next, and must not be left on the 30 s above.
+    ConnectionTimeouts unset(Poco::Timespan(1 * 1000000), Poco::Timespan(-1 * 1000), Poco::Timespan(-1 * 1000));
+    apply_request_timeouts(session, unset);
+
+    EXPECT_EQ(pristine.totalMicroseconds(), session.getReceiveTimeout().totalMicroseconds());
+    EXPECT_EQ(pristine.totalMicroseconds(), session.getSendTimeout().totalMicroseconds());
+}
+
+// Zero explicitly disables the request timeout. It must not be confused with an unset (negative)
+// timeout and restored to Poco's default, especially after a pooled session carried a positive
+// timeout for its previous borrower.
+TEST(PocoSessionTimeoutTest, ZeroTimeoutDisablesThePreviousRequestsTimeout) {
+    Poco::Net::HTTPClientSession session("127.0.0.1", 1);
+    const Poco::Timespan thirty(30 * 1000000);
+    apply_request_timeouts(session, ConnectionTimeouts(Poco::Timespan(1 * 1000000), thirty, thirty));
+    ASSERT_EQ(thirty.totalMicroseconds(), session.getReceiveTimeout().totalMicroseconds());
+
+    const Poco::Timespan zero(0);
+    apply_request_timeouts(session, ConnectionTimeouts(Poco::Timespan(1 * 1000000), zero, zero));
+
+    EXPECT_EQ(0, session.getReceiveTimeout().totalMicroseconds());
+    EXPECT_EQ(0, session.getSendTimeout().totalMicroseconds());
+}
+
+// Keep-alive belongs to the pool, not to a single request: ConnectionTimeouts default-initializes
+// http_keep_alive_timeout to zero, and pushing that onto a pooled session would work against the
+// pool, which exists to reuse connections.
+TEST(PocoSessionTimeoutTest, KeepAliveTimeoutIsLeftAlone) {
+    Poco::Net::HTTPClientSession session("127.0.0.1", 1);
+    const Poco::Timespan before = session.getKeepAliveTimeout();
+
+    ConnectionTimeouts timeouts(Poco::Timespan(1 * 1000000), Poco::Timespan(5 * 1000000), Poco::Timespan(5 * 1000000));
+    ASSERT_EQ(0, timeouts.http_keep_alive_timeout.totalMicroseconds());
+    apply_request_timeouts(session, timeouts);
+
+    EXPECT_EQ(before.totalMicroseconds(), session.getKeepAliveTimeout().totalMicroseconds());
+}
+
+// A peer that completes the TCP handshake and then never answers -- the half-open flow a NAT
+// leaves behind when it forgets an idle entry -- used to cost connect_timeout + 2 x receive_timeout
+// on a single socket. The TLS handshake spent the connect timeout without failing, because
+// connectSSL() discarded the ERR_SSL_WANT_READ that handleError() returns instead of throwing; the
+// first write then re-entered the handshake for a full receive timeout; and mustRetry() polled for
+// another full receive timeout on top before giving up. With the timeouts below that is 1 + 5 + 5
+// seconds to fail a request the caller asked to bound at 5, and with the defaults a stalled
+// PutObject cost 30 + 60 + 60 on a production CN. Fixed in thirdparty/patches, so this test only
+// passes against a Poco built with that patch applied.
+TEST(PocoSessionTimeoutTest, StalledPeerCostsOneTimeoutNotThree) {
+    Poco::Net::initializeSSL();
+
+    // Accept connections and hold them open without ever writing a byte.
+    Poco::Net::ServerSocket listener(Poco::Net::SocketAddress("127.0.0.1", 0));
+    std::atomic<bool> stop{false};
+    std::vector<Poco::Net::StreamSocket> accepted;
+    std::thread acceptor([&] {
+        while (!stop.load(std::memory_order_relaxed)) {
+            if (listener.poll(Poco::Timespan(0, 100 * 1000), Poco::Net::Socket::SELECT_READ)) {
+                accepted.push_back(listener.acceptConnection());
+            }
+        }
+    });
+
+    const Poco::Timespan connect(1 * 1000000);
+    const Poco::Timespan request(5 * 1000000);
+    const Poco::URI uri("https://127.0.0.1:" + std::to_string(listener.address().port()) + "/");
+
+    Poco::Timestamp started;
+    {
+        auto session = makeHTTPSession(uri, ConnectionTimeouts(connect, request, request), false);
+        Poco::Net::HTTPRequest req(Poco::Net::HTTPRequest::HTTP_GET, "/", Poco::Net::HTTPMessage::HTTP_1_1);
+        Poco::Net::HTTPResponse response;
+        EXPECT_THROW(
+                {
+                    session->sendRequest(req);
+                    session->receiveResponse(response);
+                },
+                Poco::TimeoutException);
+    }
+    const int64_t elapsed_us = started.elapsed();
+
+    stop.store(true, std::memory_order_relaxed);
+    acceptor.join();
+
+    // Lower bound: the request has to have actually waited on the peer, so a session that fails
+    // for some unrelated reason does not pass this test by being fast.
+    EXPECT_GE(elapsed_us, connect.totalMicroseconds() / 2)
+            << "gave up after " << elapsed_us / 1000000.0 << " s, before it could have reached the peer";
+    // Upper bound: one timeout, not three. Unpatched Poco takes connect + 2 x receive = 11 s here.
+    EXPECT_LT(elapsed_us, (connect + request).totalMicroseconds())
+            << "one stalled connection took " << elapsed_us / 1000000.0 << " s";
+
+    Poco::Net::uninitializeSSL();
 }
 
 } // namespace starrocks::poco

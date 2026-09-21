@@ -214,6 +214,11 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：应用程序分配的总字节数。
 
+## `jemalloc_dirty_bytes`
+
+- 单位：字节
+- 描述：未使用的脏页（dirty page）中的总字节数。这些页面尚未通过 madvise 归还给操作系统，可直接复用于新的内存分配而不会触发缺页中断。
+
 ## `jemalloc_mapped_bytes`
 
 - 单位：字节
@@ -229,6 +234,11 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：用于元数据的透明巨页数量。
 
+## `jemalloc_muzzy_bytes`
+
+- 单位：字节
+- 描述：未使用的 muzzy 页中的总字节数。muzzy 是脏页与保留页（retained）之间的中间衰减状态，页面已通过 madvise（例如 MADV_FREE）处理，但地址映射仍被保留。
+
 ## `jemalloc_resident_bytes`
 
 - 单位：字节
@@ -243,6 +253,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
+
+## `lake_compaction_held_segment_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：正在运行的存算分离（lake）压缩任务当前持有的输入 Segment 元数据大小（由 `lake_compaction_hold_input_segments` 控制）。与元数据缓存不同，这部分内存不受 LRU 管理，随持有它的任务结束而释放；因此该值长期偏高说明存在长时间运行的压缩任务，而不是缓存需要调大。
 
 ## `lake_compaction_failed`
 
@@ -444,6 +460,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：微秒
 - 类型：摘要
 - 描述：RPC 请求和等待流式加载管道可用性的总延迟。
+
+## `meta_replay_lag_second`
+
+- 单位：秒
+- 类型：Gauge
+- 描述：当前 FE 已回放的元数据比 Leader 的时钟落后多久。Leader FE 每 10 秒向日志中写入一个时间戳，该指标即本节点已回放的最新时间戳距今的时长。`max_journal_replay_lag` 只由 Leader 上报，而该指标由落后的节点自身上报；某条日志回放卡住期间，该值会持续增长。Leader FE 只写时间戳、不回放时间戳，因此始终上报 `0`。该值超过 `meta_delay_toleration_second` 后，该节点不再用本地元数据提供读服务，而是把查询转发给 Leader。有两种例外：一是 `ignore_meta_check` 设为 `true` 时，该节点照常提供读服务；二是该节点自上次检查以来没有回放任何日志，且与 Leader 的连接正常，此时该节点维持当前的读服务状态，因为 Leader 没有写入新日志，落后于它的时钟并不说明该节点自身有问题。第二种情况只是不把节点移出服务，并不会让已经停止提供读服务的节点重新对外服务。
 
 ## `meta_request_duration`
 

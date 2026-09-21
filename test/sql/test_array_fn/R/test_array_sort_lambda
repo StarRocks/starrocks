@@ -306,3 +306,103 @@ SELECT array_sort([7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,1,2,3,4,5], (x, y) ->
 -- result:
 [REGEX].*Comparator violates asymmetry.*
 -- !result
+
+-- name: test_array_sort_lambda_inconsistent_comparator_concurrent
+set pipeline_dop = 16;
+-- result:
+-- !result
+create table t0 (
+    k0 int,
+    c0 array<int>
+)
+duplicate key(k0)
+distributed by hash(k0) buckets 16
+properties(
+   "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i, [2, 1, 3] from table(generate_series(1, 200000)) t(i);
+-- result:
+-- !result
+SELECT count(array_sort(c0, (x, y) -> x <= y)) from t0;
+-- result:
+[REGEX].*Comparator violates irreflexivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> x <= y)) from t0;
+-- result:
+[REGEX].*Comparator violates irreflexivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> x <= y)) from t0;
+-- result:
+[REGEX].*Comparator violates irreflexivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> x <= y)) from t0;
+-- result:
+[REGEX].*Comparator violates irreflexivity.*
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> x < y) from t0;
+-- result:
+[1,2,3]
+-- !result
+drop table t0;
+-- result:
+-- !result
+
+-- name: test_array_sort_lambda_inconsistent_comparator_concurrent
+set pipeline_dop = 64;
+-- result:
+-- !result
+create table t0 (
+    k0 int,
+    c0 array<int>
+)
+duplicate key(k0)
+distributed by hash(k0) buckets 32
+properties(
+   "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i, [1,2,3,4,5,6,7,8,9,10] from table(generate_series(1, 200000)) t(i);
+-- result:
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT count(array_sort(c0, (x, y) -> CASE WHEN (x=1 and y=2) or (x=2 and y=3) or (x=3 and y=1) THEN -1 WHEN x=1 and y=3 THEN 1 ELSE x-y END)) from t0;
+-- result:
+[REGEX].*Comparator violates transitivity.*
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> x < y) from t0;
+-- result:
+[1,2,3,4,5,6,7,8,9,10]
+-- !result
+drop table t0;
+-- result:
+-- !result

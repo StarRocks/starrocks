@@ -22,6 +22,27 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: Flink/Spark SQLによって作成されたスキャンタスクの総数。
 
+## `ai_http_requests_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 転送レイヤーが受け付けた AI HTTP attempt の総数です。最初の attempt と再試行 attempt の両方を含みます。`AIHttpClient::submit` が成功を返した場合にのみカウントされ、admission の待機と同期的に拒否された送信はカウントされません。
+
+## `ai_http_retries_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 受け付けられた AI HTTP 再試行 attempt の総数です。最初の attempt は含まれず、スケジュールされた後に転送レイヤーが受け付ける前にキャンセルされた再試行もカウントされません。このため、このカウンターは常に `ai_http_requests_total` 以下です。
+
+## `ai_http_timeouts_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 転送タイムアウト、または request/query deadline の期限切れによって終了した、受け付け済み AI HTTP attempt の総数です。受け付けられた各 attempt は最大 1 回だけカウントされます。キャンセル、シャットダウン、および HTTP attempt が受け付けられる前に到達した deadline はカウントされません。
+
 ## `async_delta_writer_queue_count`
 
 - 単位: カウント
@@ -443,6 +464,21 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: バイト
 - 説明: コンパクションが使用するメモリ。
+
+## `zstd_compression_dict_build_fallback`
+
+- 単位: カウント
+- 説明: 圧縮ディクショナリの対象となる列が最終的にディクショナリを得られず、通常の ZSTD として書き込まれた累計回数。試験対象のページがディクショナリありでも十分に小さくならなかった場合 (`zstd_compression_dict_min_gain` を参照)、またはディクショナリの構築が失敗した場合に計上されます。列 writer ごと Segment ごとに 1 回カウントされます。`zstd_compression_dict_pages_written` と同様に、フラット化された JSON 列はフラット化サブ列ごとに writer を持ちます。計上されるのはディクショナリを試した writer だけです。サンプルにするには小さすぎたページは計上されません (次のページで改めて試されます)。試験に到達しない列 (ディクショナリエンコードされた列、試験を終える前に列が終わる場合) も計上されないため、この値と `zstd_compression_dict_pages_written` の合計は指定された列の数になりません。`zstd_compression_dict_pages_written` に対してこの値が大きい場合、テーブルプロパティ `zstd_compression_columns` で指定した列に対して圧縮ディクショナリがほとんど効いていないことを意味します。
+
+## `zstd_compression_dict_bytes`
+
+- 単位: バイト
+- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページのディスク上の累計サイズ。`zstd_compression_dict_pages_written` で割ると平均ディクショナリサイズが得られます。この値は `zstd_compression_dict_sample_bytes` によって制限されます。
+
+## `zstd_compression_dict_pages_written`
+
+- 単位: カウント
+- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページの累計数。ディクショナリページは Segment ごと、列 writer ごとに 1 つ書き込まれます。フラット化された JSON 列はフラット化サブ列ごとに writer を持ち、それぞれが独自のディクショナリページを書き出すことがあります。したがってこのメトリクスは実際に圧縮ディクショナリを使用した writer の数であり、スキーマ列の数でも、ディクショナリで圧縮されたデータページの数でもありません。
 
 ## `consistency_mem_bytes`
 

@@ -293,6 +293,29 @@ StarRocks SQLAlchemy 方言提供对以下功能的全面支持：
                 context.run_migrations()
     ```
 
+### 选择用于视图/物化视图比较的规范化 schema
+
+在 4.0.6 之前的 StarRocks 版本中，视图或物化视图的定义会以引擎自身的规范化形式存储，这可能与模型中的 SQL 在文本上有所不同（例如去掉了 `col AS col` 别名、添加了括号等），但语义完全相同。为避免每次自动生成时都报告虚假的变更，方言会将模型定义**往返经过一个临时视图**，并比较两侧在引擎中存储的形式，以此进行规范化。
+
+默认情况下，该临时视图会创建在被比较对象所在的 schema 中，因此迁移用户需要在每个包含视图或物化视图的 schema 中都具备创建视图的权限。如果您的用户权限受限，可以将 `starrocks_temp_view_schema` 设置为一个专用的 schema，并只在该 schema 上授予所需权限。使用 `__…__` 风格的名称（例如 `__alembic_canon__`）可以让该 schema 的用途更清晰；它可以是用户有写入权限的任意 schema，也可以复用现有的 schema（例如您的 `version_table_schema`）：
+
+```python
+# env.py
+context.configure(
+    # ... 您已有的参数（render_item、include_object 等）...
+    starrocks_temp_view_schema="__alembic_canon__",  # 在此 schema 中创建临时比较视图
+)
+```
+
+在该 schema 上为迁移用户授予“创建 → 回读 → 删除”整个往返所需的权限（仅有 `CREATE VIEW` 是不够的）：
+
+```sql
+GRANT CREATE VIEW ON DATABASE __alembic_canon__ TO '<user>';
+GRANT SELECT, DROP ON ALL VIEWS IN DATABASE __alembic_canon__ TO '<user>';
+```
+
+当未设置 `starrocks_temp_view_schema` 时，行为保持不变（临时视图仍创建在被比较对象所在的 schema 中）。如果临时视图无法创建（缺少权限，或引用的对象在本次迁移中尚不存在），比较会记录一条 DEBUG 日志，并回退到进程内的 AST/正则规范化。
+
 ### 自动生成迁移
 
 ```bash

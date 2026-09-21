@@ -46,6 +46,46 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: 小さなファイルキャッシュの数。
 
+## `sort_key_sampling_data_page_fallback_total`
+
+- 単位: カウント
+- 説明: データページからのソートキーサンプリングがセグメントを諦め、そのセグメントの粗い `[min, max]` 範囲にフォールバックした累計回数。想定外のスキーマ、セグメント自身のスキーマと一致しない `sort_key_idxes`、ページ読み取りの失敗、行数の不足、セグメントが宣言する境界の外側にあるサンプルなどが原因です。サンプリングは fail-open のため分割が失敗することはありませんが、値の上昇は Tablet 分割と範囲分割 Compaction が意図より粗い境界で動作していることを意味します。
+
+## `sort_key_sampling_data_page_latency`
+
+- 単位: us
+- 説明: 1 セグメントのソートキーをデータページからサンプリングするのに要した時間。bvar のレイテンシ系列（平均、パーセンタイル、最大、qps、カウント）として公開されます。サンプル予算チェックを通過したすべての試行を対象とし、その後フォールバックした試行も含むため、fail-open を繰り返す遅い Tablet もここで見えます。
+
+## `sort_key_sampling_data_page_segments_total`
+
+- 単位: カウント
+- 説明: サンプリングがデータページ経路を選択したセグメントの累計数。サンプリングの形状が確定した後、最初の読み取りの前に加算されるため、その後の読み取りが失敗してフォールバックしたセグメントも計上されます。このカウンタの目的は、無償の Short Key Index 経路が「使われなかった」ことを示すことです。実際に支払った I/O は `sort_key_sampling_read_bytes_total` を参照してください。
+
+## `sort_key_sampling_read_bytes_total`
+
+- 単位: バイト
+- 説明: ソートキーのサンプリング中にセグメントのデータページから読み取った圧縮バイト数の累計。ページリーダー自身の計測値から加算されるため、実際に発生した転送のみを数え、後にフォールバックした試行の分も含みます。分割点サンプリングの I/O コストを監視するための指標です。
+
+## `sort_key_sampling_rowsets_opened_total`
+
+- 単位: カウント
+- 説明: サンプリングのためにセグメントファイルを開いた Rowset の累計数。この open は、その Rowset の少なくとも 1 つのセグメントがゼロでないサンプル予算を持つことを条件とするため、実際にサンプリングを試みた場合のみ増加します。`sort_key_sampling_samples_total` と併せて読んでください。Rowset を開いたのにサンプルが公開されない場合、サンプル予算が読み取り対象のセグメントに届いていないことを意味します。
+
+## `sort_key_sampling_samples_total`
+
+- 単位: カウント
+- 説明: いずれかの経路で公開されたソートキーサンプルの累計数。この値が増えているのに `sort_key_sampling_data_page_segments_total` が増えていない場合、サンプルは無償の Short Key Index 経路から得られています。
+
+## `sort_key_sampling_short_key_index_fallback_total`
+
+- 単位: カウント
+- 説明: Short Key Index サンプリング経路に入ったうえでセグメントを諦めた累計回数。形状がセグメント自身の行数と相互検証できない、インデックスエントリをデコードできない、サンプルが順序を崩しているかセグメントの宣言する境界の外側にある、といった場合です。諦めてもそのセグメントのサンプリングが終わるわけではありません。データページ予算が割り当てられていれば次はデータページサンプリングに進み、予算が 0 か、そちらでも何も得られなかった場合にのみ粗い `[min, max]` 範囲に戻ります。この指標が数え**ない**ケースが 2 つあります。インデックスブロックが 2 個未満のセグメントは、この指標を増やさずに経路を抜け、行粒度でサンプリングされます。また、スキーマの Short Key Index がソートキー全体をエンコードできない場合（例えば VARCHAR のソートキー）はこの経路に入らないため、そうしたテーブルではこの指標は 0 のままで、該当セグメントは `sort_key_sampling_data_page_segments_total` に現れます。
+
+## `sort_key_sampling_short_key_index_latency`
+
+- 単位: us
+- 説明: 1 セグメントのソートキーを Short Key Index からサンプリングするのに要した時間。bvar のレイテンシ系列（平均、パーセンタイル、最大、qps、カウント）として公開されます。この経路はデータページを一切読まないため、値は `sort_key_sampling_data_page_latency` を大きく下回るはずです。
+
 ## `spill_parked_with_uncovered_reason_total`
 
 - 単位: カウント
@@ -55,6 +95,13 @@ description: "Alphabetical s"
 
 - 単位: -
 - 説明: `/proc/net/snmp`によって返されるメトリクス。
+
+## `starrocks_be_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: BEノードのビルド情報。メトリクスの値は常に `1` です。
 
 ## `starrocks_be_clone_task_copy_bytes`
 
@@ -182,6 +229,12 @@ description: "Alphabetical s"
 - 単位: カウント
 - タイプ: 累積値
 - 説明: `FlatJsonColumnWriter` に追加された行数（`append()` 時点でカウント、実際のフラット化の前）。
+
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 共有データモード専用。Lake tablet metadata をリモートストレージから読み取り、`NotFound` が返された試行の総数。tablet の metadata は個別の metadata ファイルか bundle metadata ファイルのいずれか一方にのみ存在し、両方に存在することはありません。いずれの読み取りもカウント対象で、vacuum が発行する bundle 読み取りも含まれます。失敗したフォールバック読み取りはそれぞれ個別にカウントされます。キャッシュミスおよび読み取り成功時には、このメトリクスは増加しません。レプリケーションでのソースクラスタ metadata の読み取り、およびリストアでのスナップショット metadata の読み取りはカウントされません。
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -337,6 +390,13 @@ description: "Alphabetical s"
 - タイプ: 累積
 - 説明: リポジトリから削除されたバックアップスナップショットの合計数。TTL による自動クリーンアップと DROP SNAPSHOT の両方を含みます。
 
+## `starrocks_fe_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: FEノードのビルド情報。メトリクスの値は常に `1` です。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -366,6 +426,12 @@ description: "Alphabetical s"
 - 単位: ms
 - タイプ: 瞬間
 - 説明: 特定のウェアハウスにおける最後のクエリまたはロードの終了時間を示します。シェアードナッシングクラスターの場合、この項目はデフォルトのウェアハウスのみを監視します。
+
+## `starrocks_fe_max_journal_replay_lag`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: 稼動中の Follower または Observer FE のうち、Leader に追いつくために再生が必要なメタデータジャーナルの最大数。Leader FE のみが報告します (`is_leader="true"`)。Leader は自身のジャーナル書き込み位置と、ハートビートで受け取る他の各ノードの再生済みジャーナル ID の両方を知る唯一のノードであるためです。稼動していない FE ノードは除外されます。最後に報告されたジャーナル ID が最後に成功したハートビートの値で止まるためです。そのようなノードは `SHOW FRONTENDS` の `Alive` 列で検出してください。他のすべてのノードが追いついている場合、他に稼動中の FE ノードがない場合、および単一 FE クラスターの場合は `0` を返します。値が大きい、または継続的に増加している場合は、少なくとも 1 つのノードでメタデータの再生が遅れていることを意味し、そのノードは古いメタデータを提供し、`meta_delay_toleration_second` を超えるとクエリを Leader に転送します。
 
 ## `starrocks_fe_memory_usage`
 

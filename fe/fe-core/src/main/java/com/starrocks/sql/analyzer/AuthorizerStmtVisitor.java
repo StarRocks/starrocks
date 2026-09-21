@@ -39,6 +39,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -83,6 +84,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -335,7 +337,12 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                     tableRef.getTableName(), tableRef.getPos());
             try {
-                Authorizer.checkTableAction(context, tableName, PrivilegeType.INSERT);
+                // The analyzer has already resolved the target; hand it over so the INSERT check does
+                // not resolve it a second time. For a target in an external catalog that second
+                // resolution is a connector round trip, and this check runs while the planner still
+                // holds the metadata lock over the statement's internal tables.
+                Authorizer.checkResolvedTableAction(context, tableName, statement.getTargetTable(),
+                        PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -1842,6 +1849,61 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    // ---------------------------------------- AI Provider Statement ---------------------------------------
+
+    private void requireSystemOperate(ConnectContext context, String action) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    action, ObjectType.SYSTEM.name(), null);
+        }
+    }
+
+    @Override
+    public Void visitCreateAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "CREATE AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitAlterAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "ALTER AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitDropAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DROP AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitSetDefaultAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SET DEFAULT AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SHOW AI PROVIDERS");
+        return null;
+    }
+
+    @Override
+    public Void visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DESC AI PROVIDER");
+        return null;
+    }
+
     // ---------------------------------------- View Statement ---------------------------------------
 
     @Override
@@ -2022,20 +2084,16 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+        // The analyzer already qualified the ref: taking the catalog from the session instead
+        // would check a different table than the one being truncated.
+        TableName tableName = TableName.fromTableRef(statement.getTblRef());
         try {
-            String dbName = statement.getDbName();
-            if (dbName == null) {
-                dbName = context.getDatabase();
-            }
-
-            Authorizer.checkTableAction(context,
-                    new TableName(context.getCurrentCatalog(), dbName, statement.getTblName()),
-                    PrivilegeType.DELETE);
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    context.getCurrentCatalog(),
+                    tableName.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), statement.getTblName());
+                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
         return null;
     }
@@ -2523,6 +2581,20 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
         // Privilege is checked in execution logic, see `StatementExecutor#handleShowProcesslist()` for details.
+        return null;
+    }
+
+    @Override
+    public Void visitAnalyzeProfileStatement(AnalyzeProfileStmt statement, ConnectContext context) {
+        // A profile carries the full SQL text and plan, so reading one that another user produced needs
+        // SYSTEM OPERATE (Authorizer#canReadQueryProfile). A missing profile is left to execution, which
+        // reports it as not found.
+        ProfileManager.ProfileElement element = ProfileManager.getInstance().getProfileElement(statement.getQueryId());
+        if (element != null) {
+            Authorizer.checkQueryProfileAccessAndReport(context, element);
+        }
+        // A profile missing here is left to execution, which reports it as not found -- and which repeats this
+        // check on the element it actually reads, so one published in between is not served unchecked.
         return null;
     }
 

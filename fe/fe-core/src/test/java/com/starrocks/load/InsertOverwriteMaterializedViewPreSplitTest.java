@@ -312,7 +312,7 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenThrow(new IllegalStateException("injected coordinator failure"));
 
             Assertions.assertDoesNotThrow(fixture.runner::preSplitStaticOverwriteTempPartitions);

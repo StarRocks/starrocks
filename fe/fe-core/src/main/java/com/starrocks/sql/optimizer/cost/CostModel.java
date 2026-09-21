@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -193,6 +194,14 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            return CostEstimate.ofCpu(statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalAIProject(PhysicalAIProjectOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 

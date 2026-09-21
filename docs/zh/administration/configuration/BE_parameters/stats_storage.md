@@ -278,6 +278,33 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：单次 Compaction 打印 Trace 的时间阈值，如果单次 Compaction 时间超过该阈值就打印 Trace。
 - 引入版本：-
 
+### zstd_compression_dict_min_gain
+
+- 默认值：0.10
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：试压页至少要小多少（以比例表示），列级压缩字典才会被保留。写入端会把采样页之后的若干个页分别用「带字典」和「不带字典」压一遍做对比；低于该阈值时整列放弃字典，改为普通 ZSTD 压缩。字典不是免费的——每列每个 Segment 要多存一个字典页，读取时每个 Segment 要加载一次，而且一旦有数据页引用了它，这个决定就无法回退——因此默认值要求的是「明显更优」而非「可测量的更优」。在 13 份数据集 × 3 档页大小上实测：取 `0.10` 时字典只在收益达到 10% 以上的场景被保留，代价是放弃了一批 5%~9% 的收益（集中在 256 KB 页，那里页内已经吃掉了大部分重复）；若希望把这批也拿到，可下调到约 `0.05`。小于 `0` 的取值按 `0` 处理；即便取 `0`，试压页带字典也必须严格小于不带字典，因此把页压得更大的字典永远不会被保留。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效，且只影响修改之后写入的数据。
+- 引入版本：v4.2
+
+### zstd_compression_dict_min_sample_bytes
+
+- 默认值：1024
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：数据页的 encoded values 至少需要达到的字节数，达到后该页才能被用作字典样本。该阈值用于避免依据一个过小或近乎为空的首个数据页构建出无效字典，并因此将该列永久标记为“字典就绪”。该值会与每一个数据页的 encoded values 依次比较，直到某一页达到为止；因此首页太小的列会改用后面的页采样，而不是就此放弃。请设置为大于等于 `0` 的值。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
+- 引入版本：v4.2
+
+### zstd_compression_dict_sample_bytes
+
+- 默认值：65536
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：为构建压缩字典而从第一个符合条件的数据页采样的字节数。默认值大致相当于一个 64 KB 数据页。实际采样量为 `min(该页 encoded values 的大小, zstd_compression_dict_sample_bytes)`，因此该参数同时限定了字典大小。该值在创建 Column Writer 时读取，因此修改后对之后写入的 Segment 生效。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
+- 引入版本：v4.2
+
 ### cumulative_compaction_check_interval_seconds
 
 - 默认值：1
@@ -307,11 +334,11 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_binary_plain_delta_offset
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：高基数 string/varchar 列在回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
+- 描述：string/varchar 列因高基数或存在超过 1 MiB 的实际值而回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧，默认开启。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此在集群中仍有不支持该编码的 BE 在服务时（例如从此类版本滚动升级期间）、以及降级到此类版本之前，请先将其置为 `false`；并注意：用该编码写入的 segment 在此类版本上将无法读取。
 - 引入版本：v4.2.0
 
 ### default_num_rows_per_column_file_block
@@ -449,6 +476,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：是否在导入时进行数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
 - 引入版本：-
 
+### enable_zstd_compression_dict
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：列级压缩字典的集群级总开关。列级压缩字典是一个 ZSTD 字典，按列存储在每个 Segment 文件中。该开关在 Segment 写入入口处判定。当其为 `false` 时，由表属性 `zstd_compression_columns` 指定的列**仍然使用 ZSTD 压缩**——这是用户的显式要求，不受该开关影响——只是不再为它们构建共享字典。也就是说该开关只影响压缩率，不会改变压缩算法，因此可以在运行时作为运维安全阀随时切换。
+
+  该参数默认值为 `true`：任何带有这个开关的版本都同时带有读取端（`ColumnMetaPB.zstd_compression_dict_page`，字段 35，先于写入端发布），并且只有通过表属性 `zstd_compression_columns` 被指定的列才会写出字典页——从未设置该属性的集群无论此默认值如何都不会写出任何字典页。
+
+  唯一仍需注意的窗口，是从一个尚不含读取端的旧版本做滚动升级。压缩字典数据页是一个基于原始内容字典（`dictID=0`）压缩的 ZSTD 帧，其帧头不携带任何“需要字典”的标识；不认识字段 35 的旧版本 BE 会在不加载字典的情况下解压该页，从而遇到 ZSTD 数据损坏错误。在这样的升级期间，请勿给任何表添加 `zstd_compression_columns`（或将该参数设置为 `false`），直到所有 BE 升级完成。混合版本窗口期内的跨副本 Clone 与 Replication 同理。
+
+  警告：一旦集群写出了带压缩字典的 Segment，就无法再降级到引入该特性之前的版本，因为旧版本 BE 既无法读取也无法 Compaction 这些 Segment。
+- 引入版本：v4.2
+
 ### enable_event_based_compaction_framework
 
 - 默认值：true
@@ -456,24 +498,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 单位：-
 - 是否动态：否
 - 描述：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 Tablet 数比较多或者单个 Tablet 数据量比较大的场景下大幅降低 Compaction 的开销。
-- 引入版本：-
-
-### enable_full_sort_key_index
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：全量排序键索引的写入侧开关。开启后，Segment Writer 会在始终写入的旧版截断短键索引页之外，**额外**写入一个完整、未截断、包含所有排序键列的保序全量排序键索引页，并不再写入由 `segment_sort_key_sample_row_interval` 控制的元数据排序键采样。无论该配置是否开启，旧版截断短键索引页都会照常写入，因此早于该特性的 BE/CN 版本读取 Segment 不受影响（无降级风险）。该配置仅影响新写入的 Segment，磁盘上已存在的 Segment 不受影响。
-- 引入版本：-
-
-### enable_full_sort_key_index_read
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：全量排序键索引的读取侧开关。开启后，查询读路径（Segment Seek 与逻辑扫描切分）在 Segment 存在全量排序键索引页时使用该页；关闭后，所有 Segment（包括已带有全量页的）都回退到旧版截断短键索引页。由于两个配置都默认开启且旧版页始终存在，关闭该开关即可让新发起的查询立即停止使用全量排序键索引（回退阀），无需重写数据。Tablet Split 与 Range-Split 并行 Compaction 不受该开关影响。
 - 引入版本：-
 
 ### enable_lazy_delta_column_compaction
@@ -493,24 +517,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
 - 引入版本：v3.3.2
-
-### enable_pk_index_parallel_compaction
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用存算分离集群中主键索引的并行 Compaction。
-- 引入版本：-
-
-### enable_pk_index_parallel_execution
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用存算分离集群中主键索引操作的并行执行。开启后，系统会在发布操作期间使用线程池并发处理分段，显著提升大表的性能。
-- 引入版本：-
 
 ### enable_pk_size_tiered_compaction_strategy
 
@@ -943,7 +949,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：百分比（0-100）
 - 是否动态：是
-- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 即并行）。
+- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控，始终走并行路径。
 - 引入版本：-
 
 ### lake_partial_update_thread_pool_max_threads
@@ -952,7 +958,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。运行时开关由 `enable_pk_index_parallel_execution` 控制。
+- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：v4.1
 
 ### lake_partial_update_thread_pool_queue_size
@@ -1135,13 +1141,13 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：快照文件清理的间隔。
 - 引入版本：-
 
-### sort_key_limit_size
+### sort_key_max_samples_per_tablet
 
 - 默认值：1024
 - 类型：Int
-- 单位：字节
+- 单位：-
 - 是否动态：是
-- 描述：单行编码后排序键的最大长度。如果导入（包括 Spark Load）或 Schema Change 会写入排序键超过该长度的数据行，则该操作会失败并返回不可重试的错误。该限制用于约束全量排序键索引页的大小及其加载后占用的内存。Compaction 与事务提交后的 Segment 重写不做该检查，因为此时事务已经提交，失败无法反馈给发起方；因此在该限制生效前写入的数据行不受影响。只要排序键可被编码，该检查就会生效，且不受 `enable_full_sort_key_index` 影响，以保证数据准入与 Segment 写入两侧的判断一致。设置为 0 或负数可关闭该检查。调高该值前请注意内存开销：全量排序键索引每个索引块保存一个条目，因此单个 Segment 的索引大小上限为 `ceil(Segment 行数 / num_rows_per_block) * sort_key_limit_size` 字节 —— 在默认值 1024 下，百万行 Segment 约 1 MB；调至 4096 则约 4 MB。该索引页在首次使用时读入内存，并在该 Segment 的整个生命周期内驻留，因此开销会随同时打开的 Segment 数量累加。这是最坏情况上限，只有当每个被索引的键都达到该限制时才会达到；实际占用取决于排序键的真实宽度，因此调高该限制本身并不会增加内存占用，只是抬高了上限。
+- 描述：计算 Tablet 拆分边界时，从单个 Tablet 中采集的排序键样本数量上限。当 Segment 的 Short Key 索引已经完整编码了整个排序键时，样本来自该索引；否则来自该 Segment 数据页的有限次读取，因此该值也限制了这部分读放大。默认值与 FE 参数 `tablet_reshard_max_split_count` 保持一致，因为将一个 Tablet 拆分为 K 个 Range 需要 K-1 个内部边界点。将该值设置为 `0` 会禁用采样，此时拆分边界仅根据每个 Segment 的最小值和最大值排序键推导，精度较低但仍然正确。
 - 引入版本：-
 
 ### stale_memtable_flush_time_sec
@@ -1290,6 +1296,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：是否为存算分离（Lake）主键表 tablet 使用精确行数统计。开启后会读取每个 rowset 在对象存储中的 delete vector 来扣减删除行，统计更准确，但会显著增加 `get_tablet_stats` RPC 的开销；关闭后使用 rowset 元数据中的近似 `num_dels`，可避免远端 I/O，但对“已删除但尚未 compaction”的行可能略有高估。
 - 引入版本：-
+
+### lake_enable_segment_tail_index_region
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Segment 写入时，是否把所有列的 ordinal index 放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的 ordinal index 写在该列数据页之后。页级 zone map 和 short key index 不受影响，位置保持不变。该配置仅影响写入侧，且仅在存算分离集群中生效：存算一体的 BE 无论该配置为何都写入原有布局。纵向 Compaction 同样会产生该索引区；部分列更新重写不会，因为它复制已有 segment 的前缀、只追加剩余的值列，这类 segment 保持原有布局。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
+- 引入版本：v4.2.0
 
 ### lake_tablet_stat_slow_log_ms
 

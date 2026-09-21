@@ -10,7 +10,6 @@ CREATE EXTERNAL CATALOG analyze_hive_batch_${uuid0} PROPERTIES (
 
 -- All three rows fit in one external histogram statistics INSERT. Keeping one MCV leaves
 -- another distinct date/int value for the real histogram() bucket aggregate.
-ADMIN SET FRONTEND CONFIG ('enable_batch_insert_histogram_statistics' = 'true');
 ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
 
 ANALYZE TABLE analyze_hive_batch_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy
@@ -42,7 +41,6 @@ ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
 DROP CATALOG analyze_hive_batch_${uuid0};
 
 CLEANUP {
-    ADMIN SET FRONTEND CONFIG ('enable_batch_insert_histogram_statistics' = 'true');
     ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
     DROP CATALOG IF EXISTS analyze_hive_batch_${uuid0};
 } END CLEANUP

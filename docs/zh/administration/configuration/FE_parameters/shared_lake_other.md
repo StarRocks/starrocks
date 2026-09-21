@@ -535,6 +535,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- 默认值: 60000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离集群中事务版本发布（Publish Version）RPC 的超时时间。该值同时限定 FE 等待计算节点响应的时长和计算节点执行发布任务的截止时间，两者始终保持一致。如果单个事务发布的 tablet 数量很多，发布确实需要更长时间，并因此出现发布超时导致事务失败，可以调大该值。
+- 引入版本: v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - 默认值: 3000
@@ -605,6 +614,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述:
 - 引入版本: -
+
+### `lake_scheduler_enable_colocate_group_sample`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Tablet 调度器是否通过抽样 Tablet 来估算大型 Colocate Group 的副本分布，而不是扫描该 Group 中的全部 Tablet。调度一个属于 Colocate Group 的 Tablet 时，调度器需要在整个 Group 上构建各 Compute Node 的副本直方图，以决定新副本的落点。对于包含数万个 Tablet 的 Group，这次全量扫描会成为调度开销的主要来源，而健康的 Colocate Group 本身分布均匀，其中每个 Tablet 给出的信号都相同。当该配置项设置为 `true` 时，对于 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 的 Group，调度器改为随机抽取 `lake_scheduler_colocate_group_sample_size` 个 Tablet，并将抽样得到的各 Compute Node 计数按 Group 实际大小等比放大。健康且已完全放置的 Colocate Group，其全部 Tablet 位于相同的 Compute Node 上，因此抽样结果与真实分布完全一致；正在均衡中的 Group 会引入有界误差，最坏情况下只会产生次优（而非非法）的放置，后续由后台 Tablet 均衡流程修正。抽样仅适用于 Colocate Group。设置为 `false` 表示始终扫描全部 Tablet。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- 默认值: 256
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: Colocate Group 的 Tablet 数超过该值后才会被抽样。Tablet 数不超过该值的 Group 始终全量扫描，因为此时全量扫描本身开销很低，抽样只会额外引入误差。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- 默认值: 128
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: 当 Colocate Group 的 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 时，抽样的 Tablet 数量。抽样数越大，对分布倾斜（正在均衡中）的 Group 估算误差越小，但每次调度决策的开销也越高，即以调度延迟换取放置精度。该值应明显小于 `lake_scheduler_colocate_group_sample_threshold`，否则抽样相比全量扫描节省有限。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- 默认值: 40
+- 类型: Int
+- 单位: 百分比
+- 是否可变: Yes
+- 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_online_rewrite_partition_retry_timeout_second`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 存算分离模式下 Range 分布表的在线数据重写在某个分区的重写 `INSERT` 失败后，持续重试该分区的时长上限，超过该时长才取消整个作业。在线数据重写（Range 排序键 Schema Change、Range Rollup、物化视图排序键重写）按 Alter 调度周期逐个分区重建数据，因此某个 Compute Node 在 `INSERT` 执行期间重启或崩溃时，只会导致该分区失败。在该时长内，作业只会在后续调度周期重跑失败的那个分区，并保留已经重写完成的所有分区；该时长耗尽后，作业被取消并报告最后一次重写错误。该时长只会被该分区自身失败的重试尝试消耗：每次失败按「该次尝试实际运行的时长 + 一个 `alter_scheduler_interval_millisecond`」计入，一旦某次尝试的计入使其达到该时长，作业立即取消。每个分区至少会获得一次重试，即使单次尝试的开销已超过整个时长——否则一个本就需要运行更久的重写会在首次瞬时故障时即被取消。分区因等待而非失败所消耗的时间——例如没有可用的 Compute Node 执行重写，或重写已 `COMMITTED` 但仍在等待 publish——不会消耗该时长，作业处理其他分区所花的时间同样不会；此类等待由 `alter_table_timeout_second` 限制。该值应大于 Compute Node 恢复可用所需的时间，同时应远小于 `alter_table_timeout_second`，因为在线数据重写运行期间该表的 Compaction 会被推迟。设置为 `0` 表示首次失败即取消作业。
+- 引入版本: v4.2.0
 
 ## 数据湖
 
@@ -1527,7 +1581,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 StarRocks 何时对具有相关物化视图的表应用“无锁”优化。当此项设置为小于 0 时，系统始终应用无锁优化，并且不为查询复制相关物化视图（减少 FE 内存使用和元数据复制/锁争用，但可能增加元数据并发问题的风险）。当设置为 0 时，禁用无锁优化（系统始终使用安全的复制和锁定路径）。当设置为大于 0 时，仅当相关物化视图的数量小于或等于配置阈值时才应用无锁优化。此外，当值大于或等于 0 时，规划器会将查询 OLAP 表记录到优化器上下文中以启用与物化视图相关的重写路径；当值小于 0 时，此步骤将被跳过。
+- 描述: 控制 StarRocks 何时对具有相关物化视图的表应用“无锁”优化。当此项设置为小于 0 时，系统始终应用无锁优化，并且不为查询复制相关物化视图（减少 FE 内存使用和元数据复制/锁争用，但可能增加元数据并发问题的风险）。当设置为 0 时，仅对没有相关物化视图的表应用无锁优化。当设置为大于 0 时，仅当相关物化视图的数量小于或等于配置阈值时才应用无锁优化。该阈值不适用于同时读取外部 Catalog 表的语句：对这类语句而言，在整个规划阶段持有锁会使锁的持有时长取决于对 FE 无法控制的外部系统发起的分区、统计信息和文件列表请求，而该锁对外部侧不提供任何保护，因此无论内表关联多少个物化视图，此类语句都走无锁路径。此外，当值大于或等于 0 时，规划器会将查询 OLAP 表记录到优化器上下文中以启用与物化视图相关的重写路径；当值小于 0 时，此步骤将被跳过。
 - 引入版本: v3.2.1
 
 ### `small_file_dir`

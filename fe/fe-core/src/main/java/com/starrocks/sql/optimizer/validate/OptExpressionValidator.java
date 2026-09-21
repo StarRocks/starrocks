@@ -23,6 +23,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -53,6 +54,7 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
+        AIFunctionPlacementValidator.validate(root);
         visit(root, null);
     }
 
@@ -67,6 +69,17 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
             Map<ColumnRefOperator, ScalarOperator> map = ((LogicalProjectOperator) optExpression.getOp())
                     .getColumnRefMap();
             validateProjectionMap(map);
+        }
+        validateChildOpt(optExpression);
+        return optExpression;
+    }
+
+    @Override
+    public OptExpression visitLogicalAIProject(OptExpression optExpression, Void context) {
+        if (needValidate) {
+            LogicalAIProjectOperator aiProject = optExpression.getOp().cast();
+            validateProjectionMap(aiProject.getColumnRefMap());
+            validateProjectionMap(aiProject.getCommonSubOperatorMap());
         }
         validateChildOpt(optExpression);
         return optExpression;

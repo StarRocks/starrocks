@@ -16,17 +16,20 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 public class TabletReshardUtils {
     private static final Logger LOG = LogManager.getLogger(TabletReshardUtils.class);
@@ -158,11 +161,20 @@ public class TabletReshardUtils {
      * Return value <= 0 if exception occurs
      */
     public static int calcSplitCount(long dataSize, long targetSize) {
+        return calcSplitCount(dataSize, targetSize, Config.tablet_reshard_max_split_count);
+    }
+
+    /**
+     * As {@link #calcSplitCount(long, long)}, but with an explicit fan-out cap. Callers that know the
+     * table pass {@link #effectiveMaxSplitCount}, which tightens the cap for a split that drags a full
+     * UNSHARE rewrite behind it.
+     */
+    public static int calcSplitCount(long dataSize, long targetSize, int maxSplitCount) {
         if (targetSize <= 0) {
             // A value less than 0 indicates the specified split count,
             // for internal testing.
             long splitCount = -targetSize;
-            if (splitCount > Config.tablet_reshard_max_split_count) {
+            if (splitCount > maxSplitCount) {
                 return 0;
             }
             return (int) splitCount;
@@ -187,7 +199,89 @@ public class TabletReshardUtils {
         // quotient is at least 1 and the remainder is at least half the target, which rounds up. Two is
         // the smallest answer this can produce.
         long n = (remainder >= halfTargetCeil) ? quotient + 1 : quotient;
-        return (int) Math.min((long) Config.tablet_reshard_max_split_count, n);
+        return (int) Math.min((long) maxSplitCount, n);
+    }
+
+    /**
+     * Whether a split of this table drags a full UNSHARE rewrite behind it.
+     *
+     * <p>True for a range-distributed primary-key table whose ORDER BY key differs from the primary
+     * key: its split children cannot range-filter the parent's shared segments, so UNSHARE compaction
+     * rewrites every one of them wholesale before the split completes. That rewrite is what the
+     * tablet_reshard_orderby_* knobs bound. An ordinary split just leaves the children sharing the
+     * parent's segments and needs no such bound.
+     */
+    public static boolean splitRewritesEveryShard(OlapTable table) {
+        if (table == null || !table.isFileBundling()) {
+            return false;
+        }
+        try {
+            return MetaUtils.hasSeparateSortKey(table, table.getBaseIndexMetaId());
+        } catch (IllegalArgumentException e) {
+            // Base index meta went away underneath us; treat as an ordinary split rather than throwing
+            // from a scheduling decision.
+            return false;
+        }
+    }
+
+    /**
+     * Whether a tablet merge of this table is unsupported for now.
+     *
+     * <p>True for the same shape as {@link #splitRewritesEveryShard}: a range-distributed primary-key
+     * table whose ORDER BY key differs from the primary key. A merge has to decide, for every row of a
+     * segment its sources share, which source still owns it, and the BE answers that by turning a
+     * primary-key interval into a rowid window. On this shape there is no such window -- the tablet range
+     * is in primary-key space while the segments are laid out in sort-key order -- so the merge fails at
+     * publish, permanently, and takes every later transaction on the partition with it.
+     *
+     * <p>Not gated on file bundling, unlike {@code splitRewritesEveryShard}: that gate is about the cost
+     * of the UNSHARE rewrite the split knobs bound, while this is about a merge that cannot be made
+     * correct. CREATE TABLE requires file_bundling=true for this shape anyway, so the two agree in
+     * practice; where they could disagree, refusing the merge is the safe answer.
+     *
+     * <p>The read-only parent alias a split keeps alive is not affected: it reproduces the pre-split
+     * parent rather than deciding ownership per row. See {@code merge_tablet} on the BE.
+     */
+    public static boolean tabletMergeUnsupported(OlapTable table) {
+        if (table == null) {
+            return false;
+        }
+        try {
+            return MetaUtils.hasSeparateSortKey(table, table.getBaseIndexMetaId());
+        } catch (IllegalArgumentException e) {
+            // Base index meta went away underneath us; leave the decision to the BE backstop rather than
+            // throwing from a scheduling decision.
+            return false;
+        }
+    }
+
+    /** Per-tablet split fan-out cap for this table. */
+    public static int effectiveMaxSplitCount(OlapTable table) {
+        int cap = Config.tablet_reshard_max_split_count;
+        int orderByCap = Config.tablet_reshard_orderby_max_split_count;
+        if (orderByCap > 1 && splitRewritesEveryShard(table)) {
+            cap = Math.min(cap, orderByCap);
+        }
+        return cap;
+    }
+
+    /**
+     * Max source tablets one split job may take for this table. Unbounded unless the split drags an
+     * UNSHARE rewrite behind it, in which case it defaults to the warehouse's compute-node count so a
+     * single UNSHARE spreads over the cluster instead of monopolizing one partition's compaction slot.
+     *
+     * <p>The resource is a supplier because most calls never read it: an ordinary split answers
+     * {@code Integer.MAX_VALUE} without looking, and a configured bound answers from the config.
+     * Resolving one eagerly would send every split through the warehouse availability probe -- a
+     * StarMgr round trip -- for an answer that does not depend on it, and would let a StarMgr blip
+     * fail a split that never needed the warehouse at all.
+     */
+    public static int maxSplitTabletsPerJob(OlapTable table, Supplier<ComputeResource> computeResource) {
+        if (!splitRewritesEveryShard(table)) {
+            return Integer.MAX_VALUE;
+        }
+        int configured = Config.tablet_reshard_orderby_max_split_tablets_per_job;
+        return configured > 0 ? configured : computeNodeCount(computeResource.get());
     }
 
     /**

@@ -46,6 +46,46 @@ description: "Alphabetical s"
 - 单位: 计数
 - 描述: 小文件缓存的数量。
 
+## `sort_key_sampling_data_page_fallback_total`
+
+- 单位: 计数
+- 描述: 从数据页采样排序键时放弃某个 Segment、退回到该 Segment 粗粒度 `[min, max]` 区间的累计次数：Schema 不符合预期、`sort_key_idxes` 与 Segment 自身的 Schema 不一致、页读取失败、读取行数不足，或采样值超出 Segment 声明的边界。采样采用失败即退化（fail-open）策略，因此该指标上升不会导致分裂失败，但意味着 Tablet 分裂与范围分裂 Compaction 使用的边界比预期更粗。
+
+## `sort_key_sampling_data_page_latency`
+
+- 单位: us
+- 描述: 从数据页采样单个 Segment 排序键所花费的时间，以 bvar 延迟序列发布（平均值、分位数、最大值、qps 与计数）。统计所有通过采样预算检查的尝试，包括随后退回粗粒度区间的尝试，因此持续失败即退化的慢 Tablet 在此依然可见。
+
+## `sort_key_sampling_data_page_segments_total`
+
+- 单位: 计数
+- 描述: 采样确定走数据页路径的 Segment 累计数量。该计数在采样几何确定之后、首次读取之前累加，因此随后读取失败并退化的 Segment 同样计入——该指标的目的是显示"未走"免费的 Short Key Index 路径。若要了解实际付出的 I/O，请查看 `sort_key_sampling_read_bytes_total`。
+
+## `sort_key_sampling_read_bytes_total`
+
+- 单位: 字节
+- 描述: 采样排序键时从 Segment 数据页读取的累计压缩字节数。取自页读取器自身的统计，因此只统计真实发生的传输，包括随后退化的那些尝试。这是观察分裂点采样 I/O 开销的指标。
+
+## `sort_key_sampling_rowsets_opened_total`
+
+- 单位: 计数
+- 描述: 为采样而打开 Segment 文件的 Rowset 累计数量。打开操作以该 Rowset 至少有一个 Segment 具有非零采样预算为前提，因此只有真正尝试采样时该指标才会上升。请与 `sort_key_sampling_samples_total` 对照阅读：打开了 Rowset 却没有产生样本，说明采样预算没有落到被读取的那些 Segment 上。
+
+## `sort_key_sampling_samples_total`
+
+- 单位: 计数
+- 描述: 两条采样路径共同产生的排序键样本累计数量。若该指标上升而 `sort_key_sampling_data_page_segments_total` 未上升，说明样本来自免费的 Short Key Index 路径。
+
+## `sort_key_sampling_short_key_index_fallback_total`
+
+- 单位: 计数
+- 描述: 进入 Short Key Index 采样路径后放弃该 Segment 的累计次数，原因包括：几何信息与 Segment 自身行数交叉校验不通过、索引项解码失败、采样值乱序或超出 Segment 声明的边界。放弃并不意味着该 Segment 就此没有采样：只要它分到了数据页预算，接下来会改走数据页采样，只有预算为 0 或数据页采样同样一无所获时，才退回到粗粒度 `[min, max]` 区间。该指标**不**统计两种情形：一是索引块少于两个的 Segment，它直接离开该路径而不计数，改由数据页按行粒度采样；二是 Short Key Index 无法完整编码排序键的 Schema（例如 VARCHAR 排序键），这类表根本不会进入该路径，指标恒为 0，相应 Segment 体现在 `sort_key_sampling_data_page_segments_total` 中。
+
+## `sort_key_sampling_short_key_index_latency`
+
+- 单位: us
+- 描述: 从 Short Key Index 采样单个 Segment 排序键所花费的时间，以 bvar 延迟序列发布（平均值、分位数、最大值、qps 与计数）。该路径不读取任何数据页，因此其取值应远低于 `sort_key_sampling_data_page_latency`。
+
 ## `spill_disk_bytes_used`
 
 - 单位: 字节
@@ -81,6 +121,13 @@ description: "Alphabetical s"
 
 - 单位: -
 - 描述: `/proc/net/snmp` 返回的指标。
+
+## `starrocks_be_build_info`
+
+- 单位：-
+- 类型：瞬时值
+- 标签：`version`、`commit_hash`
+- 描述：BE 节点的构建信息。指标值恒为 `1`。
 
 ## `starrocks_be_clone_task_copy_bytes`
 
@@ -208,6 +255,12 @@ description: "Alphabetical s"
 - 单位: 计数
 - 类型: 累积值
 - 描述: 进入 `FlatJsonColumnWriter` 的行数（在 `append()` 处统计，实际扁平化之前）。
+
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 仅存算分离模式。从远程存储读取 Lake Tablet 元数据时返回 `NotFound` 的尝试总数。Tablet 元数据要么存放在其独立的元数据文件中，要么存放在 Bundle 元数据文件中，二者必居其一且不会同时存在；对这两种位置的读取均会计入该指标，包括 Vacuum 流程发起的 Bundle 文件读取。每次失败的回退读取均会单独计数。缓存未命中和读取成功不会增加该指标。复制流程中对源集群元数据的读取、以及恢复流程中对快照元数据的读取不计入该指标。
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -363,6 +416,13 @@ description: "Alphabetical s"
 - 类型：累计
 - 描述：已从仓库中删除的备份快照总数，包括 TTL 自动清理和 DROP SNAPSHOT 两种来源。
 
+## `starrocks_fe_build_info`
+
+- 单位：-
+- 类型：瞬时值
+- 标签：`version`、`commit_hash`
+- 描述：FE 节点的构建信息。指标值恒为 `1`。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 单位：字节
@@ -392,6 +452,12 @@ description: "Alphabetical s"
 - 单位：毫秒
 - 类型：瞬时
 - 描述：表示特定仓库下最后一次查询或加载的结束时间。对于存算一体集群，此项仅监控默认仓库。
+
+## `starrocks_fe_max_journal_replay_lag`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：所有存活的 Follower 或 Observer FE 中，为追上 Leader 仍需回放的元数据日志的最大条数。仅由 Leader FE 上报（`is_leader="true"`），因为只有 Leader 同时知道自身的日志写入位置以及通过心跳获取的其他各节点已回放的日志 ID。非存活的 FE 节点会被排除，因为它们最后上报的日志 ID 停留在最后一次成功心跳时的值；此类节点请通过 `SHOW FRONTENDS` 的 `Alive` 列来发现。当其他节点均已追上、没有其他存活的 FE 节点，以及单 FE 集群时，该值为 `0`。该值较高或持续增长，说明至少有一个节点的元数据回放已落后，将导致该节点提供陈旧的元数据，并在超过 `meta_delay_toleration_second` 后把查询转发给 Leader。
 
 ## `starrocks_fe_memory_usage`
 

@@ -56,6 +56,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_virtual_merge.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -63,6 +64,7 @@
 #include "storage/lake/vector_index_build_task.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_index.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -249,7 +251,6 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
 // Forces the query-side parent alias back to the pre-fix behaviour (merge the primary-index
 // sstables too), so the cost of that merge can be measured against the same data.
-DEFINE_FAIL_POINT(lake_parent_alias_force_sstable_merge);
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
@@ -284,6 +285,19 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
         cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
         return;
+    }
+
+    for (const auto& resharding_tablet_info : request->resharding_tablet_infos()) {
+        if (!resharding_tablet_info.has_splitting_tablet_info()) {
+            continue;
+        }
+        const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
+        const int split_count = splitting_tablet_info.new_tablet_ids_size();
+        if (split_count <= 1) {
+            cntl->SetFailed(fmt::format("splitting tablet {} requires at least 2 new tablet ids, got {}",
+                                        splitting_tablet_info.old_tablet_id(), split_count));
+            return;
+        }
     }
 
     int task_num = request->tablet_ids_size();
@@ -364,6 +378,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         rebuild_pindex_tablets.insert(id);
     }
     bool skip_write_tablet_metadata = request->has_enable_aggregate_publish() && request->enable_aggregate_publish();
+    // FE resolved this partition's version-1 layout from its own metadata and offers it as a lookup
+    // preference, so no tablet task -- normal or resharding -- has to discover it by 404ing on a
+    // per-tablet key that was never written. Applied per request and never remembered -- see
+    // lake::InitialMetadataOrder.
+    auto base_version_order = request->prefer_shared_initial_metadata() ? lake::InitialMetadataOrder::kSharedFirst
+                                                                        : lake::InitialMetadataOrder::kPerTabletFirst;
 
     for (const auto& tablet_info : publish_tablet_infos) {
         auto task = std::make_shared<CancellableRunnable>(
@@ -423,7 +443,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     StatusOr<TabletMetadataPtr> res;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
-                                                    skip_write_tablet_metadata, fe_built_version);
+                                                    skip_write_tablet_metadata, fe_built_version, base_version_order);
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
@@ -441,8 +461,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         const bool emit_stats = metadata->has_range() || request->base_version() == 1;
                         int64_t stats_num_rows = 0;
                         int64_t stats_data_size = 0;
+                        bool stats_has_shared_files = false;
                         if (emit_stats) {
                             compute_tablet_stats(*metadata, &stats_num_rows, &stats_data_size);
+                            // Metadata-only scan; kept out of response_mtx for the same reason the
+                            // row/size computation is.
+                            stats_has_shared_files = lake::tablet_reshard_helper::has_shared_files(*metadata);
                         }
                         // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
                         TabletMetadataPB local_metadata;
@@ -471,6 +495,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 auto* stat = &(*response->mutable_tablet_stats())[metadata->id()];
                                 stat->set_num_rows(stats_num_rows);
                                 stat->set_data_size(stats_data_size);
+                                stat->set_has_shared_files(stats_has_shared_files);
                                 // Compat shim: also mirror the first-load row count into the legacy
                                 // field so an old FE (BE-before-FE rolling upgrade) still collects
                                 // first-load statistics from ordinal 4; a new FE reads tablet_stats.
@@ -581,7 +606,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         if (std::chrono::system_clock::now() < timeout_deadline) {
                             res = lake::publish_resharding_tablet(_tablet_mgr, resharding_tablet_info, base_version,
                                                                   new_version, txn_info, skip_write_tablet_metadata,
-                                                                  tablet_metadatas, tablet_ranges);
+                                                                  tablet_metadatas, tablet_ranges, base_version_order);
                         } else {
                             auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                             res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
@@ -714,6 +739,20 @@ static void collect_expected_metadata_tablet_ids(const AggregatePublishVersionRe
 // merge_tablet is also the range-tablet merge primitive, so it already provides
 // rowset-family deduplication and PK delvec union. Phase one intentionally rejects
 // DCG/IDG instead of copying incomplete metadata into a query-visible parent.
+
+// A PRIMARY KEY tablet whose ORDER BY differs from its key. Only this shape routes rows by a range in
+// primary-key space while laying its segments out in sort-key order, and it is the shape
+// tablet_splitter's can_prune_by_segment_sort_bounds refuses to prune segments for.
+static bool has_separate_sort_key_layout(const TabletMetadata& metadata) {
+    if (!metadata.has_schema()) {
+        return false;
+    }
+    // Spelled the same way tablet_splitter spells can_prune_by_segment_sort_bounds, so the two cannot
+    // drift apart on what counts as this shape.
+    const auto schema = TabletSchema::create(metadata.schema());
+    return schema->keys_type() == KeysType::PRIMARY_KEYS && schema->has_separate_sort_key();
+}
+
 static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
                                            const AggregatePublishVersionRequest& request,
                                            std::map<int64_t, TabletMetadata>* tablet_metas) {
@@ -759,8 +798,6 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
             merging_info.add_old_tablet_ids(child_id);
         }
 
-        bool force_sstable_merge = false;
-        FAIL_POINT_TRIGGER_EXECUTE(lake_parent_alias_force_sstable_merge, { force_sstable_merge = true; });
         const int64_t merge_begin_us = butil::gettimeofday_us();
 
         MutableTabletMetadataPtr parent_meta;
@@ -769,17 +806,24 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
             // query parent only needs an id-adjusted copy; no rowset/delvec aggregation is needed.
             parent_meta = std::make_shared<TabletMetadata>(*child_metas.front());
             parent_meta->set_id(parent_info.parent_tablet_id());
+        } else if (has_separate_sort_key_layout(*child_metas.front())) {
+            // The one shape a real merge cannot build an alias for: its range is in primary-key
+            // space while its segments are in sort-key order, so gap-delvec synthesis has no rowid
+            // window to find and the rebuild fails on every publish. That shape is also the shape
+            // tablet_splitter leaves un-pruned, which is what lets the virtual merge dedup whole
+            // rowsets by uid. Every other split keeps the real merge.
+            ASSIGN_OR_RETURN(parent_meta, lake::virtual_merge_for_read(tablet_mgr, child_metas, merging_info,
+                                                                       new_version, txn_info));
         } else {
             ASSIGN_OR_RETURN(parent_meta,
-                             lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version, txn_info,
-                                                /*skip_sstable_merge=*/!force_sstable_merge));
+                             lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version, txn_info));
         }
         // This runs on the publish critical path once per parent per version, so keep its cost
-        // visible: it is what wedged loads before the sstable merge was dropped from it.
+        // visible: it is what wedged loads while it went through the full tablet merge.
         const int64_t merge_cost_us = butil::gettimeofday_us() - merge_begin_us;
         LOG(INFO) << "build parent tablet alias, parent=" << parent_info.parent_tablet_id()
-                  << " children=" << child_metas.size() << " version=" << new_version
-                  << " sstable_merge=" << (force_sstable_merge ? "on" : "off") << " cost=" << merge_cost_us << "us";
+                  << " children=" << child_metas.size() << " version=" << new_version << " cost=" << merge_cost_us
+                  << "us";
         // The parent is a read alias, never the owner of child files. Mark every
         // inherited reference shared so retiring the parent cannot delete a file
         // that remains live in a child. Its merged delvec is reclaimed through the
@@ -1510,6 +1554,8 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         data_size += file.size();
                     }
 
+                    bool has_shared_files = lake::tablet_reshard_helper::has_shared_files(**tablet_metadata);
+
                     auto elapsed_ms = (butil::gettimeofday_us() - task_start_us) / 1000;
                     if (elapsed_ms >= config::lake_tablet_stat_slow_log_ms) {
                         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:slow_log", nullptr);
@@ -1525,6 +1571,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     tablet_stat->set_tablet_id(tablet_id);
                     tablet_stat->set_num_rows(num_rows);
                     tablet_stat->set_data_size(data_size);
+                    tablet_stat->set_has_shared_files(has_shared_files);
                 },
                 [&] {
                     LOG(WARNING) << "get tablet stats task has been cancelled ";

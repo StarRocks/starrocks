@@ -534,6 +534,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
+- Introduced in: v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - Default: 3000
@@ -604,6 +613,51 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description:
 - Introduced in: -
+
+### `lake_scheduler_enable_colocate_group_sample`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the tablet scheduler estimates a large colocate group's replica distribution by sampling its tablets, instead of scanning every tablet in the group. When a tablet that belongs to a colocate group is scheduled, the scheduler builds a per-Compute Node replica histogram over the whole group to decide where the new replica goes. For a group with tens of thousands of tablets, that full scan dominates the scheduling cost, even though a healthy colocate group is uniformly placed and every tablet in it reports the same signal. When this item is set to `true`, the scheduler instead draws `lake_scheduler_colocate_group_sample_size` random tablets from any group larger than `lake_scheduler_colocate_group_sample_threshold` and scales the sampled per-Compute Node counts up to the full group size. A healthy, fully placed colocate group has all of its tablets on the same Compute Nodes, so the sample reproduces the true distribution exactly; a group that is mid-rebalance incurs a bounded error that at worst produces a sub-optimal (never invalid) placement, which the background tablet balancer later reconciles. Only colocate groups are sampled. Set this item to `false` to always scan every tablet.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- Default: 256
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The minimum number of tablets a colocate group must exceed before the scheduler samples it. Groups at or below this size are always scanned in full, because the full scan is already cheap and sampling would only add error. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- Default: 128
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The number of tablets sampled when a colocate group exceeds `lake_scheduler_colocate_group_sample_threshold`. A larger sample reduces the estimation error for a skewed (mid-rebalance) group but costs more per scheduling decision, so it trades scheduling latency for placement precision. The value should stay well below `lake_scheduler_colocate_group_sample_threshold`, otherwise sampling saves little over a full scan. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- Default: 40
+- Type: Int
+- Unit: Percent
+- Is mutable: Yes
+- Description: The density guard for colocate group sampling, expressed as the maximum tolerated percentage of empty draws. A sampled tablet is an empty draw when it holds no replica on a candidate Compute Node, that is, it is not placed yet or is not on that Compute Node. If more than this percentage of the sample is empty, the group is too sparsely placed for the sample to represent its true distribution, which is what happens while a group is still bulk filling from empty, so the scheduler discards the sample and falls back to a full scan. Equivalently, the sample is trusted only when at least (100 - this value)% of the sampled tablets are placed on a candidate Compute Node, so a lower value is more conservative and demands a denser group before sampling. A stable, fully placed group yields close to 0% empty draws and always takes the fast sampled path regardless of this value, so this item only governs the bulk-fill transient. Set it to `100` to never fall back. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_online_rewrite_partition_retry_timeout_second`
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long an online rewrite of a shared-data range-distribution table keeps retrying one partition's rewrite `INSERT` after it fails, before cancelling the whole job. An online rewrite — a range sort-key schema change, a range rollup, or a materialized view sort-key rewrite — rebuilds data one partition per alter-scheduler tick, so a compute node that restarts or crashes while one of those `INSERT` statements is in flight fails that partition. Within this window the job re-runs only the failed partition on a later tick and keeps every partition it has already rewritten; once the window is exhausted the job is cancelled and reports the last rewrite error. The window is spent only by that partition's own failed attempts, each charged for how long it ran plus one `alter_scheduler_interval_millisecond`, and the job is cancelled as soon as an attempt's charge reaches it. A partition always gets at least one retry, even when that single attempt already costs more than the whole window — otherwise a rewrite that legitimately runs longer than the window would be cancelled by its first transient failure. Time the partition spends waiting rather than failing — because no compute node is available to run the rewrite, or because a committed rewrite is waiting to publish — does not consume it, and neither does time the job spends on a different partition; such waits are bounded by `alter_table_timeout_second` instead. Set this item to a value larger than the time a compute node takes to become available again. Keep it well below `alter_table_timeout_second`, because compaction on the table is deferred for as long as the online rewrite runs. Set this item to `0` to cancel the job on the first failure.
+- Introduced in: v4.2.0
 
 ## Data Lake
 
@@ -1527,7 +1581,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls when StarRocks applies the "non-lock" optimization for tables that have related materialized views. When this item is set to less than 0, the system always applies non-lock optimization and does not copy related materialized views for queries (FE memory usage and metadata copy/lock contention is reduced but risk of metadata concurrency issues can be increased). When it is set to 0, non-lock optimization is disable (the system always use the safe, copy-and-lock path). When it is set to greater than 0, non-lock optimization is applied only for tables whose number of related materialized views is less than or equal to the configured threshold. Additionally, when the value is greater than and equal to 0, the planner records query OLAP tables into the optimizer context to enable materialized view-related rewrite paths; when it is less than 0, this step is skipped.
+- Description: Controls when StarRocks applies the "non-lock" optimization for tables that have related materialized views. When this item is set to less than 0, the system always applies non-lock optimization and does not copy related materialized views for queries (FE memory usage and metadata copy/lock contention is reduced but risk of metadata concurrency issues can be increased). When it is set to 0, non-lock optimization is applied only for tables that carry no related materialized view. When it is set to greater than 0, non-lock optimization is applied only for tables whose number of related materialized views is less than or equal to the configured threshold. This threshold is not applied to a statement that also reads a table in an external catalog: holding the lock for the whole planning phase would bind it to partition, statistics, and file-list requests to a system outside the FE's control, while that lock protects nothing on the external side, so such a statement uses the non-lock path however many related materialized views the internal table carries. Additionally, when the value is greater than and equal to 0, the planner records query OLAP tables into the optimizer context to enable materialized view-related rewrite paths; when it is less than 0, this step is skipped.
 - Introduced in: v3.2.1
 
 ### `small_file_dir`

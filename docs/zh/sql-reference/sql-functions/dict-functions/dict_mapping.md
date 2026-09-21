@@ -40,6 +40,12 @@ key_column_expr ::= <column_name> | <expr>
 
 然而当未找到与该 key 呈映射关系的 value 时，如果为 `<null_if_not_exist>` 参数为 `true`，则返回 `NULL`。如果为默认的 `false`，则返回报错 `query failed if record not exist in dict table`。
 
+## 使用说明
+
+默认情况下，系统会允许优化器选择 `COUNT(DISTINCT)` 的实现方式。
+
+对低基数和中等基数的列进行去重时，可以通过查询 Hint 将 `count_distinct_implementation` 设置为 `multi_count_distinct`，以验证 `multi_distinct_count` 实现是否能够进行精确计数。但是，对于高基数列的去重，请勿使用 `multi_distinct_count` 实现，因为其 HashSet 状态以及最终合并过程可能导致过高的内存消耗，甚至引发 OOM。
+
 ## 示例
 
 **示例一：直接查询字典表中与 key 呈映射关系的 value。**
