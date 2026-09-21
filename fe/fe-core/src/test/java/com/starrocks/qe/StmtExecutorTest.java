@@ -16,13 +16,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-<<<<<<< HEAD
-=======
-import com.starrocks.alter.reshard.presplit.LoadKind;
-import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -58,11 +53,7 @@ import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.DeleteStmt;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
@@ -459,7 +450,8 @@ public class StmtExecutorTest {
         summary.addInfoString(ProfileManager.USER, "someone_else");
         summary.addInfoString(ProfileManager.SQL_STATEMENT, "select 1");
         profile.addChild(summary);
-        ProfileManager.ProfileElement published = ProfileManager.getInstance().createElement(summary, profile);
+        ProfileManager.ProfileElement published =
+                ProfileManager.getInstance().createElement(summary, profile.toString());
 
         new MockUp<ProfileManager>() {
             private int lookups = 0;
