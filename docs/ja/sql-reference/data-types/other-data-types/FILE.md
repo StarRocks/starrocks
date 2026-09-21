@@ -3,7 +3,11 @@ displayed_sidebar: docs
 description: "FILE は、固定されたフィールドの組を通じてファイルまたはファイル内のバイト範囲を参照する読み取り専用のスカラー型です。"
 ---
 
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
 # FILE
+
+<Experimental />
 
 FILE は、ファイルまたはファイル内部のバイト範囲を表すスカラー型です。FILE 値は全体として読み取られ、全体として返されます。固定されたフィールドの組を持ちますが、各フィールドを SQL で個別に参照することはできません。
 

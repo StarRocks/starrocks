@@ -3,7 +3,11 @@ displayed_sidebar: docs
 description: "FILE 是只读标量类型，通过一组固定字段引用一个文件或文件中的一段字节。"
 ---
 
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
 # FILE
+
+<Experimental />
 
 FILE 是一种标量类型，用于描述一个文件或文件内部的一段字节。FILE 值整体读取、整体返回：它包含一组固定的字段，但这些字段不能在 SQL 中单独访问。
 

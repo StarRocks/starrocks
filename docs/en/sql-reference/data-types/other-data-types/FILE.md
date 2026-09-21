@@ -3,7 +3,11 @@ displayed_sidebar: docs
 description: "FILE is a read-only scalar type that references a file, or a byte range of a file, through a fixed set of fields."
 ---
 
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
 # FILE
+
+<Experimental />
 
 FILE is a scalar type that describes a file, or a byte range inside a file. A FILE value is read and returned as a whole: it has a fixed set of fields, but the fields are not individually addressable in SQL.
 

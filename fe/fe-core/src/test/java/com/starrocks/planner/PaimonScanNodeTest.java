@@ -33,9 +33,11 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
@@ -430,6 +432,26 @@ public class PaimonScanNodeTest {
                 PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.JNI));
         Assertions.assertEquals(PaimonReaderMode.NATIVE,
                 PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.NATIVE));
+
+        // Paimon allows ARRAY<BLOB> and MAP<K, BLOB>; the FILE inside them must route the same way.
+        TupleDescriptor nested = new TupleDescriptor(new TupleId(1));
+        SlotDescriptor arraySlot = new SlotDescriptor(new SlotId(0), nested);
+        Type arrayOfFile = new ArrayType(FileType.FILE);
+        arraySlot.setType(arrayOfFile);
+        arraySlot.setColumn(new Column("images", arrayOfFile));
+        nested.addSlot(arraySlot);
+        Assertions.assertEquals(PaimonReaderMode.NATIVE,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(nested, PaimonReaderMode.AUTO));
+
+        // No FILE anywhere, even inside a complex type: AUTO stays AUTO.
+        TupleDescriptor plain = new TupleDescriptor(new TupleId(2));
+        SlotDescriptor intArraySlot = new SlotDescriptor(new SlotId(0), plain);
+        Type arrayOfInt = new ArrayType(IntegerType.INT);
+        intArraySlot.setType(arrayOfInt);
+        intArraySlot.setColumn(new Column("ids", arrayOfInt));
+        plain.addSlot(intArraySlot);
+        Assertions.assertEquals(PaimonReaderMode.AUTO,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(plain, PaimonReaderMode.AUTO));
     }
 
     @Test

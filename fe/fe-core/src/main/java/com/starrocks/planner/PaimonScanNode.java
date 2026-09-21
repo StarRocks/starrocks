@@ -326,13 +326,14 @@ public class PaimonScanNode extends ScanNode {
 
     // Under AUTO, a scan that touches a FILE (Paimon BLOB) column goes to paimon-cpp: it is the only
     // reader that decodes BLOB, and the split may still be raw-convertible when the column is stored
-    // as inline descriptors. An explicit JNI/NATIVE choice is left alone and the BE reports errors.
+    // as inline descriptors. Paimon also allows ARRAY<BLOB> and MAP<K, BLOB>, so look inside complex
+    // types too. An explicit JNI/NATIVE choice is left alone and the BE reports errors.
     static PaimonReaderMode resolveAutoReaderModeForFileColumns(TupleDescriptor tupleDescriptor,
                                                             PaimonReaderMode paimonReaderMode) {
         if (paimonReaderMode != PaimonReaderMode.AUTO) {
             return paimonReaderMode;
         }
-        boolean hasFileColumn = tupleDescriptor.getSlots().stream().anyMatch(slot -> slot.getType().isFileType());
+        boolean hasFileColumn = tupleDescriptor.getSlots().stream().anyMatch(slot -> slot.getType().containsFile());
         return hasFileColumn ? PaimonReaderMode.NATIVE : paimonReaderMode;
     }
 
