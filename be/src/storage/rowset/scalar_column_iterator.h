@@ -118,7 +118,7 @@ public:
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
 
-    std::optional<std::pair<int64_t, int64_t>> get_pending_dict_page_io_range() const override;
+    std::vector<std::pair<int64_t, int64_t>> get_pending_dict_page_io_ranges() const override;
 
     std::string name() const override { return "ScalarColumnIterator"; }
 
