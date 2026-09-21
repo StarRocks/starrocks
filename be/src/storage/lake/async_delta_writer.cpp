@@ -17,6 +17,7 @@
 #include <bthread/execution_queue.h>
 #include <fmt/format.h>
 
+#include <atomic>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -170,7 +171,21 @@ public:
     MergeBlockTask(std::shared_ptr<AsyncDeltaWriterImpl::FinishTask> finish_task, AsyncDeltaWriterImpl* async_writer)
             : _finish_task(std::move(finish_task)), _async_writer(async_writer) {}
 
+    // Once this task has been submitted it holds the only remaining reference to the finish
+    // callback, and that callback is the only thing that counts down the latch the caller waits
+    // on -- LakeTabletsChannel::add_chunk(), which blocks the bthread that is holding the brpc
+    // closure of a tablet_writer_add_chunks. ThreadPoolToken::shutdown() waits for the tasks it
+    // is running but cancels the ones still queued, so a task that never runs has to answer for
+    // the callback itself. Dropping it silently parks that closure forever, its connection is
+    // never recycled, and the BE cannot finish brpc's Server::Join() on exit.
+    ~MergeBlockTask() override { fail(Status::Cancelled("load spill block merge task was dropped")); }
+
+    void cancel() override { fail(Status::Cancelled("load spill block merge task was cancelled")); }
+
     void run() override {
+        if (!_claim()) {
+            return;
+        }
         auto delta_writer = _async_writer->_writer.get();
         if (_async_writer->closed()) {
             _finish_task->cb(_async_writer->closed_status(kClosedMsg));
@@ -182,9 +197,24 @@ public:
         _finish_task->cb(std::move(res));
     }
 
+    // Report |st| through the finish callback unless the task has already answered it.
+    void fail(const Status& st) {
+        if (_claim()) {
+            _finish_task->cb(st);
+        }
+    }
+
 private:
+    // Whoever wins this runs the callback, exactly once, whether the task ran, was cancelled by
+    // the thread pool, or was never submitted at all.
+    bool _claim() {
+        bool expected = false;
+        return _answered.compare_exchange_strong(expected, true);
+    }
+
     std::shared_ptr<AsyncDeltaWriterImpl::FinishTask> _finish_task;
     AsyncDeltaWriterImpl* _async_writer;
+    std::atomic<bool> _answered{false};
 };
 
 inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::TaskPtr>& iter) {
@@ -258,7 +288,9 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
                 if (!res.ok()) {
                     st.update(res);
                     LOG_IF(ERROR, !st.ok()) << "Fail to submit merge task: " << st;
-                    finish_task->cb(st);
+                    // Report through the task so that it, and not this branch, decides whether the
+                    // callback still needs an answer.
+                    merge_task->fail(st);
                 }
             } else {
                 auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
