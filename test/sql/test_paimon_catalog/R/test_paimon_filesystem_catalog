@@ -115,9 +115,7 @@ select * from image_blob_desc order by id;
 -- !result
 select * from image_blob_view order by id;
 -- result:
-1	png_header	{"uri":"oss://mr-dla-data-zhangjiakou/chendingchao/tmp/test_catalog/test_paimon_filesystem_catalog/dd488a978868437281b119d128f305b6/paimon_test.db/image_blob/bucket-0/data-b4cde027-c0ab-4ee9-bbb7-b693e037795f-1.blob","offset":4,"size":8,"content_type":null,"checksum":null,"inline":null}
-2	hello	{"uri":"oss://mr-dla-data-zhangjiakou/chendingchao/tmp/test_catalog/test_paimon_filesystem_catalog/dd488a978868437281b119d128f305b6/paimon_test.db/image_blob/bucket-0/data-0043ffa5-37c4-48cd-b1a8-a8c22834033e-1.blob","offset":4,"size":5,"content_type":null,"checksum":null,"inline":null}
-3	null_blob	None
+[REGEX]1\tpng_header\t\{.*\}\n2\thello\t\{.*\}\n3\tnull_blob\tNone
 -- !result
 set paimon_reader_mode = jni;
 -- result:
