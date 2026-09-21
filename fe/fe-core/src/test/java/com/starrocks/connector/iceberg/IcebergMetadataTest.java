@@ -164,13 +164,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-<<<<<<< HEAD
-import java.util.concurrent.ArrayBlockingQueue;
-=======
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
->>>>>>> ac2344a ([UT] Stop the iceberg drop-table tests hanging FE (#79371))
 import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
