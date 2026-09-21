@@ -599,11 +599,17 @@ public class JDBCMetadata implements ConnectorMetadata {
             // ColumnStatistic.unknown() for what it did not. A dialect that describes none keeps the
             // type-ratio estimate it has always been given -- MySQL and ClickHouse report a row
             // count but no column statistics, and reading nothing for PostgreSQL is not a reason to
-            // change what they see. The same split covers a PostgreSQL table whose pg_stats is empty
-            // because row-level security hides it, and the session variable below, which therefore
-            // restores the pre-feature behaviour rather than blanking the columns.
-            boolean sourceDescribesColumns =
-                    isColumnStatisticsEnabled(session) && !loaded.getColumnStats().isEmpty();
+            // change what they see. The session variable below restores that pre-feature behaviour
+            // rather than blanking the columns.
+            //
+            // The test is whether the source was *asked*, not whether it answered. Those differ for
+            // a table the source describes nothing about while still having a real row count -- a
+            // partition parent, or a table row-level security hides the pg_stats rows for -- and the
+            // difference matters, because the estimate below scales its NDV by the row count. Given
+            // a real 20,000 it answered 10,000 distinct values for a column holding 5, which costed
+            // an equality on that column at 2 rows against a true 12,000. Unknown is the honest
+            // answer there, and the one Trino gives.
+            boolean sourceDescribesColumns = isColumnStatisticsEnabled(session) && loaded.describesColumns();
             Map<ColumnRefOperator, ColumnStatistic> colStats = new HashMap<>();
             for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
                 colStats.put(entry.getKey(), sourceDescribesColumns

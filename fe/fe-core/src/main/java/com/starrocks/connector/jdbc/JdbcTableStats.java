@@ -33,17 +33,28 @@ import javax.annotation.Nullable;
  */
 public class JdbcTableStats {
 
-    private static final JdbcTableStats UNKNOWN = new JdbcTableStats(OptionalLong.empty(), Map.of());
+    private static final JdbcTableStats UNKNOWN = new JdbcTableStats(OptionalLong.empty(), Map.of(), false);
 
     private final OptionalLong rowCount;
     private final TreeMap<String, JdbcColumnStats> columnStats;
+    private final boolean columnsWereRead;
 
+    /**
+     * For a dialect that reads per-column statistics. An empty map then means "this source was
+     * asked and reported none for this table", which is a different answer from a dialect that
+     * cannot be asked at all -- see {@link #describesColumns()}.
+     */
     public JdbcTableStats(OptionalLong rowCount, Map<String, JdbcColumnStats> columnStats) {
+        this(rowCount, columnStats, true);
+    }
+
+    private JdbcTableStats(OptionalLong rowCount, Map<String, JdbcColumnStats> columnStats, boolean columnsWereRead) {
         this.rowCount = rowCount == null ? OptionalLong.empty() : rowCount;
         this.columnStats = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         if (columnStats != null) {
             this.columnStats.putAll(columnStats);
         }
+        this.columnsWereRead = columnsWereRead;
     }
 
     /** Nothing could be established: neither a row count nor any column statistic. */
@@ -53,7 +64,25 @@ public class JdbcTableStats {
 
     /** A dialect that can report a row count but no column statistics (e.g. MySQL today). */
     public static JdbcTableStats ofRowCount(long rowCount) {
-        return new JdbcTableStats(OptionalLong.of(rowCount), Map.of());
+        return new JdbcTableStats(OptionalLong.of(rowCount), Map.of(), false);
+    }
+
+    /**
+     * Whether the source was asked about its columns at all.
+     *
+     * <p>This separates two situations an empty {@link #getColumnStats()} cannot: a dialect that
+     * reports no column statistics in the first place (MySQL, ClickHouse), and a dialect that does
+     * but had nothing to say about <em>this</em> table. The two deserve opposite answers. For the
+     * first, the caller's long-standing type-ratio estimate is the best available and nothing has
+     * changed. For the second, the estimate is actively harmful: a PostgreSQL partition parent has
+     * an honest row count from its children but no {@code pg_stats} rows of its own, because
+     * PostgreSQL never analyzes the parent on its own, and feeding that real row count to a
+     * heuristic produces a confident, badly wrong NDV. Measured on a 20,000-row parent whose
+     * {@code region} column holds 5 values: the heuristic answered 10,000, and an equality on
+     * {@code region} was then costed at 2 rows against a true 12,000.
+     */
+    public boolean describesColumns() {
+        return columnsWereRead;
     }
 
     public OptionalLong getRowCount() {

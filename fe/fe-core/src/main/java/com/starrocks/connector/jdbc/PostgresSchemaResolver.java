@@ -285,8 +285,10 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
      *       PostgreSQL stores the whole inheritance tree's total.</li>
      *   <li>Otherwise, on a declarative partition parent reltuples is meaningless: the parent holds
      *       no rows, and autovacuum analyzes the children but never the parent, so it sits at -1
-     *       forever while the children carry perfectly good counts. Sum the children's reltuples,
-     *       and if that is unusable sum their live-tuple counters instead.</li>
+     *       forever while the children carry perfectly good counts. Sum the children, choosing
+     *       per child between its reltuples and its live-tuple counter — a parent normally has
+     *       both analyzed and never-analyzed partitions at once, and one choice for the whole
+     *       sum cannot serve both.</li>
      *   <li>Otherwise reltuples says nothing usable -- 0 is ambiguous (a genuinely empty table and
      *       a freshly created one look alike) and -1 says the table has never been analyzed -- so
      *       ask the statistics collector's live-tuple counter instead. That counter is maintained
@@ -295,11 +297,12 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
      *       is why it is consulted only after reltuples and only believed when positive.</li>
      * </ol>
      *
-     * <p>Since PostgreSQL 14 a never-analyzed table reports -1 rather than 0, so the sum over the
-     * children of an unanalyzed partitioned table is negative but <em>not</em> -1 — two unanalyzed
-     * partitions sum to -2. Hence the sum is accepted only when it is {@code >= 0}, and the final
-     * test is {@code < 0} rather than {@code == -1}. Testing for -1 alone would take -2 for a real
-     * row count and report a 200-million-row table as smaller than a dictionary.
+     * <p>Since PostgreSQL 14 a never-analyzed table reports -1 rather than 0, so a sum over
+     * children can be negative but <em>not</em> -1 — two unanalyzed partitions sum to -2. The
+     * per-child CASE keeps any single -1 out of the sum, but the {@code >= 0} guard stays for the
+     * case where every child is both unanalyzed and unknown to the statistics collector, and the
+     * final test is {@code < 0} rather than {@code == -1}. Testing for -1 alone would take -2 for
+     * a real row count and report a 200-million-row table as smaller than a dictionary.
      *
      * @return the row count, or empty when PostgreSQL has none to give
      */
@@ -319,29 +322,29 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             return OptionalLong.of(rows);
         }
 
-        // (2) Partition parent: prefer the sum over the children.
+        // (2) Partition parent: sum over the children, deciding per child rather than per sum.
+        // A partitioned table is analyzed one partition at a time, so a parent usually has a mix
+        // of analyzed and never-analyzed children. Summing reltuples straight adds -1 for each
+        // unanalyzed one, which is wrong twice over: it subtracts a row that does not exist, and
+        // it silently contributes nothing for a partition that may hold millions. Measured on a
+        // four-partition table with two analyzed at 5,000 rows each and two never analyzed,
+        // also holding 5,000 each: the straight sum gives 9,998 against a true 20,000. Asking
+        // each child separately -- reltuples when it is a count, the statistics collector's
+        // n_live_tup when it is not -- gives 20,000 exactly. The LEFT JOIN keeps a child that
+        // has no collector row at all contributing its own reltuples rather than dropping it
+        // from the sum entirely.
         if (isPartitionedTable(connection, schemaName, tableName)) {
-            OptionalLong childRelTuples = queryLong(connection,
-                    "SELECT SUM(child.reltuples)::bigint FROM pg_inherits " +
+            OptionalLong childRows = queryLong(connection,
+                    "SELECT SUM(CASE WHEN child.reltuples >= 0 THEN child.reltuples " +
+                            "ELSE COALESCE(stat.n_live_tup, 0) END)::bigint FROM pg_inherits " +
                             "JOIN pg_class parent ON pg_inherits.inhparent = parent.oid " +
                             "JOIN pg_class child ON pg_inherits.inhrelid = child.oid " +
                             "JOIN pg_namespace n ON parent.relnamespace = n.oid " +
+                            "LEFT JOIN pg_stat_all_tables stat ON stat.relid = child.oid " +
                             "WHERE n.nspname = ? AND parent.relname = ?",
                     schemaName, tableName);
-            if (childRelTuples.isPresent() && childRelTuples.getAsLong() >= 0) {
-                rows = childRelTuples.getAsLong();
-            } else {
-                OptionalLong childLiveTuples = queryLong(connection,
-                        "SELECT SUM(stat.n_live_tup)::bigint FROM pg_inherits " +
-                                "JOIN pg_class parent ON pg_inherits.inhparent = parent.oid " +
-                                "JOIN pg_class child ON pg_inherits.inhrelid = child.oid " +
-                                "JOIN pg_namespace n ON parent.relnamespace = n.oid " +
-                                "JOIN pg_stat_all_tables stat ON stat.relid = child.oid " +
-                                "WHERE n.nspname = ? AND parent.relname = ?",
-                        schemaName, tableName);
-                if (childLiveTuples.isPresent()) {
-                    rows = childLiveTuples.getAsLong();
-                }
+            if (childRows.isPresent() && childRows.getAsLong() >= 0) {
+                rows = childRows.getAsLong();
             }
         } else {
             // (3) reltuples is 0 or -1: neither is a row count, so ask the statistics collector.

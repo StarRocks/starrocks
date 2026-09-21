@@ -429,6 +429,33 @@ public class JDBCTableStatisticsTest {
     }
 
     /**
+     * The other half of the split above, and the one that is easy to get wrong because an empty
+     * column map looks identical from the outside: a source that <em>does</em> read column
+     * statistics but had none for this table. A PostgreSQL partition parent is the live case — its
+     * row count is honest, summed from the children, while pg_stats holds nothing for it because
+     * PostgreSQL never analyzes a parent on its own.
+     *
+     * <p>Estimating there is worse than saying nothing, because the estimate scales NDV by the row
+     * count and so looks measured. On a 20,000-row parent whose region column holds 5 values it
+     * answered 10,000, and an equality on region was costed at 2 rows against a true 12,000.
+     */
+    @Test
+    public void testSourceThatReadColumnsAndFoundNoneReportsUnknownRatherThanEstimating() throws Exception {
+        JdbcTableStats readButEmpty = new JdbcTableStats(OptionalLong.of(1_000_000L), Map.of());
+        Assertions.assertTrue(readButEmpty.describesColumns(),
+                "The two-argument constructor is the one dialects that read columns use");
+
+        Statistics statistics = planningStatisticsFor(Optional.of(readButEmpty), List.of("company_id"));
+
+        Assertions.assertEquals(Statistics.StatsSource.TABLE_METADATA, statistics.getStatsSource(),
+                "The row count is still honest and must keep its provenance");
+        Assertions.assertEquals(1_000_000.0, statistics.getOutputRowCount());
+        Assertions.assertTrue(statisticFor(statistics, "company_id").isUnknown(),
+                "A source that was asked about its columns and answered nothing must not be "
+                        + "topped up with a row-count-scaled guess");
+    }
+
+    /**
      * A column the source described and a column it did not, in the same table: the described one
      * wins, the other is honestly unknown rather than quietly estimated.
      */

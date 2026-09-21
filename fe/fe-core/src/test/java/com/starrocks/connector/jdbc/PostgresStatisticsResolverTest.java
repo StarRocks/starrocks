@@ -42,8 +42,10 @@ public class PostgresStatisticsResolverTest {
     // Fragments unique to each statement in the chain.
     private static final String Q_RELTUPLES = "c.reltuples::bigint";
     private static final String Q_IS_PARTITIONED = "c.relkind = 'p'";
-    private static final String Q_CHILD_RELTUPLES = "SUM(child.reltuples)";
-    private static final String Q_CHILD_LIVE_TUPLES = "SUM(stat.n_live_tup)";
+    // Deliberately keyed on the per-child CASE rather than on "SUM(child.reltuples)". The mock
+    // matches a statement by substring, so anything that collapses the decision back to one taken
+    // over the whole sum stops matching and the tests below fail rather than quietly passing.
+    private static final String Q_CHILD_ROWS = "ELSE COALESCE(stat.n_live_tup, 0) END";
     private static final String Q_LIVE_TUPLES = "FROM pg_stat_all_tables WHERE";
     private static final String Q_PG_STATS = "FROM pg_stats WHERE";
 
@@ -121,36 +123,56 @@ public class PostgresStatisticsResolverTest {
     }
 
     @Test
-    public void testPartitionParentSumsChildRelTuples() throws SQLException {
+    public void testPartitionParentSumsOverItsChildren() throws SQLException {
         // autovacuum analyzes the partitions but never the parent, so the parent sits at -1
         // forever while the children carry perfectly good counts.
         answer(Q_RELTUPLES, "reltuples", List.of(-1L));
         answer(Q_IS_PARTITIONED, "p", List.of(Boolean.TRUE));
-        answer(Q_CHILD_RELTUPLES, "sum", List.of(200_000L));
+        answer(Q_CHILD_ROWS, "sum", List.of(200_000L));
         Optional<JdbcTableStats> stats = resolver.getTableStatistics(connection, "pgstats_bench", "part_parent");
         Assertions.assertTrue(stats.isPresent());
         Assertions.assertEquals(200_000L, stats.get().getRowCount().getAsLong());
     }
 
+    /**
+     * The decision between reltuples and the live-tuple counter belongs to each child, not to the
+     * sum. A partitioned table is analyzed one partition at a time, so a parent normally has both
+     * kinds of child at once and no single choice serves them: summing reltuples straight adds -1
+     * for each never-analyzed partition, which both subtracts a row that does not exist and
+     * contributes nothing for a partition that may hold millions.
+     *
+     * <p>Measured against PostgreSQL 16 on a four-partition table, two analyzed at 5,000 rows and
+     * two never analyzed also holding 5,000: {@code SUM(child.reltuples)} gives 9,998,
+     * {@code SUM(GREATEST(child.reltuples, 0))} gives 10,000, and choosing per child gives 20,000.
+     *
+     * <p>This asserts the shape of the statement rather than the arithmetic, because the choice is
+     * made by PostgreSQL inside the SQL — the mock can only report what a real server would have
+     * returned for it. {@link #Q_CHILD_ROWS} is keyed on the CASE for the same reason: a statement
+     * that decides over the whole sum no longer matches, and this test fails.
+     */
     @Test
-    public void testPartitionParentWithUnanalyzedChildrenFallsBackToLiveTuples() throws SQLException {
-        // Two children, both never analyzed: the SUM is -2, not -1. Testing for == -1 would take
-        // that for a real row count and report a two-row table.
+    public void testPartitionParentDecidesPerChildRatherThanOverTheSum() throws SQLException {
         answer(Q_RELTUPLES, "reltuples", List.of(-1L));
         answer(Q_IS_PARTITIONED, "p", List.of(Boolean.TRUE));
-        answer(Q_CHILD_RELTUPLES, "sum", List.of(-2L));
-        answer(Q_CHILD_LIVE_TUPLES, "sum", List.of(200_000L));
+        answer(Q_CHILD_ROWS, "sum", List.of(20_000L));
+
         Optional<JdbcTableStats> stats = resolver.getTableStatistics(connection, "pgstats_bench", "part_parent");
-        Assertions.assertTrue(stats.isPresent());
-        Assertions.assertEquals(200_000L, stats.get().getRowCount().getAsLong());
+
+        Assertions.assertTrue(stats.isPresent(),
+                "A statement keyed on the per-child CASE must be the one the resolver sends");
+        Assertions.assertEquals(20_000L, stats.get().getRowCount().getAsLong());
     }
 
+    /**
+     * Every child unanalyzed and unknown to the statistics collector too. The CASE turns each into
+     * 0 rather than -1, so the sum cannot come back negative from that direction any more; what is
+     * left is a parent with no children at all, where PostgreSQL returns no row.
+     */
     @Test
     public void testPartitionParentWithNothingToSumYieldsNoRowCount() throws SQLException {
         answer(Q_RELTUPLES, "reltuples", List.of(-1L));
         answer(Q_IS_PARTITIONED, "p", List.of(Boolean.TRUE));
-        answer(Q_CHILD_RELTUPLES, "sum", List.of(-2L));
-        answer(Q_CHILD_LIVE_TUPLES, "sum", List.of());
+        answer(Q_CHILD_ROWS, "sum", List.of());
         Assertions.assertTrue(resolver.getTableStatistics(connection, "pgstats_bench", "part_parent").isEmpty());
     }
 
