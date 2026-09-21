@@ -246,13 +246,7 @@ public class WebBaseAction extends BaseAction {
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-<<<<<<< HEAD
                 ctx.setCurrentRoleIds(sessionValue.currentUser);
-=======
-                ctx.setCurrentRoleIds(sessionValue.connectContext.getCurrentRoleIds());
-                // Group-mapped roles and Ranger evaluate the groups; the stored context already resolved them.
-                ctx.setGroups(sessionValue.connectContext.getGroups());
->>>>>>> cb695357ca5 ([BugFix] Add RBAC check for reading query profiles (#62809))
 
                 ctx.setThreadLocalInfo();
                 return true;

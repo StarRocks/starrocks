@@ -36,12 +36,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.ProfileManager;
-import com.starrocks.epack.authorization.AccessControllerEPack;
-import com.starrocks.epack.sql.ast.PolicyType;
->>>>>>> cb695357ca5 ([BugFix] Add RBAC check for reading query profiles (#62809))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.server.CatalogMgr;
