@@ -69,6 +69,12 @@ public:
     // whose segments MetaFileBuilder appends at assigned_segment_idx() of the merged rowset.
     void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_pos,
                            const std::map<int, SegmentFileInfo>& replace_segments, uint32_t segment_idx_base = 0);
+    // Register the segments of the op_writes `builder` has batch-applied so far (the earlier statements
+    // of a multi-statement transaction), which reach the tablet metadata only in set_final_rowset(),
+    // under the rssids the primary index already gives their rows: `rowset_id`, the tablet's
+    // next_rowset_id(), plus their segment index in the pending rowset. A segment a row-mode partial
+    // update rewrote is registered with the rewritten file.
+    void add_pending_rowset(const MetaFileBuilder& builder, uint32_t rowset_id);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
     const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
@@ -102,9 +108,12 @@ public:
                                   const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
                                   ChunkPtr* out_chunk);
 
+    // `segment_idx_base` is the first rssid slot past `rowset_id` that the rows this op_write inserts
+    // take: builder->assigned_segment_idx() when `batch_apply`, 0 otherwise.
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePersistentIndex& index,
                                       MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
+                                      uint32_t segment_idx_base, bool batch_apply,
                                       const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
                                       uint32_t* new_del_rebuild_rssid);
 
@@ -113,9 +122,12 @@ public:
                                 MetaFileBuilder* builder, int64_t base_version, uint32_t del_rebuild_rssid,
                                 const RowsetUpdateStateParams& params);
 
+    // `batch_apply`: `op_write` is one of several of a multi-statement transaction applied in one publish
+    // and merged by `builder` (see publish_primary_key_tablet()).
     Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                               const TabletMetadataPtr& metadata, Tablet* tablet,
-                                              IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
+                                              IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version,
+                                              bool batch_apply = false);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumns& upserts,

@@ -1959,13 +1959,14 @@ Status MetaFileBuilder::set_final_rowset() {
 
     // A statement that wrote this tablet in one flush at the end of its load put that segment into
     // the bundle file it shares with the other tablets of the partition; a statement that flushed
-    // more than once wrote standalone files, and so are the rewrites above. One rowset cannot hold
-    // both kinds -- normalize_rowset_before_save() refuses a mix, which the legacy flat offset array
-    // cannot express -- so a batch that merged both is split into consecutive rowsets, one per run
-    // of op_writes of the same kind. A part's id is next_rowset_id() plus the first rssid slot it
-    // covers and its segment indexes are counted from there: every rssid stays what the primary
-    // index, the delete vectors and the delta column groups of this publish already use, and the
-    // parts keep the order of their op_writes.
+    // more than once wrote standalone files, and so are the rewrites above and the rows a
+    // column-mode partial update inserts (UpdateManager::_handle_column_upsert_mode). One rowset
+    // cannot hold both kinds -- normalize_rowset_before_save() refuses a mix, which the legacy flat
+    // offset array cannot express -- so a batch that merged both is split into consecutive rowsets,
+    // one per run of op_writes of the same kind. A part's id is next_rowset_id() plus the first
+    // rssid slot it covers and its segment indexes are counted from there: every rssid stays what
+    // the primary index, the delete vectors and the delta column groups of this publish already
+    // use, and the parts keep the order of their op_writes.
     const uint32_t rowset_id = _tablet_meta->next_rowset_id();
     const uint32_t rowset_id_step = get_rowset_id_step(*rowset);
     ASSIGN_OR_RETURN(auto parts, _split_final_rowset(*rowset));

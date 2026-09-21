@@ -169,6 +169,13 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
     }
 }
 
+void RssidFileInfoContainer::add_pending_rowset(const MetaFileBuilder& builder, uint32_t rowset_id) {
+    const auto& pending_rowset = builder.pending_rowset();
+    for (int pos = 0; pos < pending_rowset.segment_metas_size(); pos++) {
+        add_rssid_to_file(pending_rowset, rowset_id, pos, builder.pending_replace_segments());
+    }
+}
+
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
@@ -389,11 +396,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         // segments under the rssids that rowset will get, with the rewritten file wherever a row-mode
         // partial update replaced one, so that a partial update, condition update or auto-increment fill
         // below reads the values an earlier statement wrote instead of failing to find the rssid.
-        const auto& pending_rowset = builder->pending_rowset();
-        for (int pos = 0; pos < pending_rowset.segment_metas_size(); pos++) {
-            rssid_fileinfo_container.add_rssid_to_file(pending_rowset, rowset_id, pos,
-                                                       builder->pending_replace_segments());
-        }
+        rssid_fileinfo_container.add_pending_rowset(*builder, rowset_id);
     }
     // Init update state.
     RowsetUpdateStateParams params{
@@ -839,7 +842,8 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
 Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  LakePersistentIndex& index, MetaFileBuilder* builder,
-                                                 int64_t base_version, uint32_t rowset_id,
+                                                 int64_t base_version, uint32_t rowset_id, uint32_t segment_idx_base,
+                                                 bool batch_apply,
                                                  const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
                                                  uint32_t* new_del_rebuild_rssid) {
     if (op_write.txn_meta().partial_update_mode() != PartialUpdateMode::COLUMN_UPSERT_MODE) {
@@ -960,7 +964,11 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         uint32_t segment_idx = new_rows_op.rowset().segment_metas_size();
         seg_info.to_proto(segment_idx, new_rows_op.mutable_rowset()->add_segment_metas());
 
-        uint32_t new_segment_id = get_segment_idx(new_rows_op.rowset(), static_cast<int32_t>(segment_idx));
+        // The rssid the segment gets once new_rows_op is applied below. In a batch publish it goes
+        // after the slots of the op_writes applied before this one: next_rowset_id() does not move
+        // until set_final_rowset(), and those op_writes' rows are indexed from it.
+        uint32_t new_segment_id =
+                segment_idx_base + get_segment_idx(new_rows_op.rowset(), static_cast<int32_t>(segment_idx));
         PrimaryIndex::DeletesMap segment_deletes;
         RETURN_IF_ERROR(index.upsert(rowset_id + new_segment_id, 0, *pk_column_for_upsert, 0,
                                      pk_column_for_upsert->size(), &segment_deletes));
@@ -1032,18 +1040,27 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         // converges on the same identity. A legacy pre-uid op_write (rolling upgrade / pending
         // txn log) is never range-distributed, hence never cross-published, so it is backfilled.
         tablet_reshard_helper::inherit_or_set_uid(new_rows_op.mutable_rowset(), op_write.rowset());
-        builder->apply_opwrite(new_rows_op, {}, {});
+        if (batch_apply) {
+            // Merge the new rows into the rowset of the batch, at the slots indexed above. A rowset of
+            // their own would take next_rowset_id() and move it, and set_final_rowset() would then
+            // give the earlier statements' rows, which the primary index names by the old value,
+            // another id: their keys would point into this rowset.
+            builder->batch_apply_opwrite(new_rows_op, {}, {});
+        } else {
+            builder->apply_opwrite(new_rows_op, {}, {});
+        }
         if (!segment_id_to_add_dels_new_acc.empty()) {
             (void)builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
             segment_id_to_add_dels_new_acc.clear();
         }
     }
-    // set new del_rebuild_rssid via new op
+    // set new del_rebuild_rssid via new op: its last segment, where MetaFileBuilder also places the
+    // del files new_rows_op carries (after the op_write's own slots in a batch publish)
     uint32_t max_segment_id = 0;
     for (int i = 0; i < new_rows_op.rowset().segment_metas_size(); i++) {
         max_segment_id = std::max(max_segment_id, get_segment_idx(new_rows_op.rowset(), i));
     }
-    *new_del_rebuild_rssid = rowset_id + max_segment_id;
+    *new_del_rebuild_rssid = rowset_id + segment_idx_base + max_segment_id;
 
     return Status::OK();
 }
@@ -1098,12 +1115,21 @@ Status UpdateManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write, int
 Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                          const TabletMetadataPtr& metadata, Tablet* tablet,
                                                          IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                         int64_t base_version) {
+                                                         int64_t base_version, bool batch_apply) {
     DCHECK(index_entry != nullptr);
 
+    const uint32_t rowset_id = metadata->next_rowset_id();
+    // Rssid slots past rowset_id that the op_writes applied before this one in the batch hold.
+    const uint32_t segment_idx_base = batch_apply ? builder->assigned_segment_idx() : 0;
     auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);
+    if (batch_apply) {
+        // A row the earlier statements of the transaction wrote lives only in the rowset MetaFileBuilder
+        // is still merging, while the primary index already points at it, so an update of one of its
+        // columns has to read the row from there. See publish_primary_key_tablet().
+        rssid_fileinfo_container.add_pending_rowset(*builder, rowset_id);
+    }
     std::vector<std::vector<uint32_t>> insert_rowids_by_segment;
 
     RowsetUpdateStateParams params{
@@ -1119,8 +1145,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
         RETURN_IF_ERROR(handler.execute(params, builder, &insert_rowids_by_segment));
     }
 
-    const uint32_t rowset_id = metadata->next_rowset_id();
-    uint32_t new_del_rebuild_rssid = rowset_id; // default value if no insert rows
+    uint32_t new_del_rebuild_rssid = rowset_id + segment_idx_base; // default value if no insert rows
 
     // No cast: the index cache is DynamicCache<uint64_t, LakePersistentIndex>, so value() already
     // returns one. This was a dynamic_cast to the cache's own value type from back when it held a
@@ -1129,7 +1154,8 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
     RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
-                                               rowset_id, insert_rowids_by_segment, &new_del_rebuild_rssid));
+                                               rowset_id, segment_idx_base, batch_apply, insert_rowids_by_segment,
+                                               &new_del_rebuild_rssid));
 
     // 2. handle delete files and generate delvecs for existing rssids only
     RETURN_IF_ERROR(_handle_delete_files(op_write, txn_id, metadata, tablet, index, index_entry, builder, base_version,
