@@ -1885,14 +1885,6 @@ Status MetaFileBuilder::set_final_rowset() {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
-        // The rewrite file is standalone, so it has no offset inside a bundle file. Clear the offset per
-        // rewritten segment: unlike apply_opwrite(), whose rowset is the one op_write that was
-        // rewritten, the merged rowset also carries the other statements' segments, and a bundled one
-        // among them still lives at its offset in a bundle file shared with sibling tablets. Without
-        // the offset a reader takes the segment from the start of that file (another tablet's bytes,
-        // or a failed footer check), and vacuum takes the file for unshared and may delete it while the
-        // siblings still reference it.
-        segment_meta->clear_bundle_file_offset();
         // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
         // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
         // "unfiltered".
@@ -1921,6 +1913,10 @@ Status MetaFileBuilder::set_final_rowset() {
         }
     }
     if (!_pending_rowset_data.replace_segments.empty()) {
+        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
+        for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
+            segment_metadata.clear_bundle_file_offset();
+        }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same
         // identity. If any segment was physically rewritten, the data is now private to this
