@@ -39,6 +39,7 @@ public class LanceTable extends Table {
 
     @Override
     public boolean isSupported() {
+        // Enable SQL only when the planner, JNI reader, and BE connector are available together.
         return false;
     }
 }
