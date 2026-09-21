@@ -136,8 +136,16 @@ public class SchemaScanNode extends ScanNode {
         this.runningTxnDb = runningTxnDb;
     }
 
+    public String getRunningTxnDb() {
+        return runningTxnDb;
+    }
+
     public void setRunningTxnLabel(String runningTxnLabel) {
         this.runningTxnLabel = runningTxnLabel;
+    }
+
+    public String getRunningTxnLabel() {
+        return runningTxnLabel;
     }
 
     public void setLabel(String label) {

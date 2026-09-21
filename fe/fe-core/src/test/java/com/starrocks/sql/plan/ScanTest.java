@@ -402,7 +402,20 @@ public class ScanTest extends PlanTestBase {
         String sql = "select txn_id from information_schema.running_transactions where database_name = 'test_db'";
         ExecPlan plan = getExecPlan(sql);
         SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
-        Assertions.assertEquals("test_db", scanNode.getSchemaDb());
+        Assertions.assertEquals("test_db", scanNode.getRunningTxnDb());
+        // The value lands on this table's own field. The shared schema db field keeps a single meaning for
+        // every other scanner, which is why it must stay unset here.
+        Assertions.assertNull(scanNode.getSchemaDb());
+    }
+
+    @Test
+    public void testRunningTransactionsSchemaScanPushesExactLabel() throws Exception {
+        // LABEL is split the same way as DATABASE_NAME. The loads-style scanners treat their label field as a
+        // LIKE pattern, so running_transactions takes its own field to keep an exact match exact.
+        String sql = "select txn_id from information_schema.running_transactions where label = 'my_label'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("my_label", scanNode.getRunningTxnLabel());
     }
 
     @Test
