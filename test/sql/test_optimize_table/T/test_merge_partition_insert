@@ -6,18 +6,18 @@ create table t(k datetime, v int) partition by date_trunc('month', k) distribute
 
 insert into t values ('2022-03-01', 1),('2022-06-15', 2),('2022-09-20', 3),('2023-01-10', 4),('2023-05-05', 5);
 select * from t order by k;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 
 alter table t partition by date_trunc('year', k) between '2022-01-01' and '2022-12-31';
 function: wait_optimize_table_finish()
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 
 insert into t values ('2022-04-01', 6),('2022-11-11', 7);
 select * from t order by k;
 
 insert into t values ('2023-02-14', 8),('2022-07-07', 9),('2024-01-01', 10);
 select * from t order by k;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 
 drop database test_merge_insert_${uuid0};
 
@@ -34,14 +34,14 @@ select * from t order by k;
 
 alter table t partition by date_trunc('year', k) between '2022-01-01' and '2022-12-31';
 function: wait_optimize_table_finish()
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 
 insert into t values ('2022-04-01', 4),('2022-09-01', 5),('2023-02-01', 6),('2024-01-01', 7);
 select * from t order by k;
 
 insert into t values ('2022-01-15', 8),('2022-12-25', 9),('2022-06-30', 10),('2023-06-01', 11);
 select * from t order by k;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 
 admin set frontend config ("max_load_initial_open_partition_number"="64");
 
@@ -59,11 +59,11 @@ insert into t values ('2020-05-01',1),('2021-05-01',2),('2022-05-01',3),('2023-0
 
 alter table t partition by date_trunc('year', k) between '2020-01-01' and '2022-12-31';
 function: wait_optimize_table_finish()
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 
 insert into t values ('2020-01-15',5),('2020-11-20',6),('2021-03-10',7),('2021-09-25',8),('2022-02-14',9),('2022-12-31',10),('2023-07-04',11);
 select * from t order by k;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 
 admin set frontend config ("max_load_initial_open_partition_number"="64");
 

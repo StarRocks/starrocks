@@ -214,13 +214,17 @@ public class MergeTabletJobColocateTest {
         return addTablet(table, physicalPartition, baseIndex, range);
     }
 
-    /** A merge-candidate tablet: small enough on size, and fresh enough against its partition. */
+    /**
+     * A merge-candidate tablet: small enough on size, fresh enough against its partition, and
+     * observed free of merge-blocking shared data files.
+     */
     private static LakeTablet addTablet(OlapTable owner, PhysicalPartition partition,
             MaterializedIndex index, Range<Tuple> range) {
         LakeTablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId(),
                 new TabletRange(range));
         tablet.setDataSize(SMALL_TABLET_SIZE);
         tablet.setDataSizeUpdateTime(partition.getVisibleVersionTime());
+        tablet.setHasSharedFiles(false);
         index.addTablet(tablet, new TabletMeta(db.getId(), owner.getId(), partition.getId(),
                 index.getId(), TStorageMedium.HDD, true));
         return tablet;

@@ -39,6 +39,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -83,6 +84,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -2579,6 +2581,20 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
         // Privilege is checked in execution logic, see `StatementExecutor#handleShowProcesslist()` for details.
+        return null;
+    }
+
+    @Override
+    public Void visitAnalyzeProfileStatement(AnalyzeProfileStmt statement, ConnectContext context) {
+        // A profile carries the full SQL text and plan, so reading one that another user produced needs
+        // SYSTEM OPERATE (Authorizer#canReadQueryProfile). A missing profile is left to execution, which
+        // reports it as not found.
+        ProfileManager.ProfileElement element = ProfileManager.getInstance().getProfileElement(statement.getQueryId());
+        if (element != null) {
+            Authorizer.checkQueryProfileAccessAndReport(context, element);
+        }
+        // A profile missing here is left to execution, which reports it as not found -- and which repeats this
+        // check on the element it actually reads, so one published in between is not served unchecked.
         return null;
     }
 

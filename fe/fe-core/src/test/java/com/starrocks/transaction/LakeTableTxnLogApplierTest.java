@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.TabletMeta;
@@ -658,5 +659,128 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         physicalPartition.setNextVersion(2);
         applier.applyCommitLog(state, tableCommitInfo);
         Assertions.assertEquals(21, physicalPartition.getNextVersion());
+    }
+
+    @Test
+    public void testPublishAppliesSharedFileFlagWhenTableIsNormal() {
+        LakeTable table = buildLakeTable();
+        LakeTablet lakeTablet = (LakeTablet) table.getPartition(partitionId).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablet(tabletId[0]);
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 5L;
+        stat.dataSize = 100L;
+        stat.hasSharedFiles = Boolean.FALSE;
+        partitionCommitInfo.getTabletStats().put(tabletId[0], stat);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
+        };
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        Assertions.assertFalse(lakeTablet.hasSharedFiles());
+    }
+
+    @Test
+    public void testPublishKeepsFlagSetWhenFieldAbsent() {
+        LakeTable table = buildLakeTable();
+        LakeTablet lakeTablet = (LakeTablet) table.getPartition(partitionId).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablet(tabletId[0]);
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 5L;
+        stat.dataSize = 100L;
+        stat.hasSharedFiles = null;
+        partitionCommitInfo.getTabletStats().put(tabletId[0], stat);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
+        };
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        Assertions.assertTrue(lakeTablet.hasSharedFiles());
+    }
+
+    @Test
+    public void testPublishDoesNotApplySharedFileFlagWhileResharding() {
+        // A split's children are catalog-visible while the table is still TABLET_RESHARD, and
+        // cross-published transactions reach this method. Without the NORMAL gate, a cross-publish
+        // that happens to contribute no shared file could mark the tablet clean, and a merge could be
+        // planned in that window before the next cross-publish corrects it -- a planned merge's
+        // transaction is already committed by publish time, so it cannot be abandoned.
+        LakeTable table = buildLakeTable();
+        LakeTablet lakeTablet = (LakeTablet) table.getPartition(partitionId).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablet(tabletId[0]);
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        applier.applyCommitLog(state, tableCommitInfo);
+
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 5L;
+        stat.dataSize = 100L;
+        stat.hasSharedFiles = Boolean.FALSE;
+        partitionCommitInfo.getTabletStats().put(tabletId[0], stat);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
+        };
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+
+        Assertions.assertTrue(lakeTablet.hasSharedFiles());
+        // Size and row statistics may still be updated; only the shared-file state is gated.
+        Assertions.assertTrue(lakeTablet.getDataSize(true) > 0);
     }
 }
