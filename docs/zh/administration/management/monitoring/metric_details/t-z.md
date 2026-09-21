@@ -48,6 +48,18 @@ description: "Alphabetical t - z"
 - 单位: 计数
 - 描述: 当前打开的thrift客户端数量。
 
+## `thrift_server_acceptor_stall_ms`
+
+- 单位: 毫秒
+- 类型: 瞬时
+- 描述: FE Thrift 接收循环（accept loop）上次返回连接至今的时长（毫秒）。接收循环卡住会使该值上升，但没有 Thrift 流量的 FE 同样会上升，因此应结合连接到达速率一起判断，不要仅凭该指标告警。此外，当接收循环根本没有运行时（Thrift 服务器启动之前、停止之后）该值同样为 `0`，因此基于阈值的告警无法区分 Thrift 服务已停止与服务健康这两种情况。
+
+## `thrift_server_rejected_connections_total`
+
+- 单位: 计数
+- 类型: 累积
+- 描述: FE Thrift 服务器因工作线程池饱和而立即关闭的连接总数。每次拒绝都会计数，包括因日志限流而未打印告警的那些。该值上升表示客户端正在被拒绝；请结合 `thrift-server-pool` 的 `thread_pool` 指标一起查看，其增长速率可反映工作线程容量的缺口。
+
 ## `thrift_used_clients`
 
 - 单位: 计数
