@@ -893,7 +893,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/kudu-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib
-        if [ "${WITH_CONNECTOR_LANCE}" = "ON" ] && [ -d ${STARROCKS_HOME}/java-extensions/lance-reader/target ]; then
+        if [ "${WITH_CONNECTOR_LANCE}" = "ON" ]; then
             cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/lance-reader-lib ${STARROCKS_OUTPUT}/be/lib/
             cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/starrocks-lance-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
             cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/starrocks-lance-reader.jar ${STARROCKS_OUTPUT}/be/lib/lance-reader-lib
