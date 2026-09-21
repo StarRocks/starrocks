@@ -43,7 +43,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -86,10 +85,9 @@ public class LanceScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
+        scanRangeLocationsList.clear();
         List<Long> nodeIds = getAllAvailableBackendOrComputeIds();
-        if (nodeIds.isEmpty()) {
-            return;
-        }
+        Preconditions.checkState(!nodeIds.isEmpty(), "No alive backend or compute node for Lance scan");
 
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -97,7 +95,8 @@ public class LanceScanNode extends ScanNode {
         hdfsScanRange.setUse_lance_jni_reader(true);
         // lance_dataset_uri now lives on TLanceTable in TTableDescriptor (see LanceTable.toThrift);
         // the per-split payload only carries fragment metadata.
-        hdfsScanRange.setLance_split_info("{\"fragment_ids\": [0]}".getBytes(StandardCharsets.UTF_8));
+        // A single range scans the entire dataset, including every fragment.
+        // Leave split_info unset until fragment enumeration and reader splitting are implemented.
         hdfsScanRange.setFile_length(0);
         hdfsScanRange.setLength(0);
         hdfsScanRange.setFile_format(THdfsFileFormat.LANCE);
@@ -137,9 +136,6 @@ public class LanceScanNode extends ScanNode {
             if (computeNodeIds != null) {
                 allNodes.addAll(computeNodeIds);
             }
-        }
-        if (allNodes.isEmpty()) {
-            allNodes.add(10001L); // Fallback for unit testing where cluster state is empty
         }
         return allNodes;
     }
@@ -217,7 +213,9 @@ public class LanceScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
-        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        // PlanNode.treeToThrift already serialized the scan predicates. Lance has no
+        // partition-pruning pass to populate nonPartitionConjuncts; replacing them
+        // with that empty list would silently drop the WHERE clause.
 
         setConnectorCatalogType(msg);
     }
