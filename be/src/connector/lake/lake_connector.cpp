@@ -1471,6 +1471,22 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _vector_index_file_open_timer =
             ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileOpenAndGetSize", vector_index_load_name);
     _vector_index_read_file_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileRead", vector_index_load_name);
+    // Cachefs breakdown of the read above: says which cold-query scenario a miss landed in
+    // (`.vi` already on the local cache disk vs. fetched from object storage) and how the
+    // bytes and time split between the two layers.
+    const std::string vector_index_read_file_name = "VectorIndexFileRead";
+    _vector_index_io_local_disk_bytes_counter = ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexIOLocalDiskBytes",
+                                                                  TUnit::BYTES, vector_index_read_file_name);
+    _vector_index_io_remote_bytes_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexIORemoteBytes", TUnit::BYTES, vector_index_read_file_name);
+    _vector_index_io_local_disk_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexIOLocalDiskTime", vector_index_read_file_name);
+    _vector_index_io_remote_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexIORemoteTime", vector_index_read_file_name);
+    _vector_index_parallel_load_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexParallelLoads", TUnit::UNIT, vector_index_read_file_name);
+    _vector_index_streamed_load_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexStreamedLoads", TUnit::UNIT, vector_index_read_file_name);
     _vector_index_init_index_timer =
             ADD_CHILD_TIMER(_runtime_profile, "VectorIndexDeserialize", vector_index_load_name);
     _vector_index_searcher_init_timer =
@@ -1560,6 +1576,22 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexFileOpenAndGetSize", seed_vector_index_load_name);
     _lake_seed_vector_index_read_file_timer =
             ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexFileRead", seed_vector_index_load_name);
+    // On this path the seed is the only phase that loads the `.vi`; the refined children
+    // find it cached. So this is where the IO breakdown and the fetch mode live, and
+    // without these counters neither is visible anywhere.
+    const std::string seed_vector_index_read_file_name = "SeedVectorIndexFileRead";
+    _lake_seed_vector_index_io_local_disk_bytes_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "SeedVectorIndexIOLocalDiskBytes", TUnit::BYTES, seed_vector_index_read_file_name);
+    _lake_seed_vector_index_io_remote_bytes_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "SeedVectorIndexIORemoteBytes", TUnit::BYTES, seed_vector_index_read_file_name);
+    _lake_seed_vector_index_io_local_disk_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexIOLocalDiskTime", seed_vector_index_read_file_name);
+    _lake_seed_vector_index_io_remote_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexIORemoteTime", seed_vector_index_read_file_name);
+    _lake_seed_vector_index_parallel_load_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexParallelLoads",
+                                                                      TUnit::UNIT, seed_vector_index_read_file_name);
+    _lake_seed_vector_index_streamed_load_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexStreamedLoads",
+                                                                      TUnit::UNIT, seed_vector_index_read_file_name);
     _lake_seed_vector_index_init_index_timer =
             ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexDeserialize", seed_vector_index_load_name);
     _lake_seed_vector_index_searcher_init_timer =
@@ -1746,6 +1778,12 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
     COUNTER_UPDATE(_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
     COUNTER_UPDATE(_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
+    COUNTER_UPDATE(_vector_index_io_local_disk_bytes_counter, _reader->stats().vector_index_io_local_disk_bytes);
+    COUNTER_UPDATE(_vector_index_io_remote_bytes_counter, _reader->stats().vector_index_io_remote_bytes);
+    COUNTER_UPDATE(_vector_index_io_local_disk_timer, _reader->stats().vector_index_io_local_disk_ns);
+    COUNTER_UPDATE(_vector_index_io_remote_timer, _reader->stats().vector_index_io_remote_ns);
+    COUNTER_UPDATE(_vector_index_parallel_load_counter, _reader->stats().vector_index_parallel_load_count);
+    COUNTER_UPDATE(_vector_index_streamed_load_counter, _reader->stats().vector_index_streamed_load_count);
     COUNTER_UPDATE(_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
     COUNTER_UPDATE(_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
     COUNTER_UPDATE(_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
@@ -1779,6 +1817,18 @@ void LakeDataSource::update_counter(RuntimeState* state) {
                    _reader->stats().lake_prepared_seed_vector_index_file_open_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_read_file_timer,
                    _reader->stats().lake_prepared_seed_vector_index_read_file_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_io_local_disk_bytes_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_io_local_disk_bytes);
+    COUNTER_UPDATE(_lake_seed_vector_index_io_remote_bytes_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_io_remote_bytes);
+    COUNTER_UPDATE(_lake_seed_vector_index_io_local_disk_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_io_local_disk_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_io_remote_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_io_remote_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_parallel_load_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_parallel_load_count);
+    COUNTER_UPDATE(_lake_seed_vector_index_streamed_load_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_streamed_load_count);
     COUNTER_UPDATE(_lake_seed_vector_index_init_index_timer,
                    _reader->stats().lake_prepared_seed_vector_index_init_index_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_searcher_init_timer,

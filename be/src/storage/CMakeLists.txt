@@ -301,6 +301,7 @@ set(STORAGE_FILES
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
     index/vector/vector_index_file_reader.cpp
+    index/vector/vector_index_load_scheduler.cpp
     index/vector/vector_index_reader_factory.cpp
     index/vector/tenann_index_reader.cpp
     index/vector/tenann/del_id_filter.cpp

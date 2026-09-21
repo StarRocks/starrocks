@@ -881,6 +881,12 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     _stats.lake_prepared_seed_vector_index_searcher_init_ns += prepare_stats.vector_index_searcher_init_ns;
     _stats.lake_prepared_seed_vector_index_cache_hit_count += prepare_stats.vector_index_cache_hit_count;
     _stats.lake_prepared_seed_vector_index_cache_miss_count += prepare_stats.vector_index_cache_miss_count;
+    _stats.lake_prepared_seed_vector_index_io_local_disk_bytes += prepare_stats.vector_index_io_local_disk_bytes;
+    _stats.lake_prepared_seed_vector_index_io_remote_bytes += prepare_stats.vector_index_io_remote_bytes;
+    _stats.lake_prepared_seed_vector_index_io_local_disk_ns += prepare_stats.vector_index_io_local_disk_ns;
+    _stats.lake_prepared_seed_vector_index_io_remote_ns += prepare_stats.vector_index_io_remote_ns;
+    _stats.lake_prepared_seed_vector_index_parallel_load_count += prepare_stats.vector_index_parallel_load_count;
+    _stats.lake_prepared_seed_vector_index_streamed_load_count += prepare_stats.vector_index_streamed_load_count;
     _stats.lake_prepared_seed_vector_search_ns += prepare_stats.vector_search_timer;
     _stats.lake_prepared_seed_process_vector_distance_and_id_ns += prepare_stats.process_vector_distance_and_id_timer;
     _stats.lake_prepared_seed_rows_vector_index_filtered += prepare_stats.rows_vector_index_filtered;

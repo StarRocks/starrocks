@@ -323,6 +323,17 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         LOG(INFO) << "Set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
         return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
     });
+    registry->register_callback("vector_index_load_io_threads", [=]() -> Status {
+        auto* pool = runtime_env_ptr->vector_index_load_thread_pool();
+        if (pool == nullptr) {
+            return Status::OK();
+        }
+        const int32_t want = config::vector_index_load_io_threads > 0
+                                     ? config::vector_index_load_io_threads
+                                     : std::min(16, std::max(1, CpuInfo::num_cores() / 2));
+        LOG(INFO) << "Set vector_index_load_io_threads: " << want;
+        return pool->update_max_threads(want);
+    });
     registry->register_callback("update_memory_limit_percent", [=]() -> Status {
         Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                 config::update_memory_limit_percent);

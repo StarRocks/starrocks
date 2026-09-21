@@ -244,6 +244,23 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .build(&_lake_vector_index_build_thread_pool));
     REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_vi_build, _lake_vector_index_build_thread_pool.get());
 
+    // Range readers for `.vi` loads. One connection to object storage sustains ~100 MB/s,
+    // so a cold multi-gigabyte index load is bounded by a single stream rather than by the
+    // node; splitting it across ranges reaches the node's ceiling instead. Shared across
+    // concurrent loads, so several segments loading at once cannot multiply the number of
+    // downloaders -- and past the node ceiling more of them buy nothing anyway.
+    int vi_load_threads = config::vector_index_load_io_threads;
+    if (vi_load_threads <= 0) {
+        vi_load_threads = std::min(16, std::max(1, nproc / 2));
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("vi_readers")
+                            .set_min_threads(0)
+                            .set_max_threads(vi_load_threads)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(5000))
+                            .build(&_vector_index_load_thread_pool));
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, vector_index_load, _vector_index_load_thread_pool.get());
+
     return Status::OK();
 }
 
@@ -252,6 +269,7 @@ void GlobalThreadPools::shutdown() {
     if (_put_aggregate_metadata_thread_pool) _put_aggregate_metadata_thread_pool->shutdown();
     if (_lake_metadata_fetch_thread_pool) _lake_metadata_fetch_thread_pool->shutdown();
     if (_lake_vector_index_build_thread_pool) _lake_vector_index_build_thread_pool->shutdown();
+    if (_vector_index_load_thread_pool) _vector_index_load_thread_pool->shutdown();
     if (_pk_index_execution_thread_pool) _pk_index_execution_thread_pool->shutdown();
     if (_pk_index_memtable_flush_thread_pool) _pk_index_memtable_flush_thread_pool->shutdown();
     if (_lake_partial_update_thread_pool) _lake_partial_update_thread_pool->shutdown();
@@ -284,6 +302,7 @@ void GlobalThreadPools::destroy() {
     _put_aggregate_metadata_thread_pool.reset();
     _lake_metadata_fetch_thread_pool.reset();
     _lake_vector_index_build_thread_pool.reset();
+    _vector_index_load_thread_pool.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();
     _lake_partial_update_thread_pool.reset();

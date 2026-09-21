@@ -81,6 +81,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
     METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
     METRICS_DEFINE_THREAD_POOL(lake_vi_build);
+    METRICS_DEFINE_THREAD_POOL(vector_index_load);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(lake_partial_update);

@@ -131,6 +131,21 @@ struct OlapReaderStatistics {
     int64_t vector_index_searcher_init_ns = 0;
     int64_t vector_index_cache_hit_count = 0;
     int64_t vector_index_cache_miss_count = 0;
+    // Cold-load IO breakdown for the `.vi`, taken as a delta around the index read.
+    // Splits vector_index_read_file_ns by the cachefs layer that served the bytes: a
+    // VI-cache miss served from the local cache disk and one that goes out to object
+    // storage differ by orders of magnitude. Bytes and time pair up into the achieved
+    // bandwidth, which is the number that says whether a load was IO-bound at all.
+    // All zero on plain POSIX.
+    int64_t vector_index_io_local_disk_bytes = 0;
+    int64_t vector_index_io_remote_bytes = 0;
+    int64_t vector_index_io_local_disk_ns = 0;
+    int64_t vector_index_io_remote_ns = 0;
+
+    // Which way each `.vi` was fetched. Without this a profile cannot say whether the
+    // cold-load path engaged at all, and every investigation starts by guessing.
+    int64_t vector_index_parallel_load_count = 0; // kParallel: reads split across ranges
+    int64_t vector_index_streamed_load_count = 0; // kStreamed: one sequential stream
     int64_t vector_search_timer = 0;
     int64_t process_vector_distance_and_id_timer = 0;
 
@@ -235,6 +250,16 @@ struct OlapReaderStatistics {
     int64_t lake_prepared_seed_vector_index_searcher_init_ns = 0;
     int64_t lake_prepared_seed_vector_index_cache_hit_count = 0;
     int64_t lake_prepared_seed_vector_index_cache_miss_count = 0;
+    // The `.vi` is loaded once on this path, and it is the seed that loads it: the refined
+    // children find it in the cache, so their loader never runs and the counters above it
+    // never move. Without these the IO breakdown and the fetch mode are not merely
+    // attributed to the wrong phase, they are invisible on the whole prepared-split path.
+    int64_t lake_prepared_seed_vector_index_io_local_disk_bytes = 0;
+    int64_t lake_prepared_seed_vector_index_io_remote_bytes = 0;
+    int64_t lake_prepared_seed_vector_index_io_local_disk_ns = 0;
+    int64_t lake_prepared_seed_vector_index_io_remote_ns = 0;
+    int64_t lake_prepared_seed_vector_index_parallel_load_count = 0;
+    int64_t lake_prepared_seed_vector_index_streamed_load_count = 0;
     int64_t lake_prepared_seed_vector_search_ns = 0;
     int64_t lake_prepared_seed_process_vector_distance_and_id_ns = 0;
     int64_t lake_prepared_seed_rows_vector_index_filtered = 0;

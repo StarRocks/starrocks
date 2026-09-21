@@ -400,6 +400,86 @@ TEST_F(VectorIndexSearchTest, vector_index_file_reader_read_past_eof_returns_min
     EXPECT_EQ(m, -1);
 }
 
+// The whole chain in one process: read the arrays through the range readers, hand faiss
+// the mappings, then search the result. Every other test here is unit-level; this is the
+// only one that proves the pieces fit together. It compares against the streamed read
+// rather than just checking that a search succeeds, because a read that landed on the
+// wrong offset still deserialises into an index that answers queries.
+TEST_F(VectorIndexSearchTest, parallel_load_returns_what_the_streamed_load_returns) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    const auto index_path = test_vector_index_dir + "/parallel_load_chain.vi";
+    write_vector_index(index_path, tablet_index);
+
+    const auto saved_threads = config::vector_index_load_parallel_threads;
+    const auto saved_min_bytes = config::vector_index_load_parallel_min_bytes;
+    DeferOp restore([&] {
+        config::vector_index_load_parallel_threads = saved_threads;
+        config::vector_index_load_parallel_min_bytes = saved_min_bytes;
+    });
+    // The test index is a few KB, so the production size gate would send every arm down
+    // the streamed path and the comparison would be between two identical runs.
+    config::vector_index_load_parallel_min_bytes = 1;
+
+    constexpr int kTopK = 3;
+    std::vector<float> query_vector = {1.0f, 2.0f, 3.0f};
+
+    auto run_arm = [&](int32_t threads, OlapReaderStatistics* stats) {
+        config::vector_index_load_parallel_threads = threads;
+        // A cache per arm on purpose: a shared one would hand the second arm the index the
+        // first arm loaded, and the comparison would pass no matter what the code did.
+        MemTracker tracker(-1, "parallel_load_chain");
+        VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &tracker);
+        VectorIndexReaderFactory factory(cache);
+        FileInfo vi_file{.path = index_path, .fs = _fs};
+        auto init_result = factory.create_and_init(vi_file, tablet_index, {}, {.stats = *stats});
+        CHECK(init_result.ok()) << init_result.status();
+        EXPECT_EQ(VectorIndexReaderInitResult::kReady, init_result->state);
+
+        std::vector<int64_t> ids(kTopK);
+        std::vector<float> distances(kTopK);
+        SparseRange<> scan_range;
+        DelIdFilter del_id_filter(scan_range);
+        tenann::PrimitiveSeqView query_view{.data = reinterpret_cast<uint8_t*>(query_vector.data()),
+                                            .size = 3,
+                                            .elem_type = tenann::PrimitiveType::kFloatType};
+        CHECK_OK(init_result->reader->search(query_view, kTopK, ids.data(),
+                                             reinterpret_cast<uint8_t*>(distances.data()), &del_id_filter));
+        return ids;
+    };
+
+    try {
+        OlapReaderStatistics streamed_stats;
+        auto streamed = run_arm(/*threads=*/1, &streamed_stats);
+        OlapReaderStatistics parallel_stats;
+        auto parallel = run_arm(/*threads=*/4, &parallel_stats);
+
+        // The profile has to say which way each load went, or the comparison below could be
+        // between two runs that both took the same path.
+        EXPECT_EQ(1, streamed_stats.vector_index_streamed_load_count);
+        EXPECT_EQ(0, streamed_stats.vector_index_parallel_load_count);
+        EXPECT_EQ(1, parallel_stats.vector_index_parallel_load_count);
+        EXPECT_EQ(0, parallel_stats.vector_index_streamed_load_count);
+
+        EXPECT_EQ(streamed, parallel);
+
+        // The byte attribution is deliberately not asserted here: this runs over a posix
+        // filesystem, whose streams do not report IoStatsSnapshot. The cachefs layers do,
+        // and the reader's folding of those counters is covered in
+        // VectorIndexFileReaderTest.ParallelRangesAreCountedInTheIoBreakdown.
+    } catch (tenann::Error& e) {
+        FAIL() << e.what();
+    }
+}
+
 // create_and_init must read from the local filesystem when vi_file.fs is null.
 // Build a real HNSW index on local disk, pass a FileInfo without a FileSystem,
 // and confirm the call reaches the local success path (returns OK, NOT NotSupported).

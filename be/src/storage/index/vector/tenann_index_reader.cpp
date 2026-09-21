@@ -77,21 +77,70 @@ void apply_index_reader_cache_options(tenann::IndexMeta* meta) {
     }
 }
 
+// Fold the IO done by one index read into the query stats. Deltas are clamped at 0:
+// cumulative counters never decrease, but the guard keeps a swapped stream from
+// producing negative numbers.
+void accumulate_vi_io_stats(OlapReaderStatistics& stats, const io::IoStatsSnapshot& before,
+                            const io::IoStatsSnapshot& after) {
+    auto delta = [](int64_t a, int64_t b) { return std::max<int64_t>(0, a - b); };
+    stats.vector_index_io_local_disk_bytes += delta(after.bytes_read_local_disk, before.bytes_read_local_disk);
+    stats.vector_index_io_remote_bytes += delta(after.bytes_read_remote, before.bytes_read_remote);
+    stats.vector_index_io_local_disk_ns += delta(after.io_ns_read_local_disk, before.io_ns_read_local_disk);
+    stats.vector_index_io_remote_ns += delta(after.io_ns_read_remote, before.io_ns_read_remote);
+}
+
+} // namespace
+
+// Where this load gets its bytes. Only HNSW wants the whole file up front: IVF-PQ reads
+// per-list blocks on demand, so pulling the file ahead of it is pure waste. The size gate
+// lives in VectorIndexFileReader::open(), which is where the size is certain.
+VectorIndexFetchMode pick_vector_index_fetch_mode(const tenann::IndexMeta& meta, const FileInfo& vi_file) {
+    // Nothing to parallelise unless all three hold: shared-nothing hands tenann a path
+    // rather than a FileSystem and the kernel already does the right thing with a local
+    // file; one reader is the plain streamed read; and IVF-PQ reads per-list blocks on
+    // demand, so pulling its arrays in parallel buys nothing.
+    if (vi_file.fs == nullptr || config::vector_index_load_parallel_threads <= 1 ||
+        meta.index_type() != tenann::IndexType::kFaissHnsw) {
+        return VectorIndexFetchMode::kStreamed;
+    }
+    return VectorIndexFetchMode::kParallel;
+}
+
+namespace {
+
 StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, const FileInfo& vi_file,
-                                             VectorIndexCache& vector_index_cache, MemTracker* tracker,
-                                             OlapReaderStatistics& stats) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
+                                             VectorIndexCache& vector_index_cache,
+                                             const std::shared_ptr<MemTracker>& tracker, OlapReaderStatistics& stats) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker.get());
     try {
         std::shared_ptr<VectorIndexFileReader> external_file_reader;
+        io::IoStatsSnapshot io_before;
         if (vi_file.fs != nullptr) {
             auto opened_or = [&]() {
                 SCOPED_RAW_TIMER(&stats.vector_index_file_open_ns);
-                return VectorIndexFileReader::open(vi_file);
+                return VectorIndexFileReader::open(vi_file, pick_vector_index_fetch_mode(meta, vi_file));
             }();
             if (!opened_or.ok()) {
                 return opened_or.status();
             }
             external_file_reader = std::shared_ptr<VectorIndexFileReader>(opened_or.value().release());
+            // The mappings this reader hands faiss outlive the load, so they charge the
+            // tracker themselves; give it to the reader before anything is read.
+            external_file_reader->set_mem_tracker(tracker);
+
+            io_before = external_file_reader->load_file_io_stats();
+        }
+
+        // The size gate in open() can downgrade the mode, so read it back rather than
+        // recording what was asked for.
+        switch (external_file_reader != nullptr ? external_file_reader->fetch_mode()
+                                                : VectorIndexFetchMode::kStreamed) {
+        case VectorIndexFetchMode::kParallel:
+            ++stats.vector_index_parallel_load_count;
+            break;
+        case VectorIndexFetchMode::kStreamed:
+            ++stats.vector_index_streamed_load_count;
+            break;
         }
 
         auto reader = tenann::IndexFactory::CreateReaderFromMeta(meta);
@@ -106,6 +155,10 @@ StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, cons
         });
         auto index_ref = reader->ReadIndexFile(vi_file.path);
         if (external_file_reader != nullptr) {
+            // Snapshot before the release below: a released reader reports all-zero. A read
+            // that threw skips this and contributes no IO attribution, which is fine -- the
+            // load failed and the query does not use the index anyway.
+            accumulate_vi_io_stats(stats, io_before, external_file_reader->load_file_io_stats());
             // Only the initial load needs the sequential stream; every later block read
             // opens its own file. Do not pin the remote stream in the cached index.
             external_file_reader->release_load_file();
@@ -127,9 +180,9 @@ StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, cons
 
 VectorIndexCache::AsyncIndexLoader make_owned_index_loader(std::shared_ptr<const tenann::IndexMeta> meta,
                                                            FileInfo vi_file, VectorIndexCache& vector_index_cache,
-                                                           MemTracker* tracker) {
+                                                           std::shared_ptr<MemTracker> tracker) {
     return [meta = std::move(meta), vi_file = std::move(vi_file), vector_index_cache = &vector_index_cache,
-            tracker]() -> StatusOr<tenann::IndexRef> {
+            tracker = std::move(tracker)]() -> StatusOr<tenann::IndexRef> {
         OlapReaderStatistics background_stats;
         return load_vector_index(*meta, vi_file, *vector_index_cache, tracker, background_stats);
     };
@@ -153,7 +206,7 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(tenann::IndexM
     // IndexRef, not necessarily under this tracker). Routing through process keeps
     // the load off the originating query's mem limit while leaving the deterministic
     // cache consume/release as the sole source of the vector_index label.
-    auto* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
+    auto tracker = RuntimeEnv::GetInstance()->process_mem_tracker_shared();
     std::shared_ptr<const tenann::IndexMeta> async_meta;
 
     if (!_cache_handle.valid()) {

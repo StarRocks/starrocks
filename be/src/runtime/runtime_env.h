@@ -135,6 +135,7 @@ public:
     ThreadPool* lake_vector_index_build_thread_pool() const {
         return _thread_pools.lake_vector_index_build_thread_pool();
     }
+    ThreadPool* vector_index_load_thread_pool() const { return _thread_pools.vector_index_load_thread_pool(); }
     ThreadPool* pk_index_execution_thread_pool() const { return _thread_pools.pk_index_execution_thread_pool(); }
     ThreadPool* pk_index_memtable_flush_thread_pool() const {
         return _thread_pools.pk_index_memtable_flush_thread_pool();

@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "common/status.h"
+#include "storage/index/vector/vector_index_file_reader.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "tenann/common/seq_view.h"
 #include "tenann/common/type_traits.h"
@@ -32,6 +33,11 @@
 namespace starrocks {
 
 class VectorIndexCache;
+
+// Decide where a load gets its bytes. This is the one place index type, filesystem and
+// configuration meet, and a wrong answer is silent -- reading a whole IVF-PQ file ahead of
+// its per-list block reads costs a lot and looks like nothing -- so it is exposed for test.
+VectorIndexFetchMode pick_vector_index_fetch_mode(const tenann::IndexMeta& meta, const FileInfo& vi_file);
 
 class TenANNReader final : public VectorIndexReader {
 public:

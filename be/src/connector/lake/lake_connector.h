@@ -251,6 +251,13 @@ private:
     RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    // Cachefs breakdown of the `.vi` read, children of VectorIndexFileRead.
+    RuntimeProfile::Counter* _vector_index_io_local_disk_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_io_remote_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_io_local_disk_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_io_remote_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_parallel_load_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_streamed_load_counter = nullptr;
     RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
@@ -297,6 +304,12 @@ private:
     RuntimeProfile::Counter* _lake_seed_vector_index_cache_lookup_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_file_open_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_io_local_disk_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_io_remote_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_io_local_disk_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_io_remote_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_parallel_load_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_streamed_load_counter = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_init_index_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_searcher_init_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_cache_hit_counter = nullptr;

@@ -33,6 +33,21 @@ CONF_mInt32(vector_index_cache_expire_sec, "900");
 // Enable caching index blocks for IVF-family vector indexes
 CONF_mBool(enable_vector_index_block_cache, "false");
 
+// Readers one `.vi` load may use; 0 or 1 is the plain streamed read (shared-data only).
+CONF_mInt32(vector_index_load_parallel_threads, "8");
+
+// Below this size the fan-out costs more than the single stream it replaces.
+CONF_mInt64(vector_index_load_parallel_min_bytes, "67108864");
+
+// Size of one range; small ranges keep the tail of a load short.
+CONF_mInt64(vector_index_load_parallel_chunk_bytes, "8388608");
+
+// Readers across all concurrent `.vi` loads, and the pool they share; 0 means min(16, cores / 2).
+CONF_mInt32(vector_index_load_io_threads, "16");
+
+// Below this size an index array is left on the heap; a mapping cannot take huge pages.
+CONF_mInt64(vector_index_load_mmap_min_bytes, "2097152");
+
 // On a top-level vector index cache miss, let the current query fall back to
 // brute-force search and load the index into the cache in the background.
 // A runtime update affects readers initialized after the update.
