@@ -69,10 +69,13 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select ST_AsWKT(ST_GeogFromText('LINESTRING (1 2, 3 4)', 4326))");
         analyzeSuccess("select ST_AsBinary(ST_GeogFromWKB(ST_AsWKB(ST_GeogFromText('POINT (1 2)'))))");
 
-        String unsupportedComparison =
-                "Column type GEOGRAPHY does not support binary predicate operation with type GEOGRAPHY";
+        String unsupportedComparison = "Comparison predicates do not support GEOGRAPHY";
         analyzeFail("select ST_GeogFromText(ta) = ST_GeogFromText(ta) from tall", unsupportedComparison);
         analyzeFail("select ST_GeogFromText(ta) <=> ST_GeogFromText(ta) from tall", unsupportedComparison);
+        analyzeFail("select ST_GeogFromText(ta) in (ST_GeogFromText(ta)) from tall", unsupportedComparison);
+        analyzeFail("select ST_GeogFromText(ta) between ST_GeogFromText(ta) and ST_GeogFromText(ta) from tall",
+                unsupportedComparison);
+        analyzeFail("select [ST_GeogFromText(ta)] = [ST_GeogFromText(ta)] from tall", unsupportedComparison);
         analyzeFail("select ST_GeogFromText(ta) from tall group by ST_GeogFromText(ta)");
         analyzeFail("select distinct ST_GeogFromText(ta) from tall");
         analyzeFail("select ST_GeogFromText(ta) from tall order by ST_GeogFromText(ta)");
