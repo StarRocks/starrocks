@@ -620,6 +620,9 @@ public class FunctionSet {
     //user and role function
     public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
 
+    // query profile function
+    public static final String GET_QUERY_PROFILE = "get_query_profile";
+
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
     public static final String WEEKS_ADD = "weeks_add";
