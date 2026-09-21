@@ -1005,6 +1005,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (String partitionName : partitionNames) {
             if (partitionInfo == null || partitionInfo.get(partitionName) == null) {
                 this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                partitionInfo = this.partitionInfos.get(identifier);
             }
             if (partitionInfo.get(partitionName) != null) {
                 result.add(partitionInfo.get(partitionName));
