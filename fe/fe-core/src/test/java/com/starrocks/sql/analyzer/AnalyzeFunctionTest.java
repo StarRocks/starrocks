@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -62,8 +63,11 @@ public class AnalyzeFunctionTest {
     public void testNativeGeographySqlBoundary() {
         QueryRelation relation = ((QueryStatement) analyzeSuccess(
                 "select ST_GeogFromText('POINT (1 2)')")).getQueryRelation();
-        Assertions.assertEquals(PrimitiveType.GEOGRAPHY,
-                ((SelectRelation) relation).getOutputExpression().get(0).getType().getPrimitiveType());
+        ScalarType resultType =
+                (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY, resultType.getPrimitiveType());
+        Assertions.assertEquals("OGC:CRS84", resultType.getGeoDescriptor().crs());
+        Assertions.assertEquals(4326, resultType.getGeoDescriptor().srid());
 
         analyzeSuccess("select ST_AsText(ST_GeogFromText('POINT EMPTY'))");
         analyzeSuccess("select ST_AsWKT(ST_GeogFromText('LINESTRING (1 2, 3 4)', 4326))");

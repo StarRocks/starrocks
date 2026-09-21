@@ -63,9 +63,6 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.common.Pair;
 import com.starrocks.thrift.TAIModelSource;
-import com.starrocks.type.GeoTypeDescriptor;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -78,6 +75,7 @@ import java.util.Vector;
 
 import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
 import static com.starrocks.type.AnyElementType.ANY_ELEMENT;
+import static com.starrocks.type.AnyGeographyType.ANY_GEOGRAPHY;
 import static com.starrocks.type.AnyMapType.ANY_MAP;
 import static com.starrocks.type.AnyStructType.ANY_STRUCT;
 import static com.starrocks.type.ArrayType.ARRAY_BIGINT;
@@ -142,10 +140,6 @@ ${ai_descriptors}
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
-        Type crs84Geography = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                        GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                        GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
         ${functions}
   }
 }
@@ -357,7 +351,7 @@ def generate_fe(path):
     )
 
     def fe_type(type_name):
-        return "crs84Geography" if type_name == "GEOGRAPHY" else type_name
+        return "ANY_GEOGRAPHY" if type_name == "GEOGRAPHY" else type_name
 
     fn_named_template = Template('''{
             List<Type> argTypes${id} = Lists.newArrayList(${args_types_list});

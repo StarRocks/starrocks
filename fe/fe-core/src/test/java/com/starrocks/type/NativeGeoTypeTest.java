@@ -333,6 +333,10 @@ public class NativeGeoTypeTest {
                     TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
                 assertTrue(type.matchesType(AnyElementType.ANY_ELEMENT));
                 assertTrue(AnyElementType.ANY_ELEMENT.matchesType(type));
+                assertEquals(primitive == PrimitiveType.GEOGRAPHY,
+                        type.matchesType(AnyGeographyType.ANY_GEOGRAPHY));
+                assertEquals(primitive == PrimitiveType.GEOGRAPHY,
+                        AnyGeographyType.ANY_GEOGRAPHY.matchesType(type));
                 assertFalse(type.matchesType(AnyArrayType.ANY_ARRAY));
                 assertFalse(type.matchesType(AnyMapType.ANY_MAP));
                 assertFalse(type.matchesType(AnyStructType.ANY_STRUCT));

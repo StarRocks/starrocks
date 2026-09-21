@@ -27,13 +27,17 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyGeographyType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -99,6 +103,43 @@ public class PolymorphicFunctionAnalyzer {
             return newAggregateFunction((AggregateFunction) fn, Arrays.asList(resolvedArgTypes), fn.getReturnType());
         }
         return null;
+    }
+
+    private static Function resolveGeographyFunction(Function fn, Type[] inputArgTypes) {
+        Type[] declaredTypes = fn.getArgs();
+        Type returnType = fn.getReturnType();
+        boolean hasGeographyWildcard = returnType instanceof AnyGeographyType ||
+                Arrays.stream(declaredTypes).anyMatch(AnyGeographyType.class::isInstance);
+        if (!hasGeographyWildcard || !(fn instanceof ScalarFunction)) {
+            return null;
+        }
+
+        Type[] resolvedTypes = Arrays.copyOf(declaredTypes, declaredTypes.length);
+        Type resolvedGeography = null;
+        for (int i = 0; i < declaredTypes.length; ++i) {
+            if (!(declaredTypes[i] instanceof AnyGeographyType)) {
+                continue;
+            }
+            Type inputType = inputArgTypes[i];
+            if (!inputType.isNull() && !inputType.isScalarType(PrimitiveType.GEOGRAPHY)) {
+                return null;
+            }
+            if (!inputType.isNull() && resolvedGeography == null) {
+                resolvedGeography = inputType;
+            }
+            resolvedTypes[i] = inputType.isNull() ? createDefaultGeographyType() : inputType;
+        }
+        if (returnType instanceof AnyGeographyType) {
+            returnType = resolvedGeography == null ? createDefaultGeographyType() : resolvedGeography;
+        }
+        return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedTypes), returnType);
+    }
+
+    private static ScalarType createDefaultGeographyType() {
+        return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                        GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                        GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
     }
 
     private static class MapKeysDeduce implements java.util.function.Function<Type[], Type> {
@@ -416,6 +457,11 @@ public class PolymorphicFunctionAnalyzer {
         Type retType = fn.getReturnType();
         Type[] declTypes = fn.getArgs();
         Function resolvedFunction;
+
+        resolvedFunction = resolveGeographyFunction(fn, paramTypes);
+        if (resolvedFunction != null) {
+            return resolvedFunction;
+        }
 
         long numPseudoArgs = Arrays.stream(declTypes).filter(Type::isPseudoType).count();
         // resolve single pseudo type parameter, example: int array_length(ANY_ARRAY)
