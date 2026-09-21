@@ -19,6 +19,7 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
@@ -29,6 +30,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -301,5 +303,122 @@ public class ExecuteAsExecutorTest {
 
         // Execute as target user should fail
         Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
+    }
+
+    /**
+     * End to end on the real managers: a member of an allowed group is impersonable with no CREATE USER,
+     * and the roles mapped to its groups are what authorize the session.
+     *
+     * <p>Worth running against real managers rather than mocks because the native path has a gate beyond
+     * the executor's own: {@code AuthorizationMgr.canExecuteAs} builds a {@link
+     * com.starrocks.authorization.UserPEntryObject} for the target, and that used to insist the user
+     * exists. A test that only drove the analyzer and the executor would pass while `EXECUTE AS` still
+     * failed with AccessDenied under native access control.
+     */
+    @Test
+    public void testExecuteAsExternalUserInAllowedGroup() throws Exception {
+        String[] savedAllowedGroups = Config.execute_as_external_user_allowed_groups;
+        try {
+            Config.execute_as_external_user_allowed_groups = new String[] {"group1"};
+
+            authorizationMgr.createRole(new CreateRoleStmt(List.of("r1"), true, ""));
+            long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("r1");
+            authorizationMgr.grantRole(new GrantRoleStmt(List.of("r1"), "group1", GrantType.GROUP, NodePosition.ZERO));
+
+            // Only the impersonator has an account. u1 and u2 exist in the directory alone.
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            // A per-user grant cannot name a user that does not exist, so ALL USERS is the only option.
+            authorizationMgr.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT IMPERSONATE ON ALL USERS TO USER 'impersonate_user'@'%'", new ConnectContext()));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            UserIdentity impersonator = context.getCurrentUserIdentity();
+
+            // u1 is in group1, which is allowed: admitted, and authorized by the group's role.
+            ExecuteAsStmt executeAsStmt = (ExecuteAsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "EXECUTE AS u1 WITH NO REVERT", context);
+            Authorizer.check(executeAsStmt, context);
+            ExecuteAsExecutor.execute(executeAsStmt, context);
+
+            UserIdentity current = context.getCurrentUserIdentity();
+            Assertions.assertEquals("u1", current.getUser());
+            Assertions.assertTrue(current.isEphemeral(), "a target with no account must be ephemeral");
+            Assertions.assertEquals(Set.of("group1"), context.getGroups());
+            Assertions.assertEquals(Set.of(roleId1), context.getCurrentRoleIds());
+
+            // u2 is only in group2, which is not allowed. The refusal now happens in the executor, after
+            // the IMPERSONATE check, and it must leave the session exactly as it was.
+            ConnectContext other = new ConnectContext();
+            AuthenticationHandler.authenticate(other, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            other.setGroups(Set.of("service-accounts"));
+            ExecuteAsStmt refused = (ExecuteAsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "EXECUTE AS u2 WITH NO REVERT", other);
+            Authorizer.check(refused, other);
+            DdlException e = Assertions.assertThrows(DdlException.class,
+                    () -> ExecuteAsExecutor.execute(refused, other));
+            Assertions.assertTrue(e.getMessage().contains("cannot find user"), e.getMessage());
+            Assertions.assertEquals(impersonator, other.getCurrentUserIdentity(),
+                    "a refused EXECUTE AS must leave the session as the impersonator");
+            Assertions.assertEquals(Set.of("service-accounts"), other.getGroups(),
+                    "a refused EXECUTE AS must not touch the session's groups");
+
+            // An explicit host is refused even for the admitted member: Ranger uses the identity's host as
+            // the request's client IP, so the text of a statement must not get to choose it.
+            ExecuteAsStmt hosted = (ExecuteAsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "EXECUTE AS 'u1'@'10.0.0.1' WITH NO REVERT", other);
+            Authorizer.check(hosted, other);
+            Assertions.assertThrows(DdlException.class, () -> ExecuteAsExecutor.execute(hosted, other));
+        } finally {
+            Config.execute_as_external_user_allowed_groups = savedAllowedGroups;
+        }
+    }
+
+    /**
+     * A grant left over from a dropped namesake must not cover the accountless name that replaces it.
+     * `UserIdentity.equals()` ignores the ephemeral flag, so without the check in
+     * {@code UserPEntryObject.match()} the old grant resurrects and `ON ALL USERS` stops being required.
+     */
+    @Test
+    public void testGrantOutlivingItsUserDoesNotCoverTheExternalNamesake() throws Exception {
+        String[] savedAllowedGroups = Config.execute_as_external_user_allowed_groups;
+        try {
+            Config.execute_as_external_user_allowed_groups = new String[] {"group1"};
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+            authorizationMgr.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT IMPERSONATE ON USER u1 TO USER 'impersonate_user'@'%'", new ConnectContext()));
+            authenticationMgr.dropUser(new DropUserStmt(new UserRef("u1", "%"), false, NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+            // u1 is still in group1 in the directory, and the named grant is still on the books - but the
+            // name has no account now, so only ON ALL USERS may cover it.
+            ExecuteAsStmt executeAsStmt = (ExecuteAsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "EXECUTE AS u1 WITH NO REVERT", context);
+            Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
+        } finally {
+            Config.execute_as_external_user_allowed_groups = savedAllowedGroups;
+        }
+    }
+
+    @Test
+    public void testExecuteAsExternalUserIsOffByDefault() {
+        Assertions.assertEquals(0, Config.execute_as_external_user_allowed_groups.length,
+                "the feature must stay off unless an operator opts in");
+
+        ConnectContext context = new ConnectContext();
+        // u1 is in group1 in the directory, but nobody allowed that group and nobody created the user.
+        // With the feature off the analyzer rejects, so this never reaches the executor at all.
+        AnalysisException e = Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser("EXECUTE AS u1 WITH NO REVERT", context));
+        Assertions.assertTrue(e.getMessage().contains("cannot find user"), e.getMessage());
     }
 }
