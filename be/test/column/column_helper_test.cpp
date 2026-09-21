@@ -377,9 +377,8 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         ASSERT_NE(nullptr, geo);
         EXPECT_EQ(3, geo->size());
         EXPECT_FALSE(geo->is_binary());
-        // Descriptor-aware generic creation is a separate follow-up. These are
-        // untyped physical placeholders, not silently coerced native values.
-        EXPECT_EQ(GeoTypeDescriptor{}, geo->descriptor().type);
+        // Generic creation preserves semantic metadata; storage starts unvalidated.
+        EXPECT_EQ(*type.geo_type, geo->descriptor().type);
         EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
         EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
         EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, geo->descriptor().storage.validation_state);
@@ -439,7 +438,7 @@ TEST_F(ColumnHelperTest, create_geo_nullable_const_and_adaptive) {
             EXPECT_TRUE(nullable->is_null(2));
             const auto* geo = dynamic_cast<const GeoColumn*>(nullable->data_column().get());
             ASSERT_NE(nullptr, geo);
-            EXPECT_EQ(GeoTypeDescriptor{}, geo->descriptor().type);
+            EXPECT_EQ(*type.geo_type, geo->descriptor().type);
             EXPECT_EQ(3, geo->size());
             column->check_or_die();
         }
@@ -450,7 +449,7 @@ TEST_F(ColumnHelperTest, create_geo_nullable_const_and_adaptive) {
         const auto* constant_geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(constant.get()));
         ASSERT_NE(nullptr, constant_geo);
         EXPECT_EQ(1, constant_geo->size());
-        EXPECT_EQ(GeoTypeDescriptor{}, constant_geo->descriptor().type);
+        EXPECT_EQ(*type.geo_type, constant_geo->descriptor().type);
         constant->check_or_die();
 
         auto nulls = ColumnHelper::create_column(type, true, true, 3);
@@ -462,7 +461,7 @@ TEST_F(ColumnHelperTest, create_geo_nullable_const_and_adaptive) {
         EXPECT_TRUE(aligned->is_null(2));
         const auto* aligned_geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(aligned.get()));
         ASSERT_NE(nullptr, aligned_geo);
-        EXPECT_EQ(GeoTypeDescriptor{}, aligned_geo->descriptor().type);
+        EXPECT_EQ(*type.geo_type, aligned_geo->descriptor().type);
         aligned->check_or_die();
     }
 }
@@ -481,7 +480,7 @@ TEST_F(ColumnHelperTest, create_nested_geo_columns) {
         const auto* direct =
                 dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(0)));
         ASSERT_NE(nullptr, direct);
-        EXPECT_EQ(GeoTypeDescriptor{}, direct->descriptor().type);
+        EXPECT_EQ(*type.geo_type, direct->descriptor().type);
 
         const auto* array =
                 dynamic_cast<const ArrayColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(1)));

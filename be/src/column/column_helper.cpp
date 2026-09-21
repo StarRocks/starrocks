@@ -14,6 +14,8 @@
 
 #include "column/column_helper.h"
 
+#include <type_traits>
+
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
@@ -423,6 +425,8 @@ struct ColumnBuilder {
             return nullptr;
         } else if constexpr (lt_is_decimal<ltype>) {
             return RunTimeColumnType<ltype>::create(type_desc.precision, type_desc.scale, size);
+        } else if constexpr (std::is_constructible_v<RunTimeColumnType<ltype>, const TypeDescriptor&, size_t>) {
+            return RunTimeColumnType<ltype>::create(type_desc, size);
         } else {
             return RunTimeColumnType<ltype>::create(size);
         }
