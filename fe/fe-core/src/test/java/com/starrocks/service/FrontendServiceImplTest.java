@@ -783,6 +783,79 @@ public class FrontendServiceImplTest {
         Config.max_partitions_in_one_batch = 4096;
     }
 
+    @Test
+    public void testAutomaticPartitionFirstBatchOverLimitIsRejected() throws TException {
+        // A brand-new transaction has not cached any partition yet, so the per-batch limit must be
+        // evaluated against the partitions this request wants to create, not against the empty cache.
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("2035-07-01"));
+        partitionValues.add(Lists.newArrayList("2035-08-01"));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        int partitionNumBefore = ((OlapTable) table).getNumberOfPartitions();
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 1;
+            TCreatePartitionResult result = impl.createPartition(request);
+            Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, result.getStatus().getStatus_code());
+            Assertions.assertTrue(result.getStatus().getError_msgs().get(0).contains("max_partitions_in_one_batch"));
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+        // nothing must have been created before the limit kicked in
+        Assertions.assertEquals(partitionNumBefore, ((OlapTable) table).getNumberOfPartitions());
+    }
+
+    @Test
+    public void testAutomaticPartitionReRequestOfCachedPartitionsIsNotDoubleCounted() throws TException {
+        // Re-asking for partitions the same transaction already created must not be counted twice,
+        // otherwise a retrying sink would be rejected once the cache alone reaches the limit.
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("2036-07-01"));
+        partitionValues.add(Lists.newArrayList("2036-08-01"));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 2;
+            Assertions.assertEquals(TStatusCode.OK, impl.createPartition(request).getStatus().getStatus_code());
+            // second call asks for exactly the two partitions already cached by this transaction
+            Assertions.assertEquals(TStatusCode.OK, impl.createPartition(request).getStatus().getStatus_code());
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+    }
+
     private TGetTablesParams buildListTableStatusParam() {
         TGetTablesParams request = new TGetTablesParams();
         request.setDb("test");

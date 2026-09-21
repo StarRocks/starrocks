@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -455,4 +456,205 @@ public class LocalMetaStoreTest {
 
         starRocksAssert.dropTable("test.add_pp_err");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAddPhysicalPartitionBatch() throws Exception {
+        // Create a non-partitioned table with random distribution
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_batch(k1 INT, k2 VARCHAR(50), v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_batch");
+        Assertions.assertEquals(1, table.getPhysicalPartitions().size());
+
+        long originalMutableBucketNum = table.getMutableBucketNum();
+        Partition partition = table.getPartitions().iterator().next();
+
+        // Batch-add 3 physical partitions, each with bucketNum = 4, in a single call
+        metastore.addPhysicalPartition("test", "add_pp_batch", null, 4, 3);
+        Assertions.assertEquals(4, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(4, partition.getSubPartitions().size());
+
+        // The 3 newly added (non-default) physical partitions should each have bucketNum = 4
+        int newPartitionCount = 0;
+        for (PhysicalPartition p : partition.getSubPartitions()) {
+            if (p.getId() != partition.getDefaultPhysicalPartition().getId()) {
+                newPartitionCount++;
+                Assertions.assertEquals(4, p.getBucketNum());
+            }
+        }
+        Assertions.assertEquals(3, newPartitionCount);
+
+        // The original table's mutableBucketNum must not be modified (concurrency-safe)
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_batch");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBatchCountOne() throws Exception {
+        // The 5-arg overload with count = 1 must behave exactly like the 4-arg form
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_one(k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_one");
+        Partition partition = table.getPartitions().iterator().next();
+
+        metastore.addPhysicalPartition("test", "add_pp_one", null, 6, 1);
+        Assertions.assertEquals(2, table.getPhysicalPartitions().size());
+
+        PhysicalPartition newPartition = partition.getSubPartitions().stream()
+                .filter(p -> p.getId() != partition.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(6, newPartition.getBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_one");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBatchCountValidation() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_count(k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 4 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+
+        // count < 1 is rejected
+        DdlException zeroEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_count", null, 0, 0));
+        Assertions.assertTrue(zeroEx.getMessage().contains("at least 1"));
+        Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_count", null, 0, -1));
+
+        // count > max_partitions_in_one_batch is rejected; the message names the config and value
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 2;
+            DdlException overEx = Assertions.assertThrows(DdlException.class, () ->
+                    metastore.addPhysicalPartition("test", "add_pp_count", null, 0, 3));
+            Assertions.assertTrue(overEx.getMessage().contains("max_partitions_in_one_batch"));
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_pp_count");
+    }
+
+    @Test
+    public void testAddPartitionsRejectedWhenBatchWouldExceedPerTableLimit() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_partition_limit(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_partition_limit");
+        Assertions.assertEquals(1, table.getNumberOfPartitions());
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            // one existing partition, limit 2: a batch of 3 new partitions must be rejected up front
+            Config.max_partition_number_per_table = 2;
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE test.add_partition_limit ADD PARTITIONS "
+                            + "START (\"2021-01-02\") END (\"2021-01-05\") EVERY (INTERVAL 1 DAY)"));
+            Assertions.assertTrue(e.getMessage().contains("max_partition_number_per_table"),
+                    "unexpected message: " + e.getMessage());
+            Assertions.assertEquals(1, table.getNumberOfPartitions());
+
+            // a batch that still fits is accepted
+            starRocksAssert.alterTable("ALTER TABLE test.add_partition_limit ADD PARTITIONS "
+                    + "START (\"2021-01-02\") END (\"2021-01-03\") EVERY (INTERVAL 1 DAY)");
+            Assertions.assertEquals(2, table.getNumberOfPartitions());
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_partition_limit");
+    }
+
+    @Test
+    public void testAddTempPartitionsNotCountedAgainstPerTableLimit() throws Exception {
+        // Temp partitions live outside idToPartition, so getNumberOfPartitions() never sees them. Counting a
+        // temp batch against the limit would break INSERT OVERWRITE / partition merge on a table at the limit.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_temp_partition_limit(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_temp_partition_limit");
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            Config.max_partition_number_per_table = 1;
+            starRocksAssert.alterTable("ALTER TABLE test.add_temp_partition_limit ADD TEMPORARY PARTITION tp20210101 "
+                    + "VALUES [(\"2021-01-01\"), (\"2021-01-02\"))");
+            Assertions.assertEquals(1, table.getNumberOfPartitions());
+            Assertions.assertNotNull(table.getPartition("tp20210101", true));
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_temp_partition_limit");
+    }
+
+    @Test
+    public void testAddPartitionsRecheckesPerTableLimitUnderWriteLock() throws Exception {
+        // The first partition num check runs under the READ lock, which is dropped while the tablets are
+        // built. Another committer landing in that window makes the checked count stale, so the limit has to
+        // be re-checked under the WRITE lock that actually commits the batch.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_partition_race(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_partition_race");
+
+        AtomicBoolean injected = new AtomicBoolean(false);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Invocation invocation, Database db, OlapTable olapTable,
+                                 List<PhysicalPartition> partitions, ComputeResource computeResource)
+                    throws Exception {
+                // stand in for a concurrent committer that fills the table up while this batch holds no lock
+                if (injected.compareAndSet(false, true)) {
+                    starRocksAssert.alterTable("ALTER TABLE test.add_partition_race ADD PARTITION p20210102 "
+                            + "VALUES [(\"2021-01-02\"), (\"2021-01-03\"))");
+                }
+                invocation.proceed(db, olapTable, partitions, computeResource);
+            }
+        };
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            Config.max_partition_number_per_table = 2;
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE test.add_partition_race ADD PARTITION p20210103 "
+                            + "VALUES [(\"2021-01-03\"), (\"2021-01-04\"))"));
+            Assertions.assertTrue(e.getMessage().contains("max_partition_number_per_table"),
+                    "unexpected message: " + e.getMessage());
+            Assertions.assertTrue(injected.get(), "the concurrent committer never ran");
+            Assertions.assertEquals(2, table.getNumberOfPartitions());
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_partition_race");
+    }
+>>>>>>> 44070c2 ([BugFix] Count the pending partitions in the partition limit checks (#79379))
 }
