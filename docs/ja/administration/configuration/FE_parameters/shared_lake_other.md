@@ -177,6 +177,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID のテナント ID。
 - 導入時期：v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：いいえ
+- 説明：組み込み ADLS2 ストレージボリュームの作成時に、ワークロード ID 認証に使用するフェデレーション トークン ファイルのパス。`azure_adls2_oauth2_tenant_id` と `azure_adls2_oauth2_client_id` も設定し、`azure_adls2_oauth2_use_managed_identity` は `false` のままにします。すべての FE と CN で同じ読み取り可能なパスにファイルをマウントしてください。空文字列の場合、トークン ファイル認証は使用しません。変更後は FE の再起動が必要です。
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - デフォルト：false
