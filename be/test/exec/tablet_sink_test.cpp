@@ -304,10 +304,7 @@ TEST_F(TabletSinkTest, test_close_wait_twice_after_cancel) {
 #endif
 }
 
-<<<<<<< HEAD:be/test/exec/tablet_sink_test.cpp
-TEST_F(TabletSinkTest, test_decimalv3_error_log) {
-=======
-TEST_F(OlapTableSinkTest, test_close_skipped_after_init_failure) {
+TEST_F(TabletSinkTest, test_close_skipped_after_init_failure) {
     std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
     DescriptorTbl* desc_tbl = nullptr;
     ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
@@ -337,7 +334,7 @@ TEST_F(OlapTableSinkTest, test_close_skipped_after_init_failure) {
     EXPECT_STATUS(init_status, sink->close(runtime_state.get(), init_status));
 }
 
-TEST_F(OlapTableSinkTest, test_close_before_prepare) {
+TEST_F(TabletSinkTest, test_close_before_prepare) {
     std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
     auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
     ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
@@ -354,7 +351,7 @@ TEST_F(OlapTableSinkTest, test_close_before_prepare) {
     EXPECT_STATUS(close_status, sink->close(runtime_state.get(), close_status));
 }
 
-TEST_F(OlapTableSinkTest, test_close_after_prepare_failure) {
+TEST_F(TabletSinkTest, test_close_after_prepare_failure) {
     std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
     DescriptorTbl* desc_tbl = nullptr;
     ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
@@ -375,8 +372,7 @@ TEST_F(OlapTableSinkTest, test_close_after_prepare_failure) {
     EXPECT_STATUS(prepare_status, sink->close_wait(runtime_state.get(), Status::OK()));
 }
 
-TEST_F(OlapTableSinkTest, test_decimalv3_error_log) {
->>>>>>> 968b8d5 ([BugFix] Guard OlapTableSink teardown after init failure (#79370)):be/test/data_sink/tablet/olap_table_sink_test.cpp
+TEST_F(TabletSinkTest, test_decimalv3_error_log) {
     _test_error_log(
             TYPE_DECIMAL64, 2, 2, 1,
             [](Column* col) {
