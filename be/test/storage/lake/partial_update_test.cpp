@@ -34,6 +34,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
+#include "fs/bundle_file.h"
 #include "fs/fs.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
@@ -6122,6 +6123,217 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
     EXPECT_TRUE(st.is_internal_error()) << "got: " << st.to_string();
     EXPECT_NE(std::string::npos, st.message().find("unique id"))
             << "expected 'unique id' in message; got: " << st.message();
+}
+
+// A multi-statement transaction on a table with file bundling -- a SQL BEGIN ... COMMIT, published with
+// a TxnInfoPB that carries each statement's load_id. Every statement writes the segments of all the
+// tablets of a partition into one bundle file of its own, each tablet's segment at its own offset, and
+// publish folds the statements that wrote a tablet into one merged rowset of that tablet
+// (MetaFileBuilder::batch_apply_opwrite() per statement, then set_final_rowset()).
+class LakeMultiStatementBundleTest : public LakePartialUpdateTestBase {
+public:
+    LakeMultiStatementBundleTest() : LakePartialUpdateTestBase(kTestDirectory) {
+        _tablet_metadata->set_enable_persistent_index(true);
+        _tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_multi_statement_bundle";
+
+protected:
+    // Full rows carry c1 = 3 * c0 and c2 = 4 * c0; a row-mode partial update of c1 writes 5 * c0.
+    constexpr static int kFullC1 = 3;
+    constexpr static int kFullC2 = 4;
+    constexpr static int kUpdatedC1 = 5;
+
+    // c0 -> (c1, c2)
+    using Rows = std::map<int, std::pair<int, int>>;
+
+    static std::vector<int> key_range(int begin, int end) {
+        std::vector<int> keys;
+        for (int key = begin; key < end; key++) {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+    static void add_rows(Rows* rows, const std::vector<int>& keys, int c1_factor, int c2_factor) {
+        for (int key : keys) {
+            (*rows)[key] = {key * c1_factor, key * c2_factor};
+        }
+    }
+
+    static PUniqueId statement_load_id(int64_t lo) {
+        PUniqueId id;
+        id.set_hi(1);
+        id.set_lo(lo);
+        return id;
+    }
+
+    // Full rows of `keys`, or with `partial` a row-mode partial update of their c1.
+    Chunk make_chunk(bool partial, const std::vector<int>& keys) {
+        auto column = [&keys](int factor) {
+            auto c = Int32Column::create();
+            for (int key : keys) {
+                c->append(key * factor);
+            }
+            return c;
+        };
+        if (partial) {
+            Chunk::SlotHashMap slot_map;
+            slot_map[0] = 0;
+            slot_map[1] = 1;
+            return Chunk({column(1), column(kUpdatedC1)}, slot_map);
+        }
+        return Chunk({column(1), column(kFullC1), column(kFullC2)}, _slot_cid_map);
+    }
+
+    // Write one statement to the tablets of `keys_per_tablet` through one bundle file, as a load with
+    // file bundling writes the tablets of a partition: every writer is opened before any of them
+    // finishes, so all of their segments go into the one shared file, each at its own offset. `load_id`
+    // names the statement of a multi-statement transaction; null writes an ordinary load.
+    void write_bundled(int64_t txn_id, const PUniqueId* load_id, bool partial,
+                       const std::map<int64_t, std::vector<int>>& keys_per_tablet) {
+        auto bundle = std::make_unique<BundleWritableFileContext>();
+        std::vector<std::pair<std::unique_ptr<DeltaWriter>, const std::vector<int>*>> writers;
+        for (const auto& [tablet_id, keys] : keys_per_tablet) {
+            DeltaWriterBuilder builder;
+            builder.set_tablet_manager(_tablet_mgr.get())
+                    .set_tablet_id(tablet_id)
+                    .set_txn_id(txn_id)
+                    .set_partition_id(_partition_id)
+                    .set_mem_tracker(_mem_tracker.get())
+                    .set_schema_id(_tablet_schema->id())
+                    .set_bundle_writable_file_context(bundle.get());
+            if (partial) {
+                builder.set_slot_descriptors(&_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+            }
+            if (load_id != nullptr) {
+                builder.set_load_id(*load_id).set_is_multi_statements_txn(true);
+            }
+            ASSIGN_OR_ABORT(auto writer, builder.build());
+            ASSERT_OK(writer->open());
+            writers.emplace_back(std::move(writer), &keys);
+        }
+        for (auto& [writer, keys] : writers) {
+            auto chunk = make_chunk(partial, *keys);
+            std::vector<uint32_t> indexes(keys->size());
+            for (uint32_t i = 0; i < indexes.size(); i++) {
+                indexes[i] = i;
+            }
+            ASSERT_OK(writer->write(chunk, indexes.data(), indexes.size()));
+            ASSERT_OK(writer->finish_with_txnlog());
+            writer->close();
+        }
+    }
+
+    // Publish `txn_id` to `tablet_id` as the multi-statement transaction made of the statements written
+    // under `load_ids`, with the TxnInfoPB the FE sends for a SQL BEGIN ... COMMIT.
+    StatusOr<TabletMetadataPtr> publish_statements(int64_t tablet_id, int64_t new_version, int64_t txn_id,
+                                                   const std::vector<PUniqueId>& load_ids) {
+        auto txn_info = TEST_txn_info(txn_id, time(nullptr));
+        for (const auto& load_id : load_ids) {
+            txn_info.add_load_ids()->CopyFrom(load_id);
+        }
+        std::vector<TxnInfoPB> txns{std::move(txn_info)};
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), new_version - 1, new_version, txns,
+                               false);
+    }
+
+    // `tablet_id` at `version` holds exactly `expected`, one row per key.
+    void expect_rows(int64_t tablet_id, int64_t version, const Rows& expected) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        Rows actual;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            const auto& columns = chunk->columns();
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                const int key = columns[0]->get(i).get_int32();
+                const auto row = std::make_pair(columns[1]->get(i).get_int32(), columns[2]->get(i).get_int32());
+                EXPECT_TRUE(actual.emplace(key, row).second) << "duplicate primary key " << key;
+            }
+            chunk->reset();
+        }
+        EXPECT_EQ(expected, actual);
+    }
+};
+
+// A row-mode partial update among the statements replaces its segment with a standalone rewrite file,
+// but the other statements' segments stay inside their bundle files and must keep their offsets there:
+// without it, a tablet whose segment does not start the bundle file reads its footer from the wrong
+// place, and vacuum takes the bundle file for private to one tablet and may delete it while the others
+// still reference it.
+TEST_F(LakeMultiStatementBundleTest, bundled_segments_of_other_statements_keep_their_offsets) {
+    // Two tablets of one partition, so that one of them holds its segments at a non-zero bundle offset,
+    // with different keys, so that one tablet reading the other's segment shows.
+    const int64_t tablet_a = _tablet_metadata->id();
+    auto tablet_b_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    tablet_b_metadata->set_id(next_id());
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*tablet_b_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(tablet_b_metadata->id(), tablet_b_metadata->schema()));
+    const int64_t tablet_b = tablet_b_metadata->id();
+    const std::vector<int64_t> tablets{tablet_a, tablet_b};
+    const std::map<int64_t, std::vector<int>> updated{{tablet_a, key_range(0, 12)}, {tablet_b, key_range(100, 112)}};
+    const std::map<int64_t, std::vector<int>> inserted{{tablet_a, key_range(12, 24)}, {tablet_b, key_range(112, 124)}};
+
+    // version 2: full rows of the keys the partial update updates.
+    const int64_t load_txn_id = next_id();
+    ASSERT_NO_FATAL_FAILURE(write_bundled(load_txn_id, nullptr, false, updated));
+    for (int64_t tablet_id : tablets) {
+        ASSERT_OK(publish_single_version(tablet_id, 2, load_txn_id).status());
+    }
+
+    // version 3: BEGIN; UPDATE c1 of those keys; INSERT full rows of new keys; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_bundled(txn_id, &stmt1, true, updated));
+    ASSERT_NO_FATAL_FAILURE(write_bundled(txn_id, &stmt2, false, inserted));
+
+    // Where each tablet's segment of the second statement sits inside that statement's bundle file.
+    std::map<int64_t, SegmentMetadataPB> inserted_segments;
+    bool any_non_zero_offset = false;
+    for (int64_t tablet_id : tablets) {
+        ASSIGN_OR_ABORT(auto log, _tablet_mgr->get_txn_log(tablet_id, txn_id, stmt2));
+        ASSERT_EQ(1, log->op_write().rowset().segment_metas_size());
+        const auto& segment = log->op_write().rowset().segment_metas(0);
+        ASSERT_TRUE(segment.has_bundle_file_offset()) << "the second statement did not bundle its segments";
+        any_non_zero_offset = any_non_zero_offset || segment.bundle_file_offset() > 0;
+        inserted_segments[tablet_id] = segment;
+    }
+    ASSERT_TRUE(any_non_zero_offset) << "the tablets did not share one bundle file";
+
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    for (int64_t tablet_id : tablets) {
+        ASSIGN_OR_ABORT(auto metadata, publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}));
+        const auto& merged = metadata->rowsets(metadata->rowsets_size() - 1);
+        ASSERT_EQ(2, merged.segment_metas_size());
+        // The second statement's segment, still at its offset inside that statement's bundle file.
+        const auto& expected = inserted_segments[tablet_id];
+        const auto& segment = merged.segment_metas(1);
+        EXPECT_EQ(expected.filename(), segment.filename());
+        ASSERT_TRUE(segment.has_bundle_file_offset()) << "lost the bundle offset of " << segment.filename();
+        EXPECT_EQ(expected.bundle_file_offset(), segment.bundle_file_offset()) << segment.filename();
+        // The partial update's rewrite, a standalone file, recorded as a bundle file holding only itself.
+        const auto& rewrite = merged.segment_metas(0);
+        ASSERT_TRUE(rewrite.has_bundle_file_offset()) << rewrite.filename();
+        EXPECT_EQ(0, rewrite.bundle_file_offset()) << rewrite.filename();
+        ASSIGN_OR_ABORT(auto rewrite_file_size,
+                        fs->get_file_size(_tablet_mgr->segment_location(tablet_id, rewrite.filename())));
+        EXPECT_EQ(static_cast<int64_t>(rewrite_file_size), rewrite.size()) << rewrite.filename();
+
+        Rows expected_rows;
+        add_rows(&expected_rows, updated.at(tablet_id), kUpdatedC1, kFullC2);
+        add_rows(&expected_rows, inserted.at(tablet_id), kFullC1, kFullC2);
+        ASSERT_NO_FATAL_FAILURE(expect_rows(tablet_id, 3, expected_rows));
+    }
 }
 
 // A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
