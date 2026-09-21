@@ -1003,12 +1003,17 @@ public class PaimonMetadata implements ConnectorMetadata {
             return result;
         }
         Map<String, Partition> partitionInfo = this.partitionInfos.get(identifier);
+        // Reload the partition cache at most once per call. A single listing already reflects
+        // every partition of the table, so retrying it for each missing name only adds
+        // catalog round trips without changing the result.
+        boolean refreshed = false;
         for (String partitionName : partitionNames) {
-            if (partitionInfo == null || partitionInfo.get(partitionName) == null) {
+            if (!refreshed && (partitionInfo == null || partitionInfo.get(partitionName) == null)) {
                 this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
                 partitionInfo = this.partitionInfos.get(identifier);
+                refreshed = true;
             }
-            if (partitionInfo.get(partitionName) != null) {
+            if (partitionInfo != null && partitionInfo.get(partitionName) != null) {
                 result.add(partitionInfo.get(partitionName));
             } else {
                 LOG.warn("Cannot find the paimon partition info: {}", partitionName);
