@@ -35,16 +35,22 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 public class QueryAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(QueryAction.class);
@@ -74,7 +80,14 @@ public class QueryAction extends WebBaseAction {
         buffer.append("<button style=\"float:right\" onclick=\"download_query()\">Download CSV</button>");
         buffer.append("<p>This table lists the latest 100 queries</p>");
 
-        List<List<String>> finishedQueries = ProfileManager.getInstance().getAllQueries();
+        // Same rule as SHOW PROFILELIST. The web gate admits NODE holders, who are not thereby OPERATE holders,
+        // so the owner-or-OPERATE filter has to run here too; the knob is read once for the whole listing.
+        ConnectContext ctx = ConnectContext.get();
+        boolean checkAccess = Config.authorization_enable_query_profile_access_check;
+        Supplier<Boolean> hasOperate =
+                Suppliers.memoize(() -> Authorizer.hasSystemAction(ctx, PrivilegeType.OPERATE));
+        List<List<String>> finishedQueries = ProfileManager.getInstance().getAllQueries(
+                element -> !checkAccess || Authorizer.canReadQueryProfile(ctx, element, hasOperate));
         List<String> columnHeaders = ProfileManager.PROFILE_HEADERS;
         int queryIdIndex = 0; // the first column is 'Query ID' by default
         for (int i = 0; i < columnHeaders.size(); ++i) {

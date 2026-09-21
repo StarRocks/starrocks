@@ -12,6 +12,8 @@ displayed_sidebar: docs
 
 该函数从 3.0 版本开始支持。
 
+如果将 FE 配置项 `authorization_enable_query_profile_access_check` 设置为 `true`，该函数只能获取当前用户自己执行的查询的 Profile，拥有 SYSTEM 级 OPERATE 权限的用户不受此限制。此时，若传入的 `query_id` 不是常量，或者其 Profile 未缓存在当前会话所连接的 FE 上，也需要 OPERATE 权限。若同时开启 `authorization_enable_admin_user_protection`，只有 `root` 可以传入未缓存在当前 FE 上的 `query_id`。若没有 OPERATE 权限又想查看自己的 Profile，请先执行 `select last_query_id();` 取得 ID，再将该字面量传入，用法见下方示例。
+
 ## 语法
 
 ```plaintext

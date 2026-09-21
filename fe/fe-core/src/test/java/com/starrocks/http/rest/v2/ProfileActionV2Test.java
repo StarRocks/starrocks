@@ -19,6 +19,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.ActionStatus;
@@ -41,6 +42,19 @@ import java.util.List;
 public class ProfileActionV2Test extends StarRocksHttpTestCase {
 
     private static final String QUERY_PLAN_URI = "/api/v2/profile";
+    private static final String QUERY_ID = "eaff21d2-3734-11ee-909f-8e20563011de";
+
+    // A profile run by root, so the root caller reads it as its owner.
+    private static ProfileManager.ProfileElement rootProfileElement() {
+        RuntimeProfile profile = new RuntimeProfile("Query");
+        RuntimeProfile summary = new RuntimeProfile("Summary");
+        summary.addInfoString(ProfileManager.QUERY_ID, QUERY_ID);
+        summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summary.addInfoString(ProfileManager.USER, "root");
+        summary.addInfoString(ProfileManager.SQL_STATEMENT, "select count(*) from lineorder");
+        profile.addChild(summary);
+        return ProfileManager.getInstance().createElement(summary, profile.toString());
+    }
 
     @Test
     public void testQueryProfile() throws IOException {
@@ -60,29 +74,9 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
 
         new MockUp<ProfileManager>() {
             @Mock
-            public String getProfile(String queryId) {
-                if (queryId.equalsIgnoreCase("eaff21d2-3734-11ee-909f-8e20563011de")) {
-                    String queryProfileStr = "Query:\n" +
-                            "  Summary:\n" +
-                            "     - Query ID: eaff21d2-3734-11ee-909f-8e20563011de\n" +
-                            "     - Start Time: 2023-08-10 12:18:11\n" +
-                            "     - End Time: 2023-08-10 12:18:11\n" +
-                            "     - Total: 150ms\n" +
-                            "     - Query Type: Query\n" +
-                            "     - Query State: Finished\n" +
-                            "     - StarRocks Version: bugfix2-0da335ff34\n" +
-                            "     - User: root\n" +
-                            "     - Test: a<b<c\n" +
-                            "     - Default Db: ssb\n" +
-                            "     - Sql Statement: select count(s_suppkey), count(s_name), count(s_address), count(s_city), " +
-                            "count(s_nation), count(s_region), count(s_phone), count(lo_revenue), count(lo_shipmode), " +
-                            "count(lo_quantity), count(lo_partkey), count(lo_discount) from lineorder join supplier on " +
-                            "lo_suppkey=s_suppkey and lo_partkey<s_suppkey and lo_quantity>100\n" +
-                            "     - Variables: parallel_fragment_exec_instance_num=1,max_parallel_scan_instance_num=-1," +
-                            "pipeline_dop=0,enable_adaptive_sink_dop=true,enable_runtime_adaptive_dop=false," +
-                            "runtime_profile_report_interval=10\n" +
-                            "     - Collect Profile Time: 41ms";
-                    return queryProfileStr;
+            public ProfileManager.ProfileElement getProfileElement(String queryId) {
+                if (queryId.equalsIgnoreCase(QUERY_ID)) {
+                    return rootProfileElement();
                 }
                 return null;
             }
@@ -129,35 +123,13 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
         new MockUp<ProfileManager>() {
             int callCount = 0;
             @Mock
-            public String getProfile(String queryId) {
-
+            public ProfileManager.ProfileElement getProfileElement(String queryId) {
                 if (callCount <= 0) {
                     callCount++;
                     // Simulate that the profile is not found in the local ProfileManager
                     return null;
                 }
-
-                    String queryProfileStr = "Query:\n" +
-                            "  Summary:\n" +
-                            "     - Query ID: eaff21d2-3734-11ee-909f-8e20563011de\n" +
-                            "     - Start Time: 2023-08-10 12:18:11\n" +
-                            "     - End Time: 2023-08-10 12:18:11\n" +
-                            "     - Total: 150ms\n" +
-                            "     - Query Type: Query\n" +
-                            "     - Query State: Finished\n" +
-                            "     - StarRocks Version: bugfix2-0da335ff34\n" +
-                            "     - User: root\n" +
-                            "     - Test: a<b<c\n" +
-                            "     - Default Db: ssb\n" +
-                            "     - Sql Statement: select count(s_suppkey), count(s_name), count(s_address), count(s_city), " +
-                            "count(s_nation), count(s_region), count(s_phone), count(lo_revenue), count(lo_shipmode), " +
-                            "count(lo_quantity), count(lo_partkey), count(lo_discount) from lineorder join supplier on " +
-                            "lo_suppkey=s_suppkey and lo_partkey<s_suppkey and lo_quantity>100\n" +
-                            "     - Variables: parallel_fragment_exec_instance_num=1,max_parallel_scan_instance_num=-1," +
-                            "pipeline_dop=0,enable_adaptive_sink_dop=true,enable_runtime_adaptive_dop=false," +
-                            "runtime_profile_report_interval=10\n" +
-                            "     - Collect Profile Time: 41ms";
-                    return queryProfileStr;
+                return rootProfileElement();
             }
         };
 

@@ -53,6 +53,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 用户、角色和权限
 
+### `authorization_enable_query_profile_access_check`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否限制缓存的 Query Profile 的读取权限。设置为 `true` 时，SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 函数、`/api/profile` 和 `/api/query/progress` HTTP 接口，以及 `/query` 和 `/query_profile` Web 页面只向执行该查询的用户，或拥有 SYSTEM 级 OPERATE 权限的用户返回 Profile；未记录用户的 Profile（例如 EXPORT 作业和 Stream Load 导入）只有拥有 OPERATE 权限的用户才能读取。`/api/query_detail` 和 `/api/v2/query_detail` 接口仍会列出所有查询，但按同样的规则省略 `profile` 字段，以及由该 Profile 渲染而来的 `explain` 字段。若同时开启 `authorization_enable_admin_user_protection`，`root` 执行的查询的 Profile 仅 `root` 自己可以读取。设置为 `false`（默认值）时，任何已登录用户都可以读取所有 Profile，与此前版本的行为一致。每个 FE 只对自身持有的 Profile 执行此检查。若要在整个集群范围内限制访问，请在所有 FE 升级到支持该配置项的版本后，在每个 FE 的 `fe.conf` 中设置该项。开启前还需注意两点影响：一是 `/api/query/progress` 不再接受匿名请求，因为权限判断需要调用方身份，原先匿名轮询该接口的程序会收到 `401`；二是如果 `query_id` 对应的 Profile 未缓存在当前会话连接的 FE 上，`get_query_profile()` 需要 OPERATE 权限——跨 FE 获取 Profile 的 RPC 不携带调用方身份，无法在对端完成鉴权，因此开启该检查期间，跨 FE 获取 Profile 仅限拥有 OPERATE 权限的用户。
+- 引入版本: v4.1
+
 ### `enable_task_info_mask_credential`
 
 - 默认值: true

@@ -31,7 +31,9 @@ Query detail records are collected only when the FE configuration `enable_collec
 
 ## Authentication and authorization
 
-This API requires HTTP Basic authentication. There is no additional privilege check beyond a successful login. Any authenticated user can access the endpoint and can view all cached query details unless a `user` filter is applied.
+This API requires HTTP Basic authentication. By default there is no additional privilege check beyond a successful login: any authenticated user can access the endpoint and can view all cached query details unless a `user` filter is applied.
+
+If the FE configuration item `authorization_enable_query_profile_access_check` is set to `true`, the `profile` field, and the `explain` field when it holds a plan rendered from that profile, are returned only for queries run by the current user, or for every query if the user has the SYSTEM-level OPERATE privilege. Other records are still listed, with those fields omitted.
 
 ## QueryDetail fields
 

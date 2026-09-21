@@ -15,6 +15,7 @@
 package com.starrocks.http.rest.v2;
 
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -22,6 +23,8 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -43,7 +46,7 @@ public class ProfileActionV2 extends RestBaseAction {
     }
 
     @Override
-    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
         String authorization = request.getAuthorizationHeader();
         String queryId = request.getSingleParameter("query_id");
         String isRequestAllStr = request.getSingleParameter("is_request_all_frontend", "false");
@@ -57,16 +60,23 @@ public class ProfileActionV2 extends RestBaseAction {
             return;
         }
 
-        String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
-
-        if (queryProfileStr != null) {
-            sendSuccessResponse(response, queryProfileStr, request);
-            return;
+        ProfileManager.ProfileElement element = ProfileManager.getInstance().getProfileElement(queryId);
+        if (element != null) {
+            // Same rule as SHOW PROFILELIST and ANALYZE PROFILE: the owner may read their own profile, anyone
+            // else needs SYSTEM OPERATE.
+            Authorizer.checkQueryProfileAccess(ConnectContext.get(), element);
+            String queryProfileStr = element.getProfileString();
+            if (queryProfileStr != null) {
+                sendSuccessResponse(response, queryProfileStr, request);
+                return;
+            }
         }
 
         if (isRequestAll) {
             // If the query profile is not found in the local fe's ProfileManager,
-            // we will query other frontend nodes to get the query profile.
+            // we will query other frontend nodes to get the query profile. The request is relayed with the
+            // caller's own Authorization header, so the frontend that holds the profile applies the access
+            // rule itself.
             String queryPath = String.format(QUERY_PLAN_URI, queryId);
             List<String> profileList =
                     fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);

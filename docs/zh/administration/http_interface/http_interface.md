@@ -35,7 +35,7 @@ displayed_sidebar: docs
 | POST             | `/api/colocate/group_unstable` | |
 | POST             | `/api/colocate/update_group` | |
 | POST             | `/api/global_dict/table/enable` | |
-| GET              | `/api/profile?query_id={}`                                        | 获取指定 query ID 的 profile 信息。                                                                                       |
+| GET              | `/api/profile?query_id={}`                                        | 获取指定 query ID 的 profile 信息。如果 FE 配置项 `authorization_enable_query_profile_access_check` 设置为 `true`，只有执行该查询的用户或拥有 SYSTEM 级 OPERATE 权限的用户才能获取。 |
 | GET              | `/api/query_detail`                                              | 获取 query detail 信息，详见 [Query detail API](./query_detail.md)。                                     |
 | GET              | `/api/connection` | |
 | GET              | `/api/show_data?db={}`                                            | 查询指定数据库的大小。                                                                                                    |

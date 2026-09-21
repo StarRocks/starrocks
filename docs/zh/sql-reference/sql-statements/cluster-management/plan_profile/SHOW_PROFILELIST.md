@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 此功能自 v3.1 起支持。
 
-该操作无需任何权限。
+默认情况下，该操作无需任何权限。如果将 FE 配置项 `authorization_enable_query_profile_access_check` 设置为 `true`，用户只能查看自己执行的查询的 Query Profile 记录；查看其他用户执行的查询的 Query Profile 记录，需要 SYSTEM 级 OPERATE 权限。有关授权操作，参见 [GRANT](../../account-management/GRANT.md)。
 
 ## 语法
 
