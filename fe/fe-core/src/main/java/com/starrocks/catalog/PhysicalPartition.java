@@ -215,44 +215,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.versionTxnType = TransactionType.TXN_NORMAL;
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Returns a shallow copy stamped with the given visible version, carrying
-     * only the latest base materialized index entry. Older base instances
-     * (tablet-split history) and rollups are dropped to mirror the surrounding
-     * scoped OlapTable, which already prunes to the base.
-     */
-    public PhysicalPartition copyForBookmark(long visibleVersion, long visibleVersionTimeMs) {
-        MaterializedIndex latestBaseIndex = null;
-        List<Long> baseIndexIds = this.indexMetaIdToIndexIds.get(this.baseIndexMetaId);
-        if (baseIndexIds != null && !baseIndexIds.isEmpty()) {
-            latestBaseIndex = this.idToVisibleIndex.get(baseIndexIds.get(baseIndexIds.size() - 1));
-        }
-        return copyForBookmark(latestBaseIndex, visibleVersion, visibleVersionTimeMs);
-    }
-
-    /**
-     * Same as {@link #copyForBookmark(long, long)} but scoped to a caller-chosen base-index
-     * generation -- used by bookmark reads whose anchored generation predates a tablet reshard
-     * (the old generation stays installed until the recycle bin erases it).
-     */
-    public PhysicalPartition copyForBookmark(MaterializedIndex baseIndex, long visibleVersion,
-                                             long visibleVersionTimeMs) {
-        PhysicalPartition copy = new PhysicalPartition();
-        copy.id              = this.id;
-        copy.parentId        = this.parentId;
-        copy.baseIndexMetaId = this.baseIndexMetaId;
-        if (baseIndex != null) {
-            copy.indexMetaIdToIndexIds.put(this.baseIndexMetaId, Lists.newArrayList(baseIndex.getId()));
-            copy.idToVisibleIndex.put(baseIndex.getId(), baseIndex);
-        }
-        copy.visibleVersion     = visibleVersion;
-        copy.visibleVersionTime = visibleVersionTimeMs;
-        return copy;
-    }
-
->>>>>>> 2ec94237bda ([BugFix] Generate gtid and partition version epoch only on the leader FE (#61820))
     public long getId() {
         return this.id;
     }
