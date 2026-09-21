@@ -404,8 +404,6 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
     set_non_segment_files_shared(tablet_metadata, skip_delvecs);
 }
 
-<<<<<<< HEAD
-=======
 bool has_shared_files(const TabletMetadataPB& metadata) {
     // Field order below follows TabletMetadataPB / RowsetMetadataPB declaration order; see the
     // header for the full walk and for why each remaining field is skipped.
@@ -443,18 +441,6 @@ bool has_shared_files(const TabletMetadataPB& metadata) {
     return false;
 }
 
-void reset_cdc_carryover_for_old_tablet(TabletMetadataPB* metadata, int64_t base_version,
-                                        const TabletMetadataPB* old_metadata) {
-    build_metadata_ancestors(metadata, base_version, old_metadata);
-    init_cdc(metadata);
-}
-
-void reset_cdc_carryover_for_new_tablet(TabletMetadataPB* metadata) {
-    metadata->clear_metadata_ancestors();
-    init_cdc(metadata);
-}
-
->>>>>>> 806b4f56e69 ([Enhancement] Keep tablets holding shared data files out of merge candidate groups (#62847))
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
     TabletRange lhs;
     RETURN_IF_ERROR(lhs.from_proto(lhs_pb));

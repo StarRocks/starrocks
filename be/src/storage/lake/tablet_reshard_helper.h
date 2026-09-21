@@ -98,8 +98,6 @@ void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
 // per-segment ownership propagation (private for an exclusive segment).
 void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
 
-<<<<<<< HEAD
-=======
 // True iff |metadata| references a live data file carrying the shared flag. This computes the value
 // the BE reports as TabletStatPB / TabletStat.has_shared_files, which merge planning uses to refuse a
 // tablet whose files a split left co-owned: a merge inherits its sources' files verbatim, so a second
@@ -132,30 +130,6 @@ void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
 // Reads metadata only; performs no I/O.
 bool has_shared_files(const TabletMetadataPB& metadata);
 
-// Reset the CDC-related carry-over on a metadata copy a reshard publish writes at the reshard
-// version S. A reshard copies the source metadata verbatim, which would otherwise inherit the
-// source's `metadata_ancestors` and its per-publish `cdc_metadata` state as if this were the
-// source's own next publish.
-//
-// An OLD tablet id (the split parent, a merge source, or the identical-old tablet) keeps its own
-// history: its chain at S continues from base_version (S-1), so a (S-1, S] CHANGES diff is empty
-// by construction rather than misattributing the base publish's rowsets. |old_metadata| is the
-// source metadata at base_version, whose own chain is copied as the bounded tail (see
-// build_metadata_ancestors). init_cdc drops the stale capture_status / pk_change_locator left by
-// the source's last publish while preserving enable_cdc, which is a table property -- and where it
-// early-returns, on a CDC-disabled primary-key table, there is nothing to drop: both fields' only
-// writers are cdc_enabled-gated, and alter_cdc clears them when the switch goes off.
-void reset_cdc_carryover_for_old_tablet(TabletMetadataPB* metadata, int64_t base_version,
-                                        const TabletMetadataPB* old_metadata);
-
-// Peer of the above for a NEW tablet id (a split child, the merged tablet, or the identical-new
-// tablet). No metadata exists under this id below S, so the chain must be empty: a CHANGES walk
-// misdispatched with base < S then fails classified (CHANGE_NOT_TRACKABLE, "chain cannot reach
-// base") instead of following an inherited ancestor into an unclassified NotFound that the
-// frontend would read as transient and retry forever.
-void reset_cdc_carryover_for_new_tablet(TabletMetadataPB* metadata);
-
->>>>>>> 806b4f56e69 ([Enhancement] Keep tablets holding shared data files out of merge candidate groups (#62847))
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range);
