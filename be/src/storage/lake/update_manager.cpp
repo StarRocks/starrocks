@@ -546,15 +546,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             DCHECK(state.upserts(local_id) != nullptr);
             if (!has_condition_update) {
                 RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
-<<<<<<< HEAD
-                                           op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
-            } else if (op_write.ssts_size() > 0) {
-=======
                                            has_prebuilt_sst(op_write, local_id), use_cloud_native_pk_index(*metadata)));
             } else if (has_prebuilt_sst(op_write, local_id)) {
-                FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_index_condition_upsert_failed,
-                                          Status::InternalError("inject lake_pk_apply_index_condition_upsert_failed"));
->>>>>>> 68586609af8 ([Feature] Let several compute nodes write one tablet (#62712))
                 RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
                                                                    condition_column, state.upserts(local_id), index,
                                                                    &new_deletes));
