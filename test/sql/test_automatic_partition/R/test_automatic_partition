@@ -18,10 +18,10 @@ insert into dt_month values('2023-02-14 12:31:07', 2);
 insert into dt_month values('2023-03-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p202303.*
+p202302
+p202303
 -- !result
 select * from dt_month;
 -- result:
@@ -54,9 +54,9 @@ select count(*) from t;
 -- result:
 1
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p20210101.*
+p20210101
 -- !result
 insert into t values('2021-01-03', default);
 -- result:
@@ -65,10 +65,10 @@ select count(*) from t;
 -- result:
 2
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p20210101.*
-.*p20210103.*
+p20210101
+p20210103
 -- !result
 insert into t values('2021-01-05', default);
 -- result:
@@ -77,11 +77,11 @@ select count(*) from t;
 -- result:
 3
 -- !result
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- result:
-[REGEX].*p20210101.*
-.*p20210103.*
-.*p20210105.*
+p20210101
+p20210103
+p20210105
 -- !result
 -- name: test_date_trunc_date
 CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
@@ -90,9 +90,9 @@ CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTI
 insert into dt_month values('2023-02-14', 2);
 -- result:
 -- !result
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 -- result:
-[REGEX].*p202302.*
+p202302
 -- !result
 insert into dt_month values('2023-03-14', 2);
 -- result:
@@ -103,9 +103,9 @@ CREATE TABLE dt_day( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITI
 insert into dt_day values('2023-02-14', 2);
 -- result:
 -- !result
-show partitions from dt_day;
+function: print_query_columns("show partitions from dt_day", "PartitionName")
 -- result:
-[REGEX].*p20230214.*
+p20230214
 -- !result
 insert into dt_day values('2023-03-14', 2);
 -- result:
@@ -116,9 +116,9 @@ CREATE TABLE dt_year( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTIT
 insert into dt_year values('2023-02-14', 2);
 -- result:
 -- !result
-show partitions from dt_year;
+function: print_query_columns("show partitions from dt_year", "PartitionName")
 -- result:
-[REGEX].*p2023.*
+p2023
 -- !result
 insert into dt_year values('2024-03-14', 2);
 -- result:
@@ -176,9 +176,9 @@ CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) P
 insert into dt_month values('2023-02-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 -- result:
-[REGEX].*p202302.*
+p202302
 -- !result
 insert into dt_month values('2023-03-14 12:31:07', 2);
 -- result:
@@ -189,9 +189,9 @@ CREATE TABLE dt_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PAR
 insert into dt_day values('2023-02-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from dt_day;
+function: print_query_columns("show partitions from dt_day", "PartitionName")
 -- result:
-[REGEX].*p20230214.*
+p20230214
 -- !result
 insert into dt_day values('2023-03-14 12:31:07', 2);
 -- result:
@@ -202,9 +202,9 @@ CREATE TABLE dt_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PA
 insert into dt_year values('2023-02-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from dt_year;
+function: print_query_columns("show partitions from dt_year", "PartitionName")
 -- result:
-[REGEX].*p2023.*
+p2023
 -- !result
 insert into dt_year values('2024-03-14 12:31:07', 2);
 -- result:
@@ -275,10 +275,10 @@ select count(*) from ss;
 -- result:
 2
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p203303.*
+p202302
+p203303
 -- !result
 insert into ss select date(add_months(event_day, 1)),pv from ss;
 -- result:
@@ -287,12 +287,12 @@ select count(*) from ss;
 -- result:
 4
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p202303.*
-.*p203303.*
-.*p203304.*
+p202302
+p202303
+p203303
+p203304
 -- !result
 insert into ss select date(add_months(event_day, 6)),pv from ss;
 -- result:
@@ -301,16 +301,16 @@ select count(*) from ss;
 -- result:
 8
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p202303.*
-.*p202308.*
-.*p202309.*
-.*p203303.*
-.*p203304.*
-.*p203309.*
-.*p203310.*
+p202302
+p202303
+p202308
+p202309
+p203303
+p203304
+p203309
+p203310
 -- !result
 insert into ss select date(add_months(event_day, 12)),pv from ss;
 -- result:
@@ -319,24 +319,24 @@ select count(*) from ss;
 -- result:
 16
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p202303.*
-.*p202308.*
-.*p202309.*
-.*p202402.*
-.*p202403.*
-.*p202408.*
-.*p202409.*
-.*p203303.*
-.*p203304.*
-.*p203309.*
-.*p203310.*
-.*p203403.*
-.*p203404.*
-.*p203409.*
-.*p203410.*
+p202302
+p202303
+p202308
+p202309
+p202402
+p202403
+p202408
+p202409
+p203303
+p203304
+p203309
+p203310
+p203403
+p203404
+p203409
+p203410
 -- !result
 insert into ss select * from ss;
 -- result:
@@ -345,24 +345,24 @@ select count(*) from ss;
 -- result:
 32
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p202303.*
-.*p202308.*
-.*p202309.*
-.*p202402.*
-.*p202403.*
-.*p202408.*
-.*p202409.*
-.*p203303.*
-.*p203304.*
-.*p203309.*
-.*p203310.*
-.*p203403.*
-.*p203404.*
-.*p203409.*
-.*p203410.*
+p202302
+p202303
+p202308
+p202309
+p202402
+p202403
+p202408
+p202409
+p203303
+p203304
+p203309
+p203310
+p203403
+p203404
+p203409
+p203410
 -- !result
 -- name: test_multi_fragment_open_new_node_channel @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
@@ -390,20 +390,20 @@ select count(*) from ss;
 -- result:
 64
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p202303.*
-.*p202304.*
-.*p202305.*
-.*p202306.*
-.*p202307.*
-.*p203303.*
-.*p203304.*
-.*p203305.*
-.*p203306.*
-.*p203307.*
-.*p203308.*
+p202302
+p202303
+p202304
+p202305
+p202306
+p202307
+p203303
+p203304
+p203305
+p203306
+p203307
+p203308
 -- !result
 CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
@@ -415,20 +415,20 @@ select count(*) from dt_month;
 -- result:
 64
 -- !result
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 -- result:
-[REGEX].*p202302.*
-.*p202303.*
-.*p202304.*
-.*p202305.*
-.*p202306.*
-.*p202307.*
-.*p203303.*
-.*p203304.*
-.*p203305.*
-.*p203306.*
-.*p203307.*
-.*p203308.*
+p202302
+p202303
+p202304
+p202305
+p202306
+p202307
+p203303
+p203304
+p203305
+p203306
+p203307
+p203308
 -- !result
 -- name: test_automatic_partition_time_slice
 CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
@@ -437,24 +437,24 @@ CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) P
 insert into ss_month values('2023-02-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_month;
+function: print_query_columns("show partitions from ss_month", "PartitionName")
 -- result:
-[REGEX].*p202301.*
+p202301
 -- !result
 insert into ss_month values('2023-04-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_month;
+function: print_query_columns("show partitions from ss_month", "PartitionName")
 -- result:
-[REGEX].*p202301.*
+p202301
 -- !result
 insert into ss_month values('2023-07-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_month;
+function: print_query_columns("show partitions from ss_month", "PartitionName")
 -- result:
-[REGEX].*p202301.*
-.*p202305.*
+p202301
+p202305
 -- !result
 CREATE TABLE ss_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
@@ -462,24 +462,24 @@ CREATE TABLE ss_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PAR
 insert into ss_day values('2023-02-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_day;
+function: print_query_columns("show partitions from ss_day", "PartitionName")
 -- result:
-[REGEX].*p20230214.*
+p20230214
 -- !result
 insert into ss_day values('2023-02-16 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_day;
+function: print_query_columns("show partitions from ss_day", "PartitionName")
 -- result:
-[REGEX].*p20230214.*
+p20230214
 -- !result
 insert into ss_day values('2023-02-19 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_day;
+function: print_query_columns("show partitions from ss_day", "PartitionName")
 -- result:
-[REGEX].*p20230214.*
-.*p20230218.*
+p20230214
+p20230218
 -- !result
 CREATE TABLE ss_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 2 year) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
@@ -487,24 +487,24 @@ CREATE TABLE ss_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PA
 insert into ss_year values('2023-02-14 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_year;
+function: print_query_columns("show partitions from ss_year", "PartitionName")
 -- result:
-[REGEX].*p2023.*
+p2023
 -- !result
 insert into ss_year values('2024-02-16 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_year;
+function: print_query_columns("show partitions from ss_year", "PartitionName")
 -- result:
-[REGEX].*p2023.*
+p2023
 -- !result
 insert into ss_year values('2026-02-19 12:31:07', 2);
 -- result:
 -- !result
-show partitions from ss_year;
+function: print_query_columns("show partitions from ss_year", "PartitionName")
 -- result:
-[REGEX].*p2023.*
-.*p2025.*
+p2023
+p2025
 -- !result
 
 -- name: test_without_property @sequential
@@ -597,22 +597,22 @@ select * from ss;
 -- result:
 2000-01-01	2
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*\tp200001\t.*
+p200001
 -- !result
 truncate table ss;
 -- result:
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*\tp200001\t.*
+p200001
 -- !result
 insert into ss values('2002-01-01', 2);
 -- result:
 -- !result
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- result:
-[REGEX].*\tp200001\t.*
-.*\tp200201\t.*
+p200001
+p200201
 -- !result

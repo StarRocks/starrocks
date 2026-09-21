@@ -7,7 +7,7 @@ show partitions from ss;
 CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into dt_month values('2023-02-14 12:31:07', 2);
 insert into dt_month values('2023-03-14 12:31:07', 2);
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 select * from dt_month;
 -- name: test_partition_column_as_second
 create table p(c1 int null, c2 date null)engine=olap duplicate key(c1,c2) partition by date_trunc('day', c2) distributed by hash(c1) buckets 2 properties("replication_num"="1");
@@ -18,27 +18,27 @@ select * from p;
 CREATE TABLE t ( id DATE NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id) PARTITION BY date_trunc('day', id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into t values('2021-01-01', 1);
 select count(*) from t;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 insert into t values('2021-01-03', default);
 select count(*) from t;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 insert into t values('2021-01-05', default);
 select count(*) from t;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName")
 -- name: test_date_trunc_date
 CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into dt_month values('2023-02-14', 2);
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 insert into dt_month values('2023-03-14', 2);
 -- explain select * from dt_month where event_day='2023-02-14';
 CREATE TABLE dt_day( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into dt_day values('2023-02-14', 2);
-show partitions from dt_day;
+function: print_query_columns("show partitions from dt_day", "PartitionName")
 insert into dt_day values('2023-03-14', 2);
 -- explain select * from dt_day where event_day='2023-02-14';
 CREATE TABLE dt_year( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('year', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into dt_year values('2023-02-14', 2);
-show partitions from dt_year;
+function: print_query_columns("show partitions from dt_year", "PartitionName")
 insert into dt_year values('2024-03-14', 2);
 -- explain select * from dt_year where event_day='2023-02-14';
 CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
@@ -61,17 +61,17 @@ select * from ss;
 -- name: test_date_trunc_datetime
 CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into dt_month values('2023-02-14 12:31:07', 2);
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 insert into dt_month values('2023-03-14 12:31:07', 2);
 -- explain select * from dt_month where event_day='2023-02-14 12:31:07';
 CREATE TABLE dt_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into dt_day values('2023-02-14 12:31:07', 2);
-show partitions from dt_day;
+function: print_query_columns("show partitions from dt_day", "PartitionName")
 insert into dt_day values('2023-03-14 12:31:07', 2);
 -- explain select * from dt_day where event_day='2023-02-14 12:31:07';
 CREATE TABLE dt_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('year', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into dt_year values('2023-02-14 12:31:07', 2);
-show partitions from dt_year;
+function: print_query_columns("show partitions from dt_year", "PartitionName")
 insert into dt_year values('2024-03-14 12:31:07', 2);
 -- explain select * from dt_year where event_day='2023-02-14 12:31:07';
 CREATE TABLE dt_hour( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('hour', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
@@ -94,19 +94,19 @@ show partitions from site_access;
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
 select count(*) from ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 insert into ss select date(add_months(event_day, 1)),pv from ss;
 select count(*) from ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 insert into ss select date(add_months(event_day, 6)),pv from ss;
 select count(*) from ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 insert into ss select date(add_months(event_day, 12)),pv from ss;
 select count(*) from ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 insert into ss select * from ss;
 select count(*) from ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 -- name: test_multi_fragment_open_new_node_channel @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
@@ -116,33 +116,33 @@ insert into ss select date(add_months(event_day, 1)),pv from ss;
 insert into ss select date(add_months(event_day, 1)),pv from ss;
 insert into ss select date(add_months(event_day, 1)),pv from ss;
 select count(*) from ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into dt_month select * from ss;
 select count(*) from dt_month;
-show partitions from dt_month;
+function: print_query_columns("show partitions from dt_month", "PartitionName")
 -- name: test_automatic_partition_time_slice
 CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss_month values('2023-02-14 12:31:07', 2);
-show partitions from ss_month;
+function: print_query_columns("show partitions from ss_month", "PartitionName")
 insert into ss_month values('2023-04-14 12:31:07', 2);
-show partitions from ss_month;
+function: print_query_columns("show partitions from ss_month", "PartitionName")
 insert into ss_month values('2023-07-14 12:31:07', 2);
-show partitions from ss_month;
+function: print_query_columns("show partitions from ss_month", "PartitionName")
 CREATE TABLE ss_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss_day values('2023-02-14 12:31:07', 2);
-show partitions from ss_day;
+function: print_query_columns("show partitions from ss_day", "PartitionName")
 insert into ss_day values('2023-02-16 12:31:07', 2);
-show partitions from ss_day;
+function: print_query_columns("show partitions from ss_day", "PartitionName")
 insert into ss_day values('2023-02-19 12:31:07', 2);
-show partitions from ss_day;
+function: print_query_columns("show partitions from ss_day", "PartitionName")
 CREATE TABLE ss_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 2 year) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss_year values('2023-02-14 12:31:07', 2);
-show partitions from ss_year;
+function: print_query_columns("show partitions from ss_year", "PartitionName")
 insert into ss_year values('2024-02-16 12:31:07', 2);
-show partitions from ss_year;
+function: print_query_columns("show partitions from ss_year", "PartitionName")
 insert into ss_year values('2026-02-19 12:31:07', 2);
-show partitions from ss_year;
+function: print_query_columns("show partitions from ss_year", "PartitionName")
 -- CREATE TABLE ss_hour( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 2 hour) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- insert into ss_hour values('2023-02-14 12:31:07', 2);
 -- show partitions from ss_hour;
@@ -178,8 +178,8 @@ select count(*) from tt;
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into ss values('2000-01-01', 2);
 select * from ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 truncate table ss;
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
 insert into ss values('2002-01-01', 2);
-show partitions from ss;
+function: print_query_columns("show partitions from ss", "PartitionName")
