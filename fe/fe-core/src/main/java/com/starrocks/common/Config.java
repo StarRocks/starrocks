@@ -1266,11 +1266,44 @@ public class Config extends ConfigBase {
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
-     * If there is no thread to handle new request, the request will be pend to a queue,
-     * the pending queue size is thrift_server_queue_size
+     * How many connections may wait for a worker while all thrift_server_max_worker_threads workers
+     * are busy. This bounds what the queue can hold, not what it will serve: a connection arriving
+     * once the queue is full is closed immediately rather than retried, and a queued connection that
+     * waits past thrift_server_queue_timeout_ms is closed unserved when a worker reaches it. The two
+     * cases are counted apart, by thrift_server_rejected_connections_total and
+     * thrift_server_expired_connections_total.
      */
     @ConfField
     public static int thrift_server_queue_size = 4096;
+
+    /**
+     * How long a connection may wait in the thrift server pending queue before a worker picks it up.
+     * A connection that has waited longer is closed unserved, on the assumption that its caller has
+     * abandoned it and serving it only holds a worker away from work someone is still waiting for.
+     * With the check armed the queue can only ever hold fresh work, so it drains in O(timeout) after
+     * a spike however deep it grew.
+     * <p>
+     * Off by default, because that assumption does not hold for every caller and the server cannot
+     * tell which it is serving. A queued connection carries no deadline the acceptor can read, and
+     * the deadlines callers actually use span four orders of magnitude: plain FE-internal RPCs give
+     * up after thrift_rpc_timeout_ms (10s), but a statement forwarded from a follower waits
+     * getExecTimeout() + thrift_rpc_timeout_ms -- 310s for a query at the default query_timeout, and
+     * about four hours for an INSERT at the default insert_timeout -- and BE stream-load and
+     * txn-commit RPCs wait stream_load_thrift_rpc_timeout_ms (60s) or a quarter of a load's own
+     * timeout_second, whichever is larger. query_timeout, insert_timeout and timeout_second are all
+     * user-settable and unbounded, so no fixed value is safe for every cluster: any timeout short
+     * enough to help recovery can cut off a forwarded statement whose client is still waiting, during
+     * exactly the saturation this is meant to shorten. Serving work whose caller has gone is the
+     * lesser evil, so the default keeps it.
+     * <p>
+     * Arm it per cluster, above the largest deadline that cluster's clients actually rely on -- start
+     * from its query_timeout and insert_timeout rather than from this file. Mutable, so it can be
+     * armed, retuned, or switched back off without a restart. Every drop is counted in
+     * thrift_server_expired_connections_total, and thrift_server_queue_wait_ms shows what the queue
+     * waits look like before anything is armed at all.
+     */
+    @ConfField(mutable = true)
+    public static long thrift_server_queue_timeout_ms = 0;
 
     /**
      * Maximal wait seconds for straggler node in load
