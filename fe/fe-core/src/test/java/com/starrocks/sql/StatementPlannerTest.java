@@ -22,6 +22,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.CTERelation;
@@ -73,6 +74,24 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 
 class StatementPlannerTest extends PlanTestBase {
+
+    @Test
+    public void testAuthorizationPrecedesAIProviderResolution() throws Exception {
+        boolean oldBypassAuthorizerCheck = connectContext.isBypassAuthorizerCheck();
+        connectContext.setBypassAuthorizerCheck(false);
+        RuntimeException denied = new RuntimeException("authorization-order-sentinel");
+        try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
+            authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
+                    "select ai_custom_query('missing_authorization_order_provider', 'prompt')", connectContext);
+
+            Assertions.assertSame(denied,
+                    Assertions.assertThrows(RuntimeException.class,
+                            () -> StatementPlanner.plan(statement, connectContext)));
+        } finally {
+            connectContext.setBypassAuthorizerCheck(oldBypassAuthorizerCheck);
+        }
+    }
 
     @Test
     public void testDeferLock() throws Exception {

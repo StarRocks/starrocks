@@ -350,6 +350,12 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
                                                              &dict_selected_count));
     if (dict_selected_count == 0) {
         memset(selection, 0, num_rows);
+        // The predicate rejects every dictionary entry, so no row of `range` is selected. Even though nothing is
+        // appended, the data page decoder must still be advanced past `range`: the caller (ParsedPageV2::read_with_filter)
+        // unconditionally moves _offset_in_page to range.end(), and the next chunk of the same page asserts
+        // _offset_in_page == _data_decoder->current_index(). Returning here without advancing leaves the decoder at the
+        // range's start and trips that DCHECK (crashing ASan/Debug builds) on the following read.
+        RETURN_IF_ERROR(_data_page_decoder->seek_to_position_in_page(range.end()));
         return Status::OK();
     }
     if (dict_selected_count == dict_size) {

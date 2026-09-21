@@ -127,6 +127,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：每个 BE 中按 endpoint、credential 和 capability 分桶的 chat/text AI HTTP attempt 请求准入速率。为遵守 Provider 配额或降低出站负载可调小；仅在 Provider 与 BE 均有足够容量时调大。运行时修改会实时生效并唤醒等待中的准入请求，无需重启 BE。
 - 引入版本：-
 
+### ai_function_rate_limit_qps_embedding
+
+- 默认值：128
+- 类型：Int（32 位）
+- 单位：请求/秒
+- 有效值：正整数
+- 是否动态：是
+- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。适用于 SYSTEM 和 AI provider 指定的向量调用，包括重试。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
+- 引入版本：-
+
 ### ai_function_max_inflight
 
 - 默认值：512
@@ -203,6 +213,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
+
+### enable_default_value_column_zonemap_filter
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 取值范围：`true`、`false`
+- 是否动态：是
+- 描述：是否通过常量折叠对 segment 中物理缺失的列进行数据裁剪。通过 fast schema evolution（`ALTER TABLE ... ADD COLUMN`）新增的列不会写入已有的 segment，因此该列的每一行都是列默认值（或 `NULL`）。取值为 `true` 时，针对该列的谓词会直接对这个常量求值，若不可能命中则整个 segment 被跳过。取值为 `false` 时，这些 segment 会被完整读取，且每个批次都会重新按删除条件检查，即该选项引入之前的行为。如果新增过列的表出现查询结果异常，可将其设为 `false` 回滚。该选项与 `enable_index_page_level_zonemap_filter` 相互独立，后者无法覆盖 runtime filter 路径。
+- 引入版本：-
 
 ### enable_json_flat
 

@@ -62,6 +62,7 @@ public:
     Status update_max_retries_on_throttle(int32_t value);
     Status update_on_error(std::string_view value);
     Status update_rate_limit_qps_chat(int32_t value);
+    Status update_rate_limit_qps_embedding(int32_t value);
     Status update_max_inflight(int32_t value);
 
     // Linearizes with config updates, rejects future work, and synchronously resolves all accepted work. Resources stay
@@ -79,6 +80,7 @@ private:
         MAX_RETRIES,
         MAX_RETRIES_ON_THROTTLE,
         RATE_LIMIT_QPS_CHAT,
+        RATE_LIMIT_QPS_EMBEDDING,
         MAX_INFLIGHT,
     };
 

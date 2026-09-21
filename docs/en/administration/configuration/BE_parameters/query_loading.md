@@ -130,6 +130,16 @@ This topic introduces the following types of BE configurations:
 - Description: Per-BE request admission rate for each chat/text bucket, keyed by endpoint, credential, and capability. Lower it to comply with provider quotas or reduce outbound load; increase it only when the provider and BE have sufficient capacity. Runtime updates take effect live, wake queued admissions, and require no BE restart.
 - Introduced in: -
 
+### ai_function_rate_limit_qps_embedding
+
+- Default: 128
+- Type: Int (32-bit)
+- Unit: Requests per second
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. Applies to SYSTEM and AI provider-selected embedding calls, including retries. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
+- Introduced in: -
+
 ### ai_function_max_inflight
 
 - Default: 512
@@ -206,6 +216,16 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
+
+### enable_default_value_column_zonemap_filter
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Valid values: `true`, `false`
+- Is mutable: Yes
+- Description: Whether to prune data by constant-folding the value of a column that is physically absent from a segment. A column added by fast schema evolution (`ALTER TABLE ... ADD COLUMN`) is not written into pre-existing segments, so every row of it holds the column default (or `NULL`). When this is `true`, a predicate on such a column is evaluated against that constant and the segment is skipped entirely when nothing can match. When set to `false`, those segments are read in full and every batch is re-checked against the delete condition, which is the behavior before this option existed. Set it to `false` to roll back if a query returns unexpected results on a table that has had columns added. This option is deliberately separate from `enable_index_page_level_zonemap_filter`, which does not cover the runtime filter path.
+- Introduced in: -
 
 ### enable_json_flat
 

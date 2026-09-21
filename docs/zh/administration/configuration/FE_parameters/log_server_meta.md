@@ -1232,8 +1232,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: No
-- 描述: 请求待处理队列的长度。如果 Thrift 服务器中正在处理的线程数超过 `thrift_server_max_worker_threads` 中指定的值，则新请求将添加到待处理队列。
+- 描述: 当 `thrift_server_max_worker_threads` 个工作线程全部繁忙时，可排队等待工作线程的连接数量。该值限定的是待处理队列能容纳多少连接，而非最终会处理多少连接：队列已满时到达的连接会被立即关闭，不再重试；已入队但等待时间超过 `thrift_server_queue_timeout_ms` 的连接，会在工作线程取到它时被直接关闭、不予处理。这两种情况分别由 `starrocks_fe_thrift_server_rejected_connections_total` 和 `starrocks_fe_thrift_server_expired_connections_total` 统计。
 - 引入版本: -
+
+### `thrift_server_queue_timeout_ms`
+
+- 默认值: 0
+- 类型: Long
+- 单位: ms
+- 是否可变: Yes
+- 描述: 连接在被工作线程取走之前，可在 Thrift 服务器待处理队列中滞留的最长时间。超过该时间的连接将被直接关闭且不予处理，其前提是此时调用方已经放弃，继续处理只会占住工作线程，使其无法处理仍有人等待的请求。启用后，该值同时限定了突发流量过后队列排空所需的时间，无论此前堆积多深。
+
+  默认值 `0` 表示关闭该检查：无论滞留多久，所有排队连接都会被处理。默认关闭是因为上述前提并不适用于所有调用方，而排队中的连接并未携带服务端可读取的截止时间。各类调用方实际使用的超时相差四个数量级：FE 内部普通 RPC 在 `thrift_rpc_timeout_ms`（10 秒）后放弃；而从 Follower 转发到 Leader 的语句会等待会话执行超时加 `thrift_rpc_timeout_ms`——按 `query_timeout` 默认值约为 310 秒，按 `insert_timeout` 默认值约为 4 小时；BE 的 Stream Load 与事务提交 RPC 则等待 `stream_load_thrift_rpc_timeout_ms`（60 秒）与该导入任务 `timeout_second` 四分之一中的较大值。由于 `query_timeout`、`insert_timeout` 和 `timeout_second` 均可由用户设置且没有上限，不存在对所有集群都安全的固定值：任何短到足以加快恢复的超时，都可能在它本应缓解的饱和期间，切断客户端仍在等待的转发语句。
+
+  请按集群启用，取值应高于该集群客户端实际依赖的最大截止时间——依据该集群的 `query_timeout` 与 `insert_timeout` 推导。每次丢弃都会计入 `starrocks_fe_thrift_server_expired_connections_total`，并输出一条标明对端地址、经过限流的 WARN 日志。无论是否启用该检查，`starrocks_fe_thrift_server_queue_wait_ms` 都会报告队列等待时间，可据此在启用前确定取值。
+- 引入版本: v4.2.0
 
 ## 元数据和集群管理
 
@@ -1662,6 +1675,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: LockChecker 前端守护程序（名为 "deadlock-checker"）执行的间隔（秒）。守护程序执行死锁检测和慢锁扫描；配置值乘以 1000 以设置计时器（毫秒）。减小此值可减少检测延迟但增加调度和 CPU 开销；增加此值可减少开销但延迟检测和慢锁报告。更改在运行时生效，因为守护程序每次运行都会重置其间隔。此设置与 `lock_checker_enable_deadlock_check`（启用死锁检查）和 `slow_lock_threshold_ms`（定义慢锁的构成）交互。
 - 引入版本: v3.2.0
+
+### `lock_manager_lock_table_num`
+
+- 默认值: 256
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: Lock Manager 用于分片元数据锁的哈希桶（即锁表）数量。每个资源按其资源 ID 映射到一个桶，每个桶由各自的互斥量保护，因此该值越大，操作不相关资源的加锁者之间的竞争越小，代价是略微增加内存占用。该值仅在创建 Lock Manager 时读取一次，因此修改后需重启 FE 才能生效。自 v4.1.0、v4.0.1 和 v3.5.8 起，默认值从 `32` 变更为 `256`。
+- 引入版本: v3.3.0
 
 ### `master_sync_policy`
 

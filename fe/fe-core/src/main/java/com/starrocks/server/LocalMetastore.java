@@ -63,6 +63,7 @@ import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -1221,6 +1222,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    /**
+     * The lake tablets of a new partition (ADD PARTITION, TRUNCATE TABLE, the temp partitions of
+     * INSERT OVERWRITE / OPTIMIZE) are created outside the table lock and pinned to the colocation
+     * meta group looked up at that time (see {@link #createLakeTablets}). A concurrent
+     * {@code ALTER TABLE ... SET ('colocate_with' = ...)} in that window would leave the new shards in a
+     * meta group the table no longer belongs to: the post-commit {@code updateLakeTableColocationInfo}
+     * only knows the table's current group. Fail the DDL so the caller retries against the new colocation;
+     * the shards created by the failed attempt are reclaimed by StarMgrMetaSyncer.
+     */
+    public void checkIfColocateMetaGroupChange(OlapTable olapTable, ColocateTableIndex.GroupId expectedGroupId,
+                                               String tableName) throws DdlException {
+        ColocateTableIndex.GroupId currentGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
+        if (!Objects.equals(currentGroupId, expectedGroupId)) {
+            throw new DdlException("Table[" + tableName + "]'s colocation has been changed. try again.");
+        }
+    }
+
     private static class PartitionInfoCheckResult {
         private final Map<Long, Range<PartitionKey>> idToRange;
         private final Map<Long, List<LiteralExpr>> idToLiteralExprValues;
@@ -1352,6 +1370,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         DistributionInfo distributionInfo;
         OlapTable olapTable = checkTableForAddPartitions(db, tableName);
         OlapTable copiedTable;
+        ColocateTableIndex.GroupId metaGroupColocateGroupId;
 
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
@@ -1373,6 +1392,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
+            // Snapshot the colocation meta group that the lock-free tablet creation below pins the new
+            // shards to; re-validated under the WRITE lock before commit.
+            metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
             copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
@@ -1429,6 +1451,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 // check if meta changed
                 checkIfMetaChange(olapTable, copiedTable, tableName);
+                checkIfColocateMetaGroupChange(olapTable, metaGroupColocateGroupId, tableName);
 
                 // get partition info
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -2388,11 +2411,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         int bucketNum = distributionInfo.getBucketNum();
+        // For meta-group colocate tables (hash colocate lake tables — the only groups that get a
+        // StarOS meta group), create the shards already joined to the colocation meta group (same
+        // effect as the later updateMetaGroup join), so the very first placement honors the
+        // colocation constraint. Otherwise the shards get generic placement first and are only
+        // migrated onto the colocate-aligned workers after their shard groups join the meta group
+        // (InsertOverwriteJobRunner post-commit / StarMgrMetaSyncer), which runs after the load
+        // has finished and therefore orphans the caches the load populated on the original
+        // workers.
+        // The join can only be honored once the meta group has buckets, i.e. once some shard group
+        // has joined it, which StarOS rejects otherwise. A table without any shard group yet cannot
+        // tell (its group may have been created empty, e.g. a colocate table created without any
+        // partition), so its first partition is created without the join and the post-commit join
+        // defines the buckets, as it always did for the first member of a meta group.
+        ColocateTableIndex.GroupId colocateGroupId = table.getShardGroupIds().isEmpty() ? null
+                : colocateTableIndex.getMetaGroupColocateGroupId(table.getId());
+        long metaGroupId = colocateGroupId == null ? 0 : colocateGroupId.grpId;
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
                 shardGroupId,
-                null, properties, computeResource);
+                null, properties, metaGroupId, computeResource);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             if (distributionInfoType == DistributionInfo.DistributionInfoType.RANGE) {
@@ -4051,6 +4090,57 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
         }
 
+        // A rename can create the ambiguity that CREATE TABLE refuses: zstd_compression_columns is
+        // rendered as "<name>:<bytes>", and the parser resolves a whole token as a column name before
+        // splitting it, so a column renamed INTO that rendered form would make the table's own DDL name
+        // the wrong column. The property is not restated here and nothing else revalidates it.
+        // Gate on the nomination SET, not the page-size map: the set is what getCommonProperties
+        // renders, and the map is null whenever no nomination carries an explicit size -- which used
+        // to skip these checks entirely for the plain "zstd_compression_columns = v" case.
+        Set<ColumnId> zstdCompressionColumns = olapTable.getZstdCompressionColumnIds();
+        Map<ColumnId, Integer> zstdCompressionPageSizes = olapTable.getZstdCompressionPageSizes();
+        if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+            // A nominated column's name has to be writable into the property text at all. Renaming it
+            // to something carrying a delimiter does not fail here today, it fails later and silently:
+            // a comma splits the entry in two (naming other columns, or none), and leading/trailing
+            // whitespace is trimmed on the way back in, resolving to a different column.
+            if (zstdCompressionColumns.contains(column.getColumnId())) {
+                String unrepresentable = PropertyAnalyzer.zstdCompressionNameUnrepresentable(newColName);
+                if (unrepresentable != null) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": " + unrepresentable
+                                    + ". Remove the column from "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                                    + " first, or pick another name.");
+                }
+            }
+        }
+        if (zstdCompressionPageSizes != null && !zstdCompressionPageSizes.isEmpty()) {
+            // Both roles move, so the check is against the whole post-rename schema rather than just
+            // the new name: renaming some other column INTO the rendered form breaks it, and so does
+            // renaming the nominated column so that IT renders as a column that was already there.
+            Set<String> postRenameNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (Column existing : olapTable.getBaseSchema()) {
+                postRenameNames.add(existing.getName().equalsIgnoreCase(colName) ? newColName : existing.getName());
+            }
+            for (Map.Entry<ColumnId, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                Column nominated = olapTable.getColumn(entry.getKey());
+                if (nominated == null || entry.getValue() == null || entry.getValue() <= 0) {
+                    continue;
+                }
+                String nominatedName = nominated.getName().equalsIgnoreCase(colName) ? newColName : nominated.getName();
+                String rendered = nominatedName + ":" + entry.getValue();
+                if (postRenameNames.contains(rendered)) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": the table would then have a column "
+                                    + "named '" + rendered + "', which is exactly how "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " renders column "
+                                    + nominatedName + ", so the table's own DDL could not tell the two apart. "
+                                    + "Drop the page size from that entry first, or pick another name.");
+                }
+            }
+        }
+
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(db.getId(), table.getId(), colName, newColName);
         GlobalStateMgr.getCurrentState().getEditLog().logColumnRename(columnRenameInfo, wal -> {
             olapTable.renameColumn(colName, newColName);
@@ -5190,6 +5280,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long tableId = MetaUtils.getSessionAwareTable(context, db, dbTbl).getId();
         Locker locker = new Locker();
         OlapTable olapTable = null;
+        ColocateTableIndex.GroupId metaGroupColocateGroupId;
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -5214,6 +5305,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
+            // Same as addPartitions: the new partitions' shards are pinned to this meta group outside the lock.
+            metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
@@ -5301,6 +5394,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (metaChanged) {
                 throw new DdlException("Table[" + copiedTbl.getName() + "]'s meta has been changed. try again.");
             }
+            checkIfColocateMetaGroupChange(olapTable, metaGroupColocateGroupId, copiedTbl.getName());
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,

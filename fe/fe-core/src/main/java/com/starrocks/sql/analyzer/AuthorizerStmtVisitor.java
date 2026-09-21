@@ -335,7 +335,12 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                     tableRef.getTableName(), tableRef.getPos());
             try {
-                Authorizer.checkTableAction(context, tableName, PrivilegeType.INSERT);
+                // The analyzer has already resolved the target; hand it over so the INSERT check does
+                // not resolve it a second time. For a target in an external catalog that second
+                // resolution is a connector round trip, and this check runs while the planner still
+                // holds the metadata lock over the statement's internal tables.
+                Authorizer.checkResolvedTableAction(context, tableName, statement.getTargetTable(),
+                        PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -2077,20 +2082,16 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+        // The analyzer already qualified the ref: taking the catalog from the session instead
+        // would check a different table than the one being truncated.
+        TableName tableName = TableName.fromTableRef(statement.getTblRef());
         try {
-            String dbName = statement.getDbName();
-            if (dbName == null) {
-                dbName = context.getDatabase();
-            }
-
-            Authorizer.checkTableAction(context,
-                    new TableName(context.getCurrentCatalog(), dbName, statement.getTblName()),
-                    PrivilegeType.DELETE);
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    context.getCurrentCatalog(),
+                    tableName.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), statement.getTblName());
+                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
         return null;
     }
