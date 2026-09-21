@@ -1884,6 +1884,7 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        @Override
         public PlanFragment visitPhysicalLanceScan(OptExpression optExpression, ExecPlan context) {
             PhysicalLanceScanOperator node = (PhysicalLanceScanOperator) optExpression.getOp();
 
@@ -1898,6 +1899,8 @@ public class PlanFragmentBuilder {
             LanceScanNode lanceScanNode =
                     new LanceScanNode(context.getNextNodeId(), tupleDescriptor, "LanceScanNode");
             lanceScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            lanceScanNode.computeStatistics(optExpression.getStatistics());
+            currentExecGroup.add(lanceScanNode, true);
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
