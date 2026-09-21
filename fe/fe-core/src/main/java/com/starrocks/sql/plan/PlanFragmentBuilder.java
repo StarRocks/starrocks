@@ -1839,6 +1839,13 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        @Override
+        public PlanFragment visitPhysicalLanceScan(OptExpression optExpression, ExecPlan context) {
+            // The planner and execution modules are supplied by the following Lance changes.
+            throw new StarRocksPlannerException("Lance scan execution is not available",
+                    com.starrocks.sql.common.ErrorType.UNSUPPORTED);
+        }
+
         public PlanFragment visitPhysicalKuduScan(OptExpression optExpression, ExecPlan context) {
             PhysicalKuduScanOperator node = (PhysicalKuduScanOperator) optExpression.getOp();
 
