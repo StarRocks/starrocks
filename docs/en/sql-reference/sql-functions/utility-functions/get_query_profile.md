@@ -13,6 +13,8 @@ To use this function, you must enable the profiling feature, that is, set the se
 
 This function is supported from v3.0.
 
+If the FE configuration item `authorization_enable_query_profile_access_check` is set to `true`, this function returns only the profiles of queries run by the current user, unless the user has the SYSTEM-level OPERATE privilege. In that case, passing a non-constant `query_id`, or a `query_id` whose profile is not cached on the FE the session is connected to, also requires the OPERATE privilege. When `authorization_enable_admin_user_protection` is also enabled, only `root` can pass a `query_id` that is not cached on the connected FE. To read your own profile without the OPERATE privilege, obtain the id first with `select last_query_id();` and pass the returned literal, as shown in the examples below.
+
 ## Syntax
 
 ```plaintext
