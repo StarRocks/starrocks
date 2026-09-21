@@ -710,6 +710,8 @@
         "starlet_star_cache_disk_size_percent",
         "starlet_star_cache_mem_size_bytes",
         "starlet_star_cache_mem_size_percent",
+        "starlet_star_cache_skip_fresh_block_checksum_verification",
+        "starlet_starmgr_client_compression_type",
         "starlet_use_star_cache",
         "tablet_warmup_max_threads"
       ]

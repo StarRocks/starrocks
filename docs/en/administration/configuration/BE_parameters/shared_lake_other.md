@@ -406,6 +406,24 @@ This topic introduces the following types of BE configurations:
 - Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster. Only takes effect when `datacache_unified_instance_enable` is `false`.
 - Introduced in: v3.1
 
+### starlet_star_cache_skip_fresh_block_checksum_verification
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: In a shared-data cluster, whether a Data Cache disk block that this CN process wrote and has not evicted since skips the first full-block checksum read when a later request touches it. That verification re-reads the whole block from disk to check data that the process has just written and still tracks in memory, which costs one extra disk read on the first access to every freshly cached block. Set this item to `false` to verify every block on first access, which is only worth its cost where the cache disk is suspected of corrupting data at rest. Blocks inherited from a previous run of the process are always verified regardless of this item, because nothing in the current process witnessed their write. This item is read once when Data Cache initializes.
+- Introduced in: v4.2.0
+
+### starlet_starmgr_client_compression_type
+
+- Default: none
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, the compression applied to the worker heartbeat that this CN sends to StarMgr. The heartbeat carries one entry per tablet on the CN, which makes it the largest recurring request in the cluster. Valid values: `none` and `zstd`. `zstd` compresses the payload on the heartbeat thread, within the same RPC timeout budget, and the FE decompresses it. `none` sends the heartbeat uncompressed. The FE must be able to decompress the payload before any CN is switched, because an FE that predates this mechanism discards the compressed heartbeat, so upgrade the FEs first and only then set this item on the CNs. An unrecognized value is reported and falls back to `none` instead of preventing the CN from starting.
+- Introduced in: v4.2.0
+
 ### starlet_use_star_cache
 
 - Default: true

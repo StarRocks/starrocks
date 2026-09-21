@@ -635,6 +635,19 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
 #undef UPDATE_STARLET_CONFIG
 
+    // Registered by hand rather than through UPDATE_STARLET_CONFIG, which stringifies a numeric config.
+    // The value reaching here already passed the config's enum check, so the update can only fail if
+    // starlet does not know the flag.
+    registry->register_callback("starlet_starmgr_client_compression_type", []() {
+        auto val = config::starlet_starmgr_client_compression_type.value();
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("starmgr_client_compression_type", val).empty()) {
+            LOG(WARNING) << "Failed to update starmgr_client_compression_type";
+            return Status::InvalidArgument("Failed to update starlet_starmgr_client_compression_type.");
+        }
+        LOG(INFO) << "set starlet_starmgr_client_compression_type: " << val;
+        return Status::OK();
+    });
+
 #ifndef BUILD_FORMAT_LIB
     registry->register_callback("starlet_filesystem_instance_cache_capacity", [=]() -> Status {
         LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
