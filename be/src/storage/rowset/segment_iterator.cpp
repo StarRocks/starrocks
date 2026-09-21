@@ -1134,6 +1134,16 @@ Status SegmentIterator::_init_scan_range_and_context() {
             for (auto e : *vec_or) {
                 all_ranges.emplace_back(e.first, e.second);
             }
+            // get_io_range_vec covers data pages only, while the first dictionary-encoded data page
+            // also reads the column's dictionary page. Register it too: left out, it becomes a
+            // direct read on the merge thread for every prefetched input -- the serial IO the
+            // prefetch exists to remove. It sits right before the column's data pages, so it
+            // normally merges into the same buffer.
+            if (!vec_or->empty()) {
+                if (auto dict = _column_iterators[column_index]->get_pending_dict_page_io_range(); dict.has_value()) {
+                    all_ranges.emplace_back(dict->first, dict->second);
+                }
+            }
         }
         RETURN_IF_ERROR(_cross_column_stream->set_io_ranges(all_ranges));
     } else {
@@ -2887,6 +2897,15 @@ StatusOr<bool> SegmentIterator::prefetch(std::atomic<int64_t>* budget) {
         if (auto* sbs = dynamic_cast<SharedBufferedInputStream*>(file.get())) {
             ASSIGN_OR_RETURN(bool all, sbs->prefetch_registered(budget));
             covered &= all;
+            // A per-column stream registers its ranges through convert_sparse_range_to_io_range():
+            // data pages only. A dictionary page still to be loaded would be a direct read on the
+            // decoding thread, and a nested iterator does not report its sub-columns' dictionary
+            // pages at all, so either keeps the child's first read on the pool.
+            if (cid >= tablet_schema->num_columns() || is_semi_type(tablet_schema->column(cid).type()) ||
+                cid >= _column_iterators.size() || _column_iterators[cid] == nullptr ||
+                _column_iterators[cid]->get_pending_dict_page_io_range().has_value()) {
+                covered = false;
+            }
         } else if (cid < tablet_schema->num_columns() && _segment->is_default_column(tablet_schema->column(cid))) {
             // A column the segment does not carry reads nothing -- its file handle is never used.
         } else {

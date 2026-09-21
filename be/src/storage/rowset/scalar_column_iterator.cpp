@@ -932,6 +932,19 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
     return res;
 }
 
+std::optional<std::pair<int64_t, int64_t>> ScalarColumnIterator::get_pending_dict_page_io_range() const {
+    // _init_dict_decoder_func is set only for a dictionary-encoded column, and _dict_decoder
+    // stays null until _load_dict_page() has read the page.
+    if (_init_dict_decoder_func == nullptr || _dict_decoder != nullptr) {
+        return std::nullopt;
+    }
+    const PagePointer pp = _reader->get_dict_page_pointer();
+    if (pp.size == 0) {
+        return std::nullopt;
+    }
+    return std::make_pair(static_cast<int64_t>(pp.offset), static_cast<int64_t>(pp.size));
+}
+
 bool ScalarColumnIterator::support_push_down_predicate(
         const std::vector<const ColumnPredicate*>& compound_and_predicates) {
     // Check if there's a binary column != '' predicate
