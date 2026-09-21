@@ -30,16 +30,12 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-#include <memory>
-=======
 #include <atomic>
 #include <cstdlib>
 #include <memory>
 #include <string>
 #include <thread>
 #include <vector>
->>>>>>> 7585d4e ([BugFix] Stop Poco retrying a TLS socket that has already timed out (#79369))
 
 #include "common/config.h"
 #include "common/logging.h"
