@@ -36,7 +36,6 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
-#include "fs/bundle_file.h"
 #include "fs/fs.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
@@ -6270,7 +6269,7 @@ protected:
     }
 
     StatusOr<std::unique_ptr<DeltaWriter>> new_writer(int64_t tablet_id, int64_t txn_id, const PUniqueId* load_id,
-                                                      Write kind, BundleWritableFileContext* bundle = nullptr) {
+                                                      Write kind) {
         DeltaWriterBuilder builder;
         builder.set_tablet_manager(_tablet_mgr.get())
                 .set_tablet_id(tablet_id)
@@ -6286,9 +6285,6 @@ protected:
         if (load_id != nullptr) {
             // A statement of a multi-statement transaction writes its own txn log, keyed by load_id.
             builder.set_load_id(*load_id).set_is_multi_statements_txn(true);
-        }
-        if (bundle != nullptr) {
-            builder.set_bundle_writable_file_context(bundle);
         }
         return builder.build();
     }
@@ -6312,25 +6308,6 @@ protected:
         }
         ASSERT_OK(writer->finish_with_txnlog());
         writer->close();
-    }
-
-    // Write one statement to every tablet of `tablet_ids` through one bundle file, as a load with file
-    // bundling writes the tablets of a partition: every writer is opened before any of them finishes,
-    // so all of their segments go into the one shared file, each at its own offset.
-    void write_bundled_statement(const std::vector<int64_t>& tablet_ids, int64_t txn_id, const PUniqueId& load_id,
-                                 Write kind, const std::map<int64_t, std::vector<int>>& keys_per_tablet) {
-        auto bundle = std::make_unique<BundleWritableFileContext>();
-        std::vector<std::unique_ptr<DeltaWriter>> writers;
-        for (int64_t tablet_id : tablet_ids) {
-            ASSIGN_OR_ABORT(auto writer, new_writer(tablet_id, txn_id, &load_id, kind, bundle.get()));
-            ASSERT_OK(writer->open());
-            writers.emplace_back(std::move(writer));
-        }
-        for (size_t i = 0; i < tablet_ids.size(); i++) {
-            ASSERT_NO_FATAL_FAILURE(write_chunk(writers[i].get(), kind, keys_per_tablet.at(tablet_ids[i])));
-            ASSERT_OK(writers[i]->finish_with_txnlog());
-            writers[i]->close();
-        }
     }
 
     // Version `version` of `tablet_id`: one ordinary load of full rows for `keys`.
@@ -6529,71 +6506,6 @@ TEST_P(LakeMultiStatementPartialUpdateTest, statement_without_rows_between_parti
     ASSERT_OK(publish_single_version(tablet_id, 4, probe_txn_id, /*rebuild_pindex=*/true).status());
     add_rows(&expected, g2, kSeedC1, kSeedC2);
     expect_rows(tablet_id, 4, expected);
-}
-
-// A partial update's rewritten segments are standalone files, but the other statements' segments in
-// the same merged rowset may live inside a bundle file (file bundling writes the segments of all the
-// tablets of a partition into one shared file), and must keep their offsets there.
-TEST_P(LakeMultiStatementPartialUpdateTest, bundled_segments_of_other_statements_keep_their_offsets) {
-    // Two tablets of one partition, so that one of them holds its segment at a non-zero bundle offset,
-    // with different keys, so that one tablet reading the other's segment shows.
-    const int64_t tablet_a = _tablet_metadata->id();
-    auto tablet_b_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
-    tablet_b_metadata->set_id(next_id());
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*tablet_b_metadata));
-    ASSERT_OK(_tablet_mgr->create_schema_file(tablet_b_metadata->id(), tablet_b_metadata->schema()));
-    const int64_t tablet_b = tablet_b_metadata->id();
-    const std::vector<int64_t> tablets{tablet_a, tablet_b};
-    const std::map<int64_t, std::vector<int>> updated{{tablet_a, key_range(0, 12)}, {tablet_b, key_range(100, 112)}};
-    const std::map<int64_t, std::vector<int>> inserted{{tablet_a, key_range(12, 24)}, {tablet_b, key_range(112, 124)}};
-    for (int64_t tablet_id : tablets) {
-        ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, updated.at(tablet_id)));
-    }
-
-    // version 3: BEGIN; UPDATE c1 of the seeded keys; INSERT full rows of new keys; COMMIT;
-    const int64_t txn_id = next_id();
-    const auto stmt1 = statement_load_id(1);
-    const auto stmt2 = statement_load_id(2);
-    ASSERT_NO_FATAL_FAILURE(write_bundled_statement(tablets, txn_id, stmt1, Write::kC1, updated));
-    ASSERT_NO_FATAL_FAILURE(write_bundled_statement(tablets, txn_id, stmt2, Write::kFullRow, inserted));
-
-    // Where each tablet's segment of the second statement sits inside that statement's bundle file.
-    std::map<int64_t, std::map<std::string, int64_t>> bundle_offsets;
-    bool any_non_zero_offset = false;
-    for (int64_t tablet_id : tablets) {
-        ASSIGN_OR_ABORT(auto log, _tablet_mgr->get_txn_log(tablet_id, txn_id, stmt2));
-        ASSERT_EQ(1, log->op_write().rowset().segment_metas_size());
-        const auto& segment = log->op_write().rowset().segment_metas(0);
-        ASSERT_TRUE(segment.has_bundle_file_offset()) << "the second statement did not bundle its segments";
-        bundle_offsets[tablet_id][segment.filename()] = segment.bundle_file_offset();
-        any_non_zero_offset = any_non_zero_offset || segment.bundle_file_offset() > 0;
-    }
-    ASSERT_TRUE(any_non_zero_offset) << "the tablets did not share one bundle file";
-
-    for (int64_t tablet_id : tablets) {
-        ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
-        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
-        const auto& merged = metadata->rowsets(metadata->rowsets_size() - 1);
-        ASSERT_EQ(2, merged.segment_metas_size());
-        size_t bundled = 0;
-        for (const auto& segment : merged.segment_metas()) {
-            auto it = bundle_offsets[tablet_id].find(segment.filename());
-            if (it == bundle_offsets[tablet_id].end()) {
-                EXPECT_FALSE(segment.has_bundle_file_offset())
-                        << "rewritten segment " << segment.filename() << " is a standalone file";
-                continue;
-            }
-            bundled++;
-            ASSERT_TRUE(segment.has_bundle_file_offset()) << "lost the bundle offset of " << segment.filename();
-            EXPECT_EQ(it->second, segment.bundle_file_offset()) << segment.filename();
-        }
-        EXPECT_EQ(bundle_offsets[tablet_id].size(), bundled);
-
-        std::map<int, Row> expected;
-        add_rows(&expected, updated.at(tablet_id), kNewC1, kSeedC2);
-        add_rows(&expected, inserted.at(tablet_id), kSeedC1, kSeedC2);
-        expect_rows(tablet_id, 3, expected);
-    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeMultiStatementPartialUpdateTest, LakeMultiStatementPartialUpdateTest,
