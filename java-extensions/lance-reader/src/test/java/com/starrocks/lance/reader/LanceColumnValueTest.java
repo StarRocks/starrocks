@@ -20,6 +20,7 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
 import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.DateMilliVector;
 import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
@@ -181,6 +182,23 @@ public class LanceColumnValueTest {
 
             assertEquals(LocalDate.of(2024, 1, 15),
                     new LanceColumnValue(vector, 0).getDate());
+        }
+    }
+
+    @Test
+    public void testGetDate64AcrossEpoch() {
+        try (DateMilliVector vector = new DateMilliVector("date64", allocator)) {
+            long[] millis = {0, 86_400_000L, -86_400_000L, -1, 1_705_276_800_000L};
+            LocalDate[] dates = {LocalDate.of(1970, 1, 1), LocalDate.of(1970, 1, 2),
+                    LocalDate.of(1969, 12, 31), LocalDate.of(1969, 12, 31), LocalDate.of(2024, 1, 15)};
+            vector.allocateNew(millis.length);
+            for (int i = 0; i < millis.length; i++) {
+                vector.setSafe(i, millis[i]);
+            }
+            vector.setValueCount(millis.length);
+            for (int i = 0; i < millis.length; i++) {
+                assertEquals(dates[i], new LanceColumnValue(vector, i).getDate());
+            }
         }
     }
 
