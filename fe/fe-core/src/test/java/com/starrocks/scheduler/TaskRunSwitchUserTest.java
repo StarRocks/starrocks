@@ -76,7 +76,7 @@ public class TaskRunSwitchUserTest {
     @Test
     public void testCreatorBasedDisabledUsesRootNoToken() {
         Config.mv_use_creator_based_authorization = false;
-        TaskRun taskRun = buildTaskRun("alice@corp.apple.com", null);
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
 
         ConnectContext ctx = new ConnectContext();
         taskRun.switchUser(ctx);
@@ -89,7 +89,7 @@ public class TaskRunSwitchUserTest {
     @Test
     public void testCallerJwtTokenUsesRootWithCallerToken() {
         Config.mv_use_creator_based_authorization = true;
-        TaskRun taskRun = buildTaskRun("alice@corp.apple.com", null);
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
         ConnectContext parentCtx = new ConnectContext();
         parentCtx.setAuthToken("caller-jwt-token-abc");
         taskRun.setConnectContext(parentCtx);
@@ -105,7 +105,7 @@ public class TaskRunSwitchUserTest {
     @Test
     public void testBotJwtTokenUsesRootWithBotToken() throws AuthenticationException {
         Config.mv_use_creator_based_authorization = true;
-        TaskRun taskRun = buildTaskRun("alice@corp.apple.com", null);
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
 
         JWTTokenProvider mockProvider = mock(JWTTokenProvider.class);
         when(mockProvider.getToken()).thenReturn("bot-jwt-token-xyz");
@@ -122,13 +122,13 @@ public class TaskRunSwitchUserTest {
     @Test
     public void testNoJwtTokenUsesEphemeralCreatorIdentity() {
         Config.mv_use_creator_based_authorization = true;
-        TaskRun taskRun = buildTaskRun("alice@corp.apple.com", null);
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
         when(mockGsm.getTokenProvider()).thenReturn(null);
 
         ConnectContext ctx = new ConnectContext();
         taskRun.switchUser(ctx);
 
-        assertEquals("alice@corp.apple.com", ctx.getQualifiedUser());
+        assertEquals("alice@corp.example.com", ctx.getQualifiedUser());
         assertTrue(ctx.getCurrentUserIdentity().isEphemeral());
         assertNull(ctx.getAuthToken());
     }
@@ -136,8 +136,8 @@ public class TaskRunSwitchUserTest {
     @Test
     public void testNoJwtTokenPersistentCreatorIdentityPreferredOverEphemeral() {
         Config.mv_use_creator_based_authorization = true;
-        UserIdentity creatorIdentity = UserIdentity.createAnalyzedUserIdentWithIp("alice@corp.apple.com", "%");
-        TaskRun taskRun = buildTaskRun("alice@corp.apple.com", creatorIdentity);
+        UserIdentity creatorIdentity = UserIdentity.createAnalyzedUserIdentWithIp("alice@corp.example.com", "%");
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", creatorIdentity);
         when(mockGsm.getTokenProvider()).thenReturn(null);
 
         ConnectContext ctx = new ConnectContext();
@@ -149,7 +149,7 @@ public class TaskRunSwitchUserTest {
     @Test
     public void testBotTokenFetchFailsFallsBackToCreatorIdentity() throws AuthenticationException {
         Config.mv_use_creator_based_authorization = true;
-        TaskRun taskRun = buildTaskRun("alice@corp.apple.com", null);
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
 
         JWTTokenProvider mockProvider = mock(JWTTokenProvider.class);
         when(mockProvider.getToken()).thenThrow(new AuthenticationException("IAM unavailable"));
@@ -159,7 +159,7 @@ public class TaskRunSwitchUserTest {
         taskRun.switchUser(ctx);
 
         // token fetch failed — falls back to creator ephemeral identity, no auth token
-        assertEquals("alice@corp.apple.com", ctx.getQualifiedUser());
+        assertEquals("alice@corp.example.com", ctx.getQualifiedUser());
         assertTrue(ctx.getCurrentUserIdentity().isEphemeral());
         assertNull(ctx.getAuthToken());
     }
@@ -167,7 +167,7 @@ public class TaskRunSwitchUserTest {
     @Test
     public void testCallerTokenTakesPriorityOverBotToken() throws AuthenticationException {
         Config.mv_use_creator_based_authorization = true;
-        TaskRun taskRun = buildTaskRun("alice@corp.apple.com", null);
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
         ConnectContext parentCtx = new ConnectContext();
         parentCtx.setAuthToken("caller-token");
         taskRun.setConnectContext(parentCtx);
