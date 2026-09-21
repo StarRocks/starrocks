@@ -142,6 +142,7 @@ private:
     Status parse_multipoint(WkbGeometry* output) {
         RETURN_IF_ERROR(expect('('));
         do {
+            RETURN_IF_ERROR(consume_elements(1));
             WkbGeometry child;
             child.type = WkbGeometryType::POINT;
             skip_spaces();
@@ -172,6 +173,7 @@ private:
     Status parse_multilinestring(WkbGeometry* output) {
         RETURN_IF_ERROR(expect('('));
         do {
+            RETURN_IF_ERROR(consume_elements(1));
             WkbGeometry child;
             child.type = WkbGeometryType::LINESTRING;
             skip_spaces();
@@ -201,6 +203,7 @@ private:
     Status parse_multipolygon(WkbGeometry* output) {
         RETURN_IF_ERROR(expect('('));
         do {
+            RETURN_IF_ERROR(consume_elements(1));
             WkbGeometry child;
             child.type = WkbGeometryType::POLYGON;
             skip_spaces();
@@ -523,6 +526,7 @@ private:
         if (count > (_size - _position) / kMinimumChildWkbSize) {
             return invalid_wkb("geometry count exceeds input size");
         }
+        RETURN_IF_ERROR(consume_declared_children(count));
         RETURN_IF_ERROR(check_elements(count));
         output->children.reserve(count);
         for (uint32_t i = 0; i < count; ++i) {
@@ -563,6 +567,14 @@ private:
     Status consume_elements(size_t count) {
         RETURN_IF_ERROR(check_elements(count));
         _elements += count;
+        return Status::OK();
+    }
+
+    Status consume_declared_children(size_t count) {
+        if (count > kMaxElements - _declared_children) {
+            return invalid_wkb("geometry exceeds child allocation safety limit");
+        }
+        _declared_children += count;
         return Status::OK();
     }
 
@@ -628,12 +640,22 @@ private:
     size_t _size;
     size_t _position = 0;
     size_t _elements = 0;
+    size_t _declared_children = 0;
 };
 
-Status validate_geometry(const WkbGeometry& geometry, size_t depth) {
+Status consume_validation_elements(size_t count, size_t* elements) {
+    if (count > kMaxElements - *elements) {
+        return Status::InvalidArgument("geometry exceeds element safety limit");
+    }
+    *elements += count;
+    return Status::OK();
+}
+
+Status validate_geometry(const WkbGeometry& geometry, size_t depth, size_t* elements) {
     if (depth > kMaxNestingDepth) {
         return Status::InvalidArgument("geometry nesting is too deep");
     }
+    RETURN_IF_ERROR(consume_validation_elements(1, elements));
     if (geometry.empty) {
         if (!geometry.coordinates.empty() || !geometry.rings.empty() || !geometry.children.empty()) {
             return Status::InvalidArgument("EMPTY geometry contains data");
@@ -641,10 +663,8 @@ Status validate_geometry(const WkbGeometry& geometry, size_t depth) {
         return Status::OK();
     }
 
-    auto validate_coordinates = [](const std::vector<WkbCoordinate>& coordinates) -> Status {
-        if (coordinates.size() > kMaxElements) {
-            return Status::InvalidArgument("geometry contains too many coordinates");
-        }
+    auto validate_coordinates = [elements](const std::vector<WkbCoordinate>& coordinates) -> Status {
+        RETURN_IF_ERROR(consume_validation_elements(coordinates.size(), elements));
         for (const auto& coordinate : coordinates) {
             if (!std::isfinite(coordinate.x) || !std::isfinite(coordinate.y) || coordinate.x < -180 ||
                 coordinate.x > 180 || coordinate.y < -90 || coordinate.y > 90) {
@@ -669,9 +689,7 @@ Status validate_geometry(const WkbGeometry& geometry, size_t depth) {
         if (!geometry.coordinates.empty() || geometry.rings.empty() || !geometry.children.empty()) {
             return Status::InvalidArgument("POLYGON must contain at least one ring");
         }
-        if (geometry.rings.size() > kMaxElements) {
-            return Status::InvalidArgument("geometry contains too many polygon rings");
-        }
+        RETURN_IF_ERROR(consume_validation_elements(geometry.rings.size(), elements));
         for (const auto& ring : geometry.rings) {
             if (ring.size() < 4 || !(ring.front() == ring.back())) {
                 return Status::InvalidArgument("polygon ring must be closed and contain at least four points");
@@ -686,9 +704,6 @@ Status validate_geometry(const WkbGeometry& geometry, size_t depth) {
         if (!geometry.coordinates.empty() || !geometry.rings.empty() || geometry.children.empty()) {
             return Status::InvalidArgument("non-empty collection must contain child geometries");
         }
-        if (geometry.children.size() > kMaxElements) {
-            return Status::InvalidArgument("geometry contains too many child geometries");
-        }
         for (const auto& child : geometry.children) {
             if (geometry.type == WkbGeometryType::MULTIPOINT && child.type != WkbGeometryType::POINT) {
                 return Status::InvalidArgument("MULTIPOINT child is not a POINT");
@@ -699,11 +714,16 @@ Status validate_geometry(const WkbGeometry& geometry, size_t depth) {
             if (geometry.type == WkbGeometryType::MULTIPOLYGON && child.type != WkbGeometryType::POLYGON) {
                 return Status::InvalidArgument("MULTIPOLYGON child is not a POLYGON");
             }
-            RETURN_IF_ERROR(validate_geometry(child, depth + 1));
+            RETURN_IF_ERROR(validate_geometry(child, depth + 1, elements));
         }
         return Status::OK();
     }
     return Status::InvalidArgument("unknown geometry type");
+}
+
+Status validate_geometry(const WkbGeometry& geometry) {
+    size_t elements = 0;
+    return validate_geometry(geometry, 0, &elements);
 }
 
 void append_uint32(uint32_t value, std::string* output) {
@@ -879,7 +899,7 @@ Status WkbCodec::parse_wkt(std::string_view input, WkbGeometry* output) {
     *output = WkbGeometry();
     WktParser parser(input);
     RETURN_IF_ERROR(parser.parse(output));
-    return validate_geometry(*output, 0);
+    return validate_geometry(*output);
 }
 
 Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output) {
@@ -892,14 +912,14 @@ Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output) {
     *output = WkbGeometry();
     WkbReader reader(input);
     RETURN_IF_ERROR(reader.parse(output));
-    return validate_geometry(*output, 0);
+    return validate_geometry(*output);
 }
 
 Status WkbCodec::to_wkb(const WkbGeometry& geometry, std::string* output) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKB output must not be null");
     }
-    RETURN_IF_ERROR(validate_geometry(geometry, 0));
+    RETURN_IF_ERROR(validate_geometry(geometry));
     output->clear();
     return write_wkb(geometry, output);
 }
@@ -908,7 +928,7 @@ Status WkbCodec::to_wkt(const WkbGeometry& geometry, std::string* output) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKT output must not be null");
     }
-    RETURN_IF_ERROR(validate_geometry(geometry, 0));
+    RETURN_IF_ERROR(validate_geometry(geometry));
     output->clear();
     return write_wkt(geometry, output);
 }

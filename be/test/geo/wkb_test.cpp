@@ -45,6 +45,18 @@ std::string from_hex(const std::string& hex) {
     return bytes;
 }
 
+void append_uint32_little_endian(uint32_t value, std::string* output) {
+    for (size_t i = 0; i < sizeof(uint32_t); ++i) {
+        output->push_back(static_cast<char>((value >> (i * 8)) & 0xff));
+    }
+}
+
+void append_collection_header(uint32_t count, std::string* output) {
+    output->push_back(1);
+    append_uint32_little_endian(static_cast<uint32_t>(WkbGeometryType::GEOMETRYCOLLECTION), output);
+    append_uint32_little_endian(count, output);
+}
+
 TEST(WkbCodecTest, RoundTripsAllSupportedGeometryTypes) {
     const std::vector<std::pair<std::string, std::string>> cases = {
             {"point (30.1 10.25)", "POINT (30.1 10.25)"},
@@ -128,13 +140,41 @@ TEST(WkbCodecTest, AcceptsBothByteOrdersAndWritesCanonicalLittleEndian) {
 }
 
 TEST(WkbCodecTest, SupportsEmptyChildrenInMultiGeometries) {
-    WkbGeometry geometry;
-    Status status = WkbCodec::parse_wkt("MULTIPOINT (EMPTY, (1 2))", &geometry);
-    ASSERT_TRUE(status.ok()) << status.to_string();
+    const std::vector<std::string> cases = {
+            "MULTIPOINT (EMPTY, (1 2))",
+            "MULTILINESTRING (EMPTY, (1 2, 3 4))",
+            "MULTIPOLYGON (EMPTY, ((0 0, 1 0, 1 1, 0 0)))",
+            "GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING EMPTY)",
+    };
 
-    std::string normalized;
-    ASSERT_TRUE(WkbCodec::to_wkt(geometry, &normalized).ok());
-    EXPECT_EQ("MULTIPOINT (EMPTY, (1 2))", normalized);
+    for (const auto& input : cases) {
+        WkbGeometry geometry;
+        Status status = WkbCodec::parse_wkt(input, &geometry);
+        ASSERT_TRUE(status.ok()) << input << ": " << status.to_string();
+
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(geometry, &wkb).ok());
+        WkbGeometry decoded;
+        ASSERT_TRUE(WkbCodec::parse_wkb(Slice(wkb), &decoded).ok());
+
+        std::string normalized;
+        ASSERT_TRUE(WkbCodec::to_wkt(decoded, &normalized).ok());
+        EXPECT_EQ(input, normalized);
+    }
+}
+
+TEST(WkbCodecTest, RejectsCumulativeChildAllocationDeclarations) {
+    constexpr uint32_t kInnerChildren = 999'999;
+    constexpr size_t kMinimumChildWkbSize = sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);
+    std::string input;
+    append_collection_header(2, &input);
+    append_collection_header(kInnerChildren, &input);
+    input.resize(input.size() + kInnerChildren * kMinimumChildWkbSize);
+
+    WkbGeometry geometry;
+    Status status = WkbCodec::parse_wkb(Slice(input), &geometry);
+    EXPECT_FALSE(status.ok());
+    EXPECT_NE(std::string::npos, status.to_string().find("child allocation safety limit"));
 }
 
 TEST(WkbCodecTest, RejectsMalformedWkt) {
