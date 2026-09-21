@@ -437,6 +437,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -2427,7 +2428,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
+        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
+
+        // The budget is counted over the partitions this transaction would have touched once the request is
+        // served, i.e. the union of the partitions already cached on the transaction and creatingPartitionNames.
+        ConcurrentMap<String, TOlapTablePartition> cachedPartitions = txnState.getPartitionNameToTPartition(tableId);
+        long partitionNumAfterRequest = cachedPartitions.size()
+                + creatingPartitionNames.stream().filter(name -> !cachedPartitions.containsKey(name)).count();
+        if (partitionNumAfterRequest > Config.max_partitions_in_one_batch) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
                                     "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
@@ -2435,8 +2443,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
-
-        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
 
         try {
             // creating partition names is ordered
