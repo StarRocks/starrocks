@@ -36,6 +36,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -155,12 +156,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
         PrimitiveType primitiveType;
         switch (dataType) {
             case Types.ARRAY:
-                // PostgreSQL reports built-in array names with an underscore prefix.
-                // Dimensions and lower bounds belong to individual values, not the column type.
-                if ("_text".equalsIgnoreCase(typeName) || "_varchar".equalsIgnoreCase(typeName)) {
-                    return new ArrayType(TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength()));
-                }
-                return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
+                return convertArrayColumnType(typeName);
             case Types.BIT:
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
@@ -246,6 +242,75 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             }
             return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }
+    }
+
+    /**
+     * Maps a PostgreSQL array column, whose built-in type name the driver reports with an
+     * underscore prefix. Dimensions and lower bounds belong to individual values rather than to
+     * the column type, so nothing about them can be decided here.
+     *
+     * <p>This is a list of element type names rather than a recursive call into the scalar switch
+     * above, because the element types StarRocks can read back are deliberately a smaller set than
+     * the scalar ones, and the difference is not something the scalar switch knows. An array
+     * element has no VARCHAR staging step to fall back on -- {@code jdbc_scanner.cpp} keeps an
+     * array slot's own type as the intermediate, so no cast is generated and the JDBC bridge has
+     * to hand the backend the final element class. What that leaves out:
+     *
+     * <ul>
+     *   <li>{@code numeric[]}: an unconstrained {@code numeric} is marked per column for the
+     *       strict DECIMAL(38,18) read, and {@code convertToSRTable} marks it off
+     *       {@code Types.NUMERIC}, which an array column never reports;
+     *   <li>{@code timestamptz[]}: the driver hands back exactly the class {@code _timestamp}
+     *       does, so only this name tells them apart, and reading one into DATETIME collapses the
+     *       two instants of a daylight-saving fall-back onto one wall clock;
+     *   <li>{@code uuid[]}, {@code time[]}, {@code bytea[]}: {@code UDFHelper.clazzs} has no entry
+     *       for VARBINARY or TIME, so the backend array writer has no class to build;
+     *   <li>{@code json[]}: the backend array writer has no JSON element branch.
+     * </ul>
+     *
+     * <p>{@code bpchar[]} maps to {@code ARRAY<VARCHAR>}, not {@code ARRAY<CHAR>}, for the same
+     * reason: the writer has no TYPE_CHAR branch. The driver already returns the blank-padded
+     * {@code char(n)} value, so the padding survives as part of the string.
+     */
+    private static Type convertArrayColumnType(String typeName) {
+        if (typeName == null) {
+            return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
+        }
+        Type elementType;
+        switch (typeName.toLowerCase(Locale.ROOT)) {
+            case "_bool":
+                elementType = TypeFactory.createType(PrimitiveType.BOOLEAN);
+                break;
+            case "_int2":
+                elementType = TypeFactory.createType(PrimitiveType.SMALLINT);
+                break;
+            case "_int4":
+                elementType = TypeFactory.createType(PrimitiveType.INT);
+                break;
+            case "_int8":
+                elementType = TypeFactory.createType(PrimitiveType.BIGINT);
+                break;
+            case "_float4":
+                elementType = TypeFactory.createType(PrimitiveType.FLOAT);
+                break;
+            case "_float8":
+                elementType = TypeFactory.createType(PrimitiveType.DOUBLE);
+                break;
+            case "_date":
+                elementType = TypeFactory.createType(PrimitiveType.DATE);
+                break;
+            case "_timestamp":
+                elementType = TypeFactory.createType(PrimitiveType.DATETIME);
+                break;
+            case "_text":
+            case "_varchar":
+            case "_bpchar":
+                elementType = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                break;
+            default:
+                return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
+        }
+        return new ArrayType(elementType);
     }
 
     @Override

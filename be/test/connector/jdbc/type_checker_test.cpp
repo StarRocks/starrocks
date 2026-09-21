@@ -25,23 +25,38 @@ protected:
     TypeCheckerManager& type_checker_manager_ = TypeCheckerManager::getInstance();
 };
 
-TEST_F(TypeCheckerTest, SupportStringArray) {
-    TypeDescriptor array(TYPE_ARRAY);
-    array.children.emplace_back(TYPE_VARCHAR);
-    SlotDescriptor slot(0, "string_array", array);
-    auto result = type_checker_manager_.checkType("java.util.List", &slot);
-    ASSERT_TRUE(result.ok()) << result.status();
-    EXPECT_EQ(TYPE_ARRAY, result.value());
+// Every element type the JDBC reader can hand over carries its own TYPE_ARRAY rule, all under the
+// one java.util.List mapping. Matching has to keep looking past a rule whose element type differs,
+// or the first of them answers for all and only its own element type is ever accepted.
+TEST_F(TypeCheckerTest, SupportEveryConfiguredArrayElementType) {
+    for (auto element_type : {TYPE_VARCHAR, TYPE_BOOLEAN, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_FLOAT, TYPE_DOUBLE,
+                              TYPE_DATE, TYPE_DATETIME}) {
+        TypeDescriptor array(TYPE_ARRAY);
+        array.children.emplace_back(element_type);
+        SlotDescriptor slot(0, "element_array", array);
+        auto result = type_checker_manager_.checkType("java.util.List", &slot);
+        ASSERT_TRUE(result.ok()) << logical_type_to_string(element_type) << ": " << result.status();
+        EXPECT_EQ(TYPE_ARRAY, result.value()) << logical_type_to_string(element_type);
+    }
 }
 
 TEST_F(TypeCheckerTest, RejectUnsupportedArrayElementTypes) {
-    for (auto element_type : {TYPE_INT, TYPE_CHAR, TYPE_ARRAY, TYPE_JSON}) {
+    for (auto element_type :
+         {TYPE_CHAR, TYPE_ARRAY, TYPE_JSON, TYPE_TIME, TYPE_VARBINARY, TYPE_LARGEINT, TYPE_TINYINT, TYPE_DECIMAL32}) {
         TypeDescriptor array(TYPE_ARRAY);
         array.children.emplace_back(element_type);
         SlotDescriptor slot(0, "unsupported_array", array);
         auto result = type_checker_manager_.checkType("java.util.List", &slot);
-        ASSERT_FALSE(result.ok());
-        EXPECT_NE(std::string::npos, result.status().message().find("only ARRAY<VARCHAR>"));
+        ASSERT_FALSE(result.ok()) << logical_type_to_string(element_type);
+        // The message names every element type that would have been accepted, not just the first
+        // rule's, so it says what to do rather than only what failed. The names are whatever
+        // logical_type_to_string spells, which is not the SQL name for either temporal type:
+        // TYPE_DATE renders as DATE_V2 and TYPE_DATETIME as TIMESTAMP.
+        const auto& message = result.status().message();
+        EXPECT_NE(std::string::npos, message.find("ARRAY<VARCHAR>")) << message;
+        EXPECT_NE(std::string::npos, message.find("ARRAY<INT>")) << message;
+        EXPECT_NE(std::string::npos, message.find("ARRAY<DATE_V2>")) << message;
+        EXPECT_NE(std::string::npos, message.find("ARRAY<TIMESTAMP>")) << message;
     }
     SlotDescriptor malformed(0, "no_element_type", TypeDescriptor(TYPE_ARRAY));
     EXPECT_FALSE(type_checker_manager_.checkType("java.util.List", &malformed).ok());

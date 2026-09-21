@@ -39,7 +39,9 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -375,16 +377,52 @@ public class PostgresSchemaResolverTest {
         Assertions.assertEquals(-1L, count, "Should return -1 when reltuples is NULL");
     }
     @Test
-    public void testPostgresStringArrayMapping() {
+    public void testPostgresArrayElementMapping() {
         PostgresSchemaResolver resolver = new PostgresSchemaResolver();
-        for (String typeName : List.of("_text", "_varchar", "_TEXT", "_VARCHAR")) {
-            com.starrocks.type.Type type = resolver.convertColumnType(Types.ARRAY, typeName, 0, 0);
-            Assertions.assertTrue(type.isArrayType(), typeName);
-            Assertions.assertTrue(((com.starrocks.type.ArrayType) type).getItemType().isVarchar());
+        Map<String, com.starrocks.type.PrimitiveType> supported = new LinkedHashMap<>();
+        supported.put("_bool", com.starrocks.type.PrimitiveType.BOOLEAN);
+        supported.put("_int2", com.starrocks.type.PrimitiveType.SMALLINT);
+        supported.put("_int4", com.starrocks.type.PrimitiveType.INT);
+        supported.put("_int8", com.starrocks.type.PrimitiveType.BIGINT);
+        supported.put("_float4", com.starrocks.type.PrimitiveType.FLOAT);
+        supported.put("_float8", com.starrocks.type.PrimitiveType.DOUBLE);
+        supported.put("_date", com.starrocks.type.PrimitiveType.DATE);
+        supported.put("_timestamp", com.starrocks.type.PrimitiveType.DATETIME);
+        // char(n)[] maps to ARRAY<VARCHAR>, not ARRAY<CHAR>: the BE array writer has no CHAR branch.
+        supported.put("_bpchar", com.starrocks.type.PrimitiveType.VARCHAR);
+        supported.put("_text", com.starrocks.type.PrimitiveType.VARCHAR);
+        supported.put("_varchar", com.starrocks.type.PrimitiveType.VARCHAR);
+
+        for (Map.Entry<String, com.starrocks.type.PrimitiveType> entry : supported.entrySet()) {
+            for (String typeName : List.of(entry.getKey(), entry.getKey().toUpperCase(Locale.ROOT))) {
+                com.starrocks.type.Type type = resolver.convertColumnType(Types.ARRAY, typeName, 0, 0);
+                Assertions.assertTrue(type.isArrayType(), typeName);
+                Assertions.assertEquals(entry.getValue(),
+                        ((com.starrocks.type.ArrayType) type).getItemType().getPrimitiveType(), typeName);
+            }
         }
-        for (String typeName : Arrays.asList("_int4", "_bpchar", "_jsonb", "text", "text[]", null)) {
+    }
+
+    @Test
+    public void testPostgresArrayTimestampWithTimezoneStaysUnknown() {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        // The driver returns java.sql.Timestamp[] for _timestamptz exactly as it does for
+        // _timestamp, so this name is the only thing that separates them. Reading one into
+        // DATETIME collapses the two instants of a daylight-saving fall-back onto one wall
+        // clock, which no later stage can undo -- it has to stay unmapped here.
+        for (String typeName : List.of("_timestamptz", "_TIMESTAMPTZ")) {
             Assertions.assertEquals(com.starrocks.type.PrimitiveType.UNKNOWN_TYPE,
-                    resolver.convertColumnType(Types.ARRAY, typeName, 0, 0).getPrimitiveType(), typeName);
+                    resolver.convertColumnType(Types.ARRAY, typeName, 29, 6).getPrimitiveType(), typeName);
+        }
+    }
+
+    @Test
+    public void testPostgresUnsupportedArrayElementsStayUnknown() {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        for (String typeName : Arrays.asList("_numeric", "_uuid", "_time", "_timetz", "_bytea", "_json",
+                "_jsonb", "_int4range", "text", "text[]", "_", null)) {
+            Assertions.assertEquals(com.starrocks.type.PrimitiveType.UNKNOWN_TYPE,
+                    resolver.convertColumnType(Types.ARRAY, typeName, 10, 2).getPrimitiveType(), typeName);
         }
     }
 }

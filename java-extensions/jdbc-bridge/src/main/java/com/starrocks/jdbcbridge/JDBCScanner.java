@@ -70,7 +70,7 @@ public class JDBCScanner {
     private List<Boolean> postgresTimeWithTimezoneColumns;
     private List<Boolean> postgresTimestampWithTimezoneColumns;
     private List<Class<?>> postgresLocalTemporalColumns;
-    private List<Boolean> postgresStringArrayColumns;
+    private List<Boolean> postgresArrayColumns;
     private List<Object[]> resultChunk;
     private int resultNumRows = 0;
     private final boolean isOracleDriver;
@@ -141,14 +141,14 @@ public class JDBCScanner {
         postgresTimeWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresTimestampWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         postgresLocalTemporalColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
-        postgresStringArrayColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
+        postgresArrayColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
             String typeName = resultSetMetaData.getColumnTypeName(i);
             String className = resultSetMetaData.getColumnClassName(i);
-            boolean isPostgresStringArray = isPostgresStringArrayColumn(resultSetMetaData.getColumnType(i), typeName);
-            postgresStringArrayColumns.add(isPostgresStringArray);
-            if (isPostgresStringArray) {
+            String arrayElementTypeName = postgresArrayElementTypeName(resultSetMetaData.getColumnType(i), typeName);
+            postgresArrayColumns.add(arrayElementTypeName != null);
+            if (arrayElementTypeName != null) {
                 // The bridge exposes its converted representation to the BE type checker.
                 resultColumnClassNames.add(List.class.getName());
                 resultChunk.add(new List<?>[scanContext.getStatementFetchSize()]);
@@ -157,7 +157,9 @@ public class JDBCScanner {
                 // Every per-column list is indexed by ordinal in getNextChunk, so each one has to
                 // gain an entry for this column too -- skipping this one would shift every later
                 // column's temporal class down by one and make an array column read as a timestamp.
-                postgresLocalTemporalColumns.add(null);
+                // On an array column it describes the *elements*, and getNextChunk reads the array
+                // first, so it never reaches the scalar temporal read that asks a row for one value.
+                postgresLocalTemporalColumns.add(getPostgresLocalTemporalClass(arrayElementTypeName));
                 continue;
             }
             boolean isPostgresTimeWithTimezone = isPostgresTimeWithTimezoneTypeName(typeName);
@@ -200,28 +202,119 @@ public class JDBCScanner {
         return username + "/" + password + "/" + jdbcUrl;
     }
 
-    private boolean isPostgresStringArrayColumn(int jdbcType, String typeName) {
-        return isPostgresDriver && jdbcType == Types.ARRAY
-                && ("_text".equalsIgnoreCase(typeName) || "_varchar".equalsIgnoreCase(typeName));
+    // PostgreSQL array type names, which the driver reports with an underscore prefix, mapped to
+    // the element type name. Only element types the BE array writer can build are listed; the
+    // resolver's convertArrayColumnType carries the reasoning for what is left out. The two
+    // temporal names are also what selects the java.time element read below, which is why the
+    // value here is the element's type name and not just a flag.
+    //
+    // _timestamptz is absent on purpose and cannot be added by accident: the driver hands back
+    // java.sql.Timestamp[] for it, exactly as it does for _timestamp, so this name is the only
+    // thing that tells the two apart. Letting it through would read the two instants of a
+    // daylight-saving fall-back as the same wall clock, which cannot be undone downstream.
+    private static final Map<String, String> POSTGRES_ARRAY_ELEMENT_TYPE_NAMES = Map.ofEntries(
+            Map.entry("_bool", "bool"),
+            Map.entry("_int2", "int2"),
+            Map.entry("_int4", "int4"),
+            Map.entry("_int8", "int8"),
+            Map.entry("_float4", "float4"),
+            Map.entry("_float8", "float8"),
+            Map.entry("_text", "text"),
+            Map.entry("_varchar", "varchar"),
+            Map.entry("_bpchar", "bpchar"),
+            Map.entry("_date", "date"),
+            Map.entry("_timestamp", "timestamp"));
+
+    private String postgresArrayElementTypeName(int jdbcType, String typeName) {
+        if (!isPostgresDriver || jdbcType != Types.ARRAY || typeName == null) {
+            return null;
+        }
+        return POSTGRES_ARRAY_ELEMENT_TYPE_NAMES.get(typeName.toLowerCase(Locale.ROOT));
     }
 
-    private List<String> readPostgresStringArray(int columnIndex) throws SQLException {
+    private SQLException unsupportedPostgresArray(int columnIndex) {
+        return new SQLException("Unsupported PostgreSQL array on column[" + columnIndex
+                + "]: only one-dimensional values are supported");
+    }
+
+    private List<?> readPostgresArray(int columnIndex, Class<?> elementTemporalClass) throws SQLException {
         java.sql.Array array = resultSet.getArray(columnIndex);
         if (array == null) {
             return null;
         }
         try {
-            Object value = array.getArray();
-            // pgJDBC returns String[] for one dimension and String[][] (etc.) for multiple dimensions.
-            // The JDBC array representation discards PostgreSQL lower bounds: SR arrays start at 1.
-            if (!(value instanceof String[])) {
-                throw new SQLException("Unsupported PostgreSQL array on column[" + columnIndex
-                        + "]: only one-dimensional text[] and varchar[] values are supported");
+            if (elementTemporalClass != null) {
+                return readPostgresTemporalArray(array, columnIndex, elementTemporalClass);
             }
-            return Arrays.asList((String[]) value);
+            Object value = array.getArray();
+            // pgJDBC returns a one-dimensional array of the element's boxed class, and a nested
+            // array type (String[][], Integer[][], ...) for multiple dimensions. StarRocks has no
+            // representation for a multidimensional value, and PostgreSQL records dimensions on
+            // values rather than on the column, so this is the first place that can see one.
+            // The JDBC array representation discards PostgreSQL lower bounds: SR arrays start at 1.
+            Class<?> componentType = value == null ? null : value.getClass().getComponentType();
+            if (!(value instanceof Object[]) || componentType.isArray()) {
+                throw unsupportedPostgresArray(columnIndex);
+            }
+            return Arrays.asList((Object[]) value);
         } finally {
             array.free();
         }
+    }
+
+    /**
+     * Reads a date[] or timestamp[] element by element as java.time, which is what the BE array
+     * writer builds its LocalDate[] / LocalDateTime[] from.
+     *
+     * <p>The obvious route -- getArray(), then toLocalDate() / toLocalDateTime() on each element --
+     * is wrong twice over, and measurably so against pgJDBC 42.7.12 and PostgreSQL 16:
+     *
+     * <ul>
+     *   <li>java.sql.Date and java.sql.Timestamp decompose through a hybrid Julian calendar, so
+     *       1582-10-10 reads back as 1582-10-20. That one holds in every zone, UTC included;
+     *   <li>they rebuild their fields in the JVM default zone, so a value inside a daylight-saving
+     *       gap moves: 2019-09-08 00:30 reads back as 01:30 under America/Santiago.
+     * </ul>
+     *
+     * <p>Neither is recoverable afterwards -- the damage is already in the instant the driver
+     * built. There is no VARCHAR staging step to fall back on either, the way a scalar date column
+     * has: jdbc_scanner.cpp keeps an array slot's own type as the intermediate, so no cast is
+     * generated and whatever this returns is what lands in the column. Asking the driver for the
+     * java.time value per element is the array form of the scalar path's
+     * getObject(index, LocalDate.class): it parses the field and never consults a Calendar.
+     */
+    private List<?> readPostgresTemporalArray(java.sql.Array array, int columnIndex, Class<?> temporalClass)
+            throws SQLException {
+        List<Object> values = new ArrayList<>();
+        try (ResultSet elements = array.getResultSet()) {
+            // A multidimensional value reports its elements as arrays in turn. Checking the
+            // element metadata says so directly, rather than reading it off the failure of the
+            // first element conversion, which would leave an empty outer value undetected.
+            if (elements.getMetaData().getColumnType(2) == Types.ARRAY) {
+                throw unsupportedPostgresArray(columnIndex);
+            }
+            while (elements.next()) {
+                // Element order follows the value's own order; the result set renumbers a lower
+                // bound other than 1 from 1, which is the same rebasing getArray() applies.
+                values.add(checkPostgresTemporalRange(elements.getObject(2, temporalClass), columnIndex));
+            }
+        }
+        return values;
+    }
+
+    private Object checkPostgresTemporalRange(Object value, int columnIndex) throws SQLException {
+        if (value == null) {
+            return null;
+        }
+        // Same range the scalar read enforces. A BC value arrives proleptic (year 0 and below) and
+        // pgJDBC represents +/-infinity with java.time's extreme years; neither has a DATE or
+        // DATETIME to land in, and an array element cannot be nulled without moving the offsets.
+        int year = value instanceof LocalDate ? ((LocalDate) value).getYear() : ((LocalDateTime) value).getYear();
+        if (year < 1 || year > 9999) {
+            throw new SQLException("PostgreSQL temporal value on column " + columnIndex
+                    + " is outside the supported range 0001-01-01 through 9999-12-31: " + value);
+        }
+        return value;
     }
 
     private void initOracleSessionTimeZoneIfNeeded() throws Exception {
@@ -367,12 +460,14 @@ public class JDBCScanner {
                 // numeric one off an unconstrained numeric.
                 Class<?> localTemporalClass = postgresLocalTemporalColumns == null
                         ? null : postgresLocalTemporalColumns.get(i);
-                if (localTemporalClass != null) {
-                    dataColumn[resultNumRows] = readPostgresLocalTemporalValue(i, localTemporalClass);
+                if (postgresArrayColumns != null && postgresArrayColumns.get(i)) {
+                    // On an array column the temporal class describes the elements, so the array
+                    // read has to come first: the scalar one would ask the row for a single value.
+                    dataColumn[resultNumRows] = readPostgresArray(i + 1, localTemporalClass);
                     continue;
                 }
-                if (postgresStringArrayColumns != null && postgresStringArrayColumns.get(i)) {
-                    dataColumn[resultNumRows] = readPostgresStringArray(i + 1);
+                if (localTemporalClass != null) {
+                    dataColumn[resultNumRows] = readPostgresLocalTemporalValue(i, localTemporalClass);
                     continue;
                 }
                 Object resultObject = strictNumericColumns.contains(i)

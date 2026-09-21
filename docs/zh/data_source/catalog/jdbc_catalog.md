@@ -95,11 +95,27 @@ StarRocks 会缓存从 JDBC 数据源读取的每张表的统计信息，以避�
 >
 > FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE（或 CN）会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。
 
-### PostgreSQL 字符串数组
+### PostgreSQL 数组
 
-使用 `org.postgresql.Driver` 时，PostgreSQL 的 `text[]` 和 `varchar[]` 列映射为 `ARRAY<VARCHAR>`。一维数组保留元素顺序、UTF-8 字符串、NULL 数组、空数组以及 NULL 元素。查询这些列前，需要一起升级 FE、BE/CN、JDBC Bridge 和安装包中的 JDBC 类型映射。
+使用 `org.postgresql.Driver` 时，以下 PostgreSQL 数组列可以读取：
 
-StarRocks 数组的位置从 1 开始，不保留 PostgreSQL 的数组下界。例如 PostgreSQL 的 `[0:1]={a,b}` 读取后为 `["a","b"]`，因此在 StarRocks 中 `items[1]` 返回 `a`。这类列上的常量下标（`items[1]`，以及等价的 `element_at(items, 1)`）由 PostgreSQL 计算，只返回该元素，不再把整列数组读回本地再取下标。下标按原样下推，即假定数组下界为 1——PostgreSQL 自行构造的数组下界都是 1。因此，对以其他下界存储的值，下推后的下标会静默地返回与在 StarRocks 本地计算不同的元素：对 `[0:2]={zero,one,two}`，远端 `items[1]` 是 `one`，本地是 `zero`。如需下推结果与本地计算完全一致，请将 [`enable_jdbc_array_lower_bound_correction`](../../sql-reference/System_variable.md#enable_jdbc_array_lower_bound_correction) 设置为 `true`，此时下推的下标会按每个值自身的下界做校正。将 [`enable_jdbc_array_subscript_push_down`](../../sql-reference/System_variable.md#enable_jdbc_array_subscript_push_down) 设置为 `false` 则完全关闭该下推，过滤和投影两条路径一同关闭，回到读回整列数组、在 StarRocks 本地取下标的行为。两个变量只在一个方向上叠加：关闭下推后，`enable_jdbc_array_lower_bound_correction` 不再有任何作用，因为没有下标会发往 PostgreSQL。变量下标（如 `items[id]`）、数组整体的比较、连接、排序以及分组或去重聚合，仍在 StarRocks 中执行。读取多维数组值会返回明确的不支持错误，不会将其展开为一维。但列中存有多维值时，其上的常量下标仍会照常下推：PostgreSQL 对未指明全部维度的下标返回 NULL，因此查询会得到 NULL，而直接读取该列则会报错。`enable_jdbc_array_lower_bound_correction` 的两种取值都不改变这一点——PostgreSQL 不在列上记录维度（`attndims` 不做强制，同一列可以逐行存放不同维度的值），因此没有可供判断的依据。而关闭 `enable_jdbc_array_subscript_push_down` 会改变这一点：该列重新被直接读取，查询会返回不支持的报错，而不是返回 NULL。其他 PostgreSQL 数组元素类型暂不支持。
+| PostgreSQL 列类型 | StarRocks 类型 |
+| --- | --- |
+| `boolean[]` | `ARRAY<BOOLEAN>` |
+| `smallint[]` | `ARRAY<SMALLINT>` |
+| `integer[]` | `ARRAY<INT>` |
+| `bigint[]` | `ARRAY<BIGINT>` |
+| `real[]` | `ARRAY<FLOAT>` |
+| `double precision[]` | `ARRAY<DOUBLE>` |
+| `date[]` | `ARRAY<DATE>` |
+| `timestamp[]`（不带时区） | `ARRAY<DATETIME>` |
+| `text[]`、`varchar[]`、`char(n)[]` | `ARRAY<VARCHAR>` |
+
+一维数组保留元素顺序、UTF-8 字符串、NULL 数组、空数组以及 NULL 元素。`char(n)[]` 映射为 `ARRAY<VARCHAR>` 而非 `ARRAY<CHAR>`，元素保留 PostgreSQL 存储的空格补齐。`date[]` 和 `timestamp[]` 的元素按墙钟值读取，不受会话时区影响；元素若超出 `0001-01-01` 到 `9999-12-31` 的范围（公元前日期或 `infinity`），查询会报错，而不是读成别的值。查询这些列前，需要一起升级 FE、BE/CN、JDBC Bridge 和安装包中的 JDBC 类型映射。
+
+其余数组元素类型都映射为不支持的类型，该列无法被查询，包括 `numeric[]`、`uuid[]`、`time[]`、`bytea[]`、`json[]` 和 `jsonb[]`，也包括 `timestamptz[]`：把 `timestamp with time zone` 读成 `ARRAY<DATETIME>` 会让夏令时回拨的两个时刻塌成同一个墙钟，后续再也无法区分。
+
+StarRocks 数组的位置从 1 开始，不保留 PostgreSQL 的数组下界。例如 PostgreSQL 的 `[0:1]={a,b}` 读取后为 `["a","b"]`，因此在 StarRocks 中 `items[1]` 返回 `a`。这类列上的常量下标（`items[1]`，以及等价的 `element_at(items, 1)`）由 PostgreSQL 计算，只返回该元素，不再把整列数组读回本地再取下标。下标按原样下推，即假定数组下界为 1——PostgreSQL 自行构造的数组下界都是 1。因此，对以其他下界存储的值，下推后的下标会静默地返回与在 StarRocks 本地计算不同的元素：对 `[0:2]={zero,one,two}`，远端 `items[1]` 是 `one`，本地是 `zero`。如需下推结果与本地计算完全一致，请将 [`enable_jdbc_array_lower_bound_correction`](../../sql-reference/System_variable.md#enable_jdbc_array_lower_bound_correction) 设置为 `true`，此时下推的下标会按每个值自身的下界做校正。将 [`enable_jdbc_array_subscript_push_down`](../../sql-reference/System_variable.md#enable_jdbc_array_subscript_push_down) 设置为 `false` 则完全关闭该下推，过滤和投影两条路径一同关闭，回到读回整列数组、在 StarRocks 本地取下标的行为。两个变量只在一个方向上叠加：关闭下推后，`enable_jdbc_array_lower_bound_correction` 不再有任何作用，因为没有下标会发往 PostgreSQL。变量下标（如 `items[id]`）、数组整体的比较、连接、排序以及分组或去重聚合，仍在 StarRocks 中执行。读取多维数组值会返回明确的不支持错误，不会将其展开为一维。但列中存有多维值时，其上的常量下标仍会照常下推：PostgreSQL 对未指明全部维度的下标返回 NULL，因此查询会得到 NULL，而直接读取该列则会报错。`enable_jdbc_array_lower_bound_correction` 的两种取值都不改变这一点——PostgreSQL 不在列上记录维度（`attndims` 不做强制，同一列可以逐行存放不同维度的值），因此没有可供判断的依据。而关闭 `enable_jdbc_array_subscript_push_down` 会改变这一点：该列重新被直接读取，查询会返回不支持的报错，而不是返回 NULL。
 
 ### 创建示例
 

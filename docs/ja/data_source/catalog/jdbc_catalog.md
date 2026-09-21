@@ -94,11 +94,27 @@ StarRocks は JDBC データソースから読み取ったテーブルごとの�
 >
 > FEs は JDBC catalog 作成時に JDBC ドライバー JAR パッケージをダウンロードし、BEs または CNs は最初のクエリ時に JDBC ドライバー JAR パッケージをダウンロードします。ダウンロードにかかる時間はネットワークの状況によって異なります。
 
-### PostgreSQL の文字列配列
+### PostgreSQL の配列
 
-`org.postgresql.Driver` を使用すると、PostgreSQL の `text[]` と `varchar[]` 列は `ARRAY<VARCHAR>` にマッピングされます。一次元配列の要素順序、UTF-8 文字列、NULL 配列、空配列、NULL 要素は保持されます。これらの列をクエリする前に、FE、BE/CN、JDBC Bridge、およびパッケージ内の JDBC 型マッピングを一緒にアップグレードしてください。
+`org.postgresql.Driver` を使用すると、次の PostgreSQL 配列列を読み取れます。
 
-StarRocks 配列の位置は 1 から始まり、PostgreSQL の配列の下限は保持されません。たとえば PostgreSQL の `[0:1]={a,b}` は `["a","b"]` として読み込まれ、StarRocks の `items[1]` は `a` を返します。このような列に対する定数の添字（`items[1]`、および等価な `element_at(items, 1)`）は PostgreSQL で評価され、その要素だけが返されます。配列全体を読み戻してからローカルで添字を取ることはありません。添字はそのままプッシュダウンされ、下限は 1 であると仮定されます。PostgreSQL 自身が構築する配列の下限は 1 です。そのため、別の下限で格納された値では、プッシュダウンされた添字は StarRocks でローカルに評価した同じ添字とは異なる要素を、警告なく返します。`[0:2]={zero,one,two}` では、リモートの `items[1]` は `one`、ローカルでは `zero` です。プッシュダウンの結果をローカルの評価と完全に一致させるには、[`enable_jdbc_array_lower_bound_correction`](../../sql-reference/System_variable.md#enable_jdbc_array_lower_bound_correction) を `true` に設定してください。この場合、プッシュダウンされる添字は各値自身の下限に合わせて補正されます。[`enable_jdbc_array_subscript_push_down`](../../sql-reference/System_variable.md#enable_jdbc_array_subscript_push_down) を `false` に設定すると、このプッシュダウン自体を完全に無効化できます。フィルターと射影の両方の経路が閉じられ、配列カラム全体を読み戻して StarRocks で添字を取る動作に戻ります。2 つの変数が組み合わさる方向は 1 つだけです。プッシュダウンを無効にすると、PostgreSQL に添字が届かないため、`enable_jdbc_array_lower_bound_correction` は何も制御しなくなります。変数の添字（`items[id]` など）、配列全体の比較、結合、ソート、およびグループ化や重複排除集約は StarRocks で実行されます。多次元配列の読み込みは明示的な未対応エラーとなり、一次元には展開されません。ただし多次元の値を保持する列に対する定数の添字は、他と同様にプッシュダウンされます。PostgreSQL は全次元を指定しない添字に対して NULL を返すため、列を直接読めばエラーになるところでクエリは NULL を返します。`enable_jdbc_array_lower_bound_correction` のどちらの設定でもこの挙動は変わりません。PostgreSQL は列に次元を記録しないためです（`attndims` は強制されず、同一の列が行ごとに異なる次元の値を保持できます）。ただし `enable_jdbc_array_subscript_push_down` を無効にすると変わります。その場合はカラムが再び直接読み取られるため、クエリは NULL ではなく未対応エラーになります。その他の PostgreSQL 配列要素型は未対応です。
+| PostgreSQL の列型 | StarRocks の型 |
+| --- | --- |
+| `boolean[]` | `ARRAY<BOOLEAN>` |
+| `smallint[]` | `ARRAY<SMALLINT>` |
+| `integer[]` | `ARRAY<INT>` |
+| `bigint[]` | `ARRAY<BIGINT>` |
+| `real[]` | `ARRAY<FLOAT>` |
+| `double precision[]` | `ARRAY<DOUBLE>` |
+| `date[]` | `ARRAY<DATE>` |
+| `timestamp[]`（タイムゾーンなし） | `ARRAY<DATETIME>` |
+| `text[]`、`varchar[]`、`char(n)[]` | `ARRAY<VARCHAR>` |
+
+一次元配列の要素順序、UTF-8 文字列、NULL 配列、空配列、NULL 要素は保持されます。`char(n)[]` は `ARRAY<CHAR>` ではなく `ARRAY<VARCHAR>` にマッピングされ、要素は PostgreSQL が格納する空白埋めをそのまま保持します。`date[]` と `timestamp[]` の要素はセッションのタイムゾーンに影響されない壁時計の値として読み取られ、`0001-01-01` から `9999-12-31` の範囲外の要素（紀元前の日付や `infinity`）は別の値として読まれるのではなくクエリが失敗します。これらの列をクエリする前に、FE、BE/CN、JDBC Bridge、およびパッケージ内の JDBC 型マッピングを一緒にアップグレードしてください。
+
+その他の配列要素型はすべて未対応の型にマッピングされ、その列はクエリできません。`numeric[]`、`uuid[]`、`time[]`、`bytea[]`、`json[]`、`jsonb[]` に加えて `timestamptz[]` も含まれます。`timestamp with time zone` を `ARRAY<DATETIME>` として読み込むと、夏時間の繰り下げにあたる 2 つの時刻が同じ壁時計に潰れ、後段では区別できなくなるためです。
+
+StarRocks 配列の位置は 1 から始まり、PostgreSQL の配列の下限は保持されません。たとえば PostgreSQL の `[0:1]={a,b}` は `["a","b"]` として読み込まれ、StarRocks の `items[1]` は `a` を返します。このような列に対する定数の添字（`items[1]`、および等価な `element_at(items, 1)`）は PostgreSQL で評価され、その要素だけが返されます。配列全体を読み戻してからローカルで添字を取ることはありません。添字はそのままプッシュダウンされ、下限は 1 であると仮定されます。PostgreSQL 自身が構築する配列の下限は 1 です。そのため、別の下限で格納された値では、プッシュダウンされた添字は StarRocks でローカルに評価した同じ添字とは異なる要素を、警告なく返します。`[0:2]={zero,one,two}` では、リモートの `items[1]` は `one`、ローカルでは `zero` です。プッシュダウンの結果をローカルの評価と完全に一致させるには、[`enable_jdbc_array_lower_bound_correction`](../../sql-reference/System_variable.md#enable_jdbc_array_lower_bound_correction) を `true` に設定してください。この場合、プッシュダウンされる添字は各値自身の下限に合わせて補正されます。[`enable_jdbc_array_subscript_push_down`](../../sql-reference/System_variable.md#enable_jdbc_array_subscript_push_down) を `false` に設定すると、このプッシュダウン自体を完全に無効化できます。フィルターと射影の両方の経路が閉じられ、配列カラム全体を読み戻して StarRocks で添字を取る動作に戻ります。2 つの変数が組み合わさる方向は 1 つだけです。プッシュダウンを無効にすると、PostgreSQL に添字が届かないため、`enable_jdbc_array_lower_bound_correction` は何も制御しなくなります。変数の添字（`items[id]` など）、配列全体の比較、結合、ソート、およびグループ化や重複排除集約は StarRocks で実行されます。多次元配列の読み込みは明示的な未対応エラーとなり、一次元には展開されません。ただし多次元の値を保持する列に対する定数の添字は、他と同様にプッシュダウンされます。PostgreSQL は全次元を指定しない添字に対して NULL を返すため、列を直接読めばエラーになるところでクエリは NULL を返します。`enable_jdbc_array_lower_bound_correction` のどちらの設定でもこの挙動は変わりません。PostgreSQL は列に次元を記録しないためです（`attndims` は強制されず、同一の列が行ごとに異なる次元の値を保持できます）。ただし `enable_jdbc_array_subscript_push_down` を無効にすると変わります。その場合はカラムが再び直接読み取られるため、クエリは NULL ではなく未対応エラーになります。
 
 ### 例
 

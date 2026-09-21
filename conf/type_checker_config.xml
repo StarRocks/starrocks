@@ -83,9 +83,20 @@
     <type-rule allowed_type="TYPE_JSON" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
-  <!-- PostgreSQL string arrays converted by JDBCScanner to List<String>. -->
+  <!-- PostgreSQL arrays converted by JDBCScanner to a List of the element's Java class. -->
   <type-mapping java_class="java.util.List" display_name="List">
+    <!-- One rule per array element type the PostgreSQL reader can hand over. The reader gives the
+         backend the final element class, so this set has to stay in step with the element types
+         PostgresSchemaResolver maps and with UDFHelper's array writer. -->
     <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_BIGINT"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_FLOAT"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_DOUBLE"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_DATE"/>
+    <type-rule allowed_type="TYPE_ARRAY" return_type="TYPE_ARRAY" element_type="TYPE_DATETIME"/>
     <!-- Preserve the scalar fallback used by drivers whose List values are read through getString. -->
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
     <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARCHAR"/>

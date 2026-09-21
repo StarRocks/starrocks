@@ -266,10 +266,21 @@ def main():
                             if expect_error not in str(error):
                                 result["errors"].append(
                                     "Expected a StarRocks failure containing {!r}".format(expect_error))
-                    plan = sr("EXPLAIN VERBOSE " + sql, agg, topn, session)
-                    result["plan"] = plan
-                    result["jdbc_queries"], plan_errors = assert_plan(case, plan, agg, topn)
-                    result["errors"].extend(plan_errors)
+                    plan = None
+                    try:
+                        plan = sr("EXPLAIN VERBOSE " + sql, agg, topn, session)
+                    except RuntimeError as error:
+                        # A column whose type the catalog cannot map is refused while the
+                        # statement is analysed, so EXPLAIN refuses it too and there is no plan to
+                        # assert. That is the same refusal the case is pinning, not a second
+                        # failure -- but only when it carries the same message.
+                        if expect_error is None or expect_error not in str(error):
+                            raise
+                        result["plan_error"] = str(error)
+                    if plan is not None:
+                        result["plan"] = plan
+                        result["jdbc_queries"], plan_errors = assert_plan(case, plan, agg, topn)
+                        result["errors"].extend(plan_errors)
                 except Exception as error:
                     result["errors"].append(str(error))
                 result["passed"] = not result["errors"]

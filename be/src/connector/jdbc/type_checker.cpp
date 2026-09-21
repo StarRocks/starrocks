@@ -23,20 +23,36 @@ StatusOr<LogicalType> ConfigurableTypeChecker::check(const std::string& java_cla
                                                      const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
 
-    // Check if the slot type matches any of our configured rules
+    // Check if the slot type matches any of our configured rules. A Java class may carry several
+    // rules for one allowed_type that differ only in element_type -- java.util.List carries one
+    // per array element type the reader can build -- so an element mismatch has to keep looking
+    // rather than decide here: the first such rule would otherwise answer for all of them and
+    // reject every element type but its own.
+    std::vector<LogicalType> allowed_element_types;
     for (const auto& rule : _rules) {
-        if (type == rule.allowed_type) {
-            if (rule.element_type != TYPE_UNKNOWN) {
-                const auto& children = slot_desc->type().children;
-                if (children.size() != 1 || children[0].type != rule.element_type) {
-                    return Status::NotSupported(
-                            fmt::format("Unsupported element type on column[{}]: {} accepts only {}<{}>",
-                                        slot_desc->col_name(), _display_name, logical_type_to_string(rule.allowed_type),
-                                        logical_type_to_string(rule.element_type)));
-                }
-            }
+        if (type != rule.allowed_type) {
+            continue;
+        }
+        if (rule.element_type == TYPE_UNKNOWN) {
             return rule.return_type;
         }
+        const auto& children = slot_desc->type().children;
+        if (children.size() == 1 && children[0].type == rule.element_type) {
+            return rule.return_type;
+        }
+        allowed_element_types.emplace_back(rule.element_type);
+    }
+
+    if (!allowed_element_types.empty()) {
+        std::string allowed;
+        for (auto element_type : allowed_element_types) {
+            if (!allowed.empty()) {
+                allowed += ", ";
+            }
+            allowed += fmt::format("{}<{}>", logical_type_to_string(type), logical_type_to_string(element_type));
+        }
+        return Status::NotSupported(fmt::format("Unsupported element type on column[{}]: {} accepts only {}",
+                                                slot_desc->col_name(), _display_name, allowed));
     }
 
     auto err_msg = fmt::format(

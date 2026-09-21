@@ -343,5 +343,131 @@
     "remote_sql_excludes": [
       "\"md\"["
     ]
+  },
+  {
+    "name": "array_integer_elements_read_back",
+    "sql": "SELECT id, nums[1] AS a, nums[2] AS b, nums[3] AS c, shorts[1] AS s, bigs[1] AS g, bigs[2] AS h FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "remote_sql_contains": [
+      "\"nums\"",
+      "\"bigs\"",
+      "\"shorts\""
+    ],
+    "remote_sql_excludes": [
+      "\"nums\"["
+    ]
+  },
+  {
+    "name": "array_boolean_and_float_elements_read_back",
+    "sql": "SELECT id, flags[1] AS f1, flags[2] AS f2, dbls[1] AS d1, dbls[3] AS d3, f4s[1] AS r1, f4s[3] AS r3 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "remote_sql_contains": [
+      "\"flags\"",
+      "\"dbls\"",
+      "\"f4s\""
+    ],
+    "pg_sql": "SELECT id, flags[1]::int AS f1, flags[2]::int AS f2, dbls[1] AS d1, dbls[3] AS d3, f4s[1] AS r1, f4s[3] AS r3 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC"
+  },
+  {
+    "name": "array_bpchar_elements_read_back_with_padding",
+    "sql": "SELECT id, bps[1] AS b1, bps[2] AS b2 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "remote_sql_contains": [
+      "\"bps\""
+    ]
+  },
+  {
+    "name": "array_temporal_elements_read_back",
+    "sql": "SELECT id, days[1] AS d1, days[2] AS d2, days[3] AS d3, stamps[1] AS t1, stamps[2] AS t2, stamps[3] AS t3 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "remote_sql_contains": [
+      "\"days\"",
+      "\"stamps\""
+    ]
+  },
+  {
+    "name": "array_temporal_elements_ignore_session_time_zone_east",
+    "sql": "SELECT id, days[1] AS d1, days[2] AS d2, days[3] AS d3, stamps[1] AS t1, stamps[2] AS t2, stamps[3] AS t3 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false,
+      "time_zone": "Asia/Shanghai"
+    },
+    "remote_sql_contains": [
+      "\"days\"",
+      "\"stamps\""
+    ]
+  },
+  {
+    "name": "array_temporal_elements_ignore_session_time_zone_west",
+    "sql": "SELECT id, days[1] AS d1, days[2] AS d2, days[3] AS d3, stamps[1] AS t1, stamps[2] AS t2, stamps[3] AS t3 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false,
+      "time_zone": "America/New_York"
+    },
+    "remote_sql_contains": [
+      "\"days\"",
+      "\"stamps\""
+    ]
+  },
+  {
+    "name": "array_cardinality_read_back_covers_null_and_empty",
+    "sql": "SELECT id, array_length(nums) AS n, array_length(days) AS d, array_length(stamps) AS t FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "pg_sql": "SELECT id, cardinality(nums) AS n, cardinality(days) AS d, cardinality(stamps) AS t FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "session": {
+      "enable_jdbc_array_subscript_push_down": false
+    },
+    "remote_sql_contains": [
+      "\"nums\""
+    ]
+  },
+  {
+    "name": "array_integer_subscript_pushes",
+    "sql": "SELECT id, nums[1] AS a, bigs[1] AS g, shorts[1] AS s FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"nums\"[1]",
+      "\"bigs\"[1]",
+      "\"shorts\"[1]"
+    ],
+    "remote_sql_excludes": [
+      "SELECT \"id\", \"nums\" FROM"
+    ]
+  },
+  {
+    "name": "array_temporal_subscript_pushes",
+    "sql": "SELECT id, days[1] AS d1, stamps[1] AS t1 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"days\"[1]",
+      "\"stamps\"[1]"
+    ]
+  },
+  {
+    "name": "array_boolean_and_float_subscript_pushes",
+    "sql": "SELECT id, flags[1] AS f1, dbls[1] AS d1, f4s[1] AS r1 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"flags\"[1]",
+      "\"dbls\"[1]",
+      "\"f4s\"[1]"
+    ],
+    "pg_sql": "SELECT id, flags[1]::int AS f1, dbls[1] AS d1, f4s[1] AS r1 FROM {table} WHERE id BETWEEN 25 AND 35 OR id >= 81 ORDER BY id ASC"
+  },
+  {
+    "name": "array_double_subscript_predicate_pushes",
+    "sql": "SELECT id FROM {table} WHERE dbls[1] = 6.25 AND id <= 40 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"dbls\"[1]"
+    ]
+  },
+  {
+    "name": "array_timestamptz_column_is_unsupported",
+    "sql": "SELECT id, zoned[1] AS z FROM {table} WHERE id <= 4 ORDER BY id ASC",
+    "expect_error": "Datatype of external table column [zoned] is not supported"
   }
 ]

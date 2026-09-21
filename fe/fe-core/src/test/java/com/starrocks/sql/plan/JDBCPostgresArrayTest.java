@@ -19,6 +19,9 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.VarcharType;
@@ -51,6 +54,16 @@ public class JDBCPostgresArrayTest extends ConnectorPlanTestBase {
         table.setNewFullSchema(List.of(new Column("id", IntegerType.INT),
                 new Column("items", new ArrayType(VarcharType.VARCHAR)),
                 new Column("nums", new ArrayType(IntegerType.INT)),
+                // One column per remaining PostgreSQL array element type the reader maps, so the
+                // gate's "element type is scalar" condition is stated against each of them rather
+                // than inferred from the two the suite happened to start with.
+                new Column("flags", new ArrayType(BooleanType.BOOLEAN)),
+                new Column("shorts", new ArrayType(IntegerType.SMALLINT)),
+                new Column("longs", new ArrayType(IntegerType.BIGINT)),
+                new Column("floats", new ArrayType(FloatType.FLOAT)),
+                new Column("doubles", new ArrayType(FloatType.DOUBLE)),
+                new Column("days", new ArrayType(DateType.DATE)),
+                new Column("stamps", new ArrayType(DateType.DATETIME)),
                 new Column("matrix", new ArrayType(new ArrayType(VarcharType.VARCHAR))),
                 new Column("name", VarcharType.VARCHAR),
                 new Column("payload", JsonType.JSON)));
@@ -229,6 +242,32 @@ public class JDBCPostgresArrayTest extends ConnectorPlanTestBase {
                 plans.get(false));
         Assertions.assertTrue(remoteQueries(plans.get(true)).contains(correctedSubscript("nums", 3, "+ 2")),
                 plans.get(true));
+    }
+
+    /**
+     * The push-down gate asks only whether the element type is scalar, and the rendered
+     * {@code a[k]}, {@code array_lower} and {@code array_length} are all type-independent. Opening
+     * the reader to more element types therefore needs no change in the gate or the renderer --
+     * this states that as an assertion instead of an expectation, one element type at a time.
+     */
+    @Test
+    public void testEveryMappedElementTypeSubscriptPushes() throws Exception {
+        for (String column : List.of("items", "nums", "flags", "shorts", "longs", "floats", "doubles",
+                "days", "stamps")) {
+            Map<Boolean, String> plans = plansInBothModes("SELECT " + column + "[2] FROM " + TABLE);
+            Assertions.assertTrue(remoteQueries(plans.get(false)).contains(uncorrectedSubscript(column, 2)),
+                    column + " " + plans.get(false));
+            Assertions.assertTrue(remoteQueries(plans.get(true)).contains(correctedSubscript(column, 2, "+ 1")),
+                    column + " " + plans.get(true));
+            // The filter path asks the same gate, and is the one that decides whether the array
+            // column has to be fetched at all. plansInBothModes leaves the correction on, so the
+            // mode this asserts has to be stated rather than inherited.
+            setLowerBoundCorrection(false);
+            String filtered = getFragmentPlan("SELECT id FROM " + TABLE + " WHERE " + column + "[2] IS NOT NULL");
+            Assertions.assertTrue(remoteQueries(filtered).contains(uncorrectedSubscript(column, 2)), filtered);
+            Assertions.assertFalse(remoteQueries(filtered).contains("\"" + column + "\" FROM"),
+                    "The array column itself must not be fetched: " + filtered);
+        }
     }
 
     /**
