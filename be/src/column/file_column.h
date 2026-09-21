@@ -117,7 +117,6 @@ private:
     std::array<Column::WrappedPtr, NUM_FIELDS> _fields;
 };
 
-
 class FileDatumBuilder {
 public:
     static Datum make(const std::optional<Slice>& uri, const std::optional<int64_t>& offset,

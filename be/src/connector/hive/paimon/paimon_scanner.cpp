@@ -136,9 +136,11 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     selected_field_names.reserve(materialized_columns.size());
     _convert_functions.reserve(materialized_columns.size());
     _cast_exprs.resize(materialized_columns.size(), nullptr);
+    bool has_file_column = false;
     for (const auto& materialized_column : materialized_columns) {
         selected_field_names.emplace_back(materialized_column.name());
         _convert_functions.emplace_back(std::make_unique<ConvertFuncTree>());
+        has_file_column |= materialized_column.slot_desc->type().is_file_type();
     }
 
     paimon::ReadContextBuilder context_builder(table_path);
@@ -168,7 +170,9 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     context_builder.AddOption(paimon::Options::BLOB_VIEW_RESOLVE_ENABLED, "true");
     if (auto warehouse = paimon_warehouse_from_table_path(table_path)) {
         context_builder.AddOption(paimon::Options::BLOB_VIEW_UPSTREAM_WAREHOUSE, *warehouse);
-    } else {
+    } else if (has_file_column) {
+        // Only worth reporting when this scan actually reads a FILE column; do_open() runs once
+        // per split, so an unconditional warning would repeat for every split of every query.
         LOG(WARNING) << "Paimon table path " << table_path
                      << " does not follow the <warehouse>/<db>/<table> layout; blob-view columns cannot be resolved";
     }

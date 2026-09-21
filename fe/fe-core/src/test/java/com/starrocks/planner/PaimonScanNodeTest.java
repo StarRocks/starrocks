@@ -33,6 +33,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import mockit.Expectations;
@@ -408,6 +409,27 @@ public class PaimonScanNodeTest {
         StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> PaimonScanNode.checkJniReaderVariantSupport(tuple));
         Assertions.assertTrue(e.getMessage().contains("VARIANT"));
+    }
+
+    @Test
+    public void testAutoReaderModeSwitchesToNativeForFileColumns() {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(0), tuple);
+        idSlot.setType(IntegerType.INT);
+        idSlot.setColumn(new Column("id", IntegerType.INT));
+        tuple.addSlot(idSlot);
+        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(1), tuple);
+        fileSlot.setType(FileType.FILE);
+        fileSlot.setColumn(new Column("image", FileType.FILE));
+        tuple.addSlot(fileSlot);
+
+        Assertions.assertEquals(PaimonReaderMode.NATIVE,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.AUTO));
+        // An explicit choice is left alone; the BE reports whatever the chosen reader cannot do.
+        Assertions.assertEquals(PaimonReaderMode.JNI,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.JNI));
+        Assertions.assertEquals(PaimonReaderMode.NATIVE,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.NATIVE));
     }
 
     @Test
