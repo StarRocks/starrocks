@@ -27,7 +27,7 @@ public class PhysicalLanceScanOperator extends PhysicalScanOperator {
 
     public PhysicalLanceScanOperator(LogicalLanceScanOperator scan) {
         super(OperatorType.PHYSICAL_LANCE_SCAN, scan);
-        this.predicates = scan.getScanOperatorPredicates();
+        this.predicates = scan.getScanOperatorPredicates().clone();
     }
 
     @Override
