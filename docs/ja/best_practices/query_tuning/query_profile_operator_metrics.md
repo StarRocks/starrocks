@@ -473,3 +473,7 @@ OlapTableSink Operatorは`INSERT INTO <table>`操作の実行を担当します�
 | `RpcServerSideTime` | サーバー側で記録されたロードの合計RPC時間消費。 |
 | `PrepareDataTime` | データ形式変換およびデータ品質チェックを含む、データ準備フェーズの合計時間消費。 |
 | `SendDataTime` | データのシリアライズと圧縮、および送信キューへのタスク送信にかかる時間を含む、データ送信のローカル時間消費。 |
+| `RawInputBytes` | シリアライズに渡されたチャンクデータのメモリ上のサイズ。 |
+| `SerializedBytes` | 圧縮前のシリアライズされたチャンクデータのサイズ。`load_transmission_compression_type`のデフォルトは`NO_COMPRESSION`であるため、通常はネットワークに送信されるバイト数と一致します。 |
+| `CompressedInputBytes` | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。圧縮が無効な場合や、入力が RPC 圧縮のサイズ上限を超えてスキップされたチャンクは含まれません。 |
+| `CompressedBytes` | 圧縮データのサイズ。実際に圧縮されたチャンクのみが対象のため、デフォルトの`NO_COMPRESSION`ではこのメトリックと`CompressedInputBytes`はいずれも`0`になります。`CompressedInputBytes / CompressedBytes`が圧縮率であり、`SerializedBytes - CompressedInputBytes`が圧縮されなかったデータのサイズです。 |

@@ -488,3 +488,7 @@ OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` o
 | `RpcServerSideTime` | Total RPC time consumption for loading recorded by the server side. |
 | `PrepareDataTime` | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
 | `SendDataTime` | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
+| `RawInputBytes` | In-memory size of the chunk data passed to serialization. |
+| `SerializedBytes` | Size of the serialized chunk data before compression. Because `load_transmission_compression_type` defaults to `NO_COMPRESSION`, this is normally also the number of bytes sent over the network. |
+| `CompressedInputBytes` | Size of the serialized (pre-compression) data that was actually fed to the compressor. Chunks skipped because compression is disabled, or because the input exceeds the RPC compression size limit, are not counted. |
+| `CompressedBytes` | Size of the compressed chunk data. Only chunks that were actually compressed are counted, so both this metric and `CompressedInputBytes` are `0` under the default `NO_COMPRESSION`. `CompressedInputBytes / CompressedBytes` gives the compression ratio, and `SerializedBytes - CompressedInputBytes` is the size of the data that was not compressed. |

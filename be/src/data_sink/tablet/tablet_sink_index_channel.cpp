@@ -460,6 +460,13 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
 Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
+    // The byte counters below measure what this channel actually serializes and puts on the wire.
+    // _send_request() calls this once per index request that carries a chunk, so with multiple
+    // indexes the same source chunk is counted once per index. The exception is
+    // _enable_colocate_mv_index: there only requests(0) is serialized and the single payload is
+    // reused by every index of the request, so one call still equals one payload on the wire.
+    COUNTER_UPDATE(_ts_profile->raw_input_bytes_counter, src->bytes_usage());
+
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
         // Decide PER CHUNK, not once per channel. The bit only changes the layout of a column
@@ -509,6 +516,7 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
 
     size_t uncompressed_size = dst->uncompressed_size();
+    COUNTER_UPDATE(_ts_profile->serialized_bytes_counter, uncompressed_size);
 
     // try compress the ChunkPB data
     if (CompressionUtils::can_compress_rpc_payload(_compress_codec, uncompressed_size,
@@ -536,6 +544,11 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             _compression_scratch.resize(compressed_slice.size);
         }
 
+        // SerializedBytes counts every chunk, including those that skip compression entirely, so it
+        // cannot be the numerator of a compression ratio. Record what the compressor was actually
+        // fed, as the exchange sink does: CompressedInputBytes / CompressedBytes is the ratio.
+        COUNTER_UPDATE(_ts_profile->compressed_input_bytes_counter, uncompressed_size);
+        COUNTER_UPDATE(_ts_profile->compressed_bytes_counter, _compression_scratch.size());
         double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));

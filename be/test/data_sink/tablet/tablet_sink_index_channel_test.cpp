@@ -499,6 +499,50 @@ TEST_F(TabletSinkIndexChannelTest, serialize_chunk_non_pool_codec_compresses) {
     ASSERT_OK(channel._serialize_chunk(chunk.get(), &chunk_pb));
     EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::SNAPPY);
     EXPECT_EQ(chunk_pb.data(), "x");
+    EXPECT_EQ(1, sink->_ts_profile->compressed_bytes_counter->value());
+    // The ratio's numerator is what the compressor was fed, not SerializedBytes.
+    EXPECT_EQ(static_cast<int64_t>(chunk_pb.uncompressed_size()),
+              sink->_ts_profile->compressed_input_bytes_counter->value());
+}
+
+// The sink profile carried only timers: SerializeChunkTime said how long a chunk took to
+// serialize but never how many bytes left the node, so a change to the wire encoding could only
+// be inferred from the timers moving. Pin each counter to the payload it describes.
+TEST_F(TabletSinkIndexChannelTest, serialize_chunk_counts_the_bytes_it_puts_on_the_wire) {
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    auto sink = _build_prepared_sink(runtime_state.get());
+    NodeChannel channel(sink.get(), 0, false);
+    auto* ts_profile = sink->_ts_profile;
+
+    auto chunk = _build_test_chunk(runtime_state.get());
+    ChunkPB first;
+    ASSERT_OK(channel._serialize_chunk(chunk.get(), &first));
+    EXPECT_EQ(static_cast<int64_t>(chunk->bytes_usage()), ts_profile->raw_input_bytes_counter->value());
+    EXPECT_EQ(static_cast<int64_t>(first.uncompressed_size()), ts_profile->serialized_bytes_counter->value());
+    // No codec is configured here, so nothing was compressed and SerializedBytes is what went out.
+    // This is the default: load_transmission_compression_type is NO_COMPRESSION. Both compression
+    // counters stay 0, which is why the ratio is CompressedInputBytes / CompressedBytes and not
+    // SerializedBytes / CompressedBytes -- the latter would divide by zero here.
+    EXPECT_EQ(0, ts_profile->compressed_input_bytes_counter->value());
+    EXPECT_EQ(0, ts_profile->compressed_bytes_counter->value());
+
+    // One counter per sink, shared by every NodeChannel, so a second send must accumulate.
+    ChunkPB second;
+    ASSERT_OK(channel._serialize_chunk(chunk.get(), &second));
+    EXPECT_EQ(static_cast<int64_t>(2 * chunk->bytes_usage()), ts_profile->raw_input_bytes_counter->value());
+    EXPECT_EQ(static_cast<int64_t>(first.uncompressed_size() + second.uncompressed_size()),
+              ts_profile->serialized_bytes_counter->value());
+
+    // A counter nobody can find in the profile is not observability. get_counter() is a flat
+    // lookup, so it only proves registration; the child map is what decides where the counter
+    // shows up in the reported tree, and these belong next to SerializeChunkTime under SendRpcTime.
+    auto* profile = ts_profile->runtime_profile;
+    const auto& send_rpc_children = profile->_child_counter_map["SendRpcTime"];
+    for (const auto& name : {"RawInputBytes", "SerializedBytes", "CompressedInputBytes", "CompressedBytes"}) {
+        EXPECT_NE(nullptr, profile->get_counter(name));
+        EXPECT_EQ(1, send_rpc_children.count(name)) << name << " is not a child of SendRpcTime";
+    }
 }
 
 // End-to-end check of the chunk encode level negotiation: what the receiving BE advertises in
