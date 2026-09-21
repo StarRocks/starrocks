@@ -742,7 +742,6 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitBetweenPredicate(BetweenPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
-            rejectGeographyComparison(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
@@ -763,7 +762,6 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
             final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
-            rejectGeographyComparison(node);
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
@@ -818,7 +816,6 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitInPredicate(InPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
-            rejectGeographyComparison(node);
 
             List<Expr> queryExpressions = Lists.newArrayList();
             node.collect(arg -> arg instanceof Subquery, queryExpressions);
@@ -853,7 +850,6 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitLargeInPredicate(LargeInPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
-            rejectGeographyComparison(node);
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
@@ -909,7 +905,6 @@ public class ExpressionAnalyzer {
                         "subquery must return the same number of columns as provided by the IN predicate",
                         node.getPos());
             }
-
             for (int i = 0; i < rightTypes.size(); ++i) {
                 if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
                         rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
@@ -923,34 +918,6 @@ public class ExpressionAnalyzer {
                 }
             }
             return null;
-        }
-
-        private static void rejectGeographyComparison(Predicate node) {
-            for (Expr child : node.getChildren()) {
-                if (containsGeography(child.getType())) {
-                    throw new SemanticException(
-                            "Comparison predicates do not support GEOGRAPHY or types containing GEOGRAPHY",
-                            node.getPos());
-                }
-            }
-        }
-
-        private static boolean containsGeography(Type type) {
-            if (type.isGeoType()) {
-                return true;
-            }
-            if (type.isArrayType()) {
-                return containsGeography(((ArrayType) type).getItemType());
-            }
-            if (type.isMapType()) {
-                MapType mapType = (MapType) type;
-                return containsGeography(mapType.getKeyType()) || containsGeography(mapType.getValueType());
-            }
-            if (type.isStructType()) {
-                return ((StructType) type).getFields().stream()
-                        .anyMatch(field -> containsGeography(field.getType()));
-            }
-            return false;
         }
 
         @Override

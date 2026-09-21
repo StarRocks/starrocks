@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -343,6 +344,14 @@ public class InsertAnalyzer {
         if (query.getRelationFields().size() != mentionedColumnSize) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INSERT_COLUMN_COUNT_MISMATCH, mentionedColumnSize,
                     query.getRelationFields().size());
+        }
+        for (int i = 0; i < query.getRelationFields().size(); ++i) {
+            Type sourceType = query.getRelationFields().getFieldByIndex(i).getType();
+            Type targetType = targetColumns.get(i).getType();
+            if (sourceType.isGeoType() && !TypeManager.canCastTo(sourceType, targetType)) {
+                throw new SemanticException("Cannot insert type %s into column '%s' of type %s",
+                        sourceType.toSql(), targetColumns.get(i).getName(), targetType.toSql());
+            }
         }
 
         // check default value expr
