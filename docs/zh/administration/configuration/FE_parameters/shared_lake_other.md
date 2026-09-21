@@ -651,6 +651,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
 - 引入版本: v4.1.5
 
+### `lake_enable_incremental_shard_replica_journal`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：StarMgr 是否将仅涉及副本的 Tablet 变更以副本增量的形式记入元数据日志，而非记录完整的 Tablet 快照。否则，新增、删除或变更单个副本都会重新序列化整条 Tablet 元数据，包括文件路径、存储凭证、属性以及全部副本，其中约 95% 的内容描述的是任何副本操作都不会改变的状态。在 Tablet 调度频繁的集群中，这些快照会成为元数据日志的主要来源。所有提供该配置项的 FE 在回放时都能识别该增量日志条目，该配置项仅约束写入方。因此，应先部署提供该配置项的版本并保持其为 `false`，使集群具备回放该条目的能力，之后再将其设置为 `true`。当集群中仍有 FE 运行较早版本时，请勿启用：此类 FE 会跳过所有副本更新（而非单条），并在不报错的情况下将由此产生的元数据分歧写入自身的 Checkpoint。如需回退，请先将该项设置为 `false`，强制触发一次元数据 Checkpoint 以使镜像吸收已写入的日志条目，然后再降级版本，因为将该项设置为 `false` 并不会撤销日志中已有的条目。仅 Leader FE 上的取值生效。运行时修改是安全的，因为同时包含两种条目的日志可以被正确回放。
+- 引入版本：v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：StarMgr 是否维护 Compute Node 到 Tablet 的反向索引。否则，重新调度已重启 Compute Node 上的 Tablet，以及校验 Compute Node 每次心跳上报的副本，都需要扫描完整的 Tablet 映射并逐个判断该 Tablet 在该 Compute Node 上是否存在副本，对每个 Compute Node 的开销与集群 Tablet 总数成正比。启用该索引后，开销仅与该 Compute Node 自身的 Tablet 数量相关。该索引属于派生状态：在加载元数据镜像时根据 Tablet 映射重建，此后在同一把锁的保护下维护；当该项为 `false` 时既不构建也不占用内存，因此保持关闭不会带来额外开销。StarMgr 仅在加载元数据镜像时读取该项一次，因此修改后需重启 FE 才会生效。
+- 引入版本：v4.2.0
+
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
 - 默认值: 600

@@ -394,6 +394,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。仅在 `datacache_unified_instance_enable` 为 `false` 时生效。
 - 引入版本：v3.1
 
+### starlet_star_cache_skip_fresh_block_checksum_verification
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，对于由当前 CN 进程写入且此后未被淘汰的 Data Cache 磁盘 Block，后续请求首次访问时是否跳过整块 Checksum 校验读取。该校验会从磁盘重新读取整个 Block，以校验进程刚刚写入且仍在内存中跟踪的数据，因此每个新写入 Block 的首次访问都会多一次磁盘读取。将该项设置为 `false` 可在首次访问时校验每个 Block，仅当怀疑缓存磁盘存在静态数据损坏时才值得付出该开销。无论该项如何设置，从进程上一次运行继承下来的 Block 始终会被校验，因为当前进程并未见证其写入过程。该项仅在 Data Cache 初始化时读取一次。
+- 引入版本：v4.2.0
+
+### starlet_starmgr_client_compression_type
+
+- 默认值：none
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，当前 CN 发送给 StarMgr 的 Worker 心跳所使用的压缩方式。该心跳会为 CN 上的每个 Tablet 携带一个条目，是集群中最大的周期性请求。有效值：`none` 和 `zstd`。`zstd` 在心跳线程中压缩负载，并占用同一个 RPC 超时预算，由 FE 负责解压。`none` 表示不压缩发送心跳。在切换任何 CN 之前，FE 必须具备解压能力，因为不支持该机制的 FE 会丢弃压缩后的心跳，所以请先升级 FE，再在 CN 上设置该项。无法识别的取值会被记录并回退为 `none`，而不会导致 CN 启动失败。
+- 引入版本：v4.2.0
+
 ### starlet_use_star_cache
 
 - 默认值：false（v3.1）true（v3.2.3 起）

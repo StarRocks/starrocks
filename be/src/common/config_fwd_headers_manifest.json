@@ -697,7 +697,14 @@
         "starlet_star_cache_disk_size_percent",
         "starlet_star_cache_mem_size_bytes",
         "starlet_star_cache_mem_size_percent",
+<<<<<<< HEAD
         "starlet_use_star_cache"
+=======
+        "starlet_star_cache_skip_fresh_block_checksum_verification",
+        "starlet_starmgr_client_compression_type",
+        "starlet_use_star_cache",
+        "tablet_warmup_max_threads"
+>>>>>>> 5ae228ef538 ([Enhancement] Expose the v4.2-rc5 StarOS knobs as FE and BE configs (#63360))
       ]
     },
     {
