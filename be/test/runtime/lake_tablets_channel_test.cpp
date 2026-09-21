@@ -17,20 +17,10 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/runtime/lake_tablets_channel_test.cpp
-=======
 #include <atomic>
 #include <chrono>
 #include <thread>
 
-#include "base/bthreads/util.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/time/time.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
->>>>>>> 5a6731b ([BugFix] Wake the txn log collector when a combined-txn-log load is cancelled (#79389)):be/test/data_workflows/load/tablet_writer/lake_tablets_channel_test.cpp
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -60,6 +50,7 @@
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
+#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
