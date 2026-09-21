@@ -140,6 +140,16 @@ CONF_mString(jemalloc_conf,
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
 
+// Log a WARNING with the query id and the allocating stack whenever a single allocation
+// requests more than this many bytes. A value of 0 or below disables the report.
+// The check itself sits in the allocation hot path, but it is only a comparison against this
+// value; the expensive part is the report, which captures and symbolizes a stack trace and
+// takes the glog lock. Lowering the threshold far enough that ordinary allocations cross it
+// therefore degrades the whole process, so only lower it temporarily for diagnosis.
+// NOTE: the declared default only applies once config::init() has run. Allocations made before
+// that, during static initialization, see 0 and are never reported.
+CONF_mInt64(large_memory_alloc_report_threshold, "1073741824");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -270,8 +280,9 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 // If true, clear udf cache every time be starts
 CONF_Bool(clear_udf_cache_when_start, "false");
-// The sys log level, INFO, WARNING, ERROR, FATAL.
-CONF_mString(sys_log_level, "INFO");
+// The sys log level. Matched case-insensitively; a value that matches none of the four is reported
+// and INFO is used, so a typo cannot leave the process without working logging.
+CONF_mString_enum_or_default(sys_log_level, "INFO", "INFO,WARNING,ERROR,FATAL");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
@@ -725,6 +736,50 @@ CONF_Int32(dictionary_page_size, "1048576");
 
 CONF_Int32(small_dictionary_page_size, "4096");
 
+// compression dict column-level compression dictionary (a ZSTD dictionary). Master switch checked at the write
+// gate (segment_writer); when false, columns flagged use_zstd_compression fall back
+// to plain per-column ZSTD with no compression dict. Independent of the per-column
+// flag so it can be flipped at runtime as an operational safety valve.
+//
+// DEFAULT IS true: this switch ships only in builds that already contain the reader
+// (ColumnMetaPB.zstd_compression_dict_page, field 35, merged ahead of the write side),
+// and a dictionary page is only ever written for columns the user nominated through
+// the zstd_compression_columns table property -- a cluster that never sets the
+// property writes no dictionary pages regardless of this default.
+//
+// The one window that still needs care is a rolling upgrade FROM a release that
+// predates the reader: a compression dict data page is a ZSTD frame compressed
+// against a raw-content dictionary (dictID=0), so its frame header carries no signal
+// that a dictionary is required, and an old BE would decompress it WITHOUT the
+// dictionary and hit ZSTD corruption. During such an upgrade, do not add
+// zstd_compression_columns to any table (or set this to false) until every BE is
+// upgraded. WARNING: once a cluster has written compression dict segments it cannot
+// be downgraded below the reader build (old BEs cannot read or compact those
+// segments). Same reasoning covers cross-replica clone/replication during a
+// mixed-version window.
+CONF_mBool(enable_zstd_compression_dict, "true");
+// Bytes sampled from the first eligible data page to build the compression dict
+// ("first-page sampling" mode). ~one 64KB data page by default.
+CONF_mInt32(zstd_compression_dict_sample_bytes, "65536");
+// Minimum encoded_values size (bytes) of a data page for it to be used as the
+// dictionary sample. Guards against building a garbage dict from a tiny/near
+// empty first page and permanently marking the column dict-ready.
+CONF_mInt32(zstd_compression_dict_min_sample_bytes, "1024");
+// How much smaller the trial pages must get before the per-column compression
+// dictionary is kept, as a fraction. The writer compresses the first
+// kZstdDictTrialPages pages after the sample both ways and compares; below this
+// the dictionary is dropped for the whole column.
+//
+// A dictionary is not free: a page of its own per column per segment, a load per
+// segment on every read, and a decision that cannot be revisited once pages
+// reference it. So the default asks for a clear win rather than a measurable one.
+// Measured across 13 corpora x 3 page sizes: at 0.10 the dictionary is kept only
+// where it earns 10%+ (agent-log columns and replayed text at 64KB), and the cost
+// is turning down gains of 5-9% that cluster at 256KB pages, where a plain page
+// already captures most of the repetition. Lower it to about 0.05 to take those
+// too. Values below 0 are treated as 0.
+CONF_mDouble(zstd_compression_dict_min_gain, "0.10");
+
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
 CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
@@ -1064,6 +1119,14 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
+// Only takes effect when brpc_connection_type is "pooled". Maps to brpc's -max_connection_pool_size.
+// Note this is the capacity of the idle-connection cache of a single remote endpoint, NOT a cap on the
+// number of connections: when no idle connection is available a new one is always created, and on return
+// the connection is closed if the pool already holds this many. A value below the peak concurrency makes
+// the excess connections be created and closed repeatedly, which behaves like short connections and burns
+// ephemeral ports. Set it no lower than the peak number of in-flight RPCs to a single peer.
+// brpc re-reads the flag on every pooled get/return, so updating this config takes effect immediately.
+CONF_mInt32(brpc_max_connection_pool_size, "100");
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.
 // This may cause process memory usage to rise.
@@ -2059,6 +2122,15 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+// Read-time rollback valve for constant-folding the zone map of a column that is physically
+// absent from a segment (the normal outcome of fast schema evolution `ALTER TABLE ADD COLUMN`).
+// Such a column reads through DefaultValueColumnIterator, where every row holds the same value,
+// so predicates can be evaluated exactly against a synthetic min==max zone map. Turning this off
+// restores the legacy behaviour: keep every row and mark every batch delete-partial-satisfied.
+// It is deliberately separate from enable_index_page_level_zonemap_filter, which only guards
+// SegmentIterator::_get_row_ranges_by_zone_map() and therefore cannot switch off the runtime
+// filter path (SegmentIterator::_try_to_update_ranges_by_runtime_filter).
+CONF_mBool(enable_default_value_column_zonemap_filter, "true");
 CONF_mBool(enable_index_bloom_filter, "true");
 CONF_mBool(enable_index_bitmap_filter, "true");
 
@@ -2170,6 +2242,9 @@ CONF_mInt64(jit_lru_cache_size, "0");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
+
+// Largest gap between two needed Parquet byte ranges that the paimon-cpp reader still merges into one read.
+CONF_mInt64(paimon_native_parquet_cache_hole_size_limit, "1048576");
 
 // default not to build the empty index
 CONF_mInt32(config_tenann_default_build_threshold, "0");
@@ -2484,6 +2559,7 @@ CONF_mInt32(ai_function_max_retries, "3");
 CONF_mInt32(ai_function_max_retries_on_throttle, "5");
 CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
+CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
 
 // Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.

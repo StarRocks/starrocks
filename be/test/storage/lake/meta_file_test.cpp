@@ -741,6 +741,98 @@ TEST_F(MetaFileTest, test_compacted_delvec_serialized_page_writes_plaintext) {
     EXPECT_EQ(std::vector<uint64_t>({0}), offsets);
 }
 
+// A page copied byte for byte never reaches get_del_vec, so the checksum verification there never sees
+// these bytes. The copy verifies them itself, under the same condition -- a checksum is live only while
+// its gen version is the page's own version -- and under the same enable_strict_delvec_crc_check knob.
+TEST_F(MetaFileTest, test_compacted_delvec_verifies_copied_page_crc32c) {
+    const int64_t source_tablet = next_id();
+    const std::string source_name = "copied-crc-source.delvec";
+    // More than one copy chunk, and its tail differs, so a check that folded in only the first chunk
+    // would still accept first_chunk_crc below.
+    std::string source_bytes((1UL << 20) + 17, 'c');
+    source_bytes.back() = 'z';
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), source_bytes);
+    const uint32_t whole_page_crc = crc32c::Value(source_bytes.data(), source_bytes.size());
+    const uint32_t first_chunk_crc = crc32c::Value(source_bytes.data(), 1UL << 20);
+
+    auto page_claiming = [&](uint32_t crc, int64_t gen_version) {
+        auto page = raw_output_page(source_tablet, source_name, 0, source_bytes.size(), source_bytes.size());
+        page.raw_page->page.set_crc32c(crc32c::Mask(crc));
+        page.raw_page->page.set_crc32c_gen_version(gen_version);
+        return page;
+    };
+    auto copy = [&](const DelvecOutputPage& page) -> std::pair<Status, std::string> {
+        const int64_t target_tablet = next_id();
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        auto status = write_compacted_delvec_pages(_tablet_manager.get(), {page}, target_tablet, next_id(), &output,
+                                                   &offsets);
+        if (!status.ok()) return {status, ""};
+        ASSIGN_OR_ABORT(auto reader,
+                        fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+        ASSIGN_OR_ABORT(auto copied, reader->read_all());
+        return {Status::OK(), copied};
+    };
+
+    int drop_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("lake::drop_corrupted_delvec_file_cache", [&](void* arg) {
+        ++drop_calls;
+        *static_cast<Status*>(arg) = Status::OK();
+    });
+    sync->EnableProcessing();
+    const bool old_strict = config::enable_strict_delvec_crc_check;
+    DeferOp cleanup([&] {
+        config::enable_strict_delvec_crc_check = old_strict;
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    config::enable_strict_delvec_crc_check = true;
+
+    // The page the source actually holds goes through untouched, and nothing is reported corrupt.
+    {
+        auto [status, copied] = copy(page_claiming(whole_page_crc, /*gen_version=*/1));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(0, drop_calls);
+    }
+
+    // A page whose bytes do not match its live checksum fails the copy, and the source's local cache is
+    // dropped first so the caller's retry reads through to remote storage.
+    {
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/1));
+        EXPECT_TRUE(status.is_corruption()) << status;
+        EXPECT_EQ(fmt::format("delvec crc32c mismatch while copying page. expect crc32c {}, actual {}", first_chunk_crc,
+                              whole_page_crc),
+                  status.message())
+                << status;
+        EXPECT_TRUE(copied.empty());
+        EXPECT_EQ(1, drop_calls);
+    }
+
+    // Without strict checking the copy goes through, exactly as get_del_vec tolerates a mismatch it
+    // decodes. The output keeps the source's own crc32c, so the mismatch stays visible to its reader.
+    {
+        config::enable_strict_delvec_crc_check = false;
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/1));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(1, drop_calls) << "a tolerated mismatch must not drop the source's cache";
+        config::enable_strict_delvec_crc_check = true;
+    }
+
+    // A checksum whose gen version is not the page's version is no checksum at all -- meta_file reads it
+    // that way everywhere else, and there is nothing here to verify against.
+    {
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/2));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(1, drop_calls);
+    }
+}
+
 TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
     constexpr std::string_view kPrefix = "injected compacted delvec ";
     const int64_t source_tablet = next_id();

@@ -142,6 +142,65 @@ public class RangeKeyColumnRoutingTest {
     }
 
     @Test
+    public void testZstdCompressionColumnsRejectedOnRoutedKeynessFlip() throws Exception {
+        // The pure keyness flip returns even earlier than the routed ADD -- before finalAnalyze -- so a
+        // property attached to the same statement is collected and then never consumed: the rewrite job
+        // builds its shadow schema from the table's current set and nothing writes a new one back.
+        // A DUP range table with key-derived sort key: promoting the value column v2 to a key shifts
+        // that sort key, which is the shape that takes the routed flip (see
+        // RangeRewriteRoutingTest#testKeynessFlipShiftingSortKeyRoutesToRangeRewriteJob). v1 carries
+        // the property so the attached change has something to be about.
+        String tableName = "t_rangekey_zstd_flip_" + TABLE_SEQ.incrementAndGet();
+        // v2 sits directly after the key so promoting it keeps every value after every key.
+        starRocksAssert.withTable("create table " + tableName + " (k1 int NOT NULL, v2 int, v1 string)\n"
+                + "duplicate key(k1)\n"
+                + "properties('replication_num' = '1', 'zstd_compression_columns' = 'v1:64k');");
+        OlapTable dup = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", tableName);
+
+        assertThrowsDdl("can not be changed by the same ALTER that changes the keyness of a column",
+                () -> alter(dup, "MODIFY COLUMN v2 INT KEY "
+                        + "PROPERTIES ('zstd_compression_columns' = 'v1:256k')"));
+
+        Assertions.assertEquals(65536,
+                dup.getZstdCompressionPageSizes().get(dup.getColumn("v1").getColumnId()).intValue());
+    }
+
+    @Test
+    public void testZstdCompressionColumnsRejectedOnRoutedKeyAdd() throws Exception {
+        // The routed add returns before the fastSchemaEvolution flag is read, and neither routed job
+        // persists this table-level property: the async trailing-key job updates the tablet schemas
+        // without ever calling setZstdCompressionColumns, and the K-tablet rewrite builds its shadow
+        // schema from the table's current (old) set. Accepting it would report success and lose it, so
+        // the combination is refused and the user is told to issue it separately.
+        //
+        // A dedicated table rather than buildLakeRangeTable: this property only accepts string/JSON
+        // columns, and adding one to the shared fixture would change what the other cases test.
+        String tableName = "t_rangekey_zstd_" + TABLE_SEQ.incrementAndGet();
+        starRocksAssert.withTable("create table " + tableName + " (k1 int NOT NULL, v1 string)\n"
+                + "duplicate key(k1)\n"
+                + "order by(k1)\n"
+                + "properties('replication_num' = '1', 'zstd_compression_columns' = 'v1:64k');");
+        OlapTable dup = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", tableName);
+        Assertions.assertEquals(65536,
+                dup.getZstdCompressionPageSizes().get(dup.getColumn("v1").getColumnId()).intValue());
+
+        // Sanity: this add really does take the routed path, or the guard under test is not reached.
+        Assertions.assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(dup,
+                parseAlterClause(dup, "ADD COLUMN k2 INT KEY DEFAULT '0'")));
+
+        assertThrowsDdl("can not be changed by the same ALTER that adds or widens a key column",
+                () -> alter(dup, "ADD COLUMN k2 INT KEY DEFAULT \"0\" "
+                        + "PROPERTIES ('zstd_compression_columns' = 'v1:256k')"));
+
+        // Refused means refused: nothing was applied by halves.
+        Assertions.assertEquals(65536,
+                dup.getZstdCompressionPageSizes().get(dup.getColumn("v1").getColumnId()).intValue());
+        Assertions.assertNull(dup.getColumn("k2"));
+    }
+
+    @Test
     public void testAddKeyColumnRejectedForPk() throws Exception {
         // PK add-key stays rejected regardless of routing. In practice the rejection surfaces earlier, at
         // analysis time: AlterTableClauseAnalyzer.visitAddColumnClause stamps REPLACE onto every added

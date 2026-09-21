@@ -54,6 +54,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## ユーザー、ロール、権限
 
+### `authorization_enable_query_profile_access_check`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：キャッシュされた query profile の読み取りを制限するかどうか。`true` に設定すると、SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 関数、`/api/profile` および `/api/query/progress` HTTP エンドポイント、ならびに `/query` および `/query_profile` Web UI ページは、そのクエリを実行したユーザー、または SYSTEM レベルの OPERATE 権限を持つユーザーにのみ profile を返します。ユーザーが記録されていない profile（例：EXPORT ジョブや Stream Load）は、OPERATE 権限を持つ場合のみ読み取れます。`/api/query_detail` および `/api/v2/query_detail` エンドポイントはすべてのクエリを一覧に含めますが、同じルールに従って `profile` フィールド、およびその profile から生成された `explain` フィールドを省略します。`authorization_enable_admin_user_protection` も有効な場合、`root` が実行したクエリの profile は `root` 自身のみが読み取れます。`false`（デフォルト）の場合、認証済みのすべてのユーザーがすべての profile を読み取れます。これは以前のバージョンと同じ動作です。各 FE は自身が保持する profile に対してのみこのチェックを行います。クラスター全体でアクセスを制限するには、すべての FE をこの項目をサポートするバージョンにアップグレードした後、各 FE の `fe.conf` にこの項目を設定してください。有効にする際は、さらに次の 2 点に注意してください。1 つは、権限判定に呼び出し元の識別情報が必要なため `/api/query/progress` が匿名リクエストを受け付けなくなり、このエンドポイントを匿名でポーリングしていた処理が `401` を受け取るようになることです。もう 1 つは、`query_id` に対応する profile がセッションの接続先 FE にキャッシュされていない場合、`get_query_profile()` に OPERATE 権限が必要になることです。他の FE から profile を取得する RPC は呼び出し元の識別情報を持たず対向側で認可できないため、このチェックが有効な間、FE をまたぐ取得は OPERATE 権限を持つユーザーに限られます。
+- 導入時期：v4.1
+
 ### `enable_task_info_mask_credential`
 
 - デフォルト：true
@@ -89,7 +98,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：SYSTEM `ai_complete` 呼び出しが使用する完全な HTTPS POST URL。URL にはホストが必要で、ユーザー情報、フラグメント、制御文字を含めることはできません。ポートを明示しない場合は HTTPS のデフォルトポートが使用され、明示する場合は 1 から 65535 の範囲で指定する必要があります。値が空の場合、endpoint を設定するまで SYSTEM `ai_complete` の解析は失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。API key は FE 構成項目ではありません。各 BE が `AI_FUNCTION_MODEL_API_KEY` をローカルで読み取り、FE はクエリプランでキーを送信しません。AI クエリを実行するすべての BE で `AI_FUNCTION_MODEL_ENDPOINT` をこの URL と完全に同一の値に設定し、BE のローカル認証情報を管理者が承認した endpoint にバインドする必要があります。そのため FE endpoint を変更した場合は、この環境変数も更新し、新しい AI クエリを実行する前に対象 BE を再起動する必要があります。
+- 説明：SYSTEM `ai_complete` 呼び出しが使用する完全な HTTPS POST URL。URL にはホストが必要で、ユーザー情報、クエリ文字列、フラグメント、制御文字を含めることはできません。ポートを明示しない場合は HTTPS のデフォルトポートが使用され、明示する場合は 1 から 65535 の範囲で指定する必要があります。値が空の場合、endpoint を設定するまで SYSTEM `ai_complete` の解析は失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。API key は FE 構成項目ではありません。各 BE が `AI_FUNCTION_MODEL_API_KEY` をローカルで読み取り、FE はクエリプランでキーを送信しません。AI クエリを実行するすべての BE で `AI_FUNCTION_MODEL_ENDPOINT` をこの URL と完全に同一の値に設定し、BE のローカル認証情報を管理者が承認した endpoint にバインドする必要があります。そのため FE endpoint を変更した場合は、この環境変数も更新し、新しい AI クエリを実行する前に対象 BE を再起動する必要があります。
 - 導入時期：-
 
 ### `ai_default_chat_model`
@@ -109,6 +118,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 有効な値：`openai_compatible`
 - 変更可能：Yes
 - 説明：SYSTEM `ai_complete` が使用する provider プロトコル。値は正確に `openai_compatible` でなければならず、空の値や制御文字を含む追加文字がある場合は解析に失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 導入時期：-
+
+### `ai_default_embedding_endpoint`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：SYSTEM `ai_embed` 用の完全な HTTPS POST URL。チャットエンドポイントとは独立して設定する必要があります。ホストが必須で、ユーザー情報、クエリ文字列、フラグメント、制御文字は禁止です。明示するポートは 1 から 65535 です。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。実行する各 BE は `AI_FUNCTION_EMBEDDING_ENDPOINT` を完全に同一の URL に設定し、`AI_FUNCTION_EMBEDDING_API_KEY` をローカルで用意します。どちらかの BE 環境変数を変更した後は対象 BE の再起動が必要です。認証情報は FE 設定ではなく、プランには含まれません。[ai_embed](../../../sql-reference/sql-functions/ai-functions/ai_embed.md) を参照してください。
+- 導入時期：-
+
+### `ai_default_embedding_model`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：モデルを明示しない SYSTEM `ai_embed` 呼び出しのデフォルトモデル。その場合は空白でない値が必須で、C0 制御文字と DEL は禁止です。すべての埋め込み呼び出しでモデルを明示する場合は空のままにできます。チャットのデフォルトモデルにはフォールバックしません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
+- 導入時期：-
+
+### `ai_default_embedding_provider`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 有効な値：`openai_compatible`
+- 変更可能：Yes
+- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。正確に `openai_compatible` を指定する必要があります。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
 - 導入時期：-
 
 ### `brpc_send_plan_fragment_timeout_ms`
@@ -1142,8 +1179,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：4 * 3600
 - タイプ：Int
 - 単位：Seconds
-- 変更可能：No
-- 説明：ラベルがクリーンアップされる時間間隔。単位: 秒。履歴ラベルがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
+- 変更可能：Yes
+- 説明：ラベルがクリーンアップされる時間間隔。単位: 秒。履歴ラベルがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。値は 0 より大きい必要があります。0 以下の値は、`ADMIN SET FRONTEND CONFIG` でも FE 起動時の `fe.conf` 読み込みでも拒否されます。
 - 導入時期：-
 
 ### `label_keep_max_num`

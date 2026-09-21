@@ -150,6 +150,7 @@ public:
     DEFINE_STATUS(NotAuthorized, NOT_AUTHORIZED);
     DEFINE_STATUS(TableNotExist, TABLE_NOT_EXIST);
     DEFINE_STATUS(QueryNotExist, QUERY_NOT_EXIST);
+    DEFINE_STATUS(LakeMetaVersionNotFound, LAKE_META_VERSION_NOT_FOUND);
 
     bool ok() const { return _state == nullptr; }
 
@@ -170,6 +171,8 @@ public:
     bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
 
     bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
+
+    bool is_lake_meta_version_not_found() const { return code() == TStatusCode::LAKE_META_VERSION_NOT_FOUND; }
 
     bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
 
